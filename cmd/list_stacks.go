@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/selector"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -41,6 +43,7 @@ func init() {
 
 func listStacks(cmd *cobra.Command) ([]string, error) {
 	componentFlag, _ := cmd.Flags().GetString("component")
+	selectorFlag, _ := cmd.Flags().GetString("selector")
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
@@ -52,5 +55,32 @@ func listStacks(cmd *cobra.Command) ([]string, error) {
 	}
 
 	output, err := l.FilterAndListStacks(stacksMap, componentFlag)
-	return output, err
+	if err != nil {
+		return nil, err
+	}
+
+	if selectorFlag != "" {
+		// Apply label selector filtering
+		reqs, perr := selector.Parse(selectorFlag)
+		if perr != nil {
+			return nil, perr
+		}
+		filtered := []string{}
+		for _, stackName := range output {
+			if sdata, ok := stacksMap[stackName].(map[string]any); ok {
+				labels := selector.ExtractStackLabels(sdata)
+				if selector.Matches(labels, reqs) {
+					filtered = append(filtered, stackName)
+				}
+			}
+		}
+		output = filtered
+	}
+
+	if len(output) == 0 {
+		log.Info("No stacks matched selector.")
+		return []string{}, nil
+	}
+
+	return output, nil
 }

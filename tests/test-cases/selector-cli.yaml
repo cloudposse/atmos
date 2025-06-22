@@ -1,0 +1,541 @@
+tests:
+  - name: selector_list_stacks_env_prod
+    enabled: true
+    description: "list stacks filtered by env=prod selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+      - "-l"
+      - "env=prod"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+  - name: selector_list_stacks_zero
+    enabled: true
+    description: "selector with zero match returns message"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+      - "-l"
+      - "env=qa"
+    expect:
+      exit_code: 0
+      stdout:
+        - "No stacks matched selector."
+  - name: selector_list_components_version_v2
+    enabled: true
+    description: "list components with version=v2 selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "components"
+      - "-l"
+      - "version=v2"
+    expect:
+      exit_code: 0
+      stdout:
+        - "demo"
+        - "demo2"
+      not_stdout:
+        - "demo3"
+  - name: selector_list_stacks_combined
+    enabled: true
+    description: "list stacks with combined selectors"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+      - "-l"
+      - "env=prod,tier=backend"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+      not_stdout:
+        - "prod-us-west-2"
+        - "nonprod"
+  - name: selector_list_stacks_inequality
+    enabled: true
+    description: "list stacks with inequality selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+      - "-l"
+      - "env!=dev"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+      not_stdout:
+        - "nonprod"
+  - name: selector_list_stacks_in_operator
+    enabled: true
+    description: "list stacks with 'in' operator"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+      - "-l"
+      - "tier in (backend,frontend)"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+        - "nonprod"
+  - name: selector_list_stacks_notin_operator
+    enabled: true
+    description: "list stacks with 'notin' operator"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+      - "-l"
+      - "tier notin (frontend)"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "nonprod"
+      not_stdout:
+        - "prod-us-west-2"
+  - name: selector_list_stacks_key_exists
+    enabled: true
+    description: "list stacks with key existence selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+      - "-l"
+      - "region"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+      not_stdout:
+        - "nonprod"
+  - name: selector_list_stacks_key_not_exists
+    enabled: true
+    description: "list stacks with key non-existence selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+      - "-l"
+      - "!region"
+    expect:
+      exit_code: 0
+      stdout:
+        - "nonprod"
+      not_stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+  - name: selector_list_components_critical
+    enabled: true
+    description: "list components with critical=true selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "components"
+      - "-l"
+      - "critical=true"
+    expect:
+      exit_code: 0
+      stdout:
+        - "demo"
+        - "vpc"
+        - "cdn"
+  - name: selector_list_values_with_selector
+    enabled: true
+    description: "list values with selector filtering"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "vars"
+      - "-l"
+      - "env=dev"
+    expect:
+      exit_code: 0
+      stdout:
+        - "nonprod"
+  - name: selector_describe_component_with_selector
+    enabled: true
+    description: "describe component with selector filtering"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "demo"
+      - "-l"
+      - "version=v2"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+      not_stdout:
+        - "prod-us-west-2"
+        - "nonprod"
+  - name: selector_describe_stacks_with_selector
+    enabled: true
+    description: "describe stacks with selector filtering"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "describe"
+      - "stacks"
+      - "-l"
+      - "team=platform"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "nonprod"
+      not_stdout:
+        - "prod-us-west-2"
+  - name: selector_combined_with_stack_flag
+    enabled: true
+    description: "selector combined with --stack flag (additive filtering)"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "components"
+      - "--stack"
+      - "prod-us-east-1"
+      - "-l"
+      - "version=v2"
+    expect:
+      exit_code: 0
+      stdout:
+        - "demo"
+      not_stdout:
+        - "vpc"
+  - name: selector_invalid_syntax
+    enabled: true
+    description: "invalid selector syntax returns error"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+      - "-l"
+      - "env="
+    expect:
+      exit_code: 1
+      stderr:
+        - "invalid selector"
+
+  # list settings command tests
+  - name: selector_list_settings_env_prod
+    enabled: true
+    description: "list settings filtered by env=prod selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "settings"
+      - "-l"
+      - "env=prod"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+      not_stdout:
+        - "nonprod"
+
+  - name: selector_list_settings_team_platform
+    enabled: true
+    description: "list settings filtered by team=platform selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "settings"
+      - "-l"
+      - "team=platform"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "nonprod"
+      not_stdout:
+        - "prod-us-west-2"
+
+  - name: selector_list_settings_zero_match
+    enabled: true
+    description: "list settings with selector that matches no stacks"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "settings"
+      - "-l"
+      - "env=qa"
+    expect:
+      exit_code: 0
+      stdout:
+        - "No stacks matched selector."
+
+  - name: selector_list_settings_with_component
+    enabled: true
+    description: "list settings for specific component with selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "settings"
+      - "demo"
+      - "-l"
+      - "version=v2"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+      not_stdout:
+        - "prod-us-west-2"
+        - "nonprod"
+
+  - name: selector_list_settings_combined_with_stack
+    enabled: true
+    description: "list settings with selector and --stack flag (additive filtering)"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "settings"
+      - "--stack"
+      - "prod-*"
+      - "-l"
+      - "tier=backend"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+      not_stdout:
+        - "prod-us-west-2"
+        - "nonprod"
+
+  # list metadata command tests
+  - name: selector_list_metadata_env_prod
+    enabled: true
+    description: "list metadata filtered by env=prod selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "metadata"
+      - "-l"
+      - "env=prod"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+      not_stdout:
+        - "nonprod"
+
+  - name: selector_list_metadata_tier_frontend
+    enabled: true
+    description: "list metadata filtered by tier=frontend selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "metadata"
+      - "-l"
+      - "tier=frontend"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-west-2"
+      not_stdout:
+        - "prod-us-east-1"
+        - "nonprod"
+
+  - name: selector_list_metadata_zero_match
+    enabled: true
+    description: "list metadata with selector that matches no stacks"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "metadata"
+      - "-l"
+      - "env=staging"
+    expect:
+      exit_code: 0
+      stdout:
+        - "No stacks matched selector."
+
+  - name: selector_list_metadata_with_component
+    enabled: true
+    description: "list metadata for specific component with selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "metadata"
+      - "demo"
+      - "-l"
+      - "version=v1"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-west-2"
+      not_stdout:
+        - "prod-us-east-1"
+        - "nonprod"
+
+  - name: selector_list_metadata_key_exists
+    enabled: true
+    description: "list metadata with key existence selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "metadata"
+      - "-l"
+      - "region"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+      not_stdout:
+        - "nonprod"
+
+  - name: selector_list_metadata_key_not_exists
+    enabled: true
+    description: "list metadata with key non-existence selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "metadata"
+      - "-l"
+      - "!region"
+    expect:
+      exit_code: 0
+      stdout:
+        - "nonprod"
+      not_stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+
+  - name: selector_list_metadata_combined_selectors
+    enabled: true
+    description: "list metadata with combined selectors"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "list"
+      - "metadata"
+      - "-l"
+      - "env=prod,tier in (backend,frontend)"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+      not_stdout:
+        - "nonprod"
+
+  # describe affected command tests (to be implemented)
+  - name: selector_describe_affected_env_prod
+    enabled: true # Enable after implementation
+    description: "describe affected components filtered by env=prod selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "describe"
+      - "affected"
+      - "--ref"
+      - "HEAD~1"
+      - "-l"
+      - "env=prod"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "prod-us-west-2"
+      not_stdout:
+        - "nonprod"
+
+  - name: selector_describe_affected_team_platform
+    enabled: true # Enable after implementation
+    description: "describe affected components filtered by team=platform selector"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "describe"
+      - "affected"
+      - "--ref"
+      - "HEAD~1"
+      - "-l"
+      - "team=platform"
+    expect:
+      exit_code: 0
+      stdout:
+        - "prod-us-east-1"
+        - "nonprod"
+      not_stdout:
+        - "prod-us-west-2"
+
+  - name: selector_describe_affected_zero_match
+    enabled: true # Enable after implementation
+    description: "describe affected with selector that matches no affected components"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "describe"
+      - "affected"
+      - "--ref"
+      - "HEAD~1"
+      - "-l"
+      - "env=qa"
+    expect:
+      exit_code: 0
+      stdout:
+        - "No affected components matched selector."
+
+  - name: selector_describe_affected_combined_with_stack
+    enabled: true # Enable after implementation
+    description: "describe affected with selector and --stack flag (additive filtering)"
+    workdir: "fixtures/scenarios/selector"
+    command: "atmos"
+    args:
+      - "describe"
+      - "affected"
+      - "--ref"
+      - "HEAD~1"
+      - "--stack"
+      - "prod-us-east-1"
+      - "-l"
+      - "version=v2"
+    expect:
+      exit_code: 0
+      stdout:
+        - "demo"
+      not_stdout:
+        - "vpc"
+        - "nonprod"

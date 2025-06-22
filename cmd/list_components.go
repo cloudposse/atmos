@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/selector"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -58,5 +60,67 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 	}
 
 	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
-	return output, err
+	if err != nil {
+		return nil, err
+	}
+
+	selectorFlag, _ := flags.GetString("selector")
+	if selectorFlag != "" {
+		reqs, err := selector.Parse(selectorFlag)
+		if err != nil {
+			return nil, err
+		}
+		output = filterComponentsBySelector(output, stacksMap, reqs)
+	}
+
+	if len(output) == 0 {
+		log.Info("No components matched selector.")
+		return []string{}, nil
+	}
+
+	return output, nil
+}
+
+// filterComponentsBySelector filters components based on selector requirements
+func filterComponentsBySelector(components []string, stacksMap map[string]any, reqs []selector.Requirement) []string {
+	var filtered []string
+	for _, comp := range components {
+		if componentMatchesSelector(comp, stacksMap, reqs) {
+			filtered = append(filtered, comp)
+		}
+	}
+	return filtered
+}
+
+// componentMatchesSelector checks if a component matches the selector requirements
+func componentMatchesSelector(comp string, stacksMap map[string]any, reqs []selector.Requirement) bool {
+	for _, sdata := range stacksMap {
+		smap, ok := sdata.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		components, ok := smap["components"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		if found, matches := checkComponentInStack(comp, smap, components, reqs); found {
+			return matches
+		}
+	}
+	return false
+}
+
+// checkComponentInStack checks if component exists in stack and matches selector
+func checkComponentInStack(comp string, smap map[string]any, components map[string]any, reqs []selector.Requirement) (found, matches bool) {
+	for _, ctype := range []string{"terraform", "helmfile"} {
+		if ctypeSection, ok := components[ctype].(map[string]any); ok {
+			if _, ok := ctypeSection[comp]; ok {
+				merged := selector.MergedLabels(smap, comp)
+				return true, selector.Matches(merged, reqs)
+			}
+		}
+	}
+	return false, false
 }

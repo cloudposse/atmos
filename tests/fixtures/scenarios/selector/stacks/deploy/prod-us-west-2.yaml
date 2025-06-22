@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+metadata:
+  labels:
+    env: "prod"
+    region: "us-west-2"
+    tier: "frontend"
+    team: "web"
+
+vars:
+  stage: "prod-us-west-2"
+  region: "us-west-2"
+
+import:
+  - catalog/shared
+
+components:
+  terraform:
+    demo:
+      metadata:
+        labels:
+          version: "v1"
+          critical: "false"
+      vars:
+        foo: "demo-prod-west"
+    cdn:
+      metadata:
+        labels:
+          version: "v3"
+          critical: "true"
+      vars:
+        distribution: "cloudfront"

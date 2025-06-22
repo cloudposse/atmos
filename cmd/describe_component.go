@@ -42,6 +42,8 @@ var describeComponentCmd = &cobra.Command{
 		checkFlagNotPresentError(err)
 		pager, err := flags.GetString("pager")
 		checkFlagNotPresentError(err)
+		selectorExpr, err := flags.GetString("selector")
+		checkFlagNotPresentError(err)
 
 		component := args[0]
 
@@ -55,6 +57,7 @@ var describeComponentCmd = &cobra.Command{
 			Pager:                pager,
 			Format:               format,
 			File:                 file,
+			Selector:             selectorExpr,
 		})
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")

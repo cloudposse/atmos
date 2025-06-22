@@ -3,7 +3,7 @@ title: atmos list components
 sidebar_label: components
 sidebar_class_name: command
 id: components
-description: Use this command to list Atmos components 
+description: Use this command to list Atmos components
 ---
 import Screengrab from '@site/src/components/Screengrab'
 
@@ -38,6 +38,30 @@ atmos list components
 atmos list components -s tenant1-ue2-dev
 ```
 
+### Using Label Selectors
+
+Filter components using label selectors for better organization and targeted operations:
+
+```shell
+# List all production components
+atmos list components --selector="environment=prod"
+
+# List components managed by the platform team
+atmos list components --selector="team=platform"
+
+# List critical components in production
+atmos list components --selector="environment=prod,critical=true"
+
+# List components that are NOT deprecated
+atmos list components --selector="!deprecated"
+
+# List components in dev or staging environments
+atmos list components --selector="environment in (dev,staging)"
+
+# Combine with stack filtering
+atmos list components -s tenant1-ue2-dev --selector="team=platform"
+```
+
 ### Custom Columns for Components
 
 This configuration customizes the output of `atmos list components`:
@@ -61,3 +85,4 @@ Running `atmos list components` will produce a table with these custom columns.
 | Flag             | Description                                                                                                                                                                                                                               | Alias | Required |
 |:-----------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
 | `--stack`        | Atmos stack                                                                                                                                                                                                                               | `-s`  | no       |
+| `--selector`     | Filter results based on label selectors. Supports equality (`key=value`), inequality (`key!=value`), set inclusion (`key in (a,b)`), set exclusion (`key notin (a,b)`), existence (`key`), and non-existence (`!key`) operations | `-l`  | no       |

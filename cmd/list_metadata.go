@@ -16,6 +16,7 @@ import (
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/selector"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -141,6 +142,28 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 		params.ProcessingFlags.Templates, params.ProcessingFlags.Functions, false, nil)
 	if err != nil {
 		return "", &listerrors.DescribeStacksError{Cause: err}
+	}
+
+	// Apply label selector if provided
+	selectorFlag, _ := cmd.Flags().GetString("selector")
+	if selectorFlag != "" {
+		reqs, perr := selector.Parse(selectorFlag)
+		if perr != nil {
+			return "", perr
+		}
+		filtered := make(map[string]any)
+		for sname, sdata := range stacksMap {
+			mergedLabels := selector.MergedLabels(sdata.(map[string]any), params.ComponentFilter)
+			if selector.Matches(mergedLabels, reqs) {
+				filtered[sname] = sdata
+			}
+		}
+		stacksMap = filtered
+	}
+
+	if len(stacksMap) == 0 {
+		log.Info("No stacks matched selector.")
+		return "", nil
 	}
 
 	log.Debug("Filtering metadata",

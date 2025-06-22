@@ -16,6 +16,7 @@ import (
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/selector"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -285,6 +286,28 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	_, stacksMap, err := initAtmosAndDescribeStacksForList(componentName, processingFlags)
 	if err != nil {
 		return "", err
+	}
+
+	// Apply label selector if provided
+	selectorFlag, _ := cmd.Flags().GetString("selector")
+	if selectorFlag != "" {
+		reqs, perr := selector.Parse(selectorFlag)
+		if perr != nil {
+			return "", perr
+		}
+		filtered := make(map[string]any)
+		for sname, sdata := range stacksMap {
+			mergedLabels := selector.MergedLabels(sdata.(map[string]any), componentName)
+			if selector.Matches(mergedLabels, reqs) {
+				filtered[sname] = sdata
+			}
+		}
+		stacksMap = filtered
+	}
+
+	if len(stacksMap) == 0 {
+		log.Info("No stacks matched selector.")
+		return "", nil
 	}
 
 	// Log the filter options

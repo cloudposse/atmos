@@ -115,6 +115,30 @@ atmos describe affected --skip=terraform.output --skip=include
 atmos describe affected --skip=include,eval
 ```
 
+### Using Label Selectors
+
+Filter affected components using label selectors to focus on specific subsets:
+
+```shell
+# Show affected components for production environment only
+atmos describe affected --selector="environment=prod"
+
+# Show affected components managed by platform team
+atmos describe affected --selector="team=platform"
+
+# Show affected critical components in production
+atmos describe affected --selector="environment=prod,critical=true"
+
+# Show affected components not in dev/test environments
+atmos describe affected --selector="environment notin (dev,test)"
+
+# Combine with other filters - show affected production platform components
+atmos describe affected --stack=plat-ue2-prod --selector="team=platform"
+
+# Show affected components with monitoring but not deprecated
+atmos describe affected --selector="monitoring,!deprecated"
+```
+
 # Example Output
 
 <Terminal title="atmos describe affected --verbose=true">
@@ -321,6 +345,13 @@ Affected components and stacks:
         Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,
         where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,
         and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable
+    </dd>
+
+    <dt>`--selector` (`-l`)</dt>
+    <dd>
+        Filter results based on label selectors. Supports equality (`key=value`), inequality (`key!=value`), set inclusion (`key in (a,b)`), set exclusion (`key notin (a,b)`), existence (`key`), and non-existence (`!key`) operations
+
+        `atmos describe affected --selector="env=dev"`
     </dd>
 </dl>
 
