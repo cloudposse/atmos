@@ -16,7 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack
+// FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack.
 func FindAllStackConfigsInPathsForStack(
 	atmosConfig schema.AtmosConfiguration,
 	stack string,
@@ -110,7 +110,7 @@ func FindAllStackConfigsInPathsForStack(
 	return absolutePaths, relativePaths, false, nil
 }
 
-// FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs
+// FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs.
 func FindAllStackConfigsInPaths(
 	atmosConfig schema.AtmosConfiguration,
 	includeStackPaths []string,

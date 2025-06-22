@@ -7,7 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-// atlantisGenerateRepoConfigCmd generates repository configuration for Atlantis
+// atlantisGenerateRepoConfigCmd generates repository configuration for Atlantis.
 var atlantisGenerateRepoConfigCmd = &cobra.Command{
 	Use:                "repo-config",
 	Short:              "Generate repository configuration for Atlantis",

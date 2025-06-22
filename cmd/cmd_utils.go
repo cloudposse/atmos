@@ -41,7 +41,7 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
-// processCustomCommands processes and executes custom commands
+// processCustomCommands processes and executes custom commands.
 func processCustomCommands(
 	atmosConfig schema.AtmosConfiguration,
 	commands []schema.Command,
@@ -124,7 +124,7 @@ func processCustomCommands(
 	return nil
 }
 
-// addCommandWithAlias adds a command hierarchy based on the full command
+// addCommandWithAlias adds a command hierarchy based on the full command.
 func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
 	if len(parts) == 0 {
 		return
@@ -153,7 +153,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 	}
 }
 
-// processCommandAliases processes the command aliases
+// processCommandAliases processes the command aliases.
 func processCommandAliases(
 	atmosConfig schema.AtmosConfiguration,
 	aliases schema.CommandAliases,
@@ -202,7 +202,7 @@ func processCommandAliases(
 	return nil
 }
 
-// preCustomCommand is run before a custom command is executed
+// preCustomCommand is run before a custom command is executed.
 func preCustomCommand(
 	cmd *cobra.Command,
 	args []string,
@@ -290,7 +290,7 @@ func preCustomCommand(
 	}
 }
 
-// getTopLevelCommands returns the top-level commands
+// getTopLevelCommands returns the top-level commands.
 func getTopLevelCommands() map[string]*cobra.Command {
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
@@ -301,7 +301,7 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	return existingTopLevelCommands
 }
 
-// executeCustomCommand executes a custom command
+// executeCustomCommand executes a custom command.
 func executeCustomCommand(
 	atmosConfig schema.AtmosConfiguration,
 	cmd *cobra.Command,
