@@ -1623,3 +1623,13 @@ func isComponentEnabled(metadataSection map[string]any, componentName string) bo
 	}
 	return true
 }
+
+// isComponentInStackAffected checks if a component in a stack is in the affected list, recursively.
+func isComponentInStackAffected(affectedList *[]schema.Affected, stackSlug string) bool {
+	for _, a := range *affectedList {
+		if a.StackSlug == stackSlug {
+			return true
+		}
+	}
+	return false
+}

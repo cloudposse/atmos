@@ -150,3 +150,64 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 
 	assert.NotEmptyf(t, output, "Expected output to be non-empty, got %q", output)
 }
+
+func TestExecuteTerraformQuery(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the work directory and change to it
+	workDir := "../../tests/fixtures/scenarios/terraform-apply-affected"
+	if err = os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	oldStd := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	stack := "prod"
+
+	info := schema.ConfigAndStacksInfo{
+		Stack:         stack,
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		Affected:      true,
+		DryRun:        true,
+		Query:         ".vars.tags.team == \"eks\"",
+	}
+
+	err = ExecuteTerraformQuery(&info)
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraformAffected': %v", err)
+	}
+
+	w.Close()
+	os.Stderr = oldStd
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	assert.Contains(t, output, "Executing command=\"atmos terraform plan eks/cluster -s prod\"")
+	assert.Contains(t, output, "Executing command=\"atmos terraform plan eks/external-dns -s prod\"")
+	assert.Contains(t, output, "Executing command=\"atmos terraform plan eks/karpenter -s prod\"")
+	assert.Contains(t, output, "Executing command=\"atmos terraform plan eks/karpenter-node-pool -s prod\"")
+	assert.Contains(t, output, "Skipping the component because the query criteria not satisfied command=\"atmos terraform plan vpc -s prod\"")
+	assert.Contains(t, output, "Skipping the component because the query criteria not satisfied command=\"atmos terraform plan eks/istio/base -s prod\"")
+	assert.Contains(t, output, "Skipping the component because the query criteria not satisfied command=\"atmos terraform plan eks/istio/istiod -s prod\"")
+	assert.Contains(t, output, "Skipping the component because the query criteria not satisfied command=\"atmos terraform plan eks/istio/test-app -s prod\"")
+}

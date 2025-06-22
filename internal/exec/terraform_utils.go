@@ -222,7 +222,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 		return err
 	}
 
-	// Add dependent components and stacks for each affected component
+	// Add dependent components for each directly affected component.
 	if len(affectedList) > 0 {
 		err = addDependentsToAffected(args.CLIConfig, &affectedList, args.IncludeSettings)
 		if err != nil {
@@ -241,6 +241,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 		// it will be processed in the dependency order.
 		if !affected.IncludedInDependents {
 			err = executeTerraformAffectedComponentInDepOrder(info,
+				&affectedList,
 				affected.Component,
 				affected.Stack,
 				"",
@@ -260,6 +261,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
 func executeTerraformAffectedComponentInDepOrder(
 	info *schema.ConfigAndStacksInfo,
+	affectedList *[]schema.Affected,
 	affectedComponent string,
 	affectedStack string,
 	parentComponent string,
@@ -294,11 +296,12 @@ func executeTerraformAffectedComponentInDepOrder(
 		}
 	}
 
-	if args.IncludeDependents {
-		for _, dep := range dependents {
+	for _, dep := range dependents {
+		if args.IncludeDependents || isComponentInStackAffected(affectedList, dep.StackSlug) {
 			if !dep.IncludedInDependents {
 				err := executeTerraformAffectedComponentInDepOrder(
 					info,
+					affectedList,
 					dep.Component,
 					dep.Stack,
 					affectedComponent,
