@@ -22,48 +22,8 @@ import (
 
 var (
 	// Error constants.
-	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
-	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
-	ErrInvalidMetadataSection                 = errors.New("invalid 'metadata' section in the file")
-	ErrInvalidTerraformSection                = errors.New("invalid 'terraform' section in the file")
-	ErrInvalidHelmfileSection                 = errors.New("invalid 'helmfile' section in the file")
-	ErrInvalidComponentsSection               = errors.New("invalid 'components' section in the file")
-	ErrInvalidTerraformCommandSection         = errors.New("invalid 'terraform.command' section in the file")
-	ErrInvalidTerraformVarsSection            = errors.New("invalid 'terraform.vars' section in the file")
-	ErrInvalidTerraformSettingsSection        = errors.New("invalid 'terraform.settings' section in the file")
-	ErrInvalidTerraformEnvSection             = errors.New("invalid 'terraform.env' section in the file")
-	ErrInvalidTerraformProvidersSection       = errors.New("invalid 'terraform.providers' section in the file")
-	ErrInvalidTerraformBackendTypeSection     = errors.New("invalid 'terraform.backend_type' section in the file")
-	ErrInvalidTerraformBackendSection         = errors.New("invalid 'terraform.backend' section in the file")
-	ErrInvalidTerraformRemoteStateBackendType = errors.New("invalid 'terraform.remote_state_backend_type' section in the file")
-	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid 'terraform.remote_state_backend' section in the file")
-	ErrInvalidHelmfileCommandSection          = errors.New("invalid 'helmfile.command' section in the file")
-	ErrInvalidHelmfileVarsSection             = errors.New("invalid 'helmfile.vars' section in the file")
-	ErrInvalidHelmfileSettingsSection         = errors.New("invalid 'helmfile.settings' section in the file")
-	ErrInvalidHelmfileEnvSection              = errors.New("invalid 'helmfile.env' section in the file")
-	ErrInvalidComponentsTerraformSection      = errors.New("invalid 'components.terraform' section in the file")
-	ErrInvalidComponentSection                = errors.New("invalid component section in the file")
-	ErrInvalidComponentVarsSection            = errors.New("invalid component vars section in the file")
-	ErrInvalidComponentSettingsSection        = errors.New("invalid component settings section in the file")
-	ErrInvalidComponentSettingsSpacelift      = errors.New("invalid component settings.spacelift section in the file")
-	ErrInvalidComponentEnvSection             = errors.New("invalid component env section in the file")
-	ErrInvalidComponentProvidersSection       = errors.New("invalid component providers section in the file")
-	ErrInvalidComponentMetadataSection        = errors.New("invalid component metadata section in the file")
-	ErrInvalidComponentBackendTypeAttr        = errors.New("invalid component backend_type attribute in the file")
-	ErrInvalidComponentBackendSection         = errors.New("invalid component backend section in the file")
-	ErrInvalidComponentRemoteStateBackendType = errors.New("invalid component remote_state_backend_type attribute in the file")
-	ErrInvalidComponentRemoteStateBackend     = errors.New("invalid component remote_state_backend section in the file")
-	ErrInvalidComponentCommandAttr            = errors.New("invalid component command attribute in the file")
-	ErrInvalidComponentOverrides              = errors.New("invalid component overrides in the manifest")
-	ErrInvalidComponentOverridesVars          = errors.New("invalid component overrides.vars in the manifest")
-	ErrInvalidComponentOverridesSettings      = errors.New("invalid component overrides.settings in the manifest")
-	ErrInvalidComponentOverridesEnv           = errors.New("invalid component overrides.env in the manifest")
-	ErrInvalidComponentOverridesCommand       = errors.New("invalid component overrides.command in the manifest")
-	ErrInvalidComponentOverridesProviders     = errors.New("invalid component overrides.providers in the manifest")
-	ErrInvalidComponentOverridesHooks         = errors.New("invalid component overrides.hooks in the manifest")
-	ErrInvalidComponentAttr                   = errors.New("invalid component attribute in the file")
-	ErrInvalidComponentInherits               = errors.New("invalid component inherits section in the file")
-	ErrInvalidComponentHooksSection           = errors.New("invalid component hooks section in the file")
+	ErrInvalidHooksSection          = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidTerraformHooksSection = errors.New("invalid 'terraform.hooks' section in the file")
 
 	// File content sync map.
 	getFileContentSyncMap = sync.Map{}
@@ -680,28 +640,28 @@ func ProcessStackConfig(
 	if i, ok := config["metadata"]; ok {
 		globalMetadataSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidMetadataSection)
+			return nil, fmt.Errorf("invalid 'metadata' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := config["terraform"]; ok {
 		globalTerraformSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformSection)
+			return nil, fmt.Errorf("invalid 'terraform' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := config["helmfile"]; ok {
 		globalHelmfileSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidHelmfileSection)
+			return nil, fmt.Errorf("invalid 'helmfile' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := config["components"]; ok {
 		globalComponentsSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidComponentsSection)
+			return nil, fmt.Errorf("invalid 'components' section in the file '%s'", stackName)
 		}
 	}
 
@@ -709,14 +669,14 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.CommandSectionName]; ok {
 		terraformCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformCommandSection)
+			return nil, fmt.Errorf("invalid 'terraform.command' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection["vars"]; ok {
 		terraformVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformVarsSection)
+			return nil, fmt.Errorf("invalid 'terraform.vars' section in the file '%s'", stackName)
 		}
 	}
 
@@ -740,7 +700,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection["settings"]; ok {
 		terraformSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformSettingsSection)
+			return nil, fmt.Errorf("invalid 'terraform.settings' section in the file '%s'", stackName)
 		}
 	}
 
@@ -752,7 +712,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection["env"]; ok {
 		terraformEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformEnvSection)
+			return nil, fmt.Errorf("invalid 'terraform.env' section in the file '%s'", stackName)
 		}
 	}
 
@@ -764,14 +724,14 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.ProvidersSectionName]; ok {
 		terraformProviders, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformProvidersSection)
+			return nil, fmt.Errorf("invalid 'terraform.providers' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection[cfg.HooksSectionName]; ok {
 		terraformHooks, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformHooksSection)
+			return nil, fmt.Errorf("invalid 'terraform.hooks' section in the file '%s'", stackName)
 		}
 	}
 
@@ -782,14 +742,14 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection["backend_type"]; ok {
 		globalBackendType, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformBackendTypeSection)
+			return nil, fmt.Errorf("invalid 'terraform.backend_type' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection["backend"]; ok {
 		globalBackendSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformBackendSection)
+			return nil, fmt.Errorf("invalid 'terraform.backend' section in the file '%s'", stackName)
 		}
 	}
 
@@ -800,14 +760,14 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection["remote_state_backend_type"]; ok {
 		globalRemoteStateBackendType, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformRemoteStateBackendType)
+			return nil, fmt.Errorf("invalid 'terraform.remote_state_backend_type' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection["remote_state_backend"]; ok {
 		globalRemoteStateBackendSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidTerraformRemoteStateBackend)
+			return nil, fmt.Errorf("invalid 'terraform.remote_state_backend' section in the file '%s'", stackName)
 		}
 	}
 
@@ -815,14 +775,14 @@ func ProcessStackConfig(
 	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
 		helmfileCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidHelmfileCommandSection)
+			return nil, fmt.Errorf("invalid 'helmfile.command' section in the file '%s'", stackName)
 		}
 	}
 
 	if i, ok := globalHelmfileSection["vars"]; ok {
 		helmfileVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidHelmfileVarsSection)
+			return nil, fmt.Errorf("invalid 'helmfile.vars' section in the file '%s'", stackName)
 		}
 	}
 
@@ -834,7 +794,7 @@ func ProcessStackConfig(
 	if i, ok := globalHelmfileSection["settings"]; ok {
 		helmfileSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidHelmfileSettingsSection)
+			return nil, fmt.Errorf("invalid 'helmfile.settings' section in the file '%s'", stackName)
 		}
 	}
 
@@ -846,7 +806,7 @@ func ProcessStackConfig(
 	if i, ok := globalHelmfileSection["env"]; ok {
 		helmfileEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidHelmfileEnvSection)
+			return nil, fmt.Errorf("invalid 'helmfile.env' section in the file '%s'", stackName)
 		}
 	}
 
@@ -861,7 +821,7 @@ func ProcessStackConfig(
 
 			allTerraformComponentsMap, ok := allTerraformComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf("'%s': %w", stackName, ErrInvalidComponentsTerraformSection)
+				return nil, fmt.Errorf("invalid 'components.terraform' section in the file '%s'", stackName)
 			}
 
 			for cmp, v := range allTerraformComponentsMap {
@@ -869,14 +829,14 @@ func ProcessStackConfig(
 
 				componentMap, ok := v.(map[string]any)
 				if !ok {
-					return nil, fmt.Errorf("'components.terraform.%s' in '%s': %w", component, stackName, ErrInvalidComponentSection)
+					return nil, fmt.Errorf("invalid 'components.terraform.%s' section in the file '%s'", component, stackName)
 				}
 
 				componentVars := map[string]any{}
 				if i, ok := componentMap[cfg.VarsSectionName]; ok {
 					componentVars, ok = i.(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("'components.terraform.%s.vars' in '%s': %w", component, stackName, ErrInvalidComponentVarsSection)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.vars' section in the file '%s'", component, stackName)
 					}
 				}
 
@@ -884,13 +844,13 @@ func ProcessStackConfig(
 				if i, ok := componentMap[cfg.SettingsSectionName]; ok {
 					componentSettings, ok = i.(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("'components.terraform.%s.settings' in '%s': %w", component, stackName, ErrInvalidComponentSettingsSection)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.settings' section in the file '%s'", component, stackName)
 					}
 
 					if i, ok := componentSettings["spacelift"]; ok {
 						_, ok = i.(map[string]any)
 						if !ok {
-							return nil, fmt.Errorf("'components.terraform.%s.settings.spacelift' in '%s': %w", component, stackName, ErrInvalidComponentSettingsSpacelift)
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.settings.spacelift' section in the file '%s'", component, stackName)
 						}
 					}
 				}
@@ -899,7 +859,7 @@ func ProcessStackConfig(
 				if i, ok := componentMap[cfg.EnvSectionName]; ok {
 					componentEnv, ok = i.(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("'components.terraform.%s.env' in '%s': %w", component, stackName, ErrInvalidComponentEnvSection)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.env' section in the file '%s'", component, stackName)
 					}
 				}
 
@@ -907,7 +867,7 @@ func ProcessStackConfig(
 				if i, ok := componentMap[cfg.ProvidersSectionName]; ok {
 					componentProviders, ok = i.(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("'components.terraform.%s.providers' in '%s': %w", component, stackName, ErrInvalidComponentProvidersSection)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.providers' section in the file '%s'", component, stackName)
 					}
 				}
 
@@ -915,7 +875,7 @@ func ProcessStackConfig(
 				if i, ok := componentMap[cfg.HooksSectionName]; ok {
 					componentHooks, ok = i.(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("'components.terraform.%s.hooks' in '%s': %w", component, stackName, ErrInvalidComponentHooksSection)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.hooks' section in the file '%s'", component, stackName)
 					}
 				}
 
@@ -925,7 +885,7 @@ func ProcessStackConfig(
 				if i, ok := componentMap[cfg.MetadataSectionName]; ok {
 					componentMetadata, ok = i.(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("'components.terraform.%s.metadata' in '%s': %w", component, stackName, ErrInvalidComponentMetadataSection)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.metadata' section in the file '%s'", component, stackName)
 					}
 				}
 
@@ -936,14 +896,14 @@ func ProcessStackConfig(
 				if i, ok := componentMap[cfg.BackendTypeSectionName]; ok {
 					componentBackendType, ok = i.(string)
 					if !ok {
-						return nil, fmt.Errorf("'components.terraform.%s.backend_type' in '%s': %w", component, stackName, ErrInvalidComponentBackendTypeAttr)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.backend_type' attribute in the file '%s'", component, stackName)
 					}
 				}
 
 				if i, ok := componentMap[cfg.BackendSectionName]; ok {
 					componentBackendSection, ok = i.(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("'components.terraform.%s.backend' in '%s': %w", component, stackName, ErrInvalidComponentBackendSection)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.backend' section in the file '%s'", component, stackName)
 					}
 				}
 
