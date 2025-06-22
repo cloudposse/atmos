@@ -22,6 +22,8 @@ type versionExec struct {
 	getLatestGitHubRepoRelease                func() (string, error)
 	printMessage                              func(string)
 	printMessageToUpgradeToAtmosLatestRelease func(string)
+	loadCacheConfig                           func() (cfg.CacheConfig, error)
+	shouldCheckForUpdates                     func(lastChecked int64, frequency string) bool
 }
 
 func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
@@ -33,6 +35,8 @@ func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
 		},
 		printMessage: u.PrintMessage,
 		printMessageToUpgradeToAtmosLatestRelease: u.PrintMessageToUpgradeToAtmosLatestRelease,
+		loadCacheConfig:       cfg.LoadCache,
+		shouldCheckForUpdates: cfg.ShouldCheckForUpdates,
 	}
 }
 
@@ -83,14 +87,14 @@ func (v versionExec) isCheckVersionEnabled(forceCheck bool) bool {
 	}
 
 	// Load the cache
-	cacheCfg, err := cfg.LoadCache()
+	cacheCfg, err := v.loadCacheConfig()
 	if err != nil {
 		log.Warn("Could not load cache", err)
 		return false
 	}
 
 	// Determine if it's time to check for updates based on frequency and last_checked
-	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, v.atmosConfig.Version.Check.Frequency) {
+	if !v.shouldCheckForUpdates(cacheCfg.LastChecked, v.atmosConfig.Version.Check.Frequency) {
 		// Not due for another check yet, so return without printing anything
 		return false
 	}

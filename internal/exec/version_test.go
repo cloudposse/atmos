@@ -3,6 +3,7 @@ package exec
 import (
 	"testing"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/golang/mock/gomock"
@@ -107,6 +108,89 @@ func TestVersionExec_Execute(t *testing.T) {
 
 			// Execute the function
 			v.Execute(tt.checkFlag, "")
+		})
+	}
+}
+
+func TestIsCheckVersionEnabled(t *testing.T) {
+	tests := []struct {
+		name                  string
+		config                *schema.AtmosConfiguration
+		expected              bool
+		forceCheck            bool
+		loadCacheConfig       func() (cfg.CacheConfig, error)
+		shouldCheckForUpdates func(lastChecked int64, frequency string) bool
+	}{
+		{
+			name: "Check version enabled",
+			config: &schema.AtmosConfiguration{
+				Version: schema.Version{
+					Check: schema.VersionCheck{
+						Enabled: true,
+					},
+				},
+			},
+			loadCacheConfig: func() (cfg.CacheConfig, error) {
+				return cfg.CacheConfig{LastChecked: 0}, nil
+			},
+			shouldCheckForUpdates: func(lastChecked int64, frequency string) bool {
+				return true
+			},
+			expected: true,
+		},
+		{
+			name: "Check version disabled",
+			config: &schema.AtmosConfiguration{
+				Version: schema.Version{
+					Check: schema.VersionCheck{
+						Enabled: false,
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "Force check version enabled",
+			config: &schema.AtmosConfiguration{
+				Version: schema.Version{
+					Check: schema.VersionCheck{
+						Enabled: false,
+					},
+				},
+			},
+			expected:   true,
+			forceCheck: true,
+		},
+		{
+			name: "Check version enabled with cache",
+			config: &schema.AtmosConfiguration{
+				Version: schema.Version{
+					Check: schema.VersionCheck{
+						Enabled: true,
+					},
+				},
+			},
+			loadCacheConfig: func() (cfg.CacheConfig, error) {
+				return cfg.CacheConfig{LastChecked: 0}, nil
+			},
+			shouldCheckForUpdates: func(lastChecked int64, frequency string) bool {
+				return true
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := versionExec{
+				atmosConfig:           tt.config,
+				loadCacheConfig:       tt.loadCacheConfig,
+				shouldCheckForUpdates: tt.shouldCheckForUpdates,
+			}
+			result := v.isCheckVersionEnabled(tt.forceCheck)
+			if result != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, result)
+			}
 		})
 	}
 }
