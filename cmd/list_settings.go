@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
@@ -13,7 +15,6 @@ import (
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
-	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/selector"
 	utils "github.com/cloudposse/atmos/pkg/utils"
@@ -149,11 +150,18 @@ func listSettings(cmd *cobra.Command, args []string) (string, error) {
 	// Apply label selector if provided
 	selectorFlag, _ := cmd.Flags().GetString("selector")
 	if selectorFlag != "" {
-		filteredMap, err := applySettingsSelector(stacksMap, selectorFlag, params.ComponentFilter)
-		if err != nil {
-			return "", err
+		reqs, perr := selector.Parse(selectorFlag)
+		if perr != nil {
+			return "", perr
 		}
-		stacksMap = filteredMap
+		filtered := make(map[string]any)
+		for sname, sdata := range stacksMap {
+			mergedLabels := selector.MergedLabels(sdata.(map[string]any), params.ComponentFilter)
+			if selector.Matches(mergedLabels, reqs) {
+				filtered[sname] = sdata
+			}
+		}
+		stacksMap = filtered
 	}
 
 	if len(stacksMap) == 0 {
@@ -179,22 +187,4 @@ func listSettings(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	return output, nil
-}
-
-// applySettingsSelector filters stacks based on label selector requirements for settings.
-func applySettingsSelector(stacksMap map[string]interface{}, selectorStr string, componentFilter string) (map[string]interface{}, error) {
-	reqs, err := selector.Parse(selectorStr)
-	if err != nil {
-		return nil, err
-	}
-
-	filtered := make(map[string]interface{})
-	for sname, sdata := range stacksMap {
-		mergedLabels := selector.MergedLabels(sdata.(map[string]any), componentFilter)
-		if selector.Matches(mergedLabels, reqs) {
-			filtered[sname] = sdata
-		}
-	}
-
-	return filtered, nil
 }

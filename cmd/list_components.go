@@ -66,11 +66,38 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 
 	selectorFlag, _ := flags.GetString("selector")
 	if selectorFlag != "" {
-		reqs, err := selector.Parse(selectorFlag)
-		if err != nil {
-			return nil, err
+		reqs, perr := selector.Parse(selectorFlag)
+		if perr != nil {
+			return nil, perr
 		}
-		output = filterComponentsBySelector(output, stacksMap, reqs)
+		filtered := []string{}
+		for _, comp := range output {
+			// Iterate stacks to find component instance and evaluate labels
+			for _, sdata := range stacksMap {
+				smap, ok := sdata.(map[string]any)
+				if !ok {
+					continue
+				}
+				// look into components.terraform and helmfile
+				components, ok := smap["components"].(map[string]any)
+				if !ok {
+					continue
+				}
+				for _, ctype := range []string{"terraform", "helmfile"} {
+					if ctypeSection, ok := components[ctype].(map[string]any); ok {
+						if _, ok := ctypeSection[comp]; ok {
+							merged := selector.MergedLabels(smap, comp)
+							if selector.Matches(merged, reqs) {
+								filtered = append(filtered, comp)
+								goto NextComp
+							}
+						}
+					}
+				}
+			}
+		NextComp:
+		}
+		output = filtered
 	}
 
 	if len(output) == 0 {
@@ -79,48 +106,4 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 	}
 
 	return output, nil
-}
-
-// filterComponentsBySelector filters components based on selector requirements
-func filterComponentsBySelector(components []string, stacksMap map[string]any, reqs []selector.Requirement) []string {
-	var filtered []string
-	for _, comp := range components {
-		if componentMatchesSelector(comp, stacksMap, reqs) {
-			filtered = append(filtered, comp)
-		}
-	}
-	return filtered
-}
-
-// componentMatchesSelector checks if a component matches the selector requirements
-func componentMatchesSelector(comp string, stacksMap map[string]any, reqs []selector.Requirement) bool {
-	for _, sdata := range stacksMap {
-		smap, ok := sdata.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		components, ok := smap["components"].(map[string]any)
-		if !ok {
-			continue
-		}
-
-		if found, matches := checkComponentInStack(comp, smap, components, reqs); found {
-			return matches
-		}
-	}
-	return false
-}
-
-// checkComponentInStack checks if component exists in stack and matches selector
-func checkComponentInStack(comp string, smap map[string]any, components map[string]any, reqs []selector.Requirement) (found, matches bool) {
-	for _, ctype := range []string{"terraform", "helmfile"} {
-		if ctypeSection, ok := components[ctype].(map[string]any); ok {
-			if _, ok := ctypeSection[comp]; ok {
-				merged := selector.MergedLabels(smap, comp)
-				return true, selector.Matches(merged, reqs)
-			}
-		}
-	}
-	return false, false
 }
