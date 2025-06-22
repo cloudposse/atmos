@@ -298,8 +298,17 @@ func ExecuteDescribeStacks(
 							stackName = stackFileName
 						}
 
-						// Ensure stack entry exists and copy metadata
-						ensureStackEntryWithMetadata(stackSection, finalStacksMap, stackName)
+						// Only create the stack entry if it doesn't exist
+						if !u.MapKeyExists(finalStacksMap, stackName) {
+							finalStacksMap[stackName] = make(map[string]any)
+
+							// Copy stack-level metadata from the original stacksMap
+							if stackData, ok := stackSection.(map[string]any); ok {
+								if metadata, exists := stackData["metadata"]; exists {
+									finalStacksMap[stackName].(map[string]any)["metadata"] = metadata
+								}
+							}
+						}
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
@@ -523,8 +532,17 @@ func ExecuteDescribeStacks(
 							stackName = stackFileName
 						}
 
-						// Ensure stack entry exists and copy metadata
-						ensureStackEntryWithMetadata(stackSection, finalStacksMap, stackName)
+						// Only create the stack entry if it doesn't exist
+						if !u.MapKeyExists(finalStacksMap, stackName) {
+							finalStacksMap[stackName] = make(map[string]any)
+
+							// Copy stack-level metadata from the original stacksMap
+							if stackData, ok := stackSection.(map[string]any); ok {
+								if metadata, exists := stackData["metadata"]; exists {
+									finalStacksMap[stackName].(map[string]any)["metadata"] = metadata
+								}
+							}
+						}
 
 						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
@@ -674,21 +692,6 @@ func ExecuteDescribeStacks(
 	}
 
 	return finalStacksMap, nil
-}
-
-// ensureStackEntryWithMetadata creates a stack entry in finalStacksMap if it doesn't exist
-// and copies stack-level metadata from stackSection if present.
-func ensureStackEntryWithMetadata(stackSection any, finalStacksMap map[string]any, stackName string) {
-	if !u.MapKeyExists(finalStacksMap, stackName) {
-		finalStacksMap[stackName] = make(map[string]any)
-
-		// Copy stack-level metadata from the original stacksMap
-		if stackData, ok := stackSection.(map[string]any); ok {
-			if metadata, exists := stackData["metadata"]; exists {
-				finalStacksMap[stackName].(map[string]any)["metadata"] = metadata
-			}
-		}
-	}
 }
 
 // applyStackSelector filters stacks based on label selector requirements.
