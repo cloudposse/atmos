@@ -253,3 +253,49 @@ func TestGetLatestVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestDisplayVersionInFormat(t *testing.T) {
+	tests := []struct {
+		name          string
+		format        string
+		expectedError error
+	}{
+		{
+			name:   "Valid JSON format",
+			format: "json",
+		},
+		{
+			name:   "Valid YAML format",
+			format: "yaml",
+		},
+		{
+			name:          "Invalid format",
+			format:        "xml",
+			expectedError: ErrInvalidFormat,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockExec := NewMockVersionExecutor(ctrl)
+
+			v := versionExec{
+				atmosConfig:                &schema.AtmosConfiguration{},
+				printStyledText:            mockExec.PrintStyledText,
+				printMessage:               mockExec.PrintMessage,
+				getLatestGitHubRepoRelease: mockExec.GetLatestGitHubRepoRelease,
+				printMessageToUpgradeToAtmosLatestRelease: mockExec.PrintMessageToUpgradeToAtmosLatestRelease,
+			}
+
+			err := v.displayVersionInFormat(false, tt.format)
+			if tt.expectedError != nil {
+				assert.Equal(t, tt.expectedError, err, "Expected error mismatch")
+			} else {
+				assert.NoError(t, err, "Expected no error")
+			}
+		})
+	}
+}
