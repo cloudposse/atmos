@@ -518,6 +518,7 @@ Executing command="atmos terraform apply eks/istio/istiod -s nonprod"
 Executing command="atmos terraform apply eks/istio/test-app -s nonprod"
 Executing command="atmos terraform apply eks/karpenter -s nonprod"
 Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
+
 Executing command="atmos terraform apply vpc -s prod"
 Executing command="atmos terraform apply eks/cluster -s prod"
 Executing command="atmos terraform apply eks/external-dns -s prod"
@@ -560,6 +561,21 @@ Executing command="atmos terraform apply eks/istio/istiod -s prod"
 Executing command="atmos terraform apply eks/istio/test-app -s prod"
 Executing command="atmos terraform apply eks/karpenter -s prod"
 Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
+```
+</Terminal>
+
+<Terminal title="atmos terraform apply --components vpc,eks/cluster --dry-run">
+```shell
+# Execute the `terraform apply` command on the `vpc` and `eks/cluster` components
+# in all stacks.
+
+> atmos terraform apply --components vpc,eks/cluster --dry-run
+
+Executing command="atmos terraform apply vpc -s nonprod"
+Executing command="atmos terraform apply eks/cluster -s nonprod"
+
+Executing command="atmos terraform apply vpc -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod"
 ```
 </Terminal>
 
