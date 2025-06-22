@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -17,13 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	// Static errors for better error handling.
-	ErrStacksInitConfig     = errors.New("error initializing CLI config")
-	ErrStacksDescribeStacks = errors.New("error describing stacks")
-)
-
-// listStacksCmd lists atmos stacks.
+// listStacksCmd lists atmos stacks
 var listStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "List all Atmos stacks or stacks for a specific component",
@@ -54,11 +47,11 @@ func listStacks(cmd *cobra.Command) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrStacksInitConfig, err)
+		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
 	}
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrStacksDescribeStacks, err)
+		return nil, fmt.Errorf("Error describing stacks: %v", err)
 	}
 
 	output, err := l.FilterAndListStacks(stacksMap, componentFlag)
@@ -67,11 +60,21 @@ func listStacks(cmd *cobra.Command) ([]string, error) {
 	}
 
 	if selectorFlag != "" {
-		var err error
-		output, err = applyStacksSelector(output, stacksMap, selectorFlag)
-		if err != nil {
-			return nil, err
+		// Apply label selector filtering
+		reqs, perr := selector.Parse(selectorFlag)
+		if perr != nil {
+			return nil, perr
 		}
+		filtered := []string{}
+		for _, stackName := range output {
+			if sdata, ok := stacksMap[stackName].(map[string]any); ok {
+				labels := selector.ExtractStackLabels(sdata)
+				if selector.Matches(labels, reqs) {
+					filtered = append(filtered, stackName)
+				}
+			}
+		}
+		output = filtered
 	}
 
 	if len(output) == 0 {
@@ -80,23 +83,4 @@ func listStacks(cmd *cobra.Command) ([]string, error) {
 	}
 
 	return output, nil
-}
-
-// applyStacksSelector filters stacks based on label selector requirements.
-func applyStacksSelector(stacks []string, stacksMap map[string]any, selectorStr string) ([]string, error) {
-	reqs, err := selector.Parse(selectorStr)
-	if err != nil {
-		return nil, err
-	}
-
-	var filtered []string
-	for _, stackName := range stacks {
-		if sdata, ok := stacksMap[stackName].(map[string]any); ok {
-			labels := selector.ExtractStackLabels(sdata)
-			if selector.Matches(labels, reqs) {
-				filtered = append(filtered, stackName)
-			}
-		}
-	}
-	return filtered, nil
 }

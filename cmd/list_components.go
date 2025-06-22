@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -17,14 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	// Static errors for better error handling.
-	ErrStackFlag      = errors.New("error getting the stack flag")
-	ErrInitConfig     = errors.New("error initializing CLI config")
-	ErrDescribeStacks = errors.New("error describing stacks")
-)
-
-// listComponentsCmd lists atmos components.
+// listComponentsCmd lists atmos components
 var listComponentsCmd = &cobra.Command{
 	Use:   "components",
 	Short: "List all Atmos components or filter by stack",
@@ -53,18 +45,18 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 
 	stackFlag, err := flags.GetString("stack")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrStackFlag, err)
+		return nil, fmt.Errorf("Error getting the `stack` flag: `%v`", err)
 	}
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInitConfig, err)
+		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
 	}
 
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDescribeStacks, err)
+		return nil, fmt.Errorf("Error describing stacks: %v", err)
 	}
 
 	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
@@ -89,7 +81,7 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 	return output, nil
 }
 
-// filterComponentsBySelector filters components based on selector requirements.
+// filterComponentsBySelector filters components based on selector requirements
 func filterComponentsBySelector(components []string, stacksMap map[string]any, reqs []selector.Requirement) []string {
 	var filtered []string
 	for _, comp := range components {
@@ -100,7 +92,7 @@ func filterComponentsBySelector(components []string, stacksMap map[string]any, r
 	return filtered
 }
 
-// componentMatchesSelector checks if a component matches the selector requirements.
+// componentMatchesSelector checks if a component matches the selector requirements
 func componentMatchesSelector(comp string, stacksMap map[string]any, reqs []selector.Requirement) bool {
 	for _, sdata := range stacksMap {
 		smap, ok := sdata.(map[string]any)
@@ -120,7 +112,7 @@ func componentMatchesSelector(comp string, stacksMap map[string]any, reqs []sele
 	return false
 }
 
-// checkComponentInStack checks if component exists in stack and matches selector.
+// checkComponentInStack checks if component exists in stack and matches selector
 func checkComponentInStack(comp string, smap map[string]any, components map[string]any, reqs []selector.Requirement) (found, matches bool) {
 	for _, ctype := range []string{"terraform", "helmfile"} {
 		if ctypeSection, ok := components[ctype].(map[string]any); ok {

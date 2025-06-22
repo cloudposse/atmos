@@ -14,10 +14,6 @@ Label selectors provide a powerful way to filter Atmos components and stacks bas
 
 Label selectors are expressions that allow you to filter resources based on their labels. They can be used with various Atmos commands via the `--selector` (`-l`) flag.
 
-:::tip Shell Quoting
-Always wrap your selector expressions in quotes (e.g., `--selector="environment in (dev,staging)"`) to prevent shell parsing issues with commas, parentheses, and other special characters.
-:::
-
 ## Supported Operators
 
 ### Equality Operator (`=`)
@@ -170,7 +166,7 @@ When using selectors, it's important to understand how labels are inherited:
 
 1. **Stack-level labels** apply to all components in the stack
 2. **Component-level labels** override stack-level labels with the same key
-3. **Selectors evaluate the final merged labels** of each component
+3. **Selectors evaluate the final merged labels** for each component
 
 **Example:**
 ```yaml
@@ -245,13 +241,13 @@ The `--selector` flag is supported by the following commands:
 ## Best Practices
 
 1. **Use consistent label naming conventions** across your organization
-2. **Keep label values simple** — avoid spaces and special characters when possible
+2. **Keep label values simple** - avoid spaces and special characters when possible
 3. **Document your labeling strategy** so teams understand the available labels
 4. **Use selectors with other flags** for more precise filtering (e.g., `--stack` + `--selector`)
 5. **Test complex selectors** on a small subset before applying to production workflows
 
 ## Related Documentation
 
-- [Kubernetes Label Selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors) — Original inspiration for the syntax
-- [Configuring Components: metadata.labels](/core-concepts/stacks/define-components#labeling-components-with-metadatalabels) — How to define labels
-- [CLI Commands](/cli/commands/) — Commands that support label selectors
+- [Kubernetes Label Selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors) - Original inspiration for the syntax
+- [Configuring Components: metadata.labels](/core-concepts/stacks/define-components#labeling-components-with-metadatalabels) - How to define labels
+- [CLI Commands](/cli/commands/) - Commands that support label selectors
