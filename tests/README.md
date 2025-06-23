@@ -2,7 +2,7 @@
 
 We have automated tests in packages, as well as standalone tests in this directory.
 
-Smoke tests are implemented to verify the basic functionality and expected behavior of the compiled `atmos` binary, simulating real-world usage scenarios.
+Smoke tests verify the basic functionality of the `atmos` CLI by invoking `cmd.Execute()` directly rather than running a compiled binary.
 
 ```shell
 ├── cli_test.go                                      # Responsible for smoke testing
