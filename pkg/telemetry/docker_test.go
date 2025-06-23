@@ -7,7 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestIsDocker tests the isDocker function to ensure it correctly identifies
+// Docker and Kubernetes environments based on cgroup content patterns.
+// The test covers various scenarios including Docker services, containers,
+// Kubernetes pods, and non-containerized environments.
 func TestIsDocker(t *testing.T) {
+	// Define test cases for different cgroup content scenarios
 	testCases := []struct {
 		name          string
 		cgroupContent string
@@ -45,23 +50,26 @@ func TestIsDocker(t *testing.T) {
 		},
 	}
 
+	// Iterate through each test case
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a temporary file with the test content
+			// Create a temporary file to simulate cgroup content
 			tmpfile, err := os.CreateTemp("", "cgroup_test")
 			if err != nil {
 				t.Fatal(err)
 			}
+			// Ensure cleanup of temporary file and handle
 			defer os.Remove(tmpfile.Name())
 			defer tmpfile.Close()
 
+			// Write test content to the temporary file if provided
 			if tc.cgroupContent != "" {
 				if _, err := tmpfile.WriteString(tc.cgroupContent); err != nil {
 					t.Fatal(err)
 				}
 			}
 
-			// Test the cgroup detection logic with our test file
+			// Test the Docker detection logic using our temporary file
 			result := isDocker(tmpfile.Name())
 			assert.Equal(t, tc.expected, result)
 		})

@@ -8,7 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestCiProvider tests the ciProvider function to ensure it correctly identifies
+// various CI/CD platforms based on environment variables
 func TestCiProvider(t *testing.T) {
+	// Define test cases for different CI providers
 	testCases := []struct {
 		name           string
 		envVars        map[string]string
