@@ -157,7 +157,6 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
 			&atmosConfig,
 			repoPath,
-			verbose,
 			false,
 			false,
 			stack,
@@ -172,7 +171,6 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			sha,
 			sshKeyPath,
 			sshKeyPassword,
-			verbose,
 			false,
 			false,
 			stack,
@@ -185,7 +183,6 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			&atmosConfig,
 			ref,
 			sha,
-			verbose,
 			false,
 			false,
 			stack,

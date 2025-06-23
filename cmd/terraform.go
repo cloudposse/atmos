@@ -124,7 +124,6 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		a.IncludeSettings = false
 		a.Upload = false
 		a.OutputFile = ""
-		a.Verbose = false
 
 		err = e.ExecuteTerraformAffected(&a, &info)
 		if err != nil {

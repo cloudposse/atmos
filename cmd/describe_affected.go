@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
@@ -52,13 +54,25 @@ func getRunnableDescribeAffectedCmd(
 	return func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		checkErrorAndExit(err)
+
+		// Handle the deprecated `--verbose` flag.
+		if cmd.Flags().Changed("verbose") {
+			log.Warn("The --verbose flag is deprecated. Please use the --logs-level flag instead", "example", "atmos describe affected --logs-level=Debug")
+			if props.Verbose {
+				log.SetLevel(log.DebugLevel)
+				props.CLIConfig.Logs.Level = u.LogLevelDebug
+			}
+		}
+
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
 			checkErrorAndExit(err)
 		}
+
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
 		checkErrorAndExit(err)
 	}

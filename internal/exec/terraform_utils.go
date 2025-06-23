@@ -182,7 +182,6 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
 			args.CLIConfig,
 			args.RepoPath,
-			args.Verbose,
 			args.IncludeSpaceliftAdminStacks,
 			args.IncludeSettings,
 			args.Stack,
@@ -197,7 +196,6 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.SHA,
 			args.SSHKeyPath,
 			args.SSHKeyPassword,
-			args.Verbose,
 			args.IncludeSpaceliftAdminStacks,
 			args.IncludeSettings,
 			args.Stack,
@@ -210,7 +208,6 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
-			args.Verbose,
 			args.IncludeSpaceliftAdminStacks,
 			args.IncludeSettings,
 			args.Stack,
