@@ -1,0 +1,79 @@
+---
+title: Telemetry
+description: Collect Atmos usage telemetry
+sidebar_label: Telemetry
+sidebar_position: 5
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+Atmos collects **anonymous telemetry** to help improve the product by understanding how it's used. 
+This data helps us identify which features are most valuable and where we can make improvements.
+</Intro>
+
+### What Data is Collected
+
+Atmos collects the following anonymous information:
+
+- **Command usage**: Which Atmos commands are executed (e.g., `atmos describe`, `atmos terraform`, `atmos helmfile`)
+- **Error patterns**: Anonymous error information to help identify and fix issues
+- **Environment information**: Operating system, Atmos version, and basic system information
+- **CI Provider information**: If Atmos is running as part of CI workflow, CI provider name
+
+:::info Privacy First
+We **never** collect:
+- Personal information (names, emails, IP addresses)
+- Your actual configuration files or stack manifests
+- Sensitive data or secrets
+- Repository contents or code
+:::
+
+### How Telemetry Works
+
+Telemetry data is collected locally and sent securely to [PostHog](https://posthog.com/) analytics service. The data is:
+
+- **Anonymous**: No personally identifiable information is included
+- **Secure**: Transmitted over HTTPS with encryption
+- **Minimal**: Only essential usage data is collected
+- **Transparent**: You can see exactly what's being collected
+
+### Opting Out of Telemetry
+
+You can disable telemetry collection in any of the following ways:
+
+Add the following to your `atmos.yaml` configuration file:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+    telemetry:
+        enabled: false
+```
+</File>
+
+or set environment variable `ATMOS_TELEMETRY_ENABLED` to `false` 
+
+### Collect your own telemetry
+
+You can switch telemery to your own [PostHog](https://posthog.com/) account:
+
+Add the following to your `atmos.yaml` configuration file:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+    telemetry:
+        enabled: true
+        token: {provide your posthog token}
+        endpoint: {provide your posthog endpoint}
+```
+</File>
+
+or set environment variables `ATMOS_TELEMETRY_TOKEN` and `ATMOS_TELEMETRY_ENDPOINT` to your own values
+
+
+## References
+
+- https://posthog.com
