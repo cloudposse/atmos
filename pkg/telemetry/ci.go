@@ -14,22 +14,16 @@ var (
 
 	// Map of CI providers that can be detected by checking if specific environment variables exist.
 	ciProvidersEnvVarsExists = map[string]string{
-		"AGOLA":              "AGOLA_GIT_REF",
-		"APPCIRCLE":          "AC_APPCIRCLE",
-		"APPVEYOR":           "APPVEYOR",
 		"CODEBUILD":          "CODEBUILD_BUILD_ARN",
 		"AZURE_PIPELINES":    "TF_BUILD",
 		"BAMBOO":             "bamboo_planKey",
 		"BITBUCKET":          "BITBUCKET_COMMIT",
 		"BITRISE":            "BITRISE_IO",
-		"BUDDY":              "BUDDY_WORKSPACE_ID",
 		"BUILDKITE":          "BUILDKITE",
 		"CIRCLE":             "CIRCLECI",
 		"CIRRUS":             "CIRRUS_CI",
 		"CODEFRESH":          "CF_BUILD_ID",
 		"DRONE":              "DRONE",
-		"DSARI":              "DSARI",
-		"EARTHLY":            "EARTHLY_CI",
 		"GERRIT":             "GERRIT_PROJECT",
 		"GITEA_ACTIONS":      "GITEA_ACTIONS",
 		"GITHUB_ACTIONS":     "GITHUB_ACTIONS",
@@ -39,16 +33,11 @@ var (
 		"HARNESS":            "HARNESS_BUILD_ID",
 		"HUDSON":             "HUDSON_URL",
 		"JENKINS":            "JENKINS_URL", // "JENKINS_URL" and "BUILD_ID"
-		"MAGNUM":             "MAGNUM",
-		"NEVERCODE":          "NEVERCODE",
 		"PROW":               "PROW_JOB_ID",
 		"SAIL":               "SAILCI",
 		"SEMAPHORE":          "SEMAPHORE",
-		"STRIDER":            "STRIDER",
-		"TASKCLUSTER":        "TASK_ID", // "TASK_ID"  &&  "RUN_ID"
 		"TEAMCITY":           "TEAMCITY_VERSION",
 		"TRAVIS":             "TRAVIS",
-		"VELA":               "VELA",
 	}
 
 	// Map of CI providers that can be detected by checking if environment variables equal specific values.
@@ -58,9 +47,6 @@ var (
 		},
 		"SOURCEHUT": {
 			"CI_NAME": "sourcehut",
-		},
-		"WOODPECKER": {
-			ciEnvVar: "woodpecker",
 		},
 	}
 )

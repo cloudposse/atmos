@@ -438,10 +438,10 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
-// TestTelemetryWarningMessage tests the warning message functionality when telemetry warning
+// TestTelemetryDisclosureMessage tests the warning message functionality when telemetry warning
 // has not been shown before. It verifies that the first call returns the expected warning message
 // and subsequent calls return empty strings (indicating the warning has been marked as shown).
-func TestTelemetryWarningMessage(t *testing.T) {
+func TestTelemetryDisclosureMessage(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -450,28 +450,28 @@ func TestTelemetryWarningMessage(t *testing.T) {
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.TelemetryWarningShown = false
+	cacheCfg.TelemetryDisclosureShown = false
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
 	// First call should return the warning message.
-	message1 := warningMessage()
+	message1 := disclosureMessage()
 	assert.NotEmpty(t, message1)
 	assert.Equal(t, message1, `
-Attention: Atmos now collects completely anonymous telemetry regarding usage.
+**Attention:** Atmos now collects completely anonymous telemetry regarding usage.
 This information is used to shape Atmos roadmap and prioritize features.
 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
 https://atmos.tools/cli/telemetry
 `)
 
 	// Second call should return empty string since warning has been marked as shown.
-	message2 := warningMessage()
+	message2 := disclosureMessage()
 	assert.Empty(t, message2)
 }
 
-// TestTelemetryWarningMessageShown tests that no warning message is returned when
+// TestTelemetryDisclosureMessageShown tests that no warning message is returned when
 // the telemetry warning has already been shown to the user.
-func TestTelemetryWarningMessageShown(t *testing.T) {
+func TestTelemetryDisclosureMessageShown(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -480,18 +480,18 @@ func TestTelemetryWarningMessageShown(t *testing.T) {
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.TelemetryWarningShown = true
+	cacheCfg.TelemetryDisclosureShown = true
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
 	// Should return empty string since warning has already been shown.
-	message := warningMessage()
+	message := disclosureMessage()
 	assert.Empty(t, message)
 }
 
-// TestTelemetryWarningMessageHideForCI tests that warning messages are suppressed
+// TestTelemetryDisclosureMessageHideForCI tests that warning messages are suppressed
 // when running in a CI environment (when CI environment variable is set to "true").
-func TestTelemetryWarningMessageHideForCI(t *testing.T) {
+func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -500,14 +500,14 @@ func TestTelemetryWarningMessageHideForCI(t *testing.T) {
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.TelemetryWarningShown = false
+	cacheCfg.TelemetryDisclosureShown = false
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
 	// Set CI environment variable to simulate CI environment.
 	os.Setenv("CI", "true")
 	// Should return empty string when running in CI environment.
-	message := warningMessage()
+	message := disclosureMessage()
 	assert.Empty(t, message)
 	os.Unsetenv("CI")
 }
