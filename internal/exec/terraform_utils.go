@@ -272,7 +272,7 @@ func executeTerraformAffectedComponentInDepOrder(
 	dependents []schema.Dependent,
 	args *DescribeAffectedCmdArgs,
 ) error {
-	var logFunc func(msg interface{}, keyvals ...interface{})
+	var logFunc func(msg any, keyvals ...any)
 	if info.DryRun {
 		logFunc = log.Info
 	} else {
@@ -362,11 +362,11 @@ func walkTerraformComponents(
 
 // processTerraformComponent performs filtering and execution logic for a single Terraform component.
 func processTerraformComponent(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	stackName, componentName string,
 	componentSection map[string]any,
-	logFunc func(msg interface{}, keyvals ...interface{}),
+	logFunc func(msg any, keyvals ...any),
 ) error {
 	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
 	if !ok {
@@ -386,7 +386,7 @@ func processTerraformComponent(
 	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, componentName, stackName)
 
 	if info.Query != "" {
-		queryResult, err := u.EvaluateYqExpression(&atmosConfig, componentSection, info.Query)
+		queryResult, err := u.EvaluateYqExpression(atmosConfig, componentSection, info.Query)
 		if err != nil {
 			return err
 		}
@@ -420,7 +420,7 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	var logFunc func(msg interface{}, keyvals ...interface{})
+	var logFunc func(msg any, keyvals ...any)
 	if info.DryRun {
 		logFunc = log.Info
 	} else {
@@ -444,7 +444,7 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	}
 
 	err = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
-		return processTerraformComponent(atmosConfig, info, stackName, componentName, componentSection, logFunc)
+		return processTerraformComponent(&atmosConfig, info, stackName, componentName, componentSection, logFunc)
 	})
 	if err != nil {
 		return err
