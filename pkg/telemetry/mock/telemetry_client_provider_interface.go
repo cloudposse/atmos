@@ -15,5 +15,5 @@ type TelemetryClientProviderMock interface {
 	// Returns:
 	//   - posthog_go.Client: The mock client instance
 	//   - error: Any error that occurred during client creation
-	NewMockClient(token string, config posthog_go.Config) (posthog_go.Client, error)
+	NewMockClient(token string, config *posthog_go.Config) (posthog_go.Client, error)
 }
