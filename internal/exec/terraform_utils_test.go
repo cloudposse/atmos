@@ -88,6 +88,9 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 }
 
 func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -130,6 +133,7 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 		CLIConfig:         &atmosConfig,
 		Stack:             stack,
 		IncludeDependents: true,
+		CloneTargetRef:    true,
 	}
 
 	err = ExecuteTerraformAffected(&a, &info)
@@ -152,6 +156,9 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 }
 
 func TestExecuteTerraformQuery(t *testing.T) {
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {

@@ -85,8 +85,8 @@ atmos terraform <command> --query '.vars.tags.team == "data"'
 # Execute `terraform <command>` on all components that have `vars.tags.team == "eks"`, in the stack `prod`
 atmos terraform <command> --query '.vars.tags.team == "eks"' --stack prod
 
-# Execute `terraform <command>` on all components that have `settings.context.accoun_id == 12345`, in all stacks
-atmos terraform <command> --query '.settings.context.accoun_id == 12345'
+# Execute `terraform <command>` on all components that have `settings.context.account_id == 12345`, in all stacks
+atmos terraform <command> --query '.settings.context.account_id == 12345'
 ```
 </Terminal>
 
@@ -203,7 +203,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 ## Arguments
 
 <dl>
-    <dt>`component` <em>(required for Multi-Component commands)</em></dt>
+    <dt>`component` <em>(required for Single-Component commands)</em></dt>
     <dd>
         Atmos Terraform/OpenTofu component.
     </dd>
@@ -212,7 +212,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 ## Flags
 
 <dl>
-    <dt>`--stack` <em>(alias `-s`)</em> <em>(required for Multi-Component commands)</em></dt>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required for Single-Component commands)</em></dt>
     <dd>
         Atmos stack.
 
@@ -324,7 +324,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         ```shell
         atmos terraform plan --query '.vars.tags.team == "data"'
         atmos terraform apply --query '.vars.tags.team == "eks"' --stack <stack>
-        atmos terraform apply --query '.settings.context.accoun_id == 12345'
+        atmos terraform apply --query '.settings.context.account_id == 12345'
         atmos terraform deploy --query '.vars.tags.team == "data"' --dry-run --logs-level=Debug
         ```
     </dd>

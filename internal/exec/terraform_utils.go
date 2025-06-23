@@ -13,6 +13,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const commandStr = "command"
+
 func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 	if len(atmosConfig.Components.Terraform.BasePath) < 1 {
 		return errors.New("Base path to terraform components must be provided in 'components.terraform.base_path' config or " +
@@ -283,9 +285,9 @@ func executeTerraformAffectedComponentInDepOrder(
 	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
 
 	if args.IncludeDependents && parentComponent != "" && parentStack != "" {
-		logFunc("Executing", "command", command, "dependency of component", parentComponent, "in stack", parentStack)
+		logFunc("Executing", commandStr, command, "dependency of component", parentComponent, "in stack", parentStack)
 	} else {
-		logFunc("Executing", "command", command)
+		logFunc("Executing", commandStr, command)
 	}
 
 	if !info.DryRun {
@@ -375,12 +377,12 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 										return err
 									}
 									if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
-										logFunc("Skipping the component because the query criteria not satisfied", "command", command, "query", info.Query)
+										logFunc("Skipping the component because the query criteria not satisfied", commandStr, command, "query", info.Query)
 										continue
 									}
 								}
 
-								logFunc("Executing", "command", command)
+								logFunc("Executing", commandStr, command)
 
 								if !info.DryRun {
 									info.Component = componentName

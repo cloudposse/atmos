@@ -43,7 +43,7 @@ func init() {
 	describeCmd.AddCommand(describeAffectedCmd)
 }
 
-// getRunnableDescribeAffectedCmd returns a command to run `atmos describe affected`
+// getRunnableDescribeAffectedCmd returns a command to run `atmos describe affected`.
 func getRunnableDescribeAffectedCmd(
 	checkAtmosConfig func(opts ...AtmosValidateOption),
 	parseDescribeAffectedCliArgs func(cmd *cobra.Command, args []string) (exec.DescribeAffectedCmdArgs, error),
