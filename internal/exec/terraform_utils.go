@@ -237,11 +237,13 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 	}
 	log.Debug("Affected", "components", affectedYaml)
 
-	for _, affected := range affectedList {
+	for i := 0; i < len(affectedList); i++ {
+		affected := &affectedList[i]
 		// If the affected component is included in the dependencies of any other component, don't process it now;
 		// it will be processed in the dependency order.
 		if !affected.IncludedInDependents {
-			err = executeTerraformAffectedComponentInDepOrder(info,
+			err = executeTerraformAffectedComponentInDepOrder(
+				info,
 				affectedList,
 				affected.Component,
 				affected.Stack,
