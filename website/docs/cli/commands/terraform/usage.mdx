@@ -61,17 +61,22 @@ atmos terraform <command> --all
 # Execute `terraform <command>` on all components in the stack `prod`
 atmos terraform <command> --all --stack prod
 
-# Execute `terraform <command>` on all affected components in all stacks
-# https://atmos.tools/cli/commands/describe/affected
+# Execute `terraform <command>` on all the directly affected components in all stacks in dependency order
+# (if component dependencies are configured)
 atmos terraform <command> --affected
 
-# Execute `terraform <command>` on all affected components in all stacks and process all dependencies in the dependency order
-atmos terraform <command> --affected --include-dependents
-
-# Execute `terraform <command>` on all affected components in the stack `prod`
+# Execute `terraform <command>` on all the directly affected components in the `prod` stack in dependency order
+# (if component dependencies are configured)
 atmos terraform <command> --affected --stack prod
 
-# Execute `terraform <command>` on all affected components in the stack `prod` and process all dependencies in the dependency order
+# Execute `terraform <command>` on all the directly affected components in all stacks in dependency order.
+# For each directly affected component, detect the dependent components and process them in dependency order, recursively.
+# Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
+# or configs, but they are configured as dependencies of the components that are modified
+atmos terraform <command> --affected --include-dependents
+
+# Execute `terraform <command>` on all the directly affected components in the `prod` stack in dependency order.
+# For each directly affected component, detect the dependent components and process them in dependency order, recursively.
 atmos terraform <command> --affected --include-dependents --stack prod
 
 # Execute `terraform <command>` on all components that have `vars.tags.team == "data"`, in all stacks
@@ -343,7 +348,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 
     <dt>`--include-dependents` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
     <dd>
-        For each directly affected component, detect the dependent components and process them in the dependency order, recursively.
+        For each directly affected component, detect the dependent components and process them in dependency order, recursively.
         Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
         or configs, but they are configured as [dependencies](/core-concepts/stacks/dependencies/) of the components that are modified.
 
@@ -670,7 +675,7 @@ Executing command="atmos terraform apply eks/cluster -s prod"
 # Execute the `terraform apply` command on all the components affected by the changes
 # in the current branch, in all stacks.
 # For each directly affected component, detect the dependent components and process
-# them in the dependency order, recursively.
+# them in dependency order, recursively.
 # Dependents are components that are indirectly affected, meaning that nothing in the
 # current branch modifies their code or configs, but they are configured as
 # dependencies of the components that are modified.
@@ -702,7 +707,7 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" depend
 # Execute the `terraform apply` command on all the components affected by the changes
 # in the current branch, in the `prod` stack.
 # For each directly affected component, detect the dependent components and process
-# them in the dependency order, recursively.
+# them in dependency order, recursively.
 # Dependents are components that are indirectly affected, meaning that nothing in the
 # current branch modifies their code or configs, but they are configured as
 # dependencies of the components that are modified.

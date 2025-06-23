@@ -86,8 +86,7 @@ Flags:
                                       dependent components and process them in
                                       the dependency order, recursively: atmos
                                       terraform  --affected
-                                      --include-dependents=true (default
-                                      false)
+                                      --include-dependents (default false)
 
         --process-functions           Enable/disable YAML functions processing
                                       in Atmos stack manifests when executing
