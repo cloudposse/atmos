@@ -50,7 +50,7 @@ func appendToAffected(
 		}
 	}
 
-	if affected.ComponentType == "terraform" {
+	if affected.ComponentType == cfg.TerraformComponentType {
 		varSection := map[string]any{}
 
 		if i, ok2 := (*componentSection)[cfg.VarsSectionName]; ok2 {
@@ -200,9 +200,9 @@ func isComponentFolderChanged(
 	var componentPath string
 
 	switch componentType {
-	case "terraform":
+	case cfg.TerraformComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
-	case "helmfile":
+	case cfg.HelmfileComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
 	default:
 		return false, fmt.Errorf("%s: %w", componentType, ErrUnsupportedComponentType)
@@ -349,7 +349,7 @@ func addAffectedSpaceliftAdminStack(
 	for stackName, stackSection := range *stacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
-				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+				if terraformSection, ok := componentsSection[cfg.TerraformComponentType].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
 
