@@ -297,7 +297,8 @@ func executeTerraformAffectedComponentInDepOrder(
 		}
 	}
 
-	for _, dep := range dependents {
+	for i := 0; i < len(dependents); i++ {
+		dep := &dependents[i]
 		if args.IncludeDependents || isComponentInStackAffected(affectedList, dep.StackSlug) {
 			if !dep.IncludedInDependents {
 				err := executeTerraformAffectedComponentInDepOrder(
