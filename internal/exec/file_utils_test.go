@@ -70,8 +70,13 @@ func TestPrintOrWriteToFile(t *testing.T) {
 func TestRemoveTempDirAndCloseFile(t *testing.T) {
 	dir, err := os.MkdirTemp("", "atmos-test-*")
 	assert.NoError(t, err)
+	defer os.RemoveAll(dir)
+
 	filePath := filepath.Join(dir, "dummy.txt")
 	f, err := os.Create(filePath)
+	assert.NoError(t, err)
+
+	err = f.Close()
 	assert.NoError(t, err)
 
 	closeFile(filePath, f)
@@ -79,7 +84,6 @@ func TestRemoveTempDirAndCloseFile(t *testing.T) {
 
 	removeTempDir(dir)
 
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Errorf("expected temp dir to be removed")
-	}
+	_, err = os.Stat(dir)
+	assert.True(t, os.IsNotExist(err), "expected temp dir to be removed")
 }

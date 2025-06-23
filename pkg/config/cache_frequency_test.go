@@ -35,11 +35,16 @@ func TestParseFrequency(t *testing.T) {
 }
 
 func TestShouldCheckForUpdates(t *testing.T) {
-	now := time.Now().Unix()
-	if !ShouldCheckForUpdates(now-90000, "daily") {
+	const day = 24 * time.Hour
+	now := time.Now()
+
+	past := now.Add(-day - time.Hour).Unix() // 25 hours ago
+	if !ShouldCheckForUpdates(past, "daily") {
 		t.Errorf("expected true for past day check")
 	}
-	if ShouldCheckForUpdates(now-10, "invalid") {
+
+	recent := now.Add(-10 * time.Second).Unix()
+	if ShouldCheckForUpdates(recent, "invalid") {
 		t.Errorf("expected false for recent check with invalid freq")
 	}
 }
