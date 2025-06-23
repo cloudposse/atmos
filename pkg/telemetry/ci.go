@@ -87,61 +87,6 @@ func isCI() bool {
 	return isEnvVarTrue(ciEnvVar) || ciProvider() != ""
 }
 
-// PreserveCIEnvVars temporarily removes CI-related environment variables from the current process
-// and returns a map containing the original values. This is useful for testing scenarios
-// where you want to ensure a clean environment without CI detection.
-//
-// The function handles three categories of CI environment variables:
-// 1. Variables from ciProvidersEnvVarsExists (existence-based detection)
-// 2. Variables from ciProvidersEnvVarsEquals (value-based detection)
-// 3. The general "CI" environment variable
-//
-// Returns a map of preserved environment variable names to their original values.
-func PreserveCIEnvVars() map[string]string {
-	// Initialize map to store original environment variable values
-	envVars := make(map[string]string)
-
-	// Preserve and unset CI provider variables that are detected by existence
-	for key := range ciProvidersEnvVarsExists {
-		if isEnvVarExists(key) {
-			envVars[key] = os.Getenv(key)
-			os.Unsetenv(key)
-		}
-	}
-
-	// Preserve and unset CI provider variables that are detected by specific values
-	for _, values := range ciProvidersEnvVarsEquals {
-		for valueKey := range values {
-			if isEnvVarExists(valueKey) {
-				envVars[valueKey] = os.Getenv(valueKey)
-				os.Unsetenv(valueKey)
-			}
-		}
-	}
-
-	// Preserve and unset the general CI environment variable
-	if isEnvVarExists(ciEnvVar) {
-		envVars[ciEnvVar] = os.Getenv(ciEnvVar)
-		os.Unsetenv(ciEnvVar)
-	}
-
-	return envVars
-}
-
-// RestoreCIEnvVars restores previously preserved CI environment variables back to the system.
-// This function is typically called in a defer statement after PreserveCIEnvVars to ensure
-// the original environment is restored, even if the calling function panics or returns early.
-//
-// Parameters:
-//   - envVars: A map of environment variable names to their original values, typically
-//     returned from a previous call to PreserveCIEnvVars
-func RestoreCIEnvVars(envVars map[string]string) {
-	// Restore each environment variable to its original value
-	for key, value := range envVars {
-		os.Setenv(key, value)
-	}
-}
-
 // applyAlphabeticalOrder is a generic function that processes a map in alphabetical order.
 // It applies a filter function to each value and returns the first key where the filter returns true.
 // V can be either string or map[string]string.

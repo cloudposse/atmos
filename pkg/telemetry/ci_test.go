@@ -305,8 +305,7 @@ func TestCiProvider(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			currentEnvVars := PreserveCIEnvVars()
-			defer RestoreCIEnvVars(currentEnvVars)
+			DisableCIEnvVars(t)
 
 			// Save original environment variables.
 			originalEnv := make(map[string]string)
@@ -375,8 +374,7 @@ func TestIsCI(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			currentEnvVars := PreserveCIEnvVars()
-			defer RestoreCIEnvVars(currentEnvVars)
+			DisableCIEnvVars(t)
 
 			// Save original environment variables.
 			originalEnv := make(map[string]string)

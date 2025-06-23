@@ -599,8 +599,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Preserve the CI environment variables.
 	// This is to ensure that the test is not affected by the CI environment variables.
-	currentEnvVars := telemetry.PreserveCIEnvVars()
-	defer telemetry.RestoreCIEnvVars(currentEnvVars)
+	telemetry.DisableCIEnvVars(t)
 
 	// Prepare the command using the context
 	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
