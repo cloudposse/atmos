@@ -205,7 +205,7 @@ func findAffected(
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
 
 				// Terraform
-				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+				if terraformSection, ok := componentsSection[cfg.TerraformComponentType].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
 							if metadataSection, ok := componentSection["metadata"].(map[string]any); ok {
@@ -220,9 +220,9 @@ func findAffected(
 									continue
 								}
 								// Check `metadata` section
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, metadataSection, "metadata") {
+								if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, metadataSection, "metadata") {
 									affected := schema.Affected{
-										ComponentType: "terraform",
+										ComponentType: cfg.TerraformComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.metadata",
@@ -254,7 +254,7 @@ func findAffected(
 
 								if changed {
 									affected := schema.Affected{
-										ComponentType: "terraform",
+										ComponentType: cfg.TerraformComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "component.module",
@@ -276,14 +276,14 @@ func findAffected(
 								}
 
 								// Check if any files in the component's folder have changed
-								changed, err = isComponentFolderChanged(component, "terraform", atmosConfig, changedFiles)
+								changed, err = isComponentFolderChanged(component, cfg.TerraformComponentType, atmosConfig, changedFiles)
 								if err != nil {
 									return nil, err
 								}
 
 								if changed {
 									affected := schema.Affected{
-										ComponentType: "terraform",
+										ComponentType: cfg.TerraformComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "component",
@@ -306,9 +306,9 @@ func findAffected(
 							}
 							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
+								if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, varSection, "vars") {
 									affected := schema.Affected{
-										ComponentType: "terraform",
+										ComponentType: cfg.TerraformComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.vars",
@@ -331,9 +331,9 @@ func findAffected(
 							}
 							// Check `env` section
 							if envSection, ok := componentSection["env"].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, envSection, "env") {
+								if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, envSection, "env") {
 									affected := schema.Affected{
-										ComponentType: "terraform",
+										ComponentType: cfg.TerraformComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.env",
@@ -356,9 +356,9 @@ func findAffected(
 							}
 							// Check `settings` section
 							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, cfg.SettingsSectionName) {
+								if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, settingsSection, cfg.SettingsSectionName) {
 									affected := schema.Affected{
-										ComponentType: "terraform",
+										ComponentType: cfg.TerraformComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.settings",
@@ -413,7 +413,7 @@ func findAffected(
 									}
 
 									affected := schema.Affected{
-										ComponentType: "terraform",
+										ComponentType: cfg.TerraformComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      changedType,

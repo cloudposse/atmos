@@ -401,7 +401,7 @@ func addAffectedSpaceliftAdminStack(
 								}
 
 								affectedSpaceliftAdminStack := schema.Affected{
-									ComponentType: "terraform",
+									ComponentType: cfg.TerraformComponentType,
 									Component:     componentName,
 									Stack:         stackName,
 									Affected:      "stack.settings.spacelift.admin_stack_selector",

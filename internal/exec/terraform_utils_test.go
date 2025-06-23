@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"bytes"
 	"os"
 	"testing"
 
@@ -112,7 +111,7 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	}
 
 	oldStd := os.Stderr
-	r, w, _ := os.Pipe()
+	_, w, _ := os.Pipe()
 	os.Stderr = w
 
 	stack := "prod"
@@ -144,15 +143,6 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 
 	w.Close()
 	os.Stderr = oldStd
-
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
-	output := buf.String()
-	t.Logf("Output: %s", output)
 }
 
 func TestExecuteTerraformQuery(t *testing.T) {
@@ -179,7 +169,7 @@ func TestExecuteTerraformQuery(t *testing.T) {
 	}
 
 	oldStd := os.Stderr
-	r, w, _ := os.Pipe()
+	_, w, _ := os.Pipe()
 	os.Stderr = w
 
 	stack := "prod"
@@ -188,27 +178,17 @@ func TestExecuteTerraformQuery(t *testing.T) {
 		Stack:         stack,
 		ComponentType: "terraform",
 		SubCommand:    "plan",
-		Affected:      true,
 		DryRun:        true,
 		Query:         ".vars.tags.team == \"eks\"",
 	}
 
 	err = ExecuteTerraformQuery(&info)
 	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraformAffected': %v", err)
+		t.Fatalf("Failed to execute 'ExecuteTerraformQuery': %v", err)
 	}
 
 	w.Close()
 	os.Stderr = oldStd
-
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
-	output := buf.String()
-	t.Logf("Output: %s", output)
 }
 
 // TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.
