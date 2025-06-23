@@ -20,7 +20,7 @@ import (
 )
 
 // TestGetTelemetryFromConfig tests the getTelemetryFromConfig function to ensure it properly
-// initializes telemetry configuration with default values and maintains consistency across calls
+// initializes telemetry configuration with default values and maintains consistency across calls.
 func TestGetTelemetryFromConfig(t *testing.T) {
 	enabled := true
 
@@ -29,14 +29,14 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	// Expect no client creation since telemetry is not actually used in this test
+	// Expect no client creation since telemetry is not actually used in this test.
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(0)
 
-	// Expect no telemetry events to be sent
+	// Expect no telemetry events to be sent.
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
-	// Test first telemetry instance creation
+	// Test first telemetry instance creation.
 	telemetryOne := getTelemetryFromConfig(mockClientProvider.NewMockClient)
 
 	assert.NotNil(t, telemetryOne)
@@ -46,7 +46,7 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 	assert.NotEmpty(t, telemetryOne.distinctId)
 	assert.NotNil(t, telemetryOne.clientProvider)
 
-	// Test second telemetry instance creation - should be identical to first
+	// Test second telemetry instance creation - should be identical to first.
 	telemetryTwo := getTelemetryFromConfig(mockClientProvider.NewMockClient)
 
 	assert.NotNil(t, telemetryTwo)
@@ -57,7 +57,7 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 	assert.NotNil(t, telemetryTwo.clientProvider)
 }
 
-// TestCaptureCmdString tests capturing command telemetry with string command and CI environment
+// TestCaptureCmdString tests capturing command telemetry with string command and CI environment.
 func TestCaptureCmdString(t *testing.T) {
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -78,10 +78,10 @@ func TestCaptureCmdString(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	// Expect client to be created once
+	// Expect client to be created once.
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
 
-	// Expect telemetry event to be captured with CI environment details
+	// Expect telemetry event to be captured with CI environment details.
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: installationId,
 		Event:      "command",
@@ -98,7 +98,7 @@ func TestCaptureCmdString(t *testing.T) {
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
-	// Set up CI environment and workspace ID
+	// Set up CI environment and workspace ID.
 	os.Setenv("CI", "true")
 	os.Setenv("ATMOS_PRO_WORKSPACE_ID", atmosProWorkspaceID)
 	captureCmdString("test-cmd", nil, mockClientProvider.NewMockClient)
@@ -106,7 +106,7 @@ func TestCaptureCmdString(t *testing.T) {
 	os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 }
 
-// TestCaptureCmdErrorString tests capturing command telemetry when an error occurs
+// TestCaptureCmdErrorString tests capturing command telemetry when an error occurs.
 func TestCaptureCmdErrorString(t *testing.T) {
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -125,10 +125,10 @@ func TestCaptureCmdErrorString(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	// Expect client to be created once
+	// Expect client to be created once.
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
 
-	// Expect telemetry event to be captured with error flag set to true
+	// Expect telemetry event to be captured with error flag set to true.
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: installationId,
 		Event:      "command",
@@ -147,7 +147,7 @@ func TestCaptureCmdErrorString(t *testing.T) {
 	captureCmdString("test-cmd", errors.New("test-error"), mockClientProvider.NewMockClient)
 }
 
-// TestCaptureCmdStringDisabledWithEnvvar tests that telemetry is disabled when ATMOS_TELEMETRY_ENABLED=false
+// TestCaptureCmdStringDisabledWithEnvvar tests that telemetry is disabled when ATMOS_TELEMETRY_ENABLED=false.
 func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -157,10 +157,10 @@ func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	// Expect no client creation since telemetry is disabled
+	// Expect no client creation since telemetry is disabled.
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(0)
 
-	// Expect no telemetry events to be sent
+	// Expect no telemetry events to be sent.
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
@@ -170,7 +170,7 @@ func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
-// TestCaptureCmdFailureStringDisabledWithEnvvar tests that error telemetry is also disabled when ATMOS_TELEMETRY_ENABLED=false
+// TestCaptureCmdFailureStringDisabledWithEnvvar tests that error telemetry is also disabled when ATMOS_TELEMETRY_ENABLED=false.
 func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -180,20 +180,20 @@ func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	// Expect no client creation since telemetry is disabled
+	// Expect no client creation since telemetry is disabled.
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(0)
 
-	// Expect no telemetry events to be sent
+	// Expect no telemetry events to be sent.
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
-	// Disable telemetry via environment variable
+	// Disable telemetry via environment variable.
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmdString("test-cmd", errors.New("test-error"), mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
-// TestGetTelemetryFromConfigTokenWithEnvvar tests telemetry configuration with custom token, endpoint, and enabled status via environment variables
+// TestGetTelemetryFromConfigTokenWithEnvvar tests telemetry configuration with custom token, endpoint, and enabled status via environment variables.
 func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -239,18 +239,18 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 
 // TestGetTelemetryFromConfigIntergration tests the integration of telemetry configuration
 // by creating a telemetry instance with default settings and verifying all required
-// fields are properly initialized
+// fields are properly initialized.
 func TestGetTelemetryFromConfigIntergration(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference
+	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
 	enabled := true
 
-	// Create telemetry instance with default configuration
+	// Create telemetry instance with default configuration.
 	telemetry := getTelemetryFromConfig()
 
-	// Verify telemetry instance was created successfully with all required fields
+	// Verify telemetry instance was created successfully with all required fields.
 	assert.NotNil(t, telemetry)
 	assert.Equal(t, telemetry.isEnabled, enabled)
 	assert.NotEmpty(t, telemetry.token)
@@ -260,19 +260,19 @@ func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 }
 
 // TestCaptureCmd tests the captureCmd function for successful command execution
-// by setting up mock expectations and verifying telemetry data is captured correctly
+// by setting up mock expectations and verifying telemetry data is captured correctly.
 func TestCaptureCmd(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference
+	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
-	// Set up gomock controller for mocking
+	// Set up gomock controller for mocking.
 	ctrl := gomock.NewController(t)
 
-	// Generate unique installation ID for testing
+	// Generate unique installation ID for testing.
 	installationId := uuid.New().String()
 
-	// Load and update cache configuration with installation ID
+	// Load and update cache configuration with installation ID.
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
@@ -280,19 +280,19 @@ func TestCaptureCmd(t *testing.T) {
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
-	// Create mock client provider and client
+	// Create mock client provider and client.
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	// Expect client provider to be called once with any parameters
+	// Expect client provider to be called once with any parameters.
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
 
-	// Create test command with unique name
+	// Create test command with unique name.
 	cmd := &cobra.Command{
 		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
-	// Expect telemetry capture with specific properties for successful command execution
+	// Expect telemetry capture with specific properties for successful command execution.
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: installationId,
 		Event:      "command",
@@ -309,34 +309,34 @@ func TestCaptureCmd(t *testing.T) {
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
-	// Set Jenkins CI environment and test command capture
+	// Set Jenkins CI environment and test command capture.
 	os.Setenv("JENKINS_URL", "https://jenkins.example.com")
 	captureCmd(cmd, nil, mockClientProvider.NewMockClient)
 	os.Unsetenv("JENKINS_URL")
 }
 
 // TestCaptureCmdError tests the captureCmd function for failed command execution
-// by setting up mock expectations and verifying error telemetry data is captured correctly
+// by setting up mock expectations and verifying error telemetry data is captured correctly.
 func TestCaptureCmdError(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference
+	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
-	// Set up gomock controller for mocking
+	// Set up gomock controller for mocking.
 	ctrl := gomock.NewController(t)
 
-	// Create test command with unique name
+	// Create test command with unique name.
 	cmd := &cobra.Command{
 		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
-	// Generate unique Atmos Pro workspace ID for testing
+	// Generate unique Atmos Pro workspace ID for testing.
 	atmosProWorkspaceID := fmt.Sprintf("ws_%s", uuid.New().String())
 
-	// Generate unique installation ID for testing
+	// Generate unique installation ID for testing.
 	installationId := uuid.New().String()
 
-	// Load and update cache configuration with installation ID
+	// Load and update cache configuration with installation ID.
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
@@ -344,14 +344,14 @@ func TestCaptureCmdError(t *testing.T) {
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
-	// Create mock client provider and client
+	// Create mock client provider and client.
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	// Expect client provider to be called once with any parameters
+	// Expect client provider to be called once with any parameters.
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
 
-	// Expect telemetry capture with error properties for failed command execution
+	// Expect telemetry capture with error properties for failed command execution.
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: installationId,
 		Event:      "command",
@@ -368,7 +368,7 @@ func TestCaptureCmdError(t *testing.T) {
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
-	// Set CI environment variables and test error command capture
+	// Set CI environment variables and test error command capture.
 	os.Setenv("CI", "true")
 	os.Setenv("GITHUB_ACTIONS", "true")
 	os.Setenv("ATMOS_PRO_WORKSPACE_ID", atmosProWorkspaceID)
@@ -379,60 +379,60 @@ func TestCaptureCmdError(t *testing.T) {
 }
 
 // TestCaptureCmdDisabledWithEnvvar tests that telemetry is disabled when
-// ATMOS_TELEMETRY_ENABLED environment variable is set to false
+// ATMOS_TELEMETRY_ENABLED environment variable is set to false.
 func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference
+	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
-	// Set up gomock controller for mocking
+	// Set up gomock controller for mocking.
 	ctrl := gomock.NewController(t)
 
-	// Create mock client provider and client
+	// Create mock client provider and client.
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	// Expect no calls to client provider or client methods when telemetry is disabled
+	// Expect no calls to client provider or client methods when telemetry is disabled.
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(0)
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
-	// Create test command with unique name
+	// Create test command with unique name.
 	cmd := &cobra.Command{
 		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
-	// Disable telemetry via environment variable and test command capture
+	// Disable telemetry via environment variable and test command capture.
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmd(cmd, nil, mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
 // TestCaptureCmdFailureDisabledWithEnvvar tests that telemetry is disabled for failed commands
-// when ATMOS_TELEMETRY_ENABLED environment variable is set to false
+// when ATMOS_TELEMETRY_ENABLED environment variable is set to false.
 func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference
+	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
-	// Set up gomock controller for mocking
+	// Set up gomock controller for mocking.
 	ctrl := gomock.NewController(t)
 
-	// Create mock client provider and client
+	// Create mock client provider and client.
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	// Expect no calls to client provider or client methods when telemetry is disabled
+	// Expect no calls to client provider or client methods when telemetry is disabled.
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(0)
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
-	// Create test command with unique name
+	// Create test command with unique name.
 	cmd := &cobra.Command{
 		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
-	// Disable telemetry via environment variable and test error command capture
+	// Disable telemetry via environment variable and test error command capture.
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmd(cmd, errors.New("test-error"), mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
@@ -442,11 +442,11 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 // has not been shown before. It verifies that the first call returns the expected warning message
 // and subsequent calls return empty strings (indicating the warning has been marked as shown).
 func TestTelemetryWarningMessage(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference
+	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
-	// Load cache configuration and ensure telemetry warning is set to not shown
+	// Load cache configuration and ensure telemetry warning is set to not shown.
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
@@ -454,7 +454,7 @@ func TestTelemetryWarningMessage(t *testing.T) {
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
-	// First call should return the warning message
+	// First call should return the warning message.
 	message1 := warningMessage()
 	assert.NotEmpty(t, message1)
 	assert.Equal(t, message1, `
@@ -464,7 +464,7 @@ You can learn more, including how to opt-out if you'd not like to participate in
 https://atmos.tools/cli/telemetry
 `)
 
-	// Second call should return empty string since warning has been marked as shown
+	// Second call should return empty string since warning has been marked as shown.
 	message2 := warningMessage()
 	assert.Empty(t, message2)
 }
@@ -476,7 +476,7 @@ func TestTelemetryWarningMessageShown(t *testing.T) {
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
-	// Load cache configuration and set telemetry warning as already shown
+	// Load cache configuration and set telemetry warning as already shown.
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
@@ -484,7 +484,7 @@ func TestTelemetryWarningMessageShown(t *testing.T) {
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
-	// Should return empty string since warning has already been shown
+	// Should return empty string since warning has already been shown.
 	message := warningMessage()
 	assert.Empty(t, message)
 }
@@ -492,11 +492,11 @@ func TestTelemetryWarningMessageShown(t *testing.T) {
 // TestTelemetryWarningMessageHideForCI tests that warning messages are suppressed
 // when running in a CI environment (when CI environment variable is set to "true").
 func TestTelemetryWarningMessageHideForCI(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference
+	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
-	// Load cache configuration and ensure telemetry warning is set to not shown
+	// Load cache configuration and ensure telemetry warning is set to not shown.
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
@@ -504,9 +504,9 @@ func TestTelemetryWarningMessageHideForCI(t *testing.T) {
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
-	// Set CI environment variable to simulate CI environment
+	// Set CI environment variable to simulate CI environment.
 	os.Setenv("CI", "true")
-	// Should return empty string when running in CI environment
+	// Should return empty string when running in CI environment.
 	message := warningMessage()
 	assert.Empty(t, message)
 	os.Unsetenv("CI")

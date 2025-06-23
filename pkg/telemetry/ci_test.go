@@ -9,7 +9,7 @@ import (
 )
 
 // TestCiProvider tests the ciProvider function to ensure it correctly identifies
-// various CI/CD platforms based on environment variables
+// various CI/CD platforms based on environment variables.
 func TestCiProvider(t *testing.T) {
 	// Define test cases for different CI providers
 	testCases := []struct {
@@ -17,7 +17,7 @@ func TestCiProvider(t *testing.T) {
 		envVars        map[string]string
 		expectedResult string
 	}{
-		// Test providers that check for environment variable existence
+		// Test providers that check for environment variable existence.
 		{
 			name: "AGOLA",
 			envVars: map[string]string{
@@ -263,7 +263,7 @@ func TestCiProvider(t *testing.T) {
 			},
 			expectedResult: "VELA",
 		},
-		// Test providers that check for environment variable equality
+		// Test providers that check for environment variable equality.
 		{
 			name: "CODESHIP",
 			envVars: map[string]string{
@@ -285,13 +285,13 @@ func TestCiProvider(t *testing.T) {
 			},
 			expectedResult: "WOODPECKER",
 		},
-		// Test no CI provider detected
+		// Test no CI provider detected.
 		{
 			name:           "No CI provider",
 			envVars:        map[string]string{},
 			expectedResult: "",
 		},
-		// Test that first matching provider is returned (priority order)
+		// Test that first matching provider is returned (priority order).
 		{
 			name: "Multiple providers - first one wins",
 			envVars: map[string]string{
@@ -299,7 +299,7 @@ func TestCiProvider(t *testing.T) {
 				"GITLAB_CI":      "true",
 				"TRAVIS":         "true",
 			},
-			expectedResult: "GITHUB_ACTIONS", // Should return the first one in the map iteration order
+			expectedResult: "GITHUB_ACTIONS", // Should return the first one in the map iteration order.
 		},
 	}
 
@@ -308,7 +308,7 @@ func TestCiProvider(t *testing.T) {
 			currentEnvVars := PreserveCIEnvVars()
 			defer RestoreCIEnvVars(currentEnvVars)
 
-			// Save original environment variables
+			// Save original environment variables.
 			originalEnv := make(map[string]string)
 			for key := range tc.envVars {
 				if val := os.Getenv(key); val != "" {
@@ -316,18 +316,18 @@ func TestCiProvider(t *testing.T) {
 				}
 			}
 
-			// Set test environment variables
+			// Set test environment variables.
 			for key, value := range tc.envVars {
 				os.Setenv(key, value)
 			}
 
-			// Clean up environment variables after test
+			// Clean up environment variables after test.
 			defer func() {
-				// Clear test environment variables
+				// Clear test environment variables.
 				for key := range tc.envVars {
 					os.Unsetenv(key)
 				}
-				// Restore original environment variables
+				// Restore original environment variables.
 				for key, value := range originalEnv {
 					os.Setenv(key, value)
 				}
@@ -385,20 +385,20 @@ func TestIsCI(t *testing.T) {
 					originalEnv[key] = val
 				}
 			}
-			// https://bitfieldconsulting.com/posts/map-iteration
+
 			var envVarsOrdered []string
 			for key := range tc.envVars {
 				envVarsOrdered = append(envVarsOrdered, key)
 			}
 			sort.Strings(envVarsOrdered)
-			// Set test environment variables
+			// Set test environment variables.
 			for _, key := range envVarsOrdered {
 				os.Setenv(key, tc.envVars[key])
 			}
 
-			// Clean up environment variables after test
+			// Clean up environment variables after test.
 			defer func() {
-				// Clear test environment variables
+				// Clear test environment variables.
 				for key := range tc.envVars {
 					os.Unsetenv(key)
 				}
@@ -416,7 +416,7 @@ func TestIsCI(t *testing.T) {
 
 func TestHelperFunctions(t *testing.T) {
 	t.Run("notEmpty", func(t *testing.T) {
-		// Test with existing environment variable
+		// Test with existing environment variable.
 		os.Setenv("TEST_VAR", "value")
 		defer os.Unsetenv("TEST_VAR")
 
@@ -425,7 +425,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("isTrue", func(t *testing.T) {
-		// Test with "true" value
+		// Test with "true" value.
 		os.Setenv("TRUE_VAR", "true")
 		defer os.Unsetenv("TRUE_VAR")
 
@@ -433,7 +433,7 @@ func TestHelperFunctions(t *testing.T) {
 		assert.False(t, isEnvVarTrue("FALSE_VAR"))
 		assert.False(t, isEnvVarTrue("NON_EXISTENT_VAR"))
 
-		// Test with "false" value
+		// Test with "false" value.
 		os.Setenv("FALSE_VAR", "false")
 		defer os.Unsetenv("FALSE_VAR")
 
@@ -443,7 +443,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("isEquals", func(t *testing.T) {
-		// Test with matching value
+		// Test with matching value.
 		os.Setenv("MATCH_VAR", "expected")
 		defer os.Unsetenv("MATCH_VAR")
 
