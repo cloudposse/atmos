@@ -34,7 +34,6 @@ var (
 		"HUDSON":             "HUDSON_URL",
 		"JENKINS":            "JENKINS_URL", // "JENKINS_URL" and "BUILD_ID"
 		"PROW":               "PROW_JOB_ID",
-		"SAIL":               "SAILCI",
 		"SEMAPHORE":          "SEMAPHORE",
 		"TEAMCITY":           "TEAMCITY_VERSION",
 		"TRAVIS":             "TRAVIS",
