@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cloudposse/atmos/internal/testutils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -59,8 +60,8 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 
 // TestCaptureCmdString tests capturing command telemetry with string command and CI environment.
 func TestCaptureCmdString(t *testing.T) {
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	ctrl := gomock.NewController(t)
 
@@ -108,8 +109,8 @@ func TestCaptureCmdString(t *testing.T) {
 
 // TestCaptureCmdErrorString tests capturing command telemetry when an error occurs.
 func TestCaptureCmdErrorString(t *testing.T) {
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	ctrl := gomock.NewController(t)
 
@@ -149,8 +150,8 @@ func TestCaptureCmdErrorString(t *testing.T) {
 
 // TestCaptureCmdStringDisabledWithEnvvar tests that telemetry is disabled when ATMOS_TELEMETRY_ENABLED=false.
 func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	ctrl := gomock.NewController(t)
 
@@ -172,8 +173,8 @@ func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
 
 // TestCaptureCmdFailureStringDisabledWithEnvvar tests that error telemetry is also disabled when ATMOS_TELEMETRY_ENABLED=false.
 func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	ctrl := gomock.NewController(t)
 
@@ -195,8 +196,8 @@ func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 
 // TestGetTelemetryFromConfigTokenWithEnvvar tests telemetry configuration with custom token, endpoint, and enabled status via environment variables.
 func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	enabled := false
 	token := uuid.New().String()
@@ -242,8 +243,8 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 // fields are properly initialized.
 func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference.
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	enabled := true
 
@@ -263,8 +264,8 @@ func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 // by setting up mock expectations and verifying telemetry data is captured correctly.
 func TestCaptureCmd(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference.
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	// Set up gomock controller for mocking.
 	ctrl := gomock.NewController(t)
@@ -319,8 +320,8 @@ func TestCaptureCmd(t *testing.T) {
 // by setting up mock expectations and verifying error telemetry data is captured correctly.
 func TestCaptureCmdError(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference.
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	// Set up gomock controller for mocking.
 	ctrl := gomock.NewController(t)
@@ -382,8 +383,8 @@ func TestCaptureCmdError(t *testing.T) {
 // ATMOS_TELEMETRY_ENABLED environment variable is set to false.
 func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference.
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	// Set up gomock controller for mocking.
 	ctrl := gomock.NewController(t)
@@ -412,8 +413,8 @@ func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
 // when ATMOS_TELEMETRY_ENABLED environment variable is set to false.
 func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference.
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	// Set up gomock controller for mocking.
 	ctrl := gomock.NewController(t)
@@ -443,8 +444,8 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 // and subsequent calls return empty strings (indicating the disclosure has been marked as shown).
 func TestTelemetryDisclosureMessage(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference.
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	// Load cache configuration and ensure telemetry disclosure is set to not shown.
 	cacheCfg, err := cfg.LoadCache()
@@ -473,8 +474,8 @@ https://atmos.tools/cli/telemetry
 // the telemetry disclosure has already been shown to the user.
 func TestTelemetryDisclosureMessageShown(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	// Load cache configuration and set telemetry war	ning as already shown.
 	cacheCfg, err := cfg.LoadCache()
@@ -493,8 +494,8 @@ func TestTelemetryDisclosureMessageShown(t *testing.T) {
 // when running in a CI environment (when CI environment variable is set to "true").
 func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
 	// Preserve and restore CI environment variables to avoid interference.
-	currentEnvVars := PreserveCIEnvVars()
-	defer RestoreCIEnvVars(currentEnvVars)
+	currentEnvVars := testutils.PreserveCIEnvVars()
+	defer testutils.RestoreCIEnvVars(currentEnvVars)
 
 	// Load cache configuration and ensure telemetry disclosure is set to not shown.
 	cacheCfg, err := cfg.LoadCache()
