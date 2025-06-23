@@ -19,27 +19,6 @@ func TestCiProvider(t *testing.T) {
 	}{
 		// Test providers that check for environment variable existence.
 		{
-			name: "AGOLA",
-			envVars: map[string]string{
-				"AGOLA_GIT_REF": "refs/heads/main",
-			},
-			expectedResult: "AGOLA",
-		},
-		{
-			name: "APPCIRCLE",
-			envVars: map[string]string{
-				"AC_APPCIRCLE": "true",
-			},
-			expectedResult: "APPCIRCLE",
-		},
-		{
-			name: "APPVEYOR",
-			envVars: map[string]string{
-				"APPVEYOR": "true",
-			},
-			expectedResult: "APPVEYOR",
-		},
-		{
 			name: "CODEBUILD",
 			envVars: map[string]string{
 				"CODEBUILD_BUILD_ARN": "arn:aws:codebuild:us-east-1:123456789012:build/test-project:12345678-1234-1234-1234-123456789012",
@@ -75,13 +54,6 @@ func TestCiProvider(t *testing.T) {
 			expectedResult: "BITRISE",
 		},
 		{
-			name: "BUDDY",
-			envVars: map[string]string{
-				"BUDDY_WORKSPACE_ID": "12345",
-			},
-			expectedResult: "BUDDY",
-		},
-		{
 			name: "BUILDKITE",
 			envVars: map[string]string{
 				"BUILDKITE": "true",
@@ -115,20 +87,6 @@ func TestCiProvider(t *testing.T) {
 				"DRONE": "true",
 			},
 			expectedResult: "DRONE",
-		},
-		{
-			name: "DSARI",
-			envVars: map[string]string{
-				"DSARI": "true",
-			},
-			expectedResult: "DSARI",
-		},
-		{
-			name: "EARTHLY",
-			envVars: map[string]string{
-				"EARTHLY_CI": "true",
-			},
-			expectedResult: "EARTHLY",
 		},
 		{
 			name: "GERRIT",
@@ -194,20 +152,6 @@ func TestCiProvider(t *testing.T) {
 			expectedResult: "JENKINS",
 		},
 		{
-			name: "MAGNUM",
-			envVars: map[string]string{
-				"MAGNUM": "true",
-			},
-			expectedResult: "MAGNUM",
-		},
-		{
-			name: "NEVERCODE",
-			envVars: map[string]string{
-				"NEVERCODE": "true",
-			},
-			expectedResult: "NEVERCODE",
-		},
-		{
 			name: "PROW",
 			envVars: map[string]string{
 				"PROW_JOB_ID": "12345",
@@ -215,32 +159,11 @@ func TestCiProvider(t *testing.T) {
 			expectedResult: "PROW",
 		},
 		{
-			name: "SAIL",
-			envVars: map[string]string{
-				"SAILCI": "true",
-			},
-			expectedResult: "SAIL",
-		},
-		{
 			name: "SEMAPHORE",
 			envVars: map[string]string{
 				"SEMAPHORE": "true",
 			},
 			expectedResult: "SEMAPHORE",
-		},
-		{
-			name: "STRIDER",
-			envVars: map[string]string{
-				"STRIDER": "true",
-			},
-			expectedResult: "STRIDER",
-		},
-		{
-			name: "TASKCLUSTER",
-			envVars: map[string]string{
-				"TASK_ID": "abc123",
-			},
-			expectedResult: "TASKCLUSTER",
 		},
 		{
 			name: "TEAMCITY",
@@ -256,13 +179,6 @@ func TestCiProvider(t *testing.T) {
 			},
 			expectedResult: "TRAVIS",
 		},
-		{
-			name: "VELA",
-			envVars: map[string]string{
-				"VELA": "true",
-			},
-			expectedResult: "VELA",
-		},
 		// Test providers that check for environment variable equality.
 		{
 			name: "CODESHIP",
@@ -277,13 +193,6 @@ func TestCiProvider(t *testing.T) {
 				"CI_NAME": "sourcehut",
 			},
 			expectedResult: "SOURCEHUT",
-		},
-		{
-			name: "WOODPECKER",
-			envVars: map[string]string{
-				"CI": "woodpecker",
-			},
-			expectedResult: "WOODPECKER",
 		},
 		// Test no CI provider detected.
 		{

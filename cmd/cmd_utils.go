@@ -548,7 +548,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		fmt.Println(",\nbut the directory does not exist.")
 	}
 
-	telemetry.PrintWarningMessage()
+	telemetry.PrintTelemetryDisclosure()
 
 	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
 
