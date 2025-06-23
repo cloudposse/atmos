@@ -8,12 +8,17 @@ import (
 // TelemetryClientProvider is a function type that creates a PostHog client
 // given a token and configuration. This allows for dependency injection
 // and easier testing by providing mock implementations.
-type TelemetryClientProvider func(string, posthog.Config) (posthog.Client, error)
+// TelemetryClientProvider is a function type that creates a PostHog client
+// given a token and configuration. The configuration is passed by pointer to
+// avoid copying large structs and to allow tests to modify it.
+type TelemetryClientProvider func(string, *posthog.Config) (posthog.Client, error)
 
 // PosthogClientProvider is the default implementation of TelemetryClientProvider
 // that creates a real PostHog client using the provided token and configuration.
-func PosthogClientProvider(token string, config posthog.Config) (posthog.Client, error) {
-	return posthog.NewWithConfig(token, config)
+// PosthogClientProvider is the default implementation of TelemetryClientProvider
+// that creates a real PostHog client using the provided token and configuration.
+func PosthogClientProvider(token string, config *posthog.Config) (posthog.Client, error) {
+	return posthog.NewWithConfig(token, *config)
 }
 
 // Telemetry represents a telemetry system that can capture events and send them
@@ -54,7 +59,7 @@ func (t *Telemetry) Capture(eventName string, properties map[string]interface{})
 	}
 
 	// Create PostHog client using the provided client provider
-	client, err := t.clientProvider(t.token, posthog.Config{
+	client, err := t.clientProvider(t.token, &posthog.Config{
 		Endpoint: t.endpoint,
 	})
 	if err != nil {

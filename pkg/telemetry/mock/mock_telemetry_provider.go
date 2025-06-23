@@ -41,7 +41,7 @@ func (m *MockTelemetryClientProviderMock) EXPECT() *MockTelemetryClientProviderM
 }
 
 // NewMockClient mocks base method.
-func (m *MockTelemetryClientProviderMock) NewMockClient(token string, config posthog_go.Config) (posthog_go.Client, error) {
+func (m *MockTelemetryClientProviderMock) NewMockClient(token string, config *posthog_go.Config) (posthog_go.Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewMockClient", token, config)
 	ret0, _ := ret[0].(posthog_go.Client)

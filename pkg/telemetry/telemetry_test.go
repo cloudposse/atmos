@@ -29,7 +29,7 @@ func TestTelemetryConstructor(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	mockClientProvider.EXPECT().NewMockClient(token, posthog.Config{
+	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
 		Endpoint: endpoint,
 	}).Return(mockClient, nil).Times(0)
 
@@ -66,7 +66,7 @@ func TestTelemetryCaptureMethod(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	mockClientProvider.EXPECT().NewMockClient(token, posthog.Config{
+	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
 		Endpoint: endpoint,
 	}).Return(mockClient, nil).Times(1)
 
@@ -105,7 +105,7 @@ func TestTelemetryDisabledCaptureMethod(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	mockClientProvider.EXPECT().NewMockClient(token, posthog.Config{
+	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
 		Endpoint: endpoint,
 	}).Return(mockClient, nil).Times(0)
 
@@ -148,7 +148,7 @@ func TestTelemetryEmptyTokenCaptureMethod(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	mockClientProvider.EXPECT().NewMockClient(token, posthog.Config{
+	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
 		Endpoint: endpoint,
 	}).Return(mockClient, nil).Times(0)
 
@@ -191,7 +191,7 @@ func TestTelemetryProviderErrorCaptureMethod(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	mockClientProvider.EXPECT().NewMockClient(token, posthog.Config{
+	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
 		Endpoint: endpoint,
 	}).Return(mockClient, errors.New("provider error")).Times(1)
 
@@ -234,7 +234,7 @@ func TestTelemetryEnqueueErrorCaptureMethod(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	mockClientProvider.EXPECT().NewMockClient(token, posthog.Config{
+	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
 		Endpoint: endpoint,
 	}).Return(mockClient, nil).Times(1)
 
@@ -275,11 +275,11 @@ func TestTelemetryPosthogIntegrationCaptureMethod(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	mockClientProvider.EXPECT().NewMockClient(token, posthog.Config{
+	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
 		Endpoint: endpoint,
-	}).Do(func(token string, config posthog.Config) {
+	}).Do(func(token string, config *posthog.Config) {
 		var err error
-		realPosthogClient, err = posthog.NewWithConfig(token, config)
+		realPosthogClient, err = posthog.NewWithConfig(token, *config)
 		if err != nil {
 			t.Fatalf("Failed to create real PostHog client: %v", err)
 		}
@@ -328,11 +328,11 @@ func TestTelemetryPosthogIntegrationWrongEndpointCaptureMethod(t *testing.T) {
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
-	mockClientProvider.EXPECT().NewMockClient(token, posthog.Config{
+	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
 		Endpoint: endpoint,
-	}).Do(func(token string, config posthog.Config) {
+	}).Do(func(token string, config *posthog.Config) {
 		var err error
-		realPosthogClient, err = posthog.NewWithConfig(token, config)
+		realPosthogClient, err = posthog.NewWithConfig(token, *config)
 		if err != nil {
 			t.Fatalf("Failed to create real PostHog client: %v", err)
 		}
