@@ -64,7 +64,7 @@ func TestTelemetryConstructor(t *testing.T) {
 	assert.NotNil(t, telemetry.clientProvider)
 }
 
-// TestTelemetryCaptureMethod tests the Capture method when telemetry is enabled.
+// TestTelemetryCaptureMethod tests the Capture method when telemetry is enabled
 // and all operations succeed.
 func TestTelemetryCaptureMethod(t *testing.T) {
 	// Generate random test data.
