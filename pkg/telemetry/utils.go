@@ -18,15 +18,13 @@ import (
 const (
 	CommandEventName = "command"
 
-	// DisclosureMessage contains the standard telemetry warning message shown to users
+	// DisclosureMessage contains the standard telemetry disclosure message shown to users
 	// when telemetry is first enabled. It explains that Atmos collects anonymous
 	// usage data and provides a link for users to learn more or opt out.
-	DisclosureMessage = `
-**Attention:** Atmos now collects completely anonymous telemetry regarding usage.
+	DisclosureMessage = `**Attention:** Atmos now collects completely anonymous telemetry regarding usage.
 This information is used to shape Atmos roadmap and prioritize features.
 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
-https://atmos.tools/cli/telemetry
-`
+https://atmos.tools/cli/telemetry`
 )
 
 // CaptureCmdString is the public API for capturing command string telemetry.
@@ -49,8 +47,8 @@ func CaptureCmd(cmd *cobra.Command, err ...error) {
 	captureCmd(cmd, inErr)
 }
 
-// PrintTelemetryDisclosure displays the telemetry warning message if one is available.
-// It calls disclosureMessage() to get the message and prints it in warning color
+// PrintTelemetryDisclosure displays the telemetry disclosure message if one is available.
+// It calls disclosureMessage() to get the message and prints as markdown
 // if a message is returned.
 func PrintTelemetryDisclosure() {
 	if message := disclosureMessage(); message != "" {
@@ -133,23 +131,23 @@ func captureCmd(cmd *cobra.Command, err error, provider ...TelemetryClientProvid
 	captureCmdString(cmd.CommandPath(), err, provider...)
 }
 
-// disclosureMessage returns a telemetry warning message if it hasn't been shown before.
+// disclosureMessage returns a telemetry disclosure message if it hasn't been shown before.
 // It checks if telemetry is enabled and not running in CI, then loads the cache to
-// determine if the warning has been displayed previously. If not shown, it marks
-// the warning as shown in the cache and returns the warning message.
+// determine if the disclosure has been displayed previously. If not shown, it marks
+// the disclosure as shown in the cache and returns the disclosure message.
 func disclosureMessage() string {
-	// Do not show warning if running in CI
+	// Do not show disclosure if running in CI
 	if isCI() {
 		return ""
 	}
 
-	// Only show warning if telemetry is enabled
+	// Only show disclosure if telemetry is enabled
 	telemetry := getTelemetryFromConfig()
 	if telemetry == nil {
 		return ""
 	}
 
-	TelemetryWarningShown := getOrInitializeCacheValue(
+	TelemetryDisclosureShown := getOrInitializeCacheValue(
 		func(cfg *cfg.CacheConfig) bool {
 			return cfg.TelemetryDisclosureShown
 		},
@@ -159,8 +157,8 @@ func disclosureMessage() string {
 		false,
 	)
 
-	// If warning has already been shown, return empty
-	if TelemetryWarningShown {
+	// If disclosure has already been shown, return empty
+	if TelemetryDisclosureShown {
 		return ""
 	}
 	return DisclosureMessage
@@ -180,7 +178,7 @@ func disclosureMessage() string {
 //
 // The function loads the cache configuration, checks if a value already exists using the getter.
 // If the value is empty/zero, it initializes it with the default value using the initializer and saves
-// the updated cache. If cache operations fail, it logs a warning but continues execution.
+// the updated cache. If cache operations fail, it logs a disclosure but continues execution.
 func getOrInitializeCacheValue[T comparable](getter func(cfg *cfg.CacheConfig) T, initializer func(cfg *cfg.CacheConfig, value T), defaultValue T) T {
 	var emptyValue T
 
