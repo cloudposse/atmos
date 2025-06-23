@@ -323,6 +323,96 @@ func executeTerraformAffectedComponentInDepOrder(
 	return nil
 }
 
+// walkTerraformComponents iterates over all Terraform components in the provided stacks map.
+// For each component it calls the provided function, stopping if the function returns an error.
+func walkTerraformComponents(
+	stacks map[string]any,
+	fn func(stackName, componentName string, componentSection map[string]any) error,
+) error {
+	for stackName, stackSection := range stacks {
+		stackSectionMap, ok := stackSection.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		componentsSection, ok := stackSectionMap[cfg.ComponentsSectionName].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		for componentName, compSection := range terraformSection {
+			componentSection, ok := compSection.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			if err := fn(stackName, componentName, componentSection); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// processTerraformComponent performs filtering and execution logic for a single Terraform component.
+func processTerraformComponent(
+	atmosConfig schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	stackName, componentName string,
+	componentSection map[string]any,
+	logFunc func(msg interface{}, keyvals ...interface{}),
+) error {
+	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	// Skip abstract components
+	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
+		return nil
+	}
+
+	// Skip disabled components
+	if !isComponentEnabled(metadataSection, componentName) {
+		return nil
+	}
+
+	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, componentName, stackName)
+
+	if info.Query != "" {
+		queryResult, err := u.EvaluateYqExpression(&atmosConfig, componentSection, info.Query)
+		if err != nil {
+			return err
+		}
+
+		if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
+			logFunc("Skipping the component because the query criteria not satisfied", commandStr, command, "query", info.Query)
+			return nil
+		}
+	}
+
+	logFunc("Executing", commandStr, command)
+
+	if !info.DryRun {
+		info.Component = componentName
+		info.ComponentFromArg = componentName
+		info.Stack = stackName
+		info.StackFromArg = stackName
+
+		if err := ExecuteTerraform(*info); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
 func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
@@ -353,56 +443,11 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	for stackName, stackSection := range stacks {
-		if stackSectionMap, ok := stackSection.(map[string]any); ok {
-			if componentsSection, ok := stackSectionMap[cfg.ComponentsSectionName].(map[string]any); ok {
-				if terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any); ok {
-					for componentName, compSection := range terraformSection {
-						if componentSection, ok := compSection.(map[string]any); ok {
-							if metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
-								// Skip abstract components
-								if metadataType, ok := metadataSection["type"].(string); ok {
-									if metadataType == "abstract" {
-										continue
-									}
-								}
-								// Skip disabled components
-								if !isComponentEnabled(metadataSection, componentName) {
-									continue
-								}
-
-								command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, componentName, stackName)
-
-								if info.Query != "" {
-									queryResult, err := u.EvaluateYqExpression(&atmosConfig, componentSection, info.Query)
-									if err != nil {
-										return err
-									}
-									if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
-										logFunc("Skipping the component because the query criteria not satisfied", commandStr, command, "query", info.Query)
-										continue
-									}
-								}
-
-								logFunc("Executing", commandStr, command)
-
-								if !info.DryRun {
-									info.Component = componentName
-									info.ComponentFromArg = componentName
-									info.Stack = stackName
-									info.StackFromArg = stackName
-
-									err = ExecuteTerraform(*info)
-									if err != nil {
-										return err
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
+	err = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		return processTerraformComponent(atmosConfig, info, stackName, componentName, componentSection, logFunc)
+	})
+	if err != nil {
+		return err
 	}
 
 	return nil

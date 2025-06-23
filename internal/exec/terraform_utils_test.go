@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -208,4 +209,106 @@ func TestExecuteTerraformQuery(t *testing.T) {
 	}
 	output := buf.String()
 	t.Logf("Output: %s", output)
+}
+
+// TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.
+func TestWalkTerraformComponents(t *testing.T) {
+	stacks := map[string]any{
+		"stack1": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"comp1": map[string]any{},
+					"comp2": map[string]any{},
+				},
+			},
+		},
+	}
+
+	var visited []string
+	err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+		visited = append(visited, stack+"-"+comp)
+		return nil
+	})
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"stack1-comp1", "stack1-comp2"}, visited)
+}
+
+// TestProcessTerraformComponent exercises the filtering logic of processTerraformComponent.
+func TestProcessTerraformComponent(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	logFunc := func(msg interface{}, keyvals ...interface{}) {}
+	stack := "s1"
+	component := "comp1"
+
+	newSection := func(meta map[string]any) map[string]any {
+		return map[string]any{
+			cfg.MetadataSectionName: meta,
+			"vars": map[string]any{
+				"tags": map[string]any{"team": "eks"},
+			},
+		}
+	}
+
+	t.Run("abstract", func(t *testing.T) {
+		section := newSection(map[string]any{"type": "abstract"})
+		called := false
+		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+			called = true
+			return nil
+		})
+		defer patch.Reset()
+
+		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+		err := processTerraformComponent(atmosConfig, &info, stack, component, section, logFunc)
+		assert.NoError(t, err)
+		assert.False(t, called)
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": false})
+		called := false
+		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+			called = true
+			return nil
+		})
+		defer patch.Reset()
+
+		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+		err := processTerraformComponent(atmosConfig, &info, stack, component, section, logFunc)
+		assert.NoError(t, err)
+		assert.False(t, called)
+	})
+
+	t.Run("query not satisfied", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		called := false
+		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+			called = true
+			return nil
+		})
+		defer patch.Reset()
+
+		info := schema.ConfigAndStacksInfo{SubCommand: "plan", Query: ".vars.tags.team == \"foo\""}
+		err := processTerraformComponent(atmosConfig, &info, stack, component, section, logFunc)
+		assert.NoError(t, err)
+		assert.False(t, called)
+	})
+
+	t.Run("execute", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		called := false
+		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+			called = true
+			// check fields set
+			assert.Equal(t, component, i.Component)
+			assert.Equal(t, stack, i.Stack)
+			return nil
+		})
+		defer patch.Reset()
+
+		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+		err := processTerraformComponent(atmosConfig, &info, stack, component, section, logFunc)
+		assert.NoError(t, err)
+		assert.True(t, called)
+	})
 }
