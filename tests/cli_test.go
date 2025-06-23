@@ -20,7 +20,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -599,7 +598,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Preserve the CI environment variables.
 	// This is to ensure that the test is not affected by the CI environment variables.
-	telemetry.DisableCIEnvVars(t)
+	DisableCIEnvVars(t)
 
 	// Prepare the command using the context
 	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
