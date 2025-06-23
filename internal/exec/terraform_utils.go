@@ -117,8 +117,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	return nil
 }
 
-// needProcessTemplatesAndYamlFunctions checks if a Terraform command.
-// requires the `Go` templates and Atmos YAML functions to be processed.
+// needProcessTemplatesAndYamlFunctions checks if a Terraform command requires the `Go` templates and Atmos YAML functions to be processed.
 func needProcessTemplatesAndYamlFunctions(command string) bool {
 	commandsThatNeedFuncProcessing := []string{
 		"init",
@@ -243,7 +242,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 		// it will be processed in the dependency order.
 		if !affected.IncludedInDependents {
 			err = executeTerraformAffectedComponentInDepOrder(info,
-				&affectedList,
+				affectedList,
 				affected.Component,
 				affected.Stack,
 				"",
@@ -263,7 +262,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
 func executeTerraformAffectedComponentInDepOrder(
 	info *schema.ConfigAndStacksInfo,
-	affectedList *[]schema.Affected,
+	affectedList []schema.Affected,
 	affectedComponent string,
 	affectedStack string,
 	parentComponent string,
