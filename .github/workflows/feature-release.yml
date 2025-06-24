@@ -5,6 +5,13 @@ on:
     paths-ignore:
       - "README.md"
 
+permissions:
+  attestations: write
+  contents: write
+  id-token: write
+  pull-requests: write
+  packages: write
+
 jobs:
   release:
     if: |
