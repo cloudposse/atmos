@@ -1,9 +1,10 @@
 package hooks
 
 import (
+	"testing"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestGetHooks(t *testing.T) {
