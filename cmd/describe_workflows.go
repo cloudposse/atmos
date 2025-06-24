@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // describeWorkflowsCmd executes 'atmos describe workflows' CLI commands
@@ -31,17 +32,18 @@ func getRunnableDescribeWorkflowsCmd(
 		// Check Atmos configuration
 		checkAtmosConfig()
 		info, err := processCommandLineArgs("terraform", cmd, args, nil)
-		checkErrorAndExit(err)
+		checkErrorAndExit(err, cmd)
 		atmosConfig, err := initCliConfig(info, true)
-		checkErrorAndExit(err)
+		checkErrorAndExit(err, cmd)
 		describeWorkflowArgs := &exec.DescribeWorkflowsArgs{}
 		err = flagsToDescribeWorkflowsArgs(cmd.Flags(), describeWorkflowArgs)
-		checkErrorAndExit(err)
+		checkErrorAndExit(err, cmd)
 		pager, err := cmd.Flags().GetString("pager")
-		checkFlagNotPresentError(err)
+		checkFlagNotPresentError(err, cmd)
 		atmosConfig.Settings.Terminal.Pager = pager
 		err = describeWorkflowsExec.Execute(&atmosConfig, describeWorkflowArgs)
-		checkErrorAndExit(err)
+		checkErrorAndExit(err, cmd)
+		telemetry.CaptureCmd(cmd)
 	}
 }
 
