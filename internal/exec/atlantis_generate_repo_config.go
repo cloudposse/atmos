@@ -93,11 +93,6 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		return err
 	}
 
-	verbose, err := flags.GetBool("verbose")
-	if err != nil {
-		return err
-	}
-
 	// If the flag `--affected-only=true` is passed, find the affected components and stacks
 	if affectedOnly {
 		cloneTargetRef, err := flags.GetBool("clone-target-ref")
@@ -115,7 +110,6 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 			repoPath,
 			sshKeyPath,
 			sshKeyPassword,
-			verbose,
 			cloneTargetRef,
 			"",
 		)
@@ -142,7 +136,6 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	repoPath string,
 	sshKeyPath string,
 	sshKeyPassword string,
-	verbose bool,
 	cloneTargetRef bool,
 	stack string,
 ) error {
