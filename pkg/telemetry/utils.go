@@ -6,8 +6,6 @@ import (
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/google/uuid"
 	"github.com/posthog/posthog-go"
@@ -17,16 +15,6 @@ import (
 // CommandEventName is the standard event name used for command telemetry.
 const (
 	CommandEventName = "command"
-
-	// DisclosureMessage contains the standard telemetry disclosure message shown to users
-	// when telemetry is first enabled. It explains that Atmos collects anonymous
-	// usage data and provides a link for users to learn more or opt out.
-	DisclosureMessage = `
-**Attention:** Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
-https://atmos.tools/cli/telemetry
-`
 )
 
 // CaptureCmdString is the public API for capturing command string telemetry.
@@ -47,15 +35,6 @@ func CaptureCmd(cmd *cobra.Command, err ...error) {
 		inErr = err[0]
 	}
 	captureCmd(cmd, inErr)
-}
-
-// PrintTelemetryDisclosure displays the telemetry disclosure message if one is available.
-// It calls disclosureMessage() to get the message and prints as markdown
-// if a message is returned.
-func PrintTelemetryDisclosure() {
-	if message := disclosureMessage(); message != "" {
-		utils.PrintMessageInColor(message, theme.Colors.Warning)
-	}
 }
 
 // getTelemetryFromConfig initializes a new Telemetry client by loading configuration
@@ -131,39 +110,6 @@ func captureCmdString(cmdString string, err error, provider ...TelemetryClientPr
 // It extracts the command path and delegates to captureCmdString.
 func captureCmd(cmd *cobra.Command, err error, provider ...TelemetryClientProvider) {
 	captureCmdString(cmd.CommandPath(), err, provider...)
-}
-
-// disclosureMessage returns a telemetry disclosure message if it hasn't been shown before.
-// It checks if telemetry is enabled and not running in CI, then loads the cache to
-// determine if the disclosure has been displayed previously. If not shown, it marks
-// the disclosure as shown in the cache and returns the disclosure message.
-func disclosureMessage() string {
-	// Do not show disclosure if running in CI
-	if isCI() {
-		return ""
-	}
-
-	// Only show disclosure if telemetry is enabled
-	telemetry := getTelemetryFromConfig()
-	if telemetry == nil {
-		return ""
-	}
-
-	TelemetryDisclosureShown := getOrInitializeCacheValue(
-		func(cfg *cfg.CacheConfig) bool {
-			return cfg.TelemetryDisclosureShown
-		},
-		func(cfg *cfg.CacheConfig, _ bool) {
-			cfg.TelemetryDisclosureShown = true
-		},
-		false,
-	)
-
-	// If disclosure has already been shown, return empty
-	if TelemetryDisclosureShown {
-		return ""
-	}
-	return DisclosureMessage
 }
 
 // getOrInitializeCacheValue retrieves a value from cache or initializes it with a default value if not present.
