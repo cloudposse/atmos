@@ -33,11 +33,21 @@ func TestAzureKeyVaultStore_Set(t *testing.T) {
 		wantErr   error
 	}{
 		{
-			name:      "success",
+			name:      "success with string",
 			stack:     "dev",
 			component: "app",
 			key:       "secret",
 			value:     "value",
+			mockFunc: func(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
+				return azsecrets.SetSecretResponse{}, nil
+			},
+		},
+		{
+			name:      "success with map",
+			stack:     "dev",
+			component: "app",
+			key:       "config",
+			value:     map[string]interface{}{"key": "value"},
 			mockFunc: func(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
 				return azsecrets.SetSecretResponse{}, nil
 			},
@@ -65,14 +75,6 @@ func TestAzureKeyVaultStore_Set(t *testing.T) {
 			key:       "",
 			value:     "value",
 			wantErr:   ErrEmptyKey,
-		},
-		{
-			name:      "non-string value",
-			stack:     "dev",
-			component: "app",
-			key:       "secret",
-			value:     123,
-			wantErr:   ErrValueMustBeString,
 		},
 		{
 			name:      "permission denied",
@@ -119,7 +121,7 @@ func TestAzureKeyVaultStore_Get(t *testing.T) {
 		wantErr   error
 	}{
 		{
-			name:      "success",
+			name:      "success with string",
 			stack:     "dev",
 			component: "app",
 			key:       "secret",
@@ -132,6 +134,21 @@ func TestAzureKeyVaultStore_Get(t *testing.T) {
 				}, nil
 			},
 			want: "test-value",
+		},
+		{
+			name:      "success with JSON",
+			stack:     "dev",
+			component: "app",
+			key:       "config",
+			mockFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				value := `{"key":"value","number":123}`
+				return azsecrets.GetSecretResponse{
+					Secret: azsecrets.Secret{
+						Value: &value,
+					},
+				}, nil
+			},
+			want: map[string]interface{}{"key": "value", "number": float64(123)},
 		},
 		{
 			name:      "empty stack",
@@ -194,6 +211,64 @@ func TestAzureKeyVaultStore_Get(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want, got)
 			}
+		})
+	}
+}
+
+func TestAzureKeyVaultStore_normalizeSecretName(t *testing.T) {
+	store := &AzureKeyVaultStore{}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple name",
+			input:    "simple-name",
+			expected: "simple-name",
+		},
+		{
+			name:     "with slashes",
+			input:    "path/to/secret",
+			expected: "path-to-secret",
+		},
+		{
+			name:     "with special characters",
+			input:    "secret@#$%^&*()",
+			expected: "secret",
+		},
+		{
+			name:     "with spaces",
+			input:    "secret name with spaces",
+			expected: "secret-name-with-spaces",
+		},
+		{
+			name:     "with multiple hyphens",
+			input:    "secret--name---with----hyphens",
+			expected: "secret-name-with-hyphens",
+		},
+		{
+			name:     "with leading/trailing hyphens",
+			input:    "-secret-name-",
+			expected: "secret-name",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "default",
+		},
+		{
+			name:     "only special characters",
+			input:    "@#$%^&*()",
+			expected: "default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := store.normalizeSecretName(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

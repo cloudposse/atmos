@@ -2,8 +2,11 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -14,6 +17,10 @@ const (
 	statusCodeNotFound  = 404
 	statusCodeForbidden = 403
 )
+
+// Azure Key Vault secret names must match the pattern: ^[0-9a-zA-Z-]+$
+// They can only contain alphanumeric characters and hyphens
+var azureKeyVaultNameRegex = regexp.MustCompile(`^[0-9a-zA-Z-]+$`)
 
 // AzureKeyVaultClient interface allows us to mock the Azure Key Vault client.
 type AzureKeyVaultClient interface {
@@ -73,12 +80,34 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions) (Store, error) {
 	}, nil
 }
 
+// normalizeSecretName converts a key path to a valid Azure Key Vault secret name.
+// Azure Key Vault secret names must only contain alphanumeric characters and hyphens.
+func (s *AzureKeyVaultStore) normalizeSecretName(key string) string {
+	// Replace any non-alphanumeric characters with hyphens
+	normalized := regexp.MustCompile(`[^0-9a-zA-Z-]`).ReplaceAllString(key, "-")
+	// Replace multiple consecutive hyphens with a single hyphen
+	normalized = regexp.MustCompile(`-+`).ReplaceAllString(normalized, "-")
+	// Remove leading and trailing hyphens
+	normalized = strings.Trim(normalized, "-")
+	// Ensure the name is not empty
+	if normalized == "" {
+		normalized = "default"
+	}
+	return normalized
+}
+
 func (s *AzureKeyVaultStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
 		return "", ErrStackDelimiterNotSet
 	}
 
-	return getKey(s.prefix, *s.stackDelimiter, stack, component, key, "-")
+	baseKey, err := getKey(s.prefix, *s.stackDelimiter, stack, component, key, "-")
+	if err != nil {
+		return "", fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	// Normalize the key to comply with Azure Key Vault naming restrictions
+	return s.normalizeSecretName(baseKey), nil
 }
 
 func (s *AzureKeyVaultStore) Set(stack string, component string, key string, value interface{}) error {
@@ -97,10 +126,12 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
-	strValue, ok := value.(string)
-	if !ok {
-		return ErrValueMustBeString
+	// Convert value to JSON string like other stores
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
 	}
+	strValue := string(jsonValue)
 
 	params := azsecrets.SetSecretParameters{
 		Value: &strValue,
@@ -151,5 +182,12 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 	if resp.Value == nil {
 		return "", nil
 	}
-	return *resp.Value, nil
+
+	// Try to unmarshal as JSON first, fallback to string if it fails
+	var result interface{}
+	if err := json.Unmarshal([]byte(*resp.Value), &result); err != nil {
+		// If JSON unmarshaling fails, return as string
+		return *resp.Value, nil
+	}
+	return result, nil
 }

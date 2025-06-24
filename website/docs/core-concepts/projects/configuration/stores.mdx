@@ -264,21 +264,40 @@ stores:
   dev/azure-key-vault:
     type: azure-key-vault
     options:
+      vault_url: https://my-keyvault.vault.azure.net/
+      prefix: atmos/dev
+      stack_delimiter: "-"
 
   prod/azure-key-vault:
     type: azure-key-vault
     options:
+      vault_url: https://my-prod-keyvault.vault.azure.net/
+      prefix: atmos/prod
 ```
 
 <dl>
-    <dt>`stores.[store_name]`</dt>
-    <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
+  <dt>`stores.[store_name]`</dt>
+  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
 
-    <dt>`stores.[store_name].type`</dt>
-    <dd>Must be set to either `google-secret-manager` or its alias `gsm`</dd>
+  <dt>`stores.[store_name].type`</dt>
+  <dd>Must be set to `azure-key-vault`</dd>
 
-    <dt>`stores.[store_name].options`</dt>
-    <dd>A map of options specific to the store type. For Google Secret Manager, the following options are supported:</dd>
+  <dt>`stores.[store_name].options`</dt>
+  <dd>A map of options specific to the store type. For Azure Key Vault, the following options are supported:</dd>
+
+  <dt>`stores.[store_name].options.vault_url (required)`</dt>
+  <dd>The URL of the Azure Key Vault. This should be in the format `https://{vault-name}.vault.azure.net/`.</dd>
+
+  <dt>`stores.[store_name].options.prefix (optional)`</dt>
+  <dd>A prefix path that will be added to all keys stored or retrieved from Azure Key Vault. For example if the prefix
+  is `atmos/dev`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
+  would be `atmos-dev-plat-us2-dev-vpc-vpc_id` (after normalization for Azure Key Vault naming restrictions).</dd>
+
+  <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
 </dl>
 
 #### Authentication
