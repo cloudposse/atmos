@@ -6,6 +6,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -21,16 +22,19 @@ var describeConfigCmd = &cobra.Command{
 
 		format, err := flags.GetString("format")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 
 		query, err := flags.GetString("query")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 
@@ -38,14 +42,17 @@ var describeConfigCmd = &cobra.Command{
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
 			if err != nil {
+				telemetry.CaptureCmd(cmd, err)
 				return err
 			}
 		}
 
 		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(query, format, "")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdown("", err, "")
 		}
+		telemetry.CaptureCmd(cmd)
 		return nil
 	},
 }
