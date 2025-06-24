@@ -1,0 +1,19 @@
+name: Feature release
+on:
+  issue_comment:
+    types: [created]
+
+env:
+  TERRAFORM_VERSION: "1.9.7"
+  OPEN_TOFU_VERSION: "1.9.1"
+  HELMFILE_VERSION: "v1.1.0"
+
+jobs:
+  release:
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
+    with:
+      publish: true
+      prerelease: true
+      format: binary
+      environment: 'feature-releases'
+    secrets: inherit
