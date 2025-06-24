@@ -4,11 +4,12 @@ import (
 	"fmt"
 
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 )
 
 type Hooks struct {
