@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath" // For resolving absolute paths
@@ -13,12 +14,15 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/cmd"
+	utils "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -456,7 +460,6 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
-	var repoRoot string
 
 	// Capture the starting working directory
 	startingDir, err = os.Getwd()
@@ -464,31 +467,10 @@ func TestMain(m *testing.M) {
 		logger.Fatal("failed to get the current working directory", err)
 	}
 
-	// Find the root of the Git repository
-	repoRoot, err = findGitRepoRoot(startingDir)
-	if err != nil {
+	// Ensure we can locate the git repository
+	if _, err = findGitRepoRoot(startingDir); err != nil {
 		logger.Fatal("failed to locate git repository", "dir", startingDir)
 	}
-
-	// Check for the atmos binary
-	binaryPath, err := exec.LookPath("atmos")
-	if err != nil {
-		logger.Fatal("Binary not found", "command", "atmos", "PATH", os.Getenv("PATH"))
-	}
-
-	rel, err := filepath.Rel(repoRoot, binaryPath)
-	if err == nil && strings.HasPrefix(rel, "..") {
-		logger.Fatal("Discovered atmos binary outside of repository", "binary", binaryPath)
-	} else {
-		stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
-		if err != nil {
-			logger.Fatal("failed to check if rebuild is needed", "error", err)
-		}
-		if stale {
-			logger.Fatal("Rebuild needed", "binary", binaryPath)
-		}
-	}
-	logger.Info("Atmos binary for tests", "binary", binaryPath)
 
 	logger.Info("Starting directory", "dir", startingDir)
 	// Define the base directory for snapshots relative to startingDir
@@ -580,92 +562,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	// Check if the binary exists
-	binaryPath, err := exec.LookPath(tc.Command)
-	if err != nil {
-		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
-	}
-
-	// Include the system PATH in the test environment
 	tc.Env["PATH"] = os.Getenv("PATH")
 
-	// Prepare the command using the context
-	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
-
-	// Set environment variables without inheriting from the current environment.
-	// This ensures an isolated test environment, preventing unintended side effects
-	// and improving reproducibility across different systems.
-	var envVars []string
-	for key, value := range tc.Env {
-		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
-	}
-	cmd.Env = envVars
-
-	var stdout, stderr bytes.Buffer
+	var stdoutStr, stderrStr string
 	var exitCode int
 
-	if tc.Tty {
-		// Run the command in TTY mode
-		ptyOutput, err := simulateTtyCommand(t, cmd, "")
-
-		// Check if the context timeout was exceeded
-		if ctx.Err() == context.DeadlineExceeded {
-			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
-			return
-		}
-
-		if err != nil {
-			// Check if the error is an ExitError
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				// Capture the actual exit code
-				exitCode := exitErr.ExitCode()
-
-				if exitCode < 0 {
-					// Negative exit code indicates interruption by a signal
-					t.Errorf("TTY Command interrupted by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
-				}
-			} else {
-				// Handle other types of errors
-				t.Fatalf("Failed to simulate TTY command: %v", err)
-			}
-		}
-		stdout.WriteString(ptyOutput)
+	if tc.Command == "atmos" {
+		stdoutStr, stderrStr, exitCode = runAtmosInternal(t, ctx, tc)
 	} else {
-		// Run the command in non-TTY mode
-
-		// Attach stdout and stderr buffers for non-TTY execution
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-
-		err := cmd.Run()
-		if ctx.Err() == context.DeadlineExceeded {
-			// Handle the timeout case first
-			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
-			return
-		}
-
-		if err != nil {
-			// Handle other command execution errors
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				// Capture the actual exit code
-				exitCode = exitErr.ExitCode()
-
-				if exitCode < 0 {
-					// Negative exit code indicates termination by a signal
-					t.Errorf("Non-TTY Command terminated by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
-				}
-			} else {
-				// Handle other non-exec-related errors
-				t.Fatalf("Failed to run command; Error: %v", err)
-			}
-		} else {
-			// Successful command execution
-			exitCode = 0
-		}
+		stdoutStr, stderrStr, exitCode = runExternalCommand(t, ctx, tc)
 	}
 
 	// Validate outputs
@@ -674,12 +579,12 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 
 	// Validate stdout
-	if !verifyOutput(t, "stdout", stdout.String(), tc.Expect.Stdout) {
+	if !verifyOutput(t, "stdout", stdoutStr, tc.Expect.Stdout) {
 		t.Errorf("Stdout mismatch for test: %s", tc.Name)
 	}
 
 	// Validate stderr
-	if !verifyOutput(t, "stderr", stderr.String(), tc.Expect.Stderr) {
+	if !verifyOutput(t, "stderr", stderrStr, tc.Expect.Stderr) {
 		t.Errorf("Stderr mismatch for test: %s", tc.Name)
 	}
 
@@ -699,7 +604,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 
 	// Validate snapshots
-	if !verifySnapshot(t, tc, stdout.String(), stderr.String(), *regenerateSnapshots) {
+	if !verifySnapshot(t, tc, stdoutStr, stderrStr, *regenerateSnapshots) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 }
@@ -728,6 +633,150 @@ func TestCLICommands(t *testing.T) {
 			runCLICommandTest(t, tc)
 		})
 	}
+}
+
+func runExternalCommand(t *testing.T, ctx context.Context, tc TestCase) (string, string, int) {
+	binaryPath, err := exec.LookPath(tc.Command)
+	if err != nil {
+		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
+	}
+
+	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
+	var envVars []string
+	for k, v := range tc.Env {
+		envVars = append(envVars, fmt.Sprintf("%s=%s", k, v))
+	}
+	cmd.Env = envVars
+
+	var stdout, stderr bytes.Buffer
+	var exitCode int
+
+	if tc.Tty {
+		ptyOutput, err := simulateTtyCommand(t, cmd, "")
+		if ctx.Err() == context.DeadlineExceeded {
+			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+			t.Errorf("Captured stderr:\n%s", stderr.String())
+			return stdout.String(), stderr.String(), exitCode
+		}
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+				if exitCode < 0 {
+					t.Errorf("TTY Command interrupted by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
+				}
+			} else {
+				t.Fatalf("Failed to simulate TTY command: %v", err)
+			}
+		}
+		stdout.WriteString(ptyOutput)
+	} else {
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		if ctx.Err() == context.DeadlineExceeded {
+			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+			t.Errorf("Captured stderr:\n%s", stderr.String())
+			return stdout.String(), stderr.String(), exitCode
+		}
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+				if exitCode < 0 {
+					t.Errorf("Non-TTY Command terminated by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
+				}
+			} else {
+				t.Fatalf("Failed to run command; Error: %v", err)
+			}
+		}
+	}
+	return stdout.String(), stderr.String(), exitCode
+}
+
+func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, string, int) {
+	oldArgs := os.Args
+	os.Args = append([]string{"atmos"}, tc.Args...)
+	defer func() { os.Args = oldArgs }()
+
+	// Save and set environment variables
+	oldEnv := make(map[string]string)
+	for k, v := range tc.Env {
+		oldEnv[k] = os.Getenv(k)
+		os.Setenv(k, v)
+	}
+	defer func() {
+		for k, v := range oldEnv {
+			if v == "" {
+				os.Unsetenv(k)
+			} else {
+				os.Setenv(k, v)
+			}
+		}
+	}()
+
+	// Match behavior of main.go for snapshot compatibility
+	log.Default().SetReportTimestamp(false)
+
+	exitCode := 0
+	oldExit := utils.OsExit
+	utils.OsExit = func(code int) { exitCode = code }
+	oldPrint := utils.PrintErrorMarkdownAndExitFn
+	utils.PrintErrorMarkdownAndExitFn = func(string, error, string) {}
+	defer func() {
+		utils.OsExit = oldExit
+		utils.PrintErrorMarkdownAndExitFn = oldPrint
+	}()
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	var wg sync.WaitGroup
+
+	if tc.Tty {
+		ptmx, tty, err := pty.Open()
+		if err != nil {
+			t.Fatalf("failed to start PTY: %v", err)
+		}
+		oldStdout, oldStderr := os.Stdout, os.Stderr
+		os.Stdout, os.Stderr = tty, tty
+		wg.Add(1)
+		go func() {
+			io.Copy(&stdoutBuf, ptmx)
+			wg.Done()
+		}()
+		errChan := make(chan error, 1)
+		go func() { errChan <- cmd.Execute() }()
+		select {
+		case <-ctx.Done():
+			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+		case <-errChan:
+		}
+		tty.Close()
+		os.Stdout, os.Stderr = oldStdout, oldStderr
+		ptmx.Close()
+		wg.Wait()
+		return stdoutBuf.String(), "", exitCode
+	}
+
+	outR, outW, _ := os.Pipe()
+	errR, errW, _ := os.Pipe()
+	oldStdout, oldStderr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = outW, errW
+	wg.Add(2)
+	go func() { io.Copy(&stdoutBuf, outR); wg.Done() }()
+	go func() { io.Copy(&stderrBuf, errR); wg.Done() }()
+	errChan := make(chan error, 1)
+	go func() { errChan <- cmd.Execute() }()
+	select {
+	case <-ctx.Done():
+		t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+	case <-errChan:
+	}
+	outW.Close()
+	errW.Close()
+	wg.Wait()
+	os.Stdout, os.Stderr = oldStdout, oldStderr
+
+	return stdoutBuf.String(), stderrBuf.String(), exitCode
 }
 
 func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {

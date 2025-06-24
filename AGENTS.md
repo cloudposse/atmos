@@ -8,7 +8,7 @@ This repository is a Golang CLI project.
 ```sh
 gofumpt -w . && goimports -w .
 ```
-- Run `go mod tidy`, `make lint`, and `make testacc-cover` before committing.
+- Run `go mod tidy`, `golangci-lint run --new=false ./...`, and `make testacc-cover` before committing.
 - Update `docs/` and `README.md` when CLI behaviour changes.
 
 ## Pull requests
