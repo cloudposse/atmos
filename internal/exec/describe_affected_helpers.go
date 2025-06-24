@@ -17,7 +17,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
+var RemoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 
 const (
 	shaString = "SHA"
@@ -242,13 +242,13 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the target ref
 	_, err = g.GetRepoConfig(remoteRepo)
 	if err != nil {
-		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
 	}
 
 	if sha != "" {
@@ -364,13 +364,13 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		EnableDotGitCommonDir: false,
 	})
 	if err != nil {
-		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the remote target repo
 	_, err = g.GetRepoConfig(remoteRepo)
 	if err != nil {
-		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
+		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
 	}
 
 	remoteRepoInfo, err := g.GetRepoInfo(remoteRepo)
