@@ -43,7 +43,7 @@ tests:
 
   - name: atmos_vendor_pull_oci
     enabled: true
-    description: "Ensure atmos vendor pull command executes without errors and files are present."
+    description: "Ensure 'atmos vendor pull --tags' command executes without errors and files are present."
     workdir: "fixtures/scenarios/vendor"
     clean: true
     command: "atmos"

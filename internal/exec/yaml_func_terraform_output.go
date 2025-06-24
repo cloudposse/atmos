@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -13,11 +15,11 @@ func processTagTerraformOutput(
 	input string,
 	currentStack string,
 ) any {
-	u.LogTrace(fmt.Sprintf("Executing Atmos YAML function: %s", input))
+	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		log.Fatal(err)
 	}
 
 	var component string
@@ -25,8 +27,13 @@ func processTagTerraformOutput(
 	var output string
 
 	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace
-	parts := strings.Fields(str)
+	// while also ignoring leading and trailing whitespace.
+	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
+	parts, err := u.SplitStringByDelimiter(str, ' ')
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	partsLen := len(parts)
 
 	if partsLen == 3 {
@@ -37,11 +44,13 @@ func processTagTerraformOutput(
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
-		u.LogTrace(fmt.Sprintf("Atmos YAML function `%s` is called with two parameters 'component' and 'output'. "+
-			"Using the current stack '%s' as the 'stack' parameter", input, currentStack))
+		log.Debug("Calling Atmos YAML function with component and output parameters; using current stack",
+			"function", input,
+			"stack", currentStack,
+		)
 	} else {
 		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
-		u.LogErrorAndExit(err)
+		log.Fatal(err)
 	}
 
 	value := GetTerraformOutput(&atmosConfig, stack, component, output, false)

@@ -30,7 +30,7 @@ func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 }
 
 // GetHighlightSettings returns the syntax highlighting settings from the config or defaults
-func GetHighlightSettings(config schema.AtmosConfiguration) *schema.SyntaxHighlighting {
+func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighlighting {
 	defaults := DefaultHighlightSettings()
 	if config.Settings.Terminal.SyntaxHighlighting == (schema.SyntaxHighlighting{}) {
 		return defaults
@@ -71,79 +71,78 @@ func HighlightCode(code string, lexerName string, theme string) (string, error) 
 	return buf.String(), nil
 }
 
-// HighlightCodeWithConfig highlights the given code using the provided configuration
-func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration, format ...string) (string, error) {
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		return code, nil
-	}
-	settings := GetHighlightSettings(config)
-	if !settings.Enabled {
+var isTermPresent = term.IsTerminal(int(os.Stdout.Fd()))
+
+// HighlightCodeWithConfig highlights the given code using the provided configuration.
+func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
+	// Skip highlighting if not in a terminal or disabled
+	if !isTermPresent || !GetHighlightSettings(config).Enabled {
 		return code, nil
 	}
 
-	// Get terminal width
+	// Set terminal width
 	config.Settings.Terminal.MaxWidth = templates.GetTerminalWidth()
 
-	// Determine lexer based on format flag or content format
-	var lexerName string
-	if len(format) > 0 && format[0] != "" {
-		// Use format flag if provided
-		lexerName = strings.ToLower(format[0])
-	} else {
-		// This is just a fallback
-		trimmed := strings.TrimSpace(code)
-
-		// Try to parse as JSON first
-		if json.Valid([]byte(trimmed)) {
-			lexerName = "json"
-		} else {
-			// Check for common YAML indicators
-			// 1. Contains key-value pairs with colons
-			// 2. Does not start with a curly brace (which could indicate malformed JSON)
-			// 3. Contains indentation or list markers
-			if (strings.Contains(trimmed, ":") && !strings.HasPrefix(trimmed, "{")) ||
-				strings.Contains(trimmed, "\n  ") ||
-				strings.Contains(trimmed, "\n- ") {
-				lexerName = "yaml"
-			} else {
-				// Fallback to plaintext if format is unclear
-				lexerName = "plaintext"
-			}
-		}
-	}
-
-	// Get lexer
-	lexer := lexers.Get(lexerName)
+	// Select lexer based on format or code content
+	lexer := getLexer(format, code)
 	if lexer == nil {
 		lexer = lexers.Fallback
 	}
-	// Get style
-	s := styles.Get(settings.Theme)
-	if s == nil {
-		s = styles.Fallback
+
+	// Select style
+	settings := GetHighlightSettings(config)
+	style := styles.Get(settings.Theme)
+	if style == nil {
+		style = styles.Fallback
 	}
-	// Get formatter
-	var formatter chroma.Formatter
-	if settings.LineNumbers {
-		formatter = formatters.TTY256
-	} else {
-		formatter = formatters.Get(settings.Formatter)
-		if formatter == nil {
-			formatter = formatters.Fallback
-		}
+
+	// Select formatter
+	formatter := getFormatter(settings)
+	if formatter == nil {
+		formatter = formatters.Fallback
 	}
-	// Create buffer for output
-	var buf bytes.Buffer
+
 	// Format the code
+	var buf bytes.Buffer
 	iterator, err := lexer.Tokenise(nil, code)
 	if err != nil {
 		return code, err
 	}
-	err = formatter.Format(&buf, s, iterator)
-	if err != nil {
+	if err := formatter.Format(&buf, style, iterator); err != nil {
 		return code, err
 	}
+
 	return buf.String(), nil
+}
+
+// getLexer selects a lexer based on format or code content.
+func getLexer(format []string, code string) chroma.Lexer {
+	if len(format) > 0 && format[0] != "" {
+		return lexers.Get(strings.ToLower(format[0]))
+	}
+	trimmed := strings.TrimSpace(code)
+	if json.Valid([]byte(trimmed)) {
+		return lexers.Get("json")
+	}
+	if isYAML(trimmed) {
+		return lexers.Get("yaml")
+	}
+	return lexers.Get("plaintext")
+}
+
+// isYAML checks if the code resembles YAML.
+func isYAML(code string) bool {
+	return (strings.Contains(code, ":") && !strings.HasPrefix(code, "{")) ||
+		strings.Contains(code, "\n  ") ||
+		strings.Contains(code, "\n- ")
+}
+
+// getFormatter selects a formatter based on settings.
+func getFormatter(settings *schema.SyntaxHighlighting) chroma.Formatter {
+	if settings.LineNumbers {
+		return formatters.TTY256
+	}
+	return formatters.Get(settings.Formatter)
 }
 
 // HighlightWriter returns an io.Writer that highlights code written to it
@@ -172,7 +171,7 @@ func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration, format ..
 // This maintains compatibility with the io.Writer interface contract while still
 // providing syntax highlighting functionality.
 func (h *HighlightWriter) Write(p []byte) (n int, err error) {
-	highlighted, err := HighlightCodeWithConfig(string(p), h.config, h.format)
+	highlighted, err := HighlightCodeWithConfig(&h.config, string(p), h.format)
 	if err != nil {
 		return 0, err
 	}

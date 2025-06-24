@@ -15,7 +15,7 @@ import (
 // TestExecuteTerraform_ExportEnvVar check that when executing the terraform apply command.
 // It checks that the environment variables are correctly exported and used.
 // Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
-// Check `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` refers to directory.
+// Check that `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` point to a directory.
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -159,13 +159,13 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	output := buf.String()
 
 	// Check the output
-	if !strings.Contains(output, "foo = \"component-1-a\"") {
+	if !strings.Contains(output, "foo   = \"component-1-a\"") {
 		t.Errorf("'foo' variable should be 'component-1-a'")
 	}
-	if !strings.Contains(output, "bar = \"component-1-b\"") {
+	if !strings.Contains(output, "bar   = \"component-1-b\"") {
 		t.Errorf("'bar' variable should be 'component-1-b'")
 	}
-	if !strings.Contains(output, "baz = \"component-1-c\"") {
+	if !strings.Contains(output, "baz   = \"component-1-c\"") {
 		t.Errorf("'baz' variable should be 'component-1-c'")
 	}
 }
@@ -222,14 +222,16 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	}
 	output := buf.String()
 
+	t.Log(output)
+
 	// Check the output
-	if !strings.Contains(output, "foo = \"{{ .settings.config.a }}\"") {
+	if !strings.Contains(output, "foo   = \"{{ .settings.config.a }}\"") {
 		t.Errorf("'foo' variable should be '{{ .settings.config.a }}'")
 	}
-	if !strings.Contains(output, "bar = \"{{ .settings.config.b }}\"") {
+	if !strings.Contains(output, "bar   = \"{{ .settings.config.b }}\"") {
 		t.Errorf("'bar' variable should be '{{ .settings.config.b }}'")
 	}
-	if !strings.Contains(output, "baz = \"{{ .settings.config.c }}\"") {
+	if !strings.Contains(output, "baz   = \"{{ .settings.config.c }}\"") {
 		t.Errorf("'baz' variable should be '{{ .settings.config.c }}'")
 	}
 }
@@ -393,6 +395,118 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	if !strings.Contains(output, expected) {
 		t.Logf("TestExecuteTerraform_TerraformInitWithVarfile output:\n%s", output)
 		t.Errorf("Output should contain '%s'", expected)
+	}
+}
+
+func TestExecuteTerraform_OpaValidation(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "../../tests/fixtures/scenarios/atmos-stacks-validation"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	// Test `terraform plan`
+	info := schema.ConfigAndStacksInfo{
+		StackFromArg:     "",
+		Stack:            "nonprod",
+		StackFile:        "",
+		ComponentType:    "terraform",
+		ComponentFromArg: "component-1",
+		SubCommand:       "plan",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+	err = ExecuteTerraform(info)
+	assert.NoError(t, err)
+
+	// Test `terraform apply`
+	info.SubCommand = "apply"
+	err = ExecuteTerraform(info)
+	assert.ErrorContains(t, err, "the component can't be applied if the 'foo' variable is set to 'foo'")
+}
+
+func TestExecuteTerraform_Version(t *testing.T) {
+	tests := []struct {
+		name           string
+		workDir        string
+		expectedOutput string
+	}{
+		{
+			name:           "terraform version",
+			workDir:        "../../tests/fixtures/scenarios/atmos-terraform-version",
+			expectedOutput: "Terraform v",
+		},
+		{
+			name:           "tofu version",
+			workDir:        "../../tests/fixtures/scenarios/atmos-tofu-version",
+			expectedOutput: "OpenTofu v",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture the starting working directory
+			startingDir, err := os.Getwd()
+			if err != nil {
+				t.Fatalf("Failed to get the current working directory: %v", err)
+			}
+
+			defer func() {
+				// Change back to the original working directory after the test
+				if err := os.Chdir(startingDir); err != nil {
+					t.Fatalf("Failed to change back to the starting directory: %v", err)
+				}
+			}()
+
+			// Define the work directory and change to it
+			if err := os.Chdir(tt.workDir); err != nil {
+				t.Fatalf("Failed to change directory to %q: %v", tt.workDir, err)
+			}
+
+			// set info for ExecuteTerraform
+			info := schema.ConfigAndStacksInfo{
+				SubCommand: "version",
+			}
+
+			// Create a pipe to capture stdout to check if terraform is executed correctly
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			err = ExecuteTerraform(info)
+			if err != nil {
+				t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+			}
+
+			// Restore stdout
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Read the captured output
+			var buf bytes.Buffer
+			_, err = buf.ReadFrom(r)
+			if err != nil {
+				t.Fatalf("Failed to read from pipe: %v", err)
+			}
+			output := buf.String()
+
+			if !strings.Contains(output, tt.expectedOutput) {
+				t.Errorf("%s not found in the output", tt.expectedOutput)
+			}
+		})
 	}
 }
 

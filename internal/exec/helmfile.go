@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -15,7 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands
+// ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands.
 func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
 	info, err := ProcessCommandLineArgs("helmfile", cmd, args, additionalArgsAndFlags)
 	if err != nil {
@@ -32,8 +33,24 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
+	// Add the `command` from `components.helmfile.command` from `atmos.yaml`.
+	if info.Command == "" {
+		if atmosConfig.Components.Helmfile.Command != "" {
+			info.Command = atmosConfig.Components.Helmfile.Command
+		} else {
+			info.Command = cfg.HelmfileComponentType
+		}
+	}
+
 	if info.SubCommand == "version" {
-		return ExecuteShellCommand(atmosConfig, "helmfile", []string{info.SubCommand}, "", nil, false, info.RedirectStdErr)
+		return ExecuteShellCommand(atmosConfig,
+			info.Command,
+			[]string{info.SubCommand},
+			"",
+			nil,
+			false,
+			info.RedirectStdErr,
+		)
 	}
 
 	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
@@ -46,7 +63,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if !info.ComponentIsEnabled {
-		u.LogInfo(fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		log.Info(fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
 		return nil
 	}
 
@@ -83,10 +100,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Print component variables
-	u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
+		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
 		if err != nil {
 			return err
 		}
@@ -113,8 +130,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	varFile := constructHelmfileComponentVarfileName(info)
 	varFilePath := constructHelmfileComponentVarfilePath(atmosConfig, info)
 
-	u.LogDebug("Writing the variables to file:")
-	u.LogDebug(varFilePath)
+	log.Debug("Writing the variables to file:", "file", varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0o644)

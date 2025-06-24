@@ -75,8 +75,6 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		}
 	}
 	setEnv(v)
-	// We want the editorconfig color by default to be true
-	atmosConfig.Validate.EditorConfig.Color = true
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig)
@@ -99,6 +97,19 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.gitlab_token", "GITLAB_TOKEN")
 	bindEnv(v, "settings.inject_gitlab_token", "ATMOS_INJECT_GITLAB_TOKEN")
 	bindEnv(v, "settings.atmos_gitlab_token", "ATMOS_GITLAB_TOKEN")
+
+	bindEnv(v, "settings.terminal.pager", "ATMOS_PAGER", "PAGER")
+	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
+
+	// Atmos Pro settings
+	bindEnv(v, "settings.pro.base_url", "ATMOS_PRO_BASE_URL")
+	bindEnv(v, "settings.pro.endpoint", "ATMOS_PRO_ENDPOINT")
+	bindEnv(v, "settings.pro.token", "ATMOS_PRO_TOKEN")
+	bindEnv(v, "settings.pro.workspace_id", "ATMOS_PRO_WORKSPACE_ID")
+
+	// GitHub OIDC for Atmos Pro
+	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+	bindEnv(v, "settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
@@ -115,6 +126,14 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Info")
+
+	v.SetDefault("settings.terminal.no_color", false)
+	v.SetDefault("settings.terminal.pager", true)
+	v.SetDefault("docs.generate.readme.output", "./README.md")
+
+	// Atmos Pro defaults
+	v.SetDefault("settings.pro.base_url", AtmosProDefaultBaseUrl)
+	v.SetDefault("settings.pro.endpoint", AtmosProDefaultEndpoint)
 }
 
 // loadConfigSources delegates reading configs from each source,

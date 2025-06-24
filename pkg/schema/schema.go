@@ -9,6 +9,16 @@ import (
 
 type AtmosSectionMapType = map[string]any
 
+// DescribeSettings contains settings for the describe command output
+type DescribeSettings struct {
+	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
+}
+
+// Describe contains configuration for the describe command.
+type Describe struct {
+	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+}
+
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string                 `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
@@ -22,6 +32,7 @@ type AtmosConfiguration struct {
 	Schemas                       map[string]interface{} `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates              `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Settings                      AtmosSettings          `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Describe                      Describe               `yaml:"describe,omitempty" json:"describe,omitempty" mapstructure:"describe"`
 	StoresConfig                  store.StoresConfig     `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor                 `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool                   `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
@@ -42,6 +53,7 @@ type AtmosConfiguration struct {
 	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
 	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
 	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
+	Docs          Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -173,7 +185,6 @@ type EditorConfig struct {
 	IgnoreDefaults  bool     `yaml:"ignore_defaults,omitempty" json:"ignore_defaults,omitempty" mapstructure:"ignore_defaults"`
 	DryRun          bool     `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
 	Format          string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
-	Color           bool     `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
 	ConfigFilePaths []string `yaml:"config_file_paths,omitempty" json:"config_file_paths,omitempty" mapstructure:"config_file_paths"`
 	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
 	Init            bool     `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
@@ -188,10 +199,15 @@ type EditorConfig struct {
 
 type Terminal struct {
 	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
-	Pager              bool               `yaml:"pager" json:"pager" mapstructure:"pager"`
-	Colors             bool               `yaml:"colors" json:"colors" mapstructure:"colors"`
+	Pager              string             `yaml:"pager" json:"pager" mapstructure:"pager"`
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
+	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"`
+	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
+}
+
+func (t *Terminal) IsPagerEnabled() bool {
+	return t.Pager == "" || t.Pager == "on" || t.Pager == "less" || t.Pager == "true" || t.Pager == "yes" || t.Pager == "y" || t.Pager == "1"
 }
 
 type SyntaxHighlighting struct {
@@ -205,8 +221,9 @@ type SyntaxHighlighting struct {
 }
 
 type AtmosSettings struct {
-	ListMergeStrategy    string           `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
-	Terminal             Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	ListMergeStrategy string   `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal          Terminal `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	// Deprecated: this was moved to top-level Atmos config
 	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown             MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
 	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
@@ -219,11 +236,31 @@ type AtmosSettings struct {
 	InjectGitlabToken    bool             `yaml:"inject_gitlab_token,omitempty" mapstructure:"inject_gitlab_token"`
 	AtmosGitlabToken     string           `yaml:"atmos_gitlab_token,omitempty" mapstructure:"atmos_gitlab_token"`
 	GitlabToken          string           `yaml:"gitlab_token,omitempty" mapstructure:"gitlab_token"`
+	// Atmos Pro integration settings
+	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
+}
+
+// ProSettings contains Atmos Pro integration configuration.
+type ProSettings struct {
+	BaseURL     string             `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`
+	Endpoint    string             `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
+	Token       string             `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
+	WorkspaceID string             `yaml:"workspace_id,omitempty" json:"workspace_id,omitempty" mapstructure:"workspace_id"`
+	GithubOIDC  GithubOIDCSettings `yaml:"github_oidc,omitempty" json:"github_oidc,omitempty" mapstructure:"github_oidc"`
+}
+
+// GithubOIDCSettings contains GitHub OIDC token configuration.
+type GithubOIDCSettings struct {
+	RequestURL   string `yaml:"request_url,omitempty" json:"request_url,omitempty" mapstructure:"request_url"`
+	RequestToken string `yaml:"request_token,omitempty" json:"request_token,omitempty" mapstructure:"request_token"`
 }
 
 type Docs struct {
-	MaxWidth   int  `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
-	Pagination bool `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	// Deprecated: this has moved to `settings.terminal.max-width`
+	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
+	// Deprecated: this has moved to `settings.terminal.pagination`
+	Pagination bool                    `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	Generate   map[string]DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
 }
 
 type Templates struct {
@@ -333,6 +370,26 @@ type Version struct {
 	Check VersionCheck `yaml:"check,omitempty" mapstructure:"check"`
 }
 
+type TerraformDocsReadmeSettings struct {
+	Source        string `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Format        string `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	ShowProviders bool   `yaml:"show_providers,omitempty" json:"show_providers,omitempty" mapstructure:"show_providers"`
+	ShowInputs    bool   `yaml:"show_inputs,omitempty" json:"show_inputs,omitempty" mapstructure:"show_inputs"`
+	ShowOutputs   bool   `yaml:"show_outputs,omitempty" json:"show_outputs,omitempty" mapstructure:"show_outputs"`
+	SortBy        string `yaml:"sort_by,omitempty" json:"sort_by,omitempty" mapstructure:"sort_by"`
+	HideEmpty     bool   `yaml:"hide_empty,omitempty" json:"hide_empty,omitempty" mapstructure:"hide_empty"`
+	IndentLevel   int    `yaml:"indent_level,omitempty" json:"indent_level,omitempty" mapstructure:"indent_level"`
+}
+
+type DocsGenerate struct {
+	BaseDir   string                      `yaml:"base-dir,omitempty" json:"base-dir,omitempty" mapstructure:"base-dir"`
+	Input     []any                       `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
+	Template  string                      `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+	Output    string                      `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
+	Terraform TerraformDocsReadmeSettings `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
+}
+
 type ArgsAndFlagsInfo struct {
 	AdditionalArgsAndFlags    []string
 	SubCommand                string
@@ -439,6 +496,7 @@ type ConfigAndStacksInfo struct {
 	ProcessTemplates              bool
 	ProcessFunctions              bool
 	Skip                          []string
+	CliArgs                       []string
 }
 
 // Workflows
@@ -658,6 +716,7 @@ type Affected struct {
 	SpaceliftStack       string              `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject      string              `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
 	Affected             string              `yaml:"affected" json:"affected" mapstructure:"affected"`
+	AffectedAll          []string            `yaml:"affected_all" json:"affected_all" mapstructure:"affected_all"`
 	File                 string              `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
 	Folder               string              `yaml:"folder,omitempty" json:"folder,omitempty" mapstructure:"folder"`
 	Dependents           []Dependent         `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
@@ -768,10 +827,20 @@ type AtmosVendorConfig struct {
 	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
 }
 
+// ComponentManifest defines the structure of the component manifest file (component.yaml).
+type ComponentManifest struct {
+	APIVersion string         `yaml:"apiVersion,omitempty" json:"apiVersion,omitempty" mapstructure:"apiVersion,omitempty"`
+	Kind       string         `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind,omitempty"`
+	Metadata   map[string]any `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+	Spec       map[string]any `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec,omitempty"`
+	Vars       map[string]any `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars,omitempty"`
+}
+
 type Vendor struct {
 	// Path to vendor configuration file or directory containing vendor files
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	List     ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 }
 
 type MarkdownSettings struct {

@@ -1,5 +1,5 @@
 
-Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains
 
 Usage:
 
@@ -15,10 +15,11 @@ Available Commands:
   completion                     Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
   describe                       Show details about Atmos configurations and components
   docs                           Open Atmos documentation or display component-specific docs
+  generate                       Generic generation commands (e.g. docs, scaffolding, etc.)
   helmfile                       Manage Helmfile-based Kubernetes deployments
   help                           Display help information for Atmos commands
   list                           List available stacks and components
-  pro                            Access premium features integrated with app.cloudposse.com
+  pro                            Access premium features integrated with atmos-pro.com
   support                        Show Atmos support options
   terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
   validate                       Validate configurations against OPA policies and JSON schemas
@@ -53,4 +54,4 @@ Flags:
                                     '/dev/null'): atmos <command>
                                     --redirect-stderr /dev/stdout
 
-Use [;1m atmos [subcommand] --help[0m for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+Use [;1m atmos [subcommand] --help[0m for more information about a command.

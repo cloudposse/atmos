@@ -58,6 +58,7 @@ var commonFlags = []string{
 
 // ProcessComponentConfig processes component config sections
 func ProcessComponentConfig(
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
@@ -179,11 +180,14 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
 	configAndStacksInfo.BaseComponentPath = baseComponentName
-	configAndStacksInfo.Command = command
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
 	configAndStacksInfo.ComponentMetadataSection = componentMetadata
 	configAndStacksInfo.ComponentImportsSection = componentImportsSection
+
+	if command != "" {
+		configAndStacksInfo.Command = command
+	}
 
 	return nil
 }
@@ -307,7 +311,7 @@ func ProcessStacks(
 		return configAndStacksInfo, errors.New(message)
 	}
 
-	// Check if component was provided
+	// Check if the component was provided.
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
 		message := fmt.Sprintf("`component` is required.\n\nUsage:\n\n`atmos %s <command> <component> <arguments_and_flags>`", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
@@ -329,7 +333,7 @@ func ProcessStacks(
 			msg = "\nFound stack manifests:"
 		}
 		u.LogTrace(msg)
-		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -338,6 +342,7 @@ func ProcessStacks(
 	// Check and process stacks
 	if atmosConfig.StackType == "Directory" {
 		err = ProcessComponentConfig(
+			&atmosConfig,
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
 			stacksMap,
@@ -371,6 +376,7 @@ func ProcessStacks(
 		for stackName := range stacksMap {
 			// Check if we've found the component in the stack
 			err = ProcessComponentConfig(
+				&atmosConfig,
 				&configAndStacksInfo,
 				stackName,
 				stacksMap,
@@ -469,14 +475,6 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["stack"] = configAndStacksInfo.StackFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
 	configAndStacksInfo.ComponentSection["atmos_manifest"] = configAndStacksInfo.StackFile
-
-	// Add Atmos CLI config
-	atmosCliConfig := map[string]any{}
-	atmosCliConfig["base_path"] = atmosConfig.BasePath
-	atmosCliConfig["components"] = atmosConfig.Components
-	atmosCliConfig["stacks"] = atmosConfig.Stacks
-	atmosCliConfig["workflows"] = atmosConfig.Workflows
-	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
 
 	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
 	if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
@@ -644,13 +642,30 @@ func ProcessStacks(
 
 	// Add command-line arguments and vars to the component section
 	// It will allow using them when validating with OPA policies or JSON Schema
-	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = configAndStacksInfo.AdditionalArgsAndFlags
+	args := append(configAndStacksInfo.CliArgs, configAndStacksInfo.AdditionalArgsAndFlags...)
+
+	var filteredArgs []string
+	for _, item := range args {
+		if item != "" {
+			filteredArgs = append(filteredArgs, item)
+		}
+	}
+
+	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = filteredArgs
 
 	cliVars, err := getCliVars(configAndStacksInfo.AdditionalArgsAndFlags)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 	configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsSectionName] = cliVars
+
+	// Add Atmos CLI config
+	atmosCliConfig := map[string]any{}
+	atmosCliConfig["base_path"] = atmosConfig.BasePath
+	atmosCliConfig["components"] = atmosConfig.Components
+	atmosCliConfig["stacks"] = atmosConfig.Stacks
+	atmosCliConfig["workflows"] = atmosConfig.Workflows
+	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
 
 	return configAndStacksInfo, nil
 }
