@@ -16,11 +16,12 @@ import (
 const (
 	statusCodeNotFound  = 404
 	statusCodeForbidden = 403
+	// AzureKeyVaultHyphen is the hyphen character used for Azure Key Vault secret name normalization.
+	AzureKeyVaultHyphen = "-"
 )
 
-// Azure Key Vault secret names must match the pattern: ^[0-9a-zA-Z-]+$
-// They can only contain alphanumeric characters and hyphens
-var azureKeyVaultNameRegex = regexp.MustCompile(`^[0-9a-zA-Z-]+$`)
+// Azure Key Vault secret names must match the pattern: ^[0-9a-zA-Z-]+$.
+// They can only contain alphanumeric characters and hyphens.
 
 // AzureKeyVaultClient interface allows us to mock the Azure Key Vault client.
 type AzureKeyVaultClient interface {
@@ -50,19 +51,19 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions) (Store, error) {
 		return nil, ErrVaultURLRequired
 	}
 
-	// Create a credential using the default Azure credential chain
+	// Create a credential using the default Azure credential chain.
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
-	// Create the Key Vault client
+	// Create the Key Vault client.
 	client, err := azsecrets.NewClient(options.VaultURL, cred, nil)
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
-	stackDelimiter := "-"
+	stackDelimiter := AzureKeyVaultHyphen
 	if options.StackDelimiter != nil {
 		stackDelimiter = *options.StackDelimiter
 	}
@@ -83,13 +84,13 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions) (Store, error) {
 // normalizeSecretName converts a key path to a valid Azure Key Vault secret name.
 // Azure Key Vault secret names must only contain alphanumeric characters and hyphens.
 func (s *AzureKeyVaultStore) normalizeSecretName(key string) string {
-	// Replace any non-alphanumeric characters with hyphens
-	normalized := regexp.MustCompile(`[^0-9a-zA-Z-]`).ReplaceAllString(key, "-")
-	// Replace multiple consecutive hyphens with a single hyphen
-	normalized = regexp.MustCompile(`-+`).ReplaceAllString(normalized, "-")
-	// Remove leading and trailing hyphens
-	normalized = strings.Trim(normalized, "-")
-	// Ensure the name is not empty
+	// Replace any non-alphanumeric characters with hyphens.
+	normalized := regexp.MustCompile(`[^0-9a-zA-Z-]`).ReplaceAllString(key, AzureKeyVaultHyphen)
+	// Replace multiple consecutive hyphens with a single hyphen.
+	normalized = regexp.MustCompile(`-+`).ReplaceAllString(normalized, AzureKeyVaultHyphen)
+	// Remove leading and trailing hyphens.
+	normalized = strings.Trim(normalized, AzureKeyVaultHyphen)
+	// Ensure the name is not empty.
 	if normalized == "" {
 		normalized = "default"
 	}
@@ -101,12 +102,12 @@ func (s *AzureKeyVaultStore) getKey(stack string, component string, key string) 
 		return "", ErrStackDelimiterNotSet
 	}
 
-	baseKey, err := getKey(s.prefix, *s.stackDelimiter, stack, component, key, "-")
+	baseKey, err := getKey(s.prefix, *s.stackDelimiter, stack, component, key, AzureKeyVaultHyphen)
 	if err != nil {
 		return "", fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
-	// Normalize the key to comply with Azure Key Vault naming restrictions
+	// Normalize the key to comply with Azure Key Vault naming restrictions.
 	return s.normalizeSecretName(baseKey), nil
 }
 
@@ -126,7 +127,7 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
-	// Convert value to JSON string like other stores
+	// Convert value to JSON string like other stores.
 	jsonValue, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
@@ -183,10 +184,10 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 		return "", nil
 	}
 
-	// Try to unmarshal as JSON first, fallback to string if it fails
+	// Try to unmarshal as JSON first, fallback to string if it fails.
 	var result interface{}
-	if err := json.Unmarshal([]byte(*resp.Value), &result); err != nil {
-		// If JSON unmarshaling fails, return as string
+	if jsonErr := json.Unmarshal([]byte(*resp.Value), &result); jsonErr != nil {
+		// If JSON unmarshaling fails, return as string.
 		return *resp.Value, nil
 	}
 	return result, nil

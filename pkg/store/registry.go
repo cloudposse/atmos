@@ -22,6 +22,18 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			}
 			registry[key] = store
 
+		case "azure-key-vault":
+			var opts AzureKeyVaultStoreOptions
+			if err := parseOptions(storeConfig.Options, &opts); err != nil {
+				return nil, fmt.Errorf("failed to parse Key Vault store options: %w", err)
+			}
+
+			store, err := NewAzureKeyVaultStore(opts)
+			if err != nil {
+				return nil, err
+			}
+			registry[key] = store
+
 		case "aws-ssm-parameter-store":
 			var opts SSMStoreOptions
 			if err := parseOptions(storeConfig.Options, &opts); err != nil {
@@ -53,18 +65,6 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			}
 
 			store, err := NewRedisStore(opts)
-			if err != nil {
-				return nil, err
-			}
-			registry[key] = store
-
-		case "azure-key-vault":
-			var opts AzureKeyVaultStoreOptions
-			if err := parseOptions(storeConfig.Options, &opts); err != nil {
-				return nil, fmt.Errorf("failed to parse Key Vault store options: %w", err)
-			}
-
-			store, err := NewAzureKeyVaultStore(opts)
 			if err != nil {
 				return nil, err
 			}
