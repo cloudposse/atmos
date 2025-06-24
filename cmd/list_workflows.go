@@ -8,6 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -22,18 +23,21 @@ var listWorkflowsCmd = &cobra.Command{
 
 		fileFlag, err := flags.GetString("file")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `file` flag: %v", err), "")
 			return
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `format` flag: %v", err), "")
 			return
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `delimiter` flag: %v", err), "")
 			return
 		}
@@ -41,17 +45,20 @@ var listWorkflowsCmd = &cobra.Command{
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("Error initializing CLI config", err, "")
 			return
 		}
 
 		output, err := l.FilterAndListWorkflows(fileFlag, atmosConfig.Workflows.List, formatFlag, delimiterFlag)
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 			return
 		}
 
 		u.PrintMessageInColor(output, theme.Colors.Success)
+		telemetry.CaptureCmd(cmd)
 	},
 }
 
