@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // listVendorCmd lists vendor configurations.
@@ -26,6 +27,7 @@ var listVendorCmd = &cobra.Command{
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			log.Error("Error getting the 'format' flag", "error", err)
 			cmd.PrintErrln(fmt.Errorf("error getting the 'format' flag: %w", err))
 			cmd.PrintErrln("Run 'atmos list vendor --help' for usage")
@@ -34,6 +36,7 @@ var listVendorCmd = &cobra.Command{
 
 		stackFlag, err := flags.GetString("stack")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			log.Error("Error getting the 'stack' flag", "error", err)
 			cmd.PrintErrln(fmt.Errorf("error getting the 'stack' flag: %w", err))
 			cmd.PrintErrln("Run 'atmos list vendor --help' for usage")
@@ -42,6 +45,7 @@ var listVendorCmd = &cobra.Command{
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			log.Error("Error getting the 'delimiter' flag", "error", err)
 			cmd.PrintErrln(fmt.Errorf("error getting the 'delimiter' flag: %w", err))
 			cmd.PrintErrln("Run 'atmos list vendor --help' for usage")
@@ -52,6 +56,7 @@ var listVendorCmd = &cobra.Command{
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			log.Error("Error initializing CLI config", "error", err)
 			cmd.PrintErrln(fmt.Errorf("error initializing CLI config: %w", err))
 			return
@@ -67,6 +72,7 @@ var listVendorCmd = &cobra.Command{
 		// Call list vendor function
 		output, err := l.FilterAndListVendor(&atmosConfig, options)
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			log.Error("Error listing vendor configurations", "error", err)
 			cmd.PrintErrln(fmt.Errorf("error listing vendor configurations: %w", err))
 			return
@@ -74,6 +80,7 @@ var listVendorCmd = &cobra.Command{
 
 		// Print output
 		fmt.Println(output)
+		telemetry.CaptureCmd(cmd)
 	},
 }
 
