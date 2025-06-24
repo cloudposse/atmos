@@ -715,6 +715,9 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, s
 		}
 	}()
 
+	// Match behavior of main.go for snapshot compatibility
+	log.Default().SetReportTimestamp(false)
+
 	exitCode := 0
 	oldExit := utils.OsExit
 	utils.OsExit = func(code int) { exitCode = code }
