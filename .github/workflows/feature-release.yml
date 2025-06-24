@@ -1,0 +1,10 @@
+name: Feature release
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  release:
+    if: ${{ github.event_name == 'issue_comment' && contains(github.event.comment.body, '/release') }}
+    uses: cloudposse/.github/.github/workflows/shared-go-feature-release.yml@feature-release-shared-workflow
+    secrets: inherit
