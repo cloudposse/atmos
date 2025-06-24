@@ -511,3 +511,26 @@ func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
 	assert.Empty(t, message)
 	os.Unsetenv("CI")
 }
+
+// TestTelemetryDisclosureMessageHideIfTelemetryDisabled tests that disclosure messages are suppressed
+// when telemetry is disabled.
+func TestTelemetryDisclosureMessageHideIfTelemetryDisabled(t *testing.T) {
+	// Preserve and restore CI environment variables to avoid interference.
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Load cache configuration and ensure telemetry disclosure is set to not shown.
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryDisclosureShown = false
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	// Disable telemetry via environment variable.
+	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
+	// Should return empty string when telemetry is disabled.
+	message := disclosureMessage()
+	assert.Empty(t, message)
+	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+}

@@ -145,7 +145,7 @@ func disclosureMessage() string {
 
 	// Only show disclosure if telemetry is enabled
 	telemetry := getTelemetryFromConfig()
-	if telemetry == nil {
+	if telemetry == nil || !telemetry.isEnabled {
 		return ""
 	}
 
