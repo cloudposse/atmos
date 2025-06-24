@@ -16,9 +16,9 @@ Use these subcommands to interact with Terraform and OpenTofu.
 
 Atmos Terraform/OpenTofu commands fall into two categories:
 
-  - Single-Component Commands: operate on one component at a time
+  - Single-Component: Run Terraform for one component at a time
 
-  - Multi-Component Commands (Bulk Operations): operate on multiple components based on stack, set of components, query, or filters
+  - Multi-Component (Filtered/Bulk): Run Terraform across multiple components using stack names, selectors, or change detection
 
 Atmos supports all Terraform and OpenTofu commands and options described in
 [Terraform CLI Overview](https://developer.hashicorp.com/terraform/cli/commands)
@@ -34,6 +34,7 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
 
 ## Single-Component Commands Usage
 
+Use single-component commands when you want to execute Terraform operations on one component at a time, offering precise control over individual resources.
 <Terminal>
 ```shell
 # Execute `terraform <command>` on a `component` in a `stack`
@@ -43,6 +44,8 @@ atmos terraform <command> <component> --stack <stack> [options]
 </Terminal>
 
 ## Multi-Component Commands (Bulk Operations) Usage
+
+Use multi-component commands to run Terraform operations across multiple components simultaneously. You can target components by stack, selector, query, or change detection—often making this approach more efficient than using Atmos workflows for certain use cases.
 
 <Terminal>
 ```shell
