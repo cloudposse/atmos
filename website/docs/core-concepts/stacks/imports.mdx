@@ -36,7 +36,7 @@ Here are some simple examples of how to import configurations:
 import:
   - catalog/file1 # First import "file1" from the catalog
   - catalog/file2 # Second import "file2" from the catalog, deep merging on top of the first import
-  - catalog/file3 # Third import "file3" from the catalog, deep merging on top of the preceeding imports
+  - catalog/file3 # Third import "file3" from the catalog, deep merging on top of the preceding imports
 ```
 
 The base path for imports is specified in the [`atmos.yaml`](/cli/configuration) in the `stacks.base_path` section.
@@ -47,9 +47,9 @@ It's also possible to specify file extensions, although we do not recommend it.
 
 ```yaml
 import:
-  - catalog/file1.yml   # Expicitly load a file with a .yml extension
-  - catalog/file2.yaml  # Expicitly load a file with a .yaml extension
-  - catalog/file3.YAML  # Expicitly load a file with a .YAML extension
+  - catalog/file1.yml   # Explicitly load a file with a .yml extension
+  - catalog/file2.yaml  # Explicitly load a file with a .yaml extension
+  - catalog/file3.YAML  # Explicitly load a file with a .YAML extension
 ```
 
 ### Automatic Template File Detection
@@ -86,7 +86,7 @@ Use [mixins](/core-concepts/stacks/inheritance/mixins) for reusable snippets of 
 
 ## Imports Schema
 
-The `import` section supports two different formats, depending on whether the imported files use templates or not. One is a list of strings respresenting paths to the imported files, and the other is a list of objects with several feature flags.
+The `import` section supports two different formats, depending on whether the imported files use templates or not. One is a list of strings representing paths to the imported files, and the other is a list of objects with several feature flags.
 
 ### Imports without Templates
 
@@ -142,7 +142,7 @@ The `import` section supports the following fields:
   a [Go template](https://pkg.go.dev/text/template))</dd>
 
   <dt>`skip_templates_processing` - (boolean)</dt>
-  <dd>Skip template processing for the imported file. Can be used if the imported file uses `Go` templates that should not be interpretted by atmos. For example, sometimes configurations for components may pass Go template strings not intended for atmos.</dd>
+  <dd>Skip template processing for the imported file. Can be used if the imported file uses `Go` templates that should not be interpreted by atmos. For example, sometimes configurations for components may pass Go template strings not intended for atmos.</dd>
 
   <dt>`ignore_missing_template_values` - (boolean)</dt>
   <dd>Ignore the missing template values in the imported file. Can be used if the imported file uses `Go` templates to configure external systems, e.g. Datadog. In this case, Atmos will process all template values that are provided in the `context`, and will skip the missing values in the templates for the external systems without throwing an error. The `ignore_missing_template_values` setting is different from `skip_templates_processing` in that `skip_templates_processing` skips the template processing completely in the imported file, while `ignore_missing_template_values` processes the templates using the values provided in the `context` and skips all the missing values</dd>

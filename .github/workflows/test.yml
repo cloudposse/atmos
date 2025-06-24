@@ -524,16 +524,3 @@ jobs:
                 "examples/${{ matrix.demo-folder }}/stacks/**/*.yml"
               ]
             }
-
-  release:
-    needs: [ test, lint, mock, k3s, localstack, docker, validate ]
-    if: |
-      github.event_name == 'push' || 
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release/feature'))
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
-    with:
-      publish: true
-      prerelease: true
-      format: binary
-      environment: 'feature-releases'
-    secrets: inherit
