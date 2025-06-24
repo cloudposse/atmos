@@ -15,10 +15,5 @@ env:
 jobs:
   release:
     if: ${{ github.event_name == 'issue_comment' && contains(github.event.comment.body, '/release') }}
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
-    with:
-      publish: true
-      prerelease: true
-      format: binary
-      environment: 'feature-releases'
+    uses: cloudposse/.github/.github/workflows/shared-go-feature-release.yml@feature-release-shared-workflow
     secrets: inherit
