@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
-	"os"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 
@@ -27,6 +29,7 @@ var (
 	configFilePaths        []string
 	tmpExclude             string
 	format                 string
+	ErrConfigHasErrors     = errors.New("errors found")
 )
 
 var editorConfigCmd *cobra.Command = &cobra.Command{
@@ -39,9 +42,15 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		handleHelpRequest(cmd, args)
 		if len(args) > 0 {
+			telemetry.CaptureCmd(cmd)
 			showUsageAndExit(cmd, args)
 		}
-		runMainLogic()
+		err := runMainLogic()
+		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
+			log.Fatal(err)
+		}
+		telemetry.CaptureCmd(cmd)
 	},
 }
 
@@ -142,35 +151,36 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 }
 
 // runMainLogic contains the main logic
-func runMainLogic() {
+func runMainLogic() error {
 	config := *currentConfig
 	u.LogDebug(config.String())
 	u.LogTrace(fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
 
 	if err := checkVersion(config); err != nil {
-		u.LogErrorAndExit(err)
+		return err
 	}
 
 	filePaths, err := files.GetFiles(config)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		return err
 	}
 
 	if config.DryRun {
 		for _, file := range filePaths {
 			u.LogInfo(file)
 		}
-		os.Exit(0)
+		return nil
 	}
 
-	errors := validation.ProcessValidation(filePaths, config)
+	errs := validation.ProcessValidation(filePaths, config)
 	u.LogDebug(fmt.Sprintf("%d files checked", len(filePaths)))
-	errorCount := er.GetErrorCount(errors)
+	errorCount := er.GetErrorCount(errs)
 	if errorCount != 0 {
-		er.PrintErrors(errors, config)
-		os.Exit(1)
+		er.PrintErrors(errs, config)
+		return ErrConfigHasErrors
 	}
 	u.PrintMessage("No errors found")
+	return nil
 }
 
 func checkVersion(config config.Config) error {
