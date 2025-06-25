@@ -7,3 +7,8 @@ DEBU Atmos configuration not found path=/absolute/path/to/repo/atmos.d/**/* erro
 DEBU Atmos configuration not found path=/absolute/path/to/repo/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU Atmos configuration not found path=/absolute/path/to/repo/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Atmos configuration not found path=/absolute/path/to/repo/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU Telemetry event captured
