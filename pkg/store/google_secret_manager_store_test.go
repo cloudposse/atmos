@@ -505,7 +505,7 @@ func TestNewGSMStore(t *testing.T) {
 				case "missing project ID":
 					assert.Contains(t, err.Error(), "project_id is required")
 				default:
-					assert.Contains(t, err.Error(), "failed to create Secret Manager client")
+					assert.Contains(t, err.Error(), "failed to create client")
 				}
 				assert.Nil(t, store)
 			} else {
