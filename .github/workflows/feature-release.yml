@@ -23,4 +23,5 @@ jobs:
       prerelease: true
       format: binary
       environment: 'feature-releases'
+      draft: ${{ github.event.pull_request.draft }}
     secrets: inherit
