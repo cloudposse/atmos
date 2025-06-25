@@ -5,17 +5,12 @@ import (
 	"fmt"
 
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	l "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
