@@ -30,7 +30,7 @@
 
 - Print more detailed output when cloning and checking out the Git repository
 ```
- $ atmos describe affected --verbose=true
+ $ atmos describe affected --logs-level=Debug
 ```
 
 - Specify Path to PEM-encoded private key to clone private repos using SSH
@@ -48,19 +48,19 @@
 - Include the Spacelift admin stack of any stack that is affected by config changes
 
 ```
- $ atmos describe affected --include-spacelift-admin-stacks=true
+ $ atmos describe affected --include-spacelift-admin-stacks
 ```
 
 - Include the dependent components and stacks
 
 ```
- $ atmos describe affected --include-dependents=true
+ $ atmos describe affected --include-dependents
 ```
 
 - Include the `settings` section for each affected component
 
 ```
- $ atmos describe affected --include-settings=true
+ $ atmos describe affected --include-settings
 ```
 
 - Upload the affected components and stacks to a specified HTTP endpoint

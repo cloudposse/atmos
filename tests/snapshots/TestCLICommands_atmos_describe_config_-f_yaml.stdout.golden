@@ -45,10 +45,10 @@ settings:
       line_numbers: false
       wrap: false
     no_color: false
+  inject_github_token: true
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
-  inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks
 includeStackAbsolutePaths:
