@@ -149,8 +149,8 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		return err
 	}
 
-	u.LogDebug(fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
-		filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
+	log.Debug("Validating all YAML files in the folder and all subfolders (excluding template files)",
+		"folder", filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
 		stackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(

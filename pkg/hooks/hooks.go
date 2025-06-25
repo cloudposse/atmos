@@ -4,11 +4,12 @@ import (
 	"fmt"
 
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 )
 
 type Hooks struct {
@@ -22,6 +23,14 @@ func (h Hooks) HasHooks() bool {
 }
 
 func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
+	if info.ComponentFromArg == "" || info.Stack == "" {
+		return &Hooks{
+			config: atmosConfig,
+			info:   info,
+			items:  nil,
+		}, nil
+	}
+
 	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true, true, []string{})
 	if err != nil {
 		return &Hooks{}, fmt.Errorf("failed to execute describe component: %w", err)
