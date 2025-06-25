@@ -6,9 +6,9 @@ import (
 	"os"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/spf13/cobra"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/version"
+	"github.com/spf13/cobra"
 )
 
 // getTerraformCommands returns an array of statically defined Terraform commands with flags
