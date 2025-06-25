@@ -130,6 +130,19 @@ introduction: |-
   - The commands have a clean, consistent and easy to understand syntax
   - The CLI code is modular and self-documenting
 
+  ## Telemetry
+
+  Atmos collects **anonymous telemetry** to help improve the product by understanding how it's used.
+
+  You can **opt-out** of telemetry collection in either of the following ways:
+
+  - Set `settings.telemetry.enabled: false` in your `atmos.yaml`
+  - Or set the environment variable: `ATMOS_TELEMETRY_ENABLED=false`
+
+  > **Note for Atmos Pro users:** If you’re using [Atmos Pro](https://atmos-pro.com), your [workspace ID](https://atmos-pro.com/docs/authentication/workspace-id) will be included in telemetry events. This allows our team to provide more effective support and assist with troubleshooting as part of your subscription.
+
+  To learn more about what is collected and how it works, see the [Telemetry Documentation](https://atmos.tools/cli/telemetry).
+
   ## Documentation
 
   Find all documentation at: [atmos.tools](https://atmos.tools)

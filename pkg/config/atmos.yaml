@@ -6,3 +6,9 @@ logs:
   # Supported log levels: Trace, Debug, Info, Warning, Off
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
+
+settings:
+  telemetry:
+    enabled: true
+    endpoint: "https://us.i.posthog.com"
+    token: "phc_5Z678901234567890123456789012345"

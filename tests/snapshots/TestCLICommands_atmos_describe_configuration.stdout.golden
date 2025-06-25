@@ -61,6 +61,10 @@ settings:
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
+  telemetry:
+    enabled: true
+    endpoint: https://us.i.posthog.com
+    token: phc_5Z678901234567890123456789012345
   inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks
