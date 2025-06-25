@@ -17,16 +17,10 @@ type storeGetKeyParams struct {
 	defaultValue *string
 }
 
-func processTagStoreGetKey(atmosConfig schema.AtmosConfiguration, input string, currentStack string) any {
-	log.Debug("Executing Atmos YAML function", function, input)
-
-	str, err := getStringAfterTag(input, u.AtmosYamlFuncStoreGetKey)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+// parseStoreGetKeyInput parses the input string and returns storeGetKeyParams
+func parseStoreGetKeyInput(input string) (*storeGetKeyParams, error) {
 	// Split the input on the pipe symbol to separate the store parameters and default value
-	parts := strings.Split(str, "|")
+	parts := strings.Split(input, "|")
 	storePart := strings.TrimSpace(parts[0])
 
 	// Default value and query
@@ -37,8 +31,7 @@ func processTagStoreGetKey(atmosConfig schema.AtmosConfiguration, input string, 
 		for _, p := range parts[1:] {
 			pipeParts := strings.Fields(strings.TrimSpace(p))
 			if len(pipeParts) != 2 {
-				log.Error(invalidYamlFuncMsg, function, input, "invalid number of parameters after the pipe", len(pipeParts))
-				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+				return nil, fmt.Errorf("invalid number of parameters after the pipe: %d", len(pipeParts))
 			}
 			v1 := strings.Trim(pipeParts[0], `"'`) // Remove surrounding quotes if present
 			v2 := strings.Trim(pipeParts[1], `"'`)
@@ -48,8 +41,7 @@ func processTagStoreGetKey(atmosConfig schema.AtmosConfiguration, input string, 
 			case "query":
 				query = v2
 			default:
-				log.Error(invalidYamlFuncMsg, function, input, "invalid identifier after the pipe", v1)
-				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+				return nil, fmt.Errorf("invalid identifier after the pipe: %s", v1)
 			}
 		}
 	}
@@ -58,22 +50,37 @@ func processTagStoreGetKey(atmosConfig schema.AtmosConfiguration, input string, 
 	storeParts := strings.Fields(storePart)
 	partsLength := len(storeParts)
 	if partsLength != 2 {
-		log.Error(invalidYamlFuncMsg, function, input, "invalid number of parameters", partsLength)
-		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+		return nil, fmt.Errorf("invalid number of parameters: %d", partsLength)
 	}
 
-	retParams := storeGetKeyParams{
+	return &storeGetKeyParams{
 		storeName:    strings.TrimSpace(storeParts[0]),
 		key:          strings.TrimSpace(storeParts[1]),
 		defaultValue: defaultValue,
 		query:        query,
+	}, nil
+}
+
+func processTagStoreGetKey(atmosConfig schema.AtmosConfiguration, input string, currentStack string) any {
+	log.Debug("Executing Atmos YAML function", function, input)
+
+	str, err := getStringAfterTag(input, u.AtmosYamlFuncStoreGetKey)
+	if err != nil {
+		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+	}
+
+	// Parse the input parameters
+	retParams, err := parseStoreGetKeyInput(str)
+	if err != nil {
+		log.Error(invalidYamlFuncMsg, function, input, "error", err)
+		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 	}
 
 	// Retrieve the store from atmosConfig
 	store := atmosConfig.Stores[retParams.storeName]
-
 	if store == nil {
-		log.Fatal("store not found", function, input, "store", retParams.storeName)
+		log.Error("store not found", function, input, "store", retParams.storeName)
+		return fmt.Sprintf("store not found: %s", retParams.storeName)
 	}
 
 	// Retrieve the value from the store using the arbitrary key
@@ -82,16 +89,17 @@ func processTagStoreGetKey(atmosConfig schema.AtmosConfiguration, input string, 
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
-		log.Fatal("failed to get key", function, input, "key", retParams.key, "error", err)
+		log.Error("failed to get key", function, input, "key", retParams.key, "error", err)
+		return fmt.Sprintf("failed to get key %s: %v", retParams.key, err)
 	}
 
 	// Execute the YQ expression if provided
 	res := value
-
 	if retParams.query != "" {
 		res, err = u.EvaluateYqExpression(&atmosConfig, value, retParams.query)
 		if err != nil {
-			log.Fatal(err)
+			log.Error("failed to evaluate YQ expression", function, input, "error", err)
+			return fmt.Sprintf("failed to evaluate YQ expression: %v", err)
 		}
 	}
 
