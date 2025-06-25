@@ -11,7 +11,6 @@ import (
 	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
