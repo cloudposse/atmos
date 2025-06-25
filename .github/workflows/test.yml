@@ -96,7 +96,7 @@ jobs:
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@v4
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
@@ -105,7 +105,7 @@ jobs:
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
@@ -128,14 +128,14 @@ jobs:
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
         uses: opentofu/setup-opentofu@v1
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
@@ -143,14 +143,14 @@ jobs:
       # https://github.com/helmfile/helmfile-action
       - name: Install Helmfile
         uses: helmfile/helmfile-action@v2.0.4
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           helmfile-version: ${{ env.HELMFILE_VERSION }}
           helmfile-args: version
           helmfile-auto-init: "false"
 
       - name: Check atmos.exe integrity
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        if: matrix.flavor.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
         run: |
           Write-Output "PATH=$Env:PATH"
@@ -161,13 +161,13 @@ jobs:
 
       - name: Set up Go
         uses: actions/setup-go@v5
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
         id: go
 
       - name: Get dependencies
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
           make deps
 
@@ -186,7 +186,7 @@ jobs:
 
       - name: Acceptance tests
         timeout-minutes: 30
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-cover
@@ -386,15 +386,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@v4
 
-      - name: Add GNU tar to PATH (significantly faster than windows tar)
+      - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
@@ -412,14 +412,14 @@ jobs:
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - name: Install Terraform
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
