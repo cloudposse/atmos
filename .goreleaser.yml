@@ -11,7 +11,7 @@ builds:
       - CGO_ENABLED=0
     mod_timestamp: '{{ .CommitTimestamp }}'
     goos:
-{{ if and (eq (index .Env "GO_RELEASER_DRAFT_MODE") "true") (eq (index .Env "GO_RELEASER_TARGET_COMMITISH") "true") }}
+{{ if and ( index .Env "GO_RELEASER_DRAFT_MODE" ) (eq .Env.GO_RELEASER_TARGET_COMMITISH "true") }}
       - linux
       - darwin
 {{ else }}
@@ -21,7 +21,7 @@ builds:
       - darwin
 {{ end }}
     goarch:
-{{ if and (eq (index .Env "GO_RELEASER_DRAFT_MODE") "true") (eq (index .Env "GO_RELEASER_TARGET_COMMITISH") "true") }}
+{{ if and ( index .Env "GO_RELEASER_DRAFT_MODE" ) (eq .Env.GO_RELEASER_TARGET_COMMITISH "true") }}
       - amd64
       - arm64
 {{ else }}
