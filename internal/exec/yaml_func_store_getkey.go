@@ -112,4 +112,4 @@ func processTagStoreGetKey(atmosConfig *schema.AtmosConfiguration, input string,
 	}
 
 	return res
-} 
+}
