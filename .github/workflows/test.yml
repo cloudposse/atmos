@@ -38,6 +38,7 @@ jobs:
           - os: macos-latest
             target: macos
     runs-on: ${{ matrix.os }}
+    if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft == 'true' ) }}
     steps:
       - name: Build
         if: matrix.target != 'windows' || github.event.pull_request.draft != 'true'
