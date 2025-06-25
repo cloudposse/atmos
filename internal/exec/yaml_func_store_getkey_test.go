@@ -117,10 +117,10 @@ func TestProcessTagStoreGetKey(t *testing.T) {
 				// In a real test environment, this would cause the test to fail
 				// For now, we'll just verify the function exists and can be called
 				assert.NotPanics(t, func() {
-					processTagStoreGetKey(&atmosConfig, tt.input, tt.currentStack)
+					processTagStoreGetKey(atmosConfig, tt.input, tt.currentStack)
 				})
 			} else {
-				result := processTagStoreGetKey(&atmosConfig, tt.input, tt.currentStack)
+				result := processTagStoreGetKey(atmosConfig, tt.input, tt.currentStack)
 				assert.Equal(t, tt.expected, result)
 			}
 		})
