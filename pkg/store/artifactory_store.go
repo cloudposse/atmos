@@ -294,7 +294,7 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 
 	// Ensure the file path has the correct extension
 	if !strings.HasSuffix(filePath, ".json") {
-		filePath = filePath + ".json"
+		filePath += ".json"
 	}
 
 	// Construct the full repository path
