@@ -295,6 +295,7 @@ func (s *SSMStore) GetKey(key string) (interface{}, error) {
 
 	// Try to unmarshal as JSON first, fallback to string if it fails.
 	var result interface{}
+	//nolint:errcheck // Intentionally ignoring JSON unmarshal error to fall back to string
 	if unmarshalErr := json.Unmarshal([]byte(*resp.Parameter.Value), &result); unmarshalErr != nil {
 		// If JSON unmarshaling fails, return as string.
 		return *resp.Parameter.Value, nil

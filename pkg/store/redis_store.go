@@ -182,6 +182,7 @@ func (s *RedisStore) GetKey(key string) (interface{}, error) {
 
 	// Try to unmarshal as JSON first, fallback to string if it fails.
 	var result interface{}
+	//nolint:errcheck // Intentionally ignoring JSON unmarshal error to fall back to string
 	if unmarshalErr := json.Unmarshal([]byte(value), &result); unmarshalErr != nil {
 		// If JSON unmarshaling fails, return as string.
 		return value, nil
