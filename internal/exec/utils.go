@@ -54,6 +54,8 @@ var commonFlags = []string{
 	cfg.ProcessTemplatesFlag,
 	cfg.ProcessFunctionsFlag,
 	cfg.SkipFlag,
+	cfg.AffectedFlag,
+	cfg.AllFlag,
 }
 
 // ProcessComponentConfig processes component config sections
@@ -261,6 +263,8 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
+	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
+	configAndStacksInfo.All = argsAndFlagsInfo.All
 
 	flags := cmd.Flags()
 
@@ -682,6 +686,7 @@ func processArgsAndFlags(
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 	var indexesToRemove []int
+
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "clean" {
 		info.SubCommand = inputArgsAndFlags[0]
 	}
@@ -1038,6 +1043,14 @@ func processArgsAndFlags(
 			info.NeedHelp = true
 		}
 
+		if arg == cfg.AffectedFlag {
+			info.Affected = true
+		}
+
+		if arg == cfg.AllFlag {
+			info.All = true
+		}
+
 		for _, f := range commonFlags {
 			if arg == f {
 				indexesToRemove = append(indexesToRemove, i)
@@ -1070,6 +1083,10 @@ func processArgsAndFlags(
 			info.SubCommand = additionalArgsAndFlags[0]
 		}
 		return info, nil
+	}
+
+	if len(additionalArgsAndFlags) == 1 && info.SubCommand == "" {
+		info.SubCommand = additionalArgsAndFlags[0]
 	}
 
 	if len(additionalArgsAndFlags) > 1 {

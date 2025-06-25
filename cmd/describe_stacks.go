@@ -104,7 +104,7 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		default:
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}
-		checkFlagError(err)
+		checkErrorAndExit(err)
 	}
 	return validateFormat(describe)
 }
