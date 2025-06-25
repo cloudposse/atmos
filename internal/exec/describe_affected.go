@@ -5,6 +5,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/selector"
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
 
@@ -35,6 +36,7 @@ type DescribeAffectedCmdArgs struct {
 	ProcessTemplates            bool
 	ProcessYamlFunctions        bool
 	Skip                        []string
+	Selector                    string
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -161,6 +163,15 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	if err != nil {
 		return err
 	}
+
+	// Apply selector filtering if provided
+	if a.Selector != "" {
+		affected, err = d.applyAffectedSelectorFilter(a.CLIConfig, affected, a.Selector)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Add dependent components and stacks for each affected component
 	if len(affected) > 0 && a.IncludeDependents {
 		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
@@ -174,21 +185,15 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	if a.Query == "" {
-		if err := d.uploadableQuery(a, repoUrl, headHead, baseHead, affected); err != nil {
-			return err
-		}
-	} else {
-		res, err := u.EvaluateYqExpression(d.atmosConfig, affected, a.Query)
-		if err != nil {
-			return err
-		}
-
-		err = viewWithScroll(&viewWithScrollProps{d.pageCreator, term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
-		if err != nil {
-			return err
-		}
+		return d.uploadableQuery(a, repoUrl, headHead, baseHead, affected)
 	}
-	return nil
+
+	res, err := u.EvaluateYqExpression(d.atmosConfig, affected, a.Query)
+	if err != nil {
+		return err
+	}
+
+	return viewWithScroll(&viewWithScrollProps{d.pageCreator, term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
 }
 
 func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
@@ -298,4 +303,47 @@ func viewConfig(v *viewConfigProps) error {
 		return err
 	}
 	return nil
+}
+
+func (d *describeAffectedExec) applyAffectedSelectorFilter(atmosConfig *schema.AtmosConfiguration, affected []schema.Affected, selectorStr string) ([]schema.Affected, error) {
+	if selectorStr == "" {
+		return affected, nil
+	}
+
+	// Parse the selector
+	reqs, err := selector.Parse(selectorStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all stacks to extract labels from
+	stacksMap, _, err := FindStacksMap(*atmosConfig, false)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []schema.Affected
+
+	for i := range affected {
+		// Extract labels for this affected component/stack
+		stackData, ok := stacksMap[affected[i].Stack]
+		if !ok {
+			continue
+		}
+
+		// Get merged labels (stack + component)
+		merged := selector.MergedLabels(stackData.(map[string]any), affected[i].Component)
+
+		// Check if the affected item matches the selector
+		if selector.Matches(merged, reqs) {
+			filtered = append(filtered, affected[i])
+		}
+	}
+
+	// If no matches, print the standard message
+	if len(filtered) == 0 {
+		log.Info("No affected components matched selector.")
+	}
+
+	return filtered, nil
 }

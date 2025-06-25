@@ -41,6 +41,8 @@ The command is particularly useful for:
   <dd>Output format: `table`, `json`, `csv`, `tsv` (default: `table`)</dd>
   <dt>`--delimiter string`</dt>
   <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
+  <dt>`--selector string` (`-l`)</dt>
+  <dd>Filter results based on label selectors. Supports equality (`key=value`), inequality (`key!=value`), set inclusion (`key in (a,b)`), set exclusion (`key notin (a,b)`), existence (`key`), and non-existence (`!key`) operations</dd>
 </dl>
 
 ## Examples

@@ -68,17 +68,19 @@ import CardGroup from '@site/src/components/CardGroup'
     <Card title="List Components">
     ```shell
     atmos list components
+    atmos list components --selector="environment=prod"
+    atmos list components --selector="team=platform,critical=true"
     ```
     </Card>
     <Card title="Validate Components">
     ```shell
     atmos validate component $component -s $stack
     atmos validate component $component -s $stack --schema-type jsonschema --schema-path $component.json
-    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego 
+    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego
     atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego  --module-paths catalog
     atmos validate component $component -s $stack --timeout 15
     ```
-    </Card>    
+    </Card>
 </CardGroup>
 
 <CardGroup title="Workflows" className="cheatsheet">
@@ -94,7 +96,7 @@ import CardGroup from '@site/src/components/CardGroup'
     ```shell
     atmos terraform plan
     ```
-    </Card> 
+    </Card>
     <Card title="Apply Root Modules">
     ```shell
     atmos terraform apply $component --stack $stack
@@ -126,6 +128,7 @@ import CardGroup from '@site/src/components/CardGroup'
     atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>
     atmos describe affected --repo-path <path_to_already_cloned_repo>
     atmos describe affected --include-spacelift-admin-stacks=true
+    atmos describe affected --selector="environment=prod,team=platform"
     ```
     </Card>
 </CardGroup>

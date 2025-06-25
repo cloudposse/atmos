@@ -256,3 +256,85 @@ components:
 ```
 
 Using the `metadata.locked` flag helps protect critical infrastructure from unintended modifications while still allowing teams to inspect and review the configuration.
+
+### Labeling Components with `metadata.labels`
+
+The `metadata.labels` parameter allows you to add key-value labels to components for organization, filtering, and selection. Labels are defined as a map of string keys to string values and can be used with [label selectors](/cli/commands/list/components#label-selectors) to filter components across commands.
+
+Labels can be applied at both the stack level and component level, with component-level labels overriding stack-level labels when both are present (component inheritance).
+
+**Stack-level labels** (applied to all components in the stack):
+```yaml
+# Define labels at the stack level - these apply to all components
+metadata:
+  labels:
+    environment: dev
+    team: platform
+    cost-center: "1234"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: main-vpc
+    # This component inherits the stack-level labels
+```
+
+**Component-level labels** (specific to individual components):
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          environment: prod
+          team: networking
+          critical: "true"
+      vars:
+        name: production-vpc
+```
+
+**Mixed inheritance** (component labels override stack labels):
+```yaml
+# Stack-level labels
+metadata:
+  labels:
+    environment: dev
+    team: platform
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          # This overrides the stack-level environment label
+          environment: prod
+          # This adds a new label specific to this component
+          critical: "true"
+          # The team: platform label is inherited from stack level
+      vars:
+        name: production-vpc
+    # Result: { environment: "prod", team: "platform", critical: "true" }
+```
+
+**Label selector usage**:
+```bash
+# List components with specific labels
+atmos list components --selector="environment=prod"
+atmos list components --selector="team=platform,critical=true"
+atmos list components --selector="environment in (dev,staging)"
+atmos list components --selector="environment!=prod"
+
+# Use selectors with other commands
+atmos describe component vpc --selector="environment=prod"
+atmos describe stacks --selector="team=platform"
+```
+
+:::info Label Requirements
+- Label keys and values must be strings
+- Empty labels are ignored during processing
+- Component-level labels take precedence over stack-level labels
+- Labels are case-sensitive
+:::
+
+Using `metadata.labels` provides a flexible way to organize and filter your infrastructure components based on operational, organizational, or technical criteria.

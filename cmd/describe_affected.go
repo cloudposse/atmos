@@ -127,6 +127,7 @@ func setDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.
 		"format":                         &describe.Format,
 		"file":                           &describe.OutputFile,
 		"query":                          &describe.Query,
+		"selector":                       &describe.Selector,
 	}
 
 	var err error

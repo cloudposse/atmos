@@ -8,6 +8,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/selector"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -21,6 +22,7 @@ type DescribeComponentParams struct {
 	Pager                string
 	Format               string
 	File                 string
+	Selector             string
 }
 
 type DescribeComponentExec struct {
@@ -48,6 +50,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	stack := describeComponentParams.Stack
 	processTemplates := describeComponentParams.ProcessTemplates
 	processYamlFunctions := describeComponentParams.ProcessYamlFunctions
+	selectorExpr := describeComponentParams.Selector
 	skip := describeComponentParams.Skip
 	query := describeComponentParams.Query
 	pager := describeComponentParams.Pager
@@ -74,6 +77,19 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	)
 	if err != nil {
 		return err
+	}
+
+	// Apply label selector if provided
+	if selectorExpr != "" {
+		reqs, perr := selector.Parse(selectorExpr)
+		if perr != nil {
+			return perr
+		}
+		labels := selector.ExtractComponentLabels(componentSection)
+		if !selector.Matches(labels, reqs) {
+			log.Info("No stacks matched selector.")
+			return nil
+		}
 	}
 
 	var res any

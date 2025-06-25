@@ -87,6 +87,7 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		"process-functions":    &describe.ProcessYamlFunctions,
 		"query":                &describe.Query,
 		"skip":                 &describe.Skip,
+		"selector":             &describe.Selector,
 	}
 
 	var err error
