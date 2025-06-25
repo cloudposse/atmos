@@ -77,7 +77,9 @@ const (
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
 
-	QueryFlag = "--query"
+	QueryFlag    = "--query"
+	AffectedFlag = "--affected"
+	AllFlag      = "--all"
 
 	ProcessTemplatesFlag = "--process-templates"
 	ProcessFunctionsFlag = "--process-functions"
