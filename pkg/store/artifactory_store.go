@@ -278,3 +278,63 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 
 	return nil
 }
+
+func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
+	// Use the key directly as the file path
+	filePath := key
+
+	// If prefix is set, prepend it to the key
+	if s.prefix != "" {
+		filePath = s.prefix + "/" + key
+	}
+
+	// Ensure the file path has the correct extension
+	if !strings.HasSuffix(filePath, ".json") {
+		filePath = filePath + ".json"
+	}
+
+	// Construct the full repository path
+	repoPath := filepath.Join(s.repoName, filePath)
+
+	// Create a temporary directory to download the file
+	tempDir, err := os.MkdirTemp("", "atmos-artifactory-*")
+	if err != nil {
+		return nil, fmt.Errorf(errFormatWithCause, ErrCreateTempDir, err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Download the file from Artifactory
+	downloadParams := services.NewDownloadParams()
+	downloadParams.Pattern = repoPath
+	downloadParams.Target = tempDir
+	downloadParams.Recursive = false
+	downloadParams.IncludeDirs = false
+
+	_, _, err = s.rtManager.DownloadFiles(downloadParams)
+	if err != nil {
+		return nil, fmt.Errorf(errFormatWithCause, ErrDownloadFile, err)
+	}
+
+	// Read the downloaded file
+	localFilePath := filepath.Join(tempDir, filepath.Base(repoPath))
+	data, err := os.ReadFile(localFilePath)
+	if err != nil {
+		return nil, fmt.Errorf(errFormatWithCause, ErrReadFile, err)
+	}
+
+	if len(data) == 0 {
+		return "", nil
+	}
+
+	// Try to unmarshal as JSON first, fallback to string if it fails.
+	var result interface{}
+	if jsonErr := json.Unmarshal(data, &result); jsonErr != nil {
+		// If JSON unmarshaling fails, return as string.
+		return string(data), nil
+	}
+	return result, nil
+}

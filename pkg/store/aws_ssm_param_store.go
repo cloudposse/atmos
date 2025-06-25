@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -253,5 +255,49 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 		return *output.Parameter.Value, nil
 	}
 
+	return result, nil
+}
+
+func (s *SSMStore) GetKey(key string) (interface{}, error) {
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
+	// Use the key directly as the parameter name
+	paramName := key
+
+	// If prefix is set, prepend it to the key
+	if s.prefix != "" {
+		paramName = s.prefix + "/" + key
+	}
+
+	// Ensure the parameter name starts with "/" for SSM
+	if !strings.HasPrefix(paramName, "/") {
+		paramName = "/" + paramName
+	}
+
+	// Get the parameter from SSM
+	resp, err := s.client.GetParameter(context.TODO(), &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
+	})
+	if err != nil {
+		var paramNotFoundErr *types.ParameterNotFound
+		if errors.As(err, &paramNotFoundErr) {
+			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, paramName, err)
+		}
+		return nil, fmt.Errorf(errWrapFormat, ErrGetParameter, err)
+	}
+
+	if resp.Parameter == nil || resp.Parameter.Value == nil {
+		return "", nil
+	}
+
+	// Try to unmarshal as JSON first, fallback to string if it fails.
+	var result interface{}
+	if jsonErr := json.Unmarshal([]byte(*resp.Parameter.Value), &result); jsonErr != nil {
+		// If JSON unmarshaling fails, return as string.
+		return *resp.Parameter.Value, nil
+	}
 	return result, nil
 }

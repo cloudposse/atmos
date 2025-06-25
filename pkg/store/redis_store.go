@@ -152,3 +152,44 @@ func (s *RedisStore) Set(stack string, component string, key string, value inter
 
 	return err
 }
+
+func (s *RedisStore) GetKey(key string) (interface{}, error) {
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
+	// Use the key directly as the Redis key
+	redisKey := key
+
+	// If prefix is set, prepend it to the key
+	if s.prefix != "" {
+		redisKey = s.prefix + ":" + key
+	}
+
+	// Get the value from Redis
+	resp := s.redisClient.Get(context.Background(), redisKey)
+	if resp.Err() != nil {
+		if resp.Err().Error() == "redis: nil" {
+			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, redisKey, resp.Err())
+		}
+		return nil, fmt.Errorf(errFormat, ErrGetParameter, resp.Err())
+	}
+
+	value := resp.Val()
+	if value == "" {
+		return "", nil
+	}
+
+	// Try to unmarshal as JSON first, fallback to string if it fails.
+	var result interface{}
+	if jsonErr := json.Unmarshal([]byte(value), &result); jsonErr != nil {
+		// If JSON unmarshaling fails, return as string.
+		return value, nil
+	}
+	return result, nil
+}
+
+// RedisClient returns the underlying Redis client for testing purposes.
+func (s *RedisStore) RedisClient() RedisClient {
+	return s.redisClient
+}
