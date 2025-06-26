@@ -10,6 +10,7 @@ import (
 	"runtime"
 
 	log "github.com/charmbracelet/log"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -114,7 +115,7 @@ func setEnv(v *viper.Viper) {
 
 func bindEnv(v *viper.Viper, key ...string) {
 	if err := v.BindEnv(key...); err != nil {
-		panic(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 }
 

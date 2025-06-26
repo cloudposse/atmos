@@ -69,7 +69,7 @@ func ReadAndProcessVendorConfigFile(
 	// Determine the vendor config file path
 	foundVendorConfigFile := resolveVendorConfigFilePath(atmosConfig, vendorConfigFile, checkGlobalConfig)
 	if foundVendorConfigFile == "" {
-		log.Debug("Vendor config file does not exist", "file", vendorConfigFile)
+		log.Debug("Vendor config file not found", "file", vendorConfigFile)
 		return vendorConfig, false, "", nil
 	}
 

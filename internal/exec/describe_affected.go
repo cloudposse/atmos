@@ -185,7 +185,8 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		case *[]string:
 			*v, err = flags.GetStringSlice(k)
 		default:
-			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
+			er := fmt.Errorf("unsupported type %T for flag %s", v, k)
+			atmoserr.PrintErrorMarkdownAndExit(er, "", "")
 		}
 		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}

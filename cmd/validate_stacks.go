@@ -24,7 +24,7 @@ var ValidateStacksCmd = &cobra.Command{
 		err := exec.ExecuteValidateStacksCmd(cmd, args)
 		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
-		u.PrintMessageInColor("All stacks validated successfully\n", theme.Colors.Success)
+		u.PrintMessageInColor("all stacks validated successfully\n", theme.Colors.Success)
 	},
 }
 
