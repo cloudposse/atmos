@@ -88,11 +88,6 @@ func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 	PrintErrorMarkdownAndExitFn(title, err, suggestion)
 }
 
-// PrintInvalidUsageErrorAndExit prints a message about the incorrect command usage and exist with the exit code 1.
-func PrintInvalidUsageErrorAndExit(err error, suggestion string) {
-	PrintErrorMarkdownAndExit("Incorrect Usage", err, suggestion)
-}
-
 // PrintfMarkdown prints a message in Markdown format.
 func PrintfMarkdown(format string, a ...interface{}) {
 	if render == nil {

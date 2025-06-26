@@ -27,21 +27,21 @@ var describeComponentCmd = &cobra.Command{
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		checkErrorAndExit(err)
+		CheckErrorAndExit(err, "", "")
 		format, err := flags.GetString("format")
-		checkErrorAndExit(err)
+		CheckErrorAndExit(err, "", "")
 		file, err := flags.GetString("file")
-		checkErrorAndExit(err)
+		CheckErrorAndExit(err, "", "")
 		processTemplates, err := flags.GetBool("process-templates")
-		checkErrorAndExit(err)
+		CheckErrorAndExit(err, "", "")
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		checkErrorAndExit(err)
+		CheckErrorAndExit(err, "", "")
 		query, err := flags.GetString("query")
-		checkErrorAndExit(err)
+		CheckErrorAndExit(err, "", "")
 		skip, err := flags.GetStringSlice("skip")
-		checkErrorAndExit(err)
+		CheckErrorAndExit(err, "", "")
 		pager, err := flags.GetString("pager")
-		checkErrorAndExit(err)
+		CheckErrorAndExit(err, "", "")
 
 		component := args[0]
 
@@ -56,9 +56,7 @@ var describeComponentCmd = &cobra.Command{
 			Format:               format,
 			File:                 file,
 		})
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 		return nil
 	},
 	ValidArgsFunction: ComponentsArgCompletion,

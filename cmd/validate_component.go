@@ -23,9 +23,7 @@ var validateComponentCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 
 		m := fmt.Sprintf("component `%s` in stack `%s` validated successfully\n", component, stack)
 		u.PrintMessageInColor(m, theme.Colors.Success)

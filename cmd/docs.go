@@ -36,9 +36,7 @@ var docsCmd = &cobra.Command{
 			}
 
 			atmosConfig, err := cfg.InitCliConfig(info, true)
-			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
-			}
+			CheckErrorAndExit(err, "", "")
 
 			// Detect terminal width if not specified in `atmos.yaml`
 			// The default screen width is 120 characters, but uses maxWidth if set and greater than zero
@@ -66,11 +64,10 @@ var docsCmd = &cobra.Command{
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
-			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
-			}
+			CheckErrorAndExit(err, "", "")
 			if !componentPathExists {
-				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component `%s` not found in path: `%s`", info.Component, componentPath), "")
+				er := fmt.Errorf("Component `%s` not found in path: `%s`", info.Component, componentPath)
+				CheckErrorAndExit(er, "", "")
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")

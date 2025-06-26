@@ -52,9 +52,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 		Run: func(cmd *cobra.Command, args []string) {
 			err := ExecuteTerraformGeneratePlanfileCmd(cmd, args)
-			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
-			}
+			checkErrorAndExit(err)
 		},
 	}
 

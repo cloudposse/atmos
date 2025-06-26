@@ -227,9 +227,8 @@ func preCustomCommand(
 			os.Exit(1)
 		} else {
 			// truly invalid, nothing to do
-			u.PrintErrorMarkdownAndExit("Invalid command", errors.New(
-				fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()),
-			), "https://atmos.tools/cli/configuration/commands")
+			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))
+			CheckErrorAndExit(er, "", "https://atmos.tools/cli/configuration/commands")
 		}
 	}
 
@@ -734,7 +733,7 @@ func showUsageExample(cmd *cobra.Command, details string) {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
-	u.PrintInvalidUsageErrorAndExit(errors.New(details), suggestion)
+	CheckErrorAndExit(errors.New(details), "Incorrect Usage", suggestion)
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

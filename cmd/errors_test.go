@@ -22,11 +22,11 @@ func Test_checkErrorAndExit(t *testing.T) {
 			if tt.wantErr {
 				defer func() {
 					if r := recover(); r == nil {
-						t.Errorf("checkErrorAndExit() should have panicked with error")
+						t.Errorf("CheckErrorAndExit() should have panicked with error")
 					}
 				}()
 			}
-			checkErrorAndExit(tt.err)
+			CheckErrorAndExit(tt.err, "", "")
 		})
 	}
 }

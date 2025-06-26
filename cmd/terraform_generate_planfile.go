@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // terraformGeneratePlanfileCmd generates planfile for a terraform component.
@@ -20,9 +19,7 @@ var terraformGeneratePlanfileCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGeneratePlanfileCmd(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 	},
 }
 
@@ -34,9 +31,7 @@ func init() {
 	terraformGeneratePlanfileCmd.PersistentFlags().String("format", "json", "Output format (`json` or `yaml`, `json` is default)")
 
 	err := terraformGeneratePlanfileCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	CheckErrorAndExit(err, "", "")
 
 	terraformGenerateCmd.AddCommand(terraformGeneratePlanfileCmd)
 }

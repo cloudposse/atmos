@@ -21,9 +21,7 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 		err := e.ExecuteAtlantisGenerateRepoConfigCmd(cmd, args)
-		if err != nil {
-			utils.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 	},
 }
 

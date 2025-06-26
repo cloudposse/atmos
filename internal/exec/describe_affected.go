@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"github.com/cloudposse/atmos/cmd"
 
 	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -186,9 +187,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		default:
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		cmd.CheckErrorAndExit(err, "", "")
 	}
 	// When uploading, always include dependents and settings for all affected components
 	if describe.Upload {

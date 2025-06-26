@@ -48,7 +48,7 @@ var workflowCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			// For unknown errors, print and exit
-			u.PrintErrorMarkdownAndExit("", err, "")
+			CheckErrorAndExit(err, "", "")
 		}
 	},
 }

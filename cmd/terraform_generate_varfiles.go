@@ -19,9 +19,7 @@ var terraformGenerateVarfilesCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGenerateVarfilesCmd(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 	},
 }
 

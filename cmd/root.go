@@ -69,14 +69,10 @@ var RootCmd = &cobra.Command{
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 
 		err = e.ExecuteAtmosCmd()
-		if err != nil {
-			u.LogErrorAndExit(err)
-		}
+		CheckErrorAndExit(err, "", "")
 	},
 }
 

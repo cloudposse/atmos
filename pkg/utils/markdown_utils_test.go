@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	c "github.com/cloudposse/atmos/cmd"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
@@ -70,7 +71,8 @@ func TestPrintfErrorMarkdown(t *testing.T) {
 
 func TestPrintErrorMarkdownAndExit(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
-		PrintErrorMarkdownAndExit("Fatal Error", errors.New("critical failure"), "Check logs.")
+		er := errors.New("critical failure")
+		c.CheckErrorAndExit(er, "Fatal Error", "Check logs.")
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -88,7 +90,8 @@ func TestPrintErrorMarkdownAndExit(t *testing.T) {
 
 func TestPrintInvalidUsageErrorAndExit(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
-		PrintInvalidUsageErrorAndExit(errors.New("invalid command"), "Use --help for usage information.")
+		er := errors.New("invalid command")
+		c.CheckErrorAndExit(er, "", "Use --help for usage information.")
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])

@@ -57,29 +57,19 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	flags := cmd.Flags()
 
 	processTemplates, err := flags.GetBool("process-templates")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	CheckErrorAndExit(err, "", "")
 
 	processYamlFunctions, err := flags.GetBool("process-functions")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	CheckErrorAndExit(err, "", "")
 
 	skip, err := flags.GetStringSlice("skip")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	CheckErrorAndExit(err, "", "")
 
 	components, err := flags.GetStringSlice("components")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	CheckErrorAndExit(err, "", "")
 
 	dryRun, err := flags.GetBool("dry-run")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	CheckErrorAndExit(err, "", "")
 
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
@@ -89,9 +79,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	CheckErrorAndExit(err, "", "")
 
 	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`
 	if info.Affected {
@@ -114,9 +102,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		a.OutputFile = ""
 
 		err = e.ExecuteTerraformAffected(&a, &info)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 		return nil
 	}
 
@@ -127,9 +113,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// `--stack` (and the `component` argument is not passed)
 	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "") {
 		err = e.ExecuteTerraformQuery(&info)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 		return nil
 	}
 
@@ -144,7 +128,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 			return err
 		}
 		// For other errors, continue with existing behavior
-		u.PrintErrorMarkdownAndExit("", err, "")
+		CheckErrorAndExit(err, "", "")
 	}
 	return nil
 }

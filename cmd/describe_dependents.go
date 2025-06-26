@@ -20,9 +20,7 @@ var describeDependentsCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteDescribeDependentsCmd(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 	},
 }
 

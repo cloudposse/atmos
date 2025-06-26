@@ -20,9 +20,7 @@ var proUnlockCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteProUnlockCommand(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		CheckErrorAndExit(err, "", "")
 	},
 }
 

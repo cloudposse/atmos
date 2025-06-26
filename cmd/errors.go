@@ -2,8 +2,8 @@ package cmd
 
 import u "github.com/cloudposse/atmos/pkg/utils"
 
-func checkErrorAndExit(err error) {
+func CheckErrorAndExit(err error, title string, suggestion string) {
 	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
+		u.PrintErrorMarkdownAndExit(title, err, suggestion)
 	}
 }
