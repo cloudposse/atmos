@@ -7,9 +7,10 @@ import (
 	"os/exec"
 
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
 var (
