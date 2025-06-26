@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	log "github.com/charmbracelet/log"
 	atmoserr "github.com/cloudposse/atmos/errors"
 	"path/filepath"
 	"strings"
@@ -331,7 +332,7 @@ func ExecuteTerraformGenerateBackends(
 					}
 
 					// Write the backend config to the file
-					u.LogDebug(fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
+					log.Debug(fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
 
 					if format == "json" {
 						componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, "")

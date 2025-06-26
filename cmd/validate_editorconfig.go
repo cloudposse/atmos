@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	log "github.com/charmbracelet/log"
 	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"strings"
@@ -145,8 +146,8 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 // runMainLogic contains the main logic
 func runMainLogic() {
 	config := *currentConfig
-	u.LogDebug(config.String())
-	u.LogDebug(fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
+	log.Debug(config.String())
+	log.Debug(fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
 
 	if err := checkVersion(config); err != nil {
 		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
@@ -159,13 +160,13 @@ func runMainLogic() {
 
 	if config.DryRun {
 		for _, file := range filePaths {
-			u.LogInfo(file)
+			log.Info(file)
 		}
 		os.Exit(0)
 	}
 
 	errors := validation.ProcessValidation(filePaths, config)
-	u.LogDebug(fmt.Sprintf("%d files checked", len(filePaths)))
+	log.Debug(fmt.Sprintf("%d files checked", len(filePaths)))
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)

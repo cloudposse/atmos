@@ -22,7 +22,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -56,7 +55,7 @@ var RootCmd = &cobra.Command{
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
-					u.LogWarning(err.Error())
+					log.Warn(err.Error())
 				}
 			} else {
 				atmoserr.PrintErrorMarkdownAndExit(err, "", "")

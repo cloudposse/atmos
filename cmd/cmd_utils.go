@@ -224,7 +224,7 @@ func preCustomCommand(
 					fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name),
 				)
 			}
-			u.LogInfo(sb.String())
+			log.Info(sb.String())
 			os.Exit(1)
 		} else {
 			// truly invalid, nothing to do
@@ -426,9 +426,9 @@ func executeCustomCommand(
 		}
 
 		if len(envVarsList) > 0 && commandConfig.Verbose {
-			u.LogDebug("\nUsing ENV vars:")
+			log.Debug("\nUsing ENV vars:")
 			for _, v := range envVarsList {
-				u.LogDebug(v)
+				log.Debug(v)
 			}
 		}
 
@@ -574,7 +574,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(fmt.Sprintf("Could not load cache: %s", err))
+		log.Warn(fmt.Sprintf("Could not load cache: %s", err))
 		return
 	}
 
@@ -587,12 +587,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Get the latest Atmos release from GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 	if err != nil {
-		u.LogWarning(fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		log.Warn(fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
 		return
 	}
 
 	if latestReleaseTag == "" {
-		u.LogWarning("No release information available")
+		log.Warn("No release information available")
 		return
 	}
 
@@ -608,7 +608,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Update the cache to mark the current timestamp
 	cacheCfg.LastChecked = time.Now().Unix()
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-		u.LogWarning(fmt.Sprintf("Unable to save cache: %s", saveErr))
+		log.Warn(fmt.Sprintf("Unable to save cache: %s", saveErr))
 	}
 }
 

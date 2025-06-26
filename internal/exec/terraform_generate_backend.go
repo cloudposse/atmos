@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	log "github.com/charmbracelet/log"
 	"path/filepath"
 
 	"github.com/pkg/errors"
@@ -74,7 +75,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	u.LogDebug("Component backend config:\n\n")
+	log.Debug("Component backend config:\n\n")
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err = u.PrintAsJSONToFileDescriptor(atmosConfig, componentBackendConfig)
@@ -99,8 +100,8 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		"backend.tf.json",
 	)
 
-	u.LogDebug("\nWriting the backend config to file:")
-	u.LogDebug(backendFilePath)
+	log.Debug("\nWriting the backend config to file:")
+	log.Debug(backendFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0o644)

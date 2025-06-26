@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	log "github.com/charmbracelet/log"
 	atmoserr "github.com/cloudposse/atmos/errors"
 	"io"
 	"net/url"
@@ -22,7 +23,7 @@ const (
 func removeTempDir(path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
-		u.LogWarning(err.Error())
+		log.Warn(err.Error())
 	}
 }
 

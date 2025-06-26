@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	log "github.com/charmbracelet/log"
 	atmoserr "github.com/cloudposse/atmos/errors"
 	"path/filepath"
 	"strings"
@@ -327,11 +328,11 @@ func ExecuteTerraformGenerateVarfiles(
 						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 					}
 
-					u.LogDebug(fmt.Sprintf("varfile: %s", fileName))
-					u.LogDebug(fmt.Sprintf("terraform component: %s", terraformComponent))
-					u.LogDebug(fmt.Sprintf("atmos component: %s", componentName))
-					u.LogDebug(fmt.Sprintf("atmos stack: %s", stackName))
-					u.LogDebug(fmt.Sprintf("stack config file: %s", stackFileName))
+					log.Debug(fmt.Sprintf("varfile: %s", fileName))
+					log.Debug(fmt.Sprintf("terraform component: %s", terraformComponent))
+					log.Debug(fmt.Sprintf("atmos component: %s", componentName))
+					log.Debug(fmt.Sprintf("atmos stack: %s", stackName))
+					log.Debug(fmt.Sprintf("stack config file: %s", stackFileName))
 				}
 			}
 		}

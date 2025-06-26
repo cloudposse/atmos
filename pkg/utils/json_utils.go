@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
+	log "github.com/charmbracelet/log"
 	"os"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// PrintAsJSON prints the provided value as JSON document to the console
+// PrintAsJSON prints the provided value as a JSON document to the console.
 func PrintAsJSON(atmosConfig *schema.AtmosConfiguration, data any) error {
 	highlighted, err := GetHighlightedJSON(atmosConfig, data)
 	if err != nil {
@@ -65,7 +66,7 @@ func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	if err != nil {
 		return err
 	}
-	LogInfo(j)
+	log.Info(j)
 	return nil
 }
 

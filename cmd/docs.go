@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	log "github.com/charmbracelet/log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,7 +45,7 @@ var docsCmd = &cobra.Command{
 			maxWidth := atmosConfig.Settings.Terminal.MaxWidth
 			if maxWidth == 0 && atmosConfig.Settings.Docs.MaxWidth > 0 {
 				maxWidth = atmosConfig.Settings.Docs.MaxWidth
-				u.LogWarning("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
+				log.Warn("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
 			}
 			defaultWidth := 120
 			screenWidth := defaultWidth
@@ -103,7 +104,7 @@ var docsCmd = &cobra.Command{
 			pager := atmosConfig.Settings.Terminal.IsPagerEnabled()
 			if !pager && atmosConfig.Settings.Docs.Pagination {
 				pager = atmosConfig.Settings.Docs.Pagination
-				u.LogWarning("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
+				log.Warn("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {
@@ -117,7 +118,7 @@ var docsCmd = &cobra.Command{
 		var err error
 
 		if os.Getenv("GO_TEST") == "1" {
-			u.LogDebug("Skipping browser launch in test environment")
+			log.Debug("Skipping browser launch in test environment")
 		} else {
 			switch runtime.GOOS {
 			case "linux":

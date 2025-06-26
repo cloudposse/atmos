@@ -1,6 +1,7 @@
 package utils
 
 import (
+	log "github.com/charmbracelet/log"
 	"os"
 	"strings"
 
@@ -48,7 +49,7 @@ func WriteToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(err.Error())
+			log.Warn(err.Error())
 		}
 	}(f)
 
@@ -129,7 +130,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(err.Error())
+			log.Warn(err.Error())
 		}
 	}(f)
 

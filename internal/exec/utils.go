@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	log "github.com/charmbracelet/log"
 	atmoserr "github.com/cloudposse/atmos/errors"
 	"sort"
 	"strings"
@@ -337,7 +338,7 @@ func ProcessStacks(
 		} else {
 			msg = "\nFound stack manifests:"
 		}
-		u.LogDebug(msg)
+		log.Debug(msg)
 		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -424,7 +425,7 @@ func ProcessStacks(
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
 
-				u.LogDebug(
+				log.Debug(
 					fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,

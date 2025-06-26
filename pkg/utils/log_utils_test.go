@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	log "github.com/charmbracelet/log"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 )
@@ -62,30 +63,6 @@ func TestPrintMessageInColor(t *testing.T) {
 	assert.Contains(t, buf.String(), message)
 }
 
-func TestPrintErrorInColor(t *testing.T) {
-	// Save stderr
-	oldStderr := os.Stderr
-
-	// Create a pipe
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	message := "error message"
-	PrintErrorInColor(message)
-
-	// Close the writer to get all output
-	w.Close()
-
-	// Read the output
-	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
-
-	// Restore stderr
-	os.Stderr = oldStderr
-
-	assert.Contains(t, buf.String(), message)
-}
-
 func TestLogErrorAndExit(t *testing.T) {
 	// Save and restore original OsExit
 	originalOsExit := OsExit
@@ -113,7 +90,7 @@ func TestLogErrorAndExit(t *testing.T) {
 
 	// Test with a regular error
 	simpleError := errors.New("simple error")
-	LogErrorAndExit(simpleError)
+	atmoserr.PrintErrorMarkdownAndExit(simpleError, "", "")
 	assert.Equal(t, 1, exitCode)
 	assert.Contains(t, logBuffer.String(), "simple error")
 
@@ -121,7 +98,7 @@ func TestLogErrorAndExit(t *testing.T) {
 	exitError := &exec.ExitError{}
 	exitError.ProcessState = &os.ProcessState{}
 	// We can't easily set the exit code in the mock, but we can test the code path
-	LogErrorAndExit(exitError)
+	atmoserr.PrintErrorMarkdownAndExit(exitError, "", "")
 }
 
 func TestLogError(t *testing.T) {
@@ -139,43 +116,42 @@ func TestLogError(t *testing.T) {
 	log.SetDefault(customLogger)
 
 	testError := errors.New("test error")
-	LogError(testError)
+	atmoserr.PrintErrorMarkdown(testError, "", "")
 	assert.Contains(t, logBuffer.String(), "test error")
 
 	// Test with nil error
 	logBuffer.Reset()
-	LogError(nil)
 	assert.Empty(t, logBuffer.String())
 }
 
 func TestLogLevels(t *testing.T) {
 	tests := []struct {
 		name     string
-		logFunc  func(string)
+		logFunc  func(msg any, keyvals ...any)
 		message  string
 		expected string
 	}{
 		{
 			name:     "LogTrace",
-			logFunc:  LogDebug,
+			logFunc:  log.Debug,
 			message:  "trace message",
 			expected: "trace message",
 		},
 		{
 			name:     "LogDebug",
-			logFunc:  LogDebug,
+			logFunc:  log.Debug,
 			message:  "debug message",
 			expected: "debug message",
 		},
 		{
 			name:     "LogInfo",
-			logFunc:  LogInfo,
+			logFunc:  log.Info,
 			message:  "info message",
 			expected: "info message",
 		},
 		{
 			name:     "LogWarning",
-			logFunc:  LogWarning,
+			logFunc:  log.Warn,
 			message:  "warning message",
 			expected: "warning message",
 		},

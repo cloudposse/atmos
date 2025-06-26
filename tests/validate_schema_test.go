@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"strings"
 	"testing"
@@ -89,11 +90,11 @@ func TestCliValidateSchemaNegative(t *testing.T) {
 			t.Errorf("Expected exit code 1, got %d", code)
 		}
 	}
-	utils.PrintErrorMarkdownAndExitFn = func(title string, err error, suggestion string) {}
+	atmoserr.PrintErrorMarkdownAndExitFn = func(err error, title string, suggestion string) {}
 	os.Args = []string{"atmos", "validate", "schema"}
 	err = cmd.Execute()
 	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+		t.Fatalf("Failed to execute 'atmos validate schema': %v", err)
 	}
 	// Restore stdout
 	err = w.Close()

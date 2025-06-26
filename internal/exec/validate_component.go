@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	log "github.com/charmbracelet/log"
 	"os"
 	"path/filepath"
 
@@ -119,7 +120,7 @@ func ValidateComponent(
 	var err error
 
 	if schemaPath != "" && schemaType != "" {
-		u.LogDebug(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+		log.Debug(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
 		ok, err = validateComponentInternal(atmosConfig, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 		if err != nil {
@@ -166,10 +167,10 @@ func ValidateComponent(
 				finalTimeoutSeconds = v.Timeout
 			}
 
-			u.LogDebug(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, finalSchemaType, finalSchemaPath))
+			log.Debug(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, finalSchemaType, finalSchemaPath))
 
 			if v.Description != "" {
-				u.LogDebug(v.Description)
+				log.Debug(v.Description)
 			}
 
 			ok2, err := validateComponentInternal(atmosConfig, componentSection, finalSchemaPath, finalSchemaType, finalModulePaths, finalTimeoutSeconds)
