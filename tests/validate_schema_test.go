@@ -3,12 +3,12 @@ package tests
 import (
 	"bytes"
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/cmd"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )

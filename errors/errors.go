@@ -5,19 +5,16 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime/debug"
 
 	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
-
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
 var (
 	// render is the global Markdown renderer instance initialized via InitializeMarkdown.
 	render *markdown.Renderer
-	OsExit = os.Exit
 )
 
 // Variable declarations for functions that might be mocked in tests.
@@ -32,7 +29,7 @@ func PrintErrorMarkdown(err error, title string, suggestion string) {
 		return
 	}
 	if render == nil {
-		LogError(err)
+		log.Error(err)
 		return
 	}
 	if title == "" {
@@ -41,36 +38,38 @@ func PrintErrorMarkdown(err error, title string, suggestion string) {
 	title = cases.Title(language.English).String(title)
 	errorMarkdown, renderErr := render.RenderError(title, err.Error(), suggestion)
 	if renderErr != nil {
-		LogError(err)
+		log.Error(err)
 		return
 	}
 	_, printErr := os.Stderr.WriteString(fmt.Sprint(errorMarkdown + "\n"))
 	if printErr != nil {
-		LogError(printErr)
-		LogError(err)
+		log.Error(printErr)
+		log.Error(err)
 	}
 }
 
 // PrintfErrorMarkdown prints a formatted error message in Markdown format.
 func PrintfErrorMarkdown(format string, a ...interface{}) {
 	if render == nil {
-		LogError(fmt.Errorf(format, a...))
+		log.Error(fmt.Errorf(format, a...))
 		return
 	}
-	var md string
-	var renderErr error
-	md, renderErr = render.RenderErrorf(format, a...)
+	md, renderErr := render.RenderErrorf(format, a...)
 	if renderErr != nil {
-		LogError(renderErr)
-		LogError(fmt.Errorf(format, a...))
+		log.Error(renderErr)
+		log.Error(fmt.Errorf(format, a...))
 		return
 	}
 	_, err := os.Stderr.WriteString(fmt.Sprint(md + "\n"))
-	LogError(err)
+	log.Error(err)
 }
 
 // printErrorMarkdownAndExitImpl is the implementation of PrintErrorMarkdownAndExit.
 func printErrorMarkdownAndExitImpl(err error, title string, suggestion string) {
+	if err == nil {
+		return
+	}
+
 	PrintErrorMarkdown(err, title, suggestion)
 
 	// Find the executed command's exit code from the error
@@ -87,29 +86,8 @@ func printErrorMarkdownAndExitImpl(err error, title string, suggestion string) {
 
 // PrintErrorMarkdownAndExit prints an error message in Markdown format and exits with the exit code 1.
 func PrintErrorMarkdownAndExit(err error, title string, suggestion string) {
+	if err == nil {
+		return
+	}
 	PrintErrorMarkdownAndExitFn(err, title, suggestion)
-}
-
-// LogErrorAndExit logs errors to std.Error and exits with an error code.
-func LogErrorAndExit(err error) {
-	log.Error(err)
-
-	// Find the executed command's exit code from the error
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		OsExit(exitError.ExitCode())
-	}
-
-	OsExit(1)
-}
-
-// LogError logs errors to std.Error
-func LogError(err error) {
-	if err != nil {
-		log.Error(err)
-		// Print stack trace
-		if log.GetLevel() == log.DebugLevel {
-			debug.PrintStack()
-		}
-	}
 }
