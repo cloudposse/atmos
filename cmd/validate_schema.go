@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"errors"
-	atmoserr "github.com/cloudposse/atmos/errors"
 
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 // ValidateSchemaCmd represents the 'atmos validate schema' command.

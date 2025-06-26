@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	log "github.com/charmbracelet/log"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
+
+	atmoserr "github.com/cloudposse/atmos/errors"
 )
 
 func TestPrintMessage(t *testing.T) {

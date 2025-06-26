@@ -2,9 +2,9 @@ package cmd
 
 import (
 	log "github.com/charmbracelet/log"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )

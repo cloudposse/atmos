@@ -4,16 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	log "github.com/charmbracelet/log"
+	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -21,7 +22,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/go-git/go-git/v5"
 )
 
 // Define a constant for the dot string that appears multiple times.

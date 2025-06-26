@@ -3,9 +3,10 @@ package exec
 import (
 	"encoding/json"
 	"fmt"
-	log "github.com/charmbracelet/log"
-	atmoserr "github.com/cloudposse/atmos/errors"
 
+	log "github.com/charmbracelet/log"
+
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )

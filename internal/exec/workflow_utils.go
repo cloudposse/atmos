@@ -2,16 +2,16 @@ package exec
 
 import (
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
-	log "github.com/charmbracelet/log"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"

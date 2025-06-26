@@ -3,16 +3,17 @@ package exec
 import (
 	"encoding/json"
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/pkg/errors"
+
+	atmoserr "github.com/cloudposse/atmos/errors"
 	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 // Static errors.

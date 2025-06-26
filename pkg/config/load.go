@@ -10,11 +10,12 @@ import (
 	"runtime"
 
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/viper"
+
 	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/spf13/viper"
 )
 
 //go:embed atmos.yaml

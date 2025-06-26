@@ -3,11 +3,11 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	terrerrors "github.com/cloudposse/atmos/pkg/errors"

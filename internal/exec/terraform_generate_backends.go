@@ -3,14 +3,14 @@ package exec
 import (
 	"errors"
 	"fmt"
-	log "github.com/charmbracelet/log"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"

@@ -3,16 +3,16 @@ package exec
 import (
 	"errors"
 	"fmt"
-	log "github.com/charmbracelet/log"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"sort"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/schema"

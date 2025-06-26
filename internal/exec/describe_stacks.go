@@ -3,11 +3,11 @@ package exec
 import (
 	"errors"
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"

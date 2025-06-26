@@ -2,15 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	log "github.com/charmbracelet/log"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/pkg/version"
-
+	log "github.com/charmbracelet/log"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
@@ -18,6 +13,11 @@ import (
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/utils"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/validation"
 	"github.com/spf13/cobra"
+
+	atmoserr "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 var (

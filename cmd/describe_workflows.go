@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"

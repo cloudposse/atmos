@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"errors"
-	atmoserr "github.com/cloudposse/atmos/errors"
 
 	"github.com/spf13/cobra"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 

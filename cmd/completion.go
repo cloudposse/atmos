@@ -1,10 +1,11 @@
 package cmd
 
 import (
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 
 	"github.com/spf13/cobra"
+
+	atmoserr "github.com/cloudposse/atmos/errors"
 )
 
 var completionCmd = &cobra.Command{

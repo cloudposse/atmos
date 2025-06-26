@@ -2,12 +2,12 @@ package hooks
 
 import (
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )

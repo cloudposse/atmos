@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/cloudposse/atmos/cmd"
 	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestCliValidateSchema(t *testing.T) {

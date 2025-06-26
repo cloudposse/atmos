@@ -3,13 +3,13 @@ package exec
 import (
 	"errors"
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/spf13/cobra"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"

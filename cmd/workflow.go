@@ -2,11 +2,11 @@ package cmd
 
 import (
 	_ "embed"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 
 	"github.com/spf13/cobra"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 

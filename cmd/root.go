@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"io"
 	"math"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"

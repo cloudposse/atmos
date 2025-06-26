@@ -2,8 +2,6 @@ package exec
 
 import (
 	"fmt"
-	log "github.com/charmbracelet/log"
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"io"
 	"net/url"
 	"os"
@@ -11,6 +9,9 @@ import (
 	"runtime"
 	"strings"
 
+	log "github.com/charmbracelet/log"
+
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )

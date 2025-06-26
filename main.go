@@ -2,11 +2,11 @@ package main
 
 import (
 	"errors"
-	atmoserr "github.com/cloudposse/atmos/errors"
 
 	"github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/cmd"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
