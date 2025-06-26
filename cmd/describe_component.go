@@ -27,21 +27,21 @@ var describeComponentCmd = &cobra.Command{
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		checkFlagNotPresentError(err)
+		checkErrorAndExit(err)
 		format, err := flags.GetString("format")
-		checkFlagNotPresentError(err)
+		checkErrorAndExit(err)
 		file, err := flags.GetString("file")
-		checkFlagNotPresentError(err)
+		checkErrorAndExit(err)
 		processTemplates, err := flags.GetBool("process-templates")
-		checkFlagNotPresentError(err)
+		checkErrorAndExit(err)
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		checkFlagNotPresentError(err)
+		checkErrorAndExit(err)
 		query, err := flags.GetString("query")
-		checkFlagNotPresentError(err)
+		checkErrorAndExit(err)
 		skip, err := flags.GetStringSlice("skip")
-		checkFlagNotPresentError(err)
+		checkErrorAndExit(err)
 		pager, err := flags.GetString("pager")
-		checkFlagNotPresentError(err)
+		checkErrorAndExit(err)
 
 		component := args[0]
 
@@ -79,12 +79,4 @@ func init() {
 	}
 
 	describeCmd.AddCommand(describeComponentCmd)
-}
-
-// We prefer to panic because this is a developer error.
-// checkFlagNotPresentError checks if the error is nil.
-func checkFlagNotPresentError(err error) {
-	if err != nil {
-		panic(err)
-	}
 }
