@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // atlantisGenerateRepoConfigCmd generates repository configuration for Atlantis
@@ -21,7 +21,7 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 		err := e.ExecuteAtlantisGenerateRepoConfigCmd(cmd, args)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	},
 }
 

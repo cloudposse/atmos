@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"github.com/cloudposse/atmos/cmd"
 
 	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -11,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/logger"
@@ -187,7 +187,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		default:
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}
-		cmd.CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 	// When uploading, always include dependents and settings for all affected components
 	if describe.Upload {

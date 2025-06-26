@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -19,7 +20,7 @@ var terraformGeneratePlanfileCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGeneratePlanfileCmd(cmd, args)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	},
 }
 
@@ -31,7 +32,7 @@ func init() {
 	terraformGeneratePlanfileCmd.PersistentFlags().String("format", "json", "Output format (`json` or `yaml`, `json` is default)")
 
 	err := terraformGeneratePlanfileCmd.MarkPersistentFlagRequired("stack")
-	CheckErrorAndExit(err, "", "")
+	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
 	terraformGenerateCmd.AddCommand(terraformGeneratePlanfileCmd)
 }

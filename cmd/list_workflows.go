@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 
 	"github.com/spf13/cobra"
 
@@ -22,28 +23,28 @@ var listWorkflowsCmd = &cobra.Command{
 
 		fileFlag, err := flags.GetString("file")
 		if err != nil {
-			CheckErrorAndExit(fmt.Errorf("Error getting the `file` flag: %v", err), "Incorrect Usage", "")
+			atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("Error getting the `file` flag: %v", err), "Incorrect Usage", "")
 			return
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
-			CheckErrorAndExit(fmt.Errorf("Error getting the `format` flag: %v", err), "Incorrect Usage", "")
+			atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("Error getting the `format` flag: %v", err), "Incorrect Usage", "")
 			return
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
-			CheckErrorAndExit(fmt.Errorf("Error getting the `delimiter` flag: %v", err), "Incorrect Usage", "")
+			atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("Error getting the `delimiter` flag: %v", err), "Incorrect Usage", "")
 			return
 		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		CheckErrorAndExit(err, "Error initializing CLI config", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "Error initializing CLI config", "")
 
 		output, err := l.FilterAndListWorkflows(fileFlag, atmosConfig.Workflows.List, formatFlag, delimiterFlag)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
 		u.PrintMessageInColor(output, theme.Colors.Success)
 	},

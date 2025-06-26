@@ -1,15 +1,13 @@
 package utils
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
-	"runtime/debug"
 
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/fatih/color"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -41,38 +39,6 @@ func PrintErrorInColor(message string) {
 // PrintfMessageToTUI prints the message to the stderr.
 func PrintfMessageToTUI(message string, args ...any) {
 	fmt.Fprintf(os.Stderr, message, args...)
-}
-
-// Deprecated: Use `log.Fatal` instead. This function will be removed in a future release.
-// LogErrorAndExit logs errors to std.Error and exits with an error code.
-func LogErrorAndExit(err error) {
-	log.Error(err)
-
-	// Find the executed command's exit code from the error
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		OsExit(exitError.ExitCode())
-	}
-
-	OsExit(1)
-}
-
-// Deprecated: Use `log.Error` instead. This function will be removed in a future release.
-// LogError logs errors to std.Error
-func LogError(err error) {
-	if err != nil {
-		log.Error(err)
-		// Print stack trace
-		if log.GetLevel() == log.DebugLevel {
-			debug.PrintStack()
-		}
-	}
-}
-
-// Deprecated: Use `log.Debug` instead. This function will be removed in a future release.
-// LogTrace logs the provided trace message
-func LogTrace(message string) {
-	LogDebug(message)
 }
 
 // Deprecated: Use `log.Debug` instead. This function will be removed in a future release.

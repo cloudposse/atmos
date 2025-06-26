@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // terraformGenerateBackendCmd generates backend config for a terraform component
@@ -20,7 +20,7 @@ var terraformGenerateBackendCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGenerateBackendCmd(cmd, args)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	},
 }
 
@@ -29,7 +29,7 @@ func init() {
 	AddStackCompletion(terraformGenerateBackendCmd)
 	err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateBackendCmd)

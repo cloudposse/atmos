@@ -73,11 +73,11 @@ func ProcessTmplWithDatasources(
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
 	if !atmosConfig.Templates.Settings.Enabled {
-		u.LogTrace(fmt.Sprintf("ProcessTmplWithDatasources: not processing template '%s' since templating is disabled in 'atmos.yaml'", tmplName))
+		u.LogDebug(fmt.Sprintf("ProcessTmplWithDatasources: not processing template '%s' since templating is disabled in 'atmos.yaml'", tmplName))
 		return tmplValue, nil
 	}
 
-	u.LogTrace(fmt.Sprintf("ProcessTmplWithDatasources(): processing template '%s'", tmplName))
+	u.LogDebug(fmt.Sprintf("ProcessTmplWithDatasources(): processing template '%s'", tmplName))
 
 	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
 	var cliConfigTemplateSettingsMap map[string]any
@@ -112,7 +112,7 @@ func ProcessTmplWithDatasources(
 	result := tmplValue
 
 	for i := 0; i < evaluations; i++ {
-		u.LogTrace(fmt.Sprintf("ProcessTmplWithDatasources(): template '%s' - evaluation %d", tmplName, i+1))
+		u.LogDebug(fmt.Sprintf("ProcessTmplWithDatasources(): template '%s' - evaluation %d", tmplName, i+1))
 
 		d := data.Data{}
 
@@ -232,7 +232,7 @@ func ProcessTmplWithDatasources(
 		}
 	}
 
-	u.LogTrace(fmt.Sprintf("ProcessTmplWithDatasources(): processed template '%s'", tmplName))
+	u.LogDebug(fmt.Sprintf("ProcessTmplWithDatasources(): processed template '%s'", tmplName))
 
 	return result, nil
 }

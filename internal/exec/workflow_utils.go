@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -63,9 +64,9 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		u.PrintErrorMarkdown(
-			WorkflowErrTitle,
+		atmoserr.PrintErrorMarkdown(
 			ErrWorkflowNoSteps,
+			WorkflowErrTitle,
 			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
 		)
 		return ErrWorkflowNoSteps
@@ -91,9 +92,9 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			u.PrintErrorMarkdown(
-				WorkflowErrTitle,
+			atmoserr.PrintErrorMarkdown(
 				ErrInvalidFromStep,
+				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
 			)
 			return ErrInvalidFromStep
@@ -143,9 +144,9 @@ func ExecuteWorkflow(
 			u.PrintfMessageToTUI("Executing command: `atmos %s`\n", command)
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
-			u.PrintErrorMarkdown(
-				WorkflowErrTitle,
+			atmoserr.PrintErrorMarkdown(
 				ErrInvalidWorkflowStepType,
+				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})),
 			)
 			return ErrInvalidWorkflowStepType
@@ -170,9 +171,9 @@ func ExecuteWorkflow(
 				failedCmd = config.AtmosCommand + " " + command
 			}
 
-			u.PrintErrorMarkdown(
-				WorkflowErrTitle,
+			atmoserr.PrintErrorMarkdown(
 				ErrWorkflowStepFailed,
+				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
 			return ErrWorkflowStepFailed

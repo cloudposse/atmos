@@ -2,6 +2,7 @@ package cmd
 
 import (
 	log "github.com/charmbracelet/log"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
@@ -56,7 +57,7 @@ func getRunnableDescribeAffectedCmd(
 		checkAtmosConfig()
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
 		// Handle the deprecated `--verbose` flag.
 		if cmd.Flags().Changed("verbose") {
@@ -70,10 +71,10 @@ func getRunnableDescribeAffectedCmd(
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			CheckErrorAndExit(err, "", "")
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		}
 
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 }

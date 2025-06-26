@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -25,7 +26,7 @@ var listStacksCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 		output, err := listStacks(cmd)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 	},
 }

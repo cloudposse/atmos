@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"errors"
+	atmoserr "github.com/cloudposse/atmos/errors"
 
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeComponentCmd describes configuration for components
@@ -27,21 +27,21 @@ var describeComponentCmd = &cobra.Command{
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		format, err := flags.GetString("format")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		file, err := flags.GetString("file")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		processTemplates, err := flags.GetBool("process-templates")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		query, err := flags.GetString("query")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		skip, err := flags.GetStringSlice("skip")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		pager, err := flags.GetString("pager")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
 		component := args[0]
 
@@ -56,7 +56,7 @@ var describeComponentCmd = &cobra.Command{
 			Format:               format,
 			File:                 file,
 		})
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		return nil
 	},
 	ValidArgsFunction: ComponentsArgCompletion,
@@ -73,7 +73,7 @@ func init() {
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 
 	describeCmd.AddCommand(describeComponentCmd)

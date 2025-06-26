@@ -2,12 +2,12 @@ package cmd
 
 import (
 	_ "embed"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 //go:embed markdown/workflow.md
@@ -26,7 +26,7 @@ var workflowCmd = &cobra.Command{
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 			}
 			return
 		}
@@ -48,7 +48,7 @@ var workflowCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			// For unknown errors, print and exit
-			CheckErrorAndExit(err, "", "")
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		}
 	},
 }

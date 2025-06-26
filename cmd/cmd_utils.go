@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -141,7 +142,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 
 	// If the command doesn't exist, create it
 	if cmd == nil {
-		u.LogErrorAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias))
+		atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias), "", "")
 	}
 
 	// If there are more parts, recurse for the next level
@@ -228,7 +229,7 @@ func preCustomCommand(
 		} else {
 			// truly invalid, nothing to do
 			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))
-			CheckErrorAndExit(er, "", "https://atmos.tools/cli/configuration/commands")
+			atmoserr.PrintErrorMarkdownAndExit(er, "", "https://atmos.tools/cli/configuration/commands")
 		}
 	}
 
@@ -257,7 +258,7 @@ func preCustomCommand(
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
-		u.LogErrorAndExit(errors.New(sb.String()))
+		atmoserr.PrintErrorMarkdownAndExit(errors.New(sb.String()), "", "")
 	}
 
 	// Merge user-supplied arguments with defaults
@@ -272,7 +273,7 @@ func preCustomCommand(
 			} else {
 				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
-				u.LogErrorAndExit(errors.New(sb.String()))
+				atmoserr.PrintErrorMarkdownAndExit(errors.New(sb.String()), "", "")
 			}
 		}
 	}
@@ -364,8 +365,8 @@ func executeCustomCommand(
 				log.Fatal(err)
 			}
 			if component == "" || component == "<no value>" {
-				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
+				atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
@@ -374,8 +375,8 @@ func executeCustomCommand(
 				log.Fatal(err)
 			}
 			if stack == "" || stack == "<no value>" {
-				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
+				atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
 			// Get the config for the component in the stack
@@ -733,7 +734,7 @@ func showUsageExample(cmd *cobra.Command, details string) {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
-	CheckErrorAndExit(errors.New(details), "Incorrect Usage", suggestion)
+	atmoserr.PrintErrorMarkdownAndExit(errors.New(details), "Incorrect Usage", suggestion)
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -48,20 +49,20 @@ func getRunnableDescribeStacksCmd(
 		// Check Atmos configuration
 		g.checkAtmosConfig()
 		info, err := g.processCommandLineArgs("", cmd, args, nil)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		atmosConfig, err := g.initCliConfig(info, true)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		err = g.validateStacks(atmosConfig)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
 		}
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 }
 
@@ -95,7 +96,7 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		default:
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 	return validateFormat(describe)
 }

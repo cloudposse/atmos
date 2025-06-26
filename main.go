@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	atmoserr "github.com/cloudposse/atmos/errors"
 
 	"github.com/charmbracelet/log"
 
@@ -20,6 +21,6 @@ func main() {
 			log.Debug("Exiting with code 2 due to plan differences")
 			u.OsExit(2)
 		}
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 }

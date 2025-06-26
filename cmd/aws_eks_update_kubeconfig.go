@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command
@@ -31,7 +31,7 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	},
 	ValidArgsFunction: ComponentsArgCompletion,
 }

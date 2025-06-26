@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -355,7 +356,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(err)
+									atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 								}
 
 								componentSection = componentSectionConverted
@@ -574,7 +575,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(err)
+									atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 								}
 
 								componentSection = componentSectionConverted

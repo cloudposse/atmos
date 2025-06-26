@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // terraformGenerateVarfilesCmd generates varfiles for all terraform components in all stacks
@@ -19,7 +19,7 @@ var terraformGenerateVarfilesCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGenerateVarfilesCmd(cmd, args)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	},
 }
 
@@ -42,7 +42,7 @@ func init() {
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateVarfilesCmd)

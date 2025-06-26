@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 
 	"github.com/spf13/cobra"
 
@@ -23,7 +24,7 @@ var validateComponentCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
 		m := fmt.Sprintf("component `%s` in stack `%s` validated successfully\n", component, stack)
 		u.PrintMessageInColor(m, theme.Colors.Success)
@@ -41,7 +42,7 @@ func init() {
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)

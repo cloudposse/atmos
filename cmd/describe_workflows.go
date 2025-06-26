@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -31,17 +32,17 @@ func getRunnableDescribeWorkflowsCmd(
 		// Check Atmos configuration
 		checkAtmosConfig()
 		info, err := processCommandLineArgs("terraform", cmd, args, nil)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		atmosConfig, err := initCliConfig(info, true)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		describeWorkflowArgs := &exec.DescribeWorkflowsArgs{}
 		err = flagsToDescribeWorkflowsArgs(cmd.Flags(), describeWorkflowArgs)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		pager, err := cmd.Flags().GetString("pager")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		atmosConfig.Settings.Terminal.Pager = pager
 		err = describeWorkflowsExec.Execute(&atmosConfig, describeWorkflowArgs)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 }
 

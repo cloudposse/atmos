@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // helmfileGenerateVarfileCmd generates varfile for a helmfile component
@@ -21,7 +21,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 
 		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		}
 	},
 }
@@ -32,7 +32,7 @@ func init() {
 	helmfileGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "Generate a variables file for the specified Helmfile component in the given stack and write the output to the provided file path.")
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
-	CheckErrorAndExit(err, "", "")
+	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
 	helmfileGenerateCmd.AddCommand(helmfileGenerateVarfileCmd)
 }

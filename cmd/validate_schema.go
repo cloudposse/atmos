@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	atmoserr "github.com/cloudposse/atmos/errors"
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/exec"
@@ -64,7 +65,7 @@ and are compliant with expected formats, reducing configuration drift and runtim
 			if errors.Is(err, exec.ErrInvalidYAML) {
 				u.OsExit(1)
 			}
-			CheckErrorAndExit(err, "", "")
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		}
 	},
 }

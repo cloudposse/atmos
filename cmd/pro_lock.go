@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // proLockCmd executes 'pro lock' CLI command
@@ -20,7 +20,7 @@ var proLockCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteProLockCommand(cmd, args)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	},
 }
 

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"io"
 	"net/url"
 	"os"
@@ -28,7 +29,7 @@ func removeTempDir(path string) {
 func closeFile(fileName string, file io.ReadCloser) {
 	err := file.Close()
 	if err != nil {
-		u.LogError(fmt.Errorf("error closing the file '%s': %v", fileName, err))
+		atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("error closing the file '%s': %v", fileName, err), "", "")
 	}
 }
 

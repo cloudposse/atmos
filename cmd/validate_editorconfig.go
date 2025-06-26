@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 	"strings"
 
@@ -67,7 +68,7 @@ func initializeConfig(cmd *cobra.Command) {
 	if initEditorConfig {
 		err := currentConfig.Save(version.Version)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		}
 	}
 
@@ -99,13 +100,13 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("format") && atmosConfig.Validate.EditorConfig.Format != "" {
 		format := outputformat.OutputFormat(atmosConfig.Validate.EditorConfig.Format)
 		if ok := format.IsValid(); !ok {
-			u.LogErrorAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
+			atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
 		}
 		cliConfig.Format = format
 	} else if cmd.Flags().Changed("format") {
 		format := outputformat.OutputFormat(format)
 		if ok := format.IsValid(); !ok {
-			u.LogErrorAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
+			atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
 		}
 		cliConfig.Format = format
 	}
@@ -145,15 +146,15 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 func runMainLogic() {
 	config := *currentConfig
 	u.LogDebug(config.String())
-	u.LogTrace(fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
+	u.LogDebug(fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
 
 	if err := checkVersion(config); err != nil {
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 
 	filePaths, err := files.GetFiles(config)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 
 	if config.DryRun {

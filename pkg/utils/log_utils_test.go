@@ -157,7 +157,7 @@ func TestLogLevels(t *testing.T) {
 	}{
 		{
 			name:     "LogTrace",
-			logFunc:  LogTrace,
+			logFunc:  LogDebug,
 			message:  "trace message",
 			expected: "trace message",
 		},

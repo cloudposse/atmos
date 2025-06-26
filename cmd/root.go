@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"io"
 	"math"
 	"os"
@@ -58,7 +59,7 @@ var RootCmd = &cobra.Command{
 					u.LogWarning(err.Error())
 				}
 			} else {
-				u.LogErrorAndExit(err)
+				atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 			}
 		}
 	},
@@ -69,10 +70,10 @@ var RootCmd = &cobra.Command{
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
 		err = e.ExecuteAtmosCmd()
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	},
 }
 
@@ -141,7 +142,7 @@ func Execute() error {
 		if isVersionCommand() {
 			log.Debug("warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {
-			u.LogErrorAndExit(initErr)
+			atmoserr.PrintErrorMarkdownAndExit(initErr, "", "")
 		}
 	}
 
@@ -153,12 +154,12 @@ func Execute() error {
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		}
 
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		}
 	}
 
@@ -205,7 +206,7 @@ func init() {
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 
 	initCobraConfig()
@@ -244,19 +245,19 @@ func initCobraConfig() {
 		if command.Use != "atmos" || command.Flags().Changed("help") {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
-				u.LogErrorAndExit(err)
+				atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 			}
 			if err := oldUsageFunc(command); err != nil {
-				u.LogErrorAndExit(err)
+				atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 			}
 		} else {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
-				u.LogErrorAndExit(err)
+				atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 			}
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
-				u.LogErrorAndExit(err)
+				atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 			}
 		}
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)

@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"sort"
 	"strings"
 
@@ -336,7 +337,7 @@ func ProcessStacks(
 		} else {
 			msg = "\nFound stack manifests:"
 		}
-		u.LogTrace(msg)
+		u.LogDebug(msg)
 		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -460,7 +461,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 			)
-			u.LogErrorAndExit(err)
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -535,7 +536,7 @@ func ProcessStacks(
 		)
 		if err != nil {
 			// If any error returned from the templates processing, log it and exit
-			u.LogErrorAndExit(err)
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		}
 
 		componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
@@ -547,7 +548,7 @@ func ProcessStacks(
 					err = errors.Join(err, errors.New(errorMessage))
 				}
 			}
-			u.LogErrorAndExit(err)
+			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 		}
 
 		configAndStacksInfo.ComponentSection = componentSectionConverted

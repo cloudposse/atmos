@@ -1,11 +1,10 @@
 package cmd
 
 import (
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"os"
 
 	"github.com/spf13/cobra"
-
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var completionCmd = &cobra.Command{
@@ -31,7 +30,7 @@ func runCompletion(cmd *cobra.Command, args []string) {
 	}
 
 	if err != nil {
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 }
 

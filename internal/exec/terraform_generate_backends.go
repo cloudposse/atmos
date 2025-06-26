@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"path/filepath"
 	"strings"
 
@@ -260,7 +261,7 @@ func ExecuteTerraformGenerateBackends(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					u.LogErrorAndExit(err)
+					atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 				}
 
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)

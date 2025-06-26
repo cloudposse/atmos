@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeDependentsCmd produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
@@ -20,7 +20,7 @@ var describeDependentsCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteDescribeDependentsCmd(cmd, args)
-		CheckErrorAndExit(err, "", "")
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	},
 }
 
@@ -33,7 +33,7 @@ func init() {
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 	}
 
 	describeCmd.AddCommand(describeDependentsCmd)

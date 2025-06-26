@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"fmt"
+	atmoserr "github.com/cloudposse/atmos/errors"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -9,7 +10,6 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type Hooks struct {
@@ -71,7 +71,7 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 			}
 			err := storeCmd.RunE(&hook, event, cmd, args)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 			}
 		}
 	}
