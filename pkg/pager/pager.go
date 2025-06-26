@@ -14,9 +14,16 @@ type PageCreator interface {
 }
 
 type pageCreator struct {
+	enablePager           bool
 	newTeaProgram         func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
 	contentFitsTerminal   func(content string) bool
 	isTTYSupportForStdout func() bool
+}
+
+func NewWithAtmosConfig(enablePager bool) PageCreator {
+	pager := New()
+	pager.(*pageCreator).enablePager = enablePager
+	return pager
 }
 
 func New() PageCreator {
@@ -28,7 +35,7 @@ func New() PageCreator {
 }
 
 func (p *pageCreator) Run(title, content string) error {
-	if !p.isTTYSupportForStdout() {
+	if !(p.enablePager) || !p.isTTYSupportForStdout() {
 		fmt.Print(content)
 		return nil
 	}

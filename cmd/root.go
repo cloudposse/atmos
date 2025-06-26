@@ -263,7 +263,7 @@ func initCobraConfig() {
 			if err := oldUsageFunc(command); err != nil {
 				u.LogErrorAndExit(err)
 			}
-			pager := pager.New()
+			pager := pager.NewWithAtmosConfig(atmosConfig.Settings.Terminal.IsPagerEnabled())
 			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
 				log.Error("Failed to run pager", "error", err)
 				utils.OsExit(1)
