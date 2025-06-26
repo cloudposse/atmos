@@ -53,6 +53,7 @@ func TestPageCreator_Run(t *testing.T) {
 
 			// Create pageCreator with mocked dependencies
 			pc := &pageCreator{
+				enablePager: true, // Enable pager for testing
 				newTeaProgram: func(modelObj tea.Model, opts ...tea.ProgramOption) *tea.Program {
 					teaProgramCalled = true
 
@@ -234,6 +235,7 @@ func TestPageCreator_Run_WithoutPager(t *testing.T) {
 			teaProgramCalled := false
 
 			pc := &pageCreator{
+				enablePager: true, // Disable pager to test direct printing
 				newTeaProgram: func(model tea.Model, opts ...tea.ProgramOption) *tea.Program {
 					teaProgramCalled = true
 					return tea.NewProgram(&simpleTestModel{}, tea.WithInput(nil), tea.WithOutput(nil))
