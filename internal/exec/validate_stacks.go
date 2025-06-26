@@ -30,7 +30,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	spinnerDone := make(chan struct{})
 	// Run spinner in a goroutine
 	RunSpinner(p, spinnerDone, message)
-	// Ensure spinner is stopped before returning
+	// Ensure the spinner is stopped before returning
 	defer StopSpinner(p, spinnerDone)
 
 	// Process CLI arguments
