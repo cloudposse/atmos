@@ -1,17 +1,7 @@
 package cmd
 
 import (
-	"errors"
-	"fmt"
-
-	l "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
-
-	e "github.com/cloudposse/atmos/internal/exec"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	terrerrors "github.com/cloudposse/atmos/pkg/errors"
-	h "github.com/cloudposse/atmos/pkg/hooks"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
@@ -30,72 +20,4 @@ func init() {
 	AddStackCompletion(terraformCmd)
 	attachTerraformCommands(terraformCmd)
 	RootCmd.AddCommand(terraformCmd)
-}
-
-func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
-	info := getConfigAndStacksInfo("terraform", cmd, append([]string{cmd.Name()}, args...))
-
-	// Initialize the CLI config
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return fmt.Errorf("error initializing CLI config: %w", err)
-	}
-
-	hooks, err := h.GetHooks(&atmosConfig, &info)
-	if err != nil {
-		return fmt.Errorf("error getting hooks: %w", err)
-	}
-
-	if hooks.HasHooks() {
-		l.Info("running hooks", "event", event)
-		return hooks.RunAll(event, &atmosConfig, &info, cmd, args)
-	}
-
-	return nil
-}
-
-func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
-	info := getConfigAndStacksInfo("terraform", cmd, args)
-	if info.NeedHelp {
-		err := actualCmd.Usage()
-		if err != nil {
-			u.LogErrorAndExit(err)
-		}
-		return nil
-	}
-
-	flags := cmd.Flags()
-
-	processTemplates, err := flags.GetBool("process-templates")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
-
-	processYamlFunctions, err := flags.GetBool("process-functions")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
-
-	skip, err := flags.GetStringSlice("skip")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
-
-	info.ProcessTemplates = processTemplates
-	info.ProcessFunctions = processYamlFunctions
-	info.Skip = skip
-
-	err = e.ExecuteTerraform(info)
-	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
-	// So if we get here, it means there were no differences or there was an error
-	if err != nil {
-		if errors.Is(err, terrerrors.ErrPlanHasDiff) {
-			// Print the error message but return the error to be handled by main.go
-			u.PrintErrorMarkdown("", err, "")
-			return err
-		}
-		// For other errors, continue with existing behavior
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
-	return nil
 }
