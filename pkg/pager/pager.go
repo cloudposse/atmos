@@ -28,6 +28,7 @@ func NewWithAtmosConfig(enablePager bool) PageCreator {
 
 func New() PageCreator {
 	return &pageCreator{
+		enablePager:           true,
 		newTeaProgram:         tea.NewProgram,
 		contentFitsTerminal:   ContentFitsTerminal,
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
