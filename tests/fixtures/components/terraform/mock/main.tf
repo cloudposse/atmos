@@ -18,6 +18,11 @@ variable "baz" {
   default = "baz"
 }
 
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
+
 output "stage" {
   value = var.stage
 }
@@ -32,4 +37,8 @@ output "bar" {
 
 output "baz" {
   value = var.baz
+}
+
+output "tags" {
+  value = var.tags
 }
