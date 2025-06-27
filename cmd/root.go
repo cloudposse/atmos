@@ -136,7 +136,10 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+
 	utils.InitializeMarkdown(atmosConfig)
+	atmoserr.InitializeMarkdown(atmosConfig)
+
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
 			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)

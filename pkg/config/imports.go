@@ -241,7 +241,7 @@ func SearchAtmosConfig(path string) ([]string, error) {
 	// Find files matching the patterns
 	atmosFilePaths, err := findMatchingFiles(patterns)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to find matching files: %w", err)
 	}
 	// Convert paths to absolute paths
 	atmosFilePathsAbsolute, err := convertToAbsolutePaths(atmosFilePaths)

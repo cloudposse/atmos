@@ -3,6 +3,7 @@ package errors
 import (
 	"errors"
 	"fmt"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"os"
 	"os/exec"
 
@@ -16,13 +17,19 @@ import (
 var (
 	// render is the global Markdown renderer instance initialized via InitializeMarkdown.
 	render *markdown.Renderer
-)
 
-// Variable declarations for functions that might be mocked in tests.
-var (
 	// PrintErrorMarkdownAndExitFn is a variable that holds the function reference for testing.
 	PrintErrorMarkdownAndExitFn = printErrorMarkdownAndExitImpl
 )
+
+// InitializeMarkdown initializes a new Markdown renderer.
+func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
+	var err error
+	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
+	if err != nil {
+		PrintErrorMarkdownAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
+	}
+}
 
 // PrintErrorMarkdown prints an error message in Markdown format.
 func PrintErrorMarkdown(err error, title string, suggestion string) {
