@@ -37,4 +37,3 @@ DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scen
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 DEBU Telemetry event captured
-
