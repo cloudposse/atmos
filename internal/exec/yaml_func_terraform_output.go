@@ -6,6 +6,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -18,9 +19,7 @@ func processTagTerraformOutput(
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
-	if err != nil {
-		log.Fatal(err)
-	}
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	var component string
 	var stack string
@@ -30,9 +29,7 @@ func processTagTerraformOutput(
 	// while also ignoring leading and trailing whitespace.
 	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
 	parts, err := u.SplitStringByDelimiter(str, ' ')
-	if err != nil {
-		log.Fatal(err)
-	}
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	partsLen := len(parts)
 
@@ -50,7 +47,7 @@ func processTagTerraformOutput(
 		)
 	} else {
 		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
-		log.Fatal(err)
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 
 	value := GetTerraformOutput(&atmosConfig, stack, component, output, false)

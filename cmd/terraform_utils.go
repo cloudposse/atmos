@@ -48,9 +48,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	if info.NeedHelp {
 		err := actualCmd.Usage()
-		if err != nil {
-			log.Fatal(err)
-		}
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		return nil
 	}
 

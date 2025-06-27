@@ -93,7 +93,7 @@ var docsCmd = &cobra.Command{
 				glamour.WithWordWrap(screenWidth),
 			)
 			if err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
+				atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("failed to initialize markdown. Error: %w", err), "", "")
 			}
 
 			componentDocs, err := r.Render(string(readmeContent))

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	atmoserr "github.com/cloudposse/atmos/errors"
 )
 
 //go:embed markdown/*
@@ -23,7 +23,7 @@ const (
 	componentHint  string = "The `component` flag specifies the name of the component to be managed or deployed in Atmos CLI."
 )
 
-var examples map[string]ExampleContent = map[string]ExampleContent{
+var examples = map[string]ExampleContent{
 	"atmos_terraform": {
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
 	},
@@ -32,7 +32,7 @@ var examples map[string]ExampleContent = map[string]ExampleContent{
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
 	},
 	"atmos_terraform_apply": {
-		// TODO: We should update this once we have a page for terraform plan
+		// TODO: We should update this once we have a page for terraform apply
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
 	},
 	"atmos_workflow": {
@@ -45,9 +45,7 @@ var examples map[string]ExampleContent = map[string]ExampleContent{
 
 func init() {
 	files, err := fs.ReadDir(usageFiles, "markdown")
-	if err != nil {
-		log.Fatal(err)
-	}
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	for _, file := range files {
 		if !file.IsDir() { // Skip directories

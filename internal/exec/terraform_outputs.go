@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -356,11 +357,8 @@ func GetTerraformOutput(
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
 		u.PrintfMessageToTUI("\r✗ %s\n", message)
-		log.Fatal("Failed to describe the component",
-			cfg.ComponentStr, component,
-			cfg.StackStr, stack,
-			"error", err,
-		)
+		er := fmt.Errorf("failed to describe the component %s in the stack %s. Error: %w", component, stack, err)
+		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
@@ -368,7 +366,8 @@ func GetTerraformOutput(
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
 		u.PrintfMessageToTUI("\r✗ %s\n", message)
-		log.Fatal("Failed to get static remote state backend outputs", "error", err)
+		er := fmt.Errorf("failed to get static remote state backend outputs. Error: %w", err)
+		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
 	}
 
 	var result any
@@ -381,7 +380,8 @@ func GetTerraformOutput(
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
 			u.PrintfMessageToTUI("\r✗ %s\n", message)
-			log.Fatal("Failed to execute terraform output", cfg.ComponentStr, component, cfg.StackStr, stack, "error", err)
+			er := fmt.Errorf("failed to execute terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
+			atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
 		}
 
 		// Cache the result
@@ -407,7 +407,8 @@ func getTerraformOutputVariable(
 
 	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
 	if err != nil {
-		log.Fatal("Error evaluating terraform output", "output", output, cfg.ComponentStr, component, cfg.StackStr, stack, "error", err)
+		er := fmt.Errorf("failed to evaluate the terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
+		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
 	}
 
 	return res
@@ -427,7 +428,8 @@ func getStaticRemoteStateOutput(
 
 	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
 	if err != nil {
-		log.Fatal("Error evaluating the static remote state backend output", "output", output, cfg.ComponentStr, component, cfg.StackStr, stack, "error", err)
+		er := fmt.Errorf("failed to evaluate the static remote state backend for the component %s in the stack %s. Error: %w", component, stack, err)
+		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
 	}
 
 	return res
