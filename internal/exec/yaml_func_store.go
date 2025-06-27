@@ -6,6 +6,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -28,9 +29,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	log.Debug("Executing Atmos YAML function", function, input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
-	if err != nil {
-		log.Fatal(err)
-	}
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	// Split the input on the pipe symbol to separate the store parameters and default value
 	parts := strings.Split(str, "|")
@@ -89,7 +88,8 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	store := atmosConfig.Stores[retParams.storeName]
 
 	if store == nil {
-		log.Fatal("store not found", function, input, "store", retParams.storeName)
+		er := fmt.Errorf("failed to execute YAML function %s. Store %s not found", input, retParams.storeName)
+		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
 	}
 
 	// Retrieve the value from the store
@@ -98,7 +98,8 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
-		log.Fatal("failed to get key", function, input, "key", retParams.key, "error", err)
+		er := fmt.Errorf("error executing YAML function %s. Failed to get key %s. Error: %w", input, retParams.key, err)
+		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
 	}
 
 	// Execute the YQ expression if provided
@@ -106,9 +107,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 
 	if retParams.query != "" {
 		res, err = u.EvaluateYqExpression(&atmosConfig, value, retParams.query)
-		if err != nil {
-			log.Fatal(err)
-		}
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 
 	return res
