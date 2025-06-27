@@ -116,7 +116,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	if !valid {
-		return fmt.Errorf("\nComponent '%s' did not pass the validation policies.\n", info.ComponentFromArg)
+		return fmt.Errorf("component '%s' did not pass the validation policies", info.ComponentFromArg)
 	}
 
 	// Write variables to a file
@@ -144,7 +144,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	if atmosConfig.Components.Helmfile.UseEKS {
 		// Prepare AWS profile
 		helmAwsProfile := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
-		log.Debug(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
+		log.Debug("Using AWS_PROFILE", "profile", helmAwsProfile)
 
 		// Download kubeconfig by running `aws eks update-kubeconfig`
 		kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", atmosConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)

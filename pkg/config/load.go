@@ -310,19 +310,13 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	var atmosFoundFilePaths []string
 	// Search for `atmos.d/` configurations
 	searchDir := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
-	foundPaths1, err := SearchAtmosConfig(searchDir)
-	if err != nil {
-		log.Debug("Atmos configuration not found", "path", searchDir, "error", err)
-	}
+	foundPaths1, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths1) > 0 {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths1...)
 	}
 	// Search for `.atmos.d` configurations
 	searchDir = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
-	foundPaths2, err := SearchAtmosConfig(searchDir)
-	if err != nil {
-		log.Debug("Atmos configuration not found", "path", searchDir, "error", err)
-	}
+	foundPaths2, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths2) > 0 {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths2...)
 	}
