@@ -3,7 +3,6 @@ package errors
 import (
 	"errors"
 	"fmt"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"os"
 	"os/exec"
 
@@ -11,15 +10,13 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
 var (
 	// render is the global Markdown renderer instance initialized via InitializeMarkdown.
 	render *markdown.Renderer
-
-	// PrintErrorMarkdownAndExitFn is a variable that holds the function reference for testing.
-	PrintErrorMarkdownAndExitFn = printErrorMarkdownAndExitImpl
 )
 
 // InitializeMarkdown initializes a new Markdown renderer.
@@ -27,12 +24,12 @@ func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
-		PrintErrorMarkdownAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
+		CheckErrorPrintMarkdownAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
 	}
 }
 
-// PrintErrorMarkdown prints an error message in Markdown format.
-func PrintErrorMarkdown(err error, title string, suggestion string) {
+// CheckErrorAndPrintMarkdown prints an error message in Markdown format.
+func CheckErrorAndPrintMarkdown(err error, title string, suggestion string) {
 	if err == nil {
 		return
 	}
@@ -56,29 +53,13 @@ func PrintErrorMarkdown(err error, title string, suggestion string) {
 	}
 }
 
-// PrintfErrorMarkdown prints a formatted error message in Markdown format.
-func PrintfErrorMarkdown(format string, a ...interface{}) {
-	if render == nil {
-		log.Error(fmt.Errorf(format, a...))
-		return
-	}
-	md, renderErr := render.RenderErrorf(format, a...)
-	if renderErr != nil {
-		log.Error(renderErr)
-		log.Error(fmt.Errorf(format, a...))
-		return
-	}
-	_, err := os.Stderr.WriteString(fmt.Sprint(md + "\n"))
-	log.Error(err)
-}
-
-// printErrorMarkdownAndExitImpl is the implementation of PrintErrorMarkdownAndExit.
-func printErrorMarkdownAndExitImpl(err error, title string, suggestion string) {
+// CheckErrorPrintMarkdownAndExit prints an error message in Markdown format and exits with the exit code 1.
+func CheckErrorPrintMarkdownAndExit(err error, title string, suggestion string) {
 	if err == nil {
 		return
 	}
 
-	PrintErrorMarkdown(err, title, suggestion)
+	CheckErrorAndPrintMarkdown(err, title, suggestion)
 
 	// Find the executed command's exit code from the error
 	var exitError *exec.ExitError
@@ -90,12 +71,4 @@ func printErrorMarkdownAndExitImpl(err error, title string, suggestion string) {
 	// Exiting here makes it difficult to test.
 	// revive:disable-next-line:deep-exit
 	os.Exit(1)
-}
-
-// PrintErrorMarkdownAndExit prints an error message in Markdown format and exits with the exit code 1.
-func PrintErrorMarkdownAndExit(err error, title string, suggestion string) {
-	if err == nil {
-		return
-	}
-	PrintErrorMarkdownAndExitFn(err, title, suggestion)
 }

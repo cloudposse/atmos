@@ -21,7 +21,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 
 		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		}
 	},
 }
@@ -32,7 +32,7 @@ func init() {
 	helmfileGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "Generate a variables file for the specified Helmfile component in the given stack and write the output to the provided file path.")
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
-	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	helmfileGenerateCmd.AddCommand(helmfileGenerateVarfileCmd)
 }

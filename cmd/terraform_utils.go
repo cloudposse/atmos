@@ -57,19 +57,19 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	flags := cmd.Flags()
 
 	processTemplates, err := flags.GetBool("process-templates")
-	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	processYamlFunctions, err := flags.GetBool("process-functions")
-	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	skip, err := flags.GetStringSlice("skip")
-	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	components, err := flags.GetStringSlice("components")
-	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	dryRun, err := flags.GetBool("dry-run")
-	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
@@ -79,7 +79,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
-	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`
 	if info.Affected {
@@ -102,7 +102,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		a.OutputFile = ""
 
 		err = e.ExecuteTerraformAffected(&a, &info)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		return nil
 	}
 
@@ -113,7 +113,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// `--stack` (and the `component` argument is not passed)
 	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "") {
 		err = e.ExecuteTerraformQuery(&info)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		return nil
 	}
 
@@ -124,11 +124,11 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	if err != nil {
 		if errors.Is(err, terrerrors.ErrPlanHasDiff) {
 			// Print the error message but return the error to be handled by main.go
-			atmoserr.PrintErrorMarkdown(err, "", "")
+			atmoserr.CheckErrorAndPrintMarkdown(err, "", "")
 			return err
 		}
 		// For other errors, continue with existing behavior
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 	return nil
 }

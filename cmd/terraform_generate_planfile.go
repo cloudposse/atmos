@@ -20,7 +20,7 @@ var terraformGeneratePlanfileCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGeneratePlanfileCmd(cmd, args)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	},
 }
 
@@ -32,7 +32,7 @@ func init() {
 	terraformGeneratePlanfileCmd.PersistentFlags().String("format", "json", "Output format (`json` or `yaml`, `json` is default)")
 
 	err := terraformGeneratePlanfileCmd.MarkPersistentFlagRequired("stack")
-	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 	terraformGenerateCmd.AddCommand(terraformGeneratePlanfileCmd)
 }

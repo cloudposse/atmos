@@ -155,7 +155,7 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		fmt.Fprintln(os.Stdout, diff)
 
 		// Print the error message
-		atmoserr.PrintErrorMarkdown(terrerrors.ErrPlanHasDiff, "", "")
+		atmoserr.CheckErrorAndPrintMarkdown(terrerrors.ErrPlanHasDiff, "", "")
 
 		// Exit with code 2 to indicate that the plans are different
 		u.OsExit(2)

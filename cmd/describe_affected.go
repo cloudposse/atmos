@@ -57,7 +57,7 @@ func getRunnableDescribeAffectedCmd(
 		checkAtmosConfig()
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 		// Handle the deprecated `--verbose` flag.
 		if cmd.Flags().Changed("verbose") {
@@ -71,10 +71,10 @@ func getRunnableDescribeAffectedCmd(
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		}
 
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 }

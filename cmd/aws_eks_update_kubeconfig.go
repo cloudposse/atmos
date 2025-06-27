@@ -31,7 +31,7 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	},
 	ValidArgsFunction: ComponentsArgCompletion,
 }

@@ -36,7 +36,7 @@ func Test_checkErrorAndExit(t *testing.T) {
 					}
 				}()
 			}
-			PrintErrorMarkdownAndExit(tt.err, "", "")
+			CheckErrorPrintMarkdownAndExit(tt.err, "", "")
 		})
 	}
 }
@@ -52,7 +52,7 @@ func TestPrintErrorMarkdown(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	PrintErrorMarkdown(err, title, suggestion)
+	CheckErrorAndPrintMarkdown(err, title, suggestion)
 
 	// Restore stderr
 	err = w.Close()
@@ -69,36 +69,10 @@ func TestPrintErrorMarkdown(t *testing.T) {
 	assert.Contains(t, output.String(), expectedOutput, "'TestPrintErrorMarkdown' output should contain information about the error")
 }
 
-func TestPrintfErrorMarkdown(t *testing.T) {
-	render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
-
-	// Redirect stderr
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	PrintfErrorMarkdown("An error occurred: %s", "something went wrong")
-
-	// Restore stderr
-	err := w.Close()
-	assert.Nil(t, err)
-
-	os.Stderr = oldStderr
-
-	// Read captured output
-	var output bytes.Buffer
-	_, err = io.Copy(&output, r)
-	assert.NoError(t, err, "'TestPrintfErrorMarkdown' should execute without error")
-
-	// Check if output contains the expected content
-	expectedOutput := "An error occurred"
-	assert.Contains(t, output.String(), expectedOutput, "'TestPrintfErrorMarkdown' output should contain information about the error")
-}
-
 func TestPrintErrorMarkdownAndExit(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
 		er := errors.New("critical failure")
-		PrintErrorMarkdownAndExit(er, "Fatal Error", "Check logs.")
+		CheckErrorPrintMarkdownAndExit(er, "Fatal Error", "Check logs.")
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -117,7 +91,7 @@ func TestPrintErrorMarkdownAndExit(t *testing.T) {
 func TestPrintInvalidUsageErrorAndExit(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
 		er := errors.New("invalid command")
-		PrintErrorMarkdownAndExit(er, "", "Use --help for usage information.")
+		CheckErrorPrintMarkdownAndExit(er, "", "Use --help for usage information.")
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])

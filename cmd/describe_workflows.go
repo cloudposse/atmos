@@ -32,17 +32,17 @@ func getRunnableDescribeWorkflowsCmd(
 		// Check Atmos configuration
 		checkAtmosConfig()
 		info, err := processCommandLineArgs("terraform", cmd, args, nil)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		atmosConfig, err := initCliConfig(info, true)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		describeWorkflowArgs := &exec.DescribeWorkflowsArgs{}
 		err = flagsToDescribeWorkflowsArgs(cmd.Flags(), describeWorkflowArgs)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		pager, err := cmd.Flags().GetString("pager")
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		atmosConfig.Settings.Terminal.Pager = pager
 		err = describeWorkflowsExec.Execute(&atmosConfig, describeWorkflowArgs)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 }
 

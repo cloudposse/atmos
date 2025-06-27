@@ -356,7 +356,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+									atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 								}
 
 								componentSection = componentSectionConverted
@@ -575,7 +575,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+									atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 								}
 
 								componentSection = componentSectionConverted

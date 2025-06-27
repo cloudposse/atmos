@@ -26,7 +26,7 @@ var listStacksCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 		output, err := listStacks(cmd)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 	},
 }

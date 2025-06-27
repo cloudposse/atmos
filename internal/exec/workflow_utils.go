@@ -63,7 +63,7 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		atmoserr.PrintErrorMarkdown(
+		atmoserr.CheckErrorAndPrintMarkdown(
 			ErrWorkflowNoSteps,
 			WorkflowErrTitle,
 			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
@@ -91,7 +91,7 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			atmoserr.PrintErrorMarkdown(
+			atmoserr.CheckErrorAndPrintMarkdown(
 				ErrInvalidFromStep,
 				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
@@ -143,7 +143,7 @@ func ExecuteWorkflow(
 			u.PrintfMessageToTUI("Executing command: `atmos %s`\n", command)
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
-			atmoserr.PrintErrorMarkdown(
+			atmoserr.CheckErrorAndPrintMarkdown(
 				ErrInvalidWorkflowStepType,
 				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})),
@@ -170,7 +170,7 @@ func ExecuteWorkflow(
 				failedCmd = config.AtmosCommand + " " + command
 			}
 
-			atmoserr.PrintErrorMarkdown(
+			atmoserr.CheckErrorAndPrintMarkdown(
 				ErrWorkflowStepFailed,
 				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),

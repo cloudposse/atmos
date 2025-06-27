@@ -21,7 +21,7 @@ var vendorDiffCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteVendorDiffCmd(cmd, args)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	},
 }
 

@@ -44,7 +44,7 @@ var describeConfigCmd = &cobra.Command{
 
 		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(query, format, "")
 		if err != nil {
-			atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		}
 		return nil
 	},

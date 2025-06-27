@@ -116,7 +116,7 @@ func setEnv(v *viper.Viper) {
 
 func bindEnv(v *viper.Viper, key ...string) {
 	if err := v.BindEnv(key...); err != nil {
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 }
 

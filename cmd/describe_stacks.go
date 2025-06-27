@@ -49,20 +49,20 @@ func getRunnableDescribeStacksCmd(
 		// Check Atmos configuration
 		g.checkAtmosConfig()
 		info, err := g.processCommandLineArgs("", cmd, args, nil)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		atmosConfig, err := g.initCliConfig(info, true)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		err = g.validateStacks(atmosConfig)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
 		}
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 }
 
@@ -95,9 +95,9 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 			*v, err = flags.GetStringSlice(k)
 		default:
 			er := fmt.Errorf("unsupported type %T for flag %s", v, k)
-			atmoserr.PrintErrorMarkdownAndExit(er, "", "")
+			atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
 		}
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 	return validateFormat(describe)
 }

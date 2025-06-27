@@ -31,7 +31,7 @@ func removeTempDir(path string) {
 func closeFile(fileName string, file io.ReadCloser) {
 	err := file.Close()
 	if err != nil {
-		atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("error closing the file '%s': %v", fileName, err), "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("error closing the file '%s': %v", fileName, err), "", "")
 	}
 }
 

@@ -18,7 +18,7 @@ var render *markdown.Renderer
 func PrintfMarkdown(format string, a ...interface{}) {
 	if render == nil {
 		_, err := os.Stdout.WriteString(fmt.Sprintf(format, a...))
-		atmoserr.PrintErrorMarkdown(err, "", "")
+		atmoserr.CheckErrorAndPrintMarkdown(err, "", "")
 		return
 	}
 	message := fmt.Sprintf(format, a...)
@@ -26,10 +26,10 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	var renderErr error
 	md, renderErr = render.Render(message)
 	if renderErr != nil {
-		atmoserr.PrintErrorMarkdownAndExit(renderErr, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(renderErr, "", "")
 	}
 	_, err := os.Stdout.WriteString(fmt.Sprint(md + "\n"))
-	atmoserr.PrintErrorMarkdown(err, "", "")
+	atmoserr.CheckErrorAndPrintMarkdown(err, "", "")
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.
@@ -37,6 +37,6 @@ func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
-		atmoserr.PrintErrorMarkdownAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
 	}
 }

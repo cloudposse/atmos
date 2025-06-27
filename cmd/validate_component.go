@@ -21,7 +21,7 @@ var validateComponentCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 
 		log.Info("Validated successfully", "component", component, "stack", stack)
 	},
@@ -38,7 +38,7 @@ func init() {
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)

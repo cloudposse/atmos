@@ -18,7 +18,7 @@ func processTagTemplate(
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTemplate)
 	if err != nil {
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 
 	var decoded any

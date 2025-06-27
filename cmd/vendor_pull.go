@@ -20,7 +20,7 @@ var vendorPullCmd = &cobra.Command{
 		checkAtmosConfig(WithStackValidation(cmd.Flag("stack").Changed))
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	},
 }
 

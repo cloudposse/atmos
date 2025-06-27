@@ -32,5 +32,5 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
 	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
 	info.CliArgs = []string{"helmfile", commandName}
 	err := e.ExecuteHelmfile(info)
-	atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 }

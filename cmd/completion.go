@@ -31,7 +31,7 @@ func runCompletion(cmd *cobra.Command, args []string) {
 	}
 
 	if err != nil {
-		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 }
 
