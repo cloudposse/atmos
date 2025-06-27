@@ -257,7 +257,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		)
 	}
 	if !m.isTTY {
-		log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+		log.Info(mark, "package", pkg.name, "version", version)
 	}
 	m.index++
 	// Update progress bar
@@ -280,18 +280,17 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) 
 	if pkg.version != "" {
 		version = fmt.Sprintf("(%s)", pkg.version)
 	}
-	log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+	log.Info(mark, "package", pkg.name, "version", version)
 
 	if m.dryRun {
-		log.Info("Done! Dry run completed. No components vendored.\n")
+		log.Info("Done! Dry run completed. No components vendored")
 	}
 
 	if m.failedPkg > 0 {
-		log.Info(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n",
-			len(m.packages)-m.failedPkg, m.failedPkg))
+		log.Info("Vendored components", "success", len(m.packages)-m.failedPkg, "failed", m.failedPkg)
+	} else {
+		log.Info("Vendored components", "success", len(m.packages))
 	}
-
-	log.Info(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
 }
 
 func (m *modelVendor) View() string {

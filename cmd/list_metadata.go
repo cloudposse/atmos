@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
-
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 
 	log "github.com/charmbracelet/log"
@@ -76,7 +74,7 @@ func setupMetadataOptions(commonFlags fl.CommonFlags, componentFilter string) *l
 // logNoMetadataFoundMessage logs an appropriate message when no metadata is found.
 func logNoMetadataFoundMessage(componentFilter string) {
 	if componentFilter != "" {
-		log.Info(fmt.Sprintf("No metadata found for component '%s'", componentFilter))
+		log.Info("No metadata found", "component", componentFilter)
 	} else {
 		log.Info("No metadata found")
 	}

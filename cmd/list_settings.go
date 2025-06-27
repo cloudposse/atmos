@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
-
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 
 	log "github.com/charmbracelet/log"
@@ -71,7 +69,7 @@ func setupSettingsOptions(commonFlags fl.CommonFlags, componentFilter string) *l
 // logNoSettingsFoundMessage logs an appropriate message when no settings are found.
 func logNoSettingsFoundMessage(componentFilter string) {
 	if componentFilter != "" {
-		log.Info(fmt.Sprintf("No settings found for component '%s'", componentFilter))
+		log.Info("No settings found", "component", componentFilter)
 	} else {
 		log.Info("No settings found")
 	}

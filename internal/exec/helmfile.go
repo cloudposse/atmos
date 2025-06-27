@@ -63,7 +63,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if !info.ComponentIsEnabled {
-		log.Info(fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		log.Info("Component is not enabled and skipped", "component", info.ComponentFromArg)
 		return nil
 	}
 
