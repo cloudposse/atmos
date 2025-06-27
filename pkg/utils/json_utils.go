@@ -3,7 +3,7 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
-	log "github.com/charmbracelet/log"
+	"fmt"
 	"os"
 	"strings"
 
@@ -66,7 +66,7 @@ func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	if err != nil {
 		return err
 	}
-	log.Info(j)
+	fmt.Println(j)
 	return nil
 }
 

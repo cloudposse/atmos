@@ -2,9 +2,9 @@ package exec
 
 import (
 	"fmt"
-	log "github.com/charmbracelet/log"
 	"path/filepath"
 
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -63,11 +63,11 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	}
 
 	if info.ComponentBackendType == "" {
-		return fmt.Errorf("\n'backend_type' is missing for the '%s' component.\n", component)
+		return fmt.Errorf("'backend_type' is missing for the '%s' component", component)
 	}
 
 	if info.ComponentBackendSection == nil {
-		return fmt.Errorf("\nCould not find 'backend' config for the '%s' component.\n", component)
+		return fmt.Errorf("could not find 'backend' config for the '%s' component", component)
 	}
 
 	componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
@@ -75,14 +75,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	log.Debug("Component backend config:\n\n")
-
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsJSONToFileDescriptor(atmosConfig, componentBackendConfig)
-		if err != nil {
-			return err
-		}
-	}
+	log.Debug("Component backend", "config", componentBackendConfig)
 
 	// Check if the `backend` section has `workspace_key_prefix` when `backend_type` is `s3`
 	if info.ComponentBackendType == "s3" {
@@ -100,8 +93,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		"backend.tf.json",
 	)
 
-	log.Debug("\nWriting the backend config to file:")
-	log.Debug(backendFilePath)
+	log.Debug("Writing the backend config to file", "file", backendFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0o644)
