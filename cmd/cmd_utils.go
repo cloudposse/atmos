@@ -25,8 +25,10 @@ import (
 )
 
 // Define a constant for the dot string that appears multiple times.
-const currentDirPath = "."
-const customCommandTelemetryEvent = "custom"
+const (
+	currentDirPath              = "."
+	customCommandTelemetryEvent = "custom"
+)
 
 // ValidateConfig holds configuration options for Atmos validation.
 // CheckStack determines whether stack configuration validation should be performed.
