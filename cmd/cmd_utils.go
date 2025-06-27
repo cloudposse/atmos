@@ -574,7 +574,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		log.Warn(fmt.Sprintf("Could not load cache: %s", err))
+		log.Warn("Could not load cache", "error", err)
 		return
 	}
 
@@ -587,7 +587,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Get the latest Atmos release from GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 	if err != nil {
-		log.Warn(fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		log.Warn("Failed to retrieve latest Atmos release info", "error", err)
 		return
 	}
 
@@ -608,7 +608,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Update the cache to mark the current timestamp
 	cacheCfg.LastChecked = time.Now().Unix()
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-		log.Warn(fmt.Sprintf("Unable to save cache: %s", saveErr))
+		log.Warn("Unable to save cache", "error", saveErr)
 	}
 }
 
@@ -692,7 +692,7 @@ func isGitRepository() bool {
 func verifyInsideGitRepo() bool {
 	// Check if we're in a git repo
 	if !isGitRepository() {
-		log.Warn("You're not inside a git repository. Atmos feels lonely outside - bring it home!\n")
+		log.Warn("You're not inside a git repository. Atmos feels lonely outside - bring it home!")
 		return false
 	}
 	return true

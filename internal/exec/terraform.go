@@ -270,7 +270,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if len(problematicVars) > 0 {
-		log.Warn("detected environment variables that may interfere with Atmos's control of Terraform",
+		log.Warn("Detected environment variables that may interfere with Atmos's control of Terraform",
 			"variables", problematicVars)
 	}
 

@@ -154,7 +154,7 @@ func getBoolFlagWithDefault(cmd *cobra.Command, flagName string, defaultValue bo
 
 	value, err := cmd.Flags().GetBool(flagName)
 	if err != nil {
-		log.Warn("failed to get flag, using default",
+		log.Warn("Failed to get flag, using default",
 			"flag", flagName,
 			"default", defaultValue,
 			"error", err)
