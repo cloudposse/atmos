@@ -84,7 +84,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		}
 	}
 
-	// Write backend config to file
+	// Write the backend config to a file
 	backendFilePath := filepath.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Terraform.BasePath,
