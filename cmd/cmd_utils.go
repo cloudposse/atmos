@@ -426,10 +426,7 @@ func executeCustomCommand(
 		}
 
 		if len(envVarsList) > 0 && commandConfig.Verbose {
-			log.Debug("\nUsing ENV vars:")
-			for _, v := range envVarsList {
-				log.Debug(v)
-			}
+			log.Debug("Using ENV vars", "env", envVarsList)
 		}
 
 		// Process Go templates in the command's steps.
@@ -680,7 +677,7 @@ func isGitRepository() bool {
 	})
 	if err != nil {
 		if !errors.Is(err, git.ErrRepositoryNotExists) {
-			log.Debug("git check failed", "error", err)
+			log.Debug("Git check failed", "error", err)
 		}
 		return false
 	}

@@ -100,14 +100,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Print component variables
-	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack)
-
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
-		if err != nil {
-			return err
-		}
-	}
+	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
 	// Check if component 'settings.validation' section is specified and validate the component
 	valid, err := ValidateComponent(

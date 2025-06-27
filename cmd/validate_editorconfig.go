@@ -147,7 +147,7 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 func runMainLogic() {
 	config := *currentConfig
 	log.Debug(config.String())
-	log.Debug(fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
+	log.Debug("Excluding", "regex", config.GetExcludesAsRegularExpression())
 
 	if err := checkVersion(config); err != nil {
 		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
@@ -166,7 +166,7 @@ func runMainLogic() {
 	}
 
 	errors := validation.ProcessValidation(filePaths, config)
-	log.Debug(fmt.Sprintf("%d files checked", len(filePaths)))
+	log.Debug("Files checked", "count", len(filePaths))
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)

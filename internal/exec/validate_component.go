@@ -120,7 +120,7 @@ func ValidateComponent(
 	var err error
 
 	if schemaPath != "" && schemaType != "" {
-		log.Debug(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+		log.Debug("Validating", "component", componentName, "schema", schemaType, "file", schemaPath)
 
 		ok, err = validateComponentInternal(atmosConfig, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 		if err != nil {
@@ -167,7 +167,7 @@ func ValidateComponent(
 				finalTimeoutSeconds = v.Timeout
 			}
 
-			log.Debug(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, finalSchemaType, finalSchemaPath))
+			log.Debug("Validating", "component", componentName, "schema", finalSchemaType, "file", finalSchemaPath)
 
 			if v.Description != "" {
 				log.Debug(v.Description)

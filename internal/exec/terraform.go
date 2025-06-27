@@ -131,7 +131,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if info.SubCommand == "clean" {
 		err = handleCleanSubCommand(info, componentPath, atmosConfig)
 		if err != nil {
-			log.Debug("error cleaning the terraform component", "error", err)
+			log.Debug("Error executing 'terraform clean'", "component", componentPath, "error", err)
 			return err
 		}
 		return nil
