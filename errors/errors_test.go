@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"testing"
 
+	log "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -131,4 +132,27 @@ func TestPrintInvalidUsageErrorAndExit(t *testing.T) {
 	} else {
 		assert.Fail(t, "Expected an exit error with code 1")
 	}
+}
+
+func TestLogError(t *testing.T) {
+	// Set up a logger mock to capture logs
+	var logBuffer bytes.Buffer
+	oldLogger := log.Default()
+	defer func() { log.SetDefault(oldLogger) }()
+
+	customLogger := log.NewWithOptions(
+		&logBuffer,
+		log.Options{
+			Level: log.DebugLevel,
+		},
+	)
+	log.SetDefault(customLogger)
+
+	testError := errors.New("test error")
+	PrintErrorMarkdown(testError, "", "")
+	assert.Contains(t, logBuffer.String(), "test error")
+
+	// Test with nil error
+	logBuffer.Reset()
+	assert.Empty(t, logBuffer.String())
 }

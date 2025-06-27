@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"fmt"
-
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	atmoserr "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // validateComponentCmd validates atmos components
@@ -26,8 +23,7 @@ var validateComponentCmd = &cobra.Command{
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
 		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
-		m := fmt.Sprintf("component `%s` in stack `%s` validated successfully\n", component, stack)
-		u.PrintMessageInColor(m, theme.Colors.Success)
+		log.Info("Validated successfully", "component", component, "stack", stack)
 	},
 }
 

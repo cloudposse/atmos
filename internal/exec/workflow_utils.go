@@ -15,7 +15,6 @@ import (
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -316,12 +315,8 @@ func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, s
 		return "", "", "", nil
 	}
 
-	fmt.Println()
-	u.PrintMessageInColor(fmt.Sprintf(
-		"Executing command:\n"+os.Args[0]+" workflow %s --file %s --from-step \"%s\"\n", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep),
-		theme.Colors.Info,
-	)
-	fmt.Println()
+	c := fmt.Sprintf("atmos workflow %s --file %s --from-step \"%s\"", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep)
+	log.Info("Executing", "command", c)
 
 	return selectedWorkflowFile, selectedWorkflow, selectedWorkflowStep, nil
 }

@@ -1,12 +1,11 @@
 package cmd
 
 import (
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ValidateStacksCmd validates stacks
@@ -24,7 +23,7 @@ var ValidateStacksCmd = &cobra.Command{
 		err := exec.ExecuteValidateStacksCmd(cmd, args)
 		atmoserr.PrintErrorMarkdownAndExit(err, "", "")
 
-		u.PrintMessageInColor("all stacks validated successfully\n", theme.Colors.Success)
+		log.Info("All stacks validated successfully")
 	},
 }
 
