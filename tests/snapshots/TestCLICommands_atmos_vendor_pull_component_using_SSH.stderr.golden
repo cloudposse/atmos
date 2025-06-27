@@ -15,8 +15,6 @@ DEBU Rewriting SCP-style SSH URL old_url="" new_url="ssh://xxx@github.com/cloudp
 DEBU Reading config param InjectGithubToken=true
 DEBU Injected token env=ATMOS_GITHUB_TOKEN url="ssh://xxx:xxx@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
 DEBU Final transformation url="git::ssh://xxx:xxx@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?depth=1&ref=main"
-INFO ✓ ipinfo (main)
-INFO Done! Dry run completed. No components vendored.
-
-INFO Vendored 1 components.
-
+INFO ✓ package=ipinfo version=(main)
+INFO Done! Dry run completed. No components vendored
+INFO Vendored components success=1
