@@ -13,13 +13,9 @@ builds:
     goos:
       - 'linux'
       - 'darwin'
-      - 'freebsd'
-      - 'windows'
     goarch: 
       - 'amd64'
       - 'arm64'
-      - '386'
-      - 'arm'
     binary: atmos
     ldflags:
       # Set `atmos` version to the GitHub release tag using Go `ldflags`
