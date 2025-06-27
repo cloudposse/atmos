@@ -12,8 +12,8 @@ tests:
       - "stacks"
     expect:
       diff: []
-      stdout:
-        - "All stacks validated successfully"
+      stderr:
+        - "INFO All stacks validated successfully"
       exit_code: 0
 
   - name: atmos terraform deploy unlocked component
