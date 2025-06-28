@@ -2,10 +2,10 @@ package exec
 
 import (
 	"fmt"
-	log "github.com/charmbracelet/log"
 	"os"
 	"path/filepath"
 
+	log "github.com/charmbracelet/log"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -15,7 +15,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteValidateComponentCmd executes `validate component` command
+// ExecuteValidateComponentCmd executes `validate component` command.
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
@@ -39,7 +39,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	spinnerDone := make(chan struct{})
 	// Run spinner in a goroutine
 	RunSpinner(p, spinnerDone, message)
-	// Ensure spinner is stopped before returning
+	// Ensure the spinner is stopped before returning
 	defer StopSpinner(p, spinnerDone)
 
 	flags := cmd.Flags()
@@ -77,7 +77,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	return componentName, stack, nil
 }
 
-// ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
+// ExecuteValidateComponent validates a component in a stack using JsonSchema or OPA schema documents.
 func ExecuteValidateComponent(
 	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
@@ -106,7 +106,7 @@ func ExecuteValidateComponent(
 	return ValidateComponent(atmosConfig, componentName, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 }
 
-// ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
+// ValidateComponent validates the component config using JsonSchema or OPA schema documents.
 func ValidateComponent(
 	atmosConfig schema.AtmosConfiguration,
 	componentName string,
@@ -260,7 +260,7 @@ func validateComponentInternal(
 	return ok, nil
 }
 
-// FindValidationSection finds 'validation' section in the component config
+// FindValidationSection finds the 'validation' section in the component config.
 func FindValidationSection(componentSection map[string]any) (schema.Validation, error) {
 	validationSection := map[string]any{}
 

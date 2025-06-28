@@ -536,7 +536,7 @@ func ProcessStacks(
 			true,
 		)
 		if err != nil {
-			// If any error returned from the templates processing, log it and exit
+			// If any error returned from the template processing, log it and exit
 			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 		}
 
