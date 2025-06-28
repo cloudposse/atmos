@@ -190,7 +190,7 @@ func getInvalidCommandName(input string) string {
 }
 
 func init() {
-	// Add template function for wrapped flag usages
+	// Add the template function for wrapped flag usages
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+

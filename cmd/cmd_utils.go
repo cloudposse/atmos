@@ -593,7 +593,7 @@ func handleHelpRequest(cmd *cobra.Command, args []string) {
 	}
 }
 
-// showUsageAndExit we display the markdown usage or fallback to our custom usage
+// showUsageAndExit we display the Markdown usage or fallback to our custom usage.
 // Markdown usage is not compatible with all outputs. We should therefore have fallback option.
 func showUsageAndExit(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {

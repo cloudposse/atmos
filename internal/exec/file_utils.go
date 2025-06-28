@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 
 	log "github.com/charmbracelet/log"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -25,13 +23,6 @@ func removeTempDir(path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
 		log.Warn(err.Error())
-	}
-}
-
-func closeFile(fileName string, file io.ReadCloser) {
-	err := file.Close()
-	if err != nil {
-		atmoserr.CheckErrorPrintAndExit(fmt.Errorf("error closing the file '%s': %v", fileName, err), "", "")
 	}
 }
 
