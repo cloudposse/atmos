@@ -160,7 +160,7 @@ func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStac
 	return readAtmosConfigCli(v, configAndStacksInfo.AtmosCliConfigPath)
 }
 
-// readSystemConfig load config from system dir .
+// readSystemConfig load config from system dir.
 func readSystemConfig(v *viper.Viper) error {
 	configFilePath := ""
 	if runtime.GOOS == "windows" {
@@ -184,7 +184,7 @@ func readSystemConfig(v *viper.Viper) error {
 	return nil
 }
 
-// readHomeConfig load config from user's HOME dir .
+// readHomeConfig load config from user's HOME dir.
 func readHomeConfig(v *viper.Viper) error {
 	home, err := homedir.Dir()
 	if err != nil {
@@ -204,7 +204,7 @@ func readHomeConfig(v *viper.Viper) error {
 	return nil
 }
 
-// readWorkDirConfig load config from current working directory .
+// readWorkDirConfig load config from current working directory.
 func readWorkDirConfig(v *viper.Viper) error {
 	wd, err := os.Getwd()
 	if err != nil {
