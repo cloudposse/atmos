@@ -46,7 +46,7 @@ func CheckErrorAndPrintMarkdown(err error, title string, suggestion string) {
 		log.Error(err)
 		return
 	}
-	_, printErr := os.Stderr.WriteString(fmt.Sprint(errorMarkdown + "\n"))
+	_, printErr := os.Stderr.WriteString(errorMarkdown + "\n")
 	if printErr != nil {
 		log.Error(printErr)
 		log.Error(err)

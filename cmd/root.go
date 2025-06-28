@@ -113,17 +113,14 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		output = io.Discard // More efficient than opening os.DevNull
 	default:
 		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		if err != nil {
-			log.Fatal("Failed to open log file:", err)
-		}
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "Failed to open log file", "")
 		defer logFile.Close()
 		output = logFile
 	}
 
 	log.SetOutput(output)
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		//nolint:all // The reason to escape this is that it is expected to fail fast. The reason for ignoring all is because we also get a lint error to execute defer logFile.Close() before this but that is not required
-		log.Fatal(err)
+		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
 	}
 	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
 }
