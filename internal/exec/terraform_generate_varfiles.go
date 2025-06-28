@@ -328,11 +328,11 @@ func ExecuteTerraformGenerateVarfiles(
 						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 					}
 
-					log.Debug(fmt.Sprintf("varfile: %s", fileName))
-					log.Debug(fmt.Sprintf("terraform component: %s", terraformComponent))
-					log.Debug(fmt.Sprintf("atmos component: %s", componentName))
-					log.Debug(fmt.Sprintf("atmos stack: %s", stackName))
-					log.Debug(fmt.Sprintf("stack config file: %s", stackFileName))
+					log.Debug("varfile", fileName)
+					log.Debug("terraform component", terraformComponent)
+					log.Debug("atmos component", componentName)
+					log.Debug("atmos stack", stackName)
+					log.Debug("stack config file", stackFileName)
 				}
 			}
 		}

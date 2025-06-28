@@ -149,7 +149,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		// Download kubeconfig by running `aws eks update-kubeconfig`
 		kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", atmosConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
 		clusterName := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
-		log.Debug(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
+		log.Debug("Downloading and saving kubeconfig", "cluster", clusterName, "path", kubeconfigPath)
 
 		err = ExecuteShellCommand(
 			atmosConfig,
@@ -188,9 +188,9 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace test"
-	log.Debug(fmt.Sprintf("Global options: %v", info.GlobalOptions))
+	log.Debug("Global", "options", info.GlobalOptions)
 
-	log.Debug(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	log.Debug("Arguments and flags", "additional", info.AdditionalArgsAndFlags)
 	log.Debug("Component: " + info.ComponentFromArg)
 
 	if len(info.BaseComponent) > 0 {
@@ -205,7 +205,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	workingDir := constructHelmfileComponentWorkingDir(atmosConfig, info)
-	log.Debug(fmt.Sprintf("Working dir: %s\n\n", workingDir))
+	log.Debug("Using", "working dir", workingDir)
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}
