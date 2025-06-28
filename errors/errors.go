@@ -42,6 +42,7 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 	title = cases.Title(language.English).String(title)
 	errorMarkdown, renderErr := render.RenderError(title, err.Error(), suggestion)
 	if renderErr != nil {
+		log.Error(renderErr)
 		log.Error(err)
 		return
 	}
