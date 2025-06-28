@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -49,27 +50,29 @@ func getRunnableDescribeStacksCmd(
 		// Check Atmos configuration
 		g.checkAtmosConfig()
 		info, err := g.processCommandLineArgs("", cmd, args, nil)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
 		atmosConfig, err := g.initCliConfig(info, true)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
 		err = g.validateStacks(atmosConfig)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
+			printErrorAndExit(err, cmd)
 		}
 
-		printErrorAndExit(err)
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
+		telemetry.CaptureCmd(cmd)
 	}
 }
 
-func printErrorAndExit(err error) {
+func printErrorAndExit(err error, cmd *cobra.Command) {
 	if err != nil {
+		telemetry.CaptureCmd(cmd, err)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 }
@@ -137,7 +140,7 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types. Supported component types: terraform, helmfile")
 
-	describeStacksCmd.PersistentFlags().StringSlice("sections", nil, "Output only the specified component sections. Available component sections: `backend`, `backend_type`, `deps`, `env`, `inheritance`, `metadata`, `remote_state_backend`, `remote_state_backend_type`, `settings`, `vars`")
+	describeStacksCmd.PersistentFlags().String("sections", "", "Output only the specified component sections. Available component sections: `backend`, `backend_type`, `deps`, `env`, `inheritance`, `metadata`, `remote_state_backend`, `remote_state_backend_type`, `settings`, `vars`")
 
 	describeStacksCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 
