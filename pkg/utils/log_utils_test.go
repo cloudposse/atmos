@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Helper function to capture stdout
+// Helper function to capture stdout.
 func captureOutput(f func()) string {
 	old := os.Stdout
 	r, w, _ := os.Pipe()
@@ -27,7 +27,7 @@ func captureOutput(f func()) string {
 	return buf.String()
 }
 
-// Helper function to capture stderr
+// Helper function to capture stderr.
 func captureStderr(f func()) string {
 	old := os.Stderr
 	r, w, _ := os.Pipe()
