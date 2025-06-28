@@ -24,7 +24,7 @@ func setupTestFiles(t *testing.T) (string, func()) {
 
 func createTestConfig(t *testing.T, dir string, content string) string {
 	configPath := filepath.Join(dir, "atmos.yaml")
-	err := os.WriteFile(configPath, []byte(content), 0644)
+	err := os.WriteFile(configPath, []byte(content), 0o644)
 	assert.NoError(t, err)
 	return configPath
 }
