@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"runtime"
 
-	log "github.com/charmbracelet/log"
-
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 

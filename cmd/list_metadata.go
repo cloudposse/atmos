@@ -3,8 +3,6 @@ package cmd
 import (
 	"errors"
 
-	listutils "github.com/cloudposse/atmos/pkg/list/utils"
-
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
@@ -14,6 +12,7 @@ import (
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
+	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )

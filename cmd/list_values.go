@@ -207,9 +207,9 @@ func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, *fl.ProcessingFla
 // logNoValuesFoundMessage logs an appropriate message when no values or vars are found.
 func logNoValuesFoundMessage(componentName string, query string) {
 	if query == ".vars" {
-		log.Info("No vars found for component", "component", componentName)
+		log.Info("No vars found", "component", componentName)
 	} else {
-		log.Info("No values found for component", "component", componentName)
+		log.Info("No values found", "component", componentName)
 	}
 }
 

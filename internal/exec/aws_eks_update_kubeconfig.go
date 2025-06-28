@@ -1,13 +1,12 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	log "github.com/charmbracelet/log"
-
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"

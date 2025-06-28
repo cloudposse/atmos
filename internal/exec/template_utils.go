@@ -11,9 +11,8 @@ import (
 	"text/template/parse"
 	"time"
 
-	log "github.com/charmbracelet/log"
-
 	"github.com/Masterminds/sprig/v3"
+	log "github.com/charmbracelet/log"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/mitchellh/mapstructure"
