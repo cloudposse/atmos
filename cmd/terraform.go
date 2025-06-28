@@ -11,6 +11,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	h "github.com/cloudposse/atmos/pkg/hooks"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -94,8 +95,10 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 			u.PrintErrorMarkdown("", err, "")
 			return err
 		}
+		telemetry.CaptureCmd(actualCmd, err)
 		// For other errors, continue with existing behavior
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
+	telemetry.CaptureCmd(actualCmd)
 	return nil
 }
