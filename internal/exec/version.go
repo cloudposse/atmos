@@ -7,6 +7,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/cloudposse/atmos/pkg/version"
@@ -36,6 +37,8 @@ func (v versionExec) Execute(checkFlag bool) {
 		//nolint:revive
 		log.Fatal(err)
 	}
+
+	telemetry.PrintTelemetryDisclosure()
 
 	atmosIcon := "\U0001F47D"
 

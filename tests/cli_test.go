@@ -19,6 +19,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -27,6 +29,7 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
@@ -589,6 +592,16 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Include the system PATH in the test environment
 	tc.Env["PATH"] = os.Getenv("PATH")
 
+	// Remove the cache file before running the test.
+	// This is to ensure that the test is not affected by the cache file.
+	err = removeCacheFile()
+	assert.NoError(t, err, "failed to remove cache file")
+
+	// Preserve the CI environment variables.
+	// This is to ensure that the test is not affected by the CI environment variables.
+	currentEnvVars := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(currentEnvVars)
+
 	// Prepare the command using the context
 	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
@@ -702,6 +715,22 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if !verifySnapshot(t, tc, stdout.String(), stderr.String(), *regenerateSnapshots) {
 		t.Errorf("Description: %s", tc.Description)
 	}
+}
+
+func removeCacheFile() error {
+	cacheFilePath, err := config.GetCacheFilePath()
+	if err != nil {
+		return nil
+	}
+
+	if _, err := os.Stat(cacheFilePath); os.IsNotExist(err) {
+		return nil
+	}
+	err = os.Remove(cacheFilePath)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func TestCLICommands(t *testing.T) {

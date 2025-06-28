@@ -20,6 +20,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -250,6 +251,9 @@ func initCobraConfig() {
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
+
+			telemetry.PrintTelemetryDisclosure()
+
 			if err := oldUsageFunc(command); err != nil {
 				u.LogErrorAndExit(err)
 			}
@@ -258,6 +262,9 @@ func initCobraConfig() {
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
+
+			telemetry.PrintTelemetryDisclosure()
+
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
 				u.LogErrorAndExit(err)
