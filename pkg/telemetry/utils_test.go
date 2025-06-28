@@ -458,10 +458,11 @@ func TestTelemetryDisclosureMessage(t *testing.T) {
 	message1 := disclosureMessage()
 	assert.NotEmpty(t, message1)
 	assert.Equal(t, message1, `
-**Attention:** Atmos now collects completely anonymous telemetry regarding usage.
+Notice: Atmos now collects completely anonymous telemetry regarding usage.
 This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
-https://atmos.tools/cli/telemetry
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
+by visiting the following URL: https://atmos.tools/cli/telemetry
+
 `)
 
 	// Second call should return empty string since disclosure has been marked as shown.

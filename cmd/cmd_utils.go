@@ -529,6 +529,8 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		log.Fatal(err)
 	}
 
+	telemetry.PrintTelemetryDisclosure()
+
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
 
@@ -547,8 +549,6 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
 		fmt.Println(",\nbut the directory does not exist.")
 	}
-
-	telemetry.PrintTelemetryDisclosure()
 
 	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
 
