@@ -33,7 +33,7 @@ func (v versionExec) Execute(checkFlag bool) {
 	// Print a styled Atmos logo to the terminal
 	v.printMessage("")
 	err := v.printStyledText("ATMOS")
-	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 	atmosIcon := "\U0001F47D"
 

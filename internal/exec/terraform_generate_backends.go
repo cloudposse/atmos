@@ -262,7 +262,7 @@ func ExecuteTerraformGenerateBackends(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+					atmoserr.CheckErrorPrintAndExit(err, "", "")
 				}
 
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)

@@ -38,7 +38,7 @@ var docsCmd = &cobra.Command{
 			}
 
 			atmosConfig, err := cfg.InitCliConfig(info, true)
-			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 			// Detect terminal width if not specified in `atmos.yaml`
 			// The default screen width is 120 characters, but uses maxWidth if set and greater than zero
@@ -66,24 +66,24 @@ var docsCmd = &cobra.Command{
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
-			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintAndExit(err, "", "")
 			if !componentPathExists {
 				er := fmt.Errorf("component `%s` not found in path: `%s`", info.Component, componentPath)
-				atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
+				atmoserr.CheckErrorPrintAndExit(er, "", "")
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); err != nil {
 				if os.IsNotExist(err) {
-					atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("No README found for component: %s", info.Component), "", "")
+					atmoserr.CheckErrorPrintAndExit(fmt.Errorf("No README found for component: %s", info.Component), "", "")
 				} else {
-					atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("Component %s not found", info.Component), "", "")
+					atmoserr.CheckErrorPrintAndExit(fmt.Errorf("Component %s not found", info.Component), "", "")
 				}
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			r, err := glamour.NewTermRenderer(
@@ -93,12 +93,12 @@ var docsCmd = &cobra.Command{
 				glamour.WithWordWrap(screenWidth),
 			)
 			if err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("failed to initialize markdown. Error: %w", err), "", "")
+				atmoserr.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown. Error: %w", err), "", "")
 			}
 
 			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			pager := atmosConfig.Settings.Terminal.IsPagerEnabled()
@@ -108,7 +108,7 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("failed to display documentation: %w", err), "", "")
+				atmoserr.CheckErrorPrintAndExit(fmt.Errorf("failed to display documentation: %w", err), "", "")
 			}
 
 			return
@@ -132,7 +132,7 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
 

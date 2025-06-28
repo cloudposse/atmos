@@ -25,7 +25,7 @@ var listComponentsCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 		output, err := listComponents(cmd)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 	},
 }

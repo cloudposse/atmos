@@ -27,21 +27,21 @@ var describeComponentCmd = &cobra.Command{
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 		format, err := flags.GetString("format")
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 		file, err := flags.GetString("file")
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 		processTemplates, err := flags.GetBool("process-templates")
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 		query, err := flags.GetString("query")
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 		skip, err := flags.GetStringSlice("skip")
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 		pager, err := flags.GetString("pager")
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 		component := args[0]
 
@@ -56,7 +56,7 @@ var describeComponentCmd = &cobra.Command{
 			Format:               format,
 			File:                 file,
 		})
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	},
 	ValidArgsFunction: ComponentsArgCompletion,
@@ -73,7 +73,7 @@ func init() {
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	describeCmd.AddCommand(describeComponentCmd)

@@ -19,7 +19,7 @@ var terraformGenerateBackendsCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGenerateBackendsCmd(cmd, args)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	},
 }
 

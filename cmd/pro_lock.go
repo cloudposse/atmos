@@ -20,7 +20,7 @@ var proLockCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteProLockCommand(cmd, args)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	},
 }
 

@@ -71,7 +71,7 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 			}
 			err := storeCmd.RunE(&hook, event, cmd, args)
 			if err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
 	}

@@ -358,7 +358,7 @@ func GetTerraformOutput(
 	if err != nil {
 		u.PrintfMessageToTUI("\r✗ %s\n", message)
 		er := fmt.Errorf("failed to describe the component %s in the stack %s. Error: %w", component, stack, err)
-		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
+		atmoserr.CheckErrorPrintAndExit(er, "", "")
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
@@ -367,7 +367,7 @@ func GetTerraformOutput(
 	if err != nil {
 		u.PrintfMessageToTUI("\r✗ %s\n", message)
 		er := fmt.Errorf("failed to get static remote state backend outputs. Error: %w", err)
-		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
+		atmoserr.CheckErrorPrintAndExit(er, "", "")
 	}
 
 	var result any
@@ -381,7 +381,7 @@ func GetTerraformOutput(
 		if err != nil {
 			u.PrintfMessageToTUI("\r✗ %s\n", message)
 			er := fmt.Errorf("failed to execute terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
-			atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
+			atmoserr.CheckErrorPrintAndExit(er, "", "")
 		}
 
 		// Cache the result
@@ -408,7 +408,7 @@ func getTerraformOutputVariable(
 	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
 	if err != nil {
 		er := fmt.Errorf("failed to evaluate the terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
-		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
+		atmoserr.CheckErrorPrintAndExit(er, "", "")
 	}
 
 	return res
@@ -429,7 +429,7 @@ func getStaticRemoteStateOutput(
 	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
 	if err != nil {
 		er := fmt.Errorf("failed to evaluate the static remote state backend for the component %s in the stack %s. Error: %w", component, stack, err)
-		atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
+		atmoserr.CheckErrorPrintAndExit(er, "", "")
 	}
 
 	return res

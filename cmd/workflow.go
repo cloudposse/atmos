@@ -26,7 +26,7 @@ var workflowCmd = &cobra.Command{
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 			return
 		}
@@ -48,7 +48,7 @@ var workflowCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			// For unknown errors, print and exit
-			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintAndExit(err, "", "")
 		}
 	},
 }

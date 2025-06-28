@@ -20,7 +20,7 @@ var describeDependentsCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteDescribeDependentsCmd(cmd, args)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	},
 }
 
@@ -33,7 +33,7 @@ func init() {
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	describeCmd.AddCommand(describeDependentsCmd)

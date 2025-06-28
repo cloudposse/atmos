@@ -24,12 +24,12 @@ func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
-		CheckErrorPrintMarkdownAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
+		CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
 	}
 }
 
-// CheckErrorAndPrintMarkdown prints an error message in Markdown format.
-func CheckErrorAndPrintMarkdown(err error, title string, suggestion string) {
+// CheckErrorAndPrint prints an error message.
+func CheckErrorAndPrint(err error, title string, suggestion string) {
 	if err == nil {
 		return
 	}
@@ -53,13 +53,13 @@ func CheckErrorAndPrintMarkdown(err error, title string, suggestion string) {
 	}
 }
 
-// CheckErrorPrintMarkdownAndExit prints an error message in Markdown format and exits with the exit code 1.
-func CheckErrorPrintMarkdownAndExit(err error, title string, suggestion string) {
+// CheckErrorPrintAndExit prints an error message and exits with exit code 1.
+func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 	if err == nil {
 		return
 	}
 
-	CheckErrorAndPrintMarkdown(err, title, suggestion)
+	CheckErrorAndPrint(err, title, suggestion)
 
 	// Find the executed command's exit code from the error
 	var exitError *exec.ExitError

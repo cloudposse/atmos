@@ -23,28 +23,28 @@ var listWorkflowsCmd = &cobra.Command{
 
 		fileFlag, err := flags.GetString("file")
 		if err != nil {
-			atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("Error getting the `file` flag: %v", err), "Incorrect Usage", "")
+			atmoserr.CheckErrorPrintAndExit(fmt.Errorf("Error getting the `file` flag: %v", err), "Incorrect Usage", "")
 			return
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
-			atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("Error getting the `format` flag: %v", err), "Incorrect Usage", "")
+			atmoserr.CheckErrorPrintAndExit(fmt.Errorf("Error getting the `format` flag: %v", err), "Incorrect Usage", "")
 			return
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
-			atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("Error getting the `delimiter` flag: %v", err), "Incorrect Usage", "")
+			atmoserr.CheckErrorPrintAndExit(fmt.Errorf("Error getting the `delimiter` flag: %v", err), "Incorrect Usage", "")
 			return
 		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "Error initializing CLI config", "")
+		atmoserr.CheckErrorPrintAndExit(err, "Error initializing CLI config", "")
 
 		output, err := l.FilterAndListWorkflows(fileFlag, atmosConfig.Workflows.List, formatFlag, delimiterFlag)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 		u.PrintMessageInColor(output, theme.Colors.Success)
 	},

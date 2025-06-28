@@ -45,7 +45,7 @@ var examples = map[string]ExampleContent{
 
 func init() {
 	files, err := fs.ReadDir(usageFiles, "markdown")
-	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 	for _, file := range files {
 		if !file.IsDir() { // Skip directories

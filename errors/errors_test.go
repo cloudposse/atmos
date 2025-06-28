@@ -36,7 +36,7 @@ func Test_checkErrorAndExit(t *testing.T) {
 					}
 				}()
 			}
-			CheckErrorPrintMarkdownAndExit(tt.err, "", "")
+			CheckErrorPrintAndExit(tt.err, "", "")
 		})
 	}
 }
@@ -52,7 +52,7 @@ func TestPrintErrorMarkdown(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	CheckErrorAndPrintMarkdown(err, title, suggestion)
+	CheckErrorAndPrint(err, title, suggestion)
 
 	// Restore stderr
 	err = w.Close()
@@ -72,7 +72,7 @@ func TestPrintErrorMarkdown(t *testing.T) {
 func TestPrintErrorMarkdownAndExit(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
 		er := errors.New("critical failure")
-		CheckErrorPrintMarkdownAndExit(er, "Fatal Error", "Check logs.")
+		CheckErrorPrintAndExit(er, "Fatal Error", "Check logs.")
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -91,7 +91,7 @@ func TestPrintErrorMarkdownAndExit(t *testing.T) {
 func TestPrintInvalidUsageErrorAndExit(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
 		er := errors.New("invalid command")
-		CheckErrorPrintMarkdownAndExit(er, "", "Use --help for usage information.")
+		CheckErrorPrintAndExit(er, "", "Use --help for usage information.")
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])

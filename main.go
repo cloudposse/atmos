@@ -21,6 +21,6 @@ func main() {
 			log.Debug("Exiting with code 2 due to plan differences")
 			u.OsExit(2)
 		}
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	}
 }

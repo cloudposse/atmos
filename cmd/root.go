@@ -58,7 +58,7 @@ var RootCmd = &cobra.Command{
 					log.Warn(err.Error())
 				}
 			} else {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
 	},
@@ -69,10 +69,10 @@ var RootCmd = &cobra.Command{
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 		err = e.ExecuteAtmosCmd()
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	},
 }
 
@@ -113,14 +113,14 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		output = io.Discard // More efficient than opening os.DevNull
 	default:
 		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "Failed to open log file", "")
+		atmoserr.CheckErrorPrintAndExit(err, "Failed to open log file", "")
 		defer logFile.Close()
 		output = logFile
 	}
 
 	log.SetOutput(output)
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	}
 	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
 }
@@ -141,7 +141,7 @@ func Execute() error {
 		if isVersionCommand() {
 			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {
-			atmoserr.CheckErrorPrintMarkdownAndExit(initErr, "", "")
+			atmoserr.CheckErrorPrintAndExit(initErr, "", "")
 		}
 	}
 
@@ -153,12 +153,12 @@ func Execute() error {
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
-			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintAndExit(err, "", "")
 		}
 
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
-			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintAndExit(err, "", "")
 		}
 	}
 
@@ -205,7 +205,7 @@ func init() {
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	initCobraConfig()
@@ -244,19 +244,19 @@ func initCobraConfig() {
 		if command.Use != "atmos" || command.Flags().Changed("help") {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 			if err := oldUsageFunc(command); err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 		} else {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)

@@ -19,7 +19,7 @@ func processTagTerraformOutput(
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
-	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 	var component string
 	var stack string
@@ -29,7 +29,7 @@ func processTagTerraformOutput(
 	// while also ignoring leading and trailing whitespace.
 	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
 	parts, err := u.SplitStringByDelimiter(str, ' ')
-	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 	partsLen := len(parts)
 
@@ -47,7 +47,7 @@ func processTagTerraformOutput(
 		)
 	} else {
 		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	value := GetTerraformOutput(&atmosConfig, stack, component, output, false)

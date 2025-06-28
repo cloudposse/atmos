@@ -186,9 +186,9 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 			*v, err = flags.GetStringSlice(k)
 		default:
 			er := fmt.Errorf("unsupported type %T for flag %s", v, k)
-			atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "")
+			atmoserr.CheckErrorPrintAndExit(er, "", "")
 		}
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	}
 	// When uploading, always include dependents and settings for all affected components
 	if describe.Upload {

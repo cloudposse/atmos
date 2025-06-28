@@ -142,7 +142,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 
 	// If the command doesn't exist, create it
 	if cmd == nil {
-		atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias), "", "")
+		atmoserr.CheckErrorPrintAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias), "", "")
 	}
 
 	// If there are more parts, recurse for the next level
@@ -181,11 +181,11 @@ func processCommandAliases(
 				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 				Run: func(cmd *cobra.Command, args []string) {
 					err := cmd.ParseFlags(args)
-					atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+					atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
 					err = e.ExecuteShell(atmosConfig, commandToRun, commandToRun, currentDirPath, nil, false)
-					atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+					atmoserr.CheckErrorPrintAndExit(err, "", "")
 				},
 			}
 
@@ -225,7 +225,7 @@ func preCustomCommand(
 		} else {
 			// truly invalid, nothing to do
 			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))
-			atmoserr.CheckErrorPrintMarkdownAndExit(er, "", "https://atmos.tools/cli/configuration/commands")
+			atmoserr.CheckErrorPrintAndExit(er, "", "https://atmos.tools/cli/configuration/commands")
 		}
 	}
 
@@ -254,7 +254,7 @@ func preCustomCommand(
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
-		atmoserr.CheckErrorPrintMarkdownAndExit(errors.New(sb.String()), "", "")
+		atmoserr.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
 	}
 
 	// Merge user-supplied arguments with defaults
@@ -269,7 +269,7 @@ func preCustomCommand(
 			} else {
 				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
-				atmoserr.CheckErrorPrintMarkdownAndExit(errors.New(sb.String()), "", "")
+				atmoserr.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
 			}
 		}
 	}
@@ -332,11 +332,11 @@ func executeCustomCommand(
 		for _, fl := range commandConfig.Flags {
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 				flagsData[fl.Name] = providedFlag
 			} else if fl.Type == "bool" {
 				boolFlag, err := flags.GetBool(fl.Name)
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 				flagsData[fl.Name] = boolFlag
 			}
 		}
@@ -353,23 +353,23 @@ func executeCustomCommand(
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
 			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
-			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintAndExit(err, "", "")
 			if component == "" || component == "<no value>" {
-				atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+				atmoserr.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
 					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
-			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintAndExit(err, "", "")
 			if stack == "" || stack == "<no value>" {
-				atmoserr.CheckErrorPrintMarkdownAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+				atmoserr.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
 					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
 			// Get the config for the component in the stack
 			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
-			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintAndExit(err, "", "")
 			data["ComponentConfig"] = componentConfig
 		}
 
@@ -385,24 +385,24 @@ func executeCustomCommand(
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
 				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, nil, false)
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
-				atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+				atmoserr.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
 			err = os.Setenv(key, value)
-			atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+			atmoserr.CheckErrorPrintAndExit(err, "", "")
 		}
 
 		if len(envVarsList) > 0 && commandConfig.Verbose {
@@ -412,12 +412,12 @@ func executeCustomCommand(
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 		err = e.ExecuteShell(atmosConfig, commandToRun, commandName, currentDirPath, envVarsList, false)
-		atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+		atmoserr.CheckErrorPrintAndExit(err, "", "")
 	}
 }
 
@@ -477,7 +477,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
@@ -495,7 +495,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
-	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintAndExit(err, "", "")
 
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
@@ -635,7 +635,7 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	}
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
-	atmoserr.CheckErrorPrintMarkdownAndExit(err, "", "")
+	atmoserr.CheckErrorPrintAndExit(err, "", "")
 	return info
 }
 
@@ -700,7 +700,7 @@ func showUsageExample(cmd *cobra.Command, details string) {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
-	atmoserr.CheckErrorPrintMarkdownAndExit(errors.New(details), "Incorrect Usage", suggestion)
+	atmoserr.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
