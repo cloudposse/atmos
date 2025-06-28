@@ -3,12 +3,13 @@ package cmd
 import (
 	"testing"
 
-	"github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/golang/mock/gomock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestSetFlagInDescribeWorkflow(t *testing.T) {
@@ -75,7 +76,7 @@ func TestSetFlagInDescribeWorkflow(t *testing.T) {
 	}
 }
 
-func TestDescribeWorklows(t *testing.T) {
+func TestDescribeWorkflows(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	describeWorkflowsMock := exec.NewMockDescribeWorkflowsExec(ctrl)
 	describeWorkflowsMock.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)

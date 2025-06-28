@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -346,7 +346,7 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 		cmd.PersistentFlags().String("new", "", "Path to the new Terraform plan file (optional)")
 		err := cmd.MarkPersistentFlagRequired("orig")
 		if err != nil {
-			atmoserr.CheckErrorPrintAndExit(err, "Error marking 'orig' flag as required", "")
+			errUtils.CheckErrorPrintAndExit(err, "Error marking 'orig' flag as required", "")
 		}
 	},
 }

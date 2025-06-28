@@ -6,7 +6,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -66,7 +66,7 @@ and are compliant with expected formats, reducing configuration drift and runtim
 			if errors.Is(err, exec.ErrInvalidYAML) {
 				u.OsExit(1)
 			}
-			atmoserr.CheckErrorPrintAndExit(err, "", "")
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 	},
 }

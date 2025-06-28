@@ -117,9 +117,10 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 				}()
 			}
 
-			setCliArgsForDescribeStackCli(fs, tt.describe)
+			err := setCliArgsForDescribeStackCli(fs, tt.describe)
+			assert.NoError(t, err)
 
-			// Assert the describe struct matches the expected values
+			// Assert the struct matches the expected values
 			assert.Equal(t, tt.expected, tt.describe, "Describe struct does not match expected")
 		})
 	}

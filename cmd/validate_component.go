@@ -4,7 +4,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -21,7 +21,7 @@ var validateComponentCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		log.Info("Validated successfully", "component", component, "stack", stack)
 	},
@@ -38,7 +38,7 @@ func init() {
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)

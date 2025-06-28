@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -52,7 +52,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 		Run: func(cmd *cobra.Command, args []string) {
 			err := ExecuteTerraformGeneratePlanfileCmd(cmd, args)
-			atmoserr.CheckErrorPrintAndExit(err, "", "")
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		},
 	}
 

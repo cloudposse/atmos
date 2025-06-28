@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -26,7 +26,7 @@ func TestCheckTerraformFlags(t *testing.T) {
 				ComponentFromArg: "test-component",
 				Affected:         true,
 			},
-			expectedError: atmoserr.ErrInvalidTerraformComponentWithMultiComponentFlags,
+			expectedError: errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags,
 		},
 		{
 			name: "invalid - component with all flag",
@@ -34,7 +34,7 @@ func TestCheckTerraformFlags(t *testing.T) {
 				ComponentFromArg: "test-component",
 				All:              true,
 			},
-			expectedError: atmoserr.ErrInvalidTerraformComponentWithMultiComponentFlags,
+			expectedError: errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags,
 		},
 		{
 			name: "invalid - component with components flag",
@@ -42,7 +42,7 @@ func TestCheckTerraformFlags(t *testing.T) {
 				ComponentFromArg: "test-component",
 				Components:       []string{"comp1", "comp2"},
 			},
-			expectedError: atmoserr.ErrInvalidTerraformComponentWithMultiComponentFlags,
+			expectedError: errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags,
 		},
 		{
 			name: "invalid - affected with all flag",
@@ -50,7 +50,7 @@ func TestCheckTerraformFlags(t *testing.T) {
 				Affected: true,
 				All:      true,
 			},
-			expectedError: atmoserr.ErrInvalidTerraformFlagsWithAffectedFlag,
+			expectedError: errUtils.ErrInvalidTerraformFlagsWithAffectedFlag,
 		},
 		{
 			name: "invalid - affected with components flag",
@@ -58,7 +58,7 @@ func TestCheckTerraformFlags(t *testing.T) {
 				Affected:   true,
 				Components: []string{"comp1", "comp2"},
 			},
-			expectedError: atmoserr.ErrInvalidTerraformFlagsWithAffectedFlag,
+			expectedError: errUtils.ErrInvalidTerraformFlagsWithAffectedFlag,
 		},
 		{
 			name: "invalid - affected with query flag",
@@ -66,7 +66,7 @@ func TestCheckTerraformFlags(t *testing.T) {
 				Affected: true,
 				Query:    "test-query",
 			},
-			expectedError: atmoserr.ErrInvalidTerraformFlagsWithAffectedFlag,
+			expectedError: errUtils.ErrInvalidTerraformFlagsWithAffectedFlag,
 		},
 		{
 			name: "invalid - single and multi component flags",
@@ -74,7 +74,7 @@ func TestCheckTerraformFlags(t *testing.T) {
 				PlanFile: "plan.tfplan",
 				All:      true,
 			},
-			expectedError: atmoserr.ErrInvalidTerraformSingleComponentAndMultiComponentFlags,
+			expectedError: errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags,
 		},
 		{
 			name: "invalid - from-plan with multi component flag",
@@ -82,7 +82,7 @@ func TestCheckTerraformFlags(t *testing.T) {
 				UseTerraformPlan: true,
 				Affected:         true,
 			},
-			expectedError: atmoserr.ErrInvalidTerraformSingleComponentAndMultiComponentFlags,
+			expectedError: errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags,
 		},
 		{
 			name: "valid - only single component flag",

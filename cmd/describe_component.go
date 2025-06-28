@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -27,21 +27,21 @@ var describeComponentCmd = &cobra.Command{
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		format, err := flags.GetString("format")
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		file, err := flags.GetString("file")
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		processTemplates, err := flags.GetBool("process-templates")
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		query, err := flags.GetString("query")
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		skip, err := flags.GetStringSlice("skip")
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		pager, err := flags.GetString("pager")
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		component := args[0]
 
@@ -56,7 +56,7 @@ var describeComponentCmd = &cobra.Command{
 			Format:               format,
 			File:                 file,
 		})
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	},
 	ValidArgsFunction: ComponentsArgCompletion,
@@ -73,7 +73,7 @@ func init() {
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	describeCmd.AddCommand(describeComponentCmd)

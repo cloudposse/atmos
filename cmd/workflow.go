@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -25,7 +25,7 @@ var workflowCmd = &cobra.Command{
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				atmoserr.CheckErrorPrintAndExit(err, "", "")
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 			return
 		}
@@ -44,10 +44,10 @@ var workflowCmd = &cobra.Command{
 			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
 			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
 			if e.IsKnownWorkflowError(err) {
-				atmoserr.Exit(1)
+				errUtils.Exit(1)
 			}
 			// For unknown errors, print and exit
-			atmoserr.CheckErrorPrintAndExit(err, "", "")
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 	},
 }

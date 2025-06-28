@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -71,7 +71,7 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 			}
 			err := storeCmd.RunE(&hook, event, cmd, args)
 			if err != nil {
-				atmoserr.CheckErrorPrintAndExit(err, "", "")
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
 	}

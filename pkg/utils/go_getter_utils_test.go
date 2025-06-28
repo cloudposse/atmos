@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/go-getter"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 var originalDetectors = getter.Detectors
@@ -62,5 +62,5 @@ func TestValidateURI_ErrorPaths(t *testing.T) {
 func TestMain(m *testing.M) {
 	code := m.Run()
 	getter.Detectors = originalDetectors
-	atmoserr.Exit(code)
+	errUtils.Exit(code)
 }

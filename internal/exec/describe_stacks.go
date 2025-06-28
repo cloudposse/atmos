@@ -7,7 +7,7 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -356,7 +356,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									atmoserr.CheckErrorPrintAndExit(err, "", "")
+									errUtils.CheckErrorPrintAndExit(err, "", "")
 								}
 
 								componentSection = componentSectionConverted
@@ -575,7 +575,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									atmoserr.CheckErrorPrintAndExit(err, "", "")
+									errUtils.CheckErrorPrintAndExit(err, "", "")
 								}
 
 								componentSection = componentSectionConverted

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 //go:embed markdown/*
@@ -45,7 +45,7 @@ var examples = map[string]ExampleContent{
 
 func init() {
 	files, err := fs.ReadDir(usageFiles, "markdown")
-	atmoserr.CheckErrorPrintAndExit(err, "", "")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	for _, file := range files {
 		if !file.IsDir() { // Skip directories

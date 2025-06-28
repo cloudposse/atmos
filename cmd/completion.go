@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 var completionCmd = &cobra.Command{
@@ -31,7 +31,7 @@ func runCompletion(cmd *cobra.Command, args []string) {
 	}
 
 	if err != nil {
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
 

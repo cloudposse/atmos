@@ -10,7 +10,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -271,7 +271,7 @@ func ExecuteTerraformGenerateVarfiles(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					atmoserr.CheckErrorPrintAndExit(err, "", "")
+					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)

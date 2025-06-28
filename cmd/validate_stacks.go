@@ -4,7 +4,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -21,7 +21,7 @@ var ValidateStacksCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := exec.ExecuteValidateStacksCmd(cmd, args)
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		log.Info("All stacks validated successfully")
 	},

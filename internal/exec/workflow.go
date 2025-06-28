@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -92,7 +92,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		atmoserr.CheckErrorPrintAndExit(
+		errUtils.CheckErrorPrintAndExit(
 			ErrWorkflowFileNotFound,
 			WorkflowErrTitle,
 			fmt.Sprintf("\n## Explanation\nThe workflow manifest file `%s` does not exist.", filepath.ToSlash(workflowPath)),
@@ -115,7 +115,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if workflowManifest.Workflows == nil {
-		atmoserr.CheckErrorPrintAndExit(
+		errUtils.CheckErrorPrintAndExit(
 			ErrInvalidWorkflowManifest,
 			WorkflowErrTitle,
 			fmt.Sprintf("\n## Explanation\nThe workflow manifest `%s` must be a map with the top-level `workflows:` key.", filepath.ToSlash(workflowPath)),
@@ -132,7 +132,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		}
 		// sorting so that the output is deterministic
 		sort.Strings(validWorkflows)
-		atmoserr.CheckErrorPrintAndExit(
+		errUtils.CheckErrorPrintAndExit(
 			ErrWorkflowNoWorkflow,
 			"Workflow Error",
 			fmt.Sprintf("\n## Explanation\nNo workflow exists with the name `%s`\n### Available workflows:\n%s", workflowName, FormatList(validWorkflows)),

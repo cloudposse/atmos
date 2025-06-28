@@ -6,7 +6,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/cmd"
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -16,10 +16,10 @@ func main() {
 
 	err := cmd.Execute()
 	if err != nil {
-		if errors.Is(err, atmoserr.ErrPlanHasDiff) {
+		if errors.Is(err, errUtils.ErrPlanHasDiff) {
 			log.Debug("Exiting with code 2 due to plan differences")
 			u.OsExit(2)
 		}
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }

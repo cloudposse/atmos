@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
@@ -18,7 +18,7 @@ var render *markdown.Renderer
 func PrintfMarkdown(format string, a ...interface{}) {
 	if render == nil {
 		_, err := os.Stdout.WriteString(fmt.Sprintf(format, a...))
-		atmoserr.CheckErrorAndPrint(err, "", "")
+		errUtils.CheckErrorAndPrint(err, "", "")
 		return
 	}
 	message := fmt.Sprintf(format, a...)
@@ -26,10 +26,10 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	var renderErr error
 	md, renderErr = render.Render(message)
 	if renderErr != nil {
-		atmoserr.CheckErrorPrintAndExit(renderErr, "", "")
+		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
 	}
 	_, err := os.Stdout.WriteString(fmt.Sprint(md + "\n"))
-	atmoserr.CheckErrorAndPrint(err, "", "")
+	errUtils.CheckErrorAndPrint(err, "", "")
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.
@@ -37,6 +37,6 @@ func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
-		atmoserr.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
 	}
 }

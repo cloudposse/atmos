@@ -10,7 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -154,7 +154,7 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		fmt.Fprintln(os.Stdout, diff)
 
 		// Print the error message
-		atmoserr.CheckErrorAndPrint(atmoserr.ErrPlanHasDiff, "", "")
+		errUtils.CheckErrorAndPrint(errUtils.ErrPlanHasDiff, "", "")
 
 		// Exit with code 2 to indicate that the plans are different
 		u.OsExit(2)

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -69,7 +69,7 @@ func processCustomTags(
 		return processTagTemplate(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncExec) && !skipFunc(skip, u.AtmosYamlFuncExec):
 		res, err := u.ProcessTagExec(input)
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return res
 	case strings.HasPrefix(input, u.AtmosYamlFuncStore) && !skipFunc(skip, u.AtmosYamlFuncStore):
 		return processTagStore(atmosConfig, input, currentStack)
@@ -77,7 +77,7 @@ func processCustomTags(
 		return processTagTerraformOutput(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
 		res, err := u.ProcessTagEnv(input)
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return res
 	default:
 		// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing

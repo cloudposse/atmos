@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -20,7 +20,7 @@ var describeDependentsCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		err := e.ExecuteDescribeDependentsCmd(cmd, args)
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	},
 }
 
@@ -33,7 +33,7 @@ func init() {
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	describeCmd.AddCommand(describeDependentsCmd)

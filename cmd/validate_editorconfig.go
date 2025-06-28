@@ -13,7 +13,7 @@ import (
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/validation"
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -68,7 +68,7 @@ func initializeConfig(cmd *cobra.Command) {
 	if initEditorConfig {
 		err := currentConfig.Save(version.Version)
 		if err != nil {
-			atmoserr.CheckErrorPrintAndExit(err, "", "")
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 	}
 
@@ -100,13 +100,13 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("format") && atmosConfig.Validate.EditorConfig.Format != "" {
 		format := outputformat.OutputFormat(atmosConfig.Validate.EditorConfig.Format)
 		if ok := format.IsValid(); !ok {
-			atmoserr.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
 		}
 		cliConfig.Format = format
 	} else if cmd.Flags().Changed("format") {
 		format := outputformat.OutputFormat(format)
 		if ok := format.IsValid(); !ok {
-			atmoserr.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
 		}
 		cliConfig.Format = format
 	}
@@ -149,11 +149,11 @@ func runMainLogic() {
 	log.Debug("Excluding", "regex", config.GetExcludesAsRegularExpression())
 
 	if err := checkVersion(config); err != nil {
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	filePaths, err := files.GetFiles(config)
-	atmoserr.CheckErrorPrintAndExit(err, "", "")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	if config.DryRun {
 		for _, file := range filePaths {
@@ -167,7 +167,7 @@ func runMainLogic() {
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
-		atmoserr.Exit(1)
+		errUtils.Exit(1)
 	}
 	u.PrintMessage("No errors found")
 }

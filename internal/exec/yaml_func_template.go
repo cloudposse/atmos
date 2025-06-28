@@ -5,7 +5,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -19,7 +19,7 @@ func processTagTemplate(
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTemplate)
 	if err != nil {
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	var decoded any

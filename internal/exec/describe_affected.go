@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/logger"
@@ -186,9 +186,9 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 			*v, err = flags.GetStringSlice(k)
 		default:
 			er := fmt.Errorf("unsupported type %T for flag %s", v, k)
-			atmoserr.CheckErrorPrintAndExit(er, "", "")
+			errUtils.CheckErrorPrintAndExit(er, "", "")
 		}
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	// When uploading, always include dependents and settings for all affected components
 	if describe.Upload {

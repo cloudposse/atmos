@@ -7,7 +7,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
-	atmoserr "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
@@ -41,26 +41,26 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	if info.NeedHelp {
 		err := actualCmd.Usage()
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
 
 	flags := cmd.Flags()
 
 	processTemplates, err := flags.GetBool("process-templates")
-	atmoserr.CheckErrorPrintAndExit(err, "", "")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	processYamlFunctions, err := flags.GetBool("process-functions")
-	atmoserr.CheckErrorPrintAndExit(err, "", "")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	skip, err := flags.GetStringSlice("skip")
-	atmoserr.CheckErrorPrintAndExit(err, "", "")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	components, err := flags.GetStringSlice("components")
-	atmoserr.CheckErrorPrintAndExit(err, "", "")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	dryRun, err := flags.GetBool("dry-run")
-	atmoserr.CheckErrorPrintAndExit(err, "", "")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
@@ -70,7 +70,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
-	atmoserr.CheckErrorPrintAndExit(err, "", "")
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`
 	if info.Affected {
@@ -93,7 +93,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		a.OutputFile = ""
 
 		err = e.ExecuteTerraformAffected(&a, &info)
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
 
@@ -104,7 +104,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// `--stack` (and the `component` argument is not passed)
 	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "") {
 		err = e.ExecuteTerraformQuery(&info)
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
 
@@ -113,13 +113,13 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
 	// So if we get here, it means there were no differences or there was an error
 	if err != nil {
-		if errors.Is(err, atmoserr.ErrPlanHasDiff) {
+		if errors.Is(err, errUtils.ErrPlanHasDiff) {
 			// Print the error message but return the error to be handled by main.go
-			atmoserr.CheckErrorAndPrint(err, "", "")
+			errUtils.CheckErrorAndPrint(err, "", "")
 			return err
 		}
 		// For other errors, continue with existing behavior
-		atmoserr.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	return nil
 }
@@ -129,18 +129,18 @@ func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 	// Check Multi-Component flags
 	// 1. Specifying the `component` argument is not allowed with the Multi-Component flags
 	if info.ComponentFromArg != "" && (info.All || info.Affected || len(info.Components) > 0 || info.Query != "") {
-		return fmt.Errorf("component `%s`: %w", info.ComponentFromArg, atmoserr.ErrInvalidTerraformComponentWithMultiComponentFlags)
+		return fmt.Errorf("component `%s`: %w", info.ComponentFromArg, errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags)
 	}
 	// 2. `--affected` is not allowed with the other Multi-Component flags
 	if info.Affected && (info.All || len(info.Components) > 0 || info.Query != "") {
-		return atmoserr.ErrInvalidTerraformFlagsWithAffectedFlag
+		return errUtils.ErrInvalidTerraformFlagsWithAffectedFlag
 	}
 
 	// Single-Component and Multi-Component flags are not allowed together
 	singleComponentFlagPassed := info.PlanFile != "" || info.UseTerraformPlan
 	multiComponentFlagPassed := info.Affected || info.All || len(info.Components) > 0 || info.Query != ""
 	if singleComponentFlagPassed && multiComponentFlagPassed {
-		return atmoserr.ErrInvalidTerraformSingleComponentAndMultiComponentFlags
+		return errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags
 	}
 
 	return nil
