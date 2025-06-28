@@ -11,4 +11,4 @@ settings:
   telemetry:
     enabled: true
     endpoint: "https://us.i.posthog.com"
-    token: "phc_5Z678901234567890123456789012345"
+    token: "phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS"
