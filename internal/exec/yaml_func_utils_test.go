@@ -122,7 +122,6 @@ func TestGetStringAfterTag_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := getStringAfterTag(tt.input, tt.tag)
-
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
