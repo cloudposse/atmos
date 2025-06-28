@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
-func Test_checkErrorAndExit(t *testing.T) {
+func Test_CheckErrorPrintAndExit(t *testing.T) {
 	tests := []struct {
 		name    string
 		err     error
@@ -41,7 +41,7 @@ func Test_checkErrorAndExit(t *testing.T) {
 	}
 }
 
-func TestPrintErrorMarkdown(t *testing.T) {
+func TestCheckErrorAndPrint(t *testing.T) {
 	render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 	title := "Test Error"
 	err := errors.New("this is a test error")

@@ -10,15 +10,8 @@ import (
 	atmoserr "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
-)
-
-var (
-	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
-	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the `component` argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
-	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
 )
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
@@ -120,7 +113,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
 	// So if we get here, it means there were no differences or there was an error
 	if err != nil {
-		if errors.Is(err, terrerrors.ErrPlanHasDiff) {
+		if errors.Is(err, atmoserr.ErrPlanHasDiff) {
 			// Print the error message but return the error to be handled by main.go
 			atmoserr.CheckErrorAndPrint(err, "", "")
 			return err
@@ -136,18 +129,18 @@ func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 	// Check Multi-Component flags
 	// 1. Specifying the `component` argument is not allowed with the Multi-Component flags
 	if info.ComponentFromArg != "" && (info.All || info.Affected || len(info.Components) > 0 || info.Query != "") {
-		return fmt.Errorf("component `%s`: %w", info.ComponentFromArg, ErrInvalidTerraformComponentWithMultiComponentFlags)
+		return fmt.Errorf("component `%s`: %w", info.ComponentFromArg, atmoserr.ErrInvalidTerraformComponentWithMultiComponentFlags)
 	}
 	// 2. `--affected` is not allowed with the other Multi-Component flags
 	if info.Affected && (info.All || len(info.Components) > 0 || info.Query != "") {
-		return ErrInvalidTerraformFlagsWithAffectedFlag
+		return atmoserr.ErrInvalidTerraformFlagsWithAffectedFlag
 	}
 
 	// Single-Component and Multi-Component flags are not allowed together
 	singleComponentFlagPassed := info.PlanFile != "" || info.UseTerraformPlan
 	multiComponentFlagPassed := info.Affected || info.All || len(info.Components) > 0 || info.Query != ""
 	if singleComponentFlagPassed && multiComponentFlagPassed {
-		return ErrInvalidTerraformSingleComponentAndMultiComponentFlags
+		return atmoserr.ErrInvalidTerraformSingleComponentAndMultiComponentFlags
 	}
 
 	return nil

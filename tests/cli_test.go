@@ -29,6 +29,8 @@ import (
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
+
+	atmoserr "github.com/cloudposse/atmos/errors"
 )
 
 // Command-line flag for regenerating snapshots.
@@ -495,7 +497,7 @@ func TestMain(m *testing.M) {
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
 	flag.Parse() // Parse command-line flags
-	os.Exit(m.Run())
+	atmoserr.Exit(m.Run())
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {

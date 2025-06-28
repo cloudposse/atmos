@@ -2,71 +2,40 @@ package errors
 
 import (
 	"errors"
-	"os"
-	"os/exec"
-
-	log "github.com/charmbracelet/log"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
-// render is the global Markdown renderer instance initialized via InitializeMarkdown.
-var render *markdown.Renderer
+const ErrWrappingFormat = "%w: %w"
 
-// InitializeMarkdown initializes a new Markdown renderer.
-func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
-	var err error
-	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
-	if err != nil {
-		log.Error("failed to initialize Markdown renderer", "error", err)
-	}
-}
+var (
+	ErrDownloadPackage                       = errors.New("failed to download package")
+	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
+	ErrCopyPackage                           = errors.New("failed to copy package")
+	ErrCreateTempDir                         = errors.New("failed to create temp directory")
+	ErrUnknownPackageType                    = errors.New("unknown package type")
+	ErrLocalMixinURICannotBeEmpty            = errors.New("local mixin URI cannot be empty")
+	ErrLocalMixinInstallationNotImplemented  = errors.New("local mixin installation not implemented")
+	ErrFailedToInitializeTUIModel            = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
+	ErrSetTempDirPermissions                 = errors.New("failed to set temp directory permissions")
+	ErrCopyPackageToTarget                   = errors.New("failed to copy package to target")
+	ErrNoValidInstallerPackage               = errors.New("no valid installer package provided")
+	ErrFailedToInitializeTUIModelWithDetails = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
+	ErrValidPackage                          = errors.New("no valid installer package provided for")
+	ErrTUIModel                              = errors.New("failed to initialize TUI model")
+	ErrNoFilesFound                          = errors.New("no files found in directory")
+	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
+	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
+	ErrEmptyFilePath                         = errors.New("file path is empty")
+	ErrPathResolution                        = errors.New("failed to resolve absolute path")
+	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
+	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
+	ErrMissingDocType                        = errors.New("doc-type argument missing")
+	ErrUnsupportedInputType                  = errors.New("unsupported input type")
+	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 
-// CheckErrorAndPrint prints an error message.
-func CheckErrorAndPrint(err error, title string, suggestion string) {
-	if err == nil {
-		return
-	}
-	if render == nil {
-		log.Error(err)
-		return
-	}
-	if title == "" {
-		title = "Error"
-	}
-	title = cases.Title(language.English).String(title)
-	errorMarkdown, renderErr := render.RenderError(title, err.Error(), suggestion)
-	if renderErr != nil {
-		log.Error(renderErr)
-		log.Error(err)
-		return
-	}
-	_, printErr := os.Stderr.WriteString(errorMarkdown + "\n")
-	if printErr != nil {
-		log.Error(printErr)
-		log.Error(err)
-	}
-}
+	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
+	ErrPlanHasDiff = errors.New("plan files have differences")
 
-// CheckErrorPrintAndExit prints an error message and exits with exit code 1.
-func CheckErrorPrintAndExit(err error, title string, suggestion string) {
-	if err == nil {
-		return
-	}
-
-	CheckErrorAndPrint(err, title, suggestion)
-
-	// Find the executed command's exit code from the error
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		os.Exit(exitError.ExitCode())
-	}
-
-	// TODO: Refactor so that we only call `os.Exit` in `main()` or `init()` functions.
-	// Exiting here makes it difficult to test.
-	// revive:disable-next-line:deep-exit
-	os.Exit(1)
-}
+	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
+	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the `component` argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
+	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
+)

@@ -18,6 +18,7 @@ import (
 	"github.com/jfrog/jfrog-client-go/utils/log"
 	cp "github.com/otiai10/copy"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -433,7 +434,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 			}
 		}
 		return installedPkgMsg{
-			err:  fmt.Errorf("%w %s for package %s", ErrUnknownPackageType, p.pkgType.String(), p.name),
+			err:  fmt.Errorf("%w %s for package %s", atmoserr.ErrUnknownPackageType, p.pkgType.String(), p.name),
 			name: p.name,
 		}
 	}
@@ -470,7 +471,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 			return err
 		}
 	default:
-		return fmt.Errorf("%w %s for package %s", ErrUnknownPackageType, p.pkgType.String(), p.name)
+		return fmt.Errorf("%w %s for package %s", atmoserr.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
 	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
 		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
@@ -530,7 +531,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 		return ErrMixinNotImplemented
 
 	default:
-		return fmt.Errorf("%w %s for package %s", ErrUnknownPackageType, p.pkgType.String(), p.name)
+		return fmt.Errorf("%w %s for package %s", atmoserr.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
 
 	// Copy from the temp folder to the destination folder

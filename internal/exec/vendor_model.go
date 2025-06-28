@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -109,7 +110,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	// Initialize model based on package type
 	model, err := newModelVendor(packages, dryRun, atmosConfig)
 	if err != nil {
-		return fmt.Errorf("%w: %v (verify terminal capabilities and permissions)", ErrTUIModel, err)
+		return fmt.Errorf("%w: %v (verify terminal capabilities and permissions)", atmoserr.ErrTUIModel, err)
 	}
 
 	var opts []tea.ProgramOption
@@ -384,7 +385,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 			return fmt.Errorf("failed to copy package: %w", err)
 		}
 	default:
-		return fmt.Errorf("%w %s for package %s", ErrUnknownPackageType, p.pkgType.String(), p.name)
+		return fmt.Errorf("%w %s for package %s", atmoserr.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
 	return nil
 }
@@ -493,7 +494,7 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosC
 
 	// No valid package provided
 	return func() tea.Msg {
-		err := fmt.Errorf("%w: %s", ErrValidPackage, installer.name)
+		err := fmt.Errorf("%w: %s", atmoserr.ErrValidPackage, installer.name)
 		return installedPkgMsg{
 			err:  err,
 			name: installer.name,

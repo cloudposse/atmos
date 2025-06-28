@@ -11,6 +11,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -391,7 +392,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 						return err
 					}
 				default:
-					return ErrMissingStackNameTemplateAndPattern
+					return atmoserr.ErrMissingStackNameTemplateAndPattern
 				}
 
 				// Check if the 'stacks' filter is provided

@@ -6,6 +6,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	atmoserr "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -34,7 +35,7 @@ func storeFunc(
 	store := atmosConfig.Stores[storeName]
 
 	if store == nil {
-		return nil, fmt.Errorf("%w: %s\nstore '%s' not found", ErrInvalidTemplateFunc, functionName, storeName)
+		return nil, fmt.Errorf("%w: %s\nstore '%s' not found", atmoserr.ErrInvalidTemplateFunc, functionName, storeName)
 	}
 
 	// Retrieve the value from the store

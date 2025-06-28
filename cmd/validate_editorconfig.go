@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	log "github.com/charmbracelet/log"
@@ -168,7 +167,7 @@ func runMainLogic() {
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
-		os.Exit(1)
+		atmoserr.Exit(1)
 	}
 	u.PrintMessage("No errors found")
 }

@@ -2,8 +2,6 @@ package cmd
 
 import (
 	_ "embed"
-	"os"
-
 	"github.com/spf13/cobra"
 
 	atmoserr "github.com/cloudposse/atmos/errors"
@@ -45,7 +43,7 @@ var workflowCmd = &cobra.Command{
 			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
 			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
 			if e.IsKnownWorkflowError(err) {
-				os.Exit(1)
+				atmoserr.Exit(1)
 			}
 			// For unknown errors, print and exit
 			atmoserr.CheckErrorPrintAndExit(err, "", "")
