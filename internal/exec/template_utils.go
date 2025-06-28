@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	log "github.com/charmbracelet/log"
 	"net/url"
 	"os"
 	"text/template"
 	"text/template/parse"
 	"time"
+
+	log "github.com/charmbracelet/log"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/hairyhenderson/gomplate/v3"

@@ -2,12 +2,13 @@ package config
 
 import (
 	"fmt"
-	log "github.com/charmbracelet/log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	log "github.com/charmbracelet/log"
 
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"

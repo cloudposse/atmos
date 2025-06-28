@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	log "github.com/charmbracelet/log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	log "github.com/charmbracelet/log"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"

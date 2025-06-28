@@ -1,9 +1,10 @@
 package utils
 
 import (
-	log "github.com/charmbracelet/log"
 	"os"
 	"strings"
+
+	log "github.com/charmbracelet/log"
 
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"

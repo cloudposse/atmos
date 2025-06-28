@@ -13,10 +13,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
-var (
-	// render is the global Markdown renderer instance initialized via InitializeMarkdown.
-	render *markdown.Renderer
-)
+// render is the global Markdown renderer instance initialized via InitializeMarkdown.
+var render *markdown.Renderer
 
 // InitializeMarkdown initializes a new Markdown renderer.
 func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {

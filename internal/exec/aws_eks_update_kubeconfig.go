@@ -2,9 +2,10 @@ package exec
 
 import (
 	"fmt"
-	log "github.com/charmbracelet/log"
 	"path/filepath"
 	"strings"
+
+	log "github.com/charmbracelet/log"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
