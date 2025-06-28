@@ -192,6 +192,7 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 		isTTYSupportForStdout: func() bool {
 			return true
 		},
+		enablePager: true,
 	}
 
 	err := pc.Run(title, content)
