@@ -205,3 +205,65 @@ tenant `net` (instead of `plat`):
 - Be mindful of disaster recovery (DR) implications when using it across regions.
 - Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not
   yet be available and the `!store` function call will fail unless you provide a default value with `| default`.
+
+## !store.getkey YAML Function
+
+<Intro>
+The `!store.getkey` YAML function allows you to retrieve an arbitrary key from any supported store, using the exact key name or path as it exists in the store. Unlike the `!store` function, `!store.getkey` does not expect the key to follow the Atmos stack/component/key naming pattern. This is useful for retrieving values that were stored outside of Atmos or do not conform to the standard naming convention.
+</Intro>
+
+### Usage
+
+The `!store.getkey` function can be called with two parameters, and optionally a default value and a [YQ](https://mikefarah.gitbook.io/yq) query expression:
+
+```yaml
+  !store.getkey <store_name> <key> | default <default-value> | query <yq-expression>
+```
+
+#### Arguments
+
+<dl>
+  <dt>`store_name`</dt>
+  <dd>The name of the store to read from (as defined in the `atmos.yaml` file)</dd>
+
+  <dt>`key`</dt>
+  <dd>The exact key name or path to retrieve from the store. <b>This is not constructed from stack/component/key, but is the literal key as it exists in the store.</b></dd>
+
+  <dt>`default-value`</dt>
+  <dd>(optional) The default value to return if the key is not found in the store</dd>
+
+  <dt>`yq-expression`</dt>
+  <dd>(optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the result</dd>
+</dl>
+
+### Key Differences from `!store`
+
+- `!store.getkey` retrieves the value for the exact key or path you provide, without constructing it from stack/component/key.
+- Use this function when you need to fetch a value that does not follow the Atmos naming pattern, or was written to the store by an external process.
+- All supported stores are compatible (SSM, Redis, Artifactory, Azure Key Vault, Google Secret Manager, etc.).
+
+### Examples
+
+```yaml
+vars:
+  # Retrieve a global config object from Redis by its literal key
+  global_config: !store.getkey redis global-config
+
+  # Retrieve a shared secret from SSM Parameter Store by its full path
+  shared_secret: !store.getkey prod/ssm /myapp/shared/secret
+
+  # Use a default value if the key does not exist
+  region: !store.getkey redis non-existent-key | default us-west-2
+
+  # Query a field from a complex object
+  api_version: !store.getkey redis global-config | query .api_version
+
+  # Retrieve a value from Azure Key Vault by its exact secret name
+  azure_secret: !store.getkey azure-keyvault my-flat-secret-name
+```
+
+### Considerations
+
+- The key you provide must match exactly how it is stored in the backend (including any required prefix, path, or normalization for that store).
+- This function is ideal for interoperability with values written outside of Atmos, or for advanced use cases where the naming pattern is not followed.
+- If you want to retrieve a value using the Atmos stack/component/key pattern, use the regular [`!store`](/core-concepts/stacks/yaml-functions/store) function instead.
