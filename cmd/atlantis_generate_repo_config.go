@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -13,7 +12,7 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 	Short:              "Generate repository configuration for Atlantis",
 	Long:               "Generate the repository configuration file required for Atlantis to manage Terraform repositories.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		if len(args) > 0 {
 			showUsageAndExit(cmd, args)
@@ -21,7 +20,7 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 		err := e.ExecuteAtlantisGenerateRepoConfigCmd(cmd, args)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	},
 }
 
