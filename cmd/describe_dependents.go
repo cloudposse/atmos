@@ -21,7 +21,7 @@ var describeDependentsCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.ExactArgs(1),
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: getRunnableDescribeDependentsCmd(
+	RunE: getRunnableDescribeDependentsCmd(
 		checkAtmosConfig,
 		exec.ProcessCommandLineArgs,
 		cfg.InitCliConfig,
@@ -33,24 +33,37 @@ func getRunnableDescribeDependentsCmd(
 	processCommandLineArgs func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error),
 	initCliConfig func(info schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error),
 	newDescribeDependentsExec describeDependentExecCreator,
-) func(cmd *cobra.Command, args []string) {
-	return func(cmd *cobra.Command, args []string) {
+) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
 		info, err := processCommandLineArgs("terraform", cmd, args, nil)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		atmosConfig, err := initCliConfig(info, true)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		describe := &exec.DescribeDependentsExecProps{}
 		err = setFlagsForDescribeDependentsCmd(cmd.Flags(), describe)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		if cmd.Flags().Changed("pager") {
 			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				return err
+			}
 		}
+
 		describe.Component = args[0]
 		err = newDescribeDependentsExec(&atmosConfig).Execute(describe)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	}
 }
 

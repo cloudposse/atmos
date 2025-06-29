@@ -37,12 +37,13 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		initializeConfig(cmd)
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		if len(args) > 0 {
 			showUsageAndExit(cmd, args)
 		}
 		runMainLogic()
+		return nil
 	},
 }
 

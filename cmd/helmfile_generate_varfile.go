@@ -14,15 +14,13 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 	Long:               "This command generates a values file for a specified Helmfile component.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
-		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-		}
+		return err
 	},
 }
 

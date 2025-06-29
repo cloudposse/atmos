@@ -31,6 +31,7 @@ var listSettingsCmd = &cobra.Command{
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig()
+
 		output, err := listSettings(cmd, args)
 		if err != nil {
 			return err
@@ -48,7 +49,6 @@ func init() {
 	listSettingsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 
 	AddStackCompletion(listSettingsCmd)
-
 	listCmd.AddCommand(listSettingsCmd)
 }
 

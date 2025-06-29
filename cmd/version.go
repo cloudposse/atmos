@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -18,9 +17,9 @@ var versionCmd = &cobra.Command{
 	Long:    `This command shows the version of the Atmos CLI you are currently running and checks if a newer version is available. Use this command to verify your installation and ensure you are up to date.`,
 	Example: "atmos version",
 	Args:    cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		err := exec.NewVersionExec(&atmosConfig).Execute(checkFlag, versionFormat)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	},
 }
 

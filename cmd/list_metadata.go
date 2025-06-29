@@ -30,6 +30,7 @@ var listMetadataCmd = &cobra.Command{
 		"atmos list metadata --stack 'prod-*'",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig()
+
 		output, err := listMetadata(cmd, args)
 		if err != nil {
 			return err

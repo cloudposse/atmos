@@ -300,7 +300,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 			setFlags(cmd)
 		}
 		cmd.ValidArgsFunction = ComponentsArgCompletion
-		cmd.Run = func(cmd_ *cobra.Command, args []string) {
+		cmd.RunE = func(cmd_ *cobra.Command, args []string) error {
 			// Because we disable flag parsing we require manual handle help Request
 			handleHelpRequest(cmd, args)
 			if len(os.Args) > 2 {
@@ -309,10 +309,10 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 			err := terraformRun(parentCmd, cmd_, args)
 			if err != nil {
-				// Let the main function handle errors like ErrPlanHasDiff
-				// by simply propagating them without exiting here
-				return
+				return err
 			}
+
+			return nil
 		}
 		parentCmd.AddCommand(cmd)
 	}

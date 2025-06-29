@@ -14,12 +14,12 @@ var terraformGenerateVarfilesCmd = &cobra.Command{
 	Long:               "This command generates varfiles for all Atmos Terraform components across all stacks.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGenerateVarfilesCmd(cmd, args)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	},
 }
 

@@ -19,23 +19,25 @@ var workflowCmd = &cobra.Command{
 	Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// If no arguments are provided, start the workflow UI
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				return err
 			}
-			return
 		}
 
 		// Get the --file flag value
 		workflowFile, _ := cmd.Flags().GetString("file")
 
-		// If no file is provided, show invalid command error with usage information
+		// If no file is provided, show the usage information
 		if workflowFile == "" {
-			cmd.Usage()
+			err := cmd.Usage()
+			if err != nil {
+				return err
+			}
 		}
 
 		// Execute the workflow command
@@ -46,9 +48,10 @@ var workflowCmd = &cobra.Command{
 			if e.IsKnownWorkflowError(err) {
 				errUtils.Exit(1)
 			}
-			// For unknown errors, print and exit
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return err
 		}
+
+		return nil
 	},
 }
 

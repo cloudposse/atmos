@@ -60,6 +60,7 @@ var listValuesCmd = &cobra.Command{
 
 		// Check Atmos configuration
 		checkAtmosConfig()
+
 		output, err := listValues(cmd, args)
 		if err != nil {
 			return err

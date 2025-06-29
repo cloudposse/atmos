@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -43,10 +42,7 @@ var describeConfigCmd = &cobra.Command{
 		}
 
 		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(query, format, "")
-		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-		}
-		return nil
+		return err
 	},
 }
 

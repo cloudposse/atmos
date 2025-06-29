@@ -14,13 +14,13 @@ var terraformGenerateBackendCmd = &cobra.Command{
 	Long:               `This command generates the backend configuration for a Terraform component using the specified stack`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGenerateBackendCmd(cmd, args)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	},
 }
 

@@ -14,13 +14,13 @@ var terraformGeneratePlanfileCmd = &cobra.Command{
 	Long:               "This command generates a `planfile` for a specified Atmos Terraform component.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGeneratePlanfileCmd(cmd, args)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	},
 }
 

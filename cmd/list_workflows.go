@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -18,35 +15,37 @@ var listWorkflowsCmd = &cobra.Command{
 	Use:   "workflows",
 	Short: "List all Atmos workflows",
 	Long:  "List Atmos workflows, with options to filter results by specific files.",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		flags := cmd.Flags()
 
 		fileFlag, err := flags.GetString("file")
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("Error getting the `file` flag: %v", err), "Incorrect Usage", "")
-			return
+			return err
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("Error getting the `format` flag: %v", err), "Incorrect Usage", "")
-			return
+			return err
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("Error getting the `delimiter` flag: %v", err), "Incorrect Usage", "")
-			return
+			return err
 		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		errUtils.CheckErrorPrintAndExit(err, "Error initializing CLI config", "")
+		if err != nil {
+			return err
+		}
 
 		output, err := l.FilterAndListWorkflows(fileFlag, atmosConfig.Workflows.List, formatFlag, delimiterFlag)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 
 		u.PrintMessageInColor(output, theme.Colors.Success)
+		return nil
 	},
 }
 

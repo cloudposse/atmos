@@ -27,21 +27,44 @@ var describeComponentCmd = &cobra.Command{
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		format, err := flags.GetString("format")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		file, err := flags.GetString("file")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		processTemplates, err := flags.GetBool("process-templates")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		query, err := flags.GetString("query")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		skip, err := flags.GetStringSlice("skip")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		pager, err := flags.GetString("pager")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 
 		component := args[0]
 
@@ -56,8 +79,7 @@ var describeComponentCmd = &cobra.Command{
 			Format:               format,
 			File:                 file,
 		})
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return nil
+		return err
 	},
 	ValidArgsFunction: ComponentsArgCompletion,
 }

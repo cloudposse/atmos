@@ -15,15 +15,18 @@ var validateComponentCmd = &cobra.Command{
 	Long:               "This command validates an Atmos component within a stack using JSON Schema or OPA policies.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 
 		log.Info("Validated successfully", "component", component, "stack", stack)
+		return nil
 	},
 }
 

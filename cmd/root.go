@@ -65,17 +65,19 @@ var RootCmd = &cobra.Command{
 			}
 		}
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 
 		err = e.ExecuteAtmosCmd()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	},
 }
 

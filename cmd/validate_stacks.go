@@ -4,7 +4,6 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -16,14 +15,17 @@ var ValidateStacksCmd = &cobra.Command{
 	Example:            "validate stacks",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := exec.ExecuteValidateStacksCmd(cmd, args)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 
 		log.Info("All stacks validated successfully")
+		return nil
 	},
 }
 

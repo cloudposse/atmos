@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -19,7 +18,7 @@ var describeWorkflowsCmd = &cobra.Command{
 	Long:               "List all Atmos workflows, showing their associated files and workflow names for easy reference.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run:                getRunnableDescribeWorkflowsCmd(checkAtmosConfig, exec.ProcessCommandLineArgs, cfg.InitCliConfig, exec.NewDescribeWorkflowsExec()),
+	RunE:               getRunnableDescribeWorkflowsCmd(checkAtmosConfig, exec.ProcessCommandLineArgs, cfg.InitCliConfig, exec.NewDescribeWorkflowsExec()),
 }
 
 func getRunnableDescribeWorkflowsCmd(
@@ -27,22 +26,35 @@ func getRunnableDescribeWorkflowsCmd(
 	processCommandLineArgs func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error),
 	initCliConfig func(info schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error),
 	describeWorkflowsExec exec.DescribeWorkflowsExec,
-) func(cmd *cobra.Command, args []string) {
-	return func(cmd *cobra.Command, args []string) {
+) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
 		info, err := processCommandLineArgs("terraform", cmd, args, nil)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		atmosConfig, err := initCliConfig(info, true)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		describeWorkflowArgs := &exec.DescribeWorkflowsArgs{}
 		err = flagsToDescribeWorkflowsArgs(cmd.Flags(), describeWorkflowArgs)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		pager, err := cmd.Flags().GetString("pager")
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
+
 		atmosConfig.Settings.Terminal.Pager = pager
 		err = describeWorkflowsExec.Execute(&atmosConfig, describeWorkflowArgs)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	}
 }
 

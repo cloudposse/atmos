@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -30,7 +29,7 @@ var docsCmd = &cobra.Command{
 	Args:               cobra.MaximumNArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
 			info := schema.ConfigAndStacksInfo{
 				Component:             args[0],
@@ -38,7 +37,9 @@ var docsCmd = &cobra.Command{
 			}
 
 			atmosConfig, err := cfg.InitCliConfig(info, true)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				return err
+			}
 
 			// Detect terminal width if not specified in `atmos.yaml`
 			// The default screen width is 120 characters, but uses maxWidth if set and greater than zero
@@ -66,24 +67,28 @@ var docsCmd = &cobra.Command{
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				return err
+			}
+
 			if !componentPathExists {
 				er := fmt.Errorf("component `%s` not found in path: `%s`", info.Component, componentPath)
-				errUtils.CheckErrorPrintAndExit(er, "", "")
+				return er
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); err != nil {
 				if os.IsNotExist(err) {
-					errUtils.CheckErrorPrintAndExit(fmt.Errorf("No README found for component: %s", info.Component), "", "")
+					er := fmt.Errorf("No README found for component: %s", info.Component)
+					return er
 				} else {
-					errUtils.CheckErrorPrintAndExit(fmt.Errorf("Component %s not found", info.Component), "", "")
+					return err
 				}
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				return err
 			}
 
 			r, err := glamour.NewTermRenderer(
@@ -93,12 +98,12 @@ var docsCmd = &cobra.Command{
 				glamour.WithWordWrap(screenWidth),
 			)
 			if err != nil {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown. Error: %w", err), "", "")
+				return err
 			}
 
 			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				return err
 			}
 
 			pager := atmosConfig.Settings.Terminal.IsPagerEnabled()
@@ -108,10 +113,10 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to display documentation: %w", err), "", "")
+				return err
 			}
 
-			return
+			return nil
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
@@ -132,11 +137,12 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				return err
 			}
 		}
 
 		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
+		return nil
 	},
 }
 

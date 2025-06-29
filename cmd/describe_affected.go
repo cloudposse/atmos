@@ -4,7 +4,6 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -16,7 +15,7 @@ var describeAffectedCmd = &cobra.Command{
 	Long:               "Identify and list Atmos components and stacks impacted by changes between two Git commits.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run:                getRunnableDescribeAffectedCmd(checkAtmosConfig, exec.ParseDescribeAffectedCliArgs, exec.NewDescribeAffectedExec),
+	RunE:               getRunnableDescribeAffectedCmd(checkAtmosConfig, exec.ParseDescribeAffectedCliArgs, exec.NewDescribeAffectedExec),
 }
 
 func init() {
@@ -51,13 +50,15 @@ func getRunnableDescribeAffectedCmd(
 	checkAtmosConfig func(opts ...AtmosValidateOption),
 	parseDescribeAffectedCliArgs func(cmd *cobra.Command, args []string) (exec.DescribeAffectedCmdArgs, error),
 	newDescribeAffectedExec exec.DescribeAffectedExecCreator,
-) func(cmd *cobra.Command, args []string) {
-	return func(cmd *cobra.Command, args []string) {
+) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 
 		// Handle the deprecated `--verbose` flag.
 		if cmd.Flags().Changed("verbose") {
@@ -71,10 +72,12 @@ func getRunnableDescribeAffectedCmd(
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				return err
+			}
 		}
 
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return err
 	}
 }
