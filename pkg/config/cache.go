@@ -8,11 +8,10 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/charmbracelet/log"
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type CacheConfig struct {
@@ -104,7 +103,11 @@ func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
 	interval, err := parseFrequency(frequency)
 	if err != nil {
 		// Log warning and default to daily if we can’t parse
-		u.LogWarning(fmt.Sprintf("Unsupported frequency '%s' encountered. Defaulting to daily.", frequency))
+		log.Warn(
+			"Unsupported frequency encountered. Defaulting to daily",
+			"frequency", frequency,
+			"error", err,
+		)
 		interval = 86400 // daily
 	}
 	return now-lastChecked >= interval
