@@ -13,7 +13,7 @@ In addition, the 'component' argument and 'stack' flag are required to generate 
 atmos helmfile &lt;command&gt; &lt;component&gt; -s &lt;stack&gt; [options]
 atmos helmfile &lt;command&gt; &lt;component&gt; --stack &lt;stack&gt; [options]
 
-Additions and differences from native helmfile:
+Additions and differences from native Helmfile:
  - 'atmos helmfile generate varfile' command generates a varfile for the component in the stack
  - 'atmos helmfile' commands support '[global options]' using the command-line flag '--global-options'. Usage: atmos helmfile &lt;command&gt; &lt;component&gt; -s &lt;stack&gt; [command options] [arguments] --global-options=&quot;--no-color --namespace=test&quot;
  - before executing the 'helmfile' commands, 'atmos' runs 'aws eks update-kubeconfig' to read kubeconfig from the EKS cluster and use it to authenticate with the cluster. This can be disabled in 'atmos.yaml' CLI config by setting 'components.helmfile.use_eks' to 'false'
