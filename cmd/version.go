@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -18,7 +19,8 @@ var versionCmd = &cobra.Command{
 	Example: "atmos version",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		checkErrorAndExit(exec.NewVersionExec(&atmosConfig).Execute(checkFlag, versionFormat))
+		err := exec.NewVersionExec(&atmosConfig).Execute(checkFlag, versionFormat)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	},
 }
 
