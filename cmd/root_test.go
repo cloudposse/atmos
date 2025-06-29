@@ -11,6 +11,24 @@ import (
 )
 
 func TestNoColorLog(t *testing.T) {
+	stacksPath := "../tests/fixtures/scenarios/stack-templates"
+
+	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+
+	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+
+	err = os.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+
+	// Unset ENV variables after testing
+	defer func() {
+		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		os.Unsetenv("ATMOS_BASE_PATH")
+		os.Unsetenv("ATMOS_LOGS_LEVEL")
+	}()
+
 	// Set the environment variable to disable color
 	// t.Setenv("NO_COLOR", "1")
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
