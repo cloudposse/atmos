@@ -5,10 +5,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/spf13/cobra"
-
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/version"
+	"github.com/spf13/cobra"
 )
 
 // getTerraformCommands returns an array of statically defined Terraform commands with flags
@@ -320,6 +320,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 var commandMaps = map[string]func(cmd *cobra.Command){
 	"plan": func(cmd *cobra.Command) {
+		cmd.PersistentFlags().Bool(cfg.UploadDeploymentStatusFlag, false, "If set atmos will upload the plan result to the pro API")
 		cmd.PersistentFlags().Bool("affected", false, "Plan the affected components in dependency order")
 		cmd.PersistentFlags().Bool("all", false, "Plan all components in all stacks")
 	},
