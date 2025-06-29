@@ -5,72 +5,71 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/pager"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ExecuteDescribeDependentsCmd executes `describe dependents` command
-func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
-	if err != nil {
-		return err
+type DescribeDependentsExecProps struct {
+	File      string
+	Format    string
+	Query     string
+	Stack     string
+	Component string
+}
+
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+type DescribeDependentsExec interface {
+	Execute(describeDependentsExecProps *DescribeDependentsExecProps) error
+}
+
+type describeDependentsExec struct {
+	atmosConfig               *schema.AtmosConfiguration
+	executeDescribeDependents func(
+		atmosConfig schema.AtmosConfiguration,
+		component string,
+		stack string,
+		includeSettings bool,
+	) ([]schema.Dependent, error)
+	newPageCreator        pager.PageCreator
+	isTTYSupportForStdout func() bool
+	evaluateYqExpression  func(
+		atmosConfig *schema.AtmosConfiguration,
+		data any,
+		yq string,
+	) (any, error)
+}
+
+func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeDependentsExec {
+	return &describeDependentsExec{
+		executeDescribeDependents: ExecuteDescribeDependents,
+		newPageCreator:            pager.New(),
+		isTTYSupportForStdout:     term.IsTTYSupportForStdout,
+		atmosConfig:               atmosConfig,
+		evaluateYqExpression:      u.EvaluateYqExpression,
 	}
+}
 
-	info.CliArgs = []string{"describe", "dependents"}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	err = ValidateStacks(atmosConfig)
-	if err != nil {
-		return err
-	}
-
-	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `component`")
-	}
-
-	flags := cmd.Flags()
-
-	stack, err := flags.GetString("stack")
-	if err != nil {
-		return err
-	}
-
-	format, err := flags.GetString("format")
-	if err != nil {
-		return err
-	}
-
-	file, err := flags.GetString("file")
-	if err != nil {
-		return err
-	}
-
-	query, err := flags.GetString("query")
-	if err != nil {
-		return err
-	}
-
-	component := args[0]
-
-	dependents, err := ExecuteDescribeDependents(atmosConfig, component, stack, false)
+func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDependentsExecProps) error {
+	dependents, err := d.executeDescribeDependents(
+		*d.atmosConfig,
+		describeDependentsExecProps.Component,
+		describeDependentsExecProps.Stack,
+		false,
+	)
 	if err != nil {
 		return err
 	}
 
 	var res any
 
-	if query != "" {
-		res, err = u.EvaluateYqExpression(&atmosConfig, dependents, query)
+	if describeDependentsExecProps.Query != "" {
+		res, err = d.evaluateYqExpression(d.atmosConfig, dependents, describeDependentsExecProps.Query)
 		if err != nil {
 			return err
 		}
@@ -78,12 +77,16 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		res = dependents
 	}
 
-	err = printOrWriteToFile(&atmosConfig, format, file, res)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return viewWithScroll(&viewWithScrollProps{
+		atmosConfig:           d.atmosConfig,
+		format:                describeDependentsExecProps.Format,
+		file:                  describeDependentsExecProps.File,
+		res:                   res,
+		pageCreator:           d.newPageCreator,
+		isTTYSupportForStdout: d.isTTYSupportForStdout,
+		displayName:           fmt.Sprintf("Dependents of '%s' in stack '%s'", describeDependentsExecProps.Component, describeDependentsExecProps.Stack),
+		printOrWriteToFile:    printOrWriteToFile,
+	})
 }
 
 // ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
