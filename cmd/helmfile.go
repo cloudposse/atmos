@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -25,12 +24,12 @@ func init() {
 	RootCmd.AddCommand(helmfileCmd)
 }
 
-func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
+func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	handleHelpRequest(cmd, args)
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
 	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
 	info.CliArgs = []string{"helmfile", commandName}
 	err := e.ExecuteHelmfile(info)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	return err
 }
