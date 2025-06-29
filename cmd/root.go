@@ -144,7 +144,7 @@ func Execute() error {
 		if isVersionCommand() {
 			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {
-			errUtils.CheckErrorPrintAndExit(initErr, "", "")
+			return initErr
 		}
 	}
 
@@ -156,12 +156,12 @@ func Execute() error {
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return err
 		}
 
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return err
 		}
 	}
 
