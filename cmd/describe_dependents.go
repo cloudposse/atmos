@@ -4,10 +4,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type describeDependentExecCreator func(atmosConfig *schema.AtmosConfiguration) exec.DescribeDependentsExec
@@ -38,19 +38,19 @@ func getRunnableDescribeDependentsCmd(
 		// Check Atmos configuration
 		checkAtmosConfig()
 		info, err := processCommandLineArgs("terraform", cmd, args, nil)
-		checkErrorAndExit(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		atmosConfig, err := initCliConfig(info, true)
-		checkErrorAndExit(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		describe := &exec.DescribeDependentsExecProps{}
 		err = setFlagsForDescribeDependentsCmd(cmd.Flags(), describe)
-		checkErrorAndExit(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		if cmd.Flags().Changed("pager") {
 			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			checkErrorAndExit(err)
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 		describe.Component = args[0]
 		err = newDescribeDependentsExec(&atmosConfig).Execute(describe)
-		checkErrorAndExit(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
 
@@ -89,9 +89,7 @@ func init() {
 	describeDependentsCmd.PersistentFlags().String("query", "", "Filter the output using a JMESPath query")
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		u.LogErrorAndExit(err)
-	}
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	describeCmd.AddCommand(describeDependentsCmd)
 }
