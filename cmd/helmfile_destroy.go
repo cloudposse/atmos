@@ -20,8 +20,8 @@ var helmfileDestroyCmd = &cobra.Command{
 	Short:              helmfileDestroyShort,
 	Long:               helmfileDestroyLong,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Run: func(cmd *cobra.Command, args []string) {
-		helmfileRun(cmd, "destroy", args)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return helmfileRun(cmd, "destroy", args)
 	},
 }
 

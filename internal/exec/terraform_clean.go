@@ -321,7 +321,7 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig schema.
 		for _, file := range folder.Files {
 			fileRel, err := getRelativePath(atmosConfig.BasePath, file.FullPath)
 			if err != nil {
-				log.Debug("failed to get relative path", "path", file.FullPath, "error", err)
+				log.Debug("Failed to get relative path", "path", file.FullPath, "error", err)
 				fileRel = filepath.Join(relativePath, file.Name)
 			}
 			if file.IsDir {
@@ -358,7 +358,7 @@ func handleTFDataDir(componentPath string, relativePath string, atmosConfig sche
 		return
 	}
 	if err := IsValidDataDir(tfDataDir); err != nil {
-		log.Debug("error validating TF_DATA_DIR", "error", err)
+		log.Debug("Error validating TF_DATA_DIR", "error", err)
 		return
 	}
 	if _, err := os.Stat(filepath.Join(componentPath, tfDataDir)); os.IsNotExist(err) {
@@ -366,7 +366,7 @@ func handleTFDataDir(componentPath string, relativePath string, atmosConfig sche
 		return
 	}
 	if err := DeletePathTerraform(filepath.Join(componentPath, tfDataDir), filepath.Join(relativePath, tfDataDir)); err != nil {
-		log.Debug("error deleting TF_DATA_DIR", "TF_DATA_DIR", tfDataDir, "error", err)
+		log.Debug("Error deleting TF_DATA_DIR", "TF_DATA_DIR", tfDataDir, "error", err)
 	}
 }
 

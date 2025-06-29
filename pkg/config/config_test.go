@@ -6,10 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.

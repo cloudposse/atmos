@@ -33,11 +33,11 @@ func (c *StoreCommand) GetName() string {
 
 func (c *StoreCommand) processStoreCommand(hook *Hook) error {
 	if len(hook.Outputs) == 0 {
-		log.Info("skipping hook. no outputs configured.", "hook", hook.Name, "outputs", hook.Outputs)
+		log.Info("Skipping hook. No outputs configured", "hook", hook.Name, "outputs", hook.Outputs)
 		return nil
 	}
 
-	log.Debug("executing 'after-terraform-apply' hook", "hook", hook.Name, "command", hook.Command)
+	log.Debug("Executing 'after-terraform-apply' hook", "hook", hook.Name, "command", hook.Command)
 	for key, value := range hook.Outputs {
 		outputKey, outputValue := c.getOutputValue(value)
 

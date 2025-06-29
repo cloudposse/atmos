@@ -172,10 +172,10 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if includeValue != nil {
 		data, ok := includeValue["include_data"]
 		if ok {
-			// Set the value in Viper .
+			// Set the value in Viper.
 			v.Set(currentPath, data)
 		} else {
-			log.Warn("invalid value returned from execute Yaml function",
+			log.Warn("Invalid value returned from the YAML function",
 				functionKey, strFunc,
 				"value", includeValue,
 			)

@@ -2,12 +2,11 @@ package cmd
 
 import (
 	_ "embed"
-	"os"
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 //go:embed markdown/workflow.md
@@ -20,23 +19,25 @@ var workflowCmd = &cobra.Command{
 	Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// If no arguments are provided, start the workflow UI
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				return err
 			}
-			return
 		}
 
 		// Get the --file flag value
 		workflowFile, _ := cmd.Flags().GetString("file")
 
-		// If no file is provided, show invalid command error with usage information
+		// If no file is provided, show the usage information
 		if workflowFile == "" {
-			cmd.Usage()
+			err := cmd.Usage()
+			if err != nil {
+				return err
+			}
 		}
 
 		// Execute the workflow command
@@ -45,11 +46,12 @@ var workflowCmd = &cobra.Command{
 			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
 			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
 			if e.IsKnownWorkflowError(err) {
-				os.Exit(1)
+				errUtils.Exit(1)
 			}
-			// For unknown errors, print and exit
-			u.PrintErrorMarkdownAndExit("", err, "")
+			return err
 		}
+
+		return nil
 	},
 }
 

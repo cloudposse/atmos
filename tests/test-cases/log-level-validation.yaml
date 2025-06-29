@@ -14,7 +14,6 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Invalid log level"
         - "XTrace"
         - "Valid options are"
       exit_code: 1

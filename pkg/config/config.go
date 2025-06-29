@@ -216,9 +216,9 @@ func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacks
 	atmosConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 	if stackIsPhysicalPath {
-		log.Debug(fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
-			configAndStacksInfo.Stack,
-			stackConfigFilesRelativePaths[0]))
+		log.Debug("The stack matches the stack manifest",
+			"stack", configAndStacksInfo.Stack,
+			"manifest", stackConfigFilesRelativePaths[0])
 		atmosConfig.StackType = "Directory"
 	} else {
 		// The stack is a logical name

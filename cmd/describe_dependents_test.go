@@ -1,14 +1,16 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/golang/mock/gomock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDescribeDependents(t *testing.T) {
@@ -80,4 +82,23 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 			assert.Equal(t, tt.expected, describeDependentArgs)
 		})
 	}
+}
+
+func TestDescribeDependentsCmd_Error(t *testing.T) {
+	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
+
+	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+
+	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+
+	// Unset ENV variables after testing
+	defer func() {
+		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		os.Unsetenv("ATMOS_BASE_PATH")
+	}()
+
+	err = describeDependentsCmd.RunE(describeDependentsCmd, []string{"invalid-component"})
+	assert.Error(t, err, "describe dependents command should return an error when called with invalid component")
 }

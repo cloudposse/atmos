@@ -236,4 +236,3 @@ tests:
         - "## Explanation"
         - "The workflow manifest file stacks/workflows/dne.yaml does not exist."
       exit_code: 1
-

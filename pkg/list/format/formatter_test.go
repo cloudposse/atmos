@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestJSONFormatter(t *testing.T) {

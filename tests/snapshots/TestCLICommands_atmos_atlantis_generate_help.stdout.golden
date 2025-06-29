@@ -13,13 +13,7 @@ Available Commands:
 
 Flags:
 
-        --clone-target-ref    Clone the target reference for comparison with the
-                              current branch. Only used when
-                              --affected-only=true. Defaults to false, which
-                              checks out the target reference instead. (default
-                              false)
-
-    -h, --help                help for generate
+    -h, --help    help for generate
 
 
 Global Flags:

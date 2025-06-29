@@ -2,12 +2,13 @@ package exec
 
 import (
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -21,14 +22,7 @@ const (
 func removeTempDir(path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
-		u.LogWarning(err.Error())
-	}
-}
-
-func closeFile(fileName string, file io.ReadCloser) {
-	err := file.Close()
-	if err != nil {
-		u.LogError(fmt.Errorf("error closing the file '%s': %v", fileName, err))
+		log.Warn(err.Error())
 	}
 }
 
