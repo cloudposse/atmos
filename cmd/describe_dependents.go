@@ -56,13 +56,21 @@ func getRunnableDescribeDependentsCmd(
 
 func setFlagsForDescribeDependentsCmd(flags *pflag.FlagSet, describe *exec.DescribeDependentsExecProps) error {
 	err := setStringFlagIfChanged(flags, "format", &describe.Format)
-	checkFlagError(err)
+	if err != nil {
+		return err
+	}
 	err = setStringFlagIfChanged(flags, "file", &describe.File)
-	checkFlagError(err)
+	if err != nil {
+		return err
+	}
 	err = setStringFlagIfChanged(flags, "stack", &describe.Stack)
-	checkFlagError(err)
+	if err != nil {
+		return err
+	}
 	err = setStringFlagIfChanged(flags, "query", &describe.Query)
-	checkFlagError(err)
+	if err != nil {
+		return err
+	}
 	if describe.Format == "" {
 		describe.Format = "json"
 	}
