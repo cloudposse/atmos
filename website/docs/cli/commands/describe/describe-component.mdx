@@ -67,90 +67,133 @@ atmos describe component vpc -s plat-ue2-prod --pager=more
 
 ## Flags
 
-| Flag                  | Description                                                                                                                                                                                                                                                                                                                                                                                 | Alias | Required |
-|:----------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`             | Atmos stack                                                                                                                                                                                                                                                                                                                                                                                 | `-s`  | yes      |
-| `--format`            | Output format: `yaml` or `json` (`yaml` is default)                                                                                                                                                                                                                                                                                                                                         | `-f`  | no       |
-| `--file`              | If specified, write the result to the file                                                                                                                                                                                                                                                                                                                                                  |       | no       |
-| `--process-templates` | Enable/disable processing of all `Go` templates<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-templates=false`                                     |       | no       |
-| `--process-functions` | Enable/disable processing of all Atmos YAML functions<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the functions are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-functions=false`                               |       | no       |
-| `--skip`              | Skip processing a specific Atmos YAML function<br/>in Atmos stacks manifests when executing the command.<br/>To specify more than one function,<br/>use multiple `--skip` flags, or separate the functions with a comma:<br/>`atmos describe component <c> -s <stack> --skip=terraform.output --skip=include`<br/>`atmos describe component <c> -s <stack> --skip=terraform.output,include` |       | no       |
-| `--query`             | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                                                                                                                          | `-q`  | no       |
-| `--pager`             | Disable/Enable the paging user experience                                                                                                                                                                                                                                                                                                                                                   |       |          |
+<dl>
+  <dt>`--stack` (`-s`)</dt>
+  <dd>Atmos stack (required)</dd>
 
+  <dt>`--format` (`-f`)</dt>
+  <dd>Output format: `yaml` or `json` (`yaml` is default)</dd>
+
+  <dt>`--file`</dt>
+  <dd>If specified, write the result to the file</dd>
+
+  <dt>`--process-templates`</dt>
+  <dd>Enable/disable processing of all `Go` templates in Atmos stack manifests when executing the command.<br/>Use the flag to see the component configuration before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default.</dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>Enable/disable processing of all Atmos YAML functions in Atmos stack manifests when executing the command.<br/>Use the flag to see the component configuration before and after the functions are processed.<br/>If the flag is not provided, it's set to `true` by default.</dd>
+
+  <dt>`--skip`</dt>
+  <dd>Skip processing a specific Atmos YAML function in Atmos stacks manifests when executing the command.<br/>To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.</dd>
+
+  <dt>`--query` (`-q`)</dt>
+  <dd>Query the results of the command using `yq` expressions.<br/>For more details, refer to https://mikefarah.gitbook.io/yq</dd>
+
+  <dt>`--pager`</dt>
+  <dd>Disable/Enable the paging user experience</dd>
+</dl>
 ## Output
 
 The command outputs the final deep-merged component configuration.
 
 The output contains the following sections:
 
-- `atlantis_project` - Atlantis project name (if [Atlantis Integration](/integrations/atlantis) is configured for the component in the stack)
+<dl>
+  <dt>`atlantis_project`</dt>
+  <dd>Atlantis project name (if Atlantis integration is configured for the component)</dd>
 
-- `atmos_cli_config` - information about Atmos CLI configuration from `atmos.yaml`
+  <dt>`atmos_cli_config`</dt>
+  <dd>Information about Atmos CLI configuration from `atmos.yaml`</dd>
 
-- `atmos_component` - [Atmos component](/core-concepts/components) name
+  <dt>`atmos_component`</dt>
+  <dd>The Atmos component name</dd>
 
-- `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
+  <dt>`atmos_stack`</dt>
+  <dd>The Atmos stack name</dd>
 
-- `stack` - same as `atmos_stack`
+  <dt>`stack`</dt>
+  <dd>Same as `atmos_stack`</dd>
 
-- `atmos_stack_file` - the stack manifest where the Atmos stack is defined
+  <dt>`atmos_stack_file`</dt>
+  <dd>The stack manifest where the Atmos stack is defined</dd>
 
-- `atmos_manifest` - same as `atmos_stack_file`
+  <dt>`atmos_manifest`</dt>
+  <dd>Same as `atmos_stack_file`</dd>
 
-- `backend` - Terraform/OpenTofu backend configuration
+  <dt>`backend`</dt>
+  <dd>Terraform/OpenTofu backend configuration</dd>
 
-- `backend_type` - Terraform/OpenTofu backend type
+  <dt>`backend_type`</dt>
+  <dd>Terraform/OpenTofu backend type</dd>
 
-- `command` - the binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `tofu`, `helmfile`)
+  <dt>`command`</dt>
+  <dd>The binary used to provision the component</dd>
 
-- `component` - the Terraform/OpenTofu component for which the Atmos component provides configuration
+  <dt>`component`</dt>
+  <dd>The Terraform/OpenTofu component name</dd>
 
-- `component_type` - the type of the component (`terraform` or `helmfile`)
+  <dt>`component_type`</dt>
+  <dd>The type of the component (`terraform` or `helmfile`)</dd>
 
-- `component_info` - a block describing the Terraform or Helmfile components that the Atmos component manages. The `component_info` block has the
-  following sections:
-  - `component_path` - the filesystem path to the Terraform/OpenTofu or Helmfile component
+  <dt>`component_info`</dt>
+  <dd>
+    <dl>
+      <dt>`component_path`</dt>
+      <dd>The filesystem path to the Terraform/OpenTofu or Helmfile component</dd>
+      <dt>`component_type`</dt>
+      <dd>The type of the component (`terraform` or `helmfile`)</dd>
+      <dt>`terraform_config`</dt>
+      <dd>High-level metadata about the Terraform component from its source code, including variables, outputs and child modules</dd>
+    </dl>
+  </dd>
+</dl>
+<dl>
+  <dt>`env`</dt>
+  <dd>A map of ENV variables defined for the Atmos component</dd>
 
-  - `component_type` - the type of the component (`terraform` or `helmfile`)
+  <dt>`inheritance`</dt>
+  <dd>Component's <a href="/core-concepts/stacks/inheritance">inheritance chain</a></dd>
 
-  - `terraform_config` - if the component type is `terraform`, this sections describes the high-level metadata about the Terraform component from its
-    source code, including variables, outputs and child Terraform modules (using a Terraform parser from HashiCorp). The file names and line numbers
-    where the variables, outputs and child modules are defined are also included. Invalid Terraform configurations are also detected, and in case of
-    any issues, the warnings and errors are shows in the `terraform_config.diagnostics` section
+  <dt>`metadata`</dt>
+  <dd>Component's metadata configuration</dd>
 
-- `env` - a map of ENV variables defined for the Atmos component
+  <dt>`remote_state_backend`</dt>
+  <dd>Terraform/OpenTofu backend config for remote state</dd>
 
-- `inheritance` - component's [inheritance chain](/core-concepts/stacks/inheritance)
+  <dt>`remote_state_backend_type`</dt>
+  <dd>Terraform/OpenTofu backend type for remote state</dd>
 
-- `metadata` - component's metadata config
+  <dt>`settings`</dt>
+  <dd>Component settings (free-form map)</dd>
 
-- `remote_state_backend` - Terraform/OpenTofu backend config for remote state
+  <dt>`sources`</dt>
+  <dd>Sources of values from the component's sections (`vars`, `env`, `settings`)</dd>
 
-- `remote_state_backend_type` - Terraform/OpenTofu backend type for remote state
+  <dt>`spacelift_stack`</dt>
+  <dd>Spacelift stack name if integration is configured and `workspace_enabled` is true</dd>
 
-- `settings` - component settings (free-form map)
+  <dt>`vars`</dt>
+  <dd>The final deep-merged component variables provided to Terraform/OpenTofu and Helmfile</dd>
 
-- `sources` - sources of the values from the component's sections (`vars`, `env`, `settings`)
+  <dt>`workspace`</dt>
+  <dd>Terraform/OpenTofu workspace for the Atmos component</dd>
 
-- `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/integrations/spacelift) is configured for the component in the stack
-  and `settings.spacelift.workspace_enabled` is set to `true`)
+  <dt>`imports`</dt>
+  <dd>A list of all imports in the Atmos stack (related or not to the component)</dd>
 
-- `vars` - the final deep-merged component variables that are provided to Terraform/OpenTofu and Helmfile when executing
-  `atmos terraform` and `atmos helmfile` commands
+  <dt>`deps_all`</dt>
+  <dd>A list of all component stack dependencies where the component settings are defined</dd>
 
-- `workspace` - Terraform/OpenTofu workspace for the Atmos component
+  <dt>`deps`</dt>
+  <dd>A list of component stack dependencies where the final configuration values are defined</dd>
 
-- `imports` - a list of all imports in the Atmos stack (this shows all imports in the stack, related to the component and not)
+  <dt>`overrides`</dt>
+  <dd>A map of overrides for the component</dd>
 
-- `deps_all` - a list of all component stack dependencies (stack manifests where the component settings are defined, either inline or via imports)
+  <dt>`providers`</dt>
+  <dd>A map of provider configurations for the component</dd>
+</dl>
 
-- `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
-  (after the deep-merging and processing all the inheritance chains and all the base components)
-
-- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/stacks/overrides) for more details
-
-- `providers` - a map of provider configurations for the component
 
 ## Difference between `imports`, `deps_all` and `deps` outputs
 
