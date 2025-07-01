@@ -4,9 +4,10 @@ import (
 	"errors"
 
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+
 	"github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 // ValidateSchemaCmd represents the 'atmos validate schema' command.
@@ -42,9 +43,10 @@ and are compliant with expected formats, reducing configuration drift and runtim
 `,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
 		schema := ""
 		key := ""
 		if len(args) > 0 {
@@ -64,8 +66,10 @@ and are compliant with expected formats, reducing configuration drift and runtim
 			if errors.Is(err, exec.ErrInvalidYAML) {
 				u.OsExit(1)
 			}
-			u.PrintErrorMarkdownAndExit("", err, "")
+			return err
 		}
+
+		return nil
 	},
 }
 

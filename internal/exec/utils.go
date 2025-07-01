@@ -6,11 +6,13 @@ import (
 	"sort"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -54,6 +56,8 @@ var commonFlags = []string{
 	cfg.ProcessTemplatesFlag,
 	cfg.ProcessFunctionsFlag,
 	cfg.SkipFlag,
+	cfg.AffectedFlag,
+	cfg.AllFlag,
 }
 
 // ProcessComponentConfig processes component config sections
@@ -261,6 +265,8 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
+	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
+	configAndStacksInfo.All = argsAndFlagsInfo.All
 
 	flags := cmd.Flags()
 
@@ -332,7 +338,7 @@ func ProcessStacks(
 		} else {
 			msg = "\nFound stack manifests:"
 		}
-		u.LogTrace(msg)
+		log.Debug(msg)
 		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -419,7 +425,7 @@ func ProcessStacks(
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
 
-				u.LogDebug(
+				log.Debug(
 					fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
@@ -456,7 +462,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 			)
-			u.LogErrorAndExit(err)
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -530,8 +536,8 @@ func ProcessStacks(
 			true,
 		)
 		if err != nil {
-			// If any error returned from the templates processing, log it and exit
-			u.LogErrorAndExit(err)
+			// If any error returned from the template processing, log it and exit
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
 		componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
@@ -543,7 +549,7 @@ func ProcessStacks(
 					err = errors.Join(err, errors.New(errorMessage))
 				}
 			}
-			u.LogErrorAndExit(err)
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
 		configAndStacksInfo.ComponentSection = componentSectionConverted
@@ -682,6 +688,7 @@ func processArgsAndFlags(
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 	var indexesToRemove []int
+
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "clean" {
 		info.SubCommand = inputArgsAndFlags[0]
 	}
@@ -1038,6 +1045,14 @@ func processArgsAndFlags(
 			info.NeedHelp = true
 		}
 
+		if arg == cfg.AffectedFlag {
+			info.Affected = true
+		}
+
+		if arg == cfg.AllFlag {
+			info.All = true
+		}
+
 		for _, f := range commonFlags {
 			if arg == f {
 				indexesToRemove = append(indexesToRemove, i)
@@ -1070,6 +1085,10 @@ func processArgsAndFlags(
 			info.SubCommand = additionalArgsAndFlags[0]
 		}
 		return info, nil
+	}
+
+	if len(additionalArgsAndFlags) == 1 && info.SubCommand == "" {
+		info.SubCommand = additionalArgsAndFlags[0]
 	}
 
 	if len(additionalArgsAndFlags) > 1 {

@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -109,7 +110,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	// Initialize model based on package type
 	model, err := newModelVendor(packages, dryRun, atmosConfig)
 	if err != nil {
-		return fmt.Errorf("%w: %v (verify terminal capabilities and permissions)", ErrTUIModel, err)
+		return fmt.Errorf("%w: %v (verify terminal capabilities and permissions)", errUtils.ErrTUIModel, err)
 	}
 
 	var opts []tea.ProgramOption
@@ -257,7 +258,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		)
 	}
 	if !m.isTTY {
-		log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+		log.Info(mark, "package", pkg.name, "version", version)
 	}
 	m.index++
 	// Update progress bar
@@ -280,18 +281,17 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) 
 	if pkg.version != "" {
 		version = fmt.Sprintf("(%s)", pkg.version)
 	}
-	log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+	log.Info(mark, "package", pkg.name, "version", version)
 
 	if m.dryRun {
-		log.Info("Done! Dry run completed. No components vendored.\n")
+		log.Info("Done! Dry run completed. No components vendored")
 	}
 
 	if m.failedPkg > 0 {
-		log.Info(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n",
-			len(m.packages)-m.failedPkg, m.failedPkg))
+		log.Info("Vendored components", "success", len(m.packages)-m.failedPkg, "failed", m.failedPkg)
+	} else {
+		log.Info("Vendored components", "success", len(m.packages))
 	}
-
-	log.Info(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
 }
 
 func (m *modelVendor) View() string {
@@ -385,7 +385,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 			return fmt.Errorf("failed to copy package: %w", err)
 		}
 	default:
-		return fmt.Errorf("%w %s for package %s", ErrUnknownPackageType, p.pkgType.String(), p.name)
+		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
 	return nil
 }
@@ -494,7 +494,7 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosC
 
 	// No valid package provided
 	return func() tea.Msg {
-		err := fmt.Errorf("%w: %s", ErrValidPackage, installer.name)
+		err := fmt.Errorf("%w: %s", errUtils.ErrValidPackage, installer.name)
 		return installedPkgMsg{
 			err:  err,
 			name: installer.name,

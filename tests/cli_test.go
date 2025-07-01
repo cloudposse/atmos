@@ -29,16 +29,18 @@ import (
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-// Command-line flag for regenerating snapshots
+// Command-line flag for regenerating snapshots.
 var (
 	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 	startingDir         string
 	snapshotBaseDir     string
 )
 
-// Define styles using lipgloss
+// Define styles using lipgloss.
 var (
 	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
 	removedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("160")) // Red
@@ -357,7 +359,7 @@ func sanitizeTestName(name string) string {
 	return name
 }
 
-// Drop any lines matched by the ignore patterns so they do not affect the comparison
+// Drop any lines matched by the ignore patterns so they do not affect the comparison.
 func applyIgnorePatterns(input string, patterns []string) string {
 	lines := strings.Split(input, "\n") // Split input into lines
 	var filteredLines []string          // Store lines that don't match the patterns
@@ -379,7 +381,7 @@ func applyIgnorePatterns(input string, patterns []string) string {
 	return strings.Join(filteredLines, "\n") // Join the filtered lines back into a string
 }
 
-// Simulate TTY command execution with optional stdin and proper stdout redirection
+// Simulate TTY command execution with optional stdin and proper stdout redirection.
 func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, error) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
@@ -429,7 +431,7 @@ func ptyError(err error) error {
 	return nil
 }
 
-// loadTestSuites loads and merges all .yaml files from the test-cases directory
+// loadTestSuites loads and merges all .yaml files from the test-cases directory.
 func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	var mergedSuite TestSuite
 
@@ -452,7 +454,7 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	return &mergedSuite, nil
 }
 
-// Entry point for tests to parse flags and handle setup/teardown
+// Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
@@ -495,7 +497,7 @@ func TestMain(m *testing.M) {
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
 	flag.Parse() // Parse command-line flags
-	os.Exit(m.Run())
+	errUtils.Exit(m.Run())
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
@@ -870,7 +872,7 @@ func readSnapshot(t *testing.T, fullPath string) string {
 	return string(data)
 }
 
-// Generate a unified diff using gotextdiff
+// Generate a unified diff using gotextdiff.
 func generateUnifiedDiff(actual, expected string) string {
 	edits := myers.ComputeEdits(span.URIFromPath("actual"), expected, actual)
 	unified := gotextdiff.ToUnified("expected", "actual", expected, edits)
@@ -893,7 +895,7 @@ func generateUnifiedDiff(actual, expected string) string {
 	return buf.String()
 }
 
-// Generate a diff using diffmatchpatch
+// Generate a diff using diffmatchpatch.
 func DiffStrings(x, y string) string {
 	dmp := diffmatchpatch.New()
 	diffs := dmp.DiffMain(x, y, false)
@@ -901,7 +903,7 @@ func DiffStrings(x, y string) string {
 	return dmp.DiffPrettyText(diffs)
 }
 
-// Colorize diff output based on the threshold
+// Colorize diff output based on the threshold.
 func colorizeDiffWithThreshold(actual, expected string, threshold int) string {
 	dmp := diffmatchpatch.New()
 	diffs := dmp.DiffMain(expected, actual, false)
@@ -1007,7 +1009,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	return true
 }
 
-// Clean up untracked files in the working directory
+// Clean up untracked files in the working directory.
 func cleanDirectory(t *testing.T, workdir string) error {
 	// Find the root of the Git repository
 	repoRoot, err := findGitRepoRoot(workdir)
@@ -1091,7 +1093,7 @@ func checkIfRebuildNeeded(binaryPath string, srcDir string) (bool, error) {
 	return latestModTime.After(binModTime), nil
 }
 
-// findGitRepo finds the Git repository root
+// findGitRepo finds the Git repository root.
 func findGitRepoRoot(path string) (string, error) {
 	// Open the Git repository starting from the given path
 	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})

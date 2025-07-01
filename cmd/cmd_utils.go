@@ -10,9 +10,11 @@ import (
 	"time"
 
 	log "github.com/charmbracelet/log"
+	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -20,7 +22,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/go-git/go-git/v5"
 )
 
 // Define a constant for the dot string that appears multiple times.
@@ -141,7 +142,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 
 	// If the command doesn't exist, create it
 	if cmd == nil {
-		u.LogErrorAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias))
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias), "", "")
 	}
 
 	// If there are more parts, recurse for the next level
@@ -180,15 +181,11 @@ func processCommandAliases(
 				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 				Run: func(cmd *cobra.Command, args []string) {
 					err := cmd.ParseFlags(args)
-					if err != nil {
-						log.Fatal(err)
-					}
+					errUtils.CheckErrorPrintAndExit(err, "", "")
 
 					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
 					err = e.ExecuteShell(atmosConfig, commandToRun, commandToRun, currentDirPath, nil, false)
-					if err != nil {
-						log.Fatal(err)
-					}
+					errUtils.CheckErrorPrintAndExit(err, "", "")
 				},
 			}
 
@@ -223,13 +220,12 @@ func preCustomCommand(
 					fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name),
 				)
 			}
-			u.LogInfo(sb.String())
-			os.Exit(1)
+			log.Info(sb.String())
+			errUtils.Exit(1)
 		} else {
 			// truly invalid, nothing to do
-			u.PrintErrorMarkdownAndExit("Invalid command", errors.New(
-				fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()),
-			), "https://atmos.tools/cli/configuration/commands")
+			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))
+			errUtils.CheckErrorPrintAndExit(er, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
 		}
 	}
 
@@ -258,7 +254,7 @@ func preCustomCommand(
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
-		u.LogErrorAndExit(errors.New(sb.String()))
+		errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
 	}
 
 	// Merge user-supplied arguments with defaults
@@ -273,7 +269,7 @@ func preCustomCommand(
 			} else {
 				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
-				u.LogErrorAndExit(errors.New(sb.String()))
+				errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
 			}
 		}
 	}
@@ -286,7 +282,7 @@ func preCustomCommand(
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
 		_ = cmd.Help()
-		os.Exit(0)
+		errUtils.Exit(0)
 	}
 }
 
@@ -336,15 +332,11 @@ func executeCustomCommand(
 		for _, fl := range commandConfig.Flags {
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
-				if err != nil {
-					log.Fatal(err)
-				}
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 				flagsData[fl.Name] = providedFlag
 			} else if fl.Type == "bool" {
 				boolFlag, err := flags.GetBool(fl.Name)
-				if err != nil {
-					log.Fatal(err)
-				}
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 				flagsData[fl.Name] = boolFlag
 			}
 		}
@@ -361,29 +353,23 @@ func executeCustomCommand(
 		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Process Go templates in the command's 'component_config.component'
 			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
-			if err != nil {
-				log.Fatal(err)
-			}
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if component == "" || component == "<no value>" {
-				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
+				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
-			if err != nil {
-				log.Fatal(err)
-			}
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if stack == "" || stack == "<no value>" {
-				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
+				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
 			// Get the config for the component in the stack
 			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
-			if err != nil {
-				log.Fatal(err)
-			}
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 			data["ComponentConfig"] = componentConfig
 		}
 
@@ -399,52 +385,39 @@ func executeCustomCommand(
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				log.Fatal(err)
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
 				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, nil, false)
-				if err != nil {
-					log.Fatal(err)
-				}
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
-				if err != nil {
-					log.Fatal(err)
-				}
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
 			err = os.Setenv(key, value)
-			if err != nil {
-				log.Fatal(err)
-			}
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
 		if len(envVarsList) > 0 && commandConfig.Verbose {
-			u.LogDebug("\nUsing ENV vars:")
-			for _, v := range envVarsList {
-				u.LogDebug(v)
-			}
+			log.Debug("Using ENV vars", "env", envVarsList)
 		}
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
-		if err != nil {
-			log.Fatal(err)
-		}
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 		err = e.ExecuteShell(atmosConfig, commandToRun, commandName, currentDirPath, envVarsList, false)
-		if err != nil {
-			log.Fatal(err)
-		}
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
 
@@ -504,15 +477,13 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		log.Fatal(err)
-	}
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			printMessageForMissingAtmosConfig(atmosConfig)
-			os.Exit(1)
+			errUtils.Exit(1)
 		}
 	}
 }
@@ -524,9 +495,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
-	if err != nil {
-		log.Fatal(err)
-	}
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
@@ -536,7 +505,6 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		u.PrintMessageInColor("atmos.yaml", c1)
 		fmt.Println(" CLI config file was not found.")
 		fmt.Print("\nThe default Atmos stacks directory is set to ")
-
 		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
 		fmt.Println(",\nbut the directory does not exist in the current path.")
 	} else {
@@ -574,7 +542,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(fmt.Sprintf("Could not load cache: %s", err))
+		log.Warn("Could not load cache", "error", err)
 		return
 	}
 
@@ -587,12 +555,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Get the latest Atmos release from GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 	if err != nil {
-		u.LogWarning(fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		log.Warn("Failed to retrieve latest Atmos release info", "error", err)
 		return
 	}
 
 	if latestReleaseTag == "" {
-		u.LogWarning("No release information available")
+		log.Warn("No release information available")
 		return
 	}
 
@@ -608,7 +576,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Update the cache to mark the current timestamp
 	cacheCfg.LastChecked = time.Now().Unix()
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-		u.LogWarning(fmt.Sprintf("Unable to save cache: %s", saveErr))
+		log.Warn("Unable to save cache", "error", saveErr)
 	}
 }
 
@@ -621,11 +589,11 @@ func isVersionCommand() bool {
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
 		cmd.Help()
-		os.Exit(0)
+		errUtils.Exit(0)
 	}
 }
 
-// showUsageAndExit we display the markdown usage or fallback to our custom usage
+// showUsageAndExit we display the Markdown usage or fallback to our custom usage.
 // Markdown usage is not compatible with all outputs. We should therefore have fallback option.
 func showUsageAndExit(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
@@ -634,7 +602,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
 		showErrorExampleFromMarkdown(cmd, args[0])
 	}
-	os.Exit(1)
+	errUtils.Exit(1)
 }
 
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
@@ -648,7 +616,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 		}
 	}
 	showUsageExample(cmd, unknownCommand)
-	os.Exit(1)
+	errUtils.Exit(1)
 	return nil
 }
 
@@ -667,9 +635,7 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	}
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
-	if err != nil {
-		log.Fatal(err)
-	}
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return info
 }
 
@@ -680,7 +646,7 @@ func isGitRepository() bool {
 	})
 	if err != nil {
 		if !errors.Is(err, git.ErrRepositoryNotExists) {
-			log.Debug("git check failed", "error", err)
+			log.Debug("Git check failed", "error", err)
 		}
 		return false
 	}
@@ -692,7 +658,7 @@ func isGitRepository() bool {
 func verifyInsideGitRepo() bool {
 	// Check if we're in a git repo
 	if !isGitRepository() {
-		log.Warn("You're not inside a git repository. Atmos feels lonely outside - bring it home!\n")
+		log.Warn("You're not inside a git repository. Atmos feels lonely outside - bring it home!")
 		return false
 	}
 	return true
@@ -734,7 +700,7 @@ func showUsageExample(cmd *cobra.Command, details string) {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
-	u.PrintInvalidUsageErrorAndExit(errors.New(details), suggestion)
+	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
