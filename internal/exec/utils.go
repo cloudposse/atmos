@@ -6,11 +6,13 @@ import (
 	"sort"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -336,7 +338,7 @@ func ProcessStacks(
 		} else {
 			msg = "\nFound stack manifests:"
 		}
-		u.LogTrace(msg)
+		log.Debug(msg)
 		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -423,7 +425,7 @@ func ProcessStacks(
 				foundStackCount++
 				foundStacks = append(foundStacks, stackName)
 
-				u.LogDebug(
+				log.Debug(
 					fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
@@ -460,7 +462,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 			)
-			u.LogErrorAndExit(err)
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -534,8 +536,8 @@ func ProcessStacks(
 			true,
 		)
 		if err != nil {
-			// If any error returned from the templates processing, log it and exit
-			u.LogErrorAndExit(err)
+			// If any error returned from the template processing, log it and exit
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
 		componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
@@ -547,7 +549,7 @@ func ProcessStacks(
 					err = errors.Join(err, errors.New(errorMessage))
 				}
 			}
-			u.LogErrorAndExit(err)
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
 		configAndStacksInfo.ComponentSection = componentSectionConverted
