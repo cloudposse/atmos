@@ -17,6 +17,12 @@ Flags:
                                      Atmos components changed between two Git
                                      commits. (default false)
 
+        --clone-target-ref           Clone the target reference for comparison
+                                     with the current branch. Only used when
+                                     --affected-only=true. Defaults to false,
+                                     which checks out the target reference
+                                     instead. (default false)
+
         --components string          Generate Atlantis projects for the
                                      specified components only (comma-separated
                                      values).
@@ -61,12 +67,6 @@ Flags:
 Global Flags:
 
         --base-path string           Base path for Atmos project
-
-        --clone-target-ref           Clone the target reference for comparison
-                                     with the current branch. Only used when
-                                     --affected-only=true. Defaults to false,
-                                     which checks out the target reference
-                                     instead. (default false)
 
         --config stringSlice         Paths to configuration files
                                      (comma-separated or repeated flag) (default

@@ -11,6 +11,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -93,11 +94,6 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		return err
 	}
 
-	verbose, err := flags.GetBool("verbose")
-	if err != nil {
-		return err
-	}
-
 	// If the flag `--affected-only=true` is passed, find the affected components and stacks
 	if affectedOnly {
 		cloneTargetRef, err := flags.GetBool("clone-target-ref")
@@ -115,7 +111,6 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 			repoPath,
 			sshKeyPath,
 			sshKeyPassword,
-			verbose,
 			cloneTargetRef,
 			"",
 		)
@@ -142,7 +137,6 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	repoPath string,
 	sshKeyPath string,
 	sshKeyPassword string,
-	verbose bool,
 	cloneTargetRef bool,
 	stack string,
 ) error {
@@ -157,7 +151,6 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
 			&atmosConfig,
 			repoPath,
-			verbose,
 			false,
 			false,
 			stack,
@@ -172,7 +165,6 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			sha,
 			sshKeyPath,
 			sshKeyPassword,
-			verbose,
 			false,
 			false,
 			stack,
@@ -185,7 +177,6 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			&atmosConfig,
 			ref,
 			sha,
-			verbose,
 			false,
 			false,
 			stack,
@@ -401,7 +392,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 						return err
 					}
 				default:
-					return ErrMissingStackNameTemplateAndPattern
+					return errUtils.ErrMissingStackNameTemplateAndPattern
 				}
 
 				// Check if the 'stacks' filter is provided

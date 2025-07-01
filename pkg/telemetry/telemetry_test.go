@@ -16,7 +16,7 @@ import (
 
 // TestPosthogIntegrationToken is a test token for PostHog integration tests.
 const (
-	TestPosthogIntegrationToken = "phc_5Z678901234567890123456789012345"
+	TestPosthogIntegrationToken = "phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS"
 )
 
 // TestTelemetryConstructor tests the telemetry constructor to ensure it properly initializes
@@ -355,7 +355,7 @@ func TestTelemetryPosthogIntegrationCaptureMethod(t *testing.T) {
 	// Expect Enqueue to delegate to the real PostHog client.
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: distinctId,
-		Event:      "test-snippet",
+		Event:      "test-snippet-1",
 		Properties: posthog.NewProperties().
 			Set("plan", "Enterprise").
 			Set("friends", 42),
@@ -378,7 +378,7 @@ func TestTelemetryPosthogIntegrationCaptureMethod(t *testing.T) {
 	assert.NotNil(t, telemetry.clientProvider)
 
 	// Test Capture method with real PostHog integration.
-	captured := telemetry.Capture("test-snippet", posthog.NewProperties().
+	captured := telemetry.Capture("test-snippet-1", posthog.NewProperties().
 		Set("plan", "Enterprise").
 		Set("friends", 42),
 	)

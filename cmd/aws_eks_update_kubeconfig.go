@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command
@@ -29,13 +28,11 @@ then ` + "`" + `atmos` + "`" + ` executes the command without requiring the ` + 
 See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information.`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Run: func(cmd *cobra.Command, args []string) {
+	ValidArgsFunction:  ComponentsArgCompletion,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		return err
 	},
-	ValidArgsFunction: ComponentsArgCompletion,
 }
 
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html

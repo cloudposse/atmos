@@ -6,7 +6,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeComponentCmd describes configuration for components
@@ -43,10 +42,7 @@ var describeConfigCmd = &cobra.Command{
 		}
 
 		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(query, format, "")
-		if err != nil {
-			u.PrintErrorMarkdown("", err, "")
-		}
-		return nil
+		return err
 	},
 }
 

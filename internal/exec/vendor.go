@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	ErrVendorConfigNotExist       = errors.New("the '--everything' flag is set, but vendor config file does not exist")
 	ErrExecuteVendorDiffCmd       = errors.New("'atmos vendor diff' is not implemented yet")
 	ErrValidateComponentFlag      = errors.New("either '--component' or '--tags' flag can be provided, but not both")
 	ErrValidateComponentStackFlag = errors.New("either '--component' or '--stack' flag can be provided, but not both")
@@ -145,7 +146,6 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 	if err != nil {
 		return err
 	}
-	ErrVendorConfigNotExist := errors.New("the '--everything' flag is set, but vendor config file does not exist")
 	if !vendorConfigExists && flg.Everything {
 		return fmt.Errorf("%w: %s", ErrVendorConfigNotExist, cfg.AtmosVendorConfigFileName)
 	}
