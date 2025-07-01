@@ -17,9 +17,9 @@ This data helps us identify which features are most valuable and where we can ma
 
 Atmos collects the following anonymous information:
 
-- **Command usage**: Which Atmos commands are executed (e.g., `atmos describe`, `atmos terraform`, `atmos helmfile`)
-- **Error patterns**: Anonymous error information to help identify and fix issues
-- **Environment information**: Operating system, Atmos version, and basic system information
+- **Command Usage**: Tracks which Atmos commands are executed (e.g., `atmos describe`, `atmos terraform`, `atmos helmfile`)  
+- **Error Reports**: Captures anonymized error messages and exit codes to help identify and fix issues  
+- **System Details**: Includes OS, CPU architecture, Atmos version, and other diagnostic metadata
 - **CI Provider information**: If Atmos is running as part of CI workflow, CI provider name
 
 :::info Privacy First
@@ -29,6 +29,7 @@ We **never** collect:
 - Sensitive data or secrets
 - Repository contents or code
 :::
+
 ### Atmos Pro Users
 
 If you're using [**Atmos Pro**](https://atmos-pro.com), Atmos includes your **Workspace ID** with telemetry. This allows us to associate usage with your account and better support your team by understanding adoption and usage patterns.
