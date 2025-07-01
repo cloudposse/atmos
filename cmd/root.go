@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -58,6 +59,7 @@ var RootCmd = &cobra.Command{
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
+					telemetry.CaptureCmd(cmd, err)
 					log.Warn(err.Error())
 				}
 			} else {
@@ -73,10 +75,12 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
+			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 
 		err = e.ExecuteAtmosCmd()
+		telemetry.CaptureCmd(cmd, err)
 		return err
 	},
 }
