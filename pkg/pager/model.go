@@ -359,7 +359,7 @@ func (m *model) scrollToSearchMatch() {
 
 // DebugLog writes a message to debug.log file
 func DebugLog(message string) {
-	file, err := os.OpenFile("debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	file, err := os.OpenFile("debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 	if err != nil {
 		return
 	}
