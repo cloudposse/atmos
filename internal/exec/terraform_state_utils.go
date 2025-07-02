@@ -7,7 +7,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func GetTerraformState(
@@ -33,21 +32,8 @@ func GetTerraformState(
 		}
 	}
 
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
-
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		// Initialize spinner
-		p := NewSpinner(message)
-		spinnerDone := make(chan struct{})
-		// Run spinner in a goroutine
-		RunSpinner(p, spinnerDone, message)
-		// Ensure the spinner is stopped before returning
-		defer StopSpinner(p, spinnerDone)
-	}
-
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
 		er := fmt.Errorf("failed to describe the component %s in the stack %s. Error: %w", component, stack, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
@@ -56,7 +42,6 @@ func GetTerraformState(
 	// `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
 		er := fmt.Errorf("failed to get static remote state backend outputs. Error: %w", err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
@@ -70,7 +55,6 @@ func GetTerraformState(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
-			u.PrintfMessageToTUI("\r✗ %s\n", message)
 			er := fmt.Errorf("failed to execute terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
 			errUtils.CheckErrorPrintAndExit(er, "", "")
 		}
@@ -79,7 +63,6 @@ func GetTerraformState(
 		terraformOutputsCache.Store(stackSlug, terraformOutputs)
 		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
-	u.PrintfMessageToTUI("\r✓ %s\n", message)
 
 	return result
 }
