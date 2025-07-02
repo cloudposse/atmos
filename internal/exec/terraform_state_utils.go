@@ -23,8 +23,8 @@ func GetTerraformState(
 	if !skipCache {
 		cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
 		if found && cachedOutputs != nil {
-			log.Debug("Cache hit for terraform output",
-				"command", fmt.Sprintf("!terraform.output %s %s %s", component, stack, output),
+			log.Debug("Cache hit for terraform state",
+				"command", fmt.Sprintf("!terraform.state %s %s %s", component, stack, output),
 				cfg.ComponentStr, component,
 				cfg.StackStr, stack,
 				"output", output,

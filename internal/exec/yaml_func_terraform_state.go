@@ -18,7 +18,7 @@ func processTagTerraformState(
 ) any {
 	log.Debug("Executing Atmos YAML function", "function", input)
 
-	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
+	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformState)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	var component string
