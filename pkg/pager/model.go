@@ -3,7 +3,6 @@ package pager
 import (
 	"fmt"
 	"math"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -332,7 +331,6 @@ func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) cancelSearch() {
-	DebugLog("CancelSearch called")
 	m.forwardSlashPressed = false
 	m.searchTerm = ""
 	m.content = m.originalContent // Reset content to original without highlights
@@ -340,7 +338,6 @@ func (m *model) cancelSearch() {
 }
 
 func (m *model) scrollToSearchMatch() {
-	DebugLog(fmt.Sprintf("scrollToSearchMatch called with searchTerm: %s", m.searchTerm))
 	if m.searchTerm == "" {
 		return
 	}
@@ -350,23 +347,10 @@ func (m *model) scrollToSearchMatch() {
 
 	for i, line := range lines {
 		if strings.Contains(strings.ToLower(line), searchTermLower) { // Found the match. Scroll to that line.
-			DebugLog(fmt.Sprintf("Found search match %s at line %d: %s", searchTermLower, i, line))
 			m.viewport.SetYOffset(i - 1)
 			break
 		}
 	}
-}
-
-// DebugLog writes a message to debug.log file
-func DebugLog(message string) {
-	file, err := os.OpenFile("debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-	if err != nil {
-		return
-	}
-	defer file.Close()
-
-	timestamp := time.Now().Format("15:04:05.000")
-	fmt.Fprintf(file, "[%s] %s\n", timestamp, message)
 }
 
 func (m *model) scrollToNextSearchMatch() {
@@ -500,19 +484,26 @@ func (m *model) helpView() (s string) {
 		"/       search",
 		"n       next match",
 		"N       prev match",
-		"esc     back to files",
 		"q       quit",
 	}
 	nextLine := "\n"
+	i := 0
 	s += nextLine
-	s += "k/↑      up                  " + col1[0] + nextLine
-	s += "j/↓      down                " + col1[1] + nextLine
-	s += "b/pgup   page up             " + col1[2] + nextLine
-	s += "f/pgdn   page down           " + col1[3] + nextLine
-	s += "u        ½ page up           " + col1[4] + nextLine
-	s += "d        ½ page down         " + col1[5] + nextLine
-	s += "                             " + col1[6] + nextLine
-	s += "                             " + col1[7]
+	s += "k/↑      up                  " + col1[i] + nextLine
+	i += 1
+	s += "j/↓      down                " + col1[i] + nextLine
+	i += 1
+	s += "b/pgup   page up             " + col1[i] + nextLine
+	i += 1
+	s += "f/pgdn   page down           " + col1[i] + nextLine
+	i += 1
+	s += "u        ½ page up           " + col1[i] + nextLine
+	i += 1
+	s += "d        ½ page down         " + col1[i] + nextLine
+	i += 1
+	s += "esc      back to files       " + col1[i] + nextLine
+	i += 1
+	s += "                             " + col1[i]
 
 	s = indent(s, 2)
 
