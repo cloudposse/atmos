@@ -9,7 +9,6 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // describeWorkflowsCmd executes 'atmos describe workflows' CLI commands
