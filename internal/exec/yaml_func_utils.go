@@ -75,6 +75,8 @@ func processCustomTags(
 		return processTagStore(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput) && !skipFunc(skip, u.AtmosYamlFuncTerraformOutput):
 		return processTagTerraformOutput(atmosConfig, input, currentStack)
+	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState):
+		return processTagTerraformState(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
 		res, err := u.ProcessTagEnv(input)
 		errUtils.CheckErrorPrintAndExit(err, "", "")

@@ -50,6 +50,6 @@ func processTagTerraformState(
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
-	value := GetTerraformOutput(&atmosConfig, stack, component, output, false)
+	value := GetTerraformState(&atmosConfig, stack, component, output, false)
 	return value
 }
