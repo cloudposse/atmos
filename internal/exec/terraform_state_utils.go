@@ -2,12 +2,16 @@ package exec
 
 import (
 	"fmt"
+	"sync"
+
 	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+var terraformStateCache = sync.Map{}
 
 func GetTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
@@ -20,7 +24,7 @@ func GetTerraformState(
 
 	// If the result for the component in the stack already exists in the cache, return it
 	if !skipCache {
-		cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
+		cachedOutputs, found := terraformStateCache.Load(stackSlug)
 		if found && cachedOutputs != nil {
 			log.Debug("Cache hit for terraform state",
 				"command", fmt.Sprintf("!terraform.state %s %s %s", component, stack, output),
@@ -49,7 +53,7 @@ func GetTerraformState(
 	var result any
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
-		terraformOutputsCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
+		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
 		result = getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 	} else {
 		// Execute `terraform output`
@@ -60,7 +64,7 @@ func GetTerraformState(
 		}
 
 		// Cache the result
-		terraformOutputsCache.Store(stackSlug, terraformOutputs)
+		terraformStateCache.Store(stackSlug, terraformOutputs)
 		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
 
