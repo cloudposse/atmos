@@ -21,9 +21,7 @@ var describeComponentCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		if len(args) != 1 {
-			err := errors.New("invalid arguments. The command requires one argument `component`")
-			telemetry.CaptureCmd(cmd, err)
-			return err
+			return errors.New("invalid arguments. The command requires one argument `component`")
 		}
 
 		flags := cmd.Flags()
