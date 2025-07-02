@@ -16,3 +16,4 @@ DEBU Skipping custom detection; URI already supported by go getter uri="git::ssh
 INFO ✓ package=terraform-null-label-basic version=(0.25.0)
 INFO Done! Dry run completed. No components vendored
 INFO Vendored components success=2
+DEBU Telemetry event captured

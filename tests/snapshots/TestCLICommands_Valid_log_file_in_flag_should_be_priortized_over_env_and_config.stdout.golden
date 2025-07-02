@@ -3,3 +3,6 @@ DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 
 👽 Atmos test on darwin/arm64
 
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Telemetry event captured
