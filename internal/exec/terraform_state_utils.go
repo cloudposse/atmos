@@ -50,23 +50,24 @@ func GetTerraformState(
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	var result any
+	// Read static remote state backend outputs
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result = getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
-	} else {
-		// Execute `terraform output`
-		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
-		if err != nil {
-			er := fmt.Errorf("failed to execute terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
-			errUtils.CheckErrorPrintAndExit(er, "", "")
-		}
-
-		// Cache the result
-		terraformStateCache.Store(stackSlug, terraformOutputs)
-		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
+		result := getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		return result
 	}
 
+	// Read Terraform state
+	terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
+	if err != nil {
+		er := fmt.Errorf("failed to execute terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
+	}
+
+	// Cache the result
+	terraformStateCache.Store(stackSlug, terraformOutputs)
+	// Get the output
+	result := getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	return result
 }
