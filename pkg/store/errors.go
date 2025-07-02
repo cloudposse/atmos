@@ -17,6 +17,13 @@ var (
 	ErrSetParameter   = errors.New("failed to set parameter")
 	ErrGetParameter   = errors.New("failed to get parameter")
 
+	// Azure Key Vault specific errors.
+	ErrVaultURLRequired = errors.New("vault_url is required in azure key vault store configuration")
+	ErrCreateClient     = errors.New("failed to create client")
+	ErrAccessSecret     = errors.New("failed to access secret")
+	ErrResourceNotFound = errors.New("resource not found")
+	ErrPermissionDenied = errors.New("permission denied")
+
 	// Redis specific errors.
 	ErrParseRedisURL   = errors.New("failed to parse redis url")
 	ErrMissingRedisURL = errors.New("either url must be set in options or ATMOS_REDIS_URL environment variable must be set")
@@ -36,12 +43,8 @@ var (
 	// Google Secret Manager specific errors.
 	ErrProjectIDRequired = errors.New("project_id is required in Google Secret Manager store configuration")
 	ErrValueMustBeString = errors.New("value must be a string")
-	ErrCreateClient      = errors.New("failed to create Secret Manager client")
 	ErrCreateSecret      = errors.New("failed to create secret")
 	ErrAddSecretVersion  = errors.New("failed to add secret version")
-	ErrAccessSecret      = errors.New("failed to access secret version")
-	ErrResourceNotFound  = errors.New("resource not found")
-	ErrPermissionDenied  = errors.New("permission denied")
 
 	// Registry specific errors.
 	ErrParseArtifactoryOptions = errors.New("failed to parse Artifactory store options")
@@ -52,4 +55,10 @@ var (
 	// Shared errors.
 	ErrSerializeJSON = errors.New("failed to serialize value to JSON")
 	ErrMarshalValue  = errors.New("failed to marshal value")
+
+	// ErrDeleteParameter is returned when a parameter deletion fails.
+	ErrDeleteParameter = errors.New("failed to delete parameter")
+
+	// ErrListParameters is returned when listing parameters fails.
+	ErrListParameters = errors.New("failed to list parameters")
 )

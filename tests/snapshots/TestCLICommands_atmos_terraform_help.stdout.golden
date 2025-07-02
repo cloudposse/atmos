@@ -58,7 +58,30 @@ Flags:
                                       +https://atmos.tools). This flag works
                                       with almost all commands.
 
+        --clone-target-ref            Clone the target reference with which to
+                                      compare the current branch: atmos
+                                      terraform  --affected
+                                      --clone-target-ref=true
+                                      If set to 'false' (default), the target
+                                      reference will be checked out instead
+                                      This requires that the target reference is
+                                      already cloned by Git, and the information
+                                      about it exists in the '.git' directory
+                                      (default false)
+
+        --components stringSlice      Filter by specific components (default
+                                      [])
+
+        --dry-run                     Simulate the command without making any
+                                      changes (default false)
+
     -h, --help                        help for terraform
+
+        --include-dependents          For each affected component, detect the
+                                      dependent components and process them in
+                                      the dependency order, recursively: atmos
+                                      terraform  --affected
+                                      --include-dependents (default false)
 
         --process-functions           Enable/disable YAML functions processing
                                       in Atmos stack manifests when executing
@@ -68,6 +91,28 @@ Flags:
                                       Atmos stack manifests when executing
                                       terraform commands (default true)
 
+    -q, --query string                Execute atmos terraform <command> on the
+                                      components filtered by a YQ expression, in
+                                      all stacks or in a specific stack
+
+        --ref string                  Git reference with which to compare the
+                                      current branch: atmos terraform
+                                       --affected --ref
+                                      refs/heads/main. Refer to
+                                      https://git-scm.com/book/en/v2/Git-Internals-Git-References
+                                      for more details
+
+        --repo-path string            Filesystem path to the already cloned
+                                      target repository with which to compare
+                                      the current branch: atmos terraform
+                                       --affected --repo-path
+                                      <path_to_already_cloned_repo>
+
+        --sha string                  Git commit SHA with which to compare the
+                                      current branch: atmos terraform
+                                       --affected --sha
+                                      3a5eafeab90426bd82bf5899896b28cc0bab3073
+
         --skip stringSlice            Skip executing specific YAML functions in
                                       the Atmos stack manifests when executing
                                       terraform commands (default [])
@@ -75,6 +120,18 @@ Flags:
         --skip-init                   Skip running terraform init before
                                       executing terraform commands (default
                                       false)
+
+        --ssh-key string              Path to PEM-encoded private key to clone
+                                      private repos using SSH: atmos terraform
+                                       --affected --ssh-key
+                                      <path_to_ssh_key>
+
+        --ssh-key-password string     Encryption password for the PEM-encoded
+                                      private key if the key contains a
+                                      password-encrypted PEM block: atmos
+                                      terraform  --affected
+                                      --ssh-key <path_to_ssh_key>
+                                      --ssh-key-password 
 
     -s, --stack string                The stack flag specifies the environment
                                       or configuration set for deployment in

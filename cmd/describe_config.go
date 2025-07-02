@@ -6,8 +6,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeComponentCmd describes configuration for components
@@ -48,12 +46,7 @@ var describeConfigCmd = &cobra.Command{
 		}
 
 		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(query, format, "")
-		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
-			u.PrintErrorMarkdown("", err, "")
-		}
-		telemetry.CaptureCmd(cmd)
-		return nil
+		return err
 	},
 }
 

@@ -2,15 +2,14 @@ package exec
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/samber/lo"
 
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -96,12 +95,8 @@ func ExecuteAtmosCmd() error {
 	}
 
 	// Process the selected command, stack and component
-	fmt.Println()
-	u.PrintMessageInColor(fmt.Sprintf(
-		"Executing command:\n"+os.Args[0]+" %s %s --stack %s\n", selectedCommand, selectedComponent, selectedStack),
-		theme.Colors.Info,
-	)
-	fmt.Println()
+	c := fmt.Sprintf("atmos %s %s --stack %s", selectedCommand, selectedComponent, selectedStack)
+	log.Info("Executing", "command", c)
 
 	if selectedCommand == "describe component" {
 		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true, true, nil)
@@ -133,8 +128,7 @@ func ExecuteAtmosCmd() error {
 			return err
 		}
 
-		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", selectedComponent, selectedStack)
-		u.PrintMessageInColor(m, theme.Colors.Success)
+		log.Info("Validated successfully", "component", selectedComponent, "stack", selectedStack)
 		return nil
 	}
 

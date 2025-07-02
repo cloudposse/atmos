@@ -30,7 +30,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	spinnerDone := make(chan struct{})
 	// Run spinner in a goroutine
 	RunSpinner(p, spinnerDone, message)
-	// Ensure spinner is stopped before returning
+	// Ensure the spinner is stopped before returning
 	defer StopSpinner(p, spinnerDone)
 
 	// Process CLI arguments
@@ -109,7 +109,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			return err
 		}
 		manifestSchema.Manifest = f
-		log.Debug("Atmos JSON Schema is not configured. Using the default embedded schema.")
+		log.Debug("Atmos JSON Schema is not configured. Using the default embedded schema")
 	case u.FileExists(manifestSchema.Manifest):
 		atmosManifestJsonSchemaFilePath = manifestSchema.Manifest
 	case u.FileExists(atmosManifestJsonSchemaFileAbsPath):
@@ -149,8 +149,8 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		return err
 	}
 
-	u.LogDebug(fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
-		filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
+	log.Debug("Validating all YAML files in the folder and all subfolders (excluding template files)",
+		"folder", filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
 		stackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(
@@ -322,7 +322,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true, true, nil)
+					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, false, false, nil)
 					if err != nil {
 						return nil, err
 					}

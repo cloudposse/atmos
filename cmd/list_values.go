@@ -60,6 +60,7 @@ var listValuesCmd = &cobra.Command{
 
 		// Check Atmos configuration
 		checkAtmosConfig()
+
 		output, err := listValues(cmd, args)
 		if err != nil {
 			return err
@@ -95,13 +96,13 @@ var listVarsCmd = &cobra.Command{
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {
-				log.Info(fmt.Sprintf("No vars found for component '%s'", componentVarsNotFoundErr.Component))
+				log.Info("No vars found", "component", componentVarsNotFoundErr.Component)
 				return nil
 			}
 
 			var noValuesErr *listerrors.NoValuesFoundError
 			if errors.As(err, &noValuesErr) {
-				log.Info(fmt.Sprintf("No values found for component '%s' with query '.vars'", args[0]))
+				log.Info("No values found for query '.vars'", "component", args[0])
 				return nil
 			}
 
@@ -154,7 +155,7 @@ func getBoolFlagWithDefault(cmd *cobra.Command, flagName string, defaultValue bo
 
 	value, err := cmd.Flags().GetBool(flagName)
 	if err != nil {
-		log.Warn("failed to get flag, using default",
+		log.Warn("Failed to get flag, using default",
 			"flag", flagName,
 			"default", defaultValue,
 			"error", err)
@@ -207,9 +208,9 @@ func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, *fl.ProcessingFla
 // logNoValuesFoundMessage logs an appropriate message when no values or vars are found.
 func logNoValuesFoundMessage(componentName string, query string) {
 	if query == ".vars" {
-		log.Info(fmt.Sprintf("No vars found for component '%s'", componentName))
+		log.Info("No vars found", "component", componentName)
 	} else {
-		log.Info(fmt.Sprintf("No values found for component '%s'", componentName))
+		log.Info("No values found", "component", componentName)
 	}
 }
 

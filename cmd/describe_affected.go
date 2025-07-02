@@ -1,22 +1,12 @@
 package cmd
 
 import (
-	"errors"
-	"fmt"
-
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/cloudposse/atmos/internal/exec"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
-
-type describeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
 var describeAffectedCmd = &cobra.Command{
@@ -25,35 +15,7 @@ var describeAffectedCmd = &cobra.Command{
 	Long:               "Identify and list Atmos components and stacks impacted by changes between two Git commits.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run:                getRunnableDescribeAffectedCmd(checkAtmosConfig, parseDescribeAffectedCliArgs, exec.NewDescribeAffectedExec),
-}
-
-func getRunnableDescribeAffectedCmd(
-	checkAtmosConfig func(opts ...AtmosValidateOption),
-	parseDescribeAffectedCliArgs func(cmd *cobra.Command, args []string) (exec.DescribeAffectedCmdArgs, error),
-	newDescribeAffectedExec describeAffectedExecCreator,
-) func(cmd *cobra.Command, args []string) {
-	return func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
-		props, err := parseDescribeAffectedCliArgs(cmd, args)
-		checkErrorAndExit(err, cmd)
-		if cmd.Flags().Changed("pager") {
-			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
-			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			checkErrorAndExit(err, cmd)
-		}
-		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
-		checkErrorAndExit(err, cmd)
-		telemetry.CaptureCmd(cmd)
-	}
-}
-
-func checkErrorAndExit(err error, cmd *cobra.Command) {
-	if err != nil {
-		telemetry.CaptureCmd(cmd, err)
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	RunE:               getRunnableDescribeAffectedCmd(checkAtmosConfig, exec.ParseDescribeAffectedCliArgs, exec.NewDescribeAffectedExec),
 }
 
 func init() {
@@ -78,89 +40,44 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeAffectedCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeAffectedCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
+	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Deprecated. Alias for `--logs-level=Debug`")
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }
 
-func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.DescribeAffectedCmdArgs, error) {
-	var atmosConfig schema.AtmosConfiguration
-	if info, err := exec.ProcessCommandLineArgs("", cmd, args, nil); err != nil {
-		return exec.DescribeAffectedCmdArgs{}, err
-	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
-		return exec.DescribeAffectedCmdArgs{}, err
-	}
-	if err := exec.ValidateStacks(atmosConfig); err != nil {
-		return exec.DescribeAffectedCmdArgs{}, err
-	}
-	// Process flags
-	flags := cmd.Flags()
+// getRunnableDescribeAffectedCmd returns a command to run `atmos describe affected`.
+func getRunnableDescribeAffectedCmd(
+	checkAtmosConfig func(opts ...AtmosValidateOption),
+	parseDescribeAffectedCliArgs func(cmd *cobra.Command, args []string) (exec.DescribeAffectedCmdArgs, error),
+	newDescribeAffectedExec exec.DescribeAffectedExecCreator,
+) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		// Check Atmos configuration
+		checkAtmosConfig()
 
-	result := exec.DescribeAffectedCmdArgs{
-		CLIConfig: &atmosConfig,
-	}
-	setDescribeAffectedFlagValueInCliArgs(flags, &result)
-
-	if result.Format != "yaml" && result.Format != "json" {
-		return exec.DescribeAffectedCmdArgs{}, exec.ErrInvalidFormat
-	}
-	if result.RepoPath != "" && (result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
-		return exec.DescribeAffectedCmdArgs{}, ErrRepoPathConflict
-	}
-
-	return result, nil
-}
-
-func setDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffectedCmdArgs) {
-	flagsKeyValue := map[string]any{
-		"ref":                            &describe.Ref,
-		"sha":                            &describe.SHA,
-		"repo-path":                      &describe.RepoPath,
-		"ssh-key":                        &describe.SSHKeyPath,
-		"ssh-key-password":               &describe.SSHKeyPassword,
-		"include-spacelift-admin-stacks": &describe.IncludeSpaceliftAdminStacks,
-		"include-dependents":             &describe.IncludeDependents,
-		"include-settings":               &describe.IncludeSettings,
-		"upload":                         &describe.Upload,
-		"clone-target-ref":               &describe.CloneTargetRef,
-		"process-templates":              &describe.ProcessTemplates,
-		"process-functions":              &describe.ProcessYamlFunctions,
-		"skip":                           &describe.Skip,
-		"pager":                          &describe.CLIConfig.Settings.Terminal.Pager,
-		"stack":                          &describe.Stack,
-		"format":                         &describe.Format,
-		"file":                           &describe.OutputFile,
-		"query":                          &describe.Query,
-	}
-
-	var err error
-	for k := range flagsKeyValue {
-		if !flags.Changed(k) {
-			continue
+		props, err := parseDescribeAffectedCliArgs(cmd, args)
+		if err != nil {
+			return err
 		}
-		switch v := flagsKeyValue[k].(type) {
-		case *string:
-			*v, err = flags.GetString(k)
-		case *bool:
-			*v, err = flags.GetBool(k)
-		case *[]string:
-			*v, err = flags.GetStringSlice(k)
-		default:
-			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
-		}
-		checkFlagError(err)
-	}
-	// When uploading, always include dependents and settings for all affected components
-	if describe.Upload {
-		describe.IncludeDependents = true
-		describe.IncludeSettings = true
-	}
-	if describe.Format == "" {
-		describe.Format = "json"
-	}
-}
 
-func checkFlagError(err error) {
-	if err != nil {
-		panic(err)
+		// Handle the deprecated `--verbose` flag.
+		if cmd.Flags().Changed("verbose") {
+			log.Warn("The --verbose flag is deprecated. Please use the --logs-level flag instead", "example", "atmos describe affected --logs-level=Debug")
+			if props.Verbose {
+				log.SetLevel(log.DebugLevel)
+				props.CLIConfig.Logs.Level = u.LogLevelDebug
+			}
+		}
+
+		if cmd.Flags().Changed("pager") {
+			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
+			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
+			if err != nil {
+				return err
+			}
+		}
+
+		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
+		return err
 	}
 }

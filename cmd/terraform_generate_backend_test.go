@@ -44,7 +44,8 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 
 	// Expected output after processing the templates in the component's `backend` section
 	expectedOutput := "nonprod-tfstate-lock"
+	outputStr := output.String()
 
-	// Check if output contains the expected output
-	assert.Contains(t, output.String(), expectedOutput, "'TestTerraformGenerateBackendCmd' output should contain information about the generated backend")
+	// Check if the output contains the expected output
+	assert.Contains(t, outputStr, expectedOutput, "'TestTerraformGenerateBackendCmd' output should contain information about the generated backend")
 }

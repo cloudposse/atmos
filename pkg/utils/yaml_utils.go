@@ -101,13 +101,12 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 	}
 
 	indent := getIndentFromConfig(atmosConfig)
-	log.Debug("PrintAsYAMLToFileDescriptor", "tabWidth", indent)
-
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
-	LogInfo(y)
+
+	log.Debug("PrintAsYAMLToFileDescriptor", "data", y)
 	return nil
 }
 

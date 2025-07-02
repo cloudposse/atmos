@@ -36,7 +36,6 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 		"",
 		true,
 		true,
-		true,
 		"",
 		true,
 		true,
@@ -68,7 +67,6 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
-		true,
 		true,
 		true,
 		"",

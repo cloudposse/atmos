@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -14,14 +15,17 @@ import (
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -55,14 +59,14 @@ var RootCmd = &cobra.Command{
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
-					u.LogWarning(err.Error())
+					log.Warn(err.Error())
 				}
 			} else {
-				u.LogErrorAndExit(err)
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
@@ -70,13 +74,11 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
+			return err
 		}
 
 		err = e.ExecuteAtmosCmd()
-		if err != nil {
-			u.LogErrorAndExit(err)
-		}
+		return err
 	},
 }
 
@@ -117,17 +119,14 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		output = io.Discard // More efficient than opening os.DevNull
 	default:
 		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		if err != nil {
-			log.Fatal("Failed to open log file:", err)
-		}
+		errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
 		defer logFile.Close()
 		output = logFile
 	}
 
 	log.SetOutput(output)
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		//nolint:all // The reason to escape this is because it is expected to fail fast. The reason for ignoring all is because we also get a lint error to execute defer logFile.Close() before this but that is not required
-		log.Fatal(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
 }
@@ -140,12 +139,15 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+
 	utils.InitializeMarkdown(atmosConfig)
+	errUtils.InitializeMarkdown(atmosConfig)
+
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
-			log.Debug("warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
+			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {
-			u.LogErrorAndExit(initErr)
+			return initErr
 		}
 	}
 
@@ -157,18 +159,19 @@ func Execute() error {
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			return err
 		}
 
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			return err
 		}
 	}
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
-	err = RootCmd.Execute()
+	cmd, err := RootCmd.ExecuteC()
+	telemetry.CaptureCmd(cmd, err)
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			command := getInvalidCommandName(err.Error())
@@ -194,7 +197,7 @@ func getInvalidCommandName(input string) string {
 }
 
 func init() {
-	// Add template function for wrapped flag usages
+	// Add the template function for wrapped flag usages
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
@@ -209,7 +212,7 @@ func init() {
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	initCobraConfig()
@@ -244,23 +247,34 @@ func initCobraConfig() {
 			showUsageAndExit(command, arguments)
 		}
 		// Print a styled Atmos logo to the terminal
-		fmt.Println()
 		if command.Use != "atmos" || command.Flags().Changed("help") {
-			err := tuiUtils.PrintStyledText("ATMOS")
+			var buf bytes.Buffer
+			var err error
+			command.SetOut(&buf)
+			fmt.Println()
+			if term.IsTTYSupportForStdout() {
+				err = tuiUtils.PrintStyledTextToSpecifiedOutput(&buf, "ATMOS")
+			} else {
+				err = tuiUtils.PrintStyledText("ATMOS")
+			}
 			if err != nil {
-				u.LogErrorAndExit(err)
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 			if err := oldUsageFunc(command); err != nil {
-				u.LogErrorAndExit(err)
+				errUtils.CheckErrorPrintAndExit(err, "", "")
+			}
+			pager := pager.NewWithAtmosConfig(atmosConfig.Settings.Terminal.IsPagerEnabled())
+			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
+				log.Error("Failed to run pager", "error", err)
+				utils.OsExit(1)
 			}
 		} else {
+			fmt.Println()
 			err := tuiUtils.PrintStyledText("ATMOS")
-			if err != nil {
-				u.LogErrorAndExit(err)
-			}
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
-				u.LogErrorAndExit(err)
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)

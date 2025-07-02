@@ -6,11 +6,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeStacksCmd describes configuration for stacks and components in the stacks
@@ -20,7 +19,7 @@ var describeStacksCmd = &cobra.Command{
 	Long:               "This command shows the configuration details for Atmos stacks and the components within those stacks.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
+	RunE: getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 		checkAtmosConfig,
 		exec.ProcessCommandLineArgs,
 		cfg.InitCliConfig, exec.ValidateStacks,
@@ -45,35 +44,42 @@ type getRunnableDescribeStacksCmdProps struct {
 
 func getRunnableDescribeStacksCmd(
 	g getRunnableDescribeStacksCmdProps,
-) func(cmd *cobra.Command, args []string) {
-	return func(cmd *cobra.Command, args []string) {
+) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		g.checkAtmosConfig()
+
 		info, err := g.processCommandLineArgs("", cmd, args, nil)
-		printErrorAndExit(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		atmosConfig, err := g.initCliConfig(info, true)
-		printErrorAndExit(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		err = g.validateStacks(atmosConfig)
-		printErrorAndExit(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
-		printErrorAndExit(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			printErrorAndExit(err, cmd)
+			if err != nil {
+				return err
+			}
 		}
 
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
-		printErrorAndExit(err, cmd)
-		telemetry.CaptureCmd(cmd)
-	}
-}
-
-func printErrorAndExit(err error, cmd *cobra.Command) {
-	if err != nil {
-		telemetry.CaptureCmd(cmd, err)
-		u.PrintErrorMarkdownAndExit("", err, "")
+		return err
 	}
 }
 
@@ -105,9 +111,10 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		case *[]string:
 			*v, err = flags.GetStringSlice(k)
 		default:
-			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
+			er := fmt.Errorf("unsupported type %T for flag %s", v, k)
+			errUtils.CheckErrorPrintAndExit(er, "", "")
 		}
-		checkFlagError(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	return validateFormat(describe)
 }

@@ -565,7 +565,9 @@ func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 
 // processStoreConfig creates a store registry from the provided stores config and assigns it to the atmosConfig
 func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
-	log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
+	if len(atmosConfig.StoresConfig) > 0 {
+		log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
+	}
 
 	storeRegistry, err := store.NewStoreRegistry(&atmosConfig.StoresConfig)
 	if err != nil {

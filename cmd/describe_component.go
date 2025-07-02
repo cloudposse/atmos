@@ -5,9 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeComponentCmd describes configuration for components
@@ -30,21 +29,44 @@ var describeComponentCmd = &cobra.Command{
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		checkFlagNotPresentError(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		format, err := flags.GetString("format")
-		checkFlagNotPresentError(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		file, err := flags.GetString("file")
-		checkFlagNotPresentError(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		processTemplates, err := flags.GetBool("process-templates")
-		checkFlagNotPresentError(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		checkFlagNotPresentError(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		query, err := flags.GetString("query")
-		checkFlagNotPresentError(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		skip, err := flags.GetStringSlice("skip")
-		checkFlagNotPresentError(err, cmd)
+		if err != nil {
+			return err
+		}
+
 		pager, err := flags.GetString("pager")
-		checkFlagNotPresentError(err, cmd)
+		if err != nil {
+			return err
+		}
 
 		component := args[0]
 
@@ -59,12 +81,7 @@ var describeComponentCmd = &cobra.Command{
 			Format:               format,
 			File:                 file,
 		})
-		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
-		telemetry.CaptureCmd(cmd)
-		return nil
+		return err
 	},
 	ValidArgsFunction: ComponentsArgCompletion,
 }
@@ -80,17 +97,8 @@ func init() {
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	describeCmd.AddCommand(describeComponentCmd)
-}
-
-// We prefer to panic because this is a developer error.
-// checkFlagNotPresentError checks if the error is nil.
-func checkFlagNotPresentError(err error, cmd *cobra.Command) {
-	if err != nil {
-		telemetry.CaptureCmd(cmd, err)
-		panic(err)
-	}
 }

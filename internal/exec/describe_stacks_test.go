@@ -3,10 +3,11 @@ package exec
 import (
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/pager"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDescribeStacksExec(t *testing.T) {
