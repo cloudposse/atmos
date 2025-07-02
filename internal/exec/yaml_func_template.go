@@ -6,14 +6,11 @@ import (
 	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func processTagTemplate(
-	atmosConfig schema.AtmosConfiguration,
 	input string,
-	currentStack string,
 ) any {
 	log.Debug("Executing", "Atmos YAML function", input)
 

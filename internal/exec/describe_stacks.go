@@ -365,7 +365,7 @@ func ExecuteDescribeStacks(
 							// Process YAML functions
 							if processYamlFunctions {
 								componentSectionConverted, err := ProcessCustomYamlTags(
-									atmosConfig,
+									&atmosConfig,
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,
@@ -584,7 +584,7 @@ func ExecuteDescribeStacks(
 							// Process YAML functions
 							if processYamlFunctions {
 								componentSectionConverted, err := ProcessCustomYamlTags(
-									atmosConfig,
+									&atmosConfig,
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,

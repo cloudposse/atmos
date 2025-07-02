@@ -12,7 +12,7 @@ import (
 )
 
 func processTagTerraformState(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 ) any {
@@ -50,6 +50,6 @@ func processTagTerraformState(
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
-	value := GetTerraformState(&atmosConfig, stack, component, output, false)
+	value := GetTerraformState(atmosConfig, stack, component, output, false)
 	return value
 }
