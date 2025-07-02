@@ -59,7 +59,6 @@ var RootCmd = &cobra.Command{
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
-					telemetry.CaptureCmd(cmd, err)
 					log.Warn(err.Error())
 				}
 			} else {
@@ -75,12 +74,10 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 
 		err = e.ExecuteAtmosCmd()
-		telemetry.CaptureCmd(cmd, err)
 		return err
 	},
 }
@@ -173,7 +170,8 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
-	err = RootCmd.Execute()
+	cmd, err := RootCmd.ExecuteC()
+	telemetry.CaptureCmd(cmd, err)
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			command := getInvalidCommandName(err.Error())
