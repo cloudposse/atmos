@@ -94,7 +94,7 @@ func TestCaptureCmdString(t *testing.T) {
 			Set("ci", true).
 			Set("ci_provider", "").
 			Set("atmos_pro_workspace_id", atmosProWorkspaceID).
-			Set("is_docker", isDocker()),
+			Set("docker", isDocker()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
@@ -141,7 +141,7 @@ func TestCaptureCmdErrorString(t *testing.T) {
 			Set("ci", false).
 			Set("ci_provider", "").
 			Set("atmos_pro_workspace_id", "").
-			Set("is_docker", isDocker()),
+			Set("docker", isDocker()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 	captureCmdString("test-cmd", errors.New("test-error"), mockClientProvider.NewMockClient)
@@ -305,7 +305,7 @@ func TestCaptureCmd(t *testing.T) {
 			Set("ci", true).
 			Set("ci_provider", "JENKINS").
 			Set("atmos_pro_workspace_id", "").
-			Set("is_docker", isDocker()),
+			Set("docker", isDocker()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
@@ -364,7 +364,7 @@ func TestCaptureCmdError(t *testing.T) {
 			Set("ci", true).
 			Set("ci_provider", "GITHUB_ACTIONS").
 			Set("atmos_pro_workspace_id", atmosProWorkspaceID).
-			Set("is_docker", isDocker()),
+			Set("docker", isDocker()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 

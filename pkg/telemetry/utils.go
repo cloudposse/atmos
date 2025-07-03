@@ -99,7 +99,7 @@ func captureCmdString(cmdString string, err error, provider ...TelemetryClientPr
 			Set("ci", isCI()).                                    // Whether running in CI
 			Set("ci_provider", ciProvider()).                     // Which CI provider is being used
 			Set("atmos_pro_workspace_id", atmosProWorkspaceID()). // Atmos Pro workspace ID
-			Set("is_docker", isDocker())                          // Whether running in Docker
+			Set("docker", isDocker())                             // Whether running in Docker
 
 		// Capture the telemetry event
 		t.Capture(CommandEventName, properties)
