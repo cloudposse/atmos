@@ -74,6 +74,8 @@ const (
 	ComponentTypeSectionName          = "component_type"
 	OutputsSectionName                = "outputs"
 	StaticSectionName                 = "static"
+	BackendTypeLocal                  = "local"
+	BackendTypeS3                     = "s3"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"

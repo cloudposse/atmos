@@ -47,21 +47,47 @@ func GetComponentBackendType(sections map[string]any) string {
 	return ""
 }
 
-// GetS3BackendBucket returns the `bucket` section from an S3 backend config.
-func GetS3BackendBucket(backend map[string]any) string {
-	if i, ok := backend["bucket"].(string); ok {
+// GetBackendAttribute returns an attribute from the backend config.
+func GetBackendAttribute(backend map[string]any, section string) string {
+	if i, ok := backend[section].(string); ok {
 		return i
 	}
 	return ""
 }
 
-/*
-   bucket: bd-kma-ue2-prod-tfstate
-   dynamodb_table: bd-kma-ue2-prod-tfstate-lock
-   role_arn: arn:aws:iam::145023098834:role/bd-kma-gbl-prod-tfstate
-   encrypt: true
-   key: terraform.tfstate
-   acl: bucket-owner-full-control
-   region: us-east-2
-   workspace_key_prefix: "eks-karpenter-node-pool"
-*/
+type TerraformS3BackendInfo struct {
+	Bucket             string
+	Region             string
+	Key                string
+	RoleArn            string
+	WorkspaceKeyPrefix string
+}
+
+type TerraformBackendInfo struct {
+	Type      string
+	Workspace string
+	Backend   map[string]any
+	S3        TerraformS3BackendInfo
+}
+
+func GetTerraformBackendInfo(sections map[string]any) TerraformBackendInfo {
+	info := TerraformBackendInfo{}
+	info.Workspace = GetComponentTerraformWorkspace(sections)
+	info.Backend = GetComponentBackend(sections)
+	info.Type = GetComponentBackendType(sections)
+	if info.Type == "" {
+		info.Type = cfg.BackendTypeLocal
+	}
+
+	if info.Type == cfg.BackendTypeS3 {
+		info.S3 = TerraformS3BackendInfo{
+			Bucket:             GetBackendAttribute(info.Backend, "bucket"),
+			Region:             GetBackendAttribute(info.Backend, "region"),
+			Key:                GetBackendAttribute(info.Backend, "key"),
+			RoleArn:            GetBackendAttribute(info.Backend, "role_arn"),
+			WorkspaceKeyPrefix: GetBackendAttribute(info.Backend, "workspace_key_prefix"),
+		}
+	}
+
+	return info
+}
