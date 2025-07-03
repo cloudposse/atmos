@@ -15,8 +15,9 @@ import (
 )
 
 type CacheConfig struct {
-	LastChecked    int64  `mapstructure:"last_checked"`
-	InstallationId string `mapstructure:"installation_id"`
+	LastChecked              int64  `mapstructure:"last_checked"`
+	InstallationId           string `mapstructure:"installation_id"`
+	TelemetryDisclosureShown bool   `mapstructure:"telemetry_disclosure_shown"`
 }
 
 func GetCacheFilePath() (string, error) {
@@ -78,6 +79,7 @@ func SaveCache2(cfg CacheConfig) error {
 		v := viper.New()
 		v.Set("last_checked", cfg.LastChecked)
 		v.Set("installation_id", cfg.InstallationId)
+		v.Set("telemetry_disclosure_shown", cfg.TelemetryDisclosureShown)
 		if err := v.WriteConfigAs(cacheFile); err != nil {
 			return errors.Wrap(err, "failed to write cache file")
 		}
@@ -94,6 +96,7 @@ func SaveCache(cfg CacheConfig) error {
 	v := viper.New()
 	v.Set("last_checked", cfg.LastChecked)
 	v.Set("installation_id", cfg.InstallationId)
+	v.Set("telemetry_disclosure_shown", cfg.TelemetryDisclosureShown)
 	if err := v.WriteConfigAs(cacheFile); err != nil {
 		return errors.Wrap(err, "failed to write cache file")
 	}

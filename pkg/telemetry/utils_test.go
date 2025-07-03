@@ -437,3 +437,100 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 	captureCmd(cmd, errors.New("test-error"), mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
+
+// TestTelemetryDisclosureMessage tests the disclosure message functionality when telemetry disclosure
+// has not been shown before. It verifies that the first call returns the expected disclosure message
+// and subsequent calls return empty strings (indicating the disclosure has been marked as shown).
+func TestTelemetryDisclosureMessage(t *testing.T) {
+	// Preserve and restore CI environment variables to avoid interference.
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Load cache configuration and ensure telemetry disclosure is set to not shown.
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryDisclosureShown = false
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	// First call should return the disclosure message.
+	message1 := disclosureMessage()
+	assert.NotEmpty(t, message1)
+	assert.Equal(t, message1, `Notice: Atmos now collects completely anonymous telemetry regarding usage.
+This information is used to shape Atmos roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
+by visiting the following URL: https://atmos.tools/cli/telemetry
+
+`)
+
+	// Second call should return empty string since disclosure has been marked as shown.
+	message2 := disclosureMessage()
+	assert.Empty(t, message2)
+}
+
+// TestTelemetryDisclosureMessageShown tests that no disclosure message is returned when
+// the telemetry disclosure has already been shown to the user.
+func TestTelemetryDisclosureMessageShown(t *testing.T) {
+	// Preserve and restore CI environment variables to avoid interference
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Load cache configuration and set telemetry war	ning as already shown.
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryDisclosureShown = true
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	// Should return empty string since disclosure has already been shown.
+	message := disclosureMessage()
+	assert.Empty(t, message)
+}
+
+// TestTelemetryDisclosureMessageHideForCI tests that disclosure messages are suppressed
+// when running in a CI environment (when CI environment variable is set to "true").
+func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
+	// Preserve and restore CI environment variables to avoid interference.
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Load cache configuration and ensure telemetry disclosure is set to not shown.
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryDisclosureShown = false
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	// Set CI environment variable to simulate CI environment.
+	os.Setenv("CI", "true")
+	// Should return empty string when running in CI environment.
+	message := disclosureMessage()
+	assert.Empty(t, message)
+	os.Unsetenv("CI")
+}
+
+// TestTelemetryDisclosureMessageHideIfTelemetryDisabled tests that disclosure messages are suppressed
+// when telemetry is disabled.
+func TestTelemetryDisclosureMessageHideIfTelemetryDisabled(t *testing.T) {
+	// Preserve and restore CI environment variables to avoid interference.
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Load cache configuration and ensure telemetry disclosure is set to not shown.
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryDisclosureShown = false
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	// Disable telemetry via environment variable.
+	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
+	// Should return empty string when telemetry is disabled.
+	message := disclosureMessage()
+	assert.Empty(t, message)
+	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+}
