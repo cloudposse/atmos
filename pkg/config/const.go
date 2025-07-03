@@ -73,6 +73,7 @@ const (
 	CliArgsSectionName                = "cli_args"
 	ComponentTypeSectionName          = "component_type"
 	OutputsSectionName                = "outputs"
+	StaticSectionName                 = "static"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
