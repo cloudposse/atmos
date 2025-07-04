@@ -26,7 +26,7 @@ terraform:
 
 components:
   terraform:
-    component-1:
+    component-1: {}
 
     component-2:
       backend_type: s3

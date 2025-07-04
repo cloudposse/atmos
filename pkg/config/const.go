@@ -76,6 +76,9 @@ const (
 	StaticSectionName                 = "static"
 	BackendTypeLocal                  = "local"
 	BackendTypeS3                     = "s3"
+	BackendTypeAzurerm                = "azurerm"
+	BackendTypeGCS                    = "gcs"
+	BackendTypeCloud                  = "cloud"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
