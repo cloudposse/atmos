@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -13,6 +14,14 @@ import (
 // GetComponentTerraformWorkspace returns the `workspace` section for a component in a stack.
 func GetComponentTerraformWorkspace(sections map[string]any) string {
 	if workspace, ok := sections[cfg.WorkspaceSectionName].(string); ok {
+		return workspace
+	}
+	return ""
+}
+
+// GetTerraformComponent returns the `component` section for a component in a stack.
+func GetTerraformComponent(sections map[string]any) string {
+	if workspace, ok := sections[cfg.ComponentSectionName].(string); ok {
 		return workspace
 	}
 	return ""
@@ -81,16 +90,18 @@ type TerraformS3BackendInfo struct {
 
 // TerraformBackendInfo contains the backend information.
 type TerraformBackendInfo struct {
-	Type      string
-	Workspace string
-	Backend   map[string]any
-	S3        TerraformS3BackendInfo
+	Type               string
+	Workspace          string
+	TerraformComponent string
+	Backend            map[string]any
+	S3                 TerraformS3BackendInfo
 }
 
 // GetTerraformBackendInfo returns the Terraform backend information from the component config.
 func GetTerraformBackendInfo(sections map[string]any) TerraformBackendInfo {
 	info := TerraformBackendInfo{}
 	info.Workspace = GetComponentTerraformWorkspace(sections)
+	info.TerraformComponent = GetTerraformComponent(sections)
 	info.Backend = GetComponentBackend(sections)
 	info.Type = GetComponentBackendType(sections)
 
@@ -145,18 +156,43 @@ func GetTerraformBackendVariable(
 // GetTerraformBackend returns the Terraform state from the configured backend.
 func GetTerraformBackend(
 	atmosConfig *schema.AtmosConfiguration,
-	component string,
-	stack string,
 	sections map[string]any,
 ) (map[string]any, error) {
 	backendInfo := GetTerraformBackendInfo(sections)
 
 	switch backendInfo.Type {
 	case cfg.BackendTypeLocal:
-		return nil, nil
+		return GetTerraformBackendLocal(atmosConfig, backendInfo)
 	case cfg.BackendTypeS3:
-		return nil, nil
+		return GetTerraformBackendS3(atmosConfig, backendInfo)
 	default:
 		return nil, fmt.Errorf("%w %s. Supported backends: local, s3", errUtils.ErrUnsupportedBackendType, backendInfo.Type)
 	}
+}
+
+// GetTerraformBackendLocal returns the Terraform state from the local backend.
+func GetTerraformBackendLocal(
+	atmosConfig *schema.AtmosConfiguration,
+	backendInfo TerraformBackendInfo,
+) (map[string]any, error) {
+	tfStateFilePath := filepath.Join(
+		atmosConfig.TerraformDirAbsolutePath,
+		backendInfo.TerraformComponent,
+		"terraform.tfstate.d",
+		backendInfo.Workspace,
+		"terraform.tfstate",
+	)
+	if !u.FileExists(tfStateFilePath) {
+		return nil, fmt.Errorf("%w.\npath `%s`", errUtils.ErrMissingTerraformStateFile, tfStateFilePath)
+	}
+
+	return nil, nil
+}
+
+// GetTerraformBackendS3 returns the Terraform state from the configured S3 backend.
+func GetTerraformBackendS3(
+	atmosConfig *schema.AtmosConfiguration,
+	backendInfo TerraformBackendInfo,
+) (map[string]any, error) {
+	return nil, nil
 }
