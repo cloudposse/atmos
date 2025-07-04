@@ -155,6 +155,36 @@ func GetTerraformBackendVariable(
 	return res, nil
 }
 
+// RawTerraformState represents a raw Terraform state file.
+type RawTerraformState struct {
+	Version          int    `json:"version"`           // Internal format version
+	TerraformVersion string `json:"terraform_version"` // CLI version used
+	Outputs          map[string]struct {
+		Value any `json:"value"` // Can be any JSON type
+		Type  any `json:"type"`  // HCL type representation
+	} `json:"outputs"`
+	Resources interface{} `json:"resources,omitempty"`
+}
+
+// ProcessTerraformStateFile processes the Terraform state file.
+// https://pkg.go.dev/github.com/hashicorp/terraform-json
+// https://github.com/hashicorp/terraform-json
+func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
+	var rawState RawTerraformState
+	if err := json.Unmarshal(data, &rawState); err != nil {
+		return nil, err
+	}
+
+	rawOutputs := rawState.Outputs
+	result := make(map[string]any, len(rawOutputs))
+
+	for key, output := range rawOutputs {
+		result[key] = output.Value
+	}
+
+	return result, nil
+}
+
 // GetTerraformBackend returns the Terraform state from the configured backend.
 func GetTerraformBackend(
 	atmosConfig *schema.AtmosConfiguration,
@@ -186,17 +216,17 @@ func GetTerraformBackendLocal(
 	)
 
 	if !u.FileExists(tfStateFilePath) {
-		return nil, fmt.Errorf("%w.\npath `%s`", errUtils.ErrMissingTerraformStateFile, tfStateFilePath)
+		return nil, fmt.Errorf("%w.\npath: `%s`", errUtils.ErrMissingTerraformStateFile, tfStateFilePath)
 	}
 
 	content, err := os.ReadFile(tfStateFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w.\npath `%s`\nerror: %v", errUtils.ErrReadFile, tfStateFilePath, err)
+		return nil, fmt.Errorf("%w.\npath: `%s`\nerror: %v", errUtils.ErrReadFile, tfStateFilePath, err)
 	}
 
 	data, err := ProcessTerraformStateFile(content)
 	if err != nil {
-		return nil, fmt.Errorf("%w.\npath `%s`\nerror: %v", errUtils.ErrProcessTerraformStateFile, tfStateFilePath, err)
+		return nil, fmt.Errorf("%w.\npath: `%s`\nerror: %v", errUtils.ErrProcessTerraformStateFile, tfStateFilePath, err)
 	}
 
 	return data, nil
@@ -208,34 +238,4 @@ func GetTerraformBackendS3(
 	backendInfo TerraformBackendInfo,
 ) (map[string]any, error) {
 	return nil, nil
-}
-
-// RawTerraformState represents a raw Terraform state file.
-type RawTerraformState struct {
-	Version          int    `json:"version"`           // Internal format version
-	TerraformVersion string `json:"terraform_version"` // CLI version used
-	Outputs          map[string]struct {
-		Value any `json:"value"` // Can be any JSON type
-		Type  any `json:"type"`  // HCL type representation
-	} `json:"outputs"`
-	Resources interface{} `json:"resources,omitempty"`
-}
-
-// ProcessTerraformStateFile processes the Terraform state file.
-// https://pkg.go.dev/github.com/hashicorp/terraform-json
-// https://github.com/hashicorp/terraform-json
-func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
-	var rawState RawTerraformState
-	if err := json.Unmarshal(data, &rawState); err != nil {
-		return nil, err
-	}
-
-	rawOutputs := rawState.Outputs
-	result := make(map[string]any, len(rawOutputs))
-
-	for key, output := range rawOutputs {
-		result[key] = output.Value
-	}
-
-	return result, nil
 }
