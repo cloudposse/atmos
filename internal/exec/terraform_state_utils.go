@@ -15,6 +15,7 @@ var terraformStateCache = sync.Map{}
 
 func GetTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
+	yamlFunc string,
 	stack string,
 	component string,
 	output string,
@@ -27,14 +28,14 @@ func GetTerraformState(
 		backend, found := terraformStateCache.Load(stackSlug)
 		if found && backend != nil {
 			log.Debug("Cache hit",
-				"function", fmt.Sprintf("!terraform.state %s %s %s", component, stack, output),
+				"function", yamlFunc,
 				cfg.ComponentStr, component,
 				cfg.StackStr, stack,
 				"output", output,
 			)
-			result, err := GetTerraformBackendVariable(atmosConfig, component, stack, backend.(map[string]any), output)
+			result, err := GetTerraformBackendVariable(atmosConfig, backend.(map[string]any), output)
 			if err != nil {
-				er := fmt.Errorf("%w %s for component %s in stack %s. Error: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, err)
+				er := fmt.Errorf("%w %s for component %s in stack %s in YAML function %s. Error: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 				errUtils.CheckErrorPrintAndExit(er, "", "")
 			}
 			return result
@@ -43,7 +44,7 @@ func GetTerraformState(
 
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
-		er := fmt.Errorf("%w %s in stack %s. Error: %v", errUtils.ErrDescribeComponent, component, stack, err)
+		er := fmt.Errorf("%w %s in stack %s in YAML function %s. Error: %v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
@@ -62,7 +63,7 @@ func GetTerraformState(
 	// Read Terraform backend
 	backend, err := GetTerraformBackend(atmosConfig, component, stack, sections)
 	if err != nil {
-		er := fmt.Errorf("%w for component %s in stack %s. Error: %v", errUtils.ErrGetTerraformBackend, component, stack, err)
+		er := fmt.Errorf("%w for component %s in stack %s in YAML function %s. Error: %v", errUtils.ErrReadTerraformBackend, component, stack, yamlFunc, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
@@ -70,9 +71,9 @@ func GetTerraformState(
 	terraformStateCache.Store(stackSlug, backend)
 
 	// Get the output
-	result, err := GetTerraformBackendVariable(atmosConfig, component, stack, backend, output)
+	result, err := GetTerraformBackendVariable(atmosConfig, backend, output)
 	if err != nil {
-		er := fmt.Errorf("%w %s for component %s in stack %s. Error: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, err)
+		er := fmt.Errorf("%w %s for component %s in stack %s in YAML function %s. Error: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 	return result

@@ -1,10 +1,13 @@
 package exec
 
 import (
+	"fmt"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"strings"
 )
 
 // GetComponentTerraformWorkspace returns the `workspace` section for a component in a stack.
@@ -120,6 +123,25 @@ func GetTerraformBackendInfo(sections map[string]any) TerraformBackendInfo {
 	return info
 }
 
+// GetTerraformBackendVariable returns the output from the configured backend.
+func GetTerraformBackendVariable(
+	atmosConfig *schema.AtmosConfiguration,
+	values map[string]any,
+	variable string,
+) (any, error) {
+	val := variable
+	if !strings.HasPrefix(variable, ".") {
+		val = "." + val
+	}
+
+	res, err := u.EvaluateYqExpression(atmosConfig, values, val)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 // GetTerraformBackend returns the Terraform state from the configured backend.
 func GetTerraformBackend(
 	atmosConfig *schema.AtmosConfiguration,
@@ -127,26 +149,14 @@ func GetTerraformBackend(
 	stack string,
 	sections map[string]any,
 ) (map[string]any, error) {
-	return nil, nil
-}
+	backendInfo := GetTerraformBackendInfo(sections)
 
-// GetTerraformBackendVariable returns the output from the configured backend.
-func GetTerraformBackendVariable(
-	atmosConfig *schema.AtmosConfiguration,
-	component string,
-	stack string,
-	outputs map[string]any,
-	output string,
-) (any, error) {
-	val := output
-	if !strings.HasPrefix(output, ".") {
-		val = "." + val
+	switch backendInfo.Type {
+	case cfg.BackendTypeLocal:
+		return nil, nil
+	case cfg.BackendTypeS3:
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("%w %s. Supported backends: local, s3", errUtils.ErrUnsupportedBackendType, backendInfo.Type)
 	}
-
-	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
 }

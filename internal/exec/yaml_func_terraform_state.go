@@ -46,10 +46,10 @@ func processTagTerraformState(
 			"stack", currentStack,
 		)
 	} else {
-		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		er := fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	value := GetTerraformState(atmosConfig, stack, component, output, false)
+	value := GetTerraformState(atmosConfig, input, stack, component, output, false)
 	return value
 }

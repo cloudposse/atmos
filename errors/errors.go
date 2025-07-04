@@ -39,7 +39,9 @@ var (
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the `component` argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
 
+	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrDescribeComponent                = errors.New("failed to describe component")
-	ErrGetTerraformBackend              = errors.New("failed to get terraform backend")
+	ErrReadTerraformBackend             = errors.New("failed to read terraform backend")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
+	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 )
