@@ -41,7 +41,7 @@ func processTagTerraformState(
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
-		log.Debug("Calling Atmos YAML function with component and output parameters; using current stack",
+		log.Debug("Executing Atmos YAML function with component and output parameters; using current stack",
 			"function", input,
 			"stack", currentStack,
 		)
@@ -50,6 +50,7 @@ func processTagTerraformState(
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	value := GetTerraformState(atmosConfig, input, stack, component, output, false)
+	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return value
 }

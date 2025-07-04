@@ -20,7 +20,7 @@ func GetTerraformState(
 	component string,
 	output string,
 	skipCache bool,
-) any {
+) (any, error) {
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it
@@ -36,16 +36,16 @@ func GetTerraformState(
 			result, err := GetTerraformBackendVariable(atmosConfig, backend.(map[string]any), output)
 			if err != nil {
 				er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`. Error: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
-				errUtils.CheckErrorPrintAndExit(er, "", "")
+				return nil, er
 			}
-			return result
+			return result, nil
 		}
 	}
 
 	componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
 		er := fmt.Errorf("%w `%s` in stack `%s` in YAML function `%s`. Error: %v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, er
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
@@ -57,14 +57,14 @@ func GetTerraformState(
 		// Cache the result
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
 		result := getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
-		return result
+		return result, nil
 	}
 
 	// Read Terraform backend
 	backend, err := GetTerraformBackend(atmosConfig, componentSections)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrReadTerraformBackend, component, stack, yamlFunc, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, er
 	}
 
 	// Cache the result
@@ -74,7 +74,7 @@ func GetTerraformState(
 	result, err := GetTerraformBackendVariable(atmosConfig, backend, output)
 	if err != nil {
 		er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, er
 	}
-	return result
+	return result, nil
 }
