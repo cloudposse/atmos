@@ -10,6 +10,7 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"gopkg.in/yaml.v2"
 
@@ -51,6 +52,8 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 		//nolint:revive
 		log.Fatal(err)
 	}
+
+	telemetry.PrintTelemetryDisclosure()
 
 	atmosIcon := "\U0001F47D"
 

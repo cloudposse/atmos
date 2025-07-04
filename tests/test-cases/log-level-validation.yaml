@@ -32,6 +32,7 @@ tests:
       - test
     env:
       ATMOS_LOGS_LEVEL: XTrace
+      CI: "true"
     expect:
       stderr:
         - "XTrace"
@@ -46,6 +47,7 @@ tests:
     workdir: "fixtures/scenarios/valid-log-level"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      CI: "true"
     command: "atmos"
     args:
       - version
@@ -64,6 +66,7 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_LEVEL: Debug
+      CI: "true"
     command: "atmos"
     args:
       - version
@@ -83,6 +86,7 @@ tests:
     workdir: "../"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      CI: "true"
     command: "atmos"
     args:
       - --logs-level
@@ -104,6 +108,7 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_LEVEL: "Debug"
+      CI: "true"
     command: "atmos"
     args:
       - version
@@ -127,6 +132,7 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_LEVEL: "Info"
+      CI: "true"
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
@@ -147,6 +153,7 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_FILE: "/dev/stdout"
+      CI: "true"
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
@@ -169,6 +176,7 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_FILE: "/dev/stderr"
+      CI: "true"
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
