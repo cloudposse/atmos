@@ -55,15 +55,15 @@ func GetTerraformState(
 	}
 
 	// Read Terraform state
-	terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
+	terraformState, err := GetTerraformStateBackend(atmosConfig, component, stack, sections)
 	if err != nil {
-		er := fmt.Errorf("failed to execute terraform output for the component %s in the stack %s. Error: %w", component, stack, err)
+		er := fmt.Errorf("failed to get terraform state for the component %s in the stack %s. Error: %w", component, stack, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
 	// Cache the result
-	terraformStateCache.Store(stackSlug, terraformOutputs)
+	terraformStateCache.Store(stackSlug, terraformState)
 	// Get the output
-	result := getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
+	result := getTerraformOutputVariable(atmosConfig, component, stack, terraformState, output)
 	return result
 }

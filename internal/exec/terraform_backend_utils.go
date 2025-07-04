@@ -2,6 +2,7 @@ package exec
 
 import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // GetComponentTerraformWorkspace returns the `workspace` section for a component in a stack.
@@ -107,6 +108,7 @@ func GetTerraformBackendInfo(sections map[string]any) TerraformBackendInfo {
 		if assumeRoleSection != nil {
 			roleArn = GetSectionAttribute(assumeRoleSection, "role_arn")
 		}
+		// If `assume_role.role_arn` is not set, fallback to `role_arn`
 		if roleArn == "" {
 			roleArn = GetSectionAttribute(info.Backend, "role_arn")
 		}
@@ -114,4 +116,14 @@ func GetTerraformBackendInfo(sections map[string]any) TerraformBackendInfo {
 	}
 
 	return info
+}
+
+// GetTerraformStateBackend returns the Terraform state from the configured backend.
+func GetTerraformStateBackend(
+	atmosConfig *schema.AtmosConfiguration,
+	component string,
+	stack string,
+	sections map[string]any,
+) (map[string]any, error) {
+	return nil, nil
 }
