@@ -46,6 +46,9 @@ var (
 	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 	ErrMissingTerraformStateFile        = errors.New("missing terraform local state file")
 	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
+	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
+	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
 
 	ErrReadFile = errors.New("error reading file")
 )
