@@ -45,4 +45,7 @@ var (
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
 	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 	ErrMissingTerraformStateFile        = errors.New("missing terraform local state file")
+	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
+
+	ErrReadFile = errors.New("error reading file")
 )

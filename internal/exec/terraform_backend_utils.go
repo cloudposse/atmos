@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -182,11 +183,22 @@ func GetTerraformBackendLocal(
 		backendInfo.Workspace,
 		"terraform.tfstate",
 	)
+
 	if !u.FileExists(tfStateFilePath) {
 		return nil, fmt.Errorf("%w.\npath `%s`", errUtils.ErrMissingTerraformStateFile, tfStateFilePath)
 	}
 
-	return nil, nil
+	content, err := os.ReadFile(tfStateFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("%w.\npath `%s`\nerror: %v", errUtils.ErrReadFile, tfStateFilePath, err)
+	}
+
+	data, err := ProcessTerraformStateFile(string(content))
+	if err != nil {
+		return nil, fmt.Errorf("%w.\npath `%s`\nerror: %v", errUtils.ErrProcessTerraformStateFile, tfStateFilePath, err)
+	}
+
+	return data, nil
 }
 
 // GetTerraformBackendS3 returns the Terraform state from the configured S3 backend.
@@ -194,5 +206,10 @@ func GetTerraformBackendS3(
 	atmosConfig *schema.AtmosConfiguration,
 	backendInfo TerraformBackendInfo,
 ) (map[string]any, error) {
+	return nil, nil
+}
+
+// ProcessTerraformStateFile processes the Terraform state file.
+func ProcessTerraformStateFile(data string) (map[string]any, error) {
 	return nil, nil
 }
