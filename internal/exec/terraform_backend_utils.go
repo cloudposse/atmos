@@ -64,6 +64,7 @@ func GetSectionAttribute(section map[string]any, attribute string) string {
 	return ""
 }
 
+// TerraformS3BackendInfo contains the `s3` backend information.
 type TerraformS3BackendInfo struct {
 	Bucket             string
 	Region             string
@@ -72,6 +73,7 @@ type TerraformS3BackendInfo struct {
 	WorkspaceKeyPrefix string
 }
 
+// TerraformBackendInfo contains the backend information.
 type TerraformBackendInfo struct {
 	Type      string
 	Workspace string
@@ -79,6 +81,7 @@ type TerraformBackendInfo struct {
 	S3        TerraformS3BackendInfo
 }
 
+// GetTerraformBackendInfo returns the Terraform backend information from the component config.
 func GetTerraformBackendInfo(sections map[string]any) TerraformBackendInfo {
 	info := TerraformBackendInfo{}
 	info.Workspace = GetComponentTerraformWorkspace(sections)

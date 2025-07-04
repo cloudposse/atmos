@@ -1,37 +1,41 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+# https://atmos.tools/core-concepts/components/terraform/backends/
 
 vars:
   stage: nonprod
 
+terraform:
+  backend:
+    s3:
+      bucket: nonprod-tfstate
+      dynamodb_table: nonprod-tfstate-lock
+      role_arn: arn:aws:iam::123456789123:role/nonprod-tfstate
+      encrypt: true
+      key: terraform.tfstate
+      acl: bucket-owner-full-control
+      region: us-east-2
+    azurerm:
+      resource_group_name: StorageAccount-ResourceGroup
+      storage_account_name: abcd1234
+      container_name: tfstate
+    gcs:
+      bucket: tf-state
+    cloud:
+      organization: my-org
+      hostname: app.terraform.io
+
 components:
   terraform:
     component-1:
-      metadata:
-        component: mock
-      settings:
-        config:
-          a: component-1-a
-          b: component-1-b
-          c: component-1-c
-      vars:
-        foo: "{{ .settings.config.a }}"
-        bar: "{{ .settings.config.b }}"
-        baz: "{{ .settings.config.c }}"
 
     component-2:
-      metadata:
-        component: mock
-      vars:
-        foo: !terraform.state component-1 foo
-        bar: !terraform.state component-1 bar
-        baz: !terraform.state component-1 {{ .stack }} baz
+      backend_type: s3
 
     component-3:
-      metadata:
-        component: mock
-      vars:
-        foo: !terraform.state component-1 {{ .stack }} foo
-        bar: !terraform.state component-2 .bar
-        baz: !terraform.state component-2 {{ .stack }} ".invalid-output // ""default-value"""
-        test_list: !terraform.state component-2 ".invalid-output2 // [""fallback1"", ""fallback2""]"
-        test_map: !terraform.state 'component-2 ".invalid-output3 // {""key1"": ""value1"", ""key2"": ""value2""}"'
+      backend_type: azurerm
+
+    component-4:
+      backend_type: gcs
+
+    component-5:
+      backend_type: cloud
