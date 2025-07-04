@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -169,7 +170,8 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
-	err = RootCmd.Execute()
+	cmd, err := RootCmd.ExecuteC()
+	telemetry.CaptureCmd(cmd, err)
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			command := getInvalidCommandName(err.Error())
@@ -258,6 +260,9 @@ func initCobraConfig() {
 			if err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
+
+			telemetry.PrintTelemetryDisclosure()
+
 			if err := oldUsageFunc(command); err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
@@ -270,6 +275,8 @@ func initCobraConfig() {
 			fmt.Println()
 			err := tuiUtils.PrintStyledText("ATMOS")
 			errUtils.CheckErrorPrintAndExit(err, "", "")
+			telemetry.PrintTelemetryDisclosure()
+
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
