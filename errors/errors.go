@@ -38,4 +38,8 @@ var (
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the `component` argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
+
+	ErrDescribeComponent                = errors.New("failed to describe component")
+	ErrGetTerraformBackend              = errors.New("failed to get terraform backend")
+	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
 )
