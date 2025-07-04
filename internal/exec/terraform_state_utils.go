@@ -24,15 +24,15 @@ func GetTerraformState(
 
 	// If the result for the component in the stack already exists in the cache, return it
 	if !skipCache {
-		cachedOutputs, found := terraformStateCache.Load(stackSlug)
-		if found && cachedOutputs != nil {
+		backend, found := terraformStateCache.Load(stackSlug)
+		if found && backend != nil {
 			log.Debug("Cache hit",
-				"command", fmt.Sprintf("!terraform.state %s %s %s", component, stack, output),
+				"function", fmt.Sprintf("!terraform.state %s %s %s", component, stack, output),
 				cfg.ComponentStr, component,
 				cfg.StackStr, stack,
 				"output", output,
 			)
-			return getTerraformOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+			return GetTerraformBackendVariable(atmosConfig, component, stack, backend.(map[string]any), output)
 		}
 	}
 
@@ -54,16 +54,17 @@ func GetTerraformState(
 		return result
 	}
 
-	// Read Terraform state
-	terraformState, err := GetTerraformStateBackend(atmosConfig, component, stack, sections)
+	// Read Terraform backend
+	backend, err := GetTerraformBackend(atmosConfig, component, stack, sections)
 	if err != nil {
 		er := fmt.Errorf("failed to get terraform state for the component %s in the stack %s. Error: %w", component, stack, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
 	// Cache the result
-	terraformStateCache.Store(stackSlug, terraformState)
+	terraformStateCache.Store(stackSlug, backend)
+
 	// Get the output
-	result := getTerraformOutputVariable(atmosConfig, component, stack, terraformState, output)
+	result := GetTerraformBackendVariable(atmosConfig, component, stack, backend, output)
 	return result
 }

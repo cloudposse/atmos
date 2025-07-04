@@ -1,8 +1,12 @@
 package exec
 
 import (
+	"fmt"
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"strings"
 )
 
 // GetComponentTerraformWorkspace returns the `workspace` section for a component in a stack.
@@ -118,12 +122,34 @@ func GetTerraformBackendInfo(sections map[string]any) TerraformBackendInfo {
 	return info
 }
 
-// GetTerraformStateBackend returns the Terraform state from the configured backend.
-func GetTerraformStateBackend(
+// GetTerraformBackend returns the Terraform state from the configured backend.
+func GetTerraformBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	sections map[string]any,
 ) (map[string]any, error) {
 	return nil, nil
+}
+
+// GetTerraformBackendVariable returns the output from the configured backend.
+func GetTerraformBackendVariable(
+	atmosConfig *schema.AtmosConfiguration,
+	component string,
+	stack string,
+	outputs map[string]any,
+	output string,
+) any {
+	val := output
+	if !strings.HasPrefix(output, ".") {
+		val = "." + val
+	}
+
+	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
+	if err != nil {
+		er := fmt.Errorf("failed to evaluate the backend output %s for the component %s in the stack %s. Error: %w", output, component, stack, err)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
+	}
+
+	return res
 }
