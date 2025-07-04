@@ -32,7 +32,12 @@ func GetTerraformState(
 				cfg.StackStr, stack,
 				"output", output,
 			)
-			return GetTerraformBackendVariable(atmosConfig, component, stack, backend.(map[string]any), output)
+			result, err := GetTerraformBackendVariable(atmosConfig, component, stack, backend.(map[string]any), output)
+			if err != nil {
+				er := fmt.Errorf("failed to evaluate backend output %s for the component %s in the stack %s. Error: %w", output, component, stack, err)
+				errUtils.CheckErrorPrintAndExit(er, "", "")
+			}
+			return result
 		}
 	}
 
@@ -57,7 +62,7 @@ func GetTerraformState(
 	// Read Terraform backend
 	backend, err := GetTerraformBackend(atmosConfig, component, stack, sections)
 	if err != nil {
-		er := fmt.Errorf("failed to get terraform state for the component %s in the stack %s. Error: %w", component, stack, err)
+		er := fmt.Errorf("failed to get terraform backend for the component %s in the stack %s. Error: %w", component, stack, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
@@ -65,6 +70,10 @@ func GetTerraformState(
 	terraformStateCache.Store(stackSlug, backend)
 
 	// Get the output
-	result := GetTerraformBackendVariable(atmosConfig, component, stack, backend, output)
+	result, err := GetTerraformBackendVariable(atmosConfig, component, stack, backend, output)
+	if err != nil {
+		er := fmt.Errorf("failed to evaluate backend output %s for the component %s in the stack %s. Error: %w", output, component, stack, err)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
+	}
 	return result
 }
