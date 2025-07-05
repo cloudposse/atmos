@@ -122,21 +122,36 @@ components:
 
 It has the following main sections:
 
-- `import` - (optional) a list of stack configuration files to import and combine with the current configuration file
-- `vars` - (optional) a map of variables for all components (Terraform and helmfile) in the stack
-- `terraform` - (optional) configuration (variables) for all Terraform components
-- `helmfile` - (optional) configuration (variables) for all helmfile components
-- `components` - (required) configuration for the Terraform and helmfile components
+<dl>
+  <dt>`import`</dt>
+  <dd>(optional) a list of stack configuration files to import and combine with the current configuration file</dd>
+
+  <dt>`vars`</dt>
+  <dd>(optional) a map of variables for all components (Terraform and helmfile) in the stack</dd>
+
+  <dt>`terraform`</dt>
+  <dd>(optional) configuration (variables) for all Terraform components</dd>
+
+  <dt>`helmfile`</dt>
+  <dd>(optional) configuration (variables) for all helmfile components</dd>
+
+  <dt>`components`</dt>
+  <dd>(required) configuration for the Terraform and helmfile components</dd>
+</dl>
 
 The `components` section consists of the following:
 
-- `terraform` - defines variables, the binary to execute, and the backend for each Terraform component.
+<dl>
+  <dt>`terraform`</dt>
+  <dd>Defines variables, the binary to execute, and the backend for each Terraform component.
   Terraform component names correspond to the Terraform components in
-  the [terraform](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced/components/terraform) folder
+  the [terraform](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced/components/terraform) folder</dd>
 
-- `helmfile` - defines variables and the binary to execute for each helmfile component.
+  <dt>`helmfile`</dt>
+  <dd>Defines variables and the binary to execute for each helmfile component.
   Helmfile component names correspond to the helmfile components in
-  the [helmfile](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced/components/helmfile) folder
+  the [helmfile](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced/components/helmfile) folder</dd>
+</dl>
 
 ## Run the Example
 
@@ -144,3 +159,4 @@ To run the example, execute the following commands in a terminal:
 
 - `cd example`
 - `make all` - it will build the Docker image, build the CLI tool inside the image, and then start the container
+

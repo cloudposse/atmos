@@ -246,18 +246,25 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1 --query <yq-
 
 ## Arguments
 
-| Argument    | Description     | Required |
-| :---------- | :-------------- | :------- |
-| `component` | Atmos component | yes      |
 
+<dl>
+  <dt>`component`</dt>
+  <dd>Atmos component (required)</dd>
+</dl>
 ## Flags
+<dl>
+  <dt>`--stack` (`-s`)</dt>
+  <dd>Atmos stack (required)</dd>
 
-| Flag       | Description                                                                                                                                                                                                       | Alias | Required |
-|:-----------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`  | Atmos stack                                                                                                                                                                                                       | `-s`  | yes      |
-| `--format` | Output format: `json` or `yaml` (`json` is default)                                                                                                                                                               | `-f`  | no       |
-| `--file`   | If specified, write the result to the file                                                                                                                                                                        |       | no       |
-| `--query`  | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe dependents <component> -s <stack> --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq | `-q`  | no       |
+  <dt>`--format` (`-f`)</dt>
+  <dd>Output format: `json` or `yaml` (`json` is default)</dd>
+
+  <dt>`--file`</dt>
+  <dd>If specified, write the result to the file</dd>
+
+  <dt>`--query` (`-q`)</dt>
+  <dd>Query the results of the command using `yq` expressions</dd>
+</dl>
 
 ## Output
 
@@ -283,31 +290,41 @@ Each object has the following schema:
 
 where:
 
-- `component` - the dependent Atmos component
 
-- `component_type` - the type of the dependent component (`terraform` or `helmfile`)
+<dl>
+  <dt>`component`</dt>
+  <dd>The dependent Atmos component</dd>
 
-- `component_path` - the filesystem path to the `terraform` or `helmfile` component
+  <dt>`component_type`</dt>
+  <dd>The type of the dependent component (`terraform` or `helmfile`)</dd>
 
-- `namespace` - the `namespace` where the dependent Atmos component is provisioned
+  <dt>`component_path`</dt>
+  <dd>The filesystem path to the `terraform` or `helmfile` component</dd>
 
-- `tenant` - the `tenant` where the dependent Atmos component is provisioned
+  <dt>`namespace`</dt>
+  <dd>The namespace where the dependent Atmos component is provisioned</dd>
 
-- `environment` - the `environment` where the dependent Atmos component is provisioned
+  <dt>`tenant`</dt>
+  <dd>The tenant where the dependent Atmos component is provisioned</dd>
 
-- `stage` - the `stage` where the dependent Atmos component is provisioned
+  <dt>`environment`</dt>
+  <dd>The environment where the dependent Atmos component is provisioned</dd>
 
-- `stack` - the Atmos stack where the dependent Atmos component is provisioned
+  <dt>`stage`</dt>
+  <dd>The stage where the dependent Atmos component is provisioned</dd>
 
-- `stack_slug` - the Atmos stack slug (concatenation of the Atmos stack and Atmos component)
+  <dt>`stack`</dt>
+  <dd>The Atmos stack where the dependent Atmos component is provisioned</dd>
 
-- `spacelift_stack` - the dependent Spacelift stack. It will be included only if the Spacelift workspace is enabled for the dependent Atmos component
-  in the Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled`
-  section or via inheritance)
+  <dt>`stack_slug`</dt>
+  <dd>The Atmos stack slug (concatenation of the Atmos stack and component)</dd>
 
-- `atlantis_project` - the dependent Atlantis project name. It will be included only if the Atlantis integration is configured in
-  the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integration](/integrations/atlantis) for more details
+  <dt>`spacelift_stack`</dt>
+  <dd>The dependent Spacelift stack. Included only if Spacelift workspace is enabled for the dependent component</dd>
 
+  <dt>`atlantis_project`</dt>
+  <dd>The dependent Atlantis project name. Included only if the Atlantis integration is configured in the stack</dd>
+</dl>
 :::note
 
 Abstract Atmos components (`metadata.type` is set to `abstract`) are not included in the output since they serve as blueprints for other
