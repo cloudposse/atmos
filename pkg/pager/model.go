@@ -29,6 +29,8 @@ const (
 
 type pagerState int
 
+var nextLine = "\n"
+
 const (
 	pagerStateBrowse pagerState = iota
 	pagerStateStatusMessage
@@ -175,7 +177,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Store original content and set initial content
 			if m.originalContent == "" {
 				m.originalContent = m.content
-				m.originalContentLines = strings.Split(m.content, "\n")
+				m.originalContentLines = strings.Split(m.content, nextLine)
 			}
 			m.viewport.SetContent(m.content)
 			m.ready = true
@@ -235,7 +237,7 @@ func (m *model) highlightSearchTerm() {
 		}
 	}
 
-	highlighted = strings.Join(highlightedLines, "\n")
+	highlighted = strings.Join(highlightedLines, nextLine)
 	m.content = highlighted
 	m.viewport.SetContent(m.content)
 }
@@ -456,7 +458,7 @@ func (m *model) setSize(w, h int) {
 
 	if m.showHelp {
 		if pagerHelpHeight == 0 {
-			pagerHelpHeight = strings.Count(m.helpView(), "\n")
+			pagerHelpHeight = strings.Count(m.helpView(), nextLine)
 		}
 		m.viewport.Height -= (statusBarHeight + pagerHelpHeight)
 	}
@@ -472,7 +474,7 @@ func (m *model) View() string {
 	// Show search prompt if in search mode
 	if m.forwardSlashPressed {
 		searchPrompt := fmt.Sprintf("Search: %s", m.searchTerm)
-		view += "\n" + statusBarMessageStyle(" "+searchPrompt+" ")
+		view += nextLine + statusBarMessageStyle(" "+searchPrompt+" ")
 	}
 
 	return view
@@ -488,7 +490,6 @@ func (m *model) helpView() (s string) {
 		"N       prev match",
 		"q       quit",
 	}
-	nextLine := "\n"
 	i := 0
 	s += nextLine
 	s += "k/↑      up                  " + col1[i] + nextLine
@@ -595,7 +596,7 @@ func (m *model) statusBarView(b *strings.Builder) {
 		helpNote,
 	)
 	if m.showHelp {
-		fmt.Fprint(b, "\n"+m.helpView())
+		fmt.Fprint(b, nextLine+m.helpView())
 	}
 }
 
@@ -604,7 +605,7 @@ func indent(s string, n int) string {
 	if n <= 0 || s == "" {
 		return s
 	}
-	l := strings.Split(s, "\n")
+	l := strings.Split(s, nextLine)
 	b := strings.Builder{}
 	i := strings.Repeat(" ", n)
 	for _, v := range l {
