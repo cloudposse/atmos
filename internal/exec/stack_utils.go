@@ -10,7 +10,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// BuildTerraformWorkspace builds Terraform workspace
+// BuildTerraformWorkspace builds Terraform workspace.
 func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	// Return 'default' workspace if workspaces are disabled
 	// Terraform always operates in the `default` workspace when multiple workspaces are unsupported or disabled,
@@ -110,7 +110,7 @@ func ProcessComponentMetadata(
 	return componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled, componentIsLocked
 }
 
-// BuildDependentStackNameFromDependsOnLegacy builds the dependent stack name from "settings.spacelift.depends_on" config
+// BuildDependentStackNameFromDependsOnLegacy builds the dependent stack name from "settings.spacelift.depends_on" config.
 func BuildDependentStackNameFromDependsOnLegacy(
 	dependsOn string,
 	allStackNames []string,
@@ -140,7 +140,7 @@ func BuildDependentStackNameFromDependsOnLegacy(
 	return dependentStackName, nil
 }
 
-// BuildDependentStackNameFromDependsOn builds the dependent stack name from "settings.depends_on" config
+// BuildDependentStackNameFromDependsOn builds the dependent stack name from "settings.depends_on" config.
 func BuildDependentStackNameFromDependsOn(
 	currentComponentName string,
 	currentStackName string,
@@ -165,7 +165,7 @@ func BuildDependentStackNameFromDependsOn(
 	return "", errorMessage
 }
 
-// BuildComponentPath builds component path (path to the component's physical location on disk)
+// BuildComponentPath builds component path (path to the component's physical location on disk).
 func BuildComponentPath(
 	atmosConfig schema.AtmosConfiguration,
 	componentSectionMap map[string]any,
@@ -204,7 +204,7 @@ func IsComponentAbstract(metadataSection map[string]any) bool {
 	return false
 }
 
-// IsComponentEnabled returns 'true' if the component is enabled
+// IsComponentEnabled returns 'true' if the component is enabled.
 func IsComponentEnabled(varsSection map[string]any) bool {
 	if enabled, ok := varsSection["enabled"].(bool); ok {
 		if enabled == false {
@@ -212,28 +212,4 @@ func IsComponentEnabled(varsSection map[string]any) bool {
 		}
 	}
 	return true
-}
-
-// GetComponentRemoteStateBackendStaticType returns the `remote_state_backend` section for a component in a stack
-// if the `remote_state_backend_type` is `static`
-func GetComponentRemoteStateBackendStaticType(
-	sections map[string]any,
-) (map[string]any, error) {
-	var remoteStateBackend map[string]any
-	var remoteStateBackendType string
-	var ok bool
-
-	if remoteStateBackendType, ok = sections[cfg.RemoteStateBackendTypeSectionName].(string); !ok {
-		return nil, nil
-	}
-
-	if remoteStateBackendType != "static" {
-		return nil, nil
-	}
-
-	if remoteStateBackend, ok = sections[cfg.RemoteStateBackendSectionName].(map[string]any); ok {
-		return remoteStateBackend, nil
-	}
-
-	return nil, nil
 }

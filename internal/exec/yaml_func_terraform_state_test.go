@@ -13,7 +13,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func TestYamlFuncTerraformOutput(t *testing.T) {
+func TestYamlFuncTerraformState(t *testing.T) {
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
@@ -50,7 +50,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	}()
 
 	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/atmos-terraform-output-yaml-function"
+	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
@@ -74,13 +74,13 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d := processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 foo", stack)
+	d := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 bar", stack)
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 bar", stack)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 nonprod baz", "")
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "")
 	assert.Equal(t, "component-1-c", d)
 
 	res, err := ExecuteDescribeComponent(
@@ -114,13 +114,13 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 foo", stack)
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 foo", stack)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod bar", stack)
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod bar", stack)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod baz", "")
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "")
 	assert.Equal(t, "component-1-c", d)
 
 	res, err = ExecuteDescribeComponent(

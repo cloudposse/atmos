@@ -11,14 +11,14 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func processTagTerraformOutput(
+func processTagTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 ) any {
 	log.Debug("Executing Atmos YAML function", "function", input)
 
-	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
+	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformState)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	var component string
@@ -41,15 +41,16 @@ func processTagTerraformOutput(
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
-		log.Debug("Calling Atmos YAML function with component and output parameters; using current stack",
+		log.Debug("Executing Atmos YAML function with component and output parameters; using current stack",
 			"function", input,
 			"stack", currentStack,
 		)
 	} else {
-		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		er := fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	value := GetTerraformOutput(atmosConfig, stack, component, output, false)
+	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return value
 }
