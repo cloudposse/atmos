@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -59,6 +60,7 @@ func loadAWSConfig(ctx context.Context, region string, roleArn string) (aws.Conf
 
 	// Conditionally assume the role
 	if roleArn != "" {
+		log.Debug("Assuming role", "arn", roleArn)
 		stsClient := sts.NewFromConfig(baseCfg)
 		creds := stscreds.NewAssumeRoleProvider(stsClient, roleArn)
 		cfgOpts = append(cfgOpts, config.WithCredentialsProvider(aws.NewCredentialsCache(creds)))
