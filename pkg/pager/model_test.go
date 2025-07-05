@@ -84,6 +84,7 @@ func TestModel_Update(t *testing.T) {
 		m := model{
 			ready:    true,
 			viewport: vp,
+			content:  "test content",
 		}
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
 		m.Update(msg)
