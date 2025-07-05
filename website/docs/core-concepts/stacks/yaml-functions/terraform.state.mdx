@@ -15,10 +15,14 @@ of components in Atmos stack manifests directly from the configured [Terraform/O
 
 :::note
 Currently, the `!terraform.state` YAML function supports the following backend types:
-- `local` (Terraform and OpenTofu)
-- `s3` (Terraform and OpenTofu)
+- `local` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/local) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/local))
+- `s3` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/s3) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/s3))
 
-As new backend types are added (e.g. `azurerm`, `gcs`), this document will be updated accordingly.
+As support for new backend types is added (e.g. `azurerm`, `gcs`), this document will be updated accordingly.
+
+Meanwhile, if you are using backends other than `local` and `s3`, consider the [__`!store`__](/core-concepts/stacks/yaml-functions/store)
+or [__`!terraform.output`__](/core-concepts/stacks/yaml-functions/terraform.output) YAML functions to read remote state
+and [share data between components](/core-concepts/share-data).
 :::
 
 ## Usage
