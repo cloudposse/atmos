@@ -86,6 +86,7 @@ func TestModel_Update(t *testing.T) {
 			viewport: vp,
 			content:  "test content",
 		}
+		m.Init()
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
 		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
@@ -103,6 +104,7 @@ func TestModel_Update(t *testing.T) {
 			ready:    true,
 			viewport: vp,
 		}
+		m.Init()
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
 		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}

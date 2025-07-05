@@ -136,6 +136,8 @@ type model struct {
 }
 
 func (m *model) Init() tea.Cmd {
+	m.originalContent = m.content
+	m.originalContentLines = strings.Split(m.content, nextLine)
 	return nil
 }
 
@@ -174,11 +176,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// here.
 			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
 			m.viewport.YPosition = 0
-			// Store original content and set initial content
-			if m.originalContent == "" {
-				m.originalContent = m.content
-				m.originalContentLines = strings.Split(m.content, nextLine)
-			}
 			m.viewport.SetContent(m.content)
 			m.ready = true
 		} else {
