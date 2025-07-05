@@ -477,47 +477,67 @@ func (m *model) View() string {
 	return view
 }
 
-func (m *model) helpView() (s string) {
-	col1 := []string{
-		"g/home  go to top",
-		"G/end   go to bottom",
-		"c       copy contents",
-		"/       search",
-		"n       next match",
-		"N       prev match",
-		"q       quit",
+// helpView returns the help view with key bindings and actions.
+func (m *model) helpView() string {
+	// Define help items as key-value pairs for easy maintenance
+	leftColumn := [][2]string{
+		{"k/↑", "up"},
+		{"j/↓", "down"},
+		{"b/pgup", "page up"},
+		{"f/pgdn", "page down"},
+		{"u", "½ page up"},
+		{"d", "½ page down"},
+		{"esc", "back to files"},
 	}
-	i := 0
-	s += nextLine
-	s += "k/↑      up                  " + col1[i] + nextLine
-	i += 1
-	s += "j/↓      down                " + col1[i] + nextLine
-	i += 1
-	s += "b/pgup   page up             " + col1[i] + nextLine
-	i += 1
-	s += "f/pgdn   page down           " + col1[i] + nextLine
-	i += 1
-	s += "u        ½ page up           " + col1[i] + nextLine
-	i += 1
-	s += "d        ½ page down         " + col1[i] + nextLine
-	i += 1
-	s += "esc      back to files       " + col1[i] + nextLine
 
-	s = indent(s, 2)
+	rightColumn := [][2]string{
+		{"g/home", "go to top"},
+		{"G/end", "go to bottom"},
+		{"c", "copy contents"},
+		{"/", "search"},
+		{"n", "next match"},
+		{"N", "prev match"},
+		{"q", "quit"},
+	}
 
-	// Fill up empty cells with spaces for background coloring
-	if m.common.width > 0 {
-		lines := strings.Split(s, nextLine)
-		for i := 0; i < len(lines); i++ {
-			l := runewidth.StringWidth(lines[i])
-			n := max(m.common.width-l, 0)
-			lines[i] += strings.Repeat(" ", n)
+	// Find the maximum number of rows needed
+	maxRows := max(len(leftColumn), len(rightColumn))
+
+	// Build the help content
+	var lines []string
+	for i := 0; i < maxRows; i++ {
+		var left, right string
+
+		// Left column
+		if i < len(leftColumn) {
+			left = fmt.Sprintf("%-8s %-15s", leftColumn[i][0], leftColumn[i][1])
+		} else {
+			left = strings.Repeat(" ", 24)
 		}
 
-		s = strings.Join(lines, nextLine)
+		// Right column
+		if i < len(rightColumn) {
+			right = fmt.Sprintf("%-8s %s", rightColumn[i][0], rightColumn[i][1])
+		}
+
+		lines = append(lines, left+"  "+right)
 	}
 
-	return helpViewStyle(s)
+	content := nextLine + strings.Join(lines, nextLine)
+	content = indent(content, 2)
+
+	// Fill empty cells with spaces for background coloring
+	if m.common.width > 0 {
+		contentLines := strings.Split(content, nextLine)
+		for i, line := range contentLines {
+			lineWidth := runewidth.StringWidth(line)
+			padding := max(m.common.width-lineWidth, 0)
+			contentLines[i] = line + strings.Repeat(" ", padding)
+		}
+		content = strings.Join(contentLines, nextLine)
+	}
+
+	return helpViewStyle(content)
 }
 
 func (m *model) footerView() string {
