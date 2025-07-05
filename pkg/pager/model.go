@@ -29,6 +29,8 @@ const (
 
 type pagerState int
 
+const repeatSpace = 24
+
 var nextLine = "\n"
 
 const (
@@ -512,7 +514,7 @@ func (m *model) helpView() string {
 		if i < len(leftColumn) {
 			left = fmt.Sprintf("%-8s %-15s", leftColumn[i][0], leftColumn[i][1])
 		} else {
-			left = strings.Repeat(" ", 24)
+			left = strings.Repeat(" ", repeatSpace)
 		}
 
 		// Right column
