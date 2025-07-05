@@ -53,6 +53,39 @@ Atmos processes the templates first, and then executes the `!terraform.output` f
 the function dynamically.
 :::
 
+## `!terraform.output` Function Execution Flow
+
+When processing the `!terraform.output` YAML function for a component in a stack, Atmos executes the following steps:
+
+- **Stack and Component Context Resolution**
+Atmos resolves the full context for the specified component within the given stack, including all inherited and merged
+configuration layers (globals, environment and component-level settings).
+
+- **Terraform/OpenTofu Variables**
+Based on the resolved context, Atmos generates a `varfile` with all the variables for the component in the stack.
+
+- **Terraform/OpenTofu Backend**
+Atmos generates a backend configuration file for the component in the stack based on the resolved context.
+
+- **Terraform/OpenTofu Provider Overrides**
+Atmos generates a provider override file for the component in the stack (if provider overrides are configured in the stack manifests).
+
+- **Terraform/OpenTofu Workspace**
+Based on the resolved context, Atmos selects (or creates new) Terraform/OpenTofu workspace by executing
+`terraform/tofu workspace` commands.
+
+- **Terraform/OpenTofu Init**
+Atmos executes a `terraform/tofu init` command to initialize the component and download all Terraform/OpenTofu modules and
+providers (if they are not present in the cache).
+
+- **Terraform/OpenTofu Output**
+Atmos executes a `terraform/tofu output` command to read the outputs of the component in the stack.
+
+- **Output Parsing and Interpolation**
+The relevant output variable is extracted from the state file (using a [YQ](https://mikefarah.gitbook.io/yq/) parser).
+Atmos parses and interpolates the value into the final configuration structure, replacing the `!terraform.output`
+directive in the YAML stack manifest with the final value.
+
 ## Using YQ Expressions to retrieve items from complex output types
 
 To retrieve items from complex output types such as maps and lists, or do any kind of filtering or querying,
