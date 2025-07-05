@@ -160,7 +160,6 @@ func TestModel_Update(t *testing.T) {
 		assert.Equal(t, "", updatedModel.(*model).searchTerm, "Search term should be set to 't'")
 		assert.Nil(t, cmd, "No additional command expected")
 	})
-
 }
 
 func TestModel_View(t *testing.T) {
