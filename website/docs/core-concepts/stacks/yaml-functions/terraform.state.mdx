@@ -1,36 +1,34 @@
 ---
-title: "!terraform.output"
-sidebar_position: 1
-sidebar_label: "!terraform.output"
-description: Read the remote state of any Atmos component from Terraform/OpenTofu outputs
+title: "!terraform.state"
+sidebar_position: 2
+sidebar_label: "!terraform.state"
+description: Read the remote state of any Atmos component directly from the configured backends
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/share-data/remote-state))
-of components directly in Atmos stack manifests by internally executing a
-[`terraform output`](https://developer.hashicorp.com/terraform/cli/commands/output) or
-[`tofu output`](https://opentofu.org/docs/cli/commands/output/) command.
+The `!terraform.state` YAML function allows reading the outputs ([remote state](/core-concepts/share-data/remote-state))
+of components in Atmos stack manifests directly from the configured backends.
 </Intro>
 
 ## Usage
 
-The `!terraform.output` function can be called with either two or three parameters:
+The `!terraform.state` function can be called with either two or three parameters:
 
 ```yaml
   # Get the `output` of the `component` in the current stack
-  !terraform.output <component> <output>
+  !terraform.state <component> <output>
 
   # Get the `output` of the `component` in the provided `stack`
-  !terraform.output <component> <stack> <output>
+  !terraform.state <component> <stack> <output>
 
   # Get the output of the `component` by evaluating the YQ expression
-  !terraform.output <component> <yq-expression>
+  !terraform.state <component> <yq-expression>
 
  # Get the output of the `component` in the provided `stack` by evaluating the YQ expression
-  !terraform.output <component> <yq-expression>
+  !terraform.state <component> <yq-expression>
 ```
 
 ## Arguments
@@ -48,8 +46,8 @@ The `!terraform.output` function can be called with either two or three paramete
 
 
 :::tip
-You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `!terraform.output` YAML function expressions.
-Atmos processes the templates first, and then executes the `!terraform.output` function, allowing you to provide the parameters to
+You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `!terraform.state` YAML function expressions.
+Atmos processes the templates first, and then executes the `!terraform.state` function, allowing you to provide the parameters to
 the function dynamically.
 :::
 
@@ -63,13 +61,13 @@ For example:
 - Retrieve the first item from a list
 
 ```yaml
-subnet_id1: !terraform.output vpc .private_subnet_ids[0]
+subnet_id1: !terraform.state vpc .private_subnet_ids[0]
 ```
 
 - Read a key from a map
 
 ```yaml
-username: !terraform.output config .config_map.username
+username: !terraform.state config .config_map.username
 ```
 
 For more details, review the following docs:
@@ -79,7 +77,7 @@ For more details, review the following docs:
 
 ## Using YQ Expressions to provide a default value
 
-If the component for which you are reading the output has not been provisioned yet, the `!terraform.output` function
+If the component for which you are reading the output has not been provisioned yet, the `!terraform.state` function
 will return the string `<no value>` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
 in the YQ expression, in which case the function will return the default value.
 
@@ -101,7 +99,7 @@ For example:
   If the `config` component has not been provisioned yet, return the default value `default-user`
 
 ```yaml
-username: !terraform.output config ".username // ""default-user"""
+username: !terraform.state config ".username // ""default-user"""
 ```
 
 - Specify a list default value.
@@ -109,7 +107,7 @@ username: !terraform.output config ".username // ""default-user"""
   If the `vpc` component has not been provisioned yet, return the default value `["mock-subnet1", "mock-subnet2"]`
 
 ```yaml
-subnet_ids: !terraform.output vpc ".private_subnet_ids // [""mock-subnet1"", ""mock-subnet2""]"
+subnet_ids: !terraform.state vpc ".private_subnet_ids // [""mock-subnet1"", ""mock-subnet2""]"
 ```
 
 - Specify a map default value.
@@ -117,7 +115,7 @@ subnet_ids: !terraform.output vpc ".private_subnet_ids // [""mock-subnet1"", ""m
   If the `config` component has not been provisioned yet, return the default value `{"api_endpoint": "localhost:3000", "user": "test"}`
 
 ```yaml
-config_map: !terraform.output 'config ".config_map // {""api_endpoint"": ""localhost:3000"", ""user"": ""test""}"'
+config_map: !terraform.state 'config ".config_map // {""api_endpoint"": ""localhost:3000"", ""user"": ""test""}"'
 ```
 
 For more details, review the following docs:
@@ -134,25 +132,25 @@ components:
       vars:
         vpc_config:
           # Output of type string
-          security_group_id: !terraform.output security-group/lambda id
-          security_group_id2: !terraform.output security-group/lambda2 {{ .stack }} id
-          security_group_id3: !terraform.output security-group/lambda3 {{ .atmos_stack }} id
+          security_group_id: !terraform.state security-group/lambda id
+          security_group_id2: !terraform.state security-group/lambda2 {{ .stack }} id
+          security_group_id3: !terraform.state security-group/lambda3 {{ .atmos_stack }} id
           # Output of type list
-          subnet_ids: !terraform.output vpc private_subnet_ids
+          subnet_ids: !terraform.state vpc private_subnet_ids
           # Use a YQ expression to get an item from the list
-          subnet_id1: !terraform.output vpc .private_subnet_ids[0]
+          subnet_id1: !terraform.state vpc .private_subnet_ids[0]
           # Output of type map
-          config_map: !terraform.output config {{ .stack }} config_map
+          config_map: !terraform.state config {{ .stack }} config_map
           # Use a YQ expression to get a value from the map
-          username: !terraform.output config .config_map.username
+          username: !terraform.state config .config_map.username
 ```
 </File>
 
 ## Specifying Atmos `stack`
 
-If you call the `!terraform.output` function with three parameters, you need to specify the stack as the second argument.
+If you call the `!terraform.state` function with three parameters, you need to specify the stack as the second argument.
 
-There are multiple ways you can specify the Atmos stack parameter in the `!terraform.output` function.
+There are multiple ways you can specify the Atmos stack parameter in the `!terraform.state` function.
 
 ### Hardcoded Stack Name
 
@@ -164,17 +162,17 @@ For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires 
     terraform:
       tgw:
         vars:
-          vpc_id: !terraform.output vpc plat-ue2-prod vpc_id
+          vpc_id: !terraform.state vpc plat-ue2-prod vpc_id
 ```
 
 ### Reference the Current Stack Name
 
 Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component is in
-(for which the `!terraform.output` function is executed):
+(for which the `!terraform.state` function is executed):
 
 ```yaml
-  !terraform.output <component> {{ .stack }} <output>
-  !terraform.output <component> {{ .atmos_stack }} <output>
+  !terraform.state <component> {{ .stack }} <output>
+  !terraform.state <component> {{ .atmos_stack }} <output>
 ```
 
 For example, you have a `tgw` component that requires the `vpc_id` output from the `vpc` component in the same stack:
@@ -184,13 +182,13 @@ For example, you have a `tgw` component that requires the `vpc_id` output from t
     terraform:
       tgw:
         vars:
-          vpc_id: !terraform.output vpc {{ .stack }} vpc_id
+          vpc_id: !terraform.state vpc {{ .stack }} vpc_id
 ```
 
 :::note
-Using the `.stack` or `.atmos_stack` template identifiers to specify the stack is the same as calling the `!terraform.output`
+Using the `.stack` or `.atmos_stack` template identifiers to specify the stack is the same as calling the `!terraform.state`
 function with two parameters without specifying the current stack, but without using `Go` templates.
-If you need to get an output of a component in the current stack, using the `!terraform.output` function with two parameters
+If you need to get an output of a component in the current stack, using the `!terraform.state` function with two parameters
 is preferred because it has a simpler syntax and executes faster.
 :::
 
@@ -200,11 +198,11 @@ Use the `printf` template function to construct stack names using static strings
 This is convenient when you want to override some identifiers in the stack name:
 
 ```yaml
-  !terraform.output <component> {{ printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage }} <output>
+  !terraform.state <component> {{ printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage }} <output>
 
-  !terraform.output <component> {{ printf "plat-%s-prod" .vars.environment }} <output>
+  !terraform.state <component> {{ printf "plat-%s-prod" .vars.environment }} <output>
 
-  !terraform.output <component> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <output>
+  !terraform.state <component> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <output>
 ```
 
 <dl>
@@ -224,7 +222,7 @@ tenant `net` (instead of `plat`):
     terraform:
       tgw:
         vars:
-          vpc_id: !terraform.output vpc {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc_id
+          vpc_id: !terraform.state vpc {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc_id
 ```
 
 :::tip Important
@@ -235,16 +233,16 @@ tenant `net` (instead of `plat`):
 :::
 
 
-## Caching the result of `!terraform.output` function
+## Caching the result of `!terraform.state` function
 
-Atmos caches (in memory) the results of `!terraform.output` function.
+Atmos caches (in memory) the results of `!terraform.state` function.
 
 The cache is per Atmos CLI command execution, e.g., each new execution of a command like `atmos terraform plan`,
 `atmos terraform apply` or `atmos describe component` will create and use a new memory cache, which involves re-invoking `terraform outputs` after reinitialization.
 
 If you define the function in stack manifests for the same component in a stack more than once, the first call will
 produce the result and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
-`!terraform.output` function for the same component in a stack in multiple places in Atmos stack manifests.
+`!terraform.state` function for the same component in a stack in multiple places in Atmos stack manifests.
 It will speed up the function execution and stack processing.
 
 For example:
@@ -256,20 +254,20 @@ components:
     test2:
       vars:
         tags:
-          test: !terraform.output test id
-          test2: !terraform.output test id
-          test3: !terraform.output test {{ .stack }} id
+          test: !terraform.state test id
+          test2: !terraform.state test id
+          test3: !terraform.state test {{ .stack }} id
 ```
 </File>
 
 In the example, the `test2` Atmos component uses the outputs (remote state) of the `test` Atmos component from the same stack.
-The YAML function `!terraform.output` is executed three times (once for each tag).
+The YAML function `!terraform.state` is executed three times (once for each tag).
 
 After the first execution, Atmos caches the result in memory,
 and reuses it in the next two calls to the function. The caching makes the stack processing much faster.
 In a production environment where many components are used, the speedup can be significant.
 
-## Using `!terraform.output` with `static` remote state backend
+## Using `!terraform.state` with `static` remote state backend
 
 Atmos supports [brownfield configuration by using the remote state of type `static`](/core-concepts/components/terraform/brownfield/#hacking-remote-state-with-static-backends).
 
@@ -300,13 +298,13 @@ components:
 
     eks-cluster:
       vars:
-        region: !terraform.output static-backend region
-        cluster_name: !terraform.output static-backend cluster_name
-        vpc_cidr: !terraform.output static-backend vpc_cidr
-        db_type: !terraform.output static-backend database.type
-        db_storage: !terraform.output static-backend database.storage_gb
-        allowed_ips: !terraform.output static-backend allowed_ips
-        tags: !terraform.output static-backend tags
+        region: !terraform.state static-backend region
+        cluster_name: !terraform.state static-backend cluster_name
+        vpc_cidr: !terraform.state static-backend vpc_cidr
+        db_type: !terraform.state static-backend database.type
+        db_storage: !terraform.state static-backend database.storage_gb
+        allowed_ips: !terraform.state static-backend allowed_ips
+        tags: !terraform.state static-backend tags
 ```
 </File>
 
@@ -334,15 +332,12 @@ vars:
 
 ## Considerations
 
- - Using `!terraform.output` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
+ - Using `!terraform.state` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
 
- - When using `!terraform.output` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced remote states.
-   If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
+ - When using `!terraform.state` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced remote states.
+  If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
 
- - Overusing the function within stacks to reference multiple components can significantly impact performance since Atmos internally executes a
-  [`terraform output`](https://developer.hashicorp.com/terraform/cli/commands/output) or
-  [`tofu output`](https://opentofu.org/docs/cli/commands/output/) command, which requires initializing the component,
-  which initializes all Terraform/OpenTofu modules and downloads all Terraform/OpenTofu providers.
+ - Overusing the function within stacks to reference multiple components can impact performance.
 
  - Be mindful of disaster recovery (DR) implications when using it across regions.
 
