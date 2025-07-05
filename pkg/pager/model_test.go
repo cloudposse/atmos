@@ -98,6 +98,7 @@ func TestModel_Update(t *testing.T) {
 	t.Run("ViewportUpdate_Search_Enter", func(t *testing.T) {
 		vp := viewport.New(80, 20)
 		m := model{
+			content:  "test content",
 			ready:    true,
 			viewport: vp,
 		}
