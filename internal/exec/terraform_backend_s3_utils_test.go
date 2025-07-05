@@ -17,7 +17,7 @@ func TestGetTerraformBackendS3(t *testing.T) {
 		errType     error
 	}{
 		{
-			name: "valid backend info with role arn",
+			name: "backend info with role arn",
 			backendInfo: TerraformBackendInfo{
 				Type:      cfg.BackendTypeS3,
 				Workspace: "test-workspace",
@@ -33,7 +33,7 @@ func TestGetTerraformBackendS3(t *testing.T) {
 			errType: errUtils.ErrGetObjectFromS3,
 		},
 		{
-			name: "valid backend info without role arn",
+			name: "backend info without role arn",
 			backendInfo: TerraformBackendInfo{
 				Type:      cfg.BackendTypeS3,
 				Workspace: "test-workspace",
