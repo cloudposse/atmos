@@ -15,6 +15,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
+	_ "github.com/hairyhenderson/gomplate/v4"
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
 

@@ -1,12 +1,12 @@
 package exec
 
 import (
-	errUtils "github.com/cloudposse/atmos/errors"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
