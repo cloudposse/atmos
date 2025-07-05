@@ -13,7 +13,7 @@ The `!terraform.state` YAML function allows reading the outputs ([remote state](
 of components in Atmos stack manifests directly from the configured [Terraform/OpenTofu backends](/core-concepts/components/terraform/backends).
 </Intro>
 
-:::note
+:::warning
 Currently, the `!terraform.state` YAML function supports the following backend types:
 - `local` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/local) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/local))
 - `s3` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/s3) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/s3))
@@ -21,7 +21,7 @@ Currently, the `!terraform.state` YAML function supports the following backend t
 As support for new backend types is added (e.g. `azurerm`, `gcs`), this document will be updated accordingly.
 
 Meanwhile, if you are using backends other than `local` and `s3`, consider the [__`!store`__](/core-concepts/stacks/yaml-functions/store)
-or [__`!terraform.output`__](/core-concepts/stacks/yaml-functions/terraform.output) YAML functions to read remote state
+or [__`!terraform.output`__](/core-concepts/stacks/yaml-functions/terraform.output) YAML function to read remote state
 and [share data between components](/core-concepts/share-data).
 :::
 
@@ -80,6 +80,17 @@ and reads the state file directly from the backend. If access to the backend req
 The relevant output variable is extracted from the state file (using a [YQ](https://mikefarah.gitbook.io/yq/) parser).
 Atmos parses and interpolates the value into the final configuration structure, replacing the `!terraform.state`
 directive in the YAML stack manifest with the final value.
+
+:::tip
+The `!terraform.state` function accepts the same parameters and produces the same result as the
+[`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output) function, but has significantly less impact
+on performance as it reads the state file directly from the configured backend without executing Terraform/OpenTofu
+commands, generating varfiles and backend config files, and initializing all modules and providers.
+
+To understand the performance implications of the `!terraform.output` and `!terraform.state` functions,
+compare the [!terraform.output Execution Flow](/core-concepts/stacks/yaml-functions/terraform.output#terraformoutput-function-execution-flow) with the
+[!terraform.state Execution Flow](/core-concepts/stacks/yaml-functions/terraform.state#terraformstate-function-execution-flow).
+:::
 
 ## Using YQ Expressions to retrieve items from complex output types
 

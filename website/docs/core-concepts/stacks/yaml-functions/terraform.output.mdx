@@ -86,6 +86,20 @@ The relevant output variable is extracted from the state file (using a [YQ](http
 Atmos parses and interpolates the value into the final configuration structure, replacing the `!terraform.output`
 directive in the YAML stack manifest with the final value.
 
+:::tip
+Since Atmos executes the `terraform/tofu init` and `terraform/tofu output` commands when processing the `!terraform.output`
+YAML functions, it can significantly impact performance because it requires initializing the components,
+which initializes all Terraform/OpenTofu modules and downloads all Terraform/OpenTofu providers (if they are not present in the cache).
+
+To improve performance, consider using the [__`!store`__](/core-concepts/stacks/yaml-functions/store)
+or [__`!terraform.state`__](/core-concepts/stacks/yaml-functions/terraform.state)
+YAML function.
+
+To understand the performance implications of the `!terraform.output` and `!terraform.state` functions,
+compare the [!terraform.output Execution Flow](/core-concepts/stacks/yaml-functions/terraform.output#terraformoutput-function-execution-flow) with the
+[!terraform.state Execution Flow](/core-concepts/stacks/yaml-functions/terraform.state#terraformstate-function-execution-flow).
+:::
+
 ## Using YQ Expressions to retrieve items from complex output types
 
 To retrieve items from complex output types such as maps and lists, or do any kind of filtering or querying,

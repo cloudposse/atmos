@@ -129,6 +129,17 @@ components:
     <PrimaryCTA to="/core-concepts/stacks/yaml-functions/terraform.state">Learn More</PrimaryCTA>
 </ActionCard>
 
+:::tip
+The [`!terraform.state`]((/core-concepts/stacks/yaml-functions/terraform.state)) function accepts the same parameters and
+produces the same result as the [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output) function,
+but has significantly less impact on performance as it reads the state file directly from the configured backend without
+executing Terraform/OpenTofu commands, generating varfiles and backend config files, and initializing all modules and providers.
+
+To understand the performance implications of the `!terraform.output` and `!terraform.state` functions,
+compare the [!terraform.output Execution Flow](/core-concepts/stacks/yaml-functions/terraform.output#terraformoutput-function-execution-flow) with the
+[!terraform.state Execution Flow](/core-concepts/stacks/yaml-functions/terraform.state#terraformstate-function-execution-flow).
+:::
+
 ## Using Template Functions
 
 ###  Function: `atmos.Store`
