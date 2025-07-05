@@ -4,8 +4,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var completionCmd = &cobra.Command{
@@ -16,7 +14,7 @@ var completionCmd = &cobra.Command{
 	Args:                  cobra.NoArgs,
 }
 
-func runCompletion(cmd *cobra.Command, args []string) {
+func runCompletion(cmd *cobra.Command, args []string) error {
 	var err error
 
 	switch cmd.Use {
@@ -31,8 +29,10 @@ func runCompletion(cmd *cobra.Command, args []string) {
 	}
 
 	if err != nil {
-		u.LogErrorAndExit(err)
+		return err
 	}
+
+	return nil
 }
 
 func init() {
@@ -42,7 +42,7 @@ func init() {
 			Use:   shellName,
 			Short: "Generate completion script for " + shellName,
 			Long:  "This command generates completion scripts for " + shellName,
-			Run:   runCompletion,
+			RunE:  runCompletion,
 			Args:  cobra.NoArgs,
 		})
 	}

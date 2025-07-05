@@ -2,9 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
-
-	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -15,6 +12,7 @@ import (
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
+	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -33,6 +31,7 @@ var listSettingsCmd = &cobra.Command{
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig()
+
 		output, err := listSettings(cmd, args)
 		if err != nil {
 			return err
@@ -50,7 +49,6 @@ func init() {
 	listSettingsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 
 	AddStackCompletion(listSettingsCmd)
-
 	listCmd.AddCommand(listSettingsCmd)
 }
 
@@ -71,7 +69,7 @@ func setupSettingsOptions(commonFlags fl.CommonFlags, componentFilter string) *l
 // logNoSettingsFoundMessage logs an appropriate message when no settings are found.
 func logNoSettingsFoundMessage(componentFilter string) {
 	if componentFilter != "" {
-		log.Info(fmt.Sprintf("No settings found for component '%s'", componentFilter))
+		log.Info("No settings found", "component", componentFilter)
 	} else {
 		log.Info("No settings found")
 	}

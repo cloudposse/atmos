@@ -143,6 +143,11 @@ settings:
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
+  telemetry:
+    enabled: true
+    endpoint: https://us.i.posthog.com
+    token: phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS
+  inject_github_token: true
 vendor:
   base_path: ./vendor.yaml
 initialized: true

@@ -2,8 +2,10 @@ package exec
 
 import (
 	"encoding/json"
-	"fmt"
 
+	log "github.com/charmbracelet/log"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -13,11 +15,11 @@ func processTagTemplate(
 	input string,
 	currentStack string,
 ) any {
-	u.LogTrace(fmt.Sprintf("Executing Atmos YAML function: %s", input))
+	log.Debug("Executing", "Atmos YAML function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTemplate)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	var decoded any

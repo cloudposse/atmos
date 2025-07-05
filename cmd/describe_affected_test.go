@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -130,4 +131,23 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 			assert.Equal(t, tt.expected, gotDescribe, "Describe struct does not match expected")
 		})
 	}
+}
+
+func TestDescribeAffectedCmd_Error(t *testing.T) {
+	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
+
+	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+
+	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+
+	// Unset ENV variables after testing
+	defer func() {
+		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		os.Unsetenv("ATMOS_BASE_PATH")
+	}()
+
+	err = describeAffectedCmd.RunE(describeAffectedCmd, []string{"--invalid-flag"})
+	assert.Error(t, err, "describe affected command should return an error when called with invalid flags")
 }

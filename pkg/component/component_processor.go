@@ -3,6 +3,7 @@ package component
 import (
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -92,8 +93,8 @@ func ProcessComponentFromContext(
 		}
 
 	default:
-		log.Error(e.ErrMissingStackNameTemplateAndPattern)
-		return nil, e.ErrMissingStackNameTemplateAndPattern
+		log.Error(errUtils.ErrMissingStackNameTemplateAndPattern)
+		return nil, errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
 	return ProcessComponentInStack(component, stack, atmosCliConfigPath, atmosBasePath)

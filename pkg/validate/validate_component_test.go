@@ -8,7 +8,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestValidateComponent(t *testing.T) {
@@ -26,7 +25,6 @@ func TestValidateComponent(t *testing.T) {
 		"opa",
 		[]string{"catalog"},
 		0)
-	u.LogError(err)
 	assert.Error(t, err)
 }
 
@@ -45,7 +43,6 @@ func TestValidateComponent2(t *testing.T) {
 		"",
 		[]string{"catalog/constants"},
 		0)
-	u.LogError(err)
 	assert.Error(t, err)
 }
 
@@ -64,7 +61,6 @@ func TestValidateComponent3(t *testing.T) {
 		"",
 		nil,
 		0)
-	u.LogError(err)
 	assert.Error(t, err)
 }
 
@@ -83,7 +79,6 @@ func TestValidateComponent4(t *testing.T) {
 		"",
 		nil,
 		0)
-	u.LogError(err)
 	assert.Error(t, err)
 	assert.Equal(t, "'service_1_name' variable length must be greater than 10 chars", err.Error())
 }

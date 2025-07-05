@@ -6,8 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestGetGitHubOIDCToken_Success(t *testing.T) {
