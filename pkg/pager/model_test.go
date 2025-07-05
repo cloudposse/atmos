@@ -107,6 +107,10 @@ func TestModel_Update(t *testing.T) {
 		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
 		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("backspace")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
+		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("enter")}
 		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
