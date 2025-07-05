@@ -38,6 +38,10 @@ YAML supports three types of data: core, defined, and user-defined.
    Note that this requires initializing each component (`terraform/tofu init`), which initializes all Terraform/OpenTofu
    modules and downloads all Terraform/OpenTofu providers, which may significantly impact performance.
 
+ - The [__`!terraform.state`__](/core-concepts/stacks/yaml-functions/terraform.state) YAML function allows reading the
+   outputs ([remote state](/core-concepts/share-data/remote-state)) of components in Atmos stack manifests directly
+   from the configured [Terraform/OpenTofu backends](/core-concepts/components/terraform/backends).
+
  - The [__`!store`__](/core-concepts/stacks/yaml-functions/store) YAML function allows reading the values from a
    remote [store](/core-concepts/projects/configuration/stores) (e.g. SSM Parameter Store, Artifactory, etc.)
    into Atmos stack manifests

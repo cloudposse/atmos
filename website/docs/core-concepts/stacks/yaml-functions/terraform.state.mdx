@@ -2,7 +2,7 @@
 title: "!terraform.state"
 sidebar_position: 2
 sidebar_label: "!terraform.state"
-description: Read the remote state of any Atmos component directly from the configured backends
+description: Read the remote state of any Atmos component directly from the configured Terraform/OpenTofu backends
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -10,7 +10,7 @@ import Terminal from '@site/src/components/Terminal'
 
 <Intro>
 The `!terraform.state` YAML function allows reading the outputs ([remote state](/core-concepts/share-data/remote-state))
-of components in Atmos stack manifests directly from the configured backends.
+of components in Atmos stack manifests directly from the configured [Terraform/OpenTofu backends](/core-concepts/components/terraform/backends).
 </Intro>
 
 ## Usage
