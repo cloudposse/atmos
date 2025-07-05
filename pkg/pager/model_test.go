@@ -86,9 +86,9 @@ func TestModel_Update(t *testing.T) {
 			viewport: vp,
 		}
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
-		updatedModel, cmd := m.Update(msg)
+		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
-		updatedModel, cmd = m.Update(msg)
+		updatedModel, cmd := m.Update(msg)
 		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
 		assert.True(t, updatedModel.(*model).forwardSlashPressed, "Forward slash should be pressed")
 		assert.Equal(t, "t", updatedModel.(*model).searchTerm, "Search term should be set to 't'")
@@ -102,13 +102,13 @@ func TestModel_Update(t *testing.T) {
 			viewport: vp,
 		}
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
-		_, cmd := m.Update(msg)
+		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
-		_, cmd = m.Update(msg)
+		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("enter")}
-		_, cmd = m.Update(msg)
+		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
-		_, cmd = m.Update(msg)
+		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}
 		updatedModel, cmd := m.Update(msg)
 		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
