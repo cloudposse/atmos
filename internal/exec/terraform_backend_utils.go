@@ -1,19 +1,9 @@
 package exec
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"strings"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -208,86 +198,4 @@ func GetTerraformBackend(
 	default:
 		return nil, fmt.Errorf("%w %s. Supported backends: local, s3", errUtils.ErrUnsupportedBackendType, backendInfo.Type)
 	}
-}
-
-// GetTerraformBackendLocal returns the Terraform state from the local backend.
-func GetTerraformBackendLocal(
-	atmosConfig *schema.AtmosConfiguration,
-	backendInfo TerraformBackendInfo,
-) (map[string]any, error) {
-	tfStateFilePath := filepath.Join(
-		atmosConfig.TerraformDirAbsolutePath,
-		backendInfo.TerraformComponent,
-		"terraform.tfstate.d",
-		backendInfo.Workspace,
-		"terraform.tfstate",
-	)
-
-	if !u.FileExists(tfStateFilePath) {
-		return nil, fmt.Errorf("%w.\npath: `%s`", errUtils.ErrMissingTerraformStateFile, tfStateFilePath)
-	}
-
-	content, err := os.ReadFile(tfStateFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("%w.\npath: `%s`\nerror: %v", errUtils.ErrReadFile, tfStateFilePath, err)
-	}
-
-	data, err := ProcessTerraformStateFile(content)
-	if err != nil {
-		return nil, fmt.Errorf("%w.\npath: `%s`\nerror: %v", errUtils.ErrProcessTerraformStateFile, tfStateFilePath, err)
-	}
-
-	return data, nil
-}
-
-// GetTerraformBackendS3 returns the Terraform state from the configured S3 backend.
-func GetTerraformBackendS3(
-	backendInfo TerraformBackendInfo,
-) (map[string]any, error) {
-	ctx := context.Background()
-
-	// Determine the full path to the tfstate file
-	tfStateFilePath := filepath.Join(
-		backendInfo.S3.WorkspaceKeyPrefix,
-		backendInfo.Workspace,
-		"terraform.tfstate",
-	)
-
-	// Load default config
-	awsConfig, err := config.LoadDefaultConfig(ctx, config.WithRegion(backendInfo.S3.Region))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)
-	}
-
-	// Assume role if RoleArn is specified
-	if backendInfo.S3.RoleArn != "" {
-		stsClient := sts.NewFromConfig(awsConfig)
-		creds := stscreds.NewAssumeRoleProvider(stsClient, backendInfo.S3.RoleArn)
-		awsConfig.Credentials = aws.NewCredentialsCache(creds)
-	}
-
-	// Create S3 client
-	s3Client := s3.NewFromConfig(awsConfig)
-
-	// Get the object from S3
-	output, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(backendInfo.S3.Bucket),
-		Key:    aws.String(tfStateFilePath),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, err)
-	}
-	defer output.Body.Close()
-
-	content, err := io.ReadAll(output.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrReadS3ObjectBody, err)
-	}
-
-	data, err := ProcessTerraformStateFile(content)
-	if err != nil {
-		return nil, fmt.Errorf("%w.\npath: `%s`\nerror: %v", errUtils.ErrProcessTerraformStateFile, tfStateFilePath, err)
-	}
-
-	return data, nil
 }
