@@ -26,7 +26,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 				componentDir := filepath.Join(tempDir, "terraform", "test-component")
 				stateDir := filepath.Join(componentDir, "terraform.tfstate.d", "test-workspace")
 
-				err := os.MkdirAll(stateDir, 0755)
+				err := os.MkdirAll(stateDir, 0o755)
 				require.NoError(t, err)
 
 				stateFile := filepath.Join(stateDir, "terraform.tfstate")
@@ -39,7 +39,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 							"type": "string"
 						}
 					}
-				}`), 0644)
+				}`), 0o644)
 				require.NoError(t, err)
 
 				return tempDir, func() {}
