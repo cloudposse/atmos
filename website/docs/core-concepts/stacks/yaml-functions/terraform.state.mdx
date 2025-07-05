@@ -69,22 +69,17 @@ When processing the `!terraform.state` YAML function for a component in a stack,
 
 - **Stack and Component Context Resolution**
 Atmos resolves the full context for the specified component within the given stack, including all inherited and merged
-configuration layers (globals, environment and component-level settings).
+configuration layers (globals, environment and component-level config).
+
+- **Terraform State Backend Lookup and Read**
+Based on the resolved context, Atmos identifies the corresponding backend for the component in the stack
+and reads the state file directly from the backend. If access to the backend requires a role assumption
+(e.g. `assume_role.role_arn` for the `s3` backend), Atmos assumes the role before accessing the backend state file.
 
 - **Output Parsing and Interpolation**
 The relevant output variable is extracted from the state file (using a [YQ](https://mikefarah.gitbook.io/yq/) parser).
-Atmos parses and interpolates the value into the final configuration structure, replacing the `!terraform.output`
+Atmos parses and interpolates the value into the final configuration structure, replacing the `!terraform.state`
 directive in the YAML stack manifest with the final value.
-
-- **Terraform State Backend Lookup**
-Based on the resolved context, Atmos identifies the corresponding Terraform state backend configuration, including workspace and key prefix derived from backend settings.
-
-- **Terraform Output Extraction**
-Atmos locates the Terraform state file for the referenced component and stack—typically from an S3 bucket (for remote state backends)—and reads it directly without executing terraform output.
-
-- **Output Parsing and Interpolation**
-The relevant output variable is extracted from the JSON-formatted state file. Atmos parses and interpolates the value into the final configuration structure, replacing the !terraform.output directive.
-
 
 ## Using YQ Expressions to retrieve items from complex output types
 
