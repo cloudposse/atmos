@@ -130,7 +130,7 @@ components:
 </ActionCard>
 
 :::tip
-The [`!terraform.state`]((/core-concepts/stacks/yaml-functions/terraform.state)) function accepts the same parameters and
+The [`!terraform.state`](/core-concepts/stacks/yaml-functions/terraform.state) function accepts the same parameters and
 produces the same result as the [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output) function,
 but has significantly less impact on performance as it reads the state file directly from the configured backend without
 executing Terraform/OpenTofu commands, generating varfiles and backend config files, and initializing all modules and providers.

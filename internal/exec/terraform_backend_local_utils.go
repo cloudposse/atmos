@@ -13,7 +13,7 @@ import (
 // GetTerraformBackendLocal returns the Terraform state from the local backend.
 func GetTerraformBackendLocal(
 	atmosConfig *schema.AtmosConfiguration,
-	backendInfo TerraformBackendInfo,
+	backendInfo *TerraformBackendInfo,
 ) (map[string]any, error) {
 	tfStateFilePath := filepath.Join(
 		atmosConfig.TerraformDirAbsolutePath,

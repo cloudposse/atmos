@@ -28,7 +28,6 @@ func GetTerraformComponent(sections map[string]any) string {
 }
 
 // GetComponentRemoteStateBackendStaticType returns the `remote_state_backend` section for a component in a stack.
-// if the `remote_state_backend_type` is `static`
 func GetComponentRemoteStateBackendStaticType(sections map[string]any) map[string]any {
 	var remoteStateBackend map[string]any
 	var remoteStateBackendType string
@@ -192,9 +191,9 @@ func GetTerraformBackend(
 
 	switch backendInfo.Type {
 	case cfg.BackendTypeLocal:
-		return GetTerraformBackendLocal(atmosConfig, backendInfo)
+		return GetTerraformBackendLocal(atmosConfig, &backendInfo)
 	case cfg.BackendTypeS3:
-		return GetTerraformBackendS3(backendInfo)
+		return GetTerraformBackendS3(&backendInfo)
 	default:
 		return nil, fmt.Errorf("%w %s. Supported backends: local, s3", errUtils.ErrUnsupportedBackendType, backendInfo.Type)
 	}

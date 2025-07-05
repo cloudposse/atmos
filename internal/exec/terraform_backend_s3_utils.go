@@ -15,7 +15,7 @@ import (
 
 // GetTerraformBackendS3 returns the Terraform state from the configured S3 backend.
 func GetTerraformBackendS3(
-	backendInfo TerraformBackendInfo,
+	backendInfo *TerraformBackendInfo,
 ) (map[string]any, error) {
 	ctx := context.Background()
 

@@ -79,7 +79,7 @@ func TestGetTerraformBackendS3(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := GetTerraformBackendS3(tt.backendInfo)
+			result, err := GetTerraformBackendS3(&tt.backendInfo)
 
 			if tt.wantErr {
 				assert.Error(t, err)

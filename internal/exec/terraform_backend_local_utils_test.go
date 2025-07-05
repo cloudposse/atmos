@@ -78,7 +78,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 			}
 
 			// Call the function
-			result, err := GetTerraformBackendLocal(config, tt.backendInfo)
+			result, err := GetTerraformBackendLocal(config, &tt.backendInfo)
 
 			// Verify results
 			if tt.expectedError != "" {
