@@ -100,7 +100,7 @@ func TestModel_Update(t *testing.T) {
 	t.Run("ViewportUpdate_Search_Enter", func(t *testing.T) {
 		vp := viewport.New(80, 20)
 		m := model{
-			content:  "test content",
+			content:  "test content\n test content 2",
 			ready:    true,
 			viewport: vp,
 		}
@@ -128,7 +128,7 @@ func TestModel_Update(t *testing.T) {
 	t.Run("ViewportUpdate_Search_Esc", func(t *testing.T) {
 		vp := viewport.New(80, 20)
 		m := model{
-			content:  "test content",
+			content:  "test content\n test content 2",
 			ready:    true,
 			viewport: vp,
 		}
