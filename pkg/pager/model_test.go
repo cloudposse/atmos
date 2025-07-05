@@ -125,6 +125,22 @@ func TestModel_Update(t *testing.T) {
 		assert.Nil(t, cmd, "No additional command expected")
 	})
 
+	t.Run("ViewportUpdate_Search_Help", func(t *testing.T) {
+		vp := viewport.New(80, 20)
+		m := model{
+			content:  "test content\n test content 2",
+			ready:    true,
+			viewport: vp,
+		}
+		m.Init()
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")}
+		updatedModel, cmd := m.Update(msg)
+		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
+		assert.False(t, updatedModel.(*model).forwardSlashPressed, "Forward slash should be pressed")
+		assert.Equal(t, "", updatedModel.(*model).searchTerm, "Search term should be set to 't'")
+		assert.Nil(t, cmd, "No additional command expected")
+	})
+
 	t.Run("ViewportUpdate_Search_Esc", func(t *testing.T) {
 		vp := viewport.New(80, 20)
 		m := model{

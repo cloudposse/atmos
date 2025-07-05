@@ -502,8 +502,6 @@ func (m *model) helpView() (s string) {
 	s += "d        ½ page down         " + col1[i] + nextLine
 	i += 1
 	s += "esc      back to files       " + col1[i] + nextLine
-	i += 1
-	s += "                             " + col1[i]
 
 	s = indent(s, 2)
 
