@@ -120,10 +120,10 @@ components:
         test_8: !terraform.output component1 {{ .stack }} test_label_id
 
         # Get the `test_list` output of type list from the `component1` component in the current stack
-        test_9: !terraform.output component1 {{ .stack }} test_list
+        test_9: !terraform.state component1 {{ .stack }} test_list
 
         # Get the `test_map` output of type map from the `component1` component in the current stack
-        test_10: !terraform.output component1 {{ .stack }} test_map
+        test_10: !terraform.state component1 {{ .stack }} test_map
 
         # Retrieve the value of an environment variable
         api_key: !env API_KEY
