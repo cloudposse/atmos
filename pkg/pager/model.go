@@ -117,13 +117,14 @@ var (
 )
 
 type model struct {
-	title           string
-	content         string
-	originalContent string // Store original content without highlighting
-	ready           bool
-	viewport        viewport.Model
-	common          commonModel
-	showHelp        bool
+	title                string
+	content              string
+	originalContent      string   // Store original content without highlighting
+	originalContentLines []string // Store original content lines for search
+	ready                bool
+	viewport             viewport.Model
+	common               commonModel
+	showHelp             bool
 
 	state               pagerState
 	statusMessage       pagerStatusMessage
@@ -174,6 +175,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Store original content and set initial content
 			if m.originalContent == "" {
 				m.originalContent = m.content
+				m.originalContentLines = strings.Split(m.content, "\n")
 			}
 			m.viewport.SetContent(m.content)
 			m.ready = true
@@ -203,7 +205,7 @@ func (m *model) highlightSearchTerm() {
 	var highlighted string
 
 	// Find all matches (case-insensitive)
-	lines := strings.Split(m.originalContent, "\n")
+	lines := m.originalContentLines
 	var highlightedLines []string
 
 	for _, line := range lines {
@@ -342,7 +344,7 @@ func (m *model) scrollToSearchMatch() {
 		return
 	}
 
-	lines := strings.Split(m.originalContent, "\n")
+	lines := m.originalContentLines
 	searchTermLower := strings.ToLower(m.searchTerm)
 
 	for i, line := range lines {
@@ -358,7 +360,7 @@ func (m *model) scrollToNextSearchMatch() {
 		return
 	}
 
-	lines := strings.Split(m.originalContent, "\n")
+	lines := m.originalContentLines
 	searchTermLower := strings.ToLower(m.searchTerm)
 	currentLine := m.viewport.YOffset
 
@@ -384,7 +386,7 @@ func (m *model) scrollToPreviousSearchMatch() {
 		return
 	}
 
-	lines := strings.Split(m.originalContent, "\n")
+	lines := m.originalContentLines
 	searchTermLower := strings.ToLower(m.searchTerm)
 	currentLine := m.viewport.YOffset
 
