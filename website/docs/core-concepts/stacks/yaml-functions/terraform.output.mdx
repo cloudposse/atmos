@@ -30,7 +30,7 @@ The `!terraform.output` function can be called with either two or three paramete
   !terraform.output <component> <yq-expression>
 
  # Get the output of the `component` in the provided `stack` by evaluating the YQ expression
-  !terraform.output <component> <yq-expression>
+  !terraform.output <component> <stack> <yq-expression>
 ```
 
 ## Arguments
@@ -255,7 +255,7 @@ This is convenient when you want to override some identifiers in the stack name:
 ```
 
 <dl>
-  <dt>`<component`</dt>
+  <dt>`<component>`</dt>
   <dd>Placeholder for an actual component name (e.g. `vpc`)</dd>
   <dt>`<output>`</dt>
   <dd>Placeholder for an actual Terraform output (e.g. `subnet_ids`)</dd>

@@ -40,7 +40,7 @@ The `!terraform.state` function can be called with either two or three parameter
   !terraform.state <component> <yq-expression>
 
  # Get the output of the `component` in the provided `stack` by evaluating the YQ expression
-  !terraform.state <component> <yq-expression>
+  !terraform.state <component> <stack> <yq-expression>
 ```
 
 ## Arguments
@@ -247,7 +247,7 @@ This is convenient when you want to override some identifiers in the stack name:
 ```
 
 <dl>
-  <dt>`<component`</dt>
+  <dt>`<component>`</dt>
   <dd>Placeholder for an actual component name (e.g. `vpc`)</dd>
   <dt>`<output>`</dt>
   <dd>Placeholder for an actual Terraform output (e.g. `subnet_ids`)</dd>
@@ -279,7 +279,7 @@ tenant `net` (instead of `plat`):
 Atmos caches (in memory) the results of `!terraform.state` function.
 
 The cache is per Atmos CLI command execution, e.g., each new execution of a command like `atmos terraform plan`,
-`atmos terraform apply` or `atmos describe component` will create and use a new memory cache, which involves re-invoking `terraform outputs` after reinitialization.
+`atmos terraform apply` or `atmos describe component` will create and use a new memory cache, which involves re-reading the remote state after reinitialisation.
 
 If you define the function in stack manifests for the same component in a stack more than once, the first call will
 produce the result and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
