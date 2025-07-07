@@ -23,8 +23,10 @@ func GetTerraformBackendLocal(
 		"terraform.tfstate",
 	)
 
+	// If the state file does not exist (the component in the stack has not been provisioned yet),
+	// return a `nil` result and no error.
 	if !u.FileExists(tfStateFilePath) {
-		return nil, fmt.Errorf("%w.\npath: `%s`", errUtils.ErrMissingTerraformStateFile, tfStateFilePath)
+		return nil, nil
 	}
 
 	content, err := os.ReadFile(tfStateFilePath)

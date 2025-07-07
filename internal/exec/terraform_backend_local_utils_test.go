@@ -62,7 +62,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 				TerraformComponent: "non-existent",
 				Workspace:          "test-workspace",
 			},
-			expectedError: "missing terraform local state file",
+			expected: nil,
 		},
 	}
 

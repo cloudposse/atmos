@@ -23,7 +23,7 @@ func GetTerraformState(
 ) (any, error) {
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
-	// If the result for the component in the stack already exists in the cache, return it
+	// If the result for the component in the stack already exists in the cache, return it.
 	if !skipCache {
 		backend, found := terraformStateCache.Load(stackSlug)
 		if found && backend != nil {
@@ -49,10 +49,10 @@ func GetTerraformState(
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
-	// `output` from the static remote state instead of executing `terraform output`
+	// `output` from the static remote state instead of executing `terraform output`.
 	remoteStateBackendStaticTypeOutputs := GetComponentRemoteStateBackendStaticType(componentSections)
 
-	// Read static remote state backend outputs
+	// Read static remote state backend outputs.
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
@@ -60,17 +60,22 @@ func GetTerraformState(
 		return result, nil
 	}
 
-	// Read Terraform backend
+	// Read Terraform backend.
 	backend, err := GetTerraformBackend(atmosConfig, componentSections)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrReadTerraformBackend, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
-	// Cache the result
+	// Cache the result.
 	terraformStateCache.Store(stackSlug, backend)
 
-	// Get the output
+	// If `backend` is `nil`, return `nil` (the component in the stack has not been provisioned yet).
+	if backend == nil {
+		return nil, nil
+	}
+
+	// Get the output.
 	result, err := GetTerraformBackendVariable(atmosConfig, backend, output)
 	if err != nil {
 		er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
