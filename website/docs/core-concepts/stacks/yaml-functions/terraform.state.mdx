@@ -119,7 +119,7 @@ For more details, review the following docs:
 ## Using YQ Expressions to provide a default value
 
 If the component for which you are reading the output has not been provisioned yet, the `!terraform.state` function
-will return the string `<no value>` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
+will return `null`, unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
 in the YQ expression, in which case the function will return the default value.
 
 This will allow you to mock outputs when executing `atmos terraform plan` where there are dependencies between components,
