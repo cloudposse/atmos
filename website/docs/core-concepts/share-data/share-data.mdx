@@ -99,9 +99,7 @@ For more advanced examples, check out the `!terraform.output` YAML function docu
 
 ###  Function: `!terraform.state`
 
-The `!terraform.state` YAML function allows reading the outputs ([remote state](/core-concepts/share-data/remote-state))
-of components in Atmos stack manifests directly from the configured [Terraform/OpenTofu backends](/core-concepts/components/terraform/backends)
-(without going through the `terraform output` or `tofu output` processing pipeline).
+The [`!terraform.state`](/core-concepts/stacks/yaml-functions/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it’s **very fast**, doesn’t require provider initialization, and currently supports [S3 and local backends](/core-concepts/components/terraform/backends) for accessing [remote state](/core-concepts/share-data/remote-state).
 
 For example, we can read the `vpc_id` output of the `vpc` component in the current stack:
 
