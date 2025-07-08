@@ -25,14 +25,13 @@ const (
 	statusMessageTimeout = time.Second * 3 // how long to show status messages like "stashed!"
 	ellipsis             = "…"
 	statusBarHeight      = 1
+
+	repeatSpace = 24
+
+	nextLine = "\n"
 )
 
 type pagerState int
-
-const repeatSpace = 24
-
-- var nextLine = "\n"
-+ const nextLine = "\n"
 
 const (
 	pagerStateBrowse pagerState = iota
@@ -358,10 +357,6 @@ func (m *model) scrollToSearchMatch() {
 }
 
 func (m *model) scrollToNextSearchMatch() {
-	if m.searchTerm == "" {
-		return
-	}
-
 	lines := m.originalContentLines
 	searchTermLower := strings.ToLower(m.searchTerm)
 	currentLine := m.viewport.YOffset
@@ -384,10 +379,6 @@ func (m *model) scrollToNextSearchMatch() {
 }
 
 func (m *model) scrollToPreviousSearchMatch() {
-	if m.searchTerm == "" {
-		return
-	}
-
 	lines := m.originalContentLines
 	searchTermLower := strings.ToLower(m.searchTerm)
 	currentLine := m.viewport.YOffset
