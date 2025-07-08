@@ -31,7 +31,8 @@ type pagerState int
 
 const repeatSpace = 24
 
-var nextLine = "\n"
+- var nextLine = "\n"
++ const nextLine = "\n"
 
 const (
 	pagerStateBrowse pagerState = iota
