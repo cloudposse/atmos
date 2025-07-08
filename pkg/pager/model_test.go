@@ -113,15 +113,29 @@ func TestModel_Update(t *testing.T) {
 		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
 		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
+		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("enter")}
 		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}
 		m.Update(msg)
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}
 		updatedModel, cmd := m.Update(msg)
 		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
 		assert.False(t, updatedModel.(*model).forwardSlashPressed, "Forward slash should be pressed")
-		assert.Equal(t, "t", updatedModel.(*model).searchTerm, "Search term should be set to 't'")
+		assert.Equal(t, "test", updatedModel.(*model).searchTerm, "Search term should be set to 't'")
 		assert.Nil(t, cmd, "No additional command expected")
 	})
 
