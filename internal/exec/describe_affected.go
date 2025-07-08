@@ -1,19 +1,29 @@
 package exec
 
 import (
+	"errors"
+	"fmt"
+
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	l "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	l "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+
+type DescribeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) DescribeAffectedExec
 
 type DescribeAffectedCmdArgs struct {
 	CLIConfig                   *schema.AtmosConfiguration
@@ -47,7 +57,6 @@ type describeAffectedExec struct {
 	executeDescribeAffectedWithTargetRepoPath func(
 		atmosConfig *schema.AtmosConfiguration,
 		targetRefPath string,
-		verbose bool,
 		includeSpaceliftAdminStacks bool,
 		includeSettings bool,
 		stack string,
@@ -61,7 +70,6 @@ type describeAffectedExec struct {
 		sha string,
 		sshKeyPath string,
 		sshKeyPassword string,
-		verbose bool,
 		includeSpaceliftAdminStacks bool,
 		includeSettings bool,
 		stack string,
@@ -73,7 +81,6 @@ type describeAffectedExec struct {
 		atmosConfig *schema.AtmosConfiguration,
 		ref string,
 		sha string,
-		verbose bool,
 		includeSpaceliftAdminStacks bool,
 		includeSettings bool,
 		stack string,
@@ -96,6 +103,7 @@ type describeAffectedExec struct {
 	pageCreator           pager.PageCreator
 }
 
+// NewDescribeAffectedExec creates a new `describe affected` executor.
 func NewDescribeAffectedExec(
 	atmosConfig *schema.AtmosConfiguration,
 ) DescribeAffectedExec {
@@ -111,17 +119,99 @@ func NewDescribeAffectedExec(
 	}
 }
 
+// ParseDescribeAffectedCliArgs parses the command-line arguments of the `atmos describe affected` command.
+func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
+	var atmosConfig schema.AtmosConfiguration
+	if info, err := ProcessCommandLineArgs("", cmd, args, nil); err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+	if err := ValidateStacks(atmosConfig); err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+	// Process flags
+	flags := cmd.Flags()
+
+	result := DescribeAffectedCmdArgs{
+		CLIConfig: &atmosConfig,
+	}
+	SetDescribeAffectedFlagValueInCliArgs(flags, &result)
+
+	if result.Format != "yaml" && result.Format != "json" {
+		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
+	}
+	if result.RepoPath != "" && (result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
+		return DescribeAffectedCmdArgs{}, ErrRepoPathConflict
+	}
+
+	return result, nil
+}
+
+// SetDescribeAffectedFlagValueInCliArgs sets the flag values in CLI arguments.
+func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *DescribeAffectedCmdArgs) {
+	flagsKeyValue := map[string]any{
+		"ref":                            &describe.Ref,
+		"sha":                            &describe.SHA,
+		"repo-path":                      &describe.RepoPath,
+		"ssh-key":                        &describe.SSHKeyPath,
+		"ssh-key-password":               &describe.SSHKeyPassword,
+		"include-spacelift-admin-stacks": &describe.IncludeSpaceliftAdminStacks,
+		"include-dependents":             &describe.IncludeDependents,
+		"include-settings":               &describe.IncludeSettings,
+		"upload":                         &describe.Upload,
+		"clone-target-ref":               &describe.CloneTargetRef,
+		"process-templates":              &describe.ProcessTemplates,
+		"process-functions":              &describe.ProcessYamlFunctions,
+		"skip":                           &describe.Skip,
+		"pager":                          &describe.CLIConfig.Settings.Terminal.Pager,
+		"stack":                          &describe.Stack,
+		"format":                         &describe.Format,
+		"file":                           &describe.OutputFile,
+		"query":                          &describe.Query,
+		"verbose":                        &describe.Verbose,
+	}
+
+	var err error
+	for k := range flagsKeyValue {
+		if !flags.Changed(k) {
+			continue
+		}
+		switch v := flagsKeyValue[k].(type) {
+		case *string:
+			*v, err = flags.GetString(k)
+		case *bool:
+			*v, err = flags.GetBool(k)
+		case *[]string:
+			*v, err = flags.GetStringSlice(k)
+		default:
+			er := fmt.Errorf("unsupported type %T for flag %s", v, k)
+			errUtils.CheckErrorPrintAndExit(er, "", "")
+		}
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+	// When uploading, always include dependents and settings for all affected components
+	if describe.Upload {
+		describe.IncludeDependents = true
+		describe.IncludeSettings = true
+	}
+	if describe.Format == "" {
+		describe.Format = "json"
+	}
+}
+
+// Execute executes `describe affected` command.
 func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
 	var err error
+
 	switch {
 	case a.RepoPath != "":
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRepoPath(
 			a.CLIConfig,
 			a.RepoPath,
-			a.Verbose,
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
@@ -136,7 +226,6 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.SHA,
 			a.SSHKeyPath,
 			a.SSHKeyPassword,
-			a.Verbose,
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
@@ -149,7 +238,6 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
-			a.Verbose,
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
@@ -161,6 +249,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	if err != nil {
 		return err
 	}
+
 	// Add dependent components and stacks for each affected component
 	if len(affected) > 0 && a.IncludeDependents {
 		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
@@ -192,7 +281,7 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 }
 
 func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
-	log.Debug("\nAffected components and stacks: \n")
+	log.Debug("Affected components and stacks:")
 
 	err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
 	if err != nil {

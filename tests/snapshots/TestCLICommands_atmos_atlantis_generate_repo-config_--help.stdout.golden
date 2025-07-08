@@ -1,4 +1,9 @@
 
+Notice: Atmos now collects completely anonymous telemetry regarding usage.
+This information is used to shape Atmos roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
+by visiting the following URL: https://atmos.tools/cli/telemetry
+
 Generate the repository configuration file required for Atlantis to manage Terraform repositories.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
 
 Usage:
@@ -11,6 +16,12 @@ Flags:
         --affected-only              Generate Atlantis projects only for the
                                      Atmos components changed between two Git
                                      commits. (default false)
+
+        --clone-target-ref           Clone the target reference for comparison
+                                     with the current branch. Only used when
+                                     --affected-only=true. Defaults to false,
+                                     which checks out the target reference
+                                     instead. (default false)
 
         --components string          Generate Atlantis projects for the
                                      specified components only (comma-separated
@@ -56,12 +67,6 @@ Flags:
 Global Flags:
 
         --base-path string           Base path for Atmos project
-
-        --clone-target-ref           Clone the target reference for comparison
-                                     with the current branch. Only used when
-                                     --affected-only=true. Defaults to false,
-                                     which checks out the target reference
-                                     instead. (default false)
 
         --config stringSlice         Paths to configuration files
                                      (comma-separated or repeated flag) (default
