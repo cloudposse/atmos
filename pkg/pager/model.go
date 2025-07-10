@@ -460,14 +460,8 @@ func (m *model) View() string {
 		return "\n  Initializing..."
 	}
 
-	view := fmt.Sprintf("%s\n%s", m.viewport.View(), m.footerView())
-
-	// Show search prompt if in search mode
-	if m.forwardSlashPressed {
-		searchPrompt := fmt.Sprintf("Search: %s", m.searchTerm)
-		view += nextLine + statusBarMessageStyle(" "+searchPrompt+" ")
-	}
-
+	view := m.viewport.View() + nextLine
+	view += m.footerView()
 	return view
 }
 
@@ -566,6 +560,10 @@ func (m *model) statusBarView(b *strings.Builder) {
 	default:
 		scrollPercent = statusBarNoteStyle(scrollPercent)
 		titleText := m.title
+		// Show search prompt if in search mode
+		if m.forwardSlashPressed {
+			titleText = fmt.Sprintf("Search: %s", m.searchTerm)
+		}
 		if m.searchTerm != "" && !m.forwardSlashPressed {
 			titleText += fmt.Sprintf(" (searching: %s)", m.searchTerm)
 		}
