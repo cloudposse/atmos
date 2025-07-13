@@ -78,7 +78,7 @@ require (
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/term v0.32.0
 	golang.org/x/text v0.26.0
-	google.golang.org/api v0.239.0
+	google.golang.org/api v0.241.0
 	google.golang.org/grpc v1.73.0
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v2 v2.4.0
