@@ -1,4 +1,4 @@
-package exec
+package terraform_backend
 
 import (
 	"context"
@@ -14,9 +14,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsUtils "github.com/cloudposse/atmos/internal/aws_utils"
 )
 
-// GetTerraformBackendS3 returns the Terraform state from the configured S3 backend.
+// GetTerraformBackendS3 returns the Terraform state file from the configured S3 backend.
 func GetTerraformBackendS3(
 	backendInfo *TerraformBackendInfo,
 ) (map[string]any, error) {
@@ -32,7 +33,7 @@ func GetTerraformBackendS3(
 	)
 
 	// Load AWS config and assume the backend IAM role (using the AWS SDK).
-	awsConfig, err := loadAWSConfig(ctx, backendInfo.S3.Region, backendInfo.S3.RoleArn)
+	awsConfig, err := awsUtils.LoadAWSConfig(ctx, backendInfo.S3.Region, backendInfo.S3.RoleArn)
 	if err != nil {
 		return nil, err
 	}

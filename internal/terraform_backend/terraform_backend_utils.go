@@ -1,4 +1,4 @@
-package exec
+package terraform_backend
 
 import (
 	"encoding/json"
@@ -25,24 +25,6 @@ func GetTerraformComponent(sections map[string]any) string {
 		return workspace
 	}
 	return ""
-}
-
-// GetComponentRemoteStateBackendStaticType returns the `remote_state_backend` section for a component in a stack.
-func GetComponentRemoteStateBackendStaticType(sections map[string]any) map[string]any {
-	var remoteStateBackend map[string]any
-	var remoteStateBackendType string
-	var ok bool
-
-	if remoteStateBackendType, ok = sections[cfg.RemoteStateBackendTypeSectionName].(string); !ok {
-		return nil
-	}
-	if remoteStateBackendType != cfg.StaticSectionName {
-		return nil
-	}
-	if remoteStateBackend, ok = sections[cfg.RemoteStateBackendSectionName].(map[string]any); ok {
-		return remoteStateBackend
-	}
-	return nil
 }
 
 // GetComponentBackend returns the `backend` section for a component in a stack.
@@ -163,7 +145,7 @@ type RawTerraformState struct {
 	Resources interface{} `json:"resources,omitempty"`
 }
 
-// ProcessTerraformStateFile processes the Terraform state file.
+// ProcessTerraformStateFile processes a Terraform state file.
 // https://pkg.go.dev/github.com/hashicorp/terraform-json
 // https://github.com/hashicorp/terraform-json
 func ProcessTerraformStateFile(data []byte) (map[string]any, error) {

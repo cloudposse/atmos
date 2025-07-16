@@ -1,4 +1,4 @@
-package exec
+package terraform_backend_test
 
 import (
 	"testing"
@@ -6,22 +6,23 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 func TestGetTerraformBackendS3(t *testing.T) {
 	tests := []struct {
 		name        string
-		backendInfo TerraformBackendInfo
+		backendInfo tb.TerraformBackendInfo
 		wantErr     bool
 		errType     error
 	}{
 		{
 			name: "backend info with role arn",
-			backendInfo: TerraformBackendInfo{
+			backendInfo: tb.TerraformBackendInfo{
 				Type:      cfg.BackendTypeS3,
 				Workspace: "test-workspace",
-				S3: TerraformS3BackendInfo{
+				S3: tb.TerraformS3BackendInfo{
 					Bucket:             "test-bucket",
 					Region:             "us-east-2",
 					Key:                "terraform.tfstate",
@@ -34,10 +35,10 @@ func TestGetTerraformBackendS3(t *testing.T) {
 		},
 		{
 			name: "backend info without role arn",
-			backendInfo: TerraformBackendInfo{
+			backendInfo: tb.TerraformBackendInfo{
 				Type:      cfg.BackendTypeS3,
 				Workspace: "test-workspace",
-				S3: TerraformS3BackendInfo{
+				S3: tb.TerraformS3BackendInfo{
 					Bucket:             "test-bucket",
 					Region:             "us-east-2",
 					Key:                "terraform.tfstate",
@@ -49,10 +50,10 @@ func TestGetTerraformBackendS3(t *testing.T) {
 		},
 		{
 			name: "invalid backend info - missing bucket",
-			backendInfo: TerraformBackendInfo{
+			backendInfo: tb.TerraformBackendInfo{
 				Type:      cfg.BackendTypeS3,
 				Workspace: "test-workspace",
-				S3: TerraformS3BackendInfo{
+				S3: tb.TerraformS3BackendInfo{
 					Region:             "us-east-2",
 					Key:                "terraform.tfstate",
 					WorkspaceKeyPrefix: "test-prefix",
@@ -63,10 +64,10 @@ func TestGetTerraformBackendS3(t *testing.T) {
 		},
 		{
 			name: "invalid backend info - missing region",
-			backendInfo: TerraformBackendInfo{
+			backendInfo: tb.TerraformBackendInfo{
 				Type:      cfg.BackendTypeS3,
 				Workspace: "test-workspace",
-				S3: TerraformS3BackendInfo{
+				S3: tb.TerraformS3BackendInfo{
 					Bucket:             "test-bucket",
 					Key:                "terraform.tfstate",
 					WorkspaceKeyPrefix: "test-prefix",
@@ -79,7 +80,7 @@ func TestGetTerraformBackendS3(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := GetTerraformBackendS3(&tt.backendInfo)
+			result, err := tb.GetTerraformBackendS3(&tt.backendInfo)
 
 			if tt.wantErr {
 				assert.Error(t, err)

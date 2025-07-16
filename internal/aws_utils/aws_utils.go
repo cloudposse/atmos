@@ -1,4 +1,4 @@
-package exec
+package aws_utils
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-// loadAWSConfig loads AWS config.
+// LoadAWSConfig loads AWS config.
 /*
 	It looks for credentials in the following order:
 
@@ -44,7 +44,7 @@ import (
 	Custom credential sources:
 	  Provided programmatically using config.WithCredentialsProvider(...)
 */
-func loadAWSConfig(ctx context.Context, region string, roleArn string) (aws.Config, error) {
+func LoadAWSConfig(ctx context.Context, region string, roleArn string) (aws.Config, error) {
 	var cfgOpts []func(*config.LoadOptions) error
 
 	// Conditionally set the region

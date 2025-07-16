@@ -379,7 +379,7 @@ func GetTerraformOutput(
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result = getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result = GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 	} else {
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
@@ -419,7 +419,8 @@ func getTerraformOutputVariable(
 	return res
 }
 
-func getStaticRemoteStateOutput(
+// GetStaticRemoteStateOutput returns static remote state output for a component in a stack.
+func GetStaticRemoteStateOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,

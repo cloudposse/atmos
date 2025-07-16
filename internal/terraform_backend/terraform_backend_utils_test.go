@@ -1,4 +1,4 @@
-package exec
+package terraform_backend_test
 
 import (
 	"os"
@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	e "github.com/cloudposse/atmos/internal/exec"
+	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
@@ -41,7 +43,7 @@ func TestGetTerraformBackendInfo(t *testing.T) {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
 
-	sections, err := ExecuteDescribeComponent(
+	sections, err := e.ExecuteDescribeComponent(
 		"component-1",
 		stack,
 		false,
@@ -49,11 +51,11 @@ func TestGetTerraformBackendInfo(t *testing.T) {
 		nil,
 	)
 	assert.NoError(t, err)
-	backendInfo := GetTerraformBackendInfo(sections)
+	backendInfo := tb.GetTerraformBackendInfo(sections)
 	assert.Equal(t, cfg.BackendTypeLocal, backendInfo.Type)
 	assert.Equal(t, stack, backendInfo.Workspace)
 
-	sections, err = ExecuteDescribeComponent(
+	sections, err = e.ExecuteDescribeComponent(
 		"component-2",
 		stack,
 		false,
@@ -61,7 +63,7 @@ func TestGetTerraformBackendInfo(t *testing.T) {
 		nil,
 	)
 	assert.NoError(t, err)
-	backendInfo = GetTerraformBackendInfo(sections)
+	backendInfo = tb.GetTerraformBackendInfo(sections)
 	assert.Equal(t, cfg.BackendTypeS3, backendInfo.Type)
 	assert.Equal(t, "nonprod-tfstate", backendInfo.S3.Bucket)
 	assert.Equal(t, "us-east-2", backendInfo.S3.Region)
@@ -69,7 +71,7 @@ func TestGetTerraformBackendInfo(t *testing.T) {
 	assert.Equal(t, "arn:aws:iam::123456789123:role/nonprod-tfstate", backendInfo.S3.RoleArn)
 	assert.Equal(t, "component-2", backendInfo.S3.WorkspaceKeyPrefix)
 
-	sections, err = ExecuteDescribeComponent(
+	sections, err = e.ExecuteDescribeComponent(
 		"component-3",
 		stack,
 		false,
@@ -77,10 +79,10 @@ func TestGetTerraformBackendInfo(t *testing.T) {
 		nil,
 	)
 	assert.NoError(t, err)
-	backendInfo = GetTerraformBackendInfo(sections)
+	backendInfo = tb.GetTerraformBackendInfo(sections)
 	assert.Equal(t, cfg.BackendTypeAzurerm, backendInfo.Type)
 
-	sections, err = ExecuteDescribeComponent(
+	sections, err = e.ExecuteDescribeComponent(
 		"component-4",
 		stack,
 		false,
@@ -88,10 +90,10 @@ func TestGetTerraformBackendInfo(t *testing.T) {
 		nil,
 	)
 	assert.NoError(t, err)
-	backendInfo = GetTerraformBackendInfo(sections)
+	backendInfo = tb.GetTerraformBackendInfo(sections)
 	assert.Equal(t, cfg.BackendTypeGCS, backendInfo.Type)
 
-	sections, err = ExecuteDescribeComponent(
+	sections, err = e.ExecuteDescribeComponent(
 		"component-5",
 		stack,
 		false,
@@ -99,6 +101,6 @@ func TestGetTerraformBackendInfo(t *testing.T) {
 		nil,
 	)
 	assert.NoError(t, err)
-	backendInfo = GetTerraformBackendInfo(sections)
+	backendInfo = tb.GetTerraformBackendInfo(sections)
 	assert.Equal(t, cfg.BackendTypeCloud, backendInfo.Type)
 }

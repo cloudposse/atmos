@@ -1,4 +1,4 @@
-package exec
+package terraform_backend
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// GetTerraformBackendLocal returns the Terraform state from the local backend.
+// GetTerraformBackendLocal returns the Terraform state file from the local backend.
 func GetTerraformBackendLocal(
 	atmosConfig *schema.AtmosConfiguration,
 	backendInfo *TerraformBackendInfo,

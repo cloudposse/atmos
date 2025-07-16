@@ -7,6 +7,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -45,7 +46,7 @@ func GetTerraformState(
 				cfg.StackStr, stack,
 				"output", output,
 			)
-			result, err := GetTerraformBackendVariable(atmosConfig, backend.(map[string]any), output)
+			result, err := tb.GetTerraformBackendVariable(atmosConfig, backend.(map[string]any), output)
 			if err != nil {
 				er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`. Error: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 				return nil, er
@@ -78,12 +79,12 @@ func GetTerraformState(
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result := getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 		return result, nil
 	}
 
 	// Read Terraform backend.
-	backend, err := GetTerraformBackend(atmosConfig, componentSections)
+	backend, err := tb.GetTerraformBackend(atmosConfig, componentSections)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrReadTerraformBackend, component, stack, yamlFunc, err)
 		return nil, er
@@ -98,7 +99,7 @@ func GetTerraformState(
 	}
 
 	// Get the output.
-	result, err := GetTerraformBackendVariable(atmosConfig, backend, output)
+	result, err := tb.GetTerraformBackendVariable(atmosConfig, backend, output)
 	if err != nil {
 		er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 		return nil, er

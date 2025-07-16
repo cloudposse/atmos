@@ -1,4 +1,4 @@
-package exec
+package aws_utils
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func TestLoadAWSConfig(t *testing.T) {
 			}
 
 			// Execute
-			cfg, err := loadAWSConfig(context.Background(), tt.region, tt.roleArn)
+			cfg, err := LoadAWSConfig(context.Background(), tt.region, tt.roleArn)
 
 			// Assert
 			if tt.wantErr {

@@ -1,4 +1,4 @@
-package exec
+package terraform_backend_test
 
 import (
 	"os"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -15,7 +16,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 	tests := []struct {
 		name          string
 		setup         func(t *testing.T) (string, func())
-		backendInfo   TerraformBackendInfo
+		backendInfo   tb.TerraformBackendInfo
 		expected      map[string]any
 		expectedError string
 	}{
@@ -44,7 +45,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 
 				return tempDir, func() {}
 			},
-			backendInfo: TerraformBackendInfo{
+			backendInfo: tb.TerraformBackendInfo{
 				TerraformComponent: "test-component",
 				Workspace:          "test-workspace",
 			},
@@ -58,7 +59,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 				tempDir := t.TempDir()
 				return tempDir, func() {}
 			},
-			backendInfo: TerraformBackendInfo{
+			backendInfo: tb.TerraformBackendInfo{
 				TerraformComponent: "non-existent",
 				Workspace:          "test-workspace",
 			},
@@ -78,7 +79,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 			}
 
 			// Call the function
-			result, err := GetTerraformBackendLocal(config, &tt.backendInfo)
+			result, err := tb.GetTerraformBackendLocal(config, &tt.backendInfo)
 
 			// Verify results
 			if tt.expectedError != "" {
