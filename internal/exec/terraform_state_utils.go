@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"sync"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
-
 	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var terraformStateCache = sync.Map{}
