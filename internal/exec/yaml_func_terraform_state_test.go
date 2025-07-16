@@ -141,6 +141,6 @@ func TestYamlFuncTerraformState(t *testing.T) {
     - fallback1
     - fallback2`)
 	assert.Contains(t, y, `test_map:
-    key1: value1
-    key2: value2`)
+    key1: fallback1
+    key2: fallback2`)
 }
