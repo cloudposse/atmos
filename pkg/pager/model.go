@@ -25,6 +25,10 @@ const (
 	statusMessageTimeout = time.Second * 3 // how long to show status messages like "stashed!"
 	ellipsis             = "…"
 	statusBarHeight      = 1
+
+	repeatSpace = 24
+
+	nextLine = "\n"
 )
 
 type pagerState int
@@ -86,6 +90,13 @@ var (
 			Background(lipgloss.AdaptiveColor{Light: "#f2f2f2", Dark: "#1B1B1B"}).
 			Render
 
+	// Add highlight style for search matches.
+	highlightStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#FFFF00")).
+			Foreground(lipgloss.Color("#000000")).
+			Bold(true).
+			Render
+
 	green = lipgloss.Color("#04B575")
 )
 
@@ -110,19 +121,25 @@ var (
 )
 
 type model struct {
-	title    string
-	content  string
-	ready    bool
-	viewport viewport.Model
-	common   commonModel
-	showHelp bool
+	title                string
+	content              string
+	originalContent      string   // Store original content without highlighting
+	originalContentLines []string // Store original content lines for search
+	ready                bool
+	viewport             viewport.Model
+	common               commonModel
+	showHelp             bool
 
-	state              pagerState
-	statusMessage      pagerStatusMessage
-	statusMessageTimer *time.Timer
+	state               pagerState
+	statusMessage       pagerStatusMessage
+	statusMessageTimer  *time.Timer
+	forwardSlashPressed bool
+	searchTerm          string
 }
 
 func (m *model) Init() tea.Cmd {
+	m.originalContent = m.content
+	m.originalContentLines = strings.Split(m.content, nextLine)
 	return nil
 }
 
@@ -176,27 +193,136 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// highlightSearchTerm applies highlighting to search matches in the content.
+func (m *model) highlightSearchTerm() {
+	if m.searchTerm == "" {
+		m.content = m.originalContent
+		m.viewport.SetContent(m.content)
+		return
+	}
+
+	// Use case-insensitive search
+	searchTermLower := strings.ToLower(m.searchTerm)
+	var highlighted string
+
+	// Find all matches (case-insensitive)
+	lines := m.originalContentLines
+	var highlightedLines []string
+
+	for _, line := range lines {
+		lineLower := strings.ToLower(line)
+		if strings.Contains(lineLower, searchTermLower) {
+			// Find the actual case-preserving match
+			highlightedLine := line
+			startIdx := 0
+			for {
+				idx := strings.Index(strings.ToLower(highlightedLine[startIdx:]), searchTermLower)
+				if idx == -1 {
+					break
+				}
+				actualIdx := startIdx + idx
+				// Get the actual text (preserving case)
+				actualMatch := highlightedLine[actualIdx : actualIdx+len(m.searchTerm)]
+				// Replace with highlighted version
+				highlightedLine = highlightedLine[:actualIdx] +
+					highlightStyle(actualMatch) +
+					highlightedLine[actualIdx+len(m.searchTerm):]
+				// Move past this match for next iteration
+				startIdx = actualIdx + len(highlightStyle(actualMatch))
+			}
+			highlightedLines = append(highlightedLines, highlightedLine)
+		} else {
+			highlightedLines = append(highlightedLines, line)
+		}
+	}
+
+	highlighted = strings.Join(highlightedLines, nextLine)
+	m.content = highlighted
+	m.viewport.SetContent(m.content)
+}
+
+func (m *model) forwardSlashPressedCase(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	// Check if the forward slash key is pressed
+	switch msg.String() {
+	case "enter":
+		// Finish search
+		m.forwardSlashPressed = false
+		if m.searchTerm != "" {
+			m.highlightSearchTerm()
+			m.scrollToSearchMatch()
+		}
+	case "backspace", "ctrl+h":
+		// Handle backspace in search
+		if len(m.searchTerm) > 0 {
+			m.searchTerm = m.searchTerm[:len(m.searchTerm)-1]
+			if m.searchTerm == "" {
+				// Clear highlights if search term is empty
+				m.content = m.originalContent
+				m.viewport.SetContent(m.content)
+			} else {
+				m.highlightSearchTerm()
+				m.scrollToSearchMatch()
+			}
+		}
+
+	case "esc", "ctrl+c":
+		// Cancel search
+		m.forwardSlashPressed = false
+		m.searchTerm = ""
+		m.content = m.originalContent
+		m.viewport.SetContent(m.content)
+	default:
+		// Add character to search term
+		if len(msg.String()) == 1 {
+			m.searchTerm += msg.String()
+			m.highlightSearchTerm()
+			m.scrollToSearchMatch()
+		}
+	}
+	return m, tea.Batch(cmds...)
+}
+
 // handleKeyPress processes keyboard input and returns the updated model and command.
 func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	if m.forwardSlashPressed {
+		return m.forwardSlashPressedCase(msg, cmds)
+	}
+
 	switch msg.String() {
 	case "q", "esc", "ctrl+c":
-		return m, tea.Quit
+		if m.searchTerm == "" {
+			return m, tea.Quit
+		}
+		m.cancelSearch()
 	case "home", "g":
 		m.viewport.GotoTop()
 	case "end", "G":
 		m.viewport.GotoBottom()
 	case "c":
-		// Copy using OSC 52
-		termenv.Copy(StripANSI(m.content))
-		if err := clipboard.WriteAll(StripANSI(m.content)); err != nil {
+		// Copy using OSC 52 - use original content without highlighting
+		termenv.Copy(StripANSI(m.originalContent))
+		if err := clipboard.WriteAll(StripANSI(m.originalContent)); err != nil {
 			cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Failed to copy to clipboard", true}))
 		} else {
 			cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Copied contents", false}))
 		}
 	case "?":
 		m.toggleHelp()
+	case "/":
+		m.forwardSlashPressed = true
+		m.searchTerm = "" // Reset search term when starting new search
+	case "n":
+		// Find next match
+		if m.searchTerm != "" {
+			m.scrollToNextSearchMatch()
+		}
+	case "N":
+		// Find previous match
+		if m.searchTerm != "" {
+			m.scrollToPreviousSearchMatch()
+		}
 	}
 
 	// Handle keyboard and mouse events in the viewport
@@ -205,6 +331,73 @@ func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) cancelSearch() {
+	m.forwardSlashPressed = false
+	m.searchTerm = ""
+	m.content = m.originalContent // Reset content to original without highlights
+	m.viewport.SetContent(m.content)
+}
+
+func (m *model) scrollToSearchMatch() {
+	if m.searchTerm == "" {
+		return
+	}
+
+	lines := m.originalContentLines
+	searchTermLower := strings.ToLower(m.searchTerm)
+
+	for i, line := range lines {
+		if strings.Contains(strings.ToLower(line), searchTermLower) { // Found the match. Scroll to that line.
+			m.viewport.SetYOffset(i - 1)
+			break
+		}
+	}
+}
+
+func (m *model) scrollToNextSearchMatch() {
+	lines := m.originalContentLines
+	searchTermLower := strings.ToLower(m.searchTerm)
+	currentLine := m.viewport.YOffset
+
+	// Look for matches after current position
+	for i := currentLine + 1; i < len(lines); i++ {
+		if strings.Contains(strings.ToLower(lines[i]), searchTermLower) {
+			m.viewport.SetYOffset(i)
+			return
+		}
+	}
+
+	// If no match found after current position, wrap to beginning
+	for i := 0; i <= currentLine; i++ {
+		if strings.Contains(strings.ToLower(lines[i]), searchTermLower) {
+			m.viewport.SetYOffset(i)
+			return
+		}
+	}
+}
+
+func (m *model) scrollToPreviousSearchMatch() {
+	lines := m.originalContentLines
+	searchTermLower := strings.ToLower(m.searchTerm)
+	currentLine := m.viewport.YOffset
+
+	// Look for matches before current position (in reverse)
+	for i := currentLine - 1; i >= 0; i-- {
+		if strings.Contains(strings.ToLower(lines[i]), searchTermLower) {
+			m.viewport.SetYOffset(i)
+			return
+		}
+	}
+
+	// If no match found before current position, wrap to end
+	for i := len(lines) - 1; i >= currentLine; i-- {
+		if strings.Contains(strings.ToLower(lines[i]), searchTermLower) {
+			m.viewport.SetYOffset(i)
+			return
+		}
+	}
 }
 
 type statusMessageTimeoutMsg applicationContext
@@ -256,7 +449,7 @@ func (m *model) setSize(w, h int) {
 
 	if m.showHelp {
 		if pagerHelpHeight == 0 {
-			pagerHelpHeight = strings.Count(m.helpView(), "\n")
+			pagerHelpHeight = strings.Count(m.helpView(), nextLine)
 		}
 		m.viewport.Height -= (statusBarHeight + pagerHelpHeight)
 	}
@@ -266,41 +459,73 @@ func (m *model) View() string {
 	if !m.ready {
 		return "\n  Initializing..."
 	}
-	return fmt.Sprintf("%s\n%s", m.viewport.View(), m.footerView())
+
+	view := m.viewport.View() + nextLine
+	view += m.footerView()
+	return view
 }
 
-func (m *model) helpView() (s string) {
-	col1 := []string{
-		"g/home  go to top",
-		"G/end   go to bottom",
-		"c       copy contents",
-		"esc     back to files",
-		"q       quit",
+// helpView returns the help view with key bindings and actions.
+func (m *model) helpView() string {
+	// Define help items as key-value pairs for easy maintenance
+	leftColumn := [][2]string{
+		{"k/↑", "up"},
+		{"j/↓", "down"},
+		{"b/pgup", "page up"},
+		{"f/pgdn", "page down"},
+		{"u", "½ page up"},
+		{"d", "½ page down"},
+		{"esc", "back to files"},
 	}
-	nextLine := "\n"
-	s += nextLine
-	s += "k/↑      up                  " + col1[0] + nextLine
-	s += "j/↓      down                " + col1[1] + nextLine
-	s += "b/pgup   page up             " + col1[2] + nextLine
-	s += "f/pgdn   page down           " + col1[3] + nextLine
-	s += "u        ½ page up           " + col1[4] + nextLine
-	s += "d        ½ page down         "
 
-	s = indent(s, 2)
+	rightColumn := [][2]string{
+		{"g/home", "go to top"},
+		{"G/end", "go to bottom"},
+		{"c", "copy contents"},
+		{"/", "search"},
+		{"n", "next match"},
+		{"N", "prev match"},
+		{"q", "quit"},
+	}
 
-	// Fill up empty cells with spaces for background coloring
-	if m.common.width > 0 {
-		lines := strings.Split(s, nextLine)
-		for i := 0; i < len(lines); i++ {
-			l := runewidth.StringWidth(lines[i])
-			n := max(m.common.width-l, 0)
-			lines[i] += strings.Repeat(" ", n)
+	// Find the maximum number of rows needed
+	maxRows := max(len(leftColumn), len(rightColumn))
+
+	// Build the help content
+	var lines []string
+	for i := 0; i < maxRows; i++ {
+		var left, right string
+
+		// Left column
+		if i < len(leftColumn) {
+			left = fmt.Sprintf("%-8s %-15s", leftColumn[i][0], leftColumn[i][1])
+		} else {
+			left = strings.Repeat(" ", repeatSpace)
 		}
 
-		s = strings.Join(lines, nextLine)
+		// Right column
+		if i < len(rightColumn) {
+			right = fmt.Sprintf("%-8s %s", rightColumn[i][0], rightColumn[i][1])
+		}
+
+		lines = append(lines, left+"  "+right)
 	}
 
-	return helpViewStyle(s)
+	content := nextLine + strings.Join(lines, nextLine)
+	content = indent(content, 2)
+
+	// Fill empty cells with spaces for background coloring
+	if m.common.width > 0 {
+		contentLines := strings.Split(content, nextLine)
+		for i, line := range contentLines {
+			lineWidth := runewidth.StringWidth(line)
+			padding := max(m.common.width-lineWidth, 0)
+			contentLines[i] = line + strings.Repeat(" ", padding)
+		}
+		content = strings.Join(contentLines, nextLine)
+	}
+
+	return helpViewStyle(content)
 }
 
 func (m *model) footerView() string {
@@ -334,7 +559,15 @@ func (m *model) statusBarView(b *strings.Builder) {
 		helpNote = statusBarMessageHelpStyle(" ? Help ")
 	default:
 		scrollPercent = statusBarNoteStyle(scrollPercent)
-		note = statusBarNoteStyle(" " + m.title + " ")
+		titleText := m.title
+		// Show search prompt if in search mode
+		if m.forwardSlashPressed {
+			titleText = fmt.Sprintf("Search: %s", m.searchTerm)
+		}
+		if m.searchTerm != "" && !m.forwardSlashPressed {
+			titleText += fmt.Sprintf(" (searching: %s)", m.searchTerm)
+		}
+		note = statusBarNoteStyle(" " + titleText + " ")
 		helpNote = statusBarHelpStyle(" ? Help ")
 	}
 
@@ -370,7 +603,7 @@ func (m *model) statusBarView(b *strings.Builder) {
 		helpNote,
 	)
 	if m.showHelp {
-		fmt.Fprint(b, "\n"+m.helpView())
+		fmt.Fprint(b, nextLine+m.helpView())
 	}
 }
 
@@ -379,7 +612,7 @@ func indent(s string, n int) string {
 	if n <= 0 || s == "" {
 		return s
 	}
-	l := strings.Split(s, "\n")
+	l := strings.Split(s, nextLine)
 	b := strings.Builder{}
 	i := strings.Repeat(" ", n)
 	for _, v := range l {

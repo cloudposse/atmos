@@ -78,6 +78,118 @@ func TestModel_Update(t *testing.T) {
 			assert.NotNil(t, cmd, "Viewport may return a command")
 		}
 	})
+
+	t.Run("ViewportUpdate_Search_Input", func(t *testing.T) {
+		vp := viewport.New(80, 20)
+		m := model{
+			ready:    true,
+			viewport: vp,
+			content:  "test content",
+		}
+		m.Init()
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
+		updatedModel, cmd := m.Update(msg)
+		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
+		assert.True(t, updatedModel.(*model).forwardSlashPressed, "Forward slash should be pressed")
+		assert.Equal(t, "t", updatedModel.(*model).searchTerm, "Search term should be set to 't'")
+		assert.Nil(t, cmd, "No additional command expected")
+	})
+
+	t.Run("ViewportUpdate_Search_Enter", func(t *testing.T) {
+		vp := viewport.New(80, 20)
+		m := model{
+			content:  "test content\n test content 2",
+			ready:    true,
+			viewport: vp,
+		}
+		m.Init()
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("backspace")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("enter")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}
+		updatedModel, cmd := m.Update(msg)
+		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
+		assert.False(t, updatedModel.(*model).forwardSlashPressed, "Forward slash should be pressed")
+		assert.Equal(t, "test", updatedModel.(*model).searchTerm, "Search term should be set to 't'")
+		assert.Nil(t, cmd, "No additional command expected")
+	})
+
+	t.Run("ViewportUpdate_Search_Help", func(t *testing.T) {
+		vp := viewport.New(80, 20)
+		m := model{
+			content:  "test content\n test content 2",
+			ready:    true,
+			viewport: vp,
+		}
+		m.Init()
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")}
+		updatedModel, cmd := m.Update(msg)
+		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
+		assert.False(t, updatedModel.(*model).forwardSlashPressed, "Forward slash should be pressed")
+		assert.Equal(t, "", updatedModel.(*model).searchTerm, "Search term should be set to 't'")
+		assert.Nil(t, cmd, "No additional command expected")
+	})
+
+	t.Run("ViewportUpdate_Search_Esc", func(t *testing.T) {
+		vp := viewport.New(80, 20)
+		m := model{
+			content:  "test content\n test content 2",
+			ready:    true,
+			viewport: vp,
+		}
+		m.Init()
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("backspace")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("enter")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("home")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("end")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}
+		m.Update(msg)
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("esc")}
+		updatedModel, cmd := m.Update(msg)
+		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
+		assert.False(t, updatedModel.(*model).forwardSlashPressed, "Forward slash should be pressed")
+		assert.Equal(t, "", updatedModel.(*model).searchTerm, "Search term should be set to 't'")
+		assert.Nil(t, cmd, "No additional command expected")
+	})
 }
 
 func TestModel_View(t *testing.T) {
