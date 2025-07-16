@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"sync"
 
 	log "github.com/charmbracelet/log"
@@ -42,6 +43,16 @@ func GetTerraformState(
 		}
 	}
 
+	message := fmt.Sprintf("%s: fetching %s output from %s in %s", yamlFunc, output, component, stack)
+
+	// Initialize spinner
+	p := NewSpinner(message)
+	spinnerDone := make(chan struct{})
+	// Run spinner in a goroutine
+	RunSpinner(p, spinnerDone, message)
+	// Ensure the spinner is stopped before returning
+	defer StopSpinner(p, spinnerDone)
+
 	componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
 		er := fmt.Errorf("%w `%s` in stack `%s` in YAML function `%s`. Error: %v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
@@ -81,5 +92,8 @@ func GetTerraformState(
 		er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 		return nil, er
 	}
+
+	u.PrintfMessageToTUI("\r✓ %s\n", message)
+
 	return result, nil
 }
