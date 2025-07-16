@@ -14,6 +14,17 @@ import (
 
 var terraformStateCache = sync.Map{}
 
+// GetTerraformState retrieves a specified Terraform output variable for a given component within a stack.
+// It optionally uses a cache to avoid redundant state retrievals and supports both static and dynamic backends.
+// Parameters:
+//   - atmosConfig: Atmos configuration pointer
+//   - yamlFunc: Name of the calling YAML function for error context
+//   - stack: Stack identifier
+//   - component: Component identifier
+//   - output: Output variable key to retrieve
+//   - skipCache: Flag to bypass cache lookup
+//
+// Returns the output value or nil if the component is not provisioned.
 func GetTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
 	yamlFunc string,
