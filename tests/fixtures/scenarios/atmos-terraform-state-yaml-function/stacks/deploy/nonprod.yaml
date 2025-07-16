@@ -34,4 +34,4 @@ components:
         bar: !terraform.state component-2 .bar
         baz: !terraform.state component-2 {{ .stack }} ".invalid-output // ""default-value"""
         test_list: !terraform.state component-2 ".invalid-output2 // [""fallback1"", ""fallback2""]"
-        test_map: !terraform.state 'component-2 ".invalid-output3 // {""key1"": ""value1"", ""key2"": ""value2""}"'
+        test_map: !terraform.state 'component-2 ".invalid-output3 // {""key1"": ""fallback1"", ""key2"": ""fallback2""}"'
