@@ -11,6 +11,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// processTagTerraformState processes `!terraform.state` YAML tag.
 func processTagTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
