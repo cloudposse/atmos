@@ -2,8 +2,9 @@ package exec
 
 import (
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"sync"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 
 	log "github.com/charmbracelet/log"
 
