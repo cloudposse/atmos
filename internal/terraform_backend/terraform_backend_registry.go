@@ -5,7 +5,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var terraformBackends = map[string]func(*schema.AtmosConfiguration, *map[string]any) ([]byte, error){}
+// ReadTerraformBackendFunc defines a function type to read Terraform state from a backend.
+type ReadTerraformBackendFunc func(*schema.AtmosConfiguration, *map[string]any) ([]byte, error)
+
+// terraformBackends is a map of backend types to the functions to read Terraform state.
+var terraformBackends = map[string]ReadTerraformBackendFunc{}
 
 // RegisterTerraformBackends registers Terraform backends.
 func RegisterTerraformBackends() {
