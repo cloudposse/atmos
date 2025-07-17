@@ -1,33 +1,42 @@
 package terraform_backend_test
 
 import (
+	"context"
+	"errors"
+	"io"
+	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestGetTerraformBackendS3(t *testing.T) {
+func TestReadTerraformBackendS3_InvalidConfig(t *testing.T) {
 	tests := []struct {
-		name        string
-		backendInfo tb.TerraformBackendInfo
-		wantErr     bool
-		errType     error
+		name          string
+		componentData map[string]any
+		wantErr       bool
+		errType       error
 	}{
 		{
 			name: "backend info with role arn",
-			backendInfo: tb.TerraformBackendInfo{
-				Type:      cfg.BackendTypeS3,
-				Workspace: "test-workspace",
-				S3: tb.TerraformS3BackendInfo{
-					Bucket:             "test-bucket",
-					Region:             "us-east-2",
-					Key:                "terraform.tfstate",
-					RoleArn:            "arn:aws:iam::123456789012:role/test-role",
-					WorkspaceKeyPrefix: "test-prefix",
+			componentData: map[string]any{
+				"workspace": "test-workspace",
+				"backend": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"bucket":               "test-bucket",
+						"region":               "us-east-2",
+						"key":                  "terraform.tfstate",
+						"role_arn":             "arn:aws:iam::123456789012:role/test-role",
+						"workspace_key_prefix": "test-prefix",
+					},
 				},
 			},
 			wantErr: true,
@@ -35,14 +44,16 @@ func TestGetTerraformBackendS3(t *testing.T) {
 		},
 		{
 			name: "backend info without role arn",
-			backendInfo: tb.TerraformBackendInfo{
-				Type:      cfg.BackendTypeS3,
-				Workspace: "test-workspace",
-				S3: tb.TerraformS3BackendInfo{
-					Bucket:             "test-bucket",
-					Region:             "us-east-2",
-					Key:                "terraform.tfstate",
-					WorkspaceKeyPrefix: "test-prefix",
+			componentData: map[string]any{
+				"workspace": "test-workspace",
+				"backend": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"bucket":               "test-bucket",
+						"region":               "us-east-2",
+						"key":                  "terraform.tfstate",
+						"workspace_key_prefix": "test-prefix",
+					},
 				},
 			},
 			wantErr: true,
@@ -50,13 +61,15 @@ func TestGetTerraformBackendS3(t *testing.T) {
 		},
 		{
 			name: "invalid backend info - missing bucket",
-			backendInfo: tb.TerraformBackendInfo{
-				Type:      cfg.BackendTypeS3,
-				Workspace: "test-workspace",
-				S3: tb.TerraformS3BackendInfo{
-					Region:             "us-east-2",
-					Key:                "terraform.tfstate",
-					WorkspaceKeyPrefix: "test-prefix",
+			componentData: map[string]any{
+				"workspace": "test-workspace",
+				"backend": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"region":               "us-east-2",
+						"key":                  "terraform.tfstate",
+						"workspace_key_prefix": "test-prefix",
+					},
 				},
 			},
 			wantErr: true,
@@ -64,13 +77,15 @@ func TestGetTerraformBackendS3(t *testing.T) {
 		},
 		{
 			name: "invalid backend info - missing region",
-			backendInfo: tb.TerraformBackendInfo{
-				Type:      cfg.BackendTypeS3,
-				Workspace: "test-workspace",
-				S3: tb.TerraformS3BackendInfo{
-					Bucket:             "test-bucket",
-					Key:                "terraform.tfstate",
-					WorkspaceKeyPrefix: "test-prefix",
+			componentData: map[string]any{
+				"workspace": "test-workspace",
+				"backend": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"bucket":               "test-bucket",
+						"key":                  "terraform.tfstate",
+						"workspace_key_prefix": "test-prefix",
+					},
 				},
 			},
 			wantErr: true,
@@ -80,7 +95,9 @@ func TestGetTerraformBackendS3(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tb.ReadTerraformBackendS3(&tt.backendInfo)
+			atmosConfig := &schema.AtmosConfiguration{}
+
+			result, err := tb.ReadTerraformBackendS3(atmosConfig, &tt.componentData)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -91,6 +108,157 @@ func TestGetTerraformBackendS3(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, result)
+			}
+		})
+	}
+}
+
+// mockS3Client implements only the GetObject method used in readTerraformBackendS3Internal
+type mockS3Client struct{}
+
+func (m *mockS3Client) GetObject(ctx context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	if *input.Bucket == "mock-bucket" && *input.Key == "test-prefix/test-workspace/terraform.tfstate" {
+		body := `{
+			"version": 4,
+			"terraform_version": "1.4.0",
+			"outputs": {
+				"example": {
+					"value": "mocked-output",
+					"type": "string"
+				}
+			}
+		}`
+		return &s3.GetObjectOutput{
+			Body: io.NopCloser(strings.NewReader(body)),
+		}, nil
+	}
+	return nil, &s3types.NoSuchKey{}
+}
+
+func Test_ReadTerraformBackendS3Internal(t *testing.T) {
+	componentSections := map[string]any{
+		"workspace": "test-workspace",
+	}
+	backend := map[string]any{
+		"bucket":               "mock-bucket",
+		"region":               "us-east-1",
+		"key":                  "terraform.tfstate",
+		"workspace_key_prefix": "test-prefix",
+	}
+
+	client := &mockS3Client{}
+
+	content, err := tb.ReadTerraformBackendS3Internal(client, &componentSections, &backend)
+	assert.NoError(t, err)
+	assert.NotNil(t, content)
+	assert.Contains(t, string(content), "mocked-output")
+}
+
+// Unified interface-compatible mock
+type erroringS3Client struct {
+	err  error
+	body io.ReadCloser
+}
+
+// Simulate failure in io.ReadAll.
+type badReader struct{}
+
+func (badReader) Read([]byte) (int, error) { return 0, errors.New("read failure") }
+func (badReader) Close() error             { return nil }
+
+func (m *erroringS3Client) GetObject(ctx context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &s3.GetObjectOutput{Body: m.body}, nil
+}
+
+func Test_ReadTerraformBackendS3Internal_Errors(t *testing.T) {
+	tests := []struct {
+		name            string
+		client          *erroringS3Client
+		expectedErrSub  string
+		expectedNilBody bool
+	}{
+		{
+			name: "no such key (missing file)",
+			client: &erroringS3Client{
+				err: &s3types.NoSuchKey{},
+			},
+			expectedErrSub:  "",
+			expectedNilBody: true,
+		},
+		{
+			name: "access denied",
+			client: &erroringS3Client{
+				err: &smithy.GenericAPIError{
+					Code:    "AccessDenied",
+					Message: "Access Denied",
+				},
+			},
+			expectedErrSub:  "AccessDenied",
+			expectedNilBody: true,
+		},
+		{
+			name: "no such bucket",
+			client: &erroringS3Client{
+				err: &smithy.GenericAPIError{
+					Code:    "NoSuchBucket",
+					Message: "The specified bucket does not exist",
+				},
+			},
+			expectedErrSub:  "NoSuchBucket",
+			expectedNilBody: true,
+		},
+		{
+			name: "signature mismatch",
+			client: &erroringS3Client{
+				err: &smithy.GenericAPIError{
+					Code:    "SignatureDoesNotMatch",
+					Message: "Signature error",
+				},
+			},
+			expectedErrSub:  "SignatureDoesNotMatch",
+			expectedNilBody: true,
+		},
+		{
+			name: "timeout (context deadline exceeded)",
+			client: &erroringS3Client{
+				err: context.DeadlineExceeded,
+			},
+			expectedErrSub:  "context deadline",
+			expectedNilBody: true,
+		},
+		{
+			name: "read failure on body",
+			client: &erroringS3Client{
+				body: io.NopCloser(badReader{}),
+			},
+			expectedErrSub:  "read failure",
+			expectedNilBody: true,
+		},
+	}
+
+	componentSections := map[string]any{"workspace": "test-workspace"}
+	backend := map[string]any{
+		"bucket":               "mock-bucket",
+		"region":               "us-east-1",
+		"key":                  "terraform.tfstate",
+		"workspace_key_prefix": "test-prefix",
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content, err := tb.ReadTerraformBackendS3Internal(tt.client, &componentSections, &backend)
+			if tt.expectedErrSub == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedErrSub)
+			}
+
+			if tt.expectedNilBody {
+				assert.Nil(t, content)
 			}
 		})
 	}

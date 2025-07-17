@@ -11,108 +11,44 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// GetComponentTerraformWorkspace returns the `workspace` section for a component in a stack.
-func GetComponentTerraformWorkspace(sections map[string]any) string {
-	if workspace, ok := sections[cfg.WorkspaceSectionName].(string); ok {
+// GetTerraformWorkspace returns the `workspace` section for a component in a stack.
+func GetTerraformWorkspace(sections *map[string]any) string {
+	if workspace, ok := (*sections)[cfg.WorkspaceSectionName].(string); ok {
 		return workspace
 	}
 	return ""
 }
 
 // GetTerraformComponent returns the `component` section for a component in a stack.
-func GetTerraformComponent(sections map[string]any) string {
-	if workspace, ok := sections[cfg.ComponentSectionName].(string); ok {
+func GetTerraformComponent(sections *map[string]any) string {
+	if workspace, ok := (*sections)[cfg.ComponentSectionName].(string); ok {
 		return workspace
 	}
 	return ""
 }
 
 // GetComponentBackend returns the `backend` section for a component in a stack.
-func GetComponentBackend(sections map[string]any) map[string]any {
-	if remoteStateBackend, ok := sections[cfg.BackendSectionName].(map[string]any); ok {
+func GetComponentBackend(sections *map[string]any) map[string]any {
+	if remoteStateBackend, ok := (*sections)[cfg.BackendSectionName].(map[string]any); ok {
 		return remoteStateBackend
 	}
 	return nil
 }
 
 // GetComponentBackendType returns the `backend_type` section for a component in a stack.
-func GetComponentBackendType(sections map[string]any) string {
-	if backendType, ok := sections[cfg.BackendTypeSectionName].(string); ok {
+func GetComponentBackendType(sections *map[string]any) string {
+	if backendType, ok := (*sections)[cfg.BackendTypeSectionName].(string); ok {
 		return backendType
 	}
 	return ""
 }
 
-// GetS3BackendAssumeRole returns the `assume_role` section from the S3 backend config.
-// https://developer.hashicorp.com/terraform/language/backend/s3#assume-role-configuration
-func GetS3BackendAssumeRole(backend map[string]any) map[string]any {
-	if i, ok := backend["assume_role"].(map[string]any); ok {
-		return i
-	}
-	return nil
-}
-
-// GetSectionAttribute returns an attribute from a section in the config.
-func GetSectionAttribute(section map[string]any, attribute string) string {
-	if i, ok := section[attribute].(string); ok {
+// GetBackendAttribute returns an attribute from a section in the backend.
+func GetBackendAttribute(section *map[string]any, attribute string) string {
+	if i, ok := (*section)[attribute].(string); ok {
 		return i
 	}
 	return ""
-}
-
-// TerraformS3BackendInfo contains the `s3` backend information.
-type TerraformS3BackendInfo struct {
-	Bucket             string
-	Region             string
-	Key                string
-	RoleArn            string
-	WorkspaceKeyPrefix string
-}
-
-// TerraformBackendInfo contains the backend information.
-type TerraformBackendInfo struct {
-	Type               string
-	Workspace          string
-	TerraformComponent string
-	Backend            map[string]any
-	S3                 TerraformS3BackendInfo
-}
-
-// GetTerraformBackendInfo returns the Terraform backend information from the component config.
-func GetTerraformBackendInfo(sections map[string]any) TerraformBackendInfo {
-	info := TerraformBackendInfo{}
-	info.Workspace = GetComponentTerraformWorkspace(sections)
-	info.TerraformComponent = GetTerraformComponent(sections)
-	info.Backend = GetComponentBackend(sections)
-	info.Type = GetComponentBackendType(sections)
-
-	// If the backend is not configured in stack manifests, default to "local"
-	if info.Type == "" {
-		info.Type = cfg.BackendTypeLocal
-	}
-
-	// Process S3 backend
-	if info.Type == cfg.BackendTypeS3 {
-		info.S3 = TerraformS3BackendInfo{
-			Bucket:             GetSectionAttribute(info.Backend, "bucket"),
-			Region:             GetSectionAttribute(info.Backend, "region"),
-			Key:                GetSectionAttribute(info.Backend, "key"),
-			WorkspaceKeyPrefix: GetSectionAttribute(info.Backend, "workspace_key_prefix"),
-		}
-		// Support `assume_role.role_arn` and the deprecated `role_arn` in the backend
-		var roleArn string
-		assumeRoleSection := GetS3BackendAssumeRole(info.Backend)
-		if assumeRoleSection != nil {
-			roleArn = GetSectionAttribute(assumeRoleSection, "role_arn")
-		}
-		// If `assume_role.role_arn` is not set, fallback to `role_arn`
-		if roleArn == "" {
-			roleArn = GetSectionAttribute(info.Backend, "role_arn")
-		}
-		info.S3.RoleArn = roleArn
-	}
-
-	return info
 }
 
 // GetTerraformBackendVariable returns the output from the configured backend.
@@ -169,25 +105,23 @@ func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
 // GetTerraformBackend reads and processes the Terraform state file from the configured backend.
 func GetTerraformBackend(
 	atmosConfig *schema.AtmosConfiguration,
-	componentSections map[string]any,
+	componentSections *map[string]any,
 ) (map[string]any, error) {
-	backendInfo := GetTerraformBackendInfo(componentSections)
-	var content []byte
-	var err error
+	RegisterTerraformBackends()
 
-	switch backendInfo.Type {
-	case cfg.BackendTypeLocal:
-		content, err = ReadTerraformBackendLocal(atmosConfig, &backendInfo)
-		if err != nil {
-			return nil, err
-		}
-	case cfg.BackendTypeS3:
-		content, err = ReadTerraformBackendS3(&backendInfo)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("%w %s. Supported backends: local, s3", errUtils.ErrUnsupportedBackendType, backendInfo.Type)
+	backendType := GetComponentBackendType(componentSections)
+	if backendType == "" {
+		backendType = cfg.BackendTypeLocal
+	}
+
+	readBackendStateFunc := GetTerraformBackendReadFunc(backendType)
+	if readBackendStateFunc == nil {
+		return nil, fmt.Errorf("%w %s. Supported backends: local, s3", errUtils.ErrUnsupportedBackendType, backendType)
+	}
+
+	content, err := readBackendStateFunc(atmosConfig, componentSections)
+	if err != nil {
+		return nil, err
 	}
 
 	data, err := ProcessTerraformStateFile(content)

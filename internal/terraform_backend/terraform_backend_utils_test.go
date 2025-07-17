@@ -2,105 +2,189 @@ package terraform_backend_test
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestGetTerraformBackendInfo(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+func TestGetTerraformWorkspace(t *testing.T) {
+	sections := map[string]any{"workspace": "test-workspace"}
+	result := tb.GetTerraformWorkspace(&sections)
+	assert.Equal(t, "test-workspace", result)
+
+	empty := map[string]any{}
+	result = tb.GetTerraformWorkspace(&empty)
+	assert.Equal(t, "", result)
+}
+
+func TestGetTerraformComponent(t *testing.T) {
+	sections := map[string]any{"component": "test-component"}
+	result := tb.GetTerraformComponent(&sections)
+	assert.Equal(t, "test-component", result)
+
+	empty := map[string]any{}
+	result = tb.GetTerraformComponent(&empty)
+	assert.Equal(t, "", result)
+}
+
+func TestGetComponentBackend(t *testing.T) {
+	backend := map[string]any{"type": "s3"}
+	sections := map[string]any{"backend": backend}
+	result := tb.GetComponentBackend(&sections)
+	assert.Equal(t, backend, result)
+
+	empty := map[string]any{}
+	result = tb.GetComponentBackend(&empty)
+	assert.Nil(t, result)
+}
+
+func TestGetComponentBackendType(t *testing.T) {
+	sections := map[string]any{"backend_type": "s3"}
+	result := tb.GetComponentBackendType(&sections)
+	assert.Equal(t, "s3", result)
+
+	empty := map[string]any{}
+	result = tb.GetComponentBackendType(&empty)
+	assert.Equal(t, "", result)
+}
+
+func TestGetBackendAttribute(t *testing.T) {
+	backend := map[string]any{
+		"bucket": "my-bucket",
 	}
+	result := tb.GetBackendAttribute(&backend, "bucket")
+	assert.Equal(t, "my-bucket", result)
 
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
+	result = tb.GetBackendAttribute(&backend, "region")
+	assert.Equal(t, "", result)
+}
 
-	stack := "nonprod"
-
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
+func TestProcessTerraformStateFile(t *testing.T) {
+	jsonData := []byte(`{
+		"version": 4,
+		"terraform_version": "1.0.0",
+		"outputs": {
+			"test_output": {
+				"value": "hello",
+				"type": "string"
+			}
 		}
-	}()
+	}`)
+	result, err := tb.ProcessTerraformStateFile(jsonData)
+	assert.NoError(t, err)
+	assert.Equal(t, "hello", result["test_output"])
 
-	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/terraform-backend"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	emptyData := []byte(``)
+	result, err = tb.ProcessTerraformStateFile(emptyData)
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+
+	invalidData := []byte(`{bad json}`)
+	result, err = tb.ProcessTerraformStateFile(invalidData)
+	assert.Error(t, err)
+}
+
+func TestGetTerraformBackendVariable(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	values := map[string]any{
+		"backend": map[string]any{
+			"bucket": "my-bucket",
+		},
+	}
+	result, err := tb.GetTerraformBackendVariable(atmosConfig, values, "backend.bucket")
+	assert.NoError(t, err)
+	assert.Equal(t, "my-bucket", result)
+}
+
+func TestGetTerraformBackend(t *testing.T) {
+	tests := []struct {
+		name            string
+		componentData   map[string]any
+		stateJSON       string
+		expectedOutputs map[string]any
+		expectError     bool
+	}{
+		{
+			name: "valid local backend with state data",
+			componentData: map[string]any{
+				"component":    "sample-component",
+				"workspace":    "default",
+				"backend_type": "",
+			},
+			stateJSON: `{
+				"version": 4,
+				"terraform_version": "1.3.0",
+				"outputs": {
+					"value": {
+						"value": "local-output",
+						"type": "string"
+					}
+				}
+			}`,
+			expectedOutputs: map[string]any{"value": "local-output"},
+			expectError:     false,
+		},
+		{
+			name: "missing backend_type defaults to local",
+			componentData: map[string]any{
+				"component": "sample-component",
+				"workspace": "default",
+			},
+			stateJSON: `{
+				"version": 4,
+				"terraform_version": "1.3.0",
+				"outputs": {
+					"value": {
+						"value": "default-backend-output",
+						"type": "string"
+					}
+				}
+			}`,
+			expectedOutputs: map[string]any{"value": "default-backend-output"},
+			expectError:     false,
+		},
+		{
+			name: "unsupported backend type",
+			componentData: map[string]any{
+				"component":    "sample-component",
+				"workspace":    "default",
+				"backend_type": "unsupported",
+			},
+			expectError: true,
+		},
 	}
 
-	sections, err := e.ExecuteDescribeComponent(
-		"component-1",
-		stack,
-		false,
-		false,
-		nil,
-	)
-	assert.NoError(t, err)
-	backendInfo := tb.GetTerraformBackendInfo(sections)
-	assert.Equal(t, cfg.BackendTypeLocal, backendInfo.Type)
-	assert.Equal(t, stack, backendInfo.Workspace)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a temp directory and write the test state file to simulate local backend
+			tmpDir := t.TempDir()
+			componentDir := filepath.Join(tmpDir, "terraform", tt.componentData["component"].(string))
+			stateDir := filepath.Join(componentDir, "terraform.tfstate.d", tt.componentData["workspace"].(string))
 
-	sections, err = e.ExecuteDescribeComponent(
-		"component-2",
-		stack,
-		false,
-		false,
-		nil,
-	)
-	assert.NoError(t, err)
-	backendInfo = tb.GetTerraformBackendInfo(sections)
-	assert.Equal(t, cfg.BackendTypeS3, backendInfo.Type)
-	assert.Equal(t, "nonprod-tfstate", backendInfo.S3.Bucket)
-	assert.Equal(t, "us-east-2", backendInfo.S3.Region)
-	assert.Equal(t, "terraform.tfstate", backendInfo.S3.Key)
-	assert.Equal(t, "arn:aws:iam::123456789123:role/nonprod-tfstate", backendInfo.S3.RoleArn)
-	assert.Equal(t, "component-2", backendInfo.S3.WorkspaceKeyPrefix)
+			if tt.stateJSON != "" {
+				err := os.MkdirAll(stateDir, 0755)
+				assert.NoError(t, err)
 
-	sections, err = e.ExecuteDescribeComponent(
-		"component-3",
-		stack,
-		false,
-		false,
-		nil,
-	)
-	assert.NoError(t, err)
-	backendInfo = tb.GetTerraformBackendInfo(sections)
-	assert.Equal(t, cfg.BackendTypeAzurerm, backendInfo.Type)
+				err = os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(tt.stateJSON), 0644)
+				assert.NoError(t, err)
+			}
 
-	sections, err = e.ExecuteDescribeComponent(
-		"component-4",
-		stack,
-		false,
-		false,
-		nil,
-	)
-	assert.NoError(t, err)
-	backendInfo = tb.GetTerraformBackendInfo(sections)
-	assert.Equal(t, cfg.BackendTypeGCS, backendInfo.Type)
+			atmosConfig := &schema.AtmosConfiguration{
+				TerraformDirAbsolutePath: filepath.Join(tmpDir, "terraform"),
+			}
 
-	sections, err = e.ExecuteDescribeComponent(
-		"component-5",
-		stack,
-		false,
-		false,
-		nil,
-	)
-	assert.NoError(t, err)
-	backendInfo = tb.GetTerraformBackendInfo(sections)
-	assert.Equal(t, cfg.BackendTypeCloud, backendInfo.Type)
+			outputs, err := tb.GetTerraformBackend(atmosConfig, &tt.componentData)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedOutputs, outputs)
+			}
+		})
+	}
 }

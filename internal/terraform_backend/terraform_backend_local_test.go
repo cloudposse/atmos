@@ -16,7 +16,7 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 	tests := []struct {
 		name          string
 		setup         func(t *testing.T) (string, func())
-		backendInfo   tb.TerraformBackendInfo
+		componentData map[string]any
 		expected      map[string]any
 		expectedError string
 	}{
@@ -45,9 +45,9 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 
 				return tempDir, func() {}
 			},
-			backendInfo: tb.TerraformBackendInfo{
-				TerraformComponent: "test-component",
-				Workspace:          "test-workspace",
+			componentData: map[string]any{
+				"component": "test-component",
+				"workspace": "test-workspace",
 			},
 			expected: map[string]any{
 				"test_output": "test-value",
@@ -59,9 +59,9 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 				tempDir := t.TempDir()
 				return tempDir, func() {}
 			},
-			backendInfo: tb.TerraformBackendInfo{
-				TerraformComponent: "non-existent",
-				Workspace:          "test-workspace",
+			componentData: map[string]any{
+				"component": "non-existent",
+				"workspace": "test-workspace",
 			},
 			expected: nil,
 		},
@@ -69,30 +69,32 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup test environment
 			tempDir, cleanup := tt.setup(t)
 			defer cleanup()
 
-			// Create test config
 			config := &schema.AtmosConfiguration{
 				TerraformDirAbsolutePath: filepath.Join(tempDir, "terraform"),
 			}
 
-			// Call the function
-			content, err := tb.ReadTerraformBackendLocal(config, &tt.backendInfo)
-			assert.NoError(t, err)
+			// Use componentData as a pointer.
+			content, err := tb.ReadTerraformBackendLocal(config, &tt.componentData)
 
-			result, err := tb.ProcessTerraformStateFile(content)
-			assert.NoError(t, err)
-
-			// Verify results
 			if tt.expectedError != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
+				return
 			}
+
+			require.NoError(t, err)
+
+			if content == nil {
+				assert.Nil(t, tt.expected)
+				return
+			}
+
+			result, err := tb.ProcessTerraformStateFile(content)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

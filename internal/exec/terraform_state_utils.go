@@ -73,7 +73,7 @@ func GetTerraformState(
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
 	// `output` from the static remote state instead of executing `terraform output`.
-	remoteStateBackendStaticTypeOutputs := GetComponentRemoteStateBackendStaticType(componentSections)
+	remoteStateBackendStaticTypeOutputs := GetComponentRemoteStateBackendStaticType(&componentSections)
 
 	// Read static remote state backend outputs.
 	if remoteStateBackendStaticTypeOutputs != nil {
@@ -84,7 +84,7 @@ func GetTerraformState(
 	}
 
 	// Read Terraform backend.
-	backend, err := tb.GetTerraformBackend(atmosConfig, componentSections)
+	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrReadTerraformBackend, component, stack, yamlFunc, err)
 		return nil, er

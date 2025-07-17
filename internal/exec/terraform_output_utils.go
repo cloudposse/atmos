@@ -373,7 +373,7 @@ func GetTerraformOutput(
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
 	// `output` from the static remote state instead of executing `terraform output`
-	remoteStateBackendStaticTypeOutputs := GetComponentRemoteStateBackendStaticType(sections)
+	remoteStateBackendStaticTypeOutputs := GetComponentRemoteStateBackendStaticType(&sections)
 
 	var result any
 	if remoteStateBackendStaticTypeOutputs != nil {

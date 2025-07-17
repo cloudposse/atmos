@@ -11,20 +11,20 @@ import (
 )
 
 // ReadTerraformBackendLocal reads the Terraform state file from the local backend.
+// If the state file does not exist, the function returns `nil`.
 func ReadTerraformBackendLocal(
 	atmosConfig *schema.AtmosConfiguration,
-	backendInfo *TerraformBackendInfo,
+	componentSections *map[string]any,
 ) ([]byte, error) {
 	tfStateFilePath := filepath.Join(
 		atmosConfig.TerraformDirAbsolutePath,
-		backendInfo.TerraformComponent,
+		GetTerraformComponent(componentSections),
 		"terraform.tfstate.d",
-		backendInfo.Workspace,
+		GetTerraformWorkspace(componentSections),
 		"terraform.tfstate",
 	)
 
-	// If the state file does not exist (the component in the stack has not been provisioned yet),
-	// return a `nil` result and no error.
+	// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
 	if !u.FileExists(tfStateFilePath) {
 		return nil, nil
 	}
