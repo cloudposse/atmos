@@ -149,8 +149,12 @@ type RawTerraformState struct {
 // https://pkg.go.dev/github.com/hashicorp/terraform-json
 // https://github.com/hashicorp/terraform-json
 func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+
 	var rawState RawTerraformState
-	if err := json.Unmarshal(data, &rawState); err != nil {
+	if err := json.Unmarshal([]byte(data), &rawState); err != nil {
 		return nil, err
 	}
 
@@ -164,19 +168,34 @@ func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
 	return result, nil
 }
 
-// GetTerraformBackend returns the Terraform state from the configured backend.
+// GetTerraformBackend reads and processes the Terraform state file from the configured backend.
 func GetTerraformBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	sections map[string]any,
 ) (map[string]any, error) {
 	backendInfo := GetTerraformBackendInfo(sections)
+	var content []byte
+	var err error
 
 	switch backendInfo.Type {
 	case cfg.BackendTypeLocal:
-		return GetTerraformBackendLocal(atmosConfig, &backendInfo)
+		content, err = ReadTerraformBackendLocal(atmosConfig, &backendInfo)
+		if err != nil {
+			return nil, err
+		}
 	case cfg.BackendTypeS3:
-		return GetTerraformBackendS3(&backendInfo)
+		content, err = ReadTerraformBackendS3(&backendInfo)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("%w %s. Supported backends: local, s3", errUtils.ErrUnsupportedBackendType, backendInfo.Type)
 	}
+
+	data, err := ProcessTerraformStateFile(content)
+	if err != nil {
+		return nil, fmt.Errorf("%w.\nerror: %v", errUtils.ErrProcessTerraformStateFile, err)
+	}
+
+	return data, nil
 }

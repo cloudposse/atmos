@@ -17,10 +17,10 @@ import (
 	awsUtils "github.com/cloudposse/atmos/internal/aws_utils"
 )
 
-// GetTerraformBackendS3 returns the Terraform state file from the configured S3 backend.
-func GetTerraformBackendS3(
+// ReadTerraformBackendS3 reads the Terraform state file from the configured S3 backend.
+func ReadTerraformBackendS3(
 	backendInfo *TerraformBackendInfo,
-) (map[string]any, error) {
+) ([]byte, error) {
 	// 5 sec timeout to read the state file from the S3 bucket.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -65,10 +65,5 @@ func GetTerraformBackendS3(
 		return nil, fmt.Errorf("%w: %v", errUtils.ErrReadS3ObjectBody, err)
 	}
 
-	data, err := ProcessTerraformStateFile(content)
-	if err != nil {
-		return nil, fmt.Errorf("%w.\npath: `%s`\nerror: %v", errUtils.ErrProcessTerraformStateFile, tfStateFilePath, err)
-	}
-
-	return data, nil
+	return content, nil
 }

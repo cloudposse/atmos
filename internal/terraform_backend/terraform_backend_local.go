@@ -10,11 +10,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// GetTerraformBackendLocal returns the Terraform state file from the local backend.
-func GetTerraformBackendLocal(
+// ReadTerraformBackendLocal reads the Terraform state file from the local backend.
+func ReadTerraformBackendLocal(
 	atmosConfig *schema.AtmosConfiguration,
 	backendInfo *TerraformBackendInfo,
-) (map[string]any, error) {
+) ([]byte, error) {
 	tfStateFilePath := filepath.Join(
 		atmosConfig.TerraformDirAbsolutePath,
 		backendInfo.TerraformComponent,
@@ -34,10 +34,5 @@ func GetTerraformBackendLocal(
 		return nil, fmt.Errorf("%w.\npath: `%s`\nerror: %v", errUtils.ErrReadFile, tfStateFilePath, err)
 	}
 
-	data, err := ProcessTerraformStateFile(content)
-	if err != nil {
-		return nil, fmt.Errorf("%w.\npath: `%s`\nerror: %v", errUtils.ErrProcessTerraformStateFile, tfStateFilePath, err)
-	}
-
-	return data, nil
+	return content, nil
 }

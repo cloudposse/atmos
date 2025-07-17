@@ -79,7 +79,11 @@ func TestGetTerraformBackendLocal(t *testing.T) {
 			}
 
 			// Call the function
-			result, err := tb.GetTerraformBackendLocal(config, &tt.backendInfo)
+			content, err := tb.ReadTerraformBackendLocal(config, &tt.backendInfo)
+			assert.NoError(t, err)
+
+			result, err := tb.ProcessTerraformStateFile(content)
+			assert.NoError(t, err)
 
 			// Verify results
 			if tt.expectedError != "" {
