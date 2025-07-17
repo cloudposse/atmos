@@ -116,7 +116,7 @@ func GetTerraformBackend(
 
 	readBackendStateFunc := GetTerraformBackendReadFunc(backendType)
 	if readBackendStateFunc == nil {
-		return nil, fmt.Errorf("%w %s. Supported backends: local, s3", errUtils.ErrUnsupportedBackendType, backendType)
+		return nil, fmt.Errorf("%w `%s`\nsupported backends: `local`, `s3`", errUtils.ErrUnsupportedBackendType, backendType)
 	}
 
 	content, err := readBackendStateFunc(atmosConfig, componentSections)
@@ -126,7 +126,7 @@ func GetTerraformBackend(
 
 	data, err := ProcessTerraformStateFile(content)
 	if err != nil {
-		return nil, fmt.Errorf("%w.\nerror: %v", errUtils.ErrProcessTerraformStateFile, err)
+		return nil, fmt.Errorf("%w\n%v", errUtils.ErrProcessTerraformStateFile, err)
 	}
 
 	return data, nil

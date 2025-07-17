@@ -10,7 +10,6 @@ import (
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var terraformStateCache = sync.Map{}
@@ -48,26 +47,16 @@ func GetTerraformState(
 			)
 			result, err := tb.GetTerraformBackendVariable(atmosConfig, backend.(map[string]any), output)
 			if err != nil {
-				er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`. Error: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
+				er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 				return nil, er
 			}
 			return result, nil
 		}
 	}
 
-	message := fmt.Sprintf("%s: fetching %s output from %s in %s", yamlFunc, output, component, stack)
-
-	// Initialize spinner
-	p := NewSpinner(message)
-	spinnerDone := make(chan struct{})
-	// Run spinner in a goroutine
-	RunSpinner(p, spinnerDone, message)
-	// Ensure the spinner is stopped before returning
-	defer StopSpinner(p, spinnerDone)
-
 	componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
-		er := fmt.Errorf("%w `%s` in stack `%s` in YAML function `%s`. Error: %v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w `%s` in stack `%s` in YAML function `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
@@ -86,7 +75,7 @@ func GetTerraformState(
 	// Read Terraform backend.
 	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections)
 	if err != nil {
-		er := fmt.Errorf("%w for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrReadTerraformBackend, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w for component `%s` in stack `%s` in YAML function `%s`\n%v", errUtils.ErrReadTerraformBackend, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
@@ -101,11 +90,9 @@ func GetTerraformState(
 	// Get the output.
 	result, err := tb.GetTerraformBackendVariable(atmosConfig, backend, output)
 	if err != nil {
-		er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`.\nerror: %v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 		return nil, er
 	}
-
-	u.PrintfMessageToTUI("\r✓ %s\n", message)
 
 	return result, nil
 }
