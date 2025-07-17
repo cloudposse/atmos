@@ -166,10 +166,10 @@ func TestGetTerraformBackend(t *testing.T) {
 			stateDir := filepath.Join(componentDir, "terraform.tfstate.d", tt.componentData["workspace"].(string))
 
 			if tt.stateJSON != "" {
-				err := os.MkdirAll(stateDir, 0755)
+				err := os.MkdirAll(stateDir, 0o755)
 				assert.NoError(t, err)
 
-				err = os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(tt.stateJSON), 0644)
+				err = os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(tt.stateJSON), 0o644)
 				assert.NoError(t, err)
 			}
 
