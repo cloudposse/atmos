@@ -45,3 +45,10 @@ workflows:
       - command: echo "This should fail"
         type: invalid
 
+  fail-with-stack:
+    description: |
+      Run a command that will fail with a stack parameter.
+    stack: prod
+    steps:
+      - command: terraform plan idontexist
+
