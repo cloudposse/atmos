@@ -41,7 +41,7 @@ var (
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrDescribeComponent                = errors.New("failed to describe component")
-	ErrReadTerraformBackend             = errors.New("failed to read terraform backend")
+	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
 	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")

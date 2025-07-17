@@ -47,7 +47,7 @@ func GetTerraformState(
 			)
 			result, err := tb.GetTerraformBackendVariable(atmosConfig, backend.(map[string]any), output)
 			if err != nil {
-				er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
+				er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 				return nil, er
 			}
 			return result, nil
@@ -56,7 +56,7 @@ func GetTerraformState(
 
 	componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
-		er := fmt.Errorf("%w `%s` in stack `%s` in YAML function `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
@@ -75,7 +75,7 @@ func GetTerraformState(
 	// Read Terraform backend.
 	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections)
 	if err != nil {
-		er := fmt.Errorf("%w for component `%s` in stack `%s` in YAML function `%s`\n%v", errUtils.ErrReadTerraformBackend, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
@@ -90,7 +90,7 @@ func GetTerraformState(
 	// Get the output.
 	result, err := tb.GetTerraformBackendVariable(atmosConfig, backend, output)
 	if err != nil {
-		er := fmt.Errorf("%w %s for component `%s` in stack `%s` in YAML function `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
