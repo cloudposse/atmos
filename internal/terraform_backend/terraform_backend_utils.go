@@ -43,9 +43,9 @@ func GetComponentBackendType(sections map[string]any) string {
 	return ""
 }
 
-// GetBackendAssumeRole returns the `assume_role` section from the backend config.
+// GetS3BackendAssumeRole returns the `assume_role` section from the S3 backend config.
 // https://developer.hashicorp.com/terraform/language/backend/s3#assume-role-configuration
-func GetBackendAssumeRole(backend map[string]any) map[string]any {
+func GetS3BackendAssumeRole(backend map[string]any) map[string]any {
 	if i, ok := backend["assume_role"].(map[string]any); ok {
 		return i
 	}
@@ -101,7 +101,7 @@ func GetTerraformBackendInfo(sections map[string]any) TerraformBackendInfo {
 		}
 		// Support `assume_role.role_arn` and the deprecated `role_arn` in the backend
 		var roleArn string
-		assumeRoleSection := GetBackendAssumeRole(info.Backend)
+		assumeRoleSection := GetS3BackendAssumeRole(info.Backend)
 		if assumeRoleSection != nil {
 			roleArn = GetSectionAttribute(assumeRoleSection, "role_arn")
 		}
@@ -146,15 +146,13 @@ type RawTerraformState struct {
 }
 
 // ProcessTerraformStateFile processes a Terraform state file.
-// https://pkg.go.dev/github.com/hashicorp/terraform-json
-// https://github.com/hashicorp/terraform-json
 func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
 
 	var rawState RawTerraformState
-	if err := json.Unmarshal([]byte(data), &rawState); err != nil {
+	if err := json.Unmarshal(data, &rawState); err != nil {
 		return nil, err
 	}
 
@@ -171,9 +169,9 @@ func ProcessTerraformStateFile(data []byte) (map[string]any, error) {
 // GetTerraformBackend reads and processes the Terraform state file from the configured backend.
 func GetTerraformBackend(
 	atmosConfig *schema.AtmosConfiguration,
-	sections map[string]any,
+	componentSections map[string]any,
 ) (map[string]any, error) {
-	backendInfo := GetTerraformBackendInfo(sections)
+	backendInfo := GetTerraformBackendInfo(componentSections)
 	var content []byte
 	var err error
 
