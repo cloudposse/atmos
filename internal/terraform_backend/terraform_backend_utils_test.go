@@ -84,7 +84,7 @@ func TestProcessTerraformStateFile(t *testing.T) {
 	assert.Nil(t, result)
 
 	invalidData := []byte(`{bad json}`)
-	result, err = tb.ProcessTerraformStateFile(invalidData)
+	_, err = tb.ProcessTerraformStateFile(invalidData)
 	assert.Error(t, err)
 }
 
