@@ -38,7 +38,7 @@ backend type in the `terraformBackends` registry:
 
 Update the corresponding documentation at:
 
-```
+```text
 website/docs/core-concepts/stacks/yaml-functions/terraform.state.mdx
 ```
 
