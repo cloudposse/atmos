@@ -103,6 +103,7 @@ func ExecuteWorkflow(
 	for stepIdx, step := range steps {
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
+		finalStack := ""
 
 		log.Debug("Executing workflow step", "step", stepIdx, "name", step.Name, "command", command)
 
@@ -119,7 +120,6 @@ func ExecuteWorkflow(
 
 			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
 			stepStack := strings.TrimSpace(step.Stack)
-			finalStack := ""
 
 			// The workflow `stack` attribute overrides the stack in the `command` (if specified)
 			// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute
@@ -165,9 +165,18 @@ func ExecuteWorkflow(
 				step.Name,
 			)
 
+			// Add stack parameter to resume command if a stack was used
+			if finalStack != "" {
+				resumeCommand = fmt.Sprintf("%s -s %s", resumeCommand, finalStack)
+			}
+
 			failedCmd := command
 			if commandType == config.AtmosCommand {
 				failedCmd = config.AtmosCommand + " " + command
+				// Add stack parameter to failed command if a stack was used
+				if finalStack != "" {
+					failedCmd = fmt.Sprintf("%s -s %s", failedCmd, finalStack)
+				}
 			}
 
 			errUtils.CheckErrorAndPrint(
