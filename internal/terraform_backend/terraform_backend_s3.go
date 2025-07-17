@@ -40,11 +40,6 @@ type S3API interface {
 	GetObject(ctx context.Context, input *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
-// NewS3Client creates a new AWS S3 client using the provided AWS configuration and optional functional options.
-func NewS3Client(cfg aws.Config, optFns ...func(*s3.Options)) *s3.Client {
-	return s3.NewFromConfig(cfg)
-}
-
 // ReadTerraformBackendS3 reads the Terraform state file from the configured S3 backend.
 // If the state file does not exist in the bucket, the function returns `nil`.
 func ReadTerraformBackendS3(
@@ -67,7 +62,7 @@ func ReadTerraformBackendS3(
 	}
 
 	// Create an S3 client.
-	s3Client := NewS3Client(awsConfig)
+	s3Client := s3.NewFromConfig(awsConfig)
 
 	return ReadTerraformBackendS3Internal(s3Client, componentSections, &backend)
 }

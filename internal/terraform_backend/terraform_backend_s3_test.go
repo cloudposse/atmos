@@ -113,7 +113,7 @@ func TestReadTerraformBackendS3_InvalidConfig(t *testing.T) {
 	}
 }
 
-// mockS3Client implements only the GetObject method used in readTerraformBackendS3Internal
+// mockS3Client implements only the GetObject method used in readTerraformBackendS3Internal.
 type mockS3Client struct{}
 
 func (m *mockS3Client) GetObject(ctx context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -154,7 +154,7 @@ func Test_ReadTerraformBackendS3Internal(t *testing.T) {
 	assert.Contains(t, string(content), "mocked-output")
 }
 
-// Unified interface-compatible mock
+// Unified interface-compatible mock.
 type erroringS3Client struct {
 	err  error
 	body io.ReadCloser
