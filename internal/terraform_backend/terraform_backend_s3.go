@@ -23,14 +23,16 @@ import (
 func GetS3BackendAssumeRoleArn(backend *map[string]any) string {
 	var roleArn string
 	roleArnAttribute := "role_arn"
+
+	// Check `assume_role.role_arn`.
 	if assumeRoleSection, ok := (*backend)["assume_role"].(map[string]any); ok {
-		if assumeRoleSection != nil {
+		if len(assumeRoleSection) > 0 {
 			roleArn = GetBackendAttribute(&assumeRoleSection, roleArnAttribute)
 		}
-		// If `assume_role.role_arn` is not set, fallback to `role_arn`.
-		if roleArn == "" {
-			roleArn = GetBackendAttribute(backend, roleArnAttribute)
-		}
+	}
+	// If `assume_role.role_arn` is not set, fallback to `role_arn`.
+	if roleArn == "" {
+		roleArn = GetBackendAttribute(backend, roleArnAttribute)
 	}
 	return roleArn
 }
