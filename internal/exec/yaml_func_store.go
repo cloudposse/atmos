@@ -25,7 +25,7 @@ const (
 	function           = "function"
 )
 
-func processTagStore(atmosConfig schema.AtmosConfiguration, input string, currentStack string) any {
+func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
 	log.Debug("Executing Atmos YAML function", function, input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
@@ -106,7 +106,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	res := value
 
 	if retParams.query != "" {
-		res, err = u.EvaluateYqExpression(&atmosConfig, value, retParams.query)
+		res, err = u.EvaluateYqExpression(atmosConfig, value, retParams.query)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 

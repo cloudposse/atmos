@@ -10,7 +10,7 @@ import (
 )
 
 func ProcessCustomYamlTags(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	input schema.AtmosSectionMapType,
 	currentStack string,
 	skip []string,
@@ -19,7 +19,7 @@ func ProcessCustomYamlTags(
 }
 
 func processNodes(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	data map[string]any,
 	currentStack string,
 	skip []string,
@@ -59,14 +59,14 @@ func processNodes(
 }
 
 func processCustomTags(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 	skip []string,
 ) any {
 	switch {
 	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate) && !skipFunc(skip, u.AtmosYamlFuncTemplate):
-		return processTagTemplate(atmosConfig, input, currentStack)
+		return processTagTemplate(input)
 	case strings.HasPrefix(input, u.AtmosYamlFuncExec) && !skipFunc(skip, u.AtmosYamlFuncExec):
 		res, err := u.ProcessTagExec(input)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -75,6 +75,8 @@ func processCustomTags(
 		return processTagStore(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput) && !skipFunc(skip, u.AtmosYamlFuncTerraformOutput):
 		return processTagTerraformOutput(atmosConfig, input, currentStack)
+	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState):
+		return processTagTerraformState(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
 		res, err := u.ProcessTagEnv(input)
 		errUtils.CheckErrorPrintAndExit(err, "", "")

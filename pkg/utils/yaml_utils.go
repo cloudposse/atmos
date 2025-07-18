@@ -22,6 +22,7 @@ const (
 	AtmosYamlFuncStore           = "!store"
 	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
+	AtmosYamlFuncTerraformState  = "!terraform.state"
 	AtmosYamlFuncEnv             = "!env"
 	AtmosYamlFuncInclude         = "!include"
 	AtmosYamlFuncGitRoot         = "!repo-root"
@@ -35,6 +36,7 @@ var (
 		AtmosYamlFuncStore,
 		AtmosYamlFuncTemplate,
 		AtmosYamlFuncTerraformOutput,
+		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
 	}
 
