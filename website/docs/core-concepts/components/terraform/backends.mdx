@@ -126,7 +126,12 @@ components:
 region, or per account.
 
 :::note
-The `_defaults.yaml` manifests contain the default settings for Organizations, Organizational Units and accounts.
+The `_defaults.yaml` stack manifests contain the default settings for Organizations, Organizational Units, and accounts.
+:::
+
+:::info
+The `_defaults.yaml` stack manifests are not imported into other Atmos manifests automatically.
+You need to explicitly import them using [imports](/core-concepts/stacks/imports).
 :::
 
 To configure the S3 backend for the entire Organization, add the following config in `stacks/orgs/acme/_defaults.yaml`:

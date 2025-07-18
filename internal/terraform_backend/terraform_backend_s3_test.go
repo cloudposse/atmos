@@ -263,3 +263,66 @@ func Test_ReadTerraformBackendS3Internal_Errors(t *testing.T) {
 		})
 	}
 }
+
+func TestGetS3BackendAssumeRoleArn(t *testing.T) {
+	tests := []struct {
+		name     string
+		backend  map[string]any
+		expected string
+	}{
+		{
+			name: "role_arn in assume_role section",
+			backend: map[string]any{
+				"assume_role": map[string]any{
+					"role_arn": "arn:aws:iam::123456789012:role/terraform",
+				},
+			},
+			expected: "arn:aws:iam::123456789012:role/terraform",
+		},
+		{
+			name: "role_arn in root section",
+			backend: map[string]any{
+				"role_arn": "arn:aws:iam::123456789012:role/root",
+			},
+			expected: "arn:aws:iam::123456789012:role/root",
+		},
+		{
+			name: "prefer assume_role.role_arn over root role_arn",
+			backend: map[string]any{
+				"role_arn": "arn:aws:iam::123456789012:role/root",
+				"assume_role": map[string]any{
+					"role_arn": "arn:aws:iam::123456789012:role/terraform",
+				},
+			},
+			expected: "arn:aws:iam::123456789012:role/terraform",
+		},
+		{
+			name: "empty assume_role section",
+			backend: map[string]any{
+				"assume_role": map[string]any{},
+			},
+			expected: "",
+		},
+		{
+			name:     "empty backend",
+			backend:  map[string]any{},
+			expected: "",
+		},
+		{
+			name: "assume_role section with nil value",
+			backend: map[string]any{
+				"assume_role": nil,
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tb.GetS3BackendAssumeRoleArn(&tt.backend)
+			if got != tt.expected {
+				t.Errorf("GetS3BackendAssumeRoleArn() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
