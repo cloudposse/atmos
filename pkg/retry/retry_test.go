@@ -33,7 +33,6 @@ func TestExecutor_Execute_Success(t *testing.T) {
 	}
 
 	err := executor.Execute(context.Background(), fn)
-
 	if err != nil {
 		t.Errorf("Expected success, got error: %v", err)
 	}
@@ -289,7 +288,6 @@ func TestDo_ConvenienceFunction(t *testing.T) {
 	}
 
 	err := Do(context.Background(), &config, fn)
-
 	if err != nil {
 		t.Errorf("Expected success, got error: %v", err)
 	}
@@ -328,7 +326,6 @@ func TestWithPredicate_RetryOnSpecificErrors(t *testing.T) {
 	}
 
 	err := WithPredicate(context.Background(), &config, fn, shouldRetry)
-
 	if err != nil {
 		t.Errorf("Expected success, got error: %v", err)
 	}

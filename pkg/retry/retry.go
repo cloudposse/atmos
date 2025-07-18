@@ -124,7 +124,8 @@ func Do(ctx context.Context, config *schema.RetryConfig, fn Func) error {
 
 func With7Params[T1 any, T2 any, T3 any, T4 any, T5 any, T6 any, T7 any](ctx context.Context,
 	config *schema.RetryConfig,
-	fn func(T1, T2, T3, T4, T5, T6, T7) error, a T1, b T2, c T3, d T4, e T5, f T6, g T7) error {
+	fn func(T1, T2, T3, T4, T5, T6, T7) error, a T1, b T2, c T3, d T4, e T5, f T6, g T7,
+) error {
 	err := Do(ctx, config, func() error {
 		var err error
 		err = fn(a, b, c, d, e, f, g)
