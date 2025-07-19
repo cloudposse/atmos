@@ -1,3 +1,5 @@
+// https://developer.hashicorp.com/packer/docs/commands/build
+
 package cmd
 
 import (
@@ -13,7 +15,7 @@ Example usage:
   atmos packer build <component> --stack <stack> [options]
   atmos packer build <component> -s <stack> [options]
 
-To see all the available options, refer to https://developer.hashicorp.com/packer/docs/commands/build
+To see all available options, refer to https://developer.hashicorp.com/packer/docs/commands/build
 `
 )
 
