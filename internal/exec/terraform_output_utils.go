@@ -319,6 +319,16 @@ func execTerraformOutput(
 	return outputProcessed, nil
 }
 
+// GetTerraformOutput retrieves a specified Terraform output variable for a given component within a stack.
+// It optionally uses a cache to avoid redundant state retrievals and supports both static and dynamic backends.
+// Parameters:
+//   - atmosConfig: Atmos configuration pointer
+//   - stack: Stack identifier
+//   - component: Component identifier
+//   - output: Output variable key to retrieve
+//   - skipCache: Flag to bypass cache lookup
+//
+// Returns the output value or nil if the component is not provisioned.
 func GetTerraformOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	stack string,
@@ -363,18 +373,13 @@ func GetTerraformOutput(
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
 	// `output` from the static remote state instead of executing `terraform output`
-	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
-	if err != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
-		er := fmt.Errorf("failed to get static remote state backend outputs. Error: %w", err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
-	}
+	remoteStateBackendStaticTypeOutputs := GetComponentRemoteStateBackendStaticType(&sections)
 
 	var result any
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result = getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result = GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 	} else {
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
@@ -414,7 +419,8 @@ func getTerraformOutputVariable(
 	return res
 }
 
-func getStaticRemoteStateOutput(
+// GetStaticRemoteStateOutput returns static remote state output for a component in a stack.
+func GetStaticRemoteStateOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
@@ -435,9 +441,8 @@ func getStaticRemoteStateOutput(
 	return res
 }
 
-// environToMap converts all the environment variables (excluding the variables prohibited by terraform-exec/tfexec)
-// in the environment into a map of strings
-// TODO: review this (find another way to execute `terraform output` not using `terraform-exec/tfexec`)
+// environToMap converts all the environment variables (excluding the variables prohibited by terraform-exec/tfexec) in the environment into a map of strings.
+// TODO: review this (find another way to execute `terraform output` not using `terraform-exec/tfexec`).
 func environToMap() map[string]string {
 	envMap := make(map[string]string)
 	for _, env := range os.Environ() {

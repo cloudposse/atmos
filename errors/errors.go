@@ -38,4 +38,16 @@ var (
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the `component` argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
+
+	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
+	ErrDescribeComponent                = errors.New("failed to describe component")
+	ErrReadTerraformState               = errors.New("failed to read Terraform state")
+	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
+	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
+	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
+	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
+	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
+
+	ErrReadFile = errors.New("error reading file")
 )
