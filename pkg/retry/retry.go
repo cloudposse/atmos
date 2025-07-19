@@ -11,16 +11,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Func represents a function that can be retried
+// Func represents a function that can be retried.
 type Func func() error
 
-// Executor handles the retry logic
+// Executor handles the retry logic.
 type Executor struct {
 	config schema.RetryConfig
 	rand   *rand.Rand
 }
 
-// New creates a new retry executor with the given config
+// New creates a new retry executor with the given config.
 func New(config schema.RetryConfig) *Executor {
 	return &Executor{
 		config: config,
@@ -28,12 +28,22 @@ func New(config schema.RetryConfig) *Executor {
 	}
 }
 
-// Execute runs the function with retry logic
+// Execute runs the function with retry logic.
 func (e *Executor) Execute(ctx context.Context, fn Func) error {
 	return e.ExecuteWithPredicate(ctx, fn, func(err error) bool {
 		return true
 	})
 }
+
+type MaxElapsedTimeError struct {
+	MaxElapsedTime time.Duration
+}
+
+func (e MaxElapsedTimeError) Error() string {
+	return fmt.Sprintf("retry timeout exceeded after %v", e.MaxElapsedTime)
+}
+
+var UnexpectedError = errors.New("unexpected end of retry loop")
 
 func (e *Executor) ExecuteWithPredicate(ctx context.Context, fn Func, shouldRetry func(error) bool) error {
 	startTime := time.Now()
@@ -41,7 +51,7 @@ func (e *Executor) ExecuteWithPredicate(ctx context.Context, fn Func, shouldRetr
 	for attempt := 1; attempt <= e.config.MaxAttempts; attempt++ {
 		// Check if we've exceeded max elapsed time
 		if time.Since(startTime) > e.config.MaxElapsedTime {
-			return fmt.Errorf("retry timeout exceeded after %v", e.config.MaxElapsedTime)
+			return MaxElapsedTimeError{MaxElapsedTime: e.config.MaxElapsedTime}
 		}
 
 		// Execute the function
@@ -70,11 +80,12 @@ func (e *Executor) ExecuteWithPredicate(ctx context.Context, fn Func, shouldRetr
 			// Continue to next attempt
 		}
 	}
-
-	return errors.New("unexpected end of retry loop")
+	return UnexpectedError
 }
 
-// calculateDelay calculates the delay for the next retry attempt
+const jitterFlipChance = 0.5
+
+// calculateDelay calculates the delay for the next retry attempt.
 func (e *Executor) calculateDelay(attempt int) time.Duration {
 	var delay time.Duration
 
@@ -97,7 +108,7 @@ func (e *Executor) calculateDelay(attempt int) time.Duration {
 	// Apply random jitter if enabled
 	if e.config.RandomJitter {
 		jitter := time.Duration(e.rand.Float64() * float64(delay) * 0.1) // 10% jitter
-		if e.rand.Float64() < 0.5 {
+		if e.rand.Float64() < jitterFlipChance {
 			delay += jitter
 		} else {
 			delay -= jitter
@@ -112,7 +123,7 @@ func (e *Executor) calculateDelay(attempt int) time.Duration {
 	return delay
 }
 
-// Do is a convenience function that creates an executor and runs the function
+// Do is a convenience function that creates an executor and runs the function.
 func Do(ctx context.Context, config *schema.RetryConfig, fn Func) error {
 	if config == nil {
 		temp := DefaultConfig()
@@ -127,14 +138,12 @@ func With7Params[T1 any, T2 any, T3 any, T4 any, T5 any, T6 any, T7 any](ctx con
 	fn func(T1, T2, T3, T4, T5, T6, T7) error, a T1, b T2, c T3, d T4, e T5, f T6, g T7,
 ) error {
 	err := Do(ctx, config, func() error {
-		var err error
-		err = fn(a, b, c, d, e, f, g)
-		return err
+		return fn(a, b, c, d, e, f, g)
 	})
 	return err
 }
 
-// WithPredicate allows you to specify which errors should trigger a retry
+// WithPredicate allows you to specify which errors should trigger a retry.
 func WithPredicate(ctx context.Context, config *schema.RetryConfig, fn Func, shouldRetry func(error) bool) error {
 	if config == nil {
 		temp := DefaultConfig()
@@ -144,25 +153,31 @@ func WithPredicate(ctx context.Context, config *schema.RetryConfig, fn Func, sho
 	return executor.ExecuteWithPredicate(ctx, fn, shouldRetry)
 }
 
-// DefaultConfig returns a sensible default configuration
+const (
+	defaultInitialDelay   = 100 * time.Millisecond
+	defaultMaxDelay       = 5 * time.Second
+	defaultMaxElapsedTime = 30 * time.Minute
+)
+
+// DefaultConfig returns a sensible default configuration.
 func DefaultConfig() schema.RetryConfig {
 	return schema.RetryConfig{
-		MaxAttempts:     3,
-		BackoffStrategy: "exponential",
-		InitialDelay:    100 * time.Millisecond,
-		MaxDelay:        5 * time.Second,
+		MaxAttempts:     1,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    defaultInitialDelay,
+		MaxDelay:        defaultMaxDelay,
 		RandomJitter:    true,
 		Multiplier:      2.0,
-		MaxElapsedTime:  30 * time.Second,
+		MaxElapsedTime:  defaultMaxElapsedTime,
 	}
 }
 
-// Predefined common retry predicates
+// Predefined common retry predicates.
 var (
-	// RetryOnAnyError retries on any error
+	// RetryOnAnyError retries on any error.
 	RetryOnAnyError = func(err error) bool { return true }
 
-	// RetryOnNetworkError retries on network-related errors
+	// RetryOnNetworkError retries on network-related errors.
 	RetryOnNetworkError = func(err error) bool {
 		// You can customize this based on your specific network error types
 		return true // Placeholder - customize based on your error types
