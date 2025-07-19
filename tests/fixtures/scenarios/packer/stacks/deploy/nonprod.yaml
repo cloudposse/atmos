@@ -4,9 +4,9 @@ vars:
   stage: nonprod
 
 import:
-  - catalog/aws/ami
+  - catalog/aws/bastion/defaults
 
 components:
   packer:
-    ami:
+    aws/bastion:
       vars:

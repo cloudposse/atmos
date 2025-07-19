@@ -2,9 +2,9 @@
 
 components:
   packer:
-    ami:
+    aws/bastion:
       metadata:
-        component: ami
+        component: aws/bastion
       vars:
         org_arn: ""
         kms_key_arn: ""

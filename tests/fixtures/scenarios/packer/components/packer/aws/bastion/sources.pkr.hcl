@@ -1,5 +1,5 @@
 source "amazon-ebs" "ubuntu" {
-  ami_name      = "tester"
+  ami_name      = "bastion"
   instance_type = "t4g.micro"
   region        = "us-east-1"
   ssh_username  = "ubuntu"
