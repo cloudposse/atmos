@@ -1,4 +1,9 @@
+# https://developer.hashicorp.com/packer/docs/templates/hcl_templates/blocks/source
 # https://developer.hashicorp.com/packer/integrations/hashicorp/amazon/latest/components/builder/ebs
+# https://developer.hashicorp.com/packer/integrations/hashicorp/amazon
+# https://developer.hashicorp.com/packer/integrations/hashicorp/amazon#authentication
+# https://developer.hashicorp.com/packer/tutorials/docker-get-started/docker-get-started-post-processors
+# https://developer.hashicorp.com/packer/tutorials/aws-get-started
 
 source "amazon-ebs" "this" {
   ami_name      = var.ami_name
@@ -25,4 +30,12 @@ source "amazon-ebs" "this" {
     volume_type           = var.volume_type
     delete_on_termination = true
   }
+
+  assume_role {
+    role_arn         = var.assume_role_arn
+    session_name     = "atmos-packer"
+    duration_seconds = 300
+  }
+
+  tags = var.ami_tags
 }

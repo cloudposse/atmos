@@ -50,10 +50,16 @@ variable "encrypt_boot" {
 
 variable "skip_create_ami" {
   type        = bool
-  description = " If true, Packer will not create the AMI. Useful for setting to true during a build test stage"
+  description = "If true, Packer will not create the AMI. Useful for setting to true during a build test stage"
 }
 
-variable "skip_create_ami" {
-  type        = bool
-  description = " If true, Packer will not create the AMI. Useful for setting to true during a build test stage"
+variable "ami_tags" {
+  type        = map(string)
+  description = "AMI tags"
+}
+
+# https://developer.hashicorp.com/packer/integrations/hashicorp/amazon#authentication
+variable "assume_role_arn" {
+  type        = string
+  description = "Amazon Resource Name (ARN) of the IAM Role to assume. Refer to https://developer.hashicorp.com/packer/integrations/hashicorp/amazon#authentication"
 }

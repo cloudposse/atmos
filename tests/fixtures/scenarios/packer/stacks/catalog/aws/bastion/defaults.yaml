@@ -10,9 +10,11 @@ components:
       vars:
         ami_name: "bastion"
         ami_owner: "099720109477" # Canonical
-        org_arn: ""
-        kms_key_arn: ""
+        org_arn: "arn:aws:organizations::123456789012:organization/o-abcde12345"
+        kms_key_arn: "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab"
         ssh_username: "ubuntu"
         volume_type: "gp3"
         encrypt_boot: true
         skip_create_ami: true
+        ami_tags:
+          ScanStatus: pending

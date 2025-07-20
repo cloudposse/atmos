@@ -14,3 +14,6 @@ components:
         instance_type: "t4g.small"
         volume_size: 16
         skip_create_ami: false
+        assume_role_arn: "arn:aws:iam::PROD_ACCOUNT_ID:role/ROLE_NAME"
+        ami_tags:
+          Stage: prod

@@ -8,6 +8,9 @@ build {
     ]
   }
 
+  # https://developer.hashicorp.com/packer/tutorials/docker-get-started/docker-get-started-post-processors
+  # https://developer.hashicorp.com/packer/docs/post-processors
+  # https://developer.hashicorp.com/packer/docs/post-processors/manifest
   post-processor "manifest" {
     output     = "manifest.json"
     strip_path = true
