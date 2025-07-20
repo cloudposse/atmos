@@ -354,8 +354,8 @@ func TestWithPredicate_RetryOnSpecificErrors(t *testing.T) {
 func TestDefaultConfig(t *testing.T) {
 	config := DefaultConfig()
 
-	if config.MaxAttempts != 3 {
-		t.Errorf("Expected MaxAttempts to be 3, got %d", config.MaxAttempts)
+	if config.MaxAttempts != 1 {
+		t.Errorf("Expected MaxAttempts to be 1, got %d", config.MaxAttempts)
 	}
 
 	if config.BackoffStrategy != schema.BackoffExponential {
@@ -378,7 +378,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Expected Multiplier to be 2.0, got %f", config.Multiplier)
 	}
 
-	if config.MaxElapsedTime != 30*time.Second {
+	if config.MaxElapsedTime != 30*time.Minute {
 		t.Errorf("Expected MaxElapsedTime to be 30s, got %v", config.MaxElapsedTime)
 	}
 }

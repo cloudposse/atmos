@@ -526,14 +526,14 @@ type WorkflowStep struct {
 
 type BackoffStrategy string
 
-// Backoff strategies constants
+// Backoff strategies constants.
 var (
 	BackoffConstant    BackoffStrategy = "constant"
 	BackoffLinear      BackoffStrategy = "linear"
 	BackoffExponential BackoffStrategy = "exponential"
 )
 
-// RetryConfig represents the retry configuration
+// RetryConfig represents the retry configuration.
 type RetryConfig struct {
 	MaxAttempts     int             `yaml:"max_attempts" json:"max_attempts" mapstructure:"max_attempts"`
 	BackoffStrategy BackoffStrategy `yaml:"backoff_strategy" json:"backoff_strategy" mapstructure:"backoff_strategy"`
