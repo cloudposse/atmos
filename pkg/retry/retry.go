@@ -171,15 +171,3 @@ func DefaultConfig() schema.RetryConfig {
 		MaxElapsedTime:  defaultMaxElapsedTime,
 	}
 }
-
-// Predefined common retry predicates.
-var (
-	// RetryOnAnyError retries on any error.
-	RetryOnAnyError = func(err error) bool { return true }
-
-	// RetryOnNetworkError retries on network-related errors.
-	RetryOnNetworkError = func(err error) bool {
-		// You can customize this based on your specific network error types
-		return true // Placeholder - customize based on your error types
-	}
-)

@@ -383,16 +383,6 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
-func TestRetryPredicates(t *testing.T) {
-	if !RetryOnAnyError(errors.New("any error")) {
-		t.Error("RetryOnAnyError should return true for any error")
-	}
-
-	if !RetryOnNetworkError(errors.New("network error")) {
-		t.Error("RetryOnNetworkError should return true for network errors")
-	}
-}
-
 func BenchmarkExecutor_Execute_Success(b *testing.B) {
 	config := schema.RetryConfig{
 		MaxAttempts:     3,
