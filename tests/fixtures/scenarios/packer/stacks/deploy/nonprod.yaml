@@ -10,3 +10,7 @@ components:
   packer:
     aws/bastion:
       vars:
+        # Define the variables specific to the `nonprod` account
+        instance_type: "t4g.micro"
+        volume_size: 8
+        skip_create_ami: true

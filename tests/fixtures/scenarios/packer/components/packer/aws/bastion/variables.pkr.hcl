@@ -1,7 +1,59 @@
+variable "region" {
+  type        = string
+  description = "AWS Region"
+}
+
 variable "org_arn" {
-  type = string
+  type        = string
+  description = "Organization ARN"
 }
 
 variable "kms_key_arn" {
-  type = string
+  type        = string
+  description = "KMS Key ARN"
+}
+
+variable "instance_type" {
+  type        = string
+  description = "Instance type"
+}
+
+variable "volume_size" {
+  type        = number
+  description = "Volume size"
+}
+
+variable "volume_type" {
+  type        = string
+  description = "Volume type"
+}
+
+variable "ami_name" {
+  type        = string
+  description = "AMI name"
+}
+
+variable "ami_owner" {
+  type        = string
+  description = "AMI owner"
+}
+
+variable "ssh_username" {
+  type        = string
+  description = "Instance type"
+}
+
+variable "encrypt_boot" {
+  type        = bool
+  description = "Encrypt boot"
+}
+
+variable "skip_create_ami" {
+  type        = bool
+  description = " If true, Packer will not create the AMI. Useful for setting to true during a build test stage"
+}
+
+variable "skip_create_ami" {
+  type        = bool
+  description = " If true, Packer will not create the AMI. Useful for setting to true during a build test stage"
 }

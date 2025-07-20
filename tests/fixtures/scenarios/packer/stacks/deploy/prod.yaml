@@ -10,3 +10,7 @@ components:
   packer:
     aws/bastion:
       vars:
+        # Define the variables specific to the `prod` account
+        instance_type: "t4g.small"
+        volume_size: 16
+        skip_create_ami: false

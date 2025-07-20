@@ -1,5 +1,5 @@
 build {
-  sources = ["source.amazon-ebs.ubuntu"]
+  sources = ["source.amazon-ebs.this"]
 
   provisioner "shell" {
     inline = [
@@ -9,7 +9,7 @@ build {
   }
 
   post-processor "manifest" {
-    output = "manifest.json"
+    output     = "manifest.json"
     strip_path = true
   }
 }
