@@ -29,6 +29,6 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 	diffArgs = append(diffArgs, args...)
 	info := getConfigAndStacksInfo("packer", cmd, diffArgs)
 	info.CliArgs = []string{"packer", commandName}
-	err := e.ExecuteHelmfile(info)
+	err := e.ExecutePacker(info)
 	return err
 }
