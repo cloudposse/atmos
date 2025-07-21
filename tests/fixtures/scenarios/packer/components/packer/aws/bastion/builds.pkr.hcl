@@ -1,5 +1,5 @@
 build {
-  sources = ["source.amazon-ebs.this"]
+  sources = ["source.amazon-ebs.al2023"]
 
   # SSM Agent is pre-installed on AL2023 AMIs but should be enabled explicitly as done above.
   # MySQL client on AL2023 is installed via dnf install mysql (the mysql package includes the CLI tools).

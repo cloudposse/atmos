@@ -5,7 +5,7 @@
 # https://developer.hashicorp.com/packer/tutorials/docker-get-started/docker-get-started-post-processors
 # https://developer.hashicorp.com/packer/tutorials/aws-get-started
 
-source "amazon-ebs" "this" {
+source "amazon-ebs" "al2023" {
   ami_name      = var.ami_name
   source_ami    = var.source_ami
   instance_type = var.instance_type
