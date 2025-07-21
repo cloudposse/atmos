@@ -12,7 +12,7 @@ build {
   # https://developer.hashicorp.com/packer/docs/post-processors
   # https://developer.hashicorp.com/packer/docs/post-processors/manifest
   post-processor "manifest" {
-    output     = "manifest.json"
-    strip_path = true
+    output     = var.manifest_file_name
+    strip_path = var.manifest_strip_path
   }
 }

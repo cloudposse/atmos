@@ -63,3 +63,13 @@ variable "assume_role_arn" {
   type        = string
   description = "Amazon Resource Name (ARN) of the IAM Role to assume. Refer to https://developer.hashicorp.com/packer/integrations/hashicorp/amazon#authentication"
 }
+
+variable "manifest_file_name" {
+  type        = string
+  description = "Manifest file name. Refer to https://developer.hashicorp.com/packer/docs/post-processors/manifest"
+}
+
+variable "manifest_strip_path" {
+  type        = bool
+  description = "Manifest strip path. Refer to https://developer.hashicorp.com/packer/docs/post-processors/manifest"
+}

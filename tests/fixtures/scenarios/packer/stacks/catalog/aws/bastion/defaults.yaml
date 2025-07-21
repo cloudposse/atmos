@@ -16,5 +16,7 @@ components:
         volume_type: "gp3"
         encrypt_boot: true
         skip_create_ami: true
+        manifest_file_name: "manifest.json"
+        manifest_strip_path: true
         ami_tags:
           ScanStatus: pending
