@@ -44,6 +44,7 @@ const (
 
 	TerraformComponentType = "terraform"
 	HelmfileComponentType  = "helmfile"
+	PackerComponentType    = "packer"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"

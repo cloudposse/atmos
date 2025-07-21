@@ -246,7 +246,7 @@ func ExecuteDescribeDependents(
 
 					dependent := schema.Dependent{
 						Component:     stackComponentName,
-						ComponentPath: BuildComponentPath(atmosConfig, stackComponentMap, stackComponentType),
+						ComponentPath: BuildComponentPath(&atmosConfig, &stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
 						Stack:         stackName,
 						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.Replace(stackComponentName, "/", "-", -1)),

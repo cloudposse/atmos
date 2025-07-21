@@ -50,6 +50,10 @@ var (
 				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
 				UseEKS:                true,
 			},
+			Packer: schema.Packer{
+				BasePath: "components/packer",
+				Command:  "packer",
+			},
 		},
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",

@@ -330,9 +330,15 @@ type Helmfile struct {
 	Command               string `yaml:"command" json:"command" mapstructure:"command"`
 }
 
+type Packer struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+}
+
 type Components struct {
 	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
 }
 
 type Stacks struct {

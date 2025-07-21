@@ -100,7 +100,7 @@ func appendToAffected(
 	}
 
 	// Check the `component` section and add `ComponentPath` to the output.
-	affected.ComponentPath = BuildComponentPath(*atmosConfig, *componentSection, affected.ComponentType)
+	affected.ComponentPath = BuildComponentPath(atmosConfig, componentSection, affected.ComponentType)
 	affected.StackSlug = fmt.Sprintf("%s-%s", stackName, strings.Replace(componentName, "/", "-", -1))
 
 	*affectedList = append(*affectedList, *affected)
