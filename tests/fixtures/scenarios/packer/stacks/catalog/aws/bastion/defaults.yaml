@@ -18,5 +18,7 @@ components:
         skip_create_ami: true
         manifest_file_name: "manifest.json"
         manifest_strip_path: true
+        assume_role_session_name: "atmos-packer"
+        assume_role_duration_seconds: 600
         ami_tags:
           ScanStatus: pending

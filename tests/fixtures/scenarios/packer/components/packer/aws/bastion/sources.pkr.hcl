@@ -33,8 +33,8 @@ source "amazon-ebs" "this" {
 
   assume_role {
     role_arn         = var.assume_role_arn
-    session_name     = "atmos-packer"
-    duration_seconds = 300
+    session_name     = var.assume_role_session_name
+    duration_seconds = var.assume_role_duration_seconds
   }
 
   tags = var.ami_tags
