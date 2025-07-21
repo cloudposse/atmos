@@ -1,10 +1,17 @@
 build {
   sources = ["source.amazon-ebs.this"]
 
+  # SSM Agent is pre-installed on AL2023 AMIs but should be enabled explicitly as done above.
+  # MySQL client on AL2023 is installed via dnf install mysql (the mysql package includes the CLI tools).
+  # `cloud-init clean` ensures the image will boot as a new instance on next launch.
+  # `dnf clean all` removes cached metadata and packages to reduce AMI size.
   provisioner "shell" {
     inline = [
-      "sudo systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service",
-      "sudo -E bash -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y mysql-client && apt-get clean && cloud-init clean'",
+      # Enable and start the SSM agent (already installed by default on AL2023)
+      "sudo systemctl enable --now amazon-ssm-agent",
+
+      # Install MySQL client (via dnf), clean metadata and cloud-init
+      "sudo -E bash -c 'dnf install -y mysql && dnf clean all && cloud-init clean'"
     ]
   }
 

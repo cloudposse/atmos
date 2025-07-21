@@ -33,9 +33,9 @@ variable "ami_name" {
   description = "AMI name"
 }
 
-variable "ami_owner" {
+variable "source_ami" {
   type        = string
-  description = "AMI owner"
+  description = "Source AMI"
 }
 
 variable "ssh_username" {

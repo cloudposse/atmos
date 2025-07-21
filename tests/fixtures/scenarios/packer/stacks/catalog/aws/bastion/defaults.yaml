@@ -5,20 +5,30 @@
 components:
   packer:
     aws/bastion:
+      settings:
+        ami:
+          source_ami: "ami-01892885c0cbc16de"
+          source_ami_name: "al2023-ami-2023.7.20250609.0-kernel-6.12-x86_64"
+          source_ami_description: "Amazon Linux 2023 AMI 2023.7.20250609.0 x86_64 HVM kernel-6.12"
+          source_ami_owner_account_id: "137112412989"
       metadata:
         component: aws/bastion
       vars:
         ami_name: "bastion"
-        ami_owner: "099720109477" # Canonical
+        source_ami: "{{ .settings.ami.source_ami }}"
         org_arn: "arn:aws:organizations::123456789012:organization/o-abcde12345"
         kms_key_arn: "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab"
-        ssh_username: "ubuntu"
+        ssh_username: "admin"
         volume_type: "gp3"
         encrypt_boot: true
         skip_create_ami: true
         manifest_file_name: "manifest.json"
-        manifest_strip_path: true
+        manifest_strip_path: false
         assume_role_session_name: "atmos-packer"
         assume_role_duration_seconds: 600
         ami_tags:
+          SourceAMI: "{{ .settings.ami.source_ami }}"
+          SourceAMIName: "{{ .settings.ami.source_ami_name }}"
+          SourceAMIDescription: "{{ .settings.ami.source_ami_description }}"
+          SourceAMIOwnerAccountId: "{{ .settings.ami.source_ami_owner_account_id }}"
           ScanStatus: pending
