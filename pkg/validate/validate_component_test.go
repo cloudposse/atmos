@@ -17,7 +17,7 @@ func TestValidateComponent(t *testing.T) {
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(
-		atmosConfig,
+		&atmosConfig,
 		info,
 		"infra/vpc",
 		"tenant1-ue2-dev",
@@ -35,7 +35,7 @@ func TestValidateComponent2(t *testing.T) {
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(
-		atmosConfig,
+		&atmosConfig,
 		info,
 		"infra/vpc",
 		"tenant1-ue2-prod",
@@ -53,7 +53,7 @@ func TestValidateComponent3(t *testing.T) {
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(
-		atmosConfig,
+		&atmosConfig,
 		info,
 		"infra/vpc",
 		"tenant1-ue2-staging",
@@ -71,7 +71,7 @@ func TestValidateComponent4(t *testing.T) {
 	assert.Nil(t, err)
 
 	_, err = e.ExecuteValidateComponent(
-		atmosConfig,
+		&atmosConfig,
 		info,
 		"derived-component-3",
 		"tenant1-ue2-test-1",

@@ -104,7 +104,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 	// Check if component 'settings.validation' section is specified and validate the component
 	valid, err := ValidateComponent(
-		atmosConfig,
+		&atmosConfig,
 		info.ComponentFromArg,
 		info.ComponentSection,
 		"",

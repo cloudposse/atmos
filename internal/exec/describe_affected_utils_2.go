@@ -204,6 +204,8 @@ func isComponentFolderChanged(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
 	case cfg.HelmfileComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
+	case cfg.PackerComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
 	default:
 		return false, fmt.Errorf("%s: %w", componentType, ErrUnsupportedComponentType)
 	}

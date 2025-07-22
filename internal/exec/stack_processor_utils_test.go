@@ -30,7 +30,7 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 	}
 
 	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -78,7 +78,7 @@ func TestProcessYAMLConfigFileIgnoreMissingFiles(t *testing.T) {
 	}
 
 	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -117,7 +117,7 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -155,7 +155,7 @@ func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {
 	}
 
 	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -194,7 +194,7 @@ func TestProcessYAMLConfigFileInvalidManifest(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -232,7 +232,7 @@ func TestProcessYAMLConfigFileInvalidImportTemplate(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -271,7 +271,7 @@ func TestProcessYAMLConfigFileInvalidValidationSchemaPath(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -310,7 +310,7 @@ func TestProcessYAMLConfigFileInvalidManifestSchema(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -348,7 +348,7 @@ func TestProcessYAMLConfigFileInvalidGlobalOverridesSection(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -386,7 +386,7 @@ func TestProcessYAMLConfigFileInvalidTerraformOverridesSection(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -424,7 +424,7 @@ func TestProcessYAMLConfigFileInvalidHelmfileOverridesSection(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -455,7 +455,7 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 	}
 
 	deepMergedStackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		manifest,
 		map[string]map[string]any{},
@@ -473,7 +473,7 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 	assert.Nil(t, err)
 
 	config, err := ProcessStackConfig(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filepath.Join(basePath, "components", "terraform"),
 		filepath.Join(basePath, "components", "helmfile"),

@@ -34,7 +34,7 @@ func CreateSpaceliftStacks(
 
 	if len(filePaths) > 0 {
 		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
-			atmosConfig,
+			&atmosConfig,
 			stacksBasePath,
 			terraformComponentsBasePath,
 			helmfileComponentsBasePath,
@@ -48,7 +48,7 @@ func CreateSpaceliftStacks(
 		}
 
 		return TransformStackConfigToSpaceliftStacks(
-			atmosConfig,
+			&atmosConfig,
 			stacks,
 			stackConfigPathTemplate,
 			"",
@@ -57,7 +57,7 @@ func CreateSpaceliftStacks(
 		)
 	} else {
 		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
-			atmosConfig,
+			&atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			atmosConfig.TerraformDirAbsolutePath,
 			atmosConfig.HelmfileDirAbsolutePath,
@@ -71,10 +71,10 @@ func CreateSpaceliftStacks(
 		}
 
 		return TransformStackConfigToSpaceliftStacks(
-			atmosConfig,
+			&atmosConfig,
 			stacks,
 			stackConfigPathTemplate,
-			e.GetStackNamePattern(atmosConfig),
+			e.GetStackNamePattern(&atmosConfig),
 			processImports,
 			rawStackConfigs,
 		)
@@ -83,7 +83,7 @@ func CreateSpaceliftStacks(
 
 // TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks
 func TransformStackConfigToSpaceliftStacks(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	stacks map[string]any,
 	stackConfigPathTemplate string,
 	stackNamePattern string,

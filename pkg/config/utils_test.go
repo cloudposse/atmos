@@ -62,7 +62,7 @@ func TestFindAllStackConfigsInPaths(t *testing.T) {
 	assert.NoError(t, err)
 
 	_, relativePaths, err := FindAllStackConfigsInPaths(
-		atmosConfig,
+		&atmosConfig,
 		atmosConfig.IncludeStackAbsolutePaths,
 		atmosConfig.ExcludeStackAbsolutePaths,
 	)

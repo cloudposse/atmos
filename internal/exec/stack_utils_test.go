@@ -87,7 +87,7 @@ func TestBuildTerraformWorkspace(t *testing.T) {
 			}
 
 			// Test function.
-			workspace, err := BuildTerraformWorkspace(atmosConfig, info)
+			workspace, err := BuildTerraformWorkspace(&atmosConfig, info)
 
 			// Assert results.
 			if tc.shouldReturnError {

@@ -20,7 +20,7 @@ func TestDescribeStacksExec(t *testing.T) {
 		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
 			return nil
 		},
-		executeDescribeStacks: func(atmosConfig schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string) (map[string]any, error) {
+		executeDescribeStacks: func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string) (map[string]any, error) {
 			return map[string]any{
 				"hello": "test",
 			}, nil

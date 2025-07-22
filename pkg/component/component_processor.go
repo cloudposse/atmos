@@ -34,8 +34,12 @@ func ProcessComponentInStack(
 		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
 		configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
 		if err != nil {
-			log.Error(err)
-			return nil, err
+			configAndStacksInfo.ComponentType = cfg.PackerComponentType
+			configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+			if err != nil {
+				log.Error(err)
+				return nil, err
+			}
 		}
 	}
 

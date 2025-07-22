@@ -208,7 +208,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Check if the component 'settings.validation' section is specified and validate the component
 	valid, err := ValidateComponent(
-		atmosConfig,
+		&atmosConfig,
 		info.ComponentFromArg,
 		info.ComponentSection,
 		"",

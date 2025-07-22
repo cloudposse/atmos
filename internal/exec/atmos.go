@@ -123,7 +123,7 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "validate component" {
-		_, err = ExecuteValidateComponent(atmosConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
+		_, err = ExecuteValidateComponent(&atmosConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
 		if err != nil {
 			return err
 		}

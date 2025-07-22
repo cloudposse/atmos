@@ -40,7 +40,7 @@ func TestStackProcessor(t *testing.T) {
 	}
 
 	listResult, mapResult, _, err := ProcessYAMLConfigFiles(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
@@ -219,7 +219,7 @@ func TestStackProcessorRelativePaths(t *testing.T) {
 	}
 
 	listResult, mapResult, _, err := ProcessYAMLConfigFiles(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		terraformComponentsBasePath,
 		"",
@@ -266,7 +266,7 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 	}
 
 	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
