@@ -185,7 +185,7 @@ func processCommandAliases(
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 
 					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
-					err = e.ExecuteShell(atmosConfig, commandToRun, commandToRun, currentDirPath, nil, false)
+					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, nil, false)
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				},
 			}
@@ -417,7 +417,7 @@ func executeCustomCommand(
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-		err = e.ExecuteShell(atmosConfig, commandToRun, commandName, currentDirPath, envVarsList, false)
+		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, envVarsList, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }

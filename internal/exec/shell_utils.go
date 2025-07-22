@@ -19,7 +19,6 @@ import (
 
 // ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
-	atmosConfig schema.AtmosConfiguration,
 	command string,
 	args []string,
 	dir string,
@@ -76,7 +75,6 @@ func ExecuteShellCommand(
 
 // ExecuteShell runs a shell script
 func ExecuteShell(
-	atmosConfig schema.AtmosConfiguration,
 	command string,
 	name string,
 	dir string,
@@ -100,7 +98,7 @@ func ExecuteShell(
 
 // execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
 func execTerraformShellCommand(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	componentEnvList []string,

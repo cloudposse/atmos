@@ -43,7 +43,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "version" {
-		return ExecuteShellCommand(atmosConfig,
+		return ExecuteShellCommand(
 			info.Command,
 			[]string{info.SubCommand},
 			"",
@@ -152,7 +152,6 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		log.Debug("Downloading and saving kubeconfig", "cluster", clusterName, "path", kubeconfigPath)
 
 		err = ExecuteShellCommand(
-			atmosConfig,
 			"aws",
 			[]string{
 				"--profile",
@@ -261,7 +260,6 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	err = ExecuteShellCommand(
-		atmosConfig,
 		info.Command,
 		allArgsAndFlags,
 		componentPath,

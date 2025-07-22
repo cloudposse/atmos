@@ -30,7 +30,7 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "version" {
-		return ExecuteShellCommand(atmosConfig,
+		return ExecuteShellCommand(
 			info.Command,
 			[]string{info.SubCommand},
 			"",
@@ -127,20 +127,15 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Prepare ENV vars
-	envVars := append(info.ComponentEnvList, []string{
-		fmt.Sprintf("STACK=%s", info.Stack),
-	}...)
-
-	envVars = append(envVars, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
+	envVars := append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
 	basePath, err := filepath.Abs(atmosConfig.BasePath)
 	if err != nil {
 		return err
 	}
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
-	log.Debug("Using ENV", "vars", envVars)
+	log.Debug("Using ENV", "variables", envVars)
 
 	err = ExecuteShellCommand(
-		atmosConfig,
 		info.Command,
 		allArgsAndFlags,
 		componentPath,
