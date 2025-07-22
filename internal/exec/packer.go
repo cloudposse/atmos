@@ -98,7 +98,7 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Print command info
-	log.Debug("\nCommand info:")
+	log.Debug("Command info:")
 	log.Debug("Packer binary: " + info.Command)
 	log.Debug("Packer command: " + info.SubCommand)
 	log.Debug("Arguments and flags", "additional", info.AdditionalArgsAndFlags)
