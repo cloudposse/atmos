@@ -35,7 +35,7 @@ var (
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
 // and returns a list of stack configs
 func ProcessYAMLConfigFiles(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
@@ -155,7 +155,7 @@ func ProcessYAMLConfigFiles(
 // recursively processes and deep-merges all imports,
 // and returns the final stack config
 func ProcessYAMLConfigFile(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	basePath string,
 	filePath string,
 	importsConfig map[string]map[string]any,
@@ -227,7 +227,7 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	stackConfigMap, err := u.UnmarshalYAMLFromFile[schema.AtmosSectionMapType](&atmosConfig, stackManifestTemplatesProcessed, filePath)
+	stackConfigMap, err := u.UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, stackManifestTemplatesProcessed, filePath)
 	if err != nil {
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
@@ -563,7 +563,7 @@ func ProcessYAMLConfigFile(
 
 // ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends, and returns the final stack configuration for all Terraform and helmfile components.
 func ProcessStackConfig(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
@@ -1661,7 +1661,7 @@ func ProcessStackConfig(
 
 // processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with
 // the `integrations.github` section from `atmos.yaml`
-func processSettingsIntegrationsGithub(atmosConfig schema.AtmosConfiguration, settings map[string]any) (map[string]any, error) {
+func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, settings map[string]any) (map[string]any, error) {
 	settingsIntegrationsSection := make(map[string]any)
 	settingsIntegrationsGithubSection := make(map[string]any)
 
@@ -1910,7 +1910,7 @@ func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck 
 
 // CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies
 func CreateComponentStackMap(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
@@ -2039,7 +2039,7 @@ func GetFileContent(filePath string) (string, error) {
 
 // ProcessBaseComponentConfig processes base component(s) config
 func ProcessBaseComponentConfig(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	baseComponentConfig *schema.BaseComponentConfig,
 	allComponentsMap map[string]any,
 	component string,

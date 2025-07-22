@@ -8,7 +8,7 @@ import (
 )
 
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack.
-func constructTerraformComponentWorkingDir(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
+func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
 	return filepath.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Terraform.BasePath,
@@ -42,15 +42,15 @@ func constructTerraformComponentVarfileName(info schema.ConfigAndStacksInfo) str
 }
 
 // constructTerraformComponentVarfilePath constructs the varfile path for a terraform component in a stack.
-func constructTerraformComponentVarfilePath(Config schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
+func constructTerraformComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
 	return filepath.Join(
-		constructTerraformComponentWorkingDir(Config, info),
+		constructTerraformComponentWorkingDir(atmosConfig, info),
 		constructTerraformComponentVarfileName(info),
 	)
 }
 
 // constructTerraformComponentPlanfilePath constructs the planfile path for a terraform component in a stack.
-func constructTerraformComponentPlanfilePath(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
+func constructTerraformComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
 	return filepath.Join(
 		constructTerraformComponentWorkingDir(atmosConfig, info),
 		constructTerraformComponentPlanfileName(info),
@@ -58,7 +58,7 @@ func constructTerraformComponentPlanfilePath(atmosConfig schema.AtmosConfigurati
 }
 
 // constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack.
-func constructHelmfileComponentWorkingDir(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
+func constructHelmfileComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
 	return filepath.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Helmfile.BasePath,
@@ -79,7 +79,7 @@ func constructHelmfileComponentVarfileName(info schema.ConfigAndStacksInfo) stri
 }
 
 // constructHelmfileComponentVarfilePath constructs the varfile path for a helmfile component in a stack.
-func constructHelmfileComponentVarfilePath(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
+func constructHelmfileComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
 	return filepath.Join(
 		constructHelmfileComponentWorkingDir(atmosConfig, info),
 		constructHelmfileComponentVarfileName(info),

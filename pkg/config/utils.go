@@ -112,7 +112,7 @@ func FindAllStackConfigsInPathsForStack(
 
 // FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs
 func FindAllStackConfigsInPaths(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, error) {

@@ -53,7 +53,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 	// Write variables to a file
 	varFile := constructHelmfileComponentVarfileName(info)
-	varFilePath := constructHelmfileComponentVarfilePath(atmosConfig, info)
+	varFilePath := constructHelmfileComponentVarfilePath(&atmosConfig, info)
 
 	log.Debug("Writing the variables to file:", "file", varFilePath)
 
@@ -203,7 +203,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		log.Debug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := constructHelmfileComponentWorkingDir(atmosConfig, info)
+	workingDir := constructHelmfileComponentWorkingDir(&atmosConfig, info)
 	log.Debug("Using", "working dir", workingDir)
 
 	// Prepare arguments and flags

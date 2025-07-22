@@ -70,7 +70,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
 	if shouldProcessStacks {
-		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip)
+		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip)
 		if err != nil {
 			return err
 		}
@@ -129,7 +129,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "clean" {
-		err = handleCleanSubCommand(info, componentPath, atmosConfig)
+		err = handleCleanSubCommand(info, componentPath, &atmosConfig)
 		if err != nil {
 			log.Debug("Error executing 'terraform clean'", "component", componentPath, "error", err)
 			return err
@@ -168,7 +168,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			if len(varFileNameFromArg) > 0 {
 				varFilePath = varFileNameFromArg
 			} else {
-				varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
+				varFilePath = constructTerraformComponentVarfilePath(&atmosConfig, info)
 			}
 
 			log.Debug("Writing the variables", "file", varFilePath)
@@ -228,7 +228,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Component working directory
-	workingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
+	workingDir := constructTerraformComponentWorkingDir(&atmosConfig, info)
 
 	err = generateBackendConfig(&atmosConfig, &info, workingDir)
 	if err != nil {
@@ -542,12 +542,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Clean up
 	if info.SubCommand != "plan" && info.SubCommand != "show" && info.PlanFile == "" {
-		planFilePath := constructTerraformComponentPlanfilePath(atmosConfig, info)
+		planFilePath := constructTerraformComponentPlanfilePath(&atmosConfig, info)
 		_ = os.Remove(planFilePath)
 	}
 
 	if info.SubCommand == "apply" {
-		varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
+		varFilePath := constructTerraformComponentVarfilePath(&atmosConfig, info)
 		_ = os.Remove(varFilePath)
 	}
 

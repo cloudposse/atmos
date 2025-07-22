@@ -40,7 +40,7 @@ type describeStacksExec struct {
 	isTTYSupportForStdout func() bool
 	printOrWriteToFile    func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
 	executeDescribeStacks func(
-		atmosConfig schema.AtmosConfiguration,
+		atmosConfig *schema.AtmosConfiguration,
 		filterByStack string,
 		components []string,
 		componentTypes []string,
@@ -65,7 +65,7 @@ func NewDescribeStacksExec() DescribeStacksExec {
 // ExecuteDescribeStacksCmd executes `describe stacks` command.
 func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
 	finalStacksMap, err := d.executeDescribeStacks(
-		*atmosConfig,
+		atmosConfig,
 		args.FilterByStack,
 		args.Components,
 		args.ComponentTypes,
@@ -105,7 +105,7 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 
 // ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
 func ExecuteDescribeStacks(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	filterByStack string,
 	components []string,
 	componentTypes []string,
@@ -335,7 +335,7 @@ func ExecuteDescribeStacks(
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
-									&atmosConfig,
+									atmosConfig,
 									&configAndStacksInfo,
 									settingsSectionStruct,
 									"describe-stacks-all-sections",
@@ -365,7 +365,7 @@ func ExecuteDescribeStacks(
 							// Process YAML functions
 							if processYamlFunctions {
 								componentSectionConverted, err := ProcessCustomYamlTags(
-									&atmosConfig,
+									atmosConfig,
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,
@@ -554,7 +554,7 @@ func ExecuteDescribeStacks(
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
-									&atmosConfig,
+									atmosConfig,
 									&configAndStacksInfo,
 									settingsSectionStruct,
 									"templates-describe-stacks-all-atmos-sections",
@@ -584,7 +584,7 @@ func ExecuteDescribeStacks(
 							// Process YAML functions
 							if processYamlFunctions {
 								componentSectionConverted, err := ProcessCustomYamlTags(
-									&atmosConfig,
+									atmosConfig,
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,

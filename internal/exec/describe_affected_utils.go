@@ -41,7 +41,7 @@ func executeDescribeAffected(
 	log.Debug("Current", "BASE", remoteRepoHead)
 
 	currentStacks, err := ExecuteDescribeStacks(
-		*atmosConfig,
+		atmosConfig,
 		stack,
 		nil,
 		nil,
@@ -94,7 +94,7 @@ func executeDescribeAffected(
 	}
 
 	remoteStacks, err := ExecuteDescribeStacks(
-		*atmosConfig,
+		atmosConfig,
 		stack,
 		nil,
 		nil,
@@ -444,7 +444,7 @@ func findAffected(
 				}
 
 				// Helmfile
-				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
+				if helmfileSection, ok := componentsSection[cfg.HelmfileComponentType].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
 							if metadataSection, ok := componentSection["metadata"].(map[string]any); ok {

@@ -281,7 +281,7 @@ func ProcessCommandLineArgs(
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles bool) (
+func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
 	error,
@@ -306,7 +306,7 @@ func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles boo
 
 // ProcessStacks processes stack config
 func ProcessStacks(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
 	processTemplates bool,
@@ -341,7 +341,7 @@ func ProcessStacks(
 			msg = "\nFound stack manifests:"
 		}
 		log.Debug(msg)
-		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -350,7 +350,7 @@ func ProcessStacks(
 	// Check and process stacks
 	if atmosConfig.StackType == "Directory" {
 		err = ProcessComponentConfig(
-			&atmosConfig,
+			atmosConfig,
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
 			stacksMap,
@@ -384,7 +384,7 @@ func ProcessStacks(
 		for stackName := range stacksMap {
 			// Check if we've found the component in the stack
 			err = ProcessComponentConfig(
-				&atmosConfig,
+				atmosConfig,
 				&configAndStacksInfo,
 				stackName,
 				stacksMap,
@@ -529,7 +529,7 @@ func ProcessStacks(
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
-			&atmosConfig,
+			atmosConfig,
 			&configAndStacksInfo,
 			settingsSectionStruct,
 			"templates-all-atmos-sections",
@@ -559,7 +559,7 @@ func ProcessStacks(
 
 	// Process YAML functions in Atmos manifest sections
 	if processYamlFunctions {
-		componentSectionConverted, err := ProcessCustomYamlTags(&atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip)
+		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip)
 		if err != nil {
 			return configAndStacksInfo, err
 		}

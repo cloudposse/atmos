@@ -55,7 +55,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
+	info, err = ProcessStacks(&atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
+		varFilePath = constructTerraformComponentVarfilePath(&atmosConfig, info)
 	}
 
 	// Print the component variables

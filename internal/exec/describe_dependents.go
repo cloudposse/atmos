@@ -31,7 +31,7 @@ type DescribeDependentsExec interface {
 type describeDependentsExec struct {
 	atmosConfig               *schema.AtmosConfiguration
 	executeDescribeDependents func(
-		atmosConfig schema.AtmosConfiguration,
+		atmosConfig *schema.AtmosConfiguration,
 		component string,
 		stack string,
 		includeSettings bool,
@@ -57,7 +57,7 @@ func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeD
 
 func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDependentsExecProps) error {
 	dependents, err := d.executeDescribeDependents(
-		*d.atmosConfig,
+		d.atmosConfig,
 		describeDependentsExecProps.Component,
 		describeDependentsExecProps.Stack,
 		false,
@@ -91,7 +91,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 
 // ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
 func ExecuteDescribeDependents(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	includeSettings bool,
@@ -246,7 +246,7 @@ func ExecuteDescribeDependents(
 
 					dependent := schema.Dependent{
 						Component:     stackComponentName,
-						ComponentPath: BuildComponentPath(&atmosConfig, &stackComponentMap, stackComponentType),
+						ComponentPath: BuildComponentPath(atmosConfig, &stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
 						Stack:         stackName,
 						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.Replace(stackComponentName, "/", "-", -1)),

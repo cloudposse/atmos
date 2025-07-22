@@ -56,12 +56,12 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	err = ValidateStacks(atmosConfig)
+	err = ValidateStacks(&atmosConfig)
 	return err
 }
 
 // ValidateStacks validates Atmos stack configuration
-func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
+func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	var validationErrorMessages []string
 
 	// 1. Process top-level stack manifests and detect duplicate components in the same stack
@@ -104,7 +104,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	switch {
 	case manifestSchema.Manifest == "":
 		// If the validation schema location is not specified, use the embedded one
-		f, err := getEmbeddedSchemaPath(&atmosConfig)
+		f, err := getEmbeddedSchemaPath(atmosConfig)
 		if err != nil {
 			return err
 		}
@@ -115,7 +115,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	case u.FileExists(atmosManifestJsonSchemaFileAbsPath):
 		atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
 	case u.IsURL(manifestSchema.Manifest):
-		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(&atmosConfig)
+		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(atmosConfig)
 		if err != nil {
 			return err
 		}
@@ -201,7 +201,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 }
 
 func createComponentStackMap(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	stacksMap map[string]any,
 	componentType string,
 ) (map[string]map[string][]string, error) {

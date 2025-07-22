@@ -11,11 +11,11 @@ import (
 )
 
 // BuildTerraformWorkspace builds Terraform workspace.
-func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	// Return 'default' workspace if workspaces are disabled
 	// Terraform always operates in the `default` workspace when multiple workspaces are unsupported or disabled,
 	// preventing switching or creating additional workspaces.
-	if !isWorkspacesEnabled(&atmosConfig, &configAndStacksInfo) {
+	if !isWorkspacesEnabled(atmosConfig, &configAndStacksInfo) {
 		return cfg.TerraformDefaultWorkspace, nil
 	}
 
@@ -188,7 +188,7 @@ func BuildComponentPath(
 }
 
 // GetStackNamePattern returns the stack name pattern.
-func GetStackNamePattern(atmosConfig schema.AtmosConfiguration) string {
+func GetStackNamePattern(atmosConfig *schema.AtmosConfiguration) string {
 	return atmosConfig.Stacks.NamePattern
 }
 
