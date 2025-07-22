@@ -323,6 +323,18 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
 	}
 
+	componentsPackerCommand := os.Getenv("ATMOS_COMPONENTS_PACKER_COMMAND")
+	if len(componentsPackerCommand) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_PACKER_COMMAND", componentsPackerCommand)
+		atmosConfig.Components.Packer.Command = componentsPackerCommand
+	}
+
+	componentsPackerBasePath := os.Getenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
+	if len(componentsPackerBasePath) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_PACKER_BASE_PATH", componentsPackerBasePath)
+		atmosConfig.Components.Packer.BasePath = componentsPackerBasePath
+	}
+
 	workflowsBasePath := os.Getenv("ATMOS_WORKFLOWS_BASE_PATH")
 	if len(workflowsBasePath) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_WORKFLOWS_BASE_PATH", workflowsBasePath)

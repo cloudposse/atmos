@@ -2,6 +2,9 @@ base_path: "./"
 
 components:
   packer:
+    # Can also be set using 'ATMOS_COMPONENTS_PACKER_COMMAND' ENV var, or '--packer-command' command-line argument
+    # command: packer
+    # Can also be set using 'ATMOS_COMPONENTS_PACKER_BASE_PATH' ENV var, or '--packer-dir' command-line argument
     base_path: "components/packer"
 
 stacks:
@@ -31,4 +34,4 @@ templates:
       enabled: true
       timeout: 10
       # https://docs.gomplate.ca/datasources
-      datasources: {}
+      datasources: { }
