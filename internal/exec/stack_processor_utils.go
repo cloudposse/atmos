@@ -1993,7 +1993,7 @@ func ProcessStackConfig(
 					comp[cfg.ComponentSectionName] = baseComponentName
 				}
 
-				helmfileComponents[component] = comp
+				packerComponents[component] = comp
 			}
 		}
 	}
@@ -2003,7 +2003,7 @@ func ProcessStackConfig(
 	allComponents[cfg.PackerComponentType] = packerComponents
 
 	result := map[string]any{
-		"components": allComponents,
+		cfg.ComponentsSectionName: allComponents,
 	}
 
 	return result, nil
