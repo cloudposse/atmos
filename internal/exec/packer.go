@@ -1,12 +1,12 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	log "github.com/charmbracelet/log"
-	"github.com/pkg/errors"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -55,13 +55,13 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if the component exists as a Packer component.
-	componentPath := filepath.Join(atmosConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath := filepath.Join(atmosConfig.PackerDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
+		return fmt.Errorf("'%s' points to the Packer component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
-			filepath.Join(atmosConfig.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
+			filepath.Join(atmosConfig.Components.Packer.BasePath, info.ComponentFolderPrefix),
 		)
 	}
 
@@ -85,13 +85,13 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
 	// Write variables to a file
-	varFile := constructHelmfileComponentVarfileName(info)
-	varFilePath := constructHelmfileComponentVarfilePath(atmosConfig, info)
+	varFile := constructPackerComponentVarfileName(&info)
+	varFilePath := constructPackerComponentVarfilePath(&atmosConfig, &info)
 
 	log.Debug("Writing the variables to file:", "file", varFilePath)
 
 	if !info.DryRun {
-		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0o644)
+		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
 		if err != nil {
 			return err
 		}
@@ -99,8 +99,8 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 
 	// Print command info
 	log.Debug("\nCommand info:")
-	log.Debug("Helmfile binary: " + info.Command)
-	log.Debug("Helmfile command: " + info.SubCommand)
+	log.Debug("Packer binary: " + info.Command)
+	log.Debug("Packer command: " + info.SubCommand)
 	log.Debug("Arguments and flags", "additional", info.AdditionalArgsAndFlags)
 	log.Debug("Component: " + info.ComponentFromArg)
 
@@ -115,11 +115,11 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 		log.Debug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := constructHelmfileComponentWorkingDir(atmosConfig, info)
+	workingDir := constructPackerComponentWorkingDir(&atmosConfig, &info)
 	log.Debug("Using", "working dir", workingDir)
 
 	// Prepare arguments and flags
-	allArgsAndFlags := []string{"--state-values-file", varFile}
+	allArgsAndFlags := []string{"-var-file", varFile}
 	if info.GlobalOptions != nil && len(info.GlobalOptions) > 0 {
 		allArgsAndFlags = append(allArgsAndFlags, info.GlobalOptions...)
 	}
@@ -137,10 +137,7 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
-	log.Debug("Using ENV vars:")
-	for _, v := range envVars {
-		log.Debug(v)
-	}
+	log.Debug("Using ENV", "vars", envVars)
 
 	err = ExecuteShellCommand(
 		atmosConfig,

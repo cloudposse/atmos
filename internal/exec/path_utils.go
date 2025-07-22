@@ -57,7 +57,7 @@ func constructTerraformComponentPlanfilePath(atmosConfig schema.AtmosConfigurati
 	)
 }
 
-// constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack
+// constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack.
 func constructHelmfileComponentWorkingDir(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) string {
 	return filepath.Join(
 		atmosConfig.BasePath,
@@ -83,5 +83,34 @@ func constructHelmfileComponentVarfilePath(atmosConfig schema.AtmosConfiguration
 	return filepath.Join(
 		constructHelmfileComponentWorkingDir(atmosConfig, info),
 		constructHelmfileComponentVarfileName(info),
+	)
+}
+
+// constructPackerComponentVarfileName constructs the varfile name for a Packer component in a stack.
+func constructPackerComponentVarfileName(info *schema.ConfigAndStacksInfo) string {
+	var varFile string
+	if len(info.ComponentFolderPrefixReplaced) == 0 {
+		varFile = fmt.Sprintf("%s-%s.packer.vars.json", info.ContextPrefix, info.Component)
+	} else {
+		varFile = fmt.Sprintf("%s-%s-%s.packer.vars.json", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
+	}
+	return varFile
+}
+
+// constructPackerComponentVarfilePath constructs the varfile path for a Packer component in a stack.
+func constructPackerComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	return filepath.Join(
+		constructPackerComponentWorkingDir(atmosConfig, info),
+		constructPackerComponentVarfileName(info),
+	)
+}
+
+// constructPackerComponentWorkingDir constructs the working dir for a Packer component in a stack.
+func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	return filepath.Join(
+		atmosConfig.BasePath,
+		atmosConfig.Components.Helmfile.BasePath,
+		info.ComponentFolderPrefix,
+		info.FinalComponent,
 	)
 }
