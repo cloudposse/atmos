@@ -15,12 +15,12 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports,
-// and returns a map of Spacelift stack configs
+// CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports, and returns a map of Spacelift stack configs.
 func CreateSpaceliftStacks(
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
+	packerComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
@@ -38,6 +38,7 @@ func CreateSpaceliftStacks(
 			stacksBasePath,
 			terraformComponentsBasePath,
 			helmfileComponentsBasePath,
+			packerComponentsBasePath,
 			filePaths,
 			processStackDeps,
 			processComponentDeps,
@@ -61,6 +62,7 @@ func CreateSpaceliftStacks(
 			atmosConfig.StacksBaseAbsolutePath,
 			atmosConfig.TerraformDirAbsolutePath,
 			atmosConfig.HelmfileDirAbsolutePath,
+			atmosConfig.PackerDirAbsolutePath,
 			atmosConfig.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps,

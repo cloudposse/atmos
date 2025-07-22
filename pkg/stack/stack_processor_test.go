@@ -14,6 +14,7 @@ func TestStackProcessor(t *testing.T) {
 	stacksBasePath := "../../tests/fixtures/scenarios/complete/stacks"
 	terraformComponentsBasePath := "../../tests/fixtures/scenarios/complete/components/terraform"
 	helmfileComponentsBasePath := "../../tests/fixtures/scenarios/complete/components/helmfile"
+	packerComponentsBasePath := "../../tests/fixtures/scenarios/complete/components/packer"
 
 	filePaths := []string{
 		"../../tests/fixtures/scenarios/complete/stacks/orgs/cp/tenant1/dev/us-east-2.yaml",
@@ -44,6 +45,7 @@ func TestStackProcessor(t *testing.T) {
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
+		packerComponentsBasePath,
 		filePaths,
 		processStackDeps,
 		processComponentDeps,
@@ -222,6 +224,7 @@ func TestStackProcessorRelativePaths(t *testing.T) {
 		&atmosConfig,
 		stacksBasePath,
 		terraformComponentsBasePath,
+		"",
 		"",
 		filePaths,
 		true,

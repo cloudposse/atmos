@@ -39,6 +39,7 @@ func ProcessYAMLConfigFiles(
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
+	packerComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
@@ -109,6 +110,7 @@ func ProcessYAMLConfigFiles(
 				stackBasePath,
 				terraformComponentsBasePath,
 				helmfileComponentsBasePath,
+				packerComponentsBasePath,
 				p,
 				deepMergedStackConfig,
 				processStackDeps,
@@ -561,12 +563,13 @@ func ProcessYAMLConfigFile(
 		nil
 }
 
-// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends, and returns the final stack configuration for all Terraform and helmfile components.
+// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends, and returns the final stack configuration for all Terraform/Helmfile/Packer components.
 func ProcessStackConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
+	packerComponentsBasePath string,
 	stack string,
 	config map[string]any,
 	processStackDeps bool,
@@ -605,6 +608,7 @@ func ProcessStackConfig(
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
+	packerComponents := map[string]any{}
 	allComponents := map[string]any{}
 
 	// Global sections
@@ -808,8 +812,8 @@ func ProcessStackConfig(
 	}
 
 	// Process all Terraform components
-	if componentTypeFilter == "" || componentTypeFilter == "terraform" {
-		if allTerraformComponents, ok := globalComponentsSection["terraform"]; ok {
+	if componentTypeFilter == "" || componentTypeFilter == cfg.TerraformComponentType {
+		if allTerraformComponents, ok := globalComponentsSection[cfg.TerraformComponentType]; ok {
 
 			allTerraformComponentsMap, ok := allTerraformComponents.(map[string]any)
 			if !ok {
@@ -1361,9 +1365,9 @@ func ProcessStackConfig(
 		}
 	}
 
-	// Process all helmfile components
-	if componentTypeFilter == "" || componentTypeFilter == "helmfile" {
-		if allHelmfileComponents, ok := globalComponentsSection["helmfile"]; ok {
+	// Process all Helmfile components
+	if componentTypeFilter == "" || componentTypeFilter == cfg.HelmfileComponentType {
+		if allHelmfileComponents, ok := globalComponentsSection[cfg.HelmfileComponentType]; ok {
 
 			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[string]any)
 			if !ok {
@@ -1649,8 +1653,9 @@ func ProcessStackConfig(
 		}
 	}
 
-	allComponents["terraform"] = terraformComponents
-	allComponents["helmfile"] = helmfileComponents
+	allComponents[cfg.TerraformComponentType] = terraformComponents
+	allComponents[cfg.HelmfileComponentType] = helmfileComponents
+	allComponents[cfg.PackerComponentType] = packerComponents
 
 	result := map[string]any{
 		"components": allComponents,
@@ -1914,6 +1919,7 @@ func CreateComponentStackMap(
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
+	packerComponentsBasePath string,
 	filePath string,
 ) (map[string]map[string][]string, error) {
 	stackComponentMap := map[string]map[string][]string{}
@@ -1965,6 +1971,7 @@ func CreateComponentStackMap(
 					stacksBasePath,
 					terraformComponentsBasePath,
 					helmfileComponentsBasePath,
+					packerComponentsBasePath,
 					p,
 					config,
 					false,
