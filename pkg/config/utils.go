@@ -417,6 +417,9 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 	if err := setHelmfileConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
+	if err := setPackerConfig(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
 	if err := setStacksConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
@@ -464,6 +467,18 @@ func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		atmosConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
 		log.Debug(cmdLineArg, HelmfileDirFlag, configAndStacksInfo.HelmfileDir)
+	}
+	return nil
+}
+
+func setPackerConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	if len(configAndStacksInfo.PackerCommand) > 0 {
+		atmosConfig.Components.Packer.Command = configAndStacksInfo.PackerCommand
+		log.Debug(cmdLineArg, PackerCommandFlag, configAndStacksInfo.PackerCommand)
+	}
+	if len(configAndStacksInfo.PackerDir) > 0 {
+		atmosConfig.Components.Packer.BasePath = configAndStacksInfo.PackerDir
+		log.Debug(cmdLineArg, PackerDirFlag, configAndStacksInfo.PackerDir)
 	}
 	return nil
 }

@@ -244,6 +244,8 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
 	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
+	configAndStacksInfo.PackerCommand = argsAndFlagsInfo.PackerCommand
+	configAndStacksInfo.PackerDir = argsAndFlagsInfo.PackerDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 	configAndStacksInfo.WorkflowsDir = argsAndFlagsInfo.WorkflowsDir
@@ -778,6 +780,32 @@ func processArgsAndFlags(
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.HelmfileDir = helmfileDirFlagParts[1]
+		}
+
+		if arg == cfg.PackerCommandFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PackerCommand = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.PackerCommandFlag) {
+			packerCommandFlagParts := strings.Split(arg, "=")
+			if len(packerCommandFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PackerCommand = packerCommandFlagParts[1]
+		}
+
+		if arg == cfg.PackerDirFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PackerDir = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.PackerDirFlag) {
+			packerDirFlagParts := strings.Split(arg, "=")
+			if len(packerDirFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PackerDir = packerDirFlagParts[1]
 		}
 
 		if arg == cfg.CliConfigDirFlag {

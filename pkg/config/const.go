@@ -16,6 +16,8 @@ const (
 	TerraformDirFlag            = "--terraform-dir"
 	HelmfileCommandFlag         = "--helmfile-command"
 	HelmfileDirFlag             = "--helmfile-dir"
+	PackerCommandFlag           = "--packer-command"
+	PackerDirFlag               = "--packer-dir"
 	CliConfigDirFlag            = "--config-dir"
 	StackDirFlag                = "--stacks-dir"
 	BasePathFlag                = "--base-path"

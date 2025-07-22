@@ -3,8 +3,9 @@ package schema
 import (
 	"encoding/json"
 
-	"github.com/cloudposse/atmos/pkg/store"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 type AtmosSectionMapType = map[string]any
@@ -416,6 +417,8 @@ type ArgsAndFlagsInfo struct {
 	TerraformDir              string
 	HelmfileCommand           string
 	HelmfileDir               string
+	PackerCommand             string
+	PackerDir                 string
 	ConfigDir                 string
 	StacksDir                 string
 	WorkflowsDir              string
@@ -477,6 +480,8 @@ type ConfigAndStacksInfo struct {
 	TerraformDir                  string
 	HelmfileCommand               string
 	HelmfileDir                   string
+	PackerCommand                 string
+	PackerDir                     string
 	ConfigDir                     string
 	StacksDir                     string
 	WorkflowsDir                  string
