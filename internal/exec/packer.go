@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	log "github.com/charmbracelet/log"
 
@@ -97,32 +98,26 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Print command info
-	log.Debug("Command info:")
-	log.Debug("Packer binary: " + info.Command)
-	log.Debug("Packer command: " + info.SubCommand)
-	log.Debug("Arguments and flags", "additional", info.AdditionalArgsAndFlags)
-	log.Debug("Component: " + info.ComponentFromArg)
-
-	if len(info.BaseComponent) > 0 {
-		log.Debug("Packer component: " + info.BaseComponent)
-	}
-
-	if info.Stack == info.StackFromArg {
-		log.Debug("Stack: " + info.StackFromArg)
-	} else {
-		log.Debug("Stack: " + info.StackFromArg)
-		log.Debug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
+	var inheritance string
+	if len(info.ComponentInheritanceChain) > 0 {
+		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
 
 	workingDir := constructPackerComponentWorkingDir(&atmosConfig, &info)
-	log.Debug("Using", "working dir", workingDir)
+
+	log.Debug("Packer context",
+		"executable", info.Command,
+		"command", info.SubCommand,
+		"component", info.ComponentFromArg,
+		"stack", info.StackFromArg,
+		"arguments and flags", info.AdditionalArgsAndFlags,
+		"packer component", info.BaseComponentPath,
+		"inheritance", inheritance,
+		"working directory", workingDir,
+	)
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"-var-file", varFile}
-	if info.GlobalOptions != nil && len(info.GlobalOptions) > 0 {
-		allArgsAndFlags = append(allArgsAndFlags, info.GlobalOptions...)
-	}
 	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
