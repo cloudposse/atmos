@@ -592,6 +592,7 @@ func ProcessStackConfig(
 	globalEnvSection := map[string]any{}
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
+	globalPackerSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
 
 	terraformVars := map[string]any{}
@@ -605,6 +606,11 @@ func ProcessStackConfig(
 	helmfileSettings := map[string]any{}
 	helmfileEnv := map[string]any{}
 	helmfileCommand := ""
+
+	packerVars := map[string]any{}
+	packerSettings := map[string]any{}
+	packerEnv := map[string]any{}
+	packerCommand := ""
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
@@ -640,17 +646,24 @@ func ProcessStackConfig(
 		}
 	}
 
-	if i, ok := config["terraform"]; ok {
+	if i, ok := config[cfg.TerraformSectionName]; ok {
 		globalTerraformSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform' section in the file '%s'", stackName)
 		}
 	}
 
-	if i, ok := config["helmfile"]; ok {
+	if i, ok := config[cfg.HelmfileSectionName]; ok {
 		globalHelmfileSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'helmfile' section in the file '%s'", stackName)
+		}
+	}
+
+	if i, ok := config[cfg.PackerSectionName]; ok {
+		globalPackerSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'packer' section in the file '%s'", stackName)
 		}
 	}
 
@@ -807,6 +820,50 @@ func ProcessStackConfig(
 	}
 
 	globalAndHelmfileEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, helmfileEnv})
+	if err != nil {
+		return nil, err
+	}
+
+	// Packer section
+	if i, ok := globalPackerSection[cfg.CommandSectionName]; ok {
+		packerCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'packer.command' section in the file '%s'", stackName)
+		}
+	}
+
+	if i, ok := globalPackerSection["vars"]; ok {
+		packerVars, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'packer.vars' section in the file '%s'", stackName)
+		}
+	}
+
+	globalAndPackerVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, packerVars})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalPackerSection["settings"]; ok {
+		packerSettings, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'packer.settings' section in the file '%s'", stackName)
+		}
+	}
+
+	globalAndPackerSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, packerSettings})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalPackerSection["env"]; ok {
+		packerEnv, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'packer.env' section in the file '%s'", stackName)
+		}
+	}
+
+	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, packerEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -1640,6 +1697,294 @@ func ProcessStackConfig(
 				comp[cfg.SettingsSectionName] = finalSettings
 				comp[cfg.EnvSectionName] = finalComponentEnv
 				comp[cfg.CommandSectionName] = finalComponentHelmfileCommand
+				comp["inheritance"] = componentInheritanceChain
+				comp[cfg.MetadataSectionName] = componentMetadata
+				comp[cfg.OverridesSectionName] = componentOverrides
+
+				if baseComponentName != "" {
+					comp[cfg.ComponentSectionName] = baseComponentName
+				}
+
+				helmfileComponents[component] = comp
+			}
+		}
+	}
+
+	// Process all Packer components
+	if componentTypeFilter == "" || componentTypeFilter == cfg.PackerComponentType {
+		if allPackerComponents, ok := globalComponentsSection[cfg.PackerComponentType]; ok {
+
+			allPackerComponentsMap, ok := allPackerComponents.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid 'components.packer' section in the file '%s'", stackName)
+			}
+
+			for cmp, v := range allPackerComponentsMap {
+				component := cmp
+
+				componentMap, ok := v.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("invalid 'components.packer.%s' section in the file '%s'", component, stackName)
+				}
+
+				componentVars := map[string]any{}
+				if i2, ok := componentMap[cfg.VarsSectionName]; ok {
+					componentVars, ok = i2.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.packer.%s.vars' section in the file '%s'", component, stackName)
+					}
+				}
+
+				componentSettings := map[string]any{}
+				if i, ok := componentMap[cfg.SettingsSectionName]; ok {
+					componentSettings, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.packer.%s.settings' section in the file '%s'", component, stackName)
+					}
+				}
+
+				componentEnv := map[string]any{}
+				if i, ok := componentMap[cfg.EnvSectionName]; ok {
+					componentEnv, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.packer.%s.env' section in the file '%s'", component, stackName)
+					}
+				}
+
+				// Component metadata.
+				// This is per component, not deep-merged and not inherited from base components and globals.
+				componentMetadata := map[string]any{}
+				if i, ok := componentMap[cfg.MetadataSectionName]; ok {
+					componentMetadata, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.packer.%s.metadata' section in the file '%s'", component, stackName)
+					}
+				}
+
+				componentPackerCommand := ""
+				if i, ok := componentMap[cfg.CommandSectionName]; ok {
+					componentPackerCommand, ok = i.(string)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.packer.%s.command' attribute in the file '%s'", component, stackName)
+					}
+				}
+
+				// Process overrides
+				componentOverrides := map[string]any{}
+				componentOverridesVars := map[string]any{}
+				componentOverridesSettings := map[string]any{}
+				componentOverridesEnv := map[string]any{}
+				componentOverridesPackerCommand := ""
+
+				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
+					if componentOverrides, ok = i.(map[string]any); !ok {
+						return nil, fmt.Errorf("invalid 'components.packer.%s.overrides' in the manifest '%s'", component, stackName)
+					}
+
+					if i, ok = componentOverrides[cfg.VarsSectionName]; ok {
+						if componentOverridesVars, ok = i.(map[string]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.packer.%s.overrides.vars' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides[cfg.SettingsSectionName]; ok {
+						if componentOverridesSettings, ok = i.(map[string]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.packer.%s.overrides.settings' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides[cfg.EnvSectionName]; ok {
+						if componentOverridesEnv, ok = i.(map[string]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.packer.%s.overrides.env' in the manifest '%s'", component, stackName)
+						}
+					}
+
+					if i, ok = componentOverrides[cfg.CommandSectionName]; ok {
+						if componentOverridesPackerCommand, ok = i.(string); !ok {
+							return nil, fmt.Errorf("invalid 'components.packer.%s.overrides.command' in the manifest '%s'", component, stackName)
+						}
+					}
+				}
+
+				// Process base component(s)
+				baseComponentVars := map[string]any{}
+				baseComponentSettings := map[string]any{}
+				baseComponentEnv := map[string]any{}
+				baseComponentName := ""
+				baseComponentPackerCommand := ""
+				var baseComponentConfig schema.BaseComponentConfig
+				var componentInheritanceChain []string
+				var baseComponents []string
+
+				// Inheritance using the top-level `component` attribute
+				if baseComponent, baseComponentExist := componentMap[cfg.ComponentSectionName]; baseComponentExist {
+					baseComponentName, ok = baseComponent.(string)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.packer.%s.component' attribute in the file '%s'", component, stackName)
+					}
+
+					// Process the base components recursively to find `componentInheritanceChain`
+					err = ProcessBaseComponentConfig(
+						atmosConfig,
+						&baseComponentConfig,
+						allPackerComponentsMap,
+						component,
+						stack,
+						baseComponentName,
+						packerComponentsBasePath,
+						checkBaseComponentExists,
+						&baseComponents,
+					)
+					if err != nil {
+						return nil, err
+					}
+
+					baseComponentVars = baseComponentConfig.BaseComponentVars
+					baseComponentSettings = baseComponentConfig.BaseComponentSettings
+					baseComponentEnv = baseComponentConfig.BaseComponentEnv
+					baseComponentName = baseComponentConfig.FinalBaseComponentName
+					baseComponentPackerCommand = baseComponentConfig.BaseComponentCommand
+					componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
+				}
+
+				// Multiple inheritance (and multiple-inheritance chain) using `metadata.component` and `metadata.inherit`.
+				// `metadata.component` points to the component implementation (e.g. in `components/terraform` folder),
+				// it does not specify inheritance (it overrides the deprecated top-level `component` attribute).
+				// `metadata.inherit` is a list of component names from which the current component inherits.
+				// It uses a method similar to Method Resolution Order (MRO), which is how Python supports multiple inheritance.
+				//
+				// In the case of multiple base components, it is processed left to right, in the order by which it was declared.
+				// For example: `metadata.inherits: [componentA, componentB]`
+				// will deep-merge all the base components of `componentA` (each component overriding its base),
+				// then all the base components of `componentB` (each component overriding its base),
+				// then the two results are deep-merged together (`componentB` inheritance chain will override values from 'componentA' inheritance chain).
+				if baseComponentFromMetadata, baseComponentFromMetadataExist := componentMetadata[cfg.ComponentSectionName]; baseComponentFromMetadataExist {
+					baseComponentName, ok = baseComponentFromMetadata.(string)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.packer.%s.metadata.component' attribute in the file '%s'", component, stackName)
+					}
+				}
+
+				baseComponents = append(baseComponents, baseComponentName)
+
+				if inheritList, inheritListExist := componentMetadata["inherits"].([]any); inheritListExist {
+					for _, v := range inheritList {
+						baseComponentFromInheritList, ok := v.(string)
+						if !ok {
+							return nil, fmt.Errorf("invalid 'components.packer.%s.metadata.inherits' section in the file '%s'", component, stackName)
+						}
+
+						if _, ok := allPackerComponentsMap[baseComponentFromInheritList]; !ok {
+							if checkBaseComponentExists {
+								errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
+									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
+									component,
+									stackName,
+									baseComponentFromInheritList,
+								)
+								return nil, errors.New(errorMessage)
+							}
+						}
+
+						// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
+						err = ProcessBaseComponentConfig(
+							atmosConfig,
+							&baseComponentConfig,
+							allPackerComponentsMap,
+							component,
+							stack,
+							baseComponentFromInheritList,
+							packerComponentsBasePath,
+							checkBaseComponentExists,
+							&baseComponents,
+						)
+						if err != nil {
+							return nil, err
+						}
+
+						baseComponentVars = baseComponentConfig.BaseComponentVars
+						baseComponentSettings = baseComponentConfig.BaseComponentSettings
+						baseComponentEnv = baseComponentConfig.BaseComponentEnv
+						baseComponentName = baseComponentConfig.FinalBaseComponentName
+						baseComponentPackerCommand = baseComponentConfig.BaseComponentCommand
+						componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
+					}
+				}
+
+				baseComponents = u.UniqueStrings(baseComponents)
+				sort.Strings(baseComponents)
+
+				// Final configs
+				finalComponentVars, err := m.Merge(
+					atmosConfig,
+					[]map[string]any{
+						globalAndPackerVars,
+						baseComponentVars,
+						componentVars,
+						componentOverridesVars,
+					})
+				if err != nil {
+					return nil, err
+				}
+
+				finalComponentSettings, err := m.Merge(
+					atmosConfig,
+					[]map[string]any{
+						globalAndPackerSettings,
+						baseComponentSettings,
+						componentSettings,
+						componentOverridesSettings,
+					})
+				if err != nil {
+					return nil, err
+				}
+
+				finalComponentEnv, err := m.Merge(
+					atmosConfig,
+					[]map[string]any{
+						globalAndPackerEnv,
+						baseComponentEnv,
+						componentEnv,
+						componentOverridesEnv,
+					})
+				if err != nil {
+					return nil, err
+				}
+
+				// Final binary to execute
+				// Check for the binary in the following order:
+				// - `components.packer.command` section in `atmos.yaml` CLI config file
+				// - global `packer.command` section
+				// - base component(s) `command` section
+				// - component `command` section
+				// - `overrides.command` section
+				finalComponentPackerCommand := cfg.PackerComponentType
+				if atmosConfig.Components.Packer.Command != "" {
+					finalComponentPackerCommand = atmosConfig.Components.Packer.Command
+				}
+				if packerCommand != "" {
+					finalComponentPackerCommand = packerCommand
+				}
+				if baseComponentPackerCommand != "" {
+					finalComponentPackerCommand = baseComponentPackerCommand
+				}
+				if componentPackerCommand != "" {
+					finalComponentPackerCommand = componentPackerCommand
+				}
+				if componentOverridesPackerCommand != "" {
+					finalComponentPackerCommand = componentOverridesPackerCommand
+				}
+
+				finalSettings, err := processSettingsIntegrationsGithub(atmosConfig, finalComponentSettings)
+				if err != nil {
+					return nil, err
+				}
+
+				comp := map[string]any{}
+				comp[cfg.VarsSectionName] = finalComponentVars
+				comp[cfg.SettingsSectionName] = finalSettings
+				comp[cfg.EnvSectionName] = finalComponentEnv
+				comp[cfg.CommandSectionName] = finalComponentPackerCommand
 				comp["inheritance"] = componentInheritanceChain
 				comp[cfg.MetadataSectionName] = componentMetadata
 				comp[cfg.OverridesSectionName] = componentOverrides
