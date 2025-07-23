@@ -27,7 +27,7 @@ components:
         manifest_file_name: "manifest.json"
         manifest_strip_path: false
         assume_role_session_name: "atmos-packer"
-        assume_role_duration_seconds: 600
+        assume_role_duration_seconds: 1800
         ami_tags:
           SourceAMI: "{{ .settings.ami.source_ami }}"
           SourceAMIName: "{{ .settings.ami.source_ami_name }}"
