@@ -117,8 +117,9 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 	)
 
 	// Prepare arguments and flags
-	allArgsAndFlags := []string{"-var-file", varFile}
+	allArgsAndFlags := []string{}
 	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
+	allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
 	// Prepare ENV vars

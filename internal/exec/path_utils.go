@@ -109,7 +109,7 @@ func constructPackerComponentVarfilePath(atmosConfig *schema.AtmosConfiguration,
 func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
 	return filepath.Join(
 		atmosConfig.BasePath,
-		atmosConfig.Components.Helmfile.BasePath,
+		atmosConfig.Components.Packer.BasePath,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 	)
