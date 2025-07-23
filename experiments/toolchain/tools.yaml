@@ -1,0 +1,64 @@
+# Local tools configuration
+# This file is consulted first before the Aqua registry
+# Allows local overrides and custom tool definitions
+
+# Tool name aliases for .tool-versions compatibility
+# Maps common tool names to their registry owner/repo paths
+aliases:
+  terraform: hashicorp/terraform
+  opentofu: opentofu/opentofu
+  helm: helm/helm
+  kubectl: kubernetes-sigs/kubectl
+  kustomize: kubernetes-sigs/kustomize
+  kind: kubernetes-sigs/kind
+  krew: kubernetes-sigs/krew
+  github-comment: suzuki-shunsuke/github-comment
+  tflint: terraform-linters/tflint
+  tfsec: aquasecurity/tfsec
+  checkov: bridgecrewio/checkov
+  terragrunt: gruntwork-io/terragrunt
+  packer: hashicorp/packer
+  vault: hashicorp/vault
+  consul: hashicorp/consul
+  nomad: hashicorp/nomad
+  waypoint: hashicorp/waypoint
+  boundary: hashicorp/boundary
+  helmfile: helmfile/helmfile
+
+tools:
+  # Override a registry tool with local settings
+  hashicorp/terraform:
+    type: http
+    url: https://releases.hashicorp.com/terraform/{{trimV .Version}}/terraform_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip
+    format: zip
+    binary_name: terraform
+
+  # TFLint configuration
+  terraform-linters/tflint:
+    type: github_release
+    repo_owner: terraform-linters
+    repo_name: tflint
+    binary_name: tflint
+
+  # Custom tool not in registry
+  my-custom-tool:
+    type: github_release
+    repo_owner: myorg
+    repo_name: my-custom-tool
+    asset: my-custom-tool_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz
+    format: tar.gz
+    binary_name: my-custom-tool
+
+  # Override OpenTofu to use a specific version constraint
+  opentofu/opentofu:
+    type: github_release
+    repo_owner: opentofu
+    repo_name: opentofu
+    binary_name: tofu
+    version_constraints:
+      - constraint: ">= 1.10.0"
+        asset: tofu_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz
+        format: tar.gz
+      - constraint: "< 1.10.0"
+        asset: tofu_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip
+        format: zip
