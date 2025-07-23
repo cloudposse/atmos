@@ -16,6 +16,7 @@ components:
       vars:
         ami_name: "bastion"
         source_ami: "{{ .settings.ami.source_ami }}"
+        region: us-east-1
         org_arn: "arn:aws:organizations::123456789012:organization/o-abcde12345"
         kms_key_arn: "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab"
         ssh_username: "admin"
