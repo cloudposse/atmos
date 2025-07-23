@@ -136,6 +136,11 @@ source "amazon-ebs" "al2023" {
     duration_seconds = var.assume_role_duration_seconds
   }
 
+  aws_polling {
+    delay_seconds = 5
+    max_attempts  = 100
+  }
+
   tags = var.ami_tags
 }
 

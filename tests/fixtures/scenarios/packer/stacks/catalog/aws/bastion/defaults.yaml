@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
 # https://developer.hashicorp.com/packer/integrations/hashicorp/amazon/latest/components/builder/ebs
+# https://masterminds.github.io/sprig/date.html
 
 components:
   packer:
@@ -11,19 +12,21 @@ components:
           source_ami_name: "al2023-ami-2023.7.20250527.1-kernel-6.12-arm64"
           source_ami_description: "Amazon Linux 2023 AMI 2023.7.20250527.1 arm64 HVM kernel-6.12"
           source_ami_owner_account_id: "137112412989"
+          region: us-east-2
       metadata:
         component: aws/bastion
       vars:
-        ami_name: "bastion"
+        # https://masterminds.github.io/sprig/date.html
+        ami_name: "bastion-al2023-{{ now | unixEpoch }}"
         source_ami: "{{ .settings.ami.source_ami }}"
-        region: us-east-2
-        org_arn: "arn:aws:organizations::123456789012:organization/o-abcde12345"
-        kms_key_arn: "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab"
+        region: "{{ .settings.ami.region }}"
+        org_arn: ""
+        kms_key_arn: null
+        encrypt_boot: false
         ssh_username: "ec2-user"
         associate_public_ip_address: true
         volume_type: "gp3"
-        encrypt_boot: true
-        skip_create_ami: true
+        skip_create_ami: false
         manifest_file_name: "manifest.json"
         manifest_strip_path: false
         assume_role_session_name: "atmos-packer"

@@ -11,9 +11,8 @@ components:
     aws/bastion:
       vars:
         # Define the variables specific to the `prod` account
-        instance_type: "t4g.small"
+        instance_type: "t4g.medium"
         volume_size: 16
-        skip_create_ami: false
         assume_role_arn: "arn:aws:iam::PROD_ACCOUNT_ID:role/ROLE_NAME"
         ami_tags:
           Stage: prod
