@@ -53,8 +53,8 @@ func ReadTerraformBackendS3(
 	region := GetBackendAttribute(&backend, "region")
 	roleArn := GetS3BackendAssumeRoleArn(&backend)
 
-	// 5 sec timeout to read the state file from the S3 bucket.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// 30 sec timeout to configure an AWS client (and assume a role if provided).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Load AWS config and assume the backend IAM role (using the AWS SDK).
@@ -84,8 +84,8 @@ func ReadTerraformBackendS3Internal(
 
 	bucket := GetBackendAttribute(backend, "bucket")
 
-	// 5 sec timeout to read the state file from the S3 bucket.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// 30 sec timeout to read the state file from the S3 bucket.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Get the object from S3.
