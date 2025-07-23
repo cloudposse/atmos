@@ -1,0 +1,979 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/charmbracelet/log"
+)
+
+func TestParseToolSpec(t *testing.T) {
+	installer := NewInstaller()
+
+	tests := []struct {
+		name      string
+		tool      string
+		wantOwner string
+		wantRepo  string
+		wantErr   bool
+	}{
+		{
+			name:      "full specification",
+			tool:      "suzuki-shunsuke/github-comment",
+			wantOwner: "suzuki-shunsuke",
+			wantRepo:  "github-comment",
+			wantErr:   false,
+		},
+		{
+			name:      "terraform tool name",
+			tool:      "terraform",
+			wantOwner: "hashicorp",
+			wantRepo:  "terraform",
+			wantErr:   false,
+		},
+		{
+			name:      "opentofu tool name",
+			tool:      "opentofu",
+			wantOwner: "opentofu",
+			wantRepo:  "opentofu",
+			wantErr:   false,
+		},
+		{
+			name:      "helm tool name",
+			tool:      "helm",
+			wantOwner: "helm",
+			wantRepo:  "helm",
+			wantErr:   false,
+		},
+		{
+			name:      "kubectl tool name",
+			tool:      "kubectl",
+			wantOwner: "kubernetes-sigs",
+			wantRepo:  "kubectl",
+			wantErr:   false,
+		},
+		{
+			name:      "helmfile tool name",
+			tool:      "helmfile",
+			wantOwner: "helmfile",
+			wantRepo:  "helmfile",
+			wantErr:   false,
+		},
+		{
+			name:      "unknown tool fallback",
+			tool:      "unknown-tool",
+			wantOwner: "hashicorp",
+			wantRepo:  "unknown-tool",
+			wantErr:   false,
+		},
+		{
+			name:    "invalid specification",
+			tool:    "invalid/spec/format",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			owner, repo, err := installer.parseToolSpec(tt.tool)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("parseToolSpec() expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("parseToolSpec() unexpected error: %v", err)
+				return
+			}
+
+			if owner != tt.wantOwner {
+				t.Errorf("parseToolSpec() owner = %v, want %v", owner, tt.wantOwner)
+			}
+
+			if repo != tt.wantRepo {
+				t.Errorf("parseToolSpec() repo = %v, want %v", repo, tt.wantRepo)
+			}
+		})
+	}
+}
+
+func TestLoadToolVersions(t *testing.T) {
+	installer := NewInstaller()
+
+	// Create a temporary .tool-versions file
+	content := `# CLI Tools
+terraform v1.5.0
+github-comment v6.3.4
+tflint v0.44.1
+helmfile v0.158.1`
+
+	tmpFile := filepath.Join(t.TempDir(), ".tool-versions")
+	err := os.WriteFile(tmpFile, []byte(content), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	toolVersions, err := installer.loadToolVersions(tmpFile)
+	if err != nil {
+		t.Fatalf("loadToolVersions() error: %v", err)
+	}
+
+	expected := map[string]string{
+		"terraform":      "v1.5.0",
+		"github-comment": "v6.3.4",
+		"tflint":         "v0.44.1",
+		"helmfile":       "v0.158.1",
+	}
+
+	if len(toolVersions.Tools) != len(expected) {
+		t.Errorf("loadToolVersions() got %d tools, want %d", len(toolVersions.Tools), len(expected))
+	}
+
+	for tool, version := range expected {
+		if got, exists := toolVersions.Tools[tool]; !exists {
+			t.Errorf("loadToolVersions() missing tool: %s", tool)
+		} else if got != version {
+			t.Errorf("loadToolVersions() tool %s version = %s, want %s", tool, got, version)
+		}
+	}
+}
+
+func TestLoadToolVersionsWithComments(t *testing.T) {
+	installer := NewInstaller()
+
+	// Create a temporary .tool-versions file with comments
+	content := `# CLI Tools
+terraform v1.5.0
+# This is a comment
+github-comment v6.3.4
+
+tflint v0.44.1
+helmfile v0.158.1`
+
+	tmpFile := filepath.Join(t.TempDir(), ".tool-versions")
+	err := os.WriteFile(tmpFile, []byte(content), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	toolVersions, err := installer.loadToolVersions(tmpFile)
+	if err != nil {
+		t.Fatalf("loadToolVersions() error: %v", err)
+	}
+
+	expected := map[string]string{
+		"terraform":      "v1.5.0",
+		"github-comment": "v6.3.4",
+		"tflint":         "v0.44.1",
+		"helmfile":       "v0.158.1",
+	}
+
+	if len(toolVersions.Tools) != len(expected) {
+		t.Errorf("loadToolVersions() got %d tools, want %d", len(toolVersions.Tools), len(expected))
+	}
+
+	for tool, version := range expected {
+		if got, exists := toolVersions.Tools[tool]; !exists {
+			t.Errorf("loadToolVersions() missing tool: %s", tool)
+		} else if got != version {
+			t.Errorf("loadToolVersions() tool %s version = %s, want %s", tool, got, version)
+		}
+	}
+}
+
+func TestBuildAssetURL(t *testing.T) {
+	installer := NewInstaller()
+
+	pkg := &Package{
+		RepoOwner: "suzuki-shunsuke",
+		RepoName:  "github-comment",
+		Asset:     "github-comment_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+	}
+
+	url, err := installer.buildAssetURL(pkg, "v6.3.4")
+	if err != nil {
+		t.Fatalf("buildAssetURL() error: %v", err)
+	}
+
+	expected := "https://github.com/suzuki-shunsuke/github-comment/releases/download/v6.3.4/github-comment_6.3.4_darwin_arm64.tar.gz"
+	if url != expected {
+		t.Errorf("buildAssetURL() = %v, want %v", url, expected)
+	}
+}
+
+func TestGetBinaryPath(t *testing.T) {
+	installer := NewInstaller()
+
+	path := installer.getBinaryPath("suzuki-shunsuke", "github-comment", "v6.3.4")
+	expected := filepath.Join(".", ".tools", "bin", "suzuki-shunsuke", "github-comment", "v6.3.4", "github-comment")
+
+	if path != expected {
+		t.Errorf("getBinaryPath() = %v, want %v", path, expected)
+	}
+}
+
+func TestFindPackage(t *testing.T) {
+	installer := NewInstaller()
+
+	// Test with known package
+	pkg, err := installer.findPackage("suzuki-shunsuke", "github-comment", "v6.3.4")
+	if err != nil {
+		t.Fatalf("findPackage() error: %v", err)
+	}
+
+	if pkg.RepoOwner != "suzuki-shunsuke" {
+		t.Errorf("findPackage() RepoOwner = %v, want suzuki-shunsuke", pkg.RepoOwner)
+	}
+
+	if pkg.RepoName != "github-comment" {
+		t.Errorf("findPackage() RepoName = %v, want github-comment", pkg.RepoName)
+	}
+
+	// Test with unknown package
+	_, err = installer.findPackage("unknown", "package", "v1.0.0")
+	if err == nil {
+		t.Error("findPackage() expected error for unknown package but got none")
+	}
+}
+
+func TestNewInstaller(t *testing.T) {
+	installer := NewInstaller()
+
+	if installer == nil {
+		t.Fatal("NewInstaller() returned nil")
+	}
+
+	if installer.binDir != "./.tools/bin" {
+		t.Errorf("NewInstaller() binDir = %v, want ./.tools/bin", installer.binDir)
+	}
+
+	if len(installer.registries) == 0 {
+		t.Error("NewInstaller() registries is empty")
+	}
+
+	// Check that default registries are set
+	foundRemote := false
+	foundLocal := false
+	for _, registry := range installer.registries {
+		if strings.HasPrefix(registry, "http") {
+			foundRemote = true
+		}
+		if registry == "./package-registry" {
+			foundLocal = true
+		}
+	}
+
+	if !foundRemote {
+		t.Error("NewInstaller() missing remote registry")
+	}
+
+	if !foundLocal {
+		t.Error("NewInstaller() missing local registry")
+	}
+}
+
+func TestResolveToolName(t *testing.T) {
+	installer := NewInstaller()
+
+	tests := []struct {
+		name      string
+		toolName  string
+		wantOwner string
+		wantRepo  string
+	}{
+		{
+			name:      "terraform mapping",
+			toolName:  "terraform",
+			wantOwner: "hashicorp",
+			wantRepo:  "terraform",
+		},
+		{
+			name:      "opentofu mapping",
+			toolName:  "opentofu",
+			wantOwner: "opentofu",
+			wantRepo:  "opentofu",
+		},
+		{
+			name:      "helm mapping",
+			toolName:  "helm",
+			wantOwner: "helm",
+			wantRepo:  "helm",
+		},
+		{
+			name:      "kubectl mapping",
+			toolName:  "kubectl",
+			wantOwner: "kubernetes-sigs",
+			wantRepo:  "kubectl",
+		},
+		{
+			name:      "helmfile mapping",
+			toolName:  "helmfile",
+			wantOwner: "helmfile",
+			wantRepo:  "helmfile",
+		},
+		{
+			name:      "tflint mapping",
+			toolName:  "tflint",
+			wantOwner: "terraform-linters",
+			wantRepo:  "tflint",
+		},
+		{
+			name:      "unknown tool fallback",
+			toolName:  "unknown-tool",
+			wantOwner: "hashicorp",
+			wantRepo:  "unknown-tool",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			owner, repo, err := installer.resolveToolName(tt.toolName)
+
+			if err != nil {
+				t.Errorf("resolveToolName() unexpected error: %v", err)
+				return
+			}
+
+			if owner != tt.wantOwner {
+				t.Errorf("resolveToolName() owner = %v, want %v", owner, tt.wantOwner)
+			}
+
+			if repo != tt.wantRepo {
+				t.Errorf("resolveToolName() repo = %v, want %v", repo, tt.wantRepo)
+			}
+		})
+	}
+}
+
+func TestSearchRegistryForTool(t *testing.T) {
+	installer := NewInstaller()
+
+	tests := []struct {
+		name       string
+		toolName   string
+		shouldFind bool
+	}{
+		{
+			name:       "existing tool - terraform",
+			toolName:   "terraform",
+			shouldFind: true,
+		},
+		{
+			name:       "existing tool - opentofu",
+			toolName:   "opentofu",
+			shouldFind: true,
+		},
+		{
+			name:       "non-existent tool",
+			toolName:   "nonexistent-tool-12345",
+			shouldFind: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			owner, repo, err := installer.searchRegistryForTool(tt.toolName)
+
+			if tt.shouldFind {
+				if err != nil {
+					t.Errorf("Expected to find tool but got error: %v", err)
+					return
+				}
+				if owner == "" || repo == "" {
+					t.Error("Expected owner and repo to be non-empty")
+				}
+			} else {
+				if err == nil {
+					t.Error("Expected error for non-existent tool but got none")
+				}
+			}
+		})
+	}
+}
+
+func TestSuppressLogger(t *testing.T) {
+	// Initialize logger if not already done
+	if Logger == nil {
+		InitLogger()
+	}
+
+	originalLevel := Logger.GetLevel()
+
+	// Test suppression
+	restore := SuppressLogger()
+
+	// Verify logger is suppressed
+	if Logger.GetLevel() != log.FatalLevel {
+		t.Error("Expected logger to be suppressed to FatalLevel")
+	}
+
+	// Test restoration
+	restore()
+
+	// Verify logger is restored
+	if Logger.GetLevel() != originalLevel {
+		t.Error("Expected logger to be restored to original level")
+	}
+}
+
+func TestUninstall(t *testing.T) {
+	installer := NewInstaller()
+
+	// Test uninstalling a non-existent package
+	err := installer.Uninstall("nonexistent", "package", "1.0.0")
+	if err == nil {
+		t.Error("Expected error when uninstalling non-existent package")
+	}
+
+	// Test uninstalling an existing package (if we had one installed)
+	// This would require setting up a test environment with actual binaries
+	// For now, we just test that the method exists and handles errors properly
+}
+
+func TestLocalConfigAliases(t *testing.T) {
+	// Create a temporary tools.yaml file with aliases
+	tempDir := t.TempDir()
+	toolsYamlPath := filepath.Join(tempDir, "tools.yaml")
+
+	content := `aliases:
+  terraform: hashicorp/terraform
+  opentofu: opentofu/opentofu
+  tflint: terraform-linters/tflint
+  helmfile: helmfile/helmfile
+
+tools:
+  hashicorp/terraform:
+    type: http
+    url: https://example.com/terraform.zip
+`
+
+	err := os.WriteFile(toolsYamlPath, []byte(content), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test tools.yaml file: %v", err)
+	}
+
+	// Create a local config manager and load the test file
+	lcm := NewLocalConfigManager()
+	err = lcm.Load(toolsYamlPath)
+	if err != nil {
+		t.Fatalf("Failed to load test tools.yaml: %v", err)
+	}
+
+	// Test alias resolution
+	testCases := []struct {
+		name        string
+		toolName    string
+		expected    string
+		shouldExist bool
+	}{
+		{
+			name:        "terraform alias",
+			toolName:    "terraform",
+			expected:    "hashicorp/terraform",
+			shouldExist: true,
+		},
+		{
+			name:        "opentofu alias",
+			toolName:    "opentofu",
+			expected:    "opentofu/opentofu",
+			shouldExist: true,
+		},
+		{
+			name:        "tflint alias",
+			toolName:    "tflint",
+			expected:    "terraform-linters/tflint",
+			shouldExist: true,
+		},
+		{
+			name:        "helmfile alias",
+			toolName:    "helmfile",
+			expected:    "helmfile/helmfile",
+			shouldExist: true,
+		},
+		{
+			name:        "non-existent alias",
+			toolName:    "nonexistent",
+			expected:    "",
+			shouldExist: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			alias, exists := lcm.ResolveAlias(tc.toolName)
+
+			if tc.shouldExist {
+				if !exists {
+					t.Errorf("Expected alias to exist for %s", tc.toolName)
+				}
+				if alias != tc.expected {
+					t.Errorf("Expected alias %s, got %s", tc.expected, alias)
+				}
+			} else {
+				if exists {
+					t.Errorf("Expected alias to not exist for %s", tc.toolName)
+				}
+			}
+		})
+	}
+}
+
+func TestPathCommand(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "toolchain-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Change to temp directory
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		toolVersions   string
+		setupTools     func() // Function to set up test tools
+		args           []string
+		expectedOutput string
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:          "missing .tool-versions file",
+			toolVersions:  "",
+			args:          []string{},
+			expectError:   true,
+			errorContains: "no .tool-versions file found",
+		},
+		{
+			name:         "empty .tool-versions file",
+			toolVersions: "",
+			setupTools: func() {
+				// Create empty .tool-versions file
+				err := os.WriteFile(".tool-versions", []byte(""), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create empty .tool-versions: %v", err)
+				}
+			},
+			args:          []string{},
+			expectError:   true,
+			errorContains: "no tools configured",
+		},
+		{
+			name:         "single tool not installed",
+			toolVersions: "terraform 1.5.0\n",
+			setupTools: func() {
+				// Create .tool-versions file
+				err := os.WriteFile(".tool-versions", []byte("terraform 1.5.0\n"), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create .tool-versions: %v", err)
+				}
+			},
+			args:          []string{},
+			expectError:   true,
+			errorContains: "no installed tools found",
+		},
+		{
+			name:         "multiple tools none installed",
+			toolVersions: "terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n",
+			setupTools: func() {
+				// Create .tool-versions file
+				err := os.WriteFile(".tool-versions", []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create .tool-versions: %v", err)
+				}
+			},
+			args:          []string{},
+			expectError:   true,
+			errorContains: "no installed tools found",
+		},
+		{
+			name:         "single tool installed",
+			toolVersions: "terraform 1.5.0\n",
+			setupTools: func() {
+				// Create .tool-versions file
+				err := os.WriteFile(".tool-versions", []byte("terraform 1.5.0\n"), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create .tool-versions: %v", err)
+				}
+
+				// Create mock installed tool
+				toolDir := filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0")
+				if err := os.MkdirAll(toolDir, 0755); err != nil {
+					t.Fatalf("Failed to create tool directory: %v", err)
+				}
+
+				// Create mock binary
+				binaryPath := filepath.Join(toolDir, "terraform")
+				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+					t.Fatalf("Failed to create mock binary: %v", err)
+				}
+			},
+			args: []string{},
+			expectedOutput: func() string {
+				absPath, _ := filepath.Abs(filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0"))
+				return absPath + ":" + os.Getenv("PATH")
+			}(),
+		},
+		{
+			name:         "multiple tools some installed",
+			toolVersions: "terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n",
+			setupTools: func() {
+				// Create .tool-versions file
+				err := os.WriteFile(".tool-versions", []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create .tool-versions: %v", err)
+				}
+
+				// Create mock installed terraform
+				terraformDir := filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0")
+				if err := os.MkdirAll(terraformDir, 0755); err != nil {
+					t.Fatalf("Failed to create terraform directory: %v", err)
+				}
+				terraformBinary := filepath.Join(terraformDir, "terraform")
+				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+					t.Fatalf("Failed to create terraform binary: %v", err)
+				}
+
+				// Create mock installed helm
+				helmDir := filepath.Join(".tools", "bin", "helm", "helm", "3.12.0")
+				if err := os.MkdirAll(helmDir, 0755); err != nil {
+					t.Fatalf("Failed to create helm directory: %v", err)
+				}
+				helmBinary := filepath.Join(helmDir, "helm")
+				if err := os.WriteFile(helmBinary, []byte("#!/bin/sh\necho helm"), 0755); err != nil {
+					t.Fatalf("Failed to create helm binary: %v", err)
+				}
+			},
+			args: []string{},
+			expectedOutput: func() string {
+				terraformPath, _ := filepath.Abs(filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0"))
+				helmPath, _ := filepath.Abs(filepath.Join(".tools", "bin", "helm", "helm", "3.12.0"))
+				paths := []string{terraformPath, helmPath}
+				sort.Strings(paths)
+				return strings.Join(paths, ":") + ":" + os.Getenv("PATH")
+			}(),
+		},
+		{
+			name:         "export flag",
+			toolVersions: "terraform 1.5.0\n",
+			setupTools: func() {
+				// Create .tool-versions file
+				err := os.WriteFile(".tool-versions", []byte("terraform 1.5.0\n"), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create .tool-versions: %v", err)
+				}
+
+				// Create mock installed tool
+				toolDir := filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0")
+				if err := os.MkdirAll(toolDir, 0755); err != nil {
+					t.Fatalf("Failed to create tool directory: %v", err)
+				}
+				binaryPath := filepath.Join(toolDir, "terraform")
+				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+					t.Fatalf("Failed to create mock binary: %v", err)
+				}
+			},
+			args: []string{"--export"},
+			expectedOutput: func() string {
+				absPath, _ := filepath.Abs(filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0"))
+				return "export PATH=\"" + absPath + ":" + os.Getenv("PATH") + "\""
+			}(),
+		},
+		{
+			name:         "json flag",
+			toolVersions: "terraform 1.5.0\nhelm 3.12.0\n",
+			setupTools: func() {
+				// Create .tool-versions file
+				err := os.WriteFile(".tool-versions", []byte("terraform 1.5.0\nhelm 3.12.0\n"), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create .tool-versions: %v", err)
+				}
+
+				// Create mock installed terraform
+				terraformDir := filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0")
+				if err := os.MkdirAll(terraformDir, 0755); err != nil {
+					t.Fatalf("Failed to create terraform directory: %v", err)
+				}
+				terraformBinary := filepath.Join(terraformDir, "terraform")
+				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+					t.Fatalf("Failed to create terraform binary: %v", err)
+				}
+
+				// Create mock installed helm
+				helmDir := filepath.Join(".tools", "bin", "helm", "helm", "3.12.0")
+				if err := os.MkdirAll(helmDir, 0755); err != nil {
+					t.Fatalf("Failed to create helm directory: %v", err)
+				}
+				helmBinary := filepath.Join(helmDir, "helm")
+				if err := os.WriteFile(helmBinary, []byte("#!/bin/sh\necho helm"), 0755); err != nil {
+					t.Fatalf("Failed to create helm binary: %v", err)
+				}
+			},
+			args: []string{"--json"},
+			expectedOutput: func() string {
+				terraformPath, _ := filepath.Abs(filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0"))
+				helmPath, _ := filepath.Abs(filepath.Join(".tools", "bin", "helm", "helm", "3.12.0"))
+				return fmt.Sprintf(`{
+  "tools": [
+    {
+      "tool": "helm",
+      "version": "3.12.0",
+      "path": "%s"
+    },
+    {
+      "tool": "terraform",
+      "version": "1.5.0",
+      "path": "%s"
+    }
+  ],
+  "final_path": "%s:%s:%s",
+  "count": 2
+}`, helmPath, terraformPath, terraformPath, helmPath, os.Getenv("PATH"))
+			}(),
+		},
+		{
+			name:         "unknown tool in .tool-versions",
+			toolVersions: "terraform 1.5.0\nunknown-tool 1.0.0\n",
+			setupTools: func() {
+				// Create .tool-versions file
+				err := os.WriteFile(".tool-versions", []byte("terraform 1.5.0\nunknown-tool 1.0.0\n"), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create .tool-versions: %v", err)
+				}
+
+				// Create mock installed terraform only
+				toolDir := filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0")
+				if err := os.MkdirAll(toolDir, 0755); err != nil {
+					t.Fatalf("Failed to create tool directory: %v", err)
+				}
+				binaryPath := filepath.Join(toolDir, "terraform")
+				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+					t.Fatalf("Failed to create mock binary: %v", err)
+				}
+			},
+			args: []string{},
+			expectedOutput: func() string {
+				absPath, _ := filepath.Abs(filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0"))
+				return absPath + ":" + os.Getenv("PATH")
+			}(),
+		},
+		{
+			name:         "tool with comments in .tool-versions",
+			toolVersions: "# This is a comment\nterraform 1.5.0\n# Another comment\n",
+			setupTools: func() {
+				// Create .tool-versions file with comments
+				err := os.WriteFile(".tool-versions", []byte("# This is a comment\nterraform 1.5.0\n# Another comment\n"), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create .tool-versions: %v", err)
+				}
+
+				// Create mock installed tool
+				toolDir := filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0")
+				if err := os.MkdirAll(toolDir, 0755); err != nil {
+					t.Fatalf("Failed to create tool directory: %v", err)
+				}
+				binaryPath := filepath.Join(toolDir, "terraform")
+				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+					t.Fatalf("Failed to create mock binary: %v", err)
+				}
+			},
+			args: []string{},
+			expectedOutput: func() string {
+				absPath, _ := filepath.Abs(filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.5.0"))
+				return absPath + ":" + os.Getenv("PATH")
+			}(),
+		},
+		{
+			name:         "malformed .tool-versions file",
+			toolVersions: "terraform\ninvalid line\n1.5.0\n",
+			setupTools: func() {
+				// Create malformed .tool-versions file
+				err := os.WriteFile(".tool-versions", []byte("terraform\ninvalid line\n1.5.0\n"), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create .tool-versions: %v", err)
+				}
+			},
+			args:          []string{},
+			expectError:   true,
+			errorContains: "no installed tools found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clean up from previous test
+			os.RemoveAll(".tool-versions")
+			os.RemoveAll(".tools")
+
+			// Set up test environment
+			if tt.setupTools != nil {
+				tt.setupTools()
+			}
+
+			// Capture output
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Create command and set flags
+			cmd := pathCmd
+			cmd.SetArgs(tt.args)
+
+			// Reset flags for each test
+			exportFlag = false
+			jsonFlag = false
+
+			// Parse flags
+			if len(tt.args) > 0 {
+				cmd.ParseFlags(tt.args)
+			}
+
+			// Execute command
+			err := cmd.Execute()
+
+			// Restore stdout
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Read output
+			var buf strings.Builder
+			_, err2 := io.Copy(&buf, r)
+			if err2 != nil {
+				t.Fatalf("Failed to read output: %v", err2)
+			}
+			output := strings.TrimSpace(buf.String())
+
+			// Check results
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+					return
+				}
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Error '%v' does not contain '%s'", err, tt.errorContains)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if output != tt.expectedOutput {
+					t.Errorf("Output mismatch:\nGot:  %s\nWant: %s", output, tt.expectedOutput)
+				}
+			}
+		})
+	}
+}
+
+func TestEmitJSONPath(t *testing.T) {
+	tests := []struct {
+		name      string
+		toolPaths []ToolPath
+		finalPath string
+		expected  string
+	}{
+		{
+			name:      "empty tool paths",
+			toolPaths: []ToolPath{},
+			finalPath: "/usr/local/bin:/usr/bin",
+			expected: `{
+  "tools": [
+  ],
+  "final_path": "/usr/local/bin:/usr/bin",
+  "count": 0
+}`,
+		},
+		{
+			name: "single tool path",
+			toolPaths: []ToolPath{
+				{Tool: "terraform", Version: "1.5.0", Path: "/path/to/terraform"},
+			},
+			finalPath: "/path/to/terraform:/usr/local/bin",
+			expected: `{
+  "tools": [
+    {
+      "tool": "terraform",
+      "version": "1.5.0",
+      "path": "/path/to/terraform"
+    }
+  ],
+  "final_path": "/path/to/terraform:/usr/local/bin",
+  "count": 1
+}`,
+		},
+		{
+			name: "multiple tool paths",
+			toolPaths: []ToolPath{
+				{Tool: "helm", Version: "3.12.0", Path: "/path/to/helm"},
+				{Tool: "terraform", Version: "1.5.0", Path: "/path/to/terraform"},
+			},
+			finalPath: "/path/to/terraform:/path/to/helm:/usr/local/bin",
+			expected: `{
+  "tools": [
+    {
+      "tool": "helm",
+      "version": "3.12.0",
+      "path": "/path/to/helm"
+    },
+    {
+      "tool": "terraform",
+      "version": "1.5.0",
+      "path": "/path/to/terraform"
+    }
+  ],
+  "final_path": "/path/to/terraform:/path/to/helm:/usr/local/bin",
+  "count": 2
+}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture output
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Execute function
+			err := emitJSONPath(tt.toolPaths, tt.finalPath)
+
+			// Restore stdout
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Read output
+			var buf strings.Builder
+			_, err2 := io.Copy(&buf, r)
+			if err2 != nil {
+				t.Fatalf("Failed to read output: %v", err2)
+			}
+			output := strings.TrimSpace(buf.String())
+
+			// Check results
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if output != tt.expected {
+				t.Errorf("Output mismatch:\nGot:  %s\nWant: %s", output, tt.expected)
+			}
+		})
+	}
+}
