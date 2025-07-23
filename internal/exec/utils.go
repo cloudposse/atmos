@@ -19,7 +19,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.).
+// `commonFlags` are a list of flags that atmos understands, but the underlying tools do not (e.g. terraform, helmfile, etc.).
 // These flags get removed from the arg list after atmos uses them so the underlying tool does not get passed a flag it doesn't accept.
 var commonFlags = []string{
 	"--stack",
@@ -60,7 +60,7 @@ var commonFlags = []string{
 	cfg.AllFlag,
 }
 
-// ProcessComponentConfig processes component config sections
+// ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -196,7 +196,7 @@ func ProcessComponentConfig(
 	return nil
 }
 
-// ProcessCommandLineArgs processes command-line args
+// ProcessCommandLineArgs processes command-line args.
 func ProcessCommandLineArgs(
 	componentType string,
 	cmd *cobra.Command,
@@ -280,7 +280,7 @@ func ProcessCommandLineArgs(
 	return configAndStacksInfo, nil
 }
 
-// FindStacksMap processes stack config and returns a map of all stacks
+// FindStacksMap processes stack config and returns a map of all stacks.
 func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
@@ -305,7 +305,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 	return stacksMap, rawStackConfigs, nil
 }
 
-// ProcessStacks processes stack config
+// ProcessStacks processes stack config.
 func ProcessStacks(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
@@ -682,7 +682,7 @@ func ProcessStacks(
 	return configAndStacksInfo, nil
 }
 
-// processArgsAndFlags processes args and flags from the provided CLI arguments/flags
+// processArgsAndFlags processes args and flags from the provided CLI arguments/flags.
 //
 // Deprecated: use Cobra command flag parser instead.
 // Post https://github.com/cloudposse/atmos/pull/1174 we can use the API provided by this PR for better handling of flags.
@@ -1196,7 +1196,7 @@ func processArgsAndFlags(
 	return info, nil
 }
 
-// generateComponentBackendConfig generates backend config for components
+// generateComponentBackendConfig generates backend config for components.
 func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string) (map[string]any, error) {
 	// Generate backend config file for Terraform Cloud
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
@@ -1239,14 +1239,14 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 	}, nil
 }
 
-// generateComponentProviderOverrides generates provider overrides for components
+// generateComponentProviderOverrides generates provider overrides for components.
 func generateComponentProviderOverrides(providerOverrides map[string]any) map[string]any {
 	return map[string]any{
 		"provider": providerOverrides,
 	}
 }
 
-// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defined in
+// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defined in.
 func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
 	var deps []string
 	var depsAll []string
@@ -1272,7 +1272,7 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 	return unique, uniqueAll, nil
 }
 
-// getCliVars returns a map of variables provided on the command-line
+// getCliVars returns a map of variables provided on the command-line.
 // atmos terraform apply template-functions-test -s tenant1-ue2-prod -var name=test2 -var stage=dev -var 'tags={"a":"value2", "Name":"test"}'
 func getCliVars(args []string) (map[string]any, error) {
 	variables := make(map[string]any)
@@ -1302,7 +1302,7 @@ func getCliVars(args []string) (map[string]any, error) {
 	return variables, nil
 }
 
-// postProcessTemplatesAndYamlFunctions restores Atmos sections after processing `Go` templates and custom YAML functions/tags
+// postProcessTemplatesAndYamlFunctions restores Atmos sections after processing `Go` templates and custom YAML functions/tags.
 func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
 		configAndStacksInfo.ComponentProvidersSection = i

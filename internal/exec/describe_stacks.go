@@ -62,7 +62,7 @@ func NewDescribeStacksExec() DescribeStacksExec {
 	}
 }
 
-// ExecuteDescribeStacksCmd executes `describe stacks` command.
+// Execute executes `describe stacks` command.
 func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
@@ -142,13 +142,16 @@ func ExecuteDescribeStacks(
 
 		// Check if the `components` section exists and has explicit components
 		hasExplicitComponents := false
-		if componentsSection, ok := stackSection.(map[string]any)["components"]; ok {
+		if componentsSection, ok := stackSection.(map[string]any)[cfg.ComponentsSectionName]; ok {
 			if componentsSection != nil {
-				if terraformSection, ok := componentsSection.(map[string]any)["terraform"].(map[string]any); ok {
+				if terraformSection, ok := componentsSection.(map[string]any)[cfg.TerraformSectionName].(map[string]any); ok {
 					hasExplicitComponents = len(terraformSection) > 0
 				}
-				if helmfileSection, ok := componentsSection.(map[string]any)["helmfile"].(map[string]any); ok {
+				if helmfileSection, ok := componentsSection.(map[string]any)[cfg.HelmfileSectionName].(map[string]any); ok {
 					hasExplicitComponents = hasExplicitComponents || len(helmfileSection) > 0
+				}
+				if packerSection, ok := componentsSection.(map[string]any)[cfg.PackerSectionName].(map[string]any); ok {
+					hasExplicitComponents = hasExplicitComponents || len(packerSection) > 0
 				}
 			}
 		}
