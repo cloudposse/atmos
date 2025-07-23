@@ -13,8 +13,8 @@ components:
           source_ami_description: "Amazon Linux 2023 AMI 2023.7.20250527.1 arm64 HVM kernel-6.12"
           source_ami_owner_account_id: "137112412989"
           region: "us-east-2"
-          org_id: "o-l1mg0gpzmg"
-          org_management_account_id: "423790052478"
+          org_id: "o-xxxxxxxx"
+          org_management_account_id: "xxxxxxxxxxxx"
       metadata:
         component: aws/bastion
       vars:
