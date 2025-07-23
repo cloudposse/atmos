@@ -341,7 +341,7 @@ func TestDescribeComponent_Packer(t *testing.T) {
 
 	val, err := u.EvaluateYqExpression(&atmosConfig, res, ".vars.ami_tags.SourceAMI")
 	assert.Nil(t, err)
-	assert.Equal(t, "ami-01892885c0cbc16de", val)
+	assert.Equal(t, "ami-0013ceeff668b979b", val)
 
 	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".stack")
 	assert.Nil(t, err)

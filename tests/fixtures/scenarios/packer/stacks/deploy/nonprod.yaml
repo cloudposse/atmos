@@ -14,6 +14,7 @@ components:
         instance_type: "t4g.micro"
         volume_size: 8
         skip_create_ami: true
-        assume_role_arn: "arn:aws:iam::NONPROD_ACCOUNT_ID:role/ROLE_NAME"
+        assume_role_arn: null
+        # assume_role_arn: "arn:aws:iam::NONPROD_ACCOUNT_ID:role/ROLE_NAME"
         ami_tags:
           Stage: nonprod
