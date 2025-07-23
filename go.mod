@@ -51,7 +51,7 @@ require (
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20250515145901-f4c50e64fd6d
 	github.com/hashicorp/terraform-exec v0.23.0
 	github.com/hexops/gotextdiff v1.0.3
-	github.com/jfrog/jfrog-client-go v1.54.2
+	github.com/jfrog/jfrog-client-go v1.54.3
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30

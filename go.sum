@@ -1355,8 +1355,8 @@ github.com/jfrog/build-info-go v1.10.14 h1:PWnw+rBwiQTHZ5q+84+E8MHFjtAQkB3+Oc2sK
 github.com/jfrog/build-info-go v1.10.14/go.mod h1:JcISnovFXKx3wWf3p1fcMmlPdt6adxScXvoJN4WXqIE=
 github.com/jfrog/gofrog v1.7.6 h1:QmfAiRzVyaI7JYGsB7cxfAJePAZTzFz0gRWZSE27c6s=
 github.com/jfrog/gofrog v1.7.6/go.mod h1:ntr1txqNOZtHplmaNd7rS4f8jpA5Apx8em70oYEe7+4=
-github.com/jfrog/jfrog-client-go v1.54.2 h1:z7GjCyIbV5Wx35USVDCF/0vf/fCWki++pZ7lcKt0gj0=
-github.com/jfrog/jfrog-client-go v1.54.2/go.mod h1:1v0eih4thdPA4clBo9TuvAMT25sGDr1IQJ81DXQ/lBY=
+github.com/jfrog/jfrog-client-go v1.54.3 h1:tIhhDhM7rDMT1lzgeQy4nr6H2ihlqnumhiFybIWlLz0=
+github.com/jfrog/jfrog-client-go v1.54.3/go.mod h1:1v0eih4thdPA4clBo9TuvAMT25sGDr1IQJ81DXQ/lBY=
 github.com/jinzhu/copier v0.4.0 h1:w3ciUoD19shMCRargcpm0cm91ytaBhDvuRpz1ODO/U8=
 github.com/jinzhu/copier v0.4.0/go.mod h1:DfbEm0FYsaqBcKcFuvmOZb218JkPGtvSHsKg8S8hyyg=
 github.com/jmespath/go-jmespath v0.3.0/go.mod h1:9QtRXoHjLGCJ5IBSaohpXITPlowMeeYCZ7fLUTSywik=
