@@ -322,6 +322,12 @@ func TestDescribeComponent_Packer(t *testing.T) {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
 
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
 	component := "aws/bastion"
 
 	res, err := ExecuteDescribeComponent(
@@ -333,7 +339,15 @@ func TestDescribeComponent_Packer(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	y, err := u.ConvertToYAML(res)
+	val, err := u.EvaluateYqExpression(&atmosConfig, res, ".vars.ami_tags.SourceAMI")
 	assert.Nil(t, err)
-	assert.Contains(t, y, "a: a-dev")
+	assert.Equal(t, "ami-01892885c0cbc16de", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".stack")
+	assert.Nil(t, err)
+	assert.Equal(t, "prod", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".vars.assume_role_arn")
+	assert.Nil(t, err)
+	assert.Equal(t, "arn:aws:iam::PROD_ACCOUNT_ID:role/ROLE_NAME", val)
 }
