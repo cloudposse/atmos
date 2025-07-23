@@ -19,7 +19,8 @@ components:
         region: us-east-2
         org_arn: "arn:aws:organizations::123456789012:organization/o-abcde12345"
         kms_key_arn: "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab"
-        ssh_username: "admin"
+        ssh_username: "ec2-user"
+        associate_public_ip_address: true
         volume_type: "gp3"
         encrypt_boot: true
         skip_create_ami: true

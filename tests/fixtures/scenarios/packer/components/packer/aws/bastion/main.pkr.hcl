@@ -106,6 +106,11 @@ variable "manifest_strip_path" {
   description = "Manifest strip path. Refer to https://developer.hashicorp.com/packer/docs/post-processors/manifest"
 }
 
+variable "associate_public_ip_address" {
+  type        = bool
+  description = "If this is `true`, the new instance will get a Public IP"
+}
+
 source "amazon-ebs" "al2023" {
   ami_name      = var.ami_name
   source_ami    = var.source_ami
@@ -115,6 +120,8 @@ source "amazon-ebs" "al2023" {
   ami_org_arns = [var.org_arn]
   kms_key_id    = var.kms_key_arn
   encrypt_boot  = var.encrypt_boot
+
+  associate_public_ip_address = var.associate_public_ip_address
 
   ami_block_device_mappings {
     device_name           = "/dev/xvda"
@@ -144,8 +151,8 @@ build {
       # Enable and start the SSM agent (already installed by default on AL2023)
       "sudo systemctl enable --now amazon-ssm-agent",
 
-      # Install MySQL client (via dnf), clean metadata and cloud-init
-      "sudo -E bash -c 'dnf install -y mysql && dnf clean all && cloud-init clean'"
+      # Install packages, clean metadata and cloud-init
+      "sudo -E bash -c 'dnf install -y jq && dnf clean all && cloud-init clean'"
     ]
   }
 
