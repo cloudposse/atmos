@@ -137,8 +137,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
-	varFile := constructTerraformComponentVarfileName(info)
-	planFile := constructTerraformComponentPlanfileName(info)
+	varFile := constructTerraformComponentVarfileName(&info)
+	planFile := constructTerraformComponentPlanfileName(&info)
 
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands.
@@ -168,7 +168,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			if len(varFileNameFromArg) > 0 {
 				varFilePath = varFileNameFromArg
 			} else {
-				varFilePath = constructTerraformComponentVarfilePath(&atmosConfig, info)
+				varFilePath = constructTerraformComponentVarfilePath(&atmosConfig, &info)
 			}
 
 			log.Debug("Writing the variables", "file", varFilePath)
@@ -228,7 +228,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Component working directory
-	workingDir := constructTerraformComponentWorkingDir(&atmosConfig, info)
+	workingDir := constructTerraformComponentWorkingDir(&atmosConfig, &info)
 
 	err = generateBackendConfig(&atmosConfig, &info, workingDir)
 	if err != nil {
@@ -542,12 +542,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Clean up
 	if info.SubCommand != "plan" && info.SubCommand != "show" && info.PlanFile == "" {
-		planFilePath := constructTerraformComponentPlanfilePath(&atmosConfig, info)
+		planFilePath := constructTerraformComponentPlanfilePath(&atmosConfig, &info)
 		_ = os.Remove(planFilePath)
 	}
 
 	if info.SubCommand == "apply" {
-		varFilePath := constructTerraformComponentVarfilePath(&atmosConfig, info)
+		varFilePath := constructTerraformComponentVarfilePath(&atmosConfig, &info)
 		_ = os.Remove(varFilePath)
 	}
 

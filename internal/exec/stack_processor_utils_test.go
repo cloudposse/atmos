@@ -477,6 +477,7 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 		stacksBasePath,
 		filepath.Join(basePath, "components", "terraform"),
 		filepath.Join(basePath, "components", "helmfile"),
+		filepath.Join(basePath, "components", "packer"),
 		"nonprod",
 		deepMergedStackConfig,
 		false,

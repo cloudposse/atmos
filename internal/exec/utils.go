@@ -638,13 +638,16 @@ func ProcessStacks(
 	componentInfo := map[string]any{}
 	componentInfo["component_type"] = configAndStacksInfo.ComponentType
 
-	if configAndStacksInfo.ComponentType == "terraform" {
-		componentPath := constructTerraformComponentWorkingDir(atmosConfig, configAndStacksInfo)
-		componentInfo["component_path"] = componentPath
+	switch configAndStacksInfo.ComponentType {
+	case cfg.TerraformComponentType:
+		componentPath := constructTerraformComponentWorkingDir(atmosConfig, &configAndStacksInfo)
+		componentInfo[cfg.ComponentPathSectionName] = componentPath
 		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
 		componentInfo["terraform_config"] = terraformConfiguration
-	} else if configAndStacksInfo.ComponentType == "helmfile" {
-		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(atmosConfig, configAndStacksInfo)
+	case cfg.HelmfileComponentType:
+		componentInfo[cfg.ComponentPathSectionName] = constructHelmfileComponentWorkingDir(atmosConfig, &configAndStacksInfo)
+	case cfg.PackerComponentType:
+		componentInfo[cfg.ComponentPathSectionName] = constructPackerComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 	}
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo

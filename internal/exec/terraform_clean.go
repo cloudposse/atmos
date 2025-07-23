@@ -374,8 +374,8 @@ func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema
 	if info.ComponentFromArg == "" {
 		return []string{".terraform", ".terraform.lock.hcl", "*.tfvar.json", "terraform.tfstate.d"}
 	}
-	varFile := constructTerraformComponentVarfileName(info)
-	planFile := constructTerraformComponentPlanfileName(info)
+	varFile := constructTerraformComponentVarfileName(&info)
+	planFile := constructTerraformComponentPlanfileName(&info)
 	files := []string{".terraform", varFile, planFile}
 
 	if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {

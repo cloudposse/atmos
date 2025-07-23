@@ -83,6 +83,7 @@ const (
 	BackendTypeAzurerm                = "azurerm"
 	BackendTypeGCS                    = "gcs"
 	BackendTypeCloud                  = "cloud"
+	ComponentPathSectionName          = "component_path"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"

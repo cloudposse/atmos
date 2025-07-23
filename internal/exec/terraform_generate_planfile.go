@@ -197,7 +197,7 @@ func resolvePlanfilePath(componentPath, format string, customFile string, info *
 			planFilePath = filepath.Join(componentPath, customFile)
 		}
 	} else {
-		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, *info), format)
+		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
 	}
 
 	err := u.EnsureDir(planFilePath)

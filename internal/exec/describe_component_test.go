@@ -288,3 +288,52 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "c: c")
 	assert.Contains(t, y, "d: d")
 }
+
+func TestDescribeComponent_Packer(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	}
+
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
+
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err = os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "../../tests/fixtures/scenarios/packer"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	component := "aws/bastion"
+
+	res, err := ExecuteDescribeComponent(
+		component,
+		"prod",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err := u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-dev")
+}
