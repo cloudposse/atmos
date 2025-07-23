@@ -12,7 +12,9 @@ components:
           source_ami_name: "al2023-ami-2023.7.20250527.1-kernel-6.12-arm64"
           source_ami_description: "Amazon Linux 2023 AMI 2023.7.20250527.1 arm64 HVM kernel-6.12"
           source_ami_owner_account_id: "137112412989"
-          region: us-east-2
+          region: "us-east-2"
+          org_id: "o-l1mg0gpzmg"
+          org_management_account_id: "423790052478"
       metadata:
         component: aws/bastion
       vars:
@@ -20,7 +22,7 @@ components:
         ami_name: "bastion-al2023-{{ now | unixEpoch }}"
         source_ami: "{{ .settings.ami.source_ami }}"
         region: "{{ .settings.ami.region }}"
-        org_arn: ""
+        org_arn: "arn:aws:organizations::{{ .settings.ami.org_management_account_id }}:organization/{{ .settings.ami.org_id }}"
         kms_key_arn: null
         encrypt_boot: false
         ssh_username: "ec2-user"
