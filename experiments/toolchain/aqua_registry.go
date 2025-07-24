@@ -12,6 +12,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -148,22 +149,35 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*P
 		RepoName:  pkgDef.RepoName,
 	}
 
-	// Find the appropriate version override
-	// For now, use the last override (usually the catch-all "true" constraint)
-	if len(pkgDef.VersionOverrides) > 0 {
-		override := pkgDef.VersionOverrides[len(pkgDef.VersionOverrides)-1]
-		pkg.Asset = override.Asset
-		// Store format for later use
+	// Find the appropriate version override using semver constraint
+	v, err := semver.NewVersion(version)
+	if err != nil {
+		return nil, fmt.Errorf("invalid version: %w", err)
+	}
+
+	selectedIdx := -1
+	for i, override := range pkgDef.VersionOverrides {
+		c, err := semver.NewConstraint(override.VersionConstraint)
+		if err != nil {
+			continue // skip invalid constraints
+		}
+		if c.Check(v) {
+			selectedIdx = i
+			break // use the first matching override
+		}
+	}
+
+	if selectedIdx != -1 {
+		override := pkgDef.VersionOverrides[selectedIdx]
+		if override.Asset != "" {
+			pkg.Asset = override.Asset
+		}
 		if override.Format != "" {
 			pkg.Format = override.Format
 		}
-		// Extract binary name from files section
 		if len(override.Files) > 0 {
 			pkg.Name = override.Files[0].Name
 		}
-	} else {
-		// Fallback to default template
-		pkg.Asset = "{{.RepoName}}_{{trimV .Version}}_{{.OS}}_{{.Arch}}.{{.Format}}"
 	}
 
 	return pkg, nil

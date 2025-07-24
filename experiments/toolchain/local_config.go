@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -118,22 +118,18 @@ func (lcm *LocalConfigManager) ResolveVersionConstraint(tool *LocalTool, version
 		return nil
 	}
 
-	// For now, use the first matching constraint
-	// TODO: Implement proper semver constraint evaluation
+	v, err := semver.NewVersion(version)
+	if err != nil {
+		return nil // Invalid version string
+	}
+
 	for _, constraint := range tool.VersionConstraints {
-		// Simple string matching for now
-		if strings.Contains(constraint.Constraint, ">=") {
-			// Extract version from constraint like ">= 1.10.0"
-			constraintVersion := strings.TrimSpace(strings.TrimPrefix(constraint.Constraint, ">="))
-			if version >= constraintVersion {
-				return &constraint
-			}
-		} else if strings.Contains(constraint.Constraint, "<") {
-			// Extract version from constraint like "< 1.10.0"
-			constraintVersion := strings.TrimSpace(strings.TrimPrefix(constraint.Constraint, "<"))
-			if version < constraintVersion {
-				return &constraint
-			}
+		c, err := semver.NewConstraint(constraint.Constraint)
+		if err != nil {
+			continue // Skip invalid constraints
+		}
+		if c.Check(v) {
+			return &constraint
 		}
 	}
 
@@ -143,4 +139,48 @@ func (lcm *LocalConfigManager) ResolveVersionConstraint(tool *LocalTool, version
 	}
 
 	return nil
+}
+
+// GetPackageWithVersion returns a Package for the given owner/repo and version, using local config (asdf-style versioned local tool lookup)
+func (lcm *LocalConfigManager) GetPackageWithVersion(owner, repo, version string) (*Package, error) {
+	tool, exists := lcm.GetTool(owner, repo)
+	if !exists {
+		return nil, fmt.Errorf("tool %s/%s not found in local config", owner, repo)
+	}
+
+	constraint := lcm.ResolveVersionConstraint(tool, version)
+
+	pkg := &Package{
+		Name:      repo,
+		Type:      tool.Type,
+		RepoOwner: tool.RepoOwner,
+		RepoName:  tool.RepoName,
+		Asset:     tool.Asset,
+		Format:    tool.Format,
+		Version:   version,
+	}
+
+	// Set binary name if specified
+	if tool.BinaryName != "" {
+		pkg.Name = tool.BinaryName
+	}
+
+	// Handle URL for http type
+	if tool.Type == "http" {
+		pkg.Asset = tool.URL
+	}
+
+	if constraint != nil {
+		if constraint.Asset != "" {
+			pkg.Asset = constraint.Asset
+		}
+		if constraint.Format != "" {
+			pkg.Format = constraint.Format
+		}
+		if constraint.BinaryName != "" {
+			pkg.Name = constraint.BinaryName
+		}
+	}
+
+	return pkg, nil
 }

@@ -5,6 +5,7 @@ go 1.23.0
 toolchain go1.24.0
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -12,6 +13,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.9
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.10.0
+	golang.org/x/term v0.31.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

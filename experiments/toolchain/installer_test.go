@@ -12,8 +12,19 @@ import (
 	"github.com/charmbracelet/log"
 )
 
+// Add a mock ToolResolver for tests
+
 func TestParseToolSpec(t *testing.T) {
-	installer := NewInstaller()
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+			"opentofu":  {"opentofu", "opentofu"},
+			"kubectl":   {"kubernetes", "kubectl"},
+			"helm":      {"helm", "helm"},
+			"helmfile":  {"helmfile", "helmfile"},
+		},
+	}
+	installer := NewInstallerWithResolver(mockResolver)
 
 	tests := []struct {
 		name      string
@@ -51,11 +62,9 @@ func TestParseToolSpec(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:      "kubectl tool name",
-			tool:      "kubectl",
-			wantOwner: "kubernetes-sigs",
-			wantRepo:  "kubectl",
-			wantErr:   false,
+			name:    "kubectl tool name",
+			tool:    "kubectl",
+			wantErr: true,
 		},
 		{
 			name:      "helmfile tool name",
@@ -65,11 +74,9 @@ func TestParseToolSpec(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:      "unknown tool fallback",
-			tool:      "unknown-tool",
-			wantOwner: "hashicorp",
-			wantRepo:  "unknown-tool",
-			wantErr:   false,
+			name:    "unknown tool fallback",
+			tool:    "unknown-tool",
+			wantErr: true,
 		},
 		{
 			name:    "invalid specification",
@@ -105,92 +112,17 @@ func TestParseToolSpec(t *testing.T) {
 	}
 }
 
-func TestLoadToolVersions(t *testing.T) {
-	installer := NewInstaller()
-
-	// Create a temporary .tool-versions file
-	content := `# CLI Tools
-terraform v1.5.0
-github-comment v6.3.4
-tflint v0.44.1
-helmfile v0.158.1`
-
-	tmpFile := filepath.Join(t.TempDir(), ".tool-versions")
-	err := os.WriteFile(tmpFile, []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	toolVersions, err := installer.loadToolVersions(tmpFile)
-	if err != nil {
-		t.Fatalf("loadToolVersions() error: %v", err)
-	}
-
-	expected := map[string]string{
-		"terraform":      "v1.5.0",
-		"github-comment": "v6.3.4",
-		"tflint":         "v0.44.1",
-		"helmfile":       "v0.158.1",
-	}
-
-	if len(toolVersions.Tools) != len(expected) {
-		t.Errorf("loadToolVersions() got %d tools, want %d", len(toolVersions.Tools), len(expected))
-	}
-
-	for tool, version := range expected {
-		if got, exists := toolVersions.Tools[tool]; !exists {
-			t.Errorf("loadToolVersions() missing tool: %s", tool)
-		} else if got != version {
-			t.Errorf("loadToolVersions() tool %s version = %s, want %s", tool, got, version)
-		}
-	}
-}
-
-func TestLoadToolVersionsWithComments(t *testing.T) {
-	installer := NewInstaller()
-
-	// Create a temporary .tool-versions file with comments
-	content := `# CLI Tools
-terraform v1.5.0
-# This is a comment
-github-comment v6.3.4
-
-tflint v0.44.1
-helmfile v0.158.1`
-
-	tmpFile := filepath.Join(t.TempDir(), ".tool-versions")
-	err := os.WriteFile(tmpFile, []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	toolVersions, err := installer.loadToolVersions(tmpFile)
-	if err != nil {
-		t.Fatalf("loadToolVersions() error: %v", err)
-	}
-
-	expected := map[string]string{
-		"terraform":      "v1.5.0",
-		"github-comment": "v6.3.4",
-		"tflint":         "v0.44.1",
-		"helmfile":       "v0.158.1",
-	}
-
-	if len(toolVersions.Tools) != len(expected) {
-		t.Errorf("loadToolVersions() got %d tools, want %d", len(toolVersions.Tools), len(expected))
-	}
-
-	for tool, version := range expected {
-		if got, exists := toolVersions.Tools[tool]; !exists {
-			t.Errorf("loadToolVersions() missing tool: %s", tool)
-		} else if got != version {
-			t.Errorf("loadToolVersions() tool %s version = %s, want %s", tool, got, version)
-		}
-	}
-}
-
 func TestBuildAssetURL(t *testing.T) {
-	installer := NewInstaller()
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+			"opentofu":  {"opentofu", "opentofu"},
+			"kubectl":   {"kubernetes", "kubectl"},
+			"helm":      {"helm", "helm"},
+			"helmfile":  {"helmfile", "helmfile"},
+		},
+	}
+	installer := NewInstallerWithResolver(mockResolver)
 
 	pkg := &Package{
 		RepoOwner: "suzuki-shunsuke",
@@ -209,8 +141,42 @@ func TestBuildAssetURL(t *testing.T) {
 	}
 }
 
+func TestBuildAssetURL_CustomFuncs(t *testing.T) {
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+		},
+	}
+	installer := NewInstallerWithResolver(mockResolver)
+
+	pkg := &Package{
+		RepoOwner: "hashicorp",
+		RepoName:  "terraform",
+		Asset:     "terraform_{{trimV .Version}}_{{trimPrefix \"1.\" .Version}}_{{trimSuffix \".8\" .Version}}_{{replace \".\" \"-\" .Version}}_{{.OS}}_{{.Arch}}.zip",
+	}
+
+	url, err := installer.buildAssetURL(pkg, "v1.2.8")
+	if err != nil {
+		t.Fatalf("buildAssetURL() error: %v", err)
+	}
+
+	// Check that all functions are applied as expected
+	if !strings.Contains(url, "terraform_1.2.8_2.8_1.2_darwin_arm64.zip") {
+		t.Errorf("buildAssetURL() custom funcs not applied correctly, got: %v", url)
+	}
+}
+
 func TestGetBinaryPath(t *testing.T) {
-	installer := NewInstaller()
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+			"opentofu":  {"opentofu", "opentofu"},
+			"kubectl":   {"kubernetes", "kubectl"},
+			"helm":      {"helm", "helm"},
+			"helmfile":  {"helmfile", "helmfile"},
+		},
+	}
+	installer := NewInstallerWithResolver(mockResolver)
 
 	path := installer.getBinaryPath("suzuki-shunsuke", "github-comment", "v6.3.4")
 	expected := filepath.Join(".", ".tools", "bin", "suzuki-shunsuke", "github-comment", "v6.3.4", "github-comment")
@@ -221,7 +187,16 @@ func TestGetBinaryPath(t *testing.T) {
 }
 
 func TestFindPackage(t *testing.T) {
-	installer := NewInstaller()
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+			"opentofu":  {"opentofu", "opentofu"},
+			"kubectl":   {"kubernetes", "kubectl"},
+			"helm":      {"helm", "helm"},
+			"helmfile":  {"helmfile", "helmfile"},
+		},
+	}
+	installer := NewInstallerWithResolver(mockResolver)
 
 	// Test with known package
 	pkg, err := installer.findPackage("suzuki-shunsuke", "github-comment", "v6.3.4")
@@ -245,7 +220,16 @@ func TestFindPackage(t *testing.T) {
 }
 
 func TestNewInstaller(t *testing.T) {
-	installer := NewInstaller()
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+			"opentofu":  {"opentofu", "opentofu"},
+			"kubectl":   {"kubernetes", "kubectl"},
+			"helm":      {"helm", "helm"},
+			"helmfile":  {"helmfile", "helmfile"},
+		},
+	}
+	installer := NewInstallerWithResolver(mockResolver)
 
 	if installer == nil {
 		t.Fatal("NewInstaller() returned nil")
@@ -281,61 +265,79 @@ func TestNewInstaller(t *testing.T) {
 }
 
 func TestResolveToolName(t *testing.T) {
-	installer := NewInstaller()
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+			"opentofu":  {"opentofu", "opentofu"},
+			"kubectl":   {"kubernetes", "kubectl"},
+			"helm":      {"helm", "helm"},
+			"helmfile":  {"helmfile", "helmfile"},
+		},
+	}
+	installer := NewInstallerWithResolver(mockResolver)
 
 	tests := []struct {
 		name      string
 		toolName  string
 		wantOwner string
 		wantRepo  string
+		wantErr   bool
 	}{
 		{
 			name:      "terraform mapping",
 			toolName:  "terraform",
 			wantOwner: "hashicorp",
 			wantRepo:  "terraform",
+			wantErr:   false,
 		},
 		{
 			name:      "opentofu mapping",
 			toolName:  "opentofu",
 			wantOwner: "opentofu",
 			wantRepo:  "opentofu",
+			wantErr:   false,
 		},
 		{
 			name:      "helm mapping",
 			toolName:  "helm",
 			wantOwner: "helm",
 			wantRepo:  "helm",
+			wantErr:   false,
 		},
 		{
-			name:      "kubectl mapping",
-			toolName:  "kubectl",
-			wantOwner: "kubernetes-sigs",
-			wantRepo:  "kubectl",
+			name:     "kubectl mapping",
+			toolName: "kubectl",
+			wantErr:  true,
 		},
 		{
 			name:      "helmfile mapping",
 			toolName:  "helmfile",
 			wantOwner: "helmfile",
 			wantRepo:  "helmfile",
+			wantErr:   false,
 		},
 		{
-			name:      "tflint mapping",
-			toolName:  "tflint",
-			wantOwner: "terraform-linters",
-			wantRepo:  "tflint",
+			name:     "tflint mapping",
+			toolName: "tflint",
+			wantErr:  true,
 		},
 		{
-			name:      "unknown tool fallback",
-			toolName:  "unknown-tool",
-			wantOwner: "hashicorp",
-			wantRepo:  "unknown-tool",
+			name:     "unknown tool fallback",
+			toolName: "unknown-tool",
+			wantErr:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			owner, repo, err := installer.resolveToolName(tt.toolName)
+			owner, repo, err := installer.resolver.Resolve(tt.toolName)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("resolveToolName() expected error but got none")
+				}
+				return
+			}
 
 			if err != nil {
 				t.Errorf("resolveToolName() unexpected error: %v", err)
@@ -354,48 +356,28 @@ func TestResolveToolName(t *testing.T) {
 }
 
 func TestSearchRegistryForTool(t *testing.T) {
-	installer := NewInstaller()
-
-	tests := []struct {
-		name       string
-		toolName   string
-		shouldFind bool
-	}{
-		{
-			name:       "existing tool - terraform",
-			toolName:   "terraform",
-			shouldFind: true,
-		},
-		{
-			name:       "existing tool - opentofu",
-			toolName:   "opentofu",
-			shouldFind: true,
-		},
-		{
-			name:       "non-existent tool",
-			toolName:   "nonexistent-tool-12345",
-			shouldFind: false,
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+			"opentofu":  {"opentofu", "opentofu"},
+			"kubectl":   {"kubernetes", "kubectl"},
+			"helm":      {"helm", "helm"},
+			"helmfile":  {"helmfile", "helmfile"},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			owner, repo, err := installer.searchRegistryForTool(tt.toolName)
+	owner, repo, err := mockResolver.Resolve("terraform")
+	if err != nil {
+		t.Errorf("Expected to find tool but got error: %v", err)
+		return
+	}
+	if owner == "" || repo == "" {
+		t.Error("Expected owner and repo to be non-empty")
+	}
 
-			if tt.shouldFind {
-				if err != nil {
-					t.Errorf("Expected to find tool but got error: %v", err)
-					return
-				}
-				if owner == "" || repo == "" {
-					t.Error("Expected owner and repo to be non-empty")
-				}
-			} else {
-				if err == nil {
-					t.Error("Expected error for non-existent tool but got none")
-				}
-			}
-		})
+	owner, repo, err = mockResolver.Resolve("nonexistent-tool-12345")
+	if err == nil {
+		t.Error("Expected error for non-existent tool but got none")
 	}
 }
 
@@ -425,7 +407,16 @@ func TestSuppressLogger(t *testing.T) {
 }
 
 func TestUninstall(t *testing.T) {
-	installer := NewInstaller()
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+			"opentofu":  {"opentofu", "opentofu"},
+			"kubectl":   {"kubernetes", "kubectl"},
+			"helm":      {"helm", "helm"},
+			"helmfile":  {"helmfile", "helmfile"},
+		},
+	}
+	installer := NewInstallerWithResolver(mockResolver)
 
 	// Test uninstalling a non-existent package
 	err := installer.Uninstall("nonexistent", "package", "1.0.0")

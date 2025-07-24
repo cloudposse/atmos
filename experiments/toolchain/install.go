@@ -9,7 +9,17 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
+
+func printProgressBar(stderr *os.File, isTTY bool, line string) {
+	if isTTY {
+		fmt.Fprintf(stderr, "\r\033[K%s", line)
+	} else {
+		fmt.Fprintln(stderr, line)
+	}
+	stderr.Sync()
+}
 
 var installCmd = &cobra.Command{
 	Use:   "install [package]",
@@ -25,14 +35,35 @@ Examples:
 	RunE: runInstall,
 }
 
+func init() {
+	installCmd.Flags().Bool("default", false, "Set installed version as default (front of .tool-versions)")
+}
+
 func runInstall(cmd *cobra.Command, args []string) error {
 	// If no arguments, install from .tool-versions
 	if len(args) == 0 {
 		return installFromToolVersions(".tool-versions")
 	}
 
+	setDefault, _ := cmd.Flags().GetBool("default")
+
 	packageSpec := args[0]
 	parts := strings.Split(packageSpec, "@")
+	if len(parts) == 1 {
+		// Try to look up version in .tool-versions or fallback to alias/latest
+		tool := parts[0]
+		toolVersions, err := LoadToolVersions(".tool-versions")
+		if err != nil {
+			return fmt.Errorf("invalid package specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", packageSpec, err)
+		}
+		installer := NewInstaller()
+		resolvedKey, version, found, usedLatest := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
+		if !found && !usedLatest {
+			return fmt.Errorf("invalid package specification: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions or as an alias", packageSpec)
+		}
+		packageSpec = resolvedKey + "@" + version
+		parts = strings.Split(packageSpec, "@")
+	}
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid package specification: %s. Expected format: owner/repo@version or tool@version", packageSpec)
 	}
@@ -59,94 +90,117 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		isLatest = true
 	}
 
-	return installSinglePackage(owner, repo, version, isLatest)
+	err = InstallSinglePackage(owner, repo, version, isLatest, true)
+	if err != nil {
+		return err
+	}
+
+	// Update .tool-versions: add version, set as default if requested
+	toolVersions, err := LoadToolVersions(".tool-versions")
+	if err != nil {
+		toolVersions = &ToolVersions{Tools: make(map[string][]string)}
+	}
+	AddVersionToTool(toolVersions, repoPath, version, setDefault)
+	if err := SaveToolVersions(".tool-versions", toolVersions); err != nil {
+		return fmt.Errorf("failed to update .tool-versions: %w", err)
+	}
+
+	return nil
 }
 
-func installSinglePackage(owner, repo, version string, isLatest bool) error {
-	// Suppress logger immediately to prevent interference with progress bar
+func InstallSinglePackage(owner, repo, version string, isLatest bool, showProgressBar bool) error {
 	restoreLogger := SuppressLogger()
 	defer restoreLogger()
 
-	spinner := bspinner.New()
-	progressBar := progress.New(progress.WithDefaultGradient())
-	percent := 0.0
-	phase := "Installing"
-
-	// Start spinner
-	spinner.Tick()
-	fmt.Fprint(os.Stderr, "\n")
-
-	// Create installer and perform real installation
 	installer := NewInstaller()
 
-	// Show progress for registry lookup
-	percent = 0.1
-	phase = "Looking up package"
-	bar := progressBar.ViewAs(percent)
-	fmt.Fprintf(os.Stderr, "\r%s %s %s %3.0f%%", spinner.View(), phase, bar, percent*100)
-	os.Stderr.Sync()
-	spinner.Tick()
-	time.Sleep(200 * time.Millisecond)
+	if showProgressBar {
+		spinner := bspinner.New()
+		progressBar := progress.New(progress.WithDefaultGradient())
+		phases := []struct {
+			phase   string
+			percent float64
+		}{
+			{"Looking up package", 0.1},
+			{"Downloading", 0.3},
+			{"Extracting", 0.7},
+			{"Complete", 1.0},
+		}
 
-	// Show progress for downloading
-	percent = 0.3
-	phase = "Downloading"
-	bar = progressBar.ViewAs(percent)
-	fmt.Fprintf(os.Stderr, "\r%s %s %s %3.0f%%", spinner.View(), phase, bar, percent*100)
-	os.Stderr.Sync()
-	spinner.Tick()
-	time.Sleep(200 * time.Millisecond)
+		fmt.Fprint(os.Stderr, "\n")
+
+		// Phase 1: Looking up package
+		bar := progressBar.ViewAs(phases[0].percent)
+		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
+		spinner.Tick()
+		time.Sleep(200 * time.Millisecond)
+
+		// Phase 2: Downloading
+		bar = progressBar.ViewAs(phases[1].percent)
+		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
+		spinner.Tick()
+		time.Sleep(200 * time.Millisecond)
+	}
 
 	// Perform installation
 	binaryPath, err := installer.Install(owner, repo, version)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "\r%s Failed to install %s/%s@%s: %v%s\n", xMark.Render(), owner, repo, version, err, strings.Repeat(" ", 50))
+		if showProgressBar {
+			fmt.Fprintf(os.Stderr, "\r%s Failed to install %s/%s@%s: %v\n", xMark.Render(), owner, repo, version, err)
+		}
 		return err
 	}
 
 	// Create latest file if this is a latest installation
 	if isLatest {
 		if err := installer.createLatestFile(owner, repo, version); err != nil {
-			fmt.Fprintf(os.Stderr, "\r%s Failed to create latest file for %s/%s: %v%s\n", xMark.Render(), owner, repo, err, strings.Repeat(" ", 50))
+			if showProgressBar {
+				fmt.Fprintf(os.Stderr, "\r%s Failed to create latest file for %s/%s: %v\n", xMark.Render(), owner, repo, err)
+			}
 			// Don't fail the installation, just warn
 		}
 	}
 
-	// Show progress for extracting
-	percent = 0.7
-	phase = "Extracting"
-	bar = progressBar.ViewAs(percent)
-	fmt.Fprintf(os.Stderr, "\r%s %s %s %3.0f%%", spinner.View(), phase, bar, percent*100)
-	os.Stderr.Sync()
-	spinner.Tick()
-	time.Sleep(200 * time.Millisecond)
+	if showProgressBar {
+		// Phase 3: Extracting
+		progressBar := progress.New(progress.WithDefaultGradient())
+		spinner := bspinner.New()
+		bar := progressBar.ViewAs(0.7)
+		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Extracting %s %3.0f%%", spinner.View(), bar, 70.0))
+		spinner.Tick()
+		time.Sleep(200 * time.Millisecond)
 
-	// Show completion
-	percent = 1.0
-	phase = "Complete"
-	bar = progressBar.ViewAs(percent)
-	fmt.Fprintf(os.Stderr, "\r%s %s %s %3.0f%%", spinner.View(), phase, bar, percent*100)
-	os.Stderr.Sync()
-	time.Sleep(500 * time.Millisecond)
+		// Phase 4: Complete
+		bar = progressBar.ViewAs(1.0)
+		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Complete %s %3.0f%%", spinner.View(), bar, 100.0))
+		time.Sleep(500 * time.Millisecond)
 
-	fmt.Fprintf(os.Stderr, "\r%s Installed %s/%s@%s to %s%s\n", checkMark.Render(), owner, repo, version, binaryPath, strings.Repeat(" ", 50))
+		// Clear the line before printing the summary
+		if term.IsTerminal(int(os.Stderr.Fd())) {
+			fmt.Fprint(os.Stderr, "\r\033[K")
+		}
+		fmt.Fprintf(os.Stderr, "%s Installed %s/%s@%s to %s\n", checkMark.Render(), owner, repo, version, binaryPath)
+	}
+
+	// Register in .tool-versions
+	if err := AddToolToVersions(".tool-versions", repo, version); err == nil && showProgressBar {
+		fmt.Fprintf(os.Stderr, "%s Registered %s %s in .tool-versions\n", checkMark.Render(), repo, version)
+	}
+
 	return nil
 }
 
 func installFromToolVersions(toolVersionsPath string) error {
-	// Suppress logger immediately to prevent interference with progress bar
 	restoreLogger := SuppressLogger()
 	defer restoreLogger()
 
 	installer := NewInstaller()
 
-	// Load tool versions
-	toolVersions, err := installer.loadToolVersions(toolVersionsPath)
+	toolVersions, err := LoadToolVersions(toolVersionsPath)
 	if err != nil {
 		return fmt.Errorf("failed to load .tool-versions: %w", err)
 	}
 
-	// Count total packages for progress tracking
 	totalPackages := len(toolVersions.Tools)
 	if totalPackages == 0 {
 		fmt.Fprintf(os.Stderr, "No packages found in %s\n", toolVersionsPath)
@@ -156,73 +210,68 @@ func installFromToolVersions(toolVersionsPath string) error {
 	spinner := bspinner.New()
 	progressBar := progress.New(progress.WithDefaultGradient())
 
-	// Start spinner
-	spinner.Tick()
 	fmt.Fprint(os.Stderr, "\n")
 
 	installedCount := 0
 	failedCount := 0
 
-	for tool, version := range toolVersions.Tools {
-		// Parse tool specification (owner/repo@version or just repo@version)
+	toolList := make([]struct {
+		tool    string
+		version string
+		owner   string
+		repo    string
+	}, 0, totalPackages)
+	for tool, versions := range toolVersions.Tools {
 		owner, repo, err := installer.parseToolSpec(tool)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\r⚠️  Skipping invalid tool specification: %s%s\n", tool, strings.Repeat(" ", 20))
 			continue
 		}
-
-		// Handle "latest" keyword
-		if version == "latest" {
-			registry := NewAquaRegistry()
-			latestVersion, err := registry.GetLatestVersion(owner, repo)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "\r%s Failed to get latest version for %s/%s: %v%s\n", xMark.Render(), owner, repo, err, strings.Repeat(" ", 50))
-				failedCount++
-				continue
-			}
-			fmt.Fprintf(os.Stderr, "\r📦 Using latest version for %s/%s: %s%s\n", owner, repo, latestVersion, strings.Repeat(" ", 20))
-			version = latestVersion
-		}
-
-		// Show progress for current package
-		percent := float64(installedCount) / float64(totalPackages)
-		phase := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
-		bar := progressBar.ViewAs(percent)
-		fmt.Fprintf(os.Stderr, "\r%s %s %s %3.0f%%", spinner.View(), phase, bar, percent*100)
-		os.Stderr.Sync()
-		spinner.Tick()
-		time.Sleep(100 * time.Millisecond)
-
-		// Install the package
-		_, err = installer.Install(owner, repo, version)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "\r%s Failed to install %s/%s@%s: %v%s\n", xMark.Render(), owner, repo, version, err, strings.Repeat(" ", 50))
-			failedCount++
-		} else {
-			// Create latest file if the original version was "latest"
-			if toolVersions.Tools[tool] == "latest" {
-				if err := installer.createLatestFile(owner, repo, version); err != nil {
-					fmt.Fprintf(os.Stderr, "\r%s Failed to create latest file for %s/%s: %v%s\n", xMark.Render(), owner, repo, err, strings.Repeat(" ", 50))
-					// Don't fail the installation, just warn
-				}
-			}
-			installedCount++
+		for _, version := range versions {
+			toolList = append(toolList, struct {
+				tool    string
+				version string
+				owner   string
+				repo    string
+			}{tool, version, owner, repo})
 		}
 	}
 
-	// Show final completion
+	for i, pkg := range toolList {
+		version := pkg.version
+		if version == "latest" {
+			registry := NewAquaRegistry()
+			latestVersion, err := registry.GetLatestVersion(pkg.owner, pkg.repo)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "\r%s Failed to get latest version for %s/%s: %v\n", xMark.Render(), pkg.owner, pkg.repo, err)
+				failedCount++
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "\r📦 Using latest version for %s/%s: %s\n", pkg.owner, pkg.repo, latestVersion)
+			version = latestVersion
+		}
+
+		percent := float64(i) / float64(totalPackages)
+		bar := progressBar.ViewAs(percent)
+		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installing %s@%s %s %d/%d", spinner.View(), pkg.tool, version, bar, i+1, totalPackages))
+		spinner.Tick()
+		time.Sleep(100 * time.Millisecond)
+
+		_ = InstallSinglePackage(pkg.owner, pkg.repo, version, pkg.version == "latest", false)
+	}
+
 	percent := 1.0
-	phase := "Complete"
 	bar := progressBar.ViewAs(percent)
-	fmt.Fprintf(os.Stderr, "\r%s %s %s %3.0f%%", spinner.View(), phase, bar, percent*100)
-	os.Stderr.Sync()
+	printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Complete %s %d/%d", spinner.View(), bar, totalPackages, totalPackages))
 	time.Sleep(500 * time.Millisecond)
 
-	// Show summary
+	// Clear the line before printing the summary
+	if term.IsTerminal(int(os.Stderr.Fd())) {
+		fmt.Fprint(os.Stderr, "\r\033[K")
+	}
 	if failedCount == 0 {
-		fmt.Fprintf(os.Stderr, "\r%s Successfully installed %d packages%s\n", checkMark.Render(), installedCount, strings.Repeat(" ", 50))
+		fmt.Fprintf(os.Stderr, "%s Successfully installed %d packages\n", checkMark.Render(), installedCount)
 	} else {
-		fmt.Fprintf(os.Stderr, "\r⚠️  Installed %d packages, %d failed%s\n", installedCount, failedCount, strings.Repeat(" ", 50))
+		fmt.Fprintf(os.Stderr, "\r⚠️  Installed %d packages, %d failed\n", installedCount, failedCount)
 	}
 
 	return nil

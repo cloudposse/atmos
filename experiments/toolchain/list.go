@@ -17,10 +17,8 @@ var listCmd = &cobra.Command{
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	installer := NewInstaller()
-
 	// Read .tool-versions file
-	toolVersions, err := installer.loadToolVersions(".tool-versions")
+	toolVersions, err := LoadToolVersions(".tool-versions")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("no .tool-versions file found in current directory")
@@ -29,7 +27,8 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(toolVersions.Tools) == 0 {
-		return fmt.Errorf("no tools configured in .tool-versions file")
+		fmt.Println("No tools installed.")
+		return nil
 	}
 
 	// Print header
@@ -37,9 +36,18 @@ func runList(cmd *cobra.Command, args []string) error {
 	fmt.Println(strings.Repeat("-", 70))
 
 	// Check each tool in .tool-versions to see if it's installed
-	for toolName, version := range toolVersions.Tools {
+	for toolName, versions := range toolVersions.Tools {
+		if len(versions) == 0 {
+			continue
+		}
+		version := versions[0] // default version
+		installer := NewInstaller()
+		_, _, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
+		if !found {
+			continue // skip if not found (shouldn't happen)
+		}
 		// Resolve tool name to owner/repo
-		owner, repo, err := installer.resolveToolName(toolName)
+		owner, repo, err := installer.resolver.Resolve(toolName)
 		if err != nil {
 			// Skip tools that can't be resolved
 			continue
