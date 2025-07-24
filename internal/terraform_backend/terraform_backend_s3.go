@@ -49,7 +49,7 @@ type S3API interface {
 // ReadTerraformBackendS3 reads the Terraform state file from the configured S3 backend.
 // If the state file does not exist in the bucket, the function returns `nil`.
 func ReadTerraformBackendS3(
-	atmosConfig *schema.AtmosConfiguration,
+	_ *schema.AtmosConfiguration,
 	componentSections *map[string]any,
 ) ([]byte, error) {
 	backend := GetComponentBackend(componentSections)
@@ -62,7 +62,7 @@ func ReadTerraformBackendS3(
 	defer cancel()
 
 	// Load AWS config and assume the backend IAM role (using the AWS SDK).
-	awsConfig, err := awsUtils.LoadAWSConfig(ctx, region, roleArn)
+	awsConfig, err := awsUtils.LoadAWSConfig(ctx, region, roleArn, time.Minute*3)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -60,7 +61,7 @@ func TestLoadAWSConfig(t *testing.T) {
 			}
 
 			// Execute
-			cfg, err := LoadAWSConfig(context.Background(), tt.region, tt.roleArn)
+			cfg, err := LoadAWSConfig(context.Background(), tt.region, tt.roleArn, time.Second*10)
 
 			// Assert
 			if tt.wantErr {
