@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -24,25 +25,41 @@ func processNodes(
 	currentStack string,
 	skip []string,
 ) map[string]any {
-	newMap := make(map[string]any)
-	var recurse func(any) any
+	type stateNode struct {
+		parent any    // *map[string]any or *[]any
+		key    any    // string (for maps) or int (for slices)
+		value  string // original string
+	}
 
-	recurse = func(node any) any {
+	var stateNodes []stateNode
+	var mu sync.Mutex
+
+	var recurse func(node any, parent any, key any) any
+
+	recurse = func(node any, parent any, key any) any {
 		switch v := node.(type) {
 		case string:
+			if strings.HasPrefix(v, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState) {
+				// Defer processing this tag
+				mu.Lock()
+				stateNodes = append(stateNodes, stateNode{parent: parent, key: key, value: v})
+				mu.Unlock()
+				return v // Keep the original value for now
+			}
+			// Process all other strings immediately
 			return processCustomTags(atmosConfig, v, currentStack, skip)
 
 		case map[string]any:
 			newNestedMap := make(map[string]any)
 			for k, val := range v {
-				newNestedMap[k] = recurse(val)
+				newNestedMap[k] = recurse(val, newNestedMap, k)
 			}
 			return newNestedMap
 
 		case []any:
 			newSlice := make([]any, len(v))
 			for i, val := range v {
-				newSlice[i] = recurse(val)
+				newSlice[i] = recurse(val, newSlice, i)
 			}
 			return newSlice
 
@@ -51,12 +68,72 @@ func processNodes(
 		}
 	}
 
+	// Start recursion with original map
+	newMap := make(map[string]any)
 	for k, v := range data {
-		newMap[k] = recurse(v)
+		newMap[k] = recurse(v, newMap, k)
 	}
+
+	// Process !terraform.state tags in parallel
+	var wg sync.WaitGroup
+	for _, node := range stateNodes {
+		wg.Add(1)
+		go func(n stateNode) {
+			defer wg.Done()
+			res := processTagTerraformState(atmosConfig, n.value, currentStack)
+
+			switch parent := n.parent.(type) {
+			case map[string]any:
+				parent[n.key.(string)] = res
+			case []any:
+				parent[n.key.(int)] = res
+			}
+		}(node)
+	}
+	wg.Wait()
 
 	return newMap
 }
+
+//func processNodes(
+//	atmosConfig *schema.AtmosConfiguration,
+//	data map[string]any,
+//	currentStack string,
+//	skip []string,
+//) map[string]any {
+//	newMap := make(map[string]any)
+//	var recurse func(any) any
+//
+//	recurse = func(node any) any {
+//		switch v := node.(type) {
+//		case string:
+//			return processCustomTags(atmosConfig, v, currentStack, skip)
+//
+//		case map[string]any:
+//			newNestedMap := make(map[string]any)
+//			for k, val := range v {
+//				newNestedMap[k] = recurse(val)
+//			}
+//			return newNestedMap
+//
+//		case []any:
+//			newSlice := make([]any, len(v))
+//			for i, val := range v {
+//				newSlice[i] = recurse(val)
+//			}
+//			return newSlice
+//
+//		default:
+//			return v
+//		}
+//	}
+//
+//	for k, v := range data {
+//		newMap[k] = recurse(v)
+//	}
+//
+//	return newMap
+//}
 
 func processCustomTags(
 	atmosConfig *schema.AtmosConfiguration,
