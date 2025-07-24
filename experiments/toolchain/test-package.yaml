@@ -1,4 +1,4 @@
-packages:
+tools:
   - name: github-comment
     type: github_release
     repo_owner: suzuki-shunsuke

@@ -21,47 +21,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// PackageRegistry represents the structure of a package registry YAML file
-type PackageRegistry struct {
-	Packages []Package `yaml:"packages"`
-}
-
-// Package represents a single package in the registry
-type Package struct {
-	Name         string            `yaml:"name"`
-	Registry     string            `yaml:"registry"`
-	Version      string            `yaml:"version"`
-	Type         string            `yaml:"type"`
-	RepoOwner    string            `yaml:"repo_owner"`
-	RepoName     string            `yaml:"repo_name"`
-	Asset        string            `yaml:"asset"`
-	Format       string            `yaml:"format"`
-	Files        []File            `yaml:"files"`
-	Overrides    []Override        `yaml:"overrides"`
-	SupportedIf  *SupportedIf      `yaml:"supported_if"`
-	Replacements map[string]string `yaml:"replacements"`
-}
-
-// File represents a file to be extracted from the archive
-type File struct {
-	Name string `yaml:"name"`
-	Src  string `yaml:"src"`
-}
-
-// Override represents platform-specific overrides
-type Override struct {
-	GOOS   string `yaml:"goos"`
-	GOARCH string `yaml:"goarch"`
-	Asset  string `yaml:"asset"`
-	Files  []File `yaml:"files"`
-}
-
-// SupportedIf represents conditions for when a package is supported
-type SupportedIf struct {
-	GOOS   string `yaml:"goos"`
-	GOARCH string `yaml:"goarch"`
-}
-
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
 // This allows for mocking in tests and flexible resolution in production
 type ToolResolver interface {
@@ -82,7 +41,7 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 			}
 		}
 	}
-	// Try to find the package in the Aqua registry
+	// Try to find the tool in the Aqua registry
 	owner, repo, err := searchRegistryForTool(toolName)
 	if err == nil {
 		return owner, repo, nil
@@ -106,10 +65,10 @@ func NewInstallerWithResolver(resolver ToolResolver) *Installer {
 	binDir := "./.tools/bin"
 	registries := []string{
 		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
-		"./package-registry",
+		"./tool-registry",
 	}
 	return &Installer{
-		registryPath: "./package-registry",
+		registryPath: "./tool-registry",
 		cacheDir:     cacheDir,
 		binDir:       binDir,
 		registries:   registries,
@@ -122,37 +81,37 @@ func NewInstaller() *Installer {
 	return NewInstallerWithResolver(&DefaultToolResolver{})
 }
 
-// Install installs a package from the registry
+// Install installs a tool from the registry
 func (i *Installer) Install(owner, repo, version string) (string, error) {
 	// 1. Try local config manager first
 	lcm := i.getLocalConfigManager()
 	if lcm != nil {
-		pkg, err := lcm.GetPackageWithVersion(owner, repo, version)
-		if err == nil && pkg != nil {
-			return i.installFromPackage(pkg, version)
+		tool, err := lcm.GetToolWithVersion(owner, repo, version)
+		if err == nil && tool != nil {
+			return i.installFromTool(tool, version)
 		}
 	}
 
 	// 2. Fallback to Aqua registry
-	pkg, err := i.findPackage(owner, repo, version)
+	tool, err := i.findTool(owner, repo, version)
 	if err != nil {
-		return "", fmt.Errorf("failed to get package from registry: %w", err)
+		return "", fmt.Errorf("failed to get tool from registry: %w", err)
 	}
-	return i.installFromPackage(pkg, version)
+	return i.installFromTool(tool, version)
 }
 
 // Helper to handle the rest of the install logic
-func (i *Installer) installFromPackage(pkg *Package, version string) (string, error) {
-	assetURL, err := i.buildAssetURL(pkg, version)
+func (i *Installer) installFromTool(tool *Tool, version string) (string, error) {
+	assetURL, err := i.buildAssetURL(tool, version)
 	if err != nil {
 		return "", fmt.Errorf("failed to build asset URL: %w", err)
 	}
-	log.Debug("Downloading package", "owner", pkg.RepoOwner, "repo", pkg.RepoName, "version", version, "url", assetURL)
+	log.Debug("Downloading tool", "owner", tool.RepoOwner, "repo", tool.RepoName, "version", version, "url", assetURL)
 	assetPath, err := i.downloadAsset(assetURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download asset: %w", err)
 	}
-	binaryPath, err := i.extractAndInstall(pkg, assetPath, version)
+	binaryPath, err := i.extractAndInstall(tool, assetPath, version)
 	if err != nil {
 		return "", fmt.Errorf("failed to extract and install: %w", err)
 	}
@@ -165,7 +124,7 @@ func (i *Installer) installFromPackage(pkg *Package, version string) (string, er
 	return binaryPath, nil
 }
 
-// InstallFromToolVersions installs packages specified in .tool-versions file
+// InstallFromToolVersions installs tools specified in .tool-versions file
 func (i *Installer) InstallFromToolVersions(toolVersionsPath string) error {
 	toolVersions, err := LoadToolVersions(toolVersionsPath)
 	if err != nil {
@@ -192,24 +151,24 @@ func (i *Installer) InstallFromToolVersions(toolVersionsPath string) error {
 
 		_, err = i.Install(owner, repo, version)
 		if err != nil {
-			log.Error("Failed to install package", "owner", owner, "repo", repo, "version", version, "error", err)
+			log.Error("Failed to install tool", "owner", owner, "repo", repo, "version", version, "error", err)
 			continue
 		}
 
-		log.Debug("Successfully installed package", "owner", owner, "repo", repo, "version", version)
+		log.Debug("Successfully installed tool", "owner", owner, "repo", repo, "version", version)
 	}
 
 	return nil
 }
 
-// Run executes a specific version of a package
+// Run executes a specific version of a tool
 func (i *Installer) Run(owner, repo, version string, args []string) error {
 	// Find the binary path for this version
 	binaryPath := i.getBinaryPath(owner, repo, version)
 
 	// Check if binary exists
 	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
-		return fmt.Errorf("package %s/%s@%s is not installed. Run 'toolchain install %s/%s@%s' first",
+		return fmt.Errorf("tool %s/%s@%s is not installed. Run 'toolchain install %s/%s@%s' first",
 			owner, repo, version, owner, repo, version)
 	}
 
@@ -242,27 +201,27 @@ func (i *Installer) RunFromToolVersions(tool string, args []string) error {
 	return i.Run(owner, repo, version, args)
 }
 
-// findPackage searches for a package in the registry
-func (i *Installer) findPackage(owner, repo, version string) (*Package, error) {
+// findTool searches for a tool in the registry
+func (i *Installer) findTool(owner, repo, version string) (*Tool, error) {
 	// Search through all registries
 	for _, registry := range i.registries {
-		pkg, err := i.searchRegistry(registry, owner, repo, version)
+		tool, err := i.searchRegistry(registry, owner, repo, version)
 		if err == nil {
-			return pkg, nil
+			return tool, nil
 		}
 	}
 
-	return nil, fmt.Errorf("package %s/%s@%s not found in any registry", owner, repo, version)
+	return nil, fmt.Errorf("tool %s/%s@%s not found in any registry", owner, repo, version)
 }
 
-// searchRegistry searches a specific registry for a package
-func (i *Installer) searchRegistry(registry, owner, repo, version string) (*Package, error) {
-	// For demonstration, we'll use a hardcoded package for github-comment
+// searchRegistry searches a specific registry for a tool
+func (i *Installer) searchRegistry(registry, owner, repo, version string) (*Tool, error) {
+	// For demonstration, we'll use a hardcoded tool for github-comment
 	// In a real implementation, you'd scan the registry
 
 	if owner == "suzuki-shunsuke" && repo == "github-comment" {
-		// Return a hardcoded package for demonstration
-		return &Package{
+		// Return a hardcoded tool for demonstration
+		return &Tool{
 			Name:      "github-comment",
 			Type:      "github_release",
 			RepoOwner: "suzuki-shunsuke",
@@ -286,8 +245,8 @@ func (i *Installer) searchRegistry(registry, owner, repo, version string) (*Pack
 	return i.searchLocalRegistry(registry, owner, repo, version)
 }
 
-// fetchFromRemoteRegistry fetches package definition from a remote registry
-func (i *Installer) fetchFromRemoteRegistry(registryURL, owner, repo, version string) (*Package, error) {
+// fetchFromRemoteRegistry fetches tool definition from a remote registry
+func (i *Installer) fetchFromRemoteRegistry(registryURL, owner, repo, version string) (*Tool, error) {
 	// Create cache directory for registry files
 	registryCacheDir := filepath.Join(i.cacheDir, "registries")
 	if err := os.MkdirAll(registryCacheDir, 0755); err != nil {
@@ -327,37 +286,37 @@ func (i *Installer) fetchFromRemoteRegistry(registryURL, owner, repo, version st
 	}
 
 	// Load from cache
-	return i.loadPackageFile(cacheFile)
+	return i.loadToolFile(cacheFile)
 }
 
-// searchLocalRegistry searches a local registry for a package
-func (i *Installer) searchLocalRegistry(registryPath, owner, repo, version string) (*Package, error) {
-	packageFile := filepath.Join(registryPath, owner, repo+".yaml")
-	if _, err := os.Stat(packageFile); os.IsNotExist(err) {
-		return nil, fmt.Errorf("package file not found: %s", packageFile)
+// searchLocalRegistry searches a local registry for a tool
+func (i *Installer) searchLocalRegistry(registryPath, owner, repo, version string) (*Tool, error) {
+	toolFile := filepath.Join(registryPath, owner, repo+".yaml")
+	if _, err := os.Stat(toolFile); os.IsNotExist(err) {
+		return nil, fmt.Errorf("tool file not found: %s", toolFile)
 	}
 
-	return i.loadPackageFile(packageFile)
+	return i.loadToolFile(toolFile)
 }
 
-// loadPackageFile loads a package YAML file
-func (i *Installer) loadPackageFile(filePath string) (*Package, error) {
+// loadToolFile loads a tool YAML file
+func (i *Installer) loadToolFile(filePath string) (*Tool, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	var pkg PackageRegistry
-	if err := yaml.Unmarshal(data, &pkg); err != nil {
+	var toolToolRegistry ToolRegistry
+	if err := yaml.Unmarshal(data, &toolToolRegistry); err != nil {
 		return nil, err
 	}
 
-	// Return the first package (assuming single package per file)
-	if len(pkg.Packages) > 0 {
-		return &pkg.Packages[0], nil
+	// Return the first tool (assuming single tool per file)
+	if len(toolToolRegistry.Tools) > 0 {
+		return &toolToolRegistry.Tools[0], nil
 	}
 
-	return nil, fmt.Errorf("no packages found in %s", filePath)
+	return nil, fmt.Errorf("no tools found in %s", filePath)
 }
 
 // parseToolSpec parses a tool specification (owner/repo or just repo)
@@ -382,9 +341,9 @@ func (i *Installer) getLocalConfigManager() *LocalConfigManager {
 }
 
 // buildAssetURL constructs the download URL for the asset
-func (i *Installer) buildAssetURL(pkg *Package, version string) (string, error) {
-	// Use the asset template from the package
-	assetTemplate := pkg.Asset
+func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
+	// Use the asset template from the tool
+	assetTemplate := tool.Asset
 	if assetTemplate == "" {
 		// Fallback to a common pattern
 		assetTemplate = "{{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
@@ -407,8 +366,8 @@ func (i *Installer) buildAssetURL(pkg *Package, version string) (string, error) 
 		Version:   versionForAsset,
 		OS:        runtime.GOOS,
 		Arch:      runtime.GOARCH,
-		RepoOwner: pkg.RepoOwner,
-		RepoName:  pkg.RepoName,
+		RepoOwner: tool.RepoOwner,
+		RepoName:  tool.RepoName,
 	}
 
 	// Register custom template functions
@@ -439,7 +398,7 @@ func (i *Installer) buildAssetURL(pkg *Package, version string) (string, error) 
 
 	// Construct the full URL
 	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
-		pkg.RepoOwner, pkg.RepoName, version, assetName.String())
+		tool.RepoOwner, tool.RepoName, version, assetName.String())
 
 	return url, nil
 }
@@ -491,23 +450,23 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 }
 
 // extractAndInstall extracts the binary from the asset and installs it
-func (i *Installer) extractAndInstall(pkg *Package, assetPath, version string) (string, error) {
+func (i *Installer) extractAndInstall(tool *Tool, assetPath, version string) (string, error) {
 	// Create version-specific directory
-	versionDir := filepath.Join(i.binDir, pkg.RepoOwner, pkg.RepoName, version)
+	versionDir := filepath.Join(i.binDir, tool.RepoOwner, tool.RepoName, version)
 	if err := os.MkdirAll(versionDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create version directory: %w", err)
 	}
 
 	// Determine the binary name
-	binaryName := pkg.Name
+	binaryName := tool.Name
 	if binaryName == "" {
-		binaryName = pkg.RepoName
+		binaryName = tool.RepoName
 	}
 
 	binaryPath := filepath.Join(versionDir, binaryName)
 
 	// For now, just copy the file (simplified extraction)
-	if err := i.simpleExtract(assetPath, binaryPath, pkg); err != nil {
+	if err := i.simpleExtract(assetPath, binaryPath, tool); err != nil {
 		return "", fmt.Errorf("failed to extract: %w", err)
 	}
 
@@ -515,7 +474,7 @@ func (i *Installer) extractAndInstall(pkg *Package, assetPath, version string) (
 }
 
 // simpleExtract is a robust extraction method using magic file type detection
-func (i *Installer) simpleExtract(assetPath, binaryPath string, pkg *Package) error {
+func (i *Installer) simpleExtract(assetPath, binaryPath string, tool *Tool) error {
 	// Detect file type using magic bytes
 	mime, err := mimetype.DetectFile(assetPath)
 	if err != nil {
@@ -526,25 +485,25 @@ func (i *Installer) simpleExtract(assetPath, binaryPath string, pkg *Package) er
 
 	switch {
 	case mime.Is("application/zip"):
-		return i.extractZip(assetPath, binaryPath, pkg)
+		return i.extractZip(assetPath, binaryPath, tool)
 	case mime.Is("application/x-gzip") || mime.Is("application/gzip"):
 		// Check if it's a tar.gz (by extension or by magic)
 		if strings.HasSuffix(assetPath, ".tar.gz") || strings.HasSuffix(assetPath, ".tgz") || mime.Is("application/x-tar") {
-			return i.extractTarGz(assetPath, binaryPath, pkg)
+			return i.extractTarGz(assetPath, binaryPath, tool)
 		}
 		// Otherwise, treat as a single gzip-compressed binary
 		return i.extractGzip(assetPath, binaryPath)
 	case mime.Is("application/x-tar"):
-		return i.extractTarGz(assetPath, binaryPath, pkg)
+		return i.extractTarGz(assetPath, binaryPath, tool)
 	case mime.Is("application/octet-stream") || mime.Is("application/x-executable"):
 		return i.copyFile(assetPath, binaryPath)
 	default:
 		// Fallback to extension-based detection
 		if strings.HasSuffix(assetPath, ".zip") {
-			return i.extractZip(assetPath, binaryPath, pkg)
+			return i.extractZip(assetPath, binaryPath, tool)
 		}
 		if strings.HasSuffix(assetPath, ".tar.gz") || strings.HasSuffix(assetPath, ".tgz") {
-			return i.extractTarGz(assetPath, binaryPath, pkg)
+			return i.extractTarGz(assetPath, binaryPath, tool)
 		}
 		if strings.HasSuffix(assetPath, ".gz") {
 			return i.extractGzip(assetPath, binaryPath)
@@ -555,7 +514,7 @@ func (i *Installer) simpleExtract(assetPath, binaryPath string, pkg *Package) er
 }
 
 // extractZip extracts a ZIP file
-func (i *Installer) extractZip(zipPath, binaryPath string, pkg *Package) error {
+func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 	log.Debug("Extracting ZIP archive", "filename", filepath.Base(zipPath))
 
 	tempDir, err := ioutil.TempDir("", "installer-extract-")
@@ -569,9 +528,9 @@ func (i *Installer) extractZip(zipPath, binaryPath string, pkg *Package) error {
 		return fmt.Errorf("failed to extract ZIP: %w, output: %s", err, string(output))
 	}
 
-	binaryName := pkg.Name
+	binaryName := tool.Name
 	if binaryName == "" {
-		binaryName = pkg.RepoName
+		binaryName = tool.RepoName
 	}
 
 	// Find the binary in the temp dir (recursively)
@@ -608,7 +567,7 @@ func (i *Installer) extractZip(zipPath, binaryPath string, pkg *Package) error {
 }
 
 // extractTarGz extracts a tar.gz file
-func (i *Installer) extractTarGz(tarPath, binaryPath string, pkg *Package) error {
+func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 	log.Debug("Extracting tar.gz archive", "filename", filepath.Base(tarPath))
 
 	tempDir, err := ioutil.TempDir("", "installer-extract-")
@@ -622,9 +581,9 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, pkg *Package) error
 		return fmt.Errorf("failed to extract tar.gz: %w, output: %s", err, string(output))
 	}
 
-	binaryName := pkg.Name
+	binaryName := tool.Name
 	if binaryName == "" {
-		binaryName = pkg.RepoName
+		binaryName = tool.RepoName
 	}
 
 	// Find the binary in the temp dir (recursively)
@@ -738,12 +697,12 @@ func (i *Installer) executeBinary(binaryPath string, args []string) error {
 	return nil
 }
 
-// Uninstall removes a previously installed package
+// Uninstall removes a previously installed tool
 func (i *Installer) Uninstall(owner, repo, version string) error {
 	// Try to find the binary by searching
 	binaryPath, err := i.findBinaryPath(owner, repo, version)
 	if err != nil {
-		return fmt.Errorf("package %s/%s@%s is not installed", owner, repo, version)
+		return fmt.Errorf("tool %s/%s@%s is not installed", owner, repo, version)
 	}
 
 	// Get the directory containing the binary
@@ -775,7 +734,7 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 		}
 	}
 
-	log.Debug("Successfully uninstalled package", "owner", owner, "repo", repo, "version", version)
+	log.Debug("Successfully uninstalled tool", "owner", owner, "repo", repo, "version", version)
 	return nil
 }
 
@@ -856,7 +815,7 @@ func (i *Installer) readLatestFile(owner, repo string) (string, error) {
 
 // searchRegistryForTool searches the Aqua registry for a tool by name
 func searchRegistryForTool(toolName string) (string, string, error) {
-	// Try to find the package by searching the registry
+	// Try to find the tool by searching the registry
 	// This is a simplified search - in a real implementation, you'd want to
 	// cache the registry contents and search more efficiently
 

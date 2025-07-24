@@ -14,15 +14,11 @@ import (
 )
 
 var uninstallCmd = &cobra.Command{
-	Use:   "uninstall [package]",
-	Short: "Uninstall a CLI binary",
-	Long: `Uninstall a CLI binary that was previously installed.
+	Use:   "uninstall [tool]",
+	Short: "Uninstall a CLI binary from the registry",
+	Long: `Uninstall a CLI binary using metadata from the registry.
 
-The package should be specified in the format: owner/repo@version or tool@version
-Examples:
-  toolchain uninstall terraform@1.9.8
-  toolchain uninstall hashicorp/terraform@1.9.8
-  toolchain uninstall                    # Uninstall from .tool-versions file`,
+The tool should be specified in the format: owner/repo@version or tool@version`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runUninstall,
 }
@@ -34,27 +30,27 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 		return uninstallFromToolVersions(".tool-versions", installer)
 	}
 
-	packageSpec := args[0]
-	parts := strings.Split(packageSpec, "@")
+	toolSpec := args[0]
+	parts := strings.Split(toolSpec, "@")
 	if len(parts) == 1 {
 		// Try to look up version in .tool-versions using LookupToolVersion
 		tool := parts[0]
 		toolVersions, err := LoadToolVersions(".tool-versions")
 		if err != nil {
-			return fmt.Errorf("invalid package specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", packageSpec, err)
+			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", toolSpec, err)
 		}
 		if installer == nil {
 			installer = NewInstaller()
 		}
 		resolvedKey, version, found := LookupToolVersion(tool, toolVersions, installer.resolver)
 		if !found {
-			return fmt.Errorf("invalid package specification: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions", packageSpec)
+			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions", toolSpec)
 		}
-		packageSpec = resolvedKey + "@" + version
-		parts = strings.Split(packageSpec, "@")
+		toolSpec = resolvedKey + "@" + version
+		parts = strings.Split(toolSpec, "@")
 	}
 	if len(parts) != 2 {
-		return fmt.Errorf("invalid package specification: %s. Expected format: owner/repo@version or tool@version", packageSpec)
+		return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version", toolSpec)
 	}
 	repoPath := parts[0]
 	version := parts[1]
@@ -72,7 +68,7 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 		actualVersion, err := installer.readLatestFile(owner, repo)
 		if err != nil {
 			// If the latest file does not exist, return error (test expects this)
-			return fmt.Errorf("package %s/%s@latest is not installed (no latest file found)", owner, repo)
+			return fmt.Errorf("tool %s/%s@latest is not installed (no latest file found)", owner, repo)
 		}
 		version = actualVersion
 		// Check if the versioned binary exists
@@ -84,17 +80,17 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 			return nil
 		} else {
 			// Both binary and latest file exist: uninstall binary, delete latest file, return nil
-			err = uninstallSinglePackage(installer, owner, repo, version, true)
+			err = uninstallSingleTool(installer, owner, repo, version, true)
 			_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
 			_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
 			return err
 		}
 	}
 
-	err = uninstallSinglePackage(installer, owner, repo, version, true)
+	err = uninstallSingleTool(installer, owner, repo, version, true)
 
 	// Always attempt to remove the latest file and parent directory after uninstalling @latest
-	if args[0] == packageSpec && strings.HasSuffix(packageSpec, "@latest") {
+	if args[0] == toolSpec && strings.HasSuffix(toolSpec, "@latest") {
 		_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
 		_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
 	}
@@ -107,9 +103,9 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	return runUninstallWithInstaller(cmd, args, nil)
 }
 
-// Change uninstallSinglePackage to accept showProgressBar
-func uninstallSinglePackage(installer *Installer, owner, repo, version string, showProgressBar bool) error {
-	// Check if the package is actually installed first
+// Change uninstallSingleTool to accept showProgressBar
+func uninstallSingleTool(installer *Installer, owner, repo, version string, showProgressBar bool) error {
+	// Check if the tool is actually installed first
 	_, err := installer.findBinaryPath(owner, repo, version)
 	if err != nil {
 		// If the binary is not found, treat as success (idempotent delete)
@@ -134,7 +130,7 @@ func uninstallSinglePackage(installer *Installer, owner, repo, version string, s
 		// Start spinner
 		spinner.Tick()
 
-		// Show progress for finding package
+		// Show progress for finding tool
 		percent = 0.2
 		bar := progressBar.ViewAs(percent)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
@@ -195,10 +191,10 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 		return fmt.Errorf("failed to load .tool-versions: %w", err)
 	}
 
-	// Count total packages for progress tracking
-	totalPackages := len(toolVersions.Tools)
-	if totalPackages == 0 {
-		fmt.Fprintf(os.Stderr, "No packages found in %s\n", toolVersionsPath)
+	// Count total tools for progress tracking
+	totalTools := len(toolVersions.Tools)
+	if totalTools == 0 {
+		fmt.Fprintf(os.Stderr, "No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
 
@@ -212,8 +208,8 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	// Start spinner
 	spinner.Tick()
 
-	// Collect installed packages
-	var installedPackages []struct {
+	// Collect installed tools
+	var installedTools []struct {
 		tool    string
 		version string
 		owner   string
@@ -228,7 +224,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 			}
 			_, err = installer.findBinaryPath(owner, repo, version)
 			if err == nil {
-				installedPackages = append(installedPackages, struct {
+				installedTools = append(installedTools, struct {
 					tool    string
 					version string
 					owner   string
@@ -240,7 +236,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 		}
 	}
 
-	if len(installedPackages) == 0 {
+	if len(installedTools) == 0 {
 		fmt.Fprintf(os.Stderr, "No tools to uninstall\n")
 		return nil
 	}
@@ -249,34 +245,34 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	failedCount := 0
 	alreadyRemovedCount := 0
 
-	for i, pkg := range installedPackages {
-		version := pkg.version
+	for i, tool := range installedTools {
+		version := tool.version
 		var msg string
 		// Check if tool is installed
-		_, err := installer.findBinaryPath(pkg.owner, pkg.repo, version)
+		_, err := installer.findBinaryPath(tool.owner, tool.repo, version)
 		if err != nil {
-			msg = fmt.Sprintf("%s %s/%s@%s not installed", checkMark.Render(), pkg.owner, pkg.repo, version)
+			msg = fmt.Sprintf("%s %s/%s@%s not installed", checkMark.Render(), tool.owner, tool.repo, version)
 			alreadyRemovedCount++
 		} else {
-			err = uninstallSinglePackage(installer, pkg.owner, pkg.repo, version, false)
+			err = uninstallSingleTool(installer, tool.owner, tool.repo, version, false)
 			if err == nil {
-				msg = fmt.Sprintf("%s Uninstalled %s/%s@%s", checkMark.Render(), pkg.owner, pkg.repo, version)
+				msg = fmt.Sprintf("%s Uninstalled %s/%s@%s", checkMark.Render(), tool.owner, tool.repo, version)
 				installedCount++
 			} else {
-				msg = fmt.Sprintf("%s Uninstall failed %s/%s@%s: %v", xMark.Render(), pkg.owner, pkg.repo, version, err)
+				msg = fmt.Sprintf("%s Uninstall failed %s/%s@%s: %v", xMark.Render(), tool.owner, tool.repo, version, err)
 				failedCount++
 			}
 		}
 		resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 		fmt.Fprintln(os.Stderr, msg)
-		percent := float64(i+1) / float64(totalPackages)
+		percent := float64(i+1) / float64(totalTools)
 		bar := progressBar.ViewAs(percent)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
 		time.Sleep(100 * time.Millisecond)
 	}
 	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 	fmt.Fprintln(os.Stderr)
-	if totalPackages == 0 {
+	if totalTools == 0 {
 		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s no tools to uninstall", checkMark.Render()))
 	} else if failedCount == 0 && alreadyRemovedCount == 0 {
 		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s uninstalled %d tools", checkMark.Render(), installedCount))

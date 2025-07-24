@@ -46,12 +46,12 @@ func (ar *AquaRegistry) LoadLocalConfig(configPath string) error {
 	return ar.local.Load(configPath)
 }
 
-// GetPackage fetches package metadata from the Aqua registry
-func (ar *AquaRegistry) GetPackage(owner, repo string) (*Package, error) {
+// GetTool fetches tool metadata from the Aqua registry
+func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 	// Check local configuration first
 	if localTool, exists := ar.local.GetTool(owner, repo); exists {
 		Logger.Debug("Using local configuration", "owner", owner, "repo", repo)
-		return ar.convertLocalToolToPackage(localTool, owner, repo), nil
+		return ar.convertLocalToolToTool(localTool, owner, repo), nil
 	}
 
 	// Fall back to remote registry
@@ -65,35 +65,35 @@ func (ar *AquaRegistry) GetPackage(owner, repo string) (*Package, error) {
 
 	for _, registry := range registries {
 		Logger.Debug("Trying registry", "registry", registry)
-		pkg, err := ar.fetchFromRegistry(registry, owner, repo)
+		tool, err := ar.fetchFromRegistry(registry, owner, repo)
 		if err == nil {
-			Logger.Debug("Found package in registry", "registry", registry)
-			return pkg, nil
+			Logger.Debug("Found tool in registry", "registry", registry)
+			return tool, nil
 		}
 		Logger.Debug("Not found in registry", "registry", registry, "error", err)
 	}
 
-	return nil, fmt.Errorf("package %s/%s not found in any registry", owner, repo)
+	return nil, fmt.Errorf("tool %s/%s not found in any registry", owner, repo)
 }
 
-// GetPackageWithVersion fetches package metadata and resolves version-specific overrides
-func (ar *AquaRegistry) GetPackageWithVersion(owner, repo, version string) (*Package, error) {
-	pkg, err := ar.GetPackage(owner, repo)
+// GetToolWithVersion fetches tool metadata and resolves version-specific overrides
+func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*Tool, error) {
+	tool, err := ar.GetTool(owner, repo)
 	if err != nil {
 		return nil, err
 	}
 
-	// If the package has version overrides, we need to fetch the full registry file
+	// If the tool has version overrides, we need to fetch the full registry file
 	// and resolve the correct asset template for this version
-	if pkg.Type == "github_release" {
+	if tool.Type == "github_release" {
 		return ar.resolveVersionOverrides(owner, repo, version)
 	}
 
-	return pkg, nil
+	return tool, nil
 }
 
 // resolveVersionOverrides fetches the full registry file and resolves version-specific overrides
-func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*Package, error) {
+func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*Tool, error) {
 	// Fetch the registry file again to get version overrides
 	registryURL := fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/%s/registry.yaml", owner, repo)
 
@@ -141,8 +141,8 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*P
 
 	pkgDef := registry.Packages[0]
 
-	// Create base package
-	pkg := &Package{
+	// Create base tool
+	tool := &Tool{
 		Name:      repo,
 		Type:      pkgDef.Type,
 		RepoOwner: pkgDef.RepoOwner,
@@ -170,21 +170,21 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*P
 	if selectedIdx != -1 {
 		override := pkgDef.VersionOverrides[selectedIdx]
 		if override.Asset != "" {
-			pkg.Asset = override.Asset
+			tool.Asset = override.Asset
 		}
 		if override.Format != "" {
-			pkg.Format = override.Format
+			tool.Format = override.Format
 		}
 		if len(override.Files) > 0 {
-			pkg.Name = override.Files[0].Name
+			tool.Name = override.Files[0].Name
 		}
 	}
 
-	return pkg, nil
+	return tool, nil
 }
 
-// fetchFromRegistry fetches package metadata from a specific registry
-func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Package, error) {
+// fetchFromRegistry fetches tool metadata from a specific registry
+func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Tool, error) {
 	// Create cache directory
 	if err := os.MkdirAll(ar.cache.baseDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
@@ -197,17 +197,17 @@ func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Pac
 	}
 
 	for _, url := range possiblePaths {
-		pkg, err := ar.fetchRegistryFile(url, owner, repo)
+		tool, err := ar.fetchRegistryFile(url, owner, repo)
 		if err == nil {
-			return pkg, nil
+			return tool, nil
 		}
 	}
 
-	return nil, fmt.Errorf("package not found in registry")
+	return nil, fmt.Errorf("tool not found in registry")
 }
 
 // fetchRegistryFile fetches and parses a registry.yaml file
-func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Package, error) {
+func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Tool, error) {
 	// Create cache key
 	cacheKey := strings.ReplaceAll(url, "/", "_")
 	cacheKey = strings.ReplaceAll(cacheKey, ":", "_")
@@ -245,7 +245,7 @@ func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Package, er
 }
 
 // parseRegistryFile parses Aqua registry YAML data
-func (ar *AquaRegistry) parseRegistryFile(data []byte, owner, repo string) (*Package, error) {
+func (ar *AquaRegistry) parseRegistryFile(data []byte, owner, repo string) (*Tool, error) {
 	var registry struct {
 		Packages []struct {
 			Type             string `yaml:"type"`
@@ -275,8 +275,8 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte, owner, repo string) (*Pac
 	// Use the first package definition
 	pkgDef := registry.Packages[0]
 
-	// Create base package
-	pkg := &Package{
+	// Create base tool
+	tool := &Tool{
 		Name:      repo,
 		Type:      pkgDef.Type,
 		RepoOwner: pkgDef.RepoOwner,
@@ -287,32 +287,32 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte, owner, repo string) (*Pac
 	switch pkgDef.Type {
 	case "http":
 		// Simple HTTP package with direct URL
-		pkg.Asset = pkgDef.URL
+		tool.Asset = pkgDef.URL
 	case "github_release":
 		// GitHub release package - we'll need version to determine asset
 		// For now, use a default asset template that can be overridden
-		pkg.Asset = "{{.RepoName}}_{{trimV .Version}}_{{.OS}}_{{.Arch}}.{{.Format}}"
+		tool.Asset = "{{.RepoName}}_{{trimV .Version}}_{{.OS}}_{{.Arch}}.{{.Format}}"
 		if len(pkgDef.VersionOverrides) > 0 {
 			// Use the first version override as default
-			pkg.Asset = pkgDef.VersionOverrides[0].Asset
+			tool.Asset = pkgDef.VersionOverrides[0].Asset
 		}
 	default:
 		return nil, fmt.Errorf("unsupported package type: %s", pkgDef.Type)
 	}
 
-	return pkg, nil
+	return tool, nil
 }
 
-// BuildAssetURL constructs the download URL for a package version
-func (ar *AquaRegistry) BuildAssetURL(pkg *Package, version string) (string, error) {
-	if pkg.Asset == "" {
-		return "", fmt.Errorf("no asset template defined for package")
+// BuildAssetURL constructs the download URL for a tool version
+func (ar *AquaRegistry) BuildAssetURL(tool *Tool, version string) (string, error) {
+	if tool.Asset == "" {
+		return "", fmt.Errorf("no asset template defined for tool")
 	}
 
-	// Determine format - use package format or default to zip
+	// Determine format - use tool format or default to zip
 	format := "zip"
-	if pkg.Format != "" {
-		format = pkg.Format
+	if tool.Format != "" {
+		format = tool.Format
 	}
 
 	// Create template data
@@ -320,8 +320,8 @@ func (ar *AquaRegistry) BuildAssetURL(pkg *Package, version string) (string, err
 		"Version":   version,
 		"OS":        getOS(),
 		"Arch":      getArch(),
-		"RepoOwner": pkg.RepoOwner,
-		"RepoName":  pkg.RepoName,
+		"RepoOwner": tool.RepoOwner,
+		"RepoName":  tool.RepoName,
 		"Format":    format,
 	}
 
@@ -342,7 +342,7 @@ func (ar *AquaRegistry) BuildAssetURL(pkg *Package, version string) (string, err
 	}
 
 	// Parse and execute template
-	tmpl, err := template.New("asset").Funcs(funcMap).Parse(pkg.Asset)
+	tmpl, err := template.New("asset").Funcs(funcMap).Parse(tool.Asset)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse asset template: %w", err)
 	}
@@ -352,8 +352,8 @@ func (ar *AquaRegistry) BuildAssetURL(pkg *Package, version string) (string, err
 		return "", fmt.Errorf("failed to execute asset template: %w", err)
 	}
 
-	// For http type packages, the URL is already complete
-	if pkg.Type == "http" {
+	// For http type tools, the URL is already complete
+	if tool.Type == "http" {
 		return assetName.String(), nil
 	}
 
@@ -365,14 +365,14 @@ func (ar *AquaRegistry) BuildAssetURL(pkg *Package, version string) (string, err
 	}
 
 	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
-		pkg.RepoOwner, pkg.RepoName, releaseVersion, assetName.String())
+		tool.RepoOwner, tool.RepoName, releaseVersion, assetName.String())
 
 	return url, nil
 }
 
-// convertLocalToolToPackage converts a local tool definition to a Package
-func (ar *AquaRegistry) convertLocalToolToPackage(localTool *LocalTool, owner, repo string) *Package {
-	pkg := &Package{
+// convertLocalToolToTool converts a local tool definition to a Tool
+func (ar *AquaRegistry) convertLocalToolToTool(localTool *LocalTool, owner, repo string) *Tool {
+	tool := &Tool{
 		Name:      repo,
 		Type:      localTool.Type,
 		RepoOwner: localTool.RepoOwner,
@@ -383,15 +383,15 @@ func (ar *AquaRegistry) convertLocalToolToPackage(localTool *LocalTool, owner, r
 
 	// Set binary name if specified
 	if localTool.BinaryName != "" {
-		pkg.Name = localTool.BinaryName
+		tool.Name = localTool.BinaryName
 	}
 
 	// Handle URL for http type
 	if localTool.Type == "http" {
-		pkg.Asset = localTool.URL
+		tool.Asset = localTool.URL
 	}
 
-	return pkg
+	return tool
 }
 
 // GetLatestVersion fetches the latest non-prerelease version from GitHub releases

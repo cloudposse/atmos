@@ -1,4 +1,4 @@
-# Toolchain - Atmos Packages Prototype
+# Toolchain - Atmos Tools Prototype
 
 A standalone Go CLI tool that installs CLI binaries using metadata from the Aqua registry. This is a prototype for the [Atmos packages feature](https://github.com/cloudposse/atmos/issues/927).
 
@@ -31,7 +31,7 @@ We chose to implement a custom Aqua registry parser rather than using Aqua as a 
 
 Our parser supports a focused subset of Aqua registry features:
 
-**Supported Package Types:**
+**Supported Package Types (from Aqua registry):**
 - `http` - Direct HTTP downloads (e.g., HashiCorp releases)
 - `github_release` - GitHub release assets with version overrides
 
@@ -56,7 +56,7 @@ Our parser supports a focused subset of Aqua registry features:
 
 1. **Registry Ecosystem**: The Aqua registry is a well-maintained, community-driven collection of package definitions. It's the de facto standard for CLI tool metadata.
 
-2. **Avoiding CLI Dependencies**: We don't want to require users to install Aqua CLI just to use Atmos packages. This keeps the dependency chain minimal.
+2. **Avoiding CLI Dependencies**: We don't want to require users to install Aqua CLI just to use Atmos tools. This keeps the dependency chain minimal.
 
 3. **Remote Integration**: We fetch registry files directly from GitHub, avoiding the need to clone or maintain a local copy of the registry.
 

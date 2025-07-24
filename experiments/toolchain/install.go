@@ -13,11 +13,11 @@ import (
 )
 
 var installCmd = &cobra.Command{
-	Use:   "install [package]",
+	Use:   "install [tool]",
 	Short: "Install a CLI binary from the registry",
 	Long: `Install a CLI binary using metadata from the registry.
 
-The package should be specified in the format: owner/repo@version
+The tool should be specified in the format: owner/repo@version
 Examples:
   toolchain install suzuki-shunsuke/github-comment@v3.5.0
   toolchain install hashicorp/terraform@v1.5.0
@@ -41,25 +41,25 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 	setDefault, _ := cmd.Flags().GetBool("default")
 
-	packageSpec := args[0]
-	parts := strings.Split(packageSpec, "@")
+	toolSpec := args[0]
+	parts := strings.Split(toolSpec, "@")
 	if len(parts) == 1 {
 		// Try to look up version in .tool-versions or fallback to alias/latest
 		tool := parts[0]
 		toolVersions, err := LoadToolVersions(".tool-versions")
 		if err != nil {
-			return fmt.Errorf("invalid package specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", packageSpec, err)
+			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", toolSpec, err)
 		}
 		installer := NewInstaller()
 		resolvedKey, version, found, usedLatest := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
 		if !found && !usedLatest {
-			return fmt.Errorf("invalid package specification: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions or as an alias", packageSpec)
+			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions or as an alias", toolSpec)
 		}
-		packageSpec = resolvedKey + "@" + version
-		parts = strings.Split(packageSpec, "@")
+		toolSpec = resolvedKey + "@" + version
+		parts = strings.Split(toolSpec, "@")
 	}
 	if len(parts) != 2 {
-		return fmt.Errorf("invalid package specification: %s. Expected format: owner/repo@version or tool@version", packageSpec)
+		return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version", toolSpec)
 	}
 	repoPath := parts[0]
 	version := parts[1]
@@ -84,7 +84,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		isLatest = true
 	}
 
-	err = InstallSinglePackage(owner, repo, version, isLatest, true)
+	err = InstallSingleTool(owner, repo, version, isLatest, true)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func InstallSinglePackage(owner, repo, version string, isLatest bool, showProgressBar bool) error {
+func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressBar bool) error {
 	restoreLogger := SuppressLogger()
 	defer restoreLogger()
 	installer := NewInstaller()
@@ -113,13 +113,13 @@ func InstallSinglePackage(owner, repo, version string, isLatest bool, showProgre
 			phase   string
 			percent float64
 		}{
-			{"Looking up package", 0.1},
+			{"Looking up tool", 0.1},
 			{"Downloading", 0.3},
 			{"Extracting", 0.7},
 			{"Complete", 1.0},
 		}
 		fmt.Fprint(os.Stderr, "\n")
-		// Phase 1: Looking up package
+		// Phase 1: Looking up tool
 		bar := progressBar.ViewAs(phases[0].percent)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
 		spinner.Tick()
@@ -134,7 +134,7 @@ func InstallSinglePackage(owner, repo, version string, isLatest bool, showProgre
 	binaryPath, err := installer.Install(owner, repo, version)
 	if err != nil {
 		if showProgressBar {
-			fmt.Fprintf(os.Stderr, "\r%s Failed to install %s/%s@%s: %v\n", xMark.Render(), owner, repo, version, err)
+			fmt.Fprintf(os.Stderr, "\r%s Install failed %s/%s@%s: %v\n", xMark.Render(), owner, repo, version, err)
 		}
 		return err
 	}
@@ -179,9 +179,9 @@ func installFromToolVersions(toolVersionsPath string) error {
 		return fmt.Errorf("failed to load .tool-versions: %w", err)
 	}
 
-	totalPackages := len(toolVersions.Tools)
-	if totalPackages == 0 {
-		fmt.Fprintf(os.Stderr, "No packages found in %s\n", toolVersionsPath)
+	totalTools := len(toolVersions.Tools)
+	if totalTools == 0 {
+		fmt.Fprintf(os.Stderr, "No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
 
@@ -200,7 +200,7 @@ func installFromToolVersions(toolVersionsPath string) error {
 		version string
 		owner   string
 		repo    string
-	}, 0, totalPackages)
+	}, 0, totalTools)
 	for tool, versions := range toolVersions.Tools {
 		owner, repo, err := installer.parseToolSpec(tool)
 		if err != nil {
@@ -216,16 +216,16 @@ func installFromToolVersions(toolVersionsPath string) error {
 		}
 	}
 
-	for i, pkg := range toolList {
-		version := pkg.version
+	for i, tool := range toolList {
+		version := tool.version
 		if version == "latest" {
 			registry := NewAquaRegistry()
-			latestVersion, err := registry.GetLatestVersion(pkg.owner, pkg.repo)
+			latestVersion, err := registry.GetLatestVersion(tool.owner, tool.repo)
 			if err != nil {
-				msg := fmt.Sprintf("%s %s/%s@%s Failed to get latest version: %v", xMark.Render(), pkg.owner, pkg.repo, version, err)
+				msg := fmt.Sprintf("%s %s/%s@%s Failed to get latest version: %v", xMark.Render(), tool.owner, tool.repo, version, err)
 				resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 				fmt.Fprintln(os.Stderr, msg)
-				percent := float64(i+1) / float64(totalPackages)
+				percent := float64(i+1) / float64(totalTools)
 				bar := progressBar.ViewAs(percent)
 				printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
 				time.Sleep(100 * time.Millisecond)
@@ -236,10 +236,10 @@ func installFromToolVersions(toolVersionsPath string) error {
 			version = latestVersion
 		}
 
-		_, err := installer.findBinaryPath(pkg.owner, pkg.repo, version)
+		_, err := installer.findBinaryPath(tool.owner, tool.repo, version)
 		if err == nil && !reinstallFlag {
-			msg := fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), pkg.owner, pkg.repo, version)
-			percent := float64(i+1) / float64(totalPackages)
+			msg := fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), tool.owner, tool.repo, version)
+			percent := float64(i+1) / float64(totalTools)
 			bar := progressBar.ViewAs(percent)
 			resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 			fmt.Fprintln(os.Stderr, msg)
@@ -250,16 +250,16 @@ func installFromToolVersions(toolVersionsPath string) error {
 			continue
 		}
 
-		err = InstallSinglePackage(pkg.owner, pkg.repo, version, pkg.version == "latest", false)
+		err = InstallSingleTool(tool.owner, tool.repo, version, tool.version == "latest", false)
 		var msg string
 		if err == nil {
-			msg = fmt.Sprintf("%s Installed %s/%s@%s", checkMark.Render(), pkg.owner, pkg.repo, version)
+			msg = fmt.Sprintf("%s Installed %s/%s@%s", checkMark.Render(), tool.owner, tool.repo, version)
 			installedCount++
 		} else {
-			msg = fmt.Sprintf("%s Failed to install %s/%s@%s: %v", xMark.Render(), pkg.owner, pkg.repo, version, err)
+			msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", xMark.Render(), tool.owner, tool.repo, version, err)
 			failedCount++
 		}
-		percent := float64(i+1) / float64(totalPackages)
+		percent := float64(i+1) / float64(totalTools)
 		bar := progressBar.ViewAs(percent)
 		resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 		fmt.Fprintln(os.Stderr, msg)
@@ -270,7 +270,7 @@ func installFromToolVersions(toolVersionsPath string) error {
 	// At the end, clear the progress bar line before printing the summary
 	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 	fmt.Fprintln(os.Stderr)
-	if totalPackages == 0 {
+	if totalTools == 0 {
 		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s No tools to install", checkMark.Render()))
 	} else if failedCount == 0 && alreadyInstalledCount == 0 {
 		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools", checkMark.Render(), installedCount))
