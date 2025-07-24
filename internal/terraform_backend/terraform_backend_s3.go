@@ -18,6 +18,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const maxRetryCount = 2
+
 // GetS3BackendAssumeRoleArn returns the s3 backend role ARN from the S3 backend config.
 // https://developer.hashicorp.com/terraform/language/backend/s3#assume-role-configuration
 func GetS3BackendAssumeRoleArn(backend *map[string]any) string {
@@ -84,32 +86,38 @@ func ReadTerraformBackendS3Internal(
 
 	bucket := GetBackendAttribute(backend, "bucket")
 
-	// 30 sec timeout to read the state file from the S3 bucket.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	var lastErr error
+	for attempt := 0; attempt <= maxRetryCount; attempt++ {
+		// 30 sec timeout to read the state file from the S3 bucket.
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
 
-	// Get the object from S3.
-	output, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(tfStateFilePath),
-	})
-	if err != nil {
-		// Check if the error is because the object doesn't exist.
-		// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
-		var nsk *types.NoSuchKey
-		if errors.As(err, &nsk) {
-			return nil, nil
+		output, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(tfStateFilePath),
+		})
+		if err != nil {
+			// Check if the error is because the object doesn't exist.
+			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
+			var nsk *types.NoSuchKey
+			if errors.As(err, &nsk) {
+				return nil, nil
+			}
+			lastErr = err
+			if attempt < maxRetryCount {
+				time.Sleep(time.Second * 2) // backoff
+				continue
+			}
+			return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
 		}
-		// If any other error, return it.
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, err)
+
+		defer output.Body.Close()
+		content, err := io.ReadAll(output.Body)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadS3ObjectBody, err)
+		}
+		return content, nil
 	}
 
-	defer output.Body.Close()
-
-	content, err := io.ReadAll(output.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrReadS3ObjectBody, err)
-	}
-
-	return content, nil
+	return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
 }
