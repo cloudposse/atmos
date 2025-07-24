@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -34,35 +33,17 @@ func processNodes(
 			return processCustomTags(atmosConfig, v, currentStack, skip)
 
 		case map[string]any:
-			// Parallelize inner maps
 			newNestedMap := make(map[string]any)
-			var wg sync.WaitGroup
-			var mu sync.Mutex
 			for k, val := range v {
-				wg.Add(1)
-				go func(k string, val any) {
-					defer wg.Done()
-					res := recurse(val)
-					mu.Lock()
-					newNestedMap[k] = res
-					mu.Unlock()
-				}(k, val)
+				newNestedMap[k] = recurse(val)
 			}
-			wg.Wait()
 			return newNestedMap
 
 		case []any:
-			// Parallelize slice elements
 			newSlice := make([]any, len(v))
-			var wg sync.WaitGroup
-			for i := range v {
-				wg.Add(1)
-				go func(i int) {
-					defer wg.Done()
-					newSlice[i] = recurse(v[i])
-				}(i)
+			for i, val := range v {
+				newSlice[i] = recurse(val)
 			}
-			wg.Wait()
 			return newSlice
 
 		default:
@@ -70,19 +51,9 @@ func processNodes(
 		}
 	}
 
-	var wg sync.WaitGroup
-	var mu sync.Mutex
 	for k, v := range data {
-		wg.Add(1)
-		go func(k string, v any) {
-			defer wg.Done()
-			res := recurse(v)
-			mu.Lock()
-			newMap[k] = res
-			mu.Unlock()
-		}(k, v)
+		newMap[k] = recurse(v)
 	}
-	wg.Wait()
 
 	return newMap
 }
