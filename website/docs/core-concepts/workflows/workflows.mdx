@@ -29,6 +29,37 @@ workflows:
       - command: terraform apply eks/alb-controller -auto-approve
 ```
 
+## Retry Configuration
+
+The `command` section of the workflow schema has been updated to allow for retrying of failed commands. The `retry` section
+accepts the following parameters:
+
+* `max_attempts`: The maximum number of times the command will be retried. The default is `3`.
+* `delay`: The amount of time to delay between retries. The default is `5s`.
+* `backoff_strategy`: The backoff strategy to use. The default is `constant`. The other options are `exponential` and `linear`.
+* `initial_delay`: The initial delay to use when retrying. The default is `5s`.
+* `random_jitter`: Whether to add a random jitter to the delay between retries. The default is `true`.
+* `multiplier`: The multiplier to use when retrying. The default is `2`.
+* `max_elapsed_time`: The maximum time allocated to the command before the retry fails. The default is 30 minutes.
+
+Here is an example of a workflow with retry configuration:
+```
+workflows:
+  eks-up:
+    description: Bring up the eks cluster
+    steps: 
+      - command: terraform apply vpc -auto-approve
+        retry:
+          max_attempts: 3
+          backoff_strategy: exponential # could be exponential, constant and linear
+          initial_delay: 3s # the time used by the backoff_strategy
+          random_jitter: false # the random jitter to be added while retrying.
+          multiplier: 2 # used during exponential strategy as multiplier that would be raised by configuration
+          max_elapsed_time: 4m # Default (30 min for all commands). This sets the total duration alloated to the command before the retry fails.
+      - command: terraform apply eks/cluster -auto-approve
+      - command: terraform apply eks/alb-controller -auto-approve
+```
+
 :::note
 
 The workflow name can be anything you want, and the workflow can also accept command-line parameters (e.g. stack name)
