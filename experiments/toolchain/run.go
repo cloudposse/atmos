@@ -10,12 +10,15 @@ import (
 )
 
 var runCmd = &cobra.Command{
-	Use:   "run [tool@version] [flags...]",
+	Use:   "run [tool[@version]] [flags...]",
 	Short: "Run a specific version of a tool",
 	Long: `Run a specific version of a tool with arguments.
 
+If no version is specified, the latest version will be used.
+
 Examples:
-  toolchain run terraform@1.9.8 --version
+  toolchain run terraform --version          # Uses latest version
+  toolchain run terraform@1.9.8 --version   # Uses specific version
   toolchain run opentofu@1.10.1 init
   toolchain run terraform@1.5.7 plan -var-file=prod.tfvars`,
 	Args:               cobra.MinimumNArgs(1),
@@ -23,7 +26,7 @@ Examples:
 	DisableFlagParsing: true,
 }
 
-func runTool(cmd *cobra.Command, args []string) error {
+func runToolWithInstaller(installer *Installer, cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no arguments provided. Expected format: tool@version")
 	}
@@ -33,15 +36,54 @@ func runTool(cmd *cobra.Command, args []string) error {
 
 	// Parse tool@version specification
 	parts := strings.Split(toolSpec, "@")
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid tool specification: %s. Expected format: tool@version", toolSpec)
+	var tool, version string
+
+	if len(parts) == 1 {
+		// No @version specified, check for configured version
+		tool = parts[0]
+		version = "latest" // default fallback
+		usedLatest := true
+
+		// First, check .tool-versions file using LookupToolVersion
+		if toolVersions, err := LoadToolVersions(".tool-versions"); err == nil {
+			_, configuredVersion, found := LookupToolVersion(tool, toolVersions, installer.resolver)
+			if found {
+				version = configuredVersion
+				usedLatest = false
+			}
+		}
+
+		// If still "latest", check if there's a latest file for this tool
+		if version == "latest" {
+			owner, repo, err := installer.resolver.Resolve(tool)
+			if err == nil {
+				if latestVersion, err := installer.readLatestFile(owner, repo); err == nil {
+					version = latestVersion
+				}
+			}
+		}
+
+		// After successful install, memorialize 'tool latest' if it was inferred
+		defer func() {
+			if usedLatest {
+				_ = AddToolToVersions(".tool-versions", tool, "latest")
+				// Write the actual version to the latest file
+				owner, repo, err := installer.resolver.Resolve(tool)
+				if err == nil {
+					_ = installer.createLatestFile(owner, repo, version)
+				}
+			}
+		}()
+	} else if len(parts) == 2 {
+		// tool@version format
+		tool = parts[0]
+		version = parts[1]
+	} else {
+		return fmt.Errorf("invalid tool specification: %s. Expected format: tool or tool@version", toolSpec)
 	}
-	tool := parts[0]
-	version := parts[1]
 
 	// Parse tool into owner/repo using installer's tool resolution
-	installer := NewInstaller()
-	owner, repo, err := installer.resolveToolName(tool)
+	owner, repo, err := installer.resolver.Resolve(tool)
 	if err != nil {
 		return fmt.Errorf("invalid tool name: %w", err)
 	}
@@ -52,8 +94,8 @@ func runTool(cmd *cobra.Command, args []string) error {
 		// Binary path not found, try to install it automatically
 		fmt.Printf("🔧 Tool %s@%s is not installed. Installing automatically...\n", tool, version)
 
-		// Try to install the tool
-		_, installErr := installer.Install(owner, repo, version)
+		// Use the same installation UI as the install command
+		installErr := InstallSinglePackage(owner, repo, version, false, true)
 		if installErr != nil {
 			return fmt.Errorf("failed to auto-install %s@%s: %w. Run 'toolchain install %s/%s@%s' manually",
 				tool, version, installErr, owner, repo, version)
@@ -64,15 +106,13 @@ func runTool(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to find binary path after installation: %w", err)
 		}
-
-		fmt.Fprintf(os.Stderr, "%s Successfully installed %s@%s\n", checkMark.Render(), tool, version)
 	} else {
 		// Check if binary exists, and if not, try to install it automatically
 		if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
 			fmt.Printf("🔧 Tool %s@%s is not installed. Installing automatically...\n", tool, version)
 
-			// Try to install the tool
-			_, installErr := installer.Install(owner, repo, version)
+			// Use the same installation UI as the install command
+			installErr := InstallSinglePackage(owner, repo, version, false, true)
 			if installErr != nil {
 				return fmt.Errorf("failed to auto-install %s@%s: %w. Run 'toolchain install %s/%s@%s' manually",
 					tool, version, installErr, owner, repo, version)
@@ -83,18 +123,18 @@ func runTool(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to find binary path after installation: %w", err)
 			}
-
-			fmt.Fprintf(os.Stderr, "%s Successfully installed %s@%s\n", checkMark.Render(), tool, version)
 		}
 	}
 
-	// Execute the binary with remaining arguments
-	fmt.Printf("🚀 Running %s@%s: %s %s\n", tool, version, binaryPath, strings.Join(remainingArgs, " "))
+	// Execute the binary with the provided arguments
+	cmdExec := exec.Command(binaryPath, remainingArgs...)
+	cmdExec.Stdout = cmd.OutOrStdout()
+	cmdExec.Stderr = cmd.ErrOrStderr()
+	cmdExec.Stdin = os.Stdin
+	return cmdExec.Run()
+}
 
-	execCmd := exec.Command(binaryPath, remainingArgs...)
-	execCmd.Stdout = os.Stdout
-	execCmd.Stderr = os.Stderr
-	execCmd.Stdin = os.Stdin
-
-	return execCmd.Run()
+func runTool(cmd *cobra.Command, args []string) error {
+	installer := NewInstaller()
+	return runToolWithInstaller(installer, cmd, args)
 }

@@ -42,7 +42,7 @@ func emitPath(cmd *cobra.Command, args []string) error {
 	installer := NewInstaller()
 
 	// Read .tool-versions file
-	toolVersions, err := installer.loadToolVersions(".tool-versions")
+	toolVersions, err := LoadToolVersions(".tool-versions")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("no .tool-versions file found in current directory")
@@ -58,9 +58,13 @@ func emitPath(cmd *cobra.Command, args []string) error {
 	var pathEntries []string
 	var toolPaths []ToolPath
 
-	for toolName, version := range toolVersions.Tools {
+	for toolName, versions := range toolVersions.Tools {
+		if len(versions) == 0 {
+			continue
+		}
+		version := versions[0] // default version
 		// Resolve tool name to owner/repo
-		owner, repo, err := installer.resolveToolName(toolName)
+		owner, repo, err := installer.resolver.Resolve(toolName)
 		if err != nil {
 			// Skip tools that can't be resolved
 			continue

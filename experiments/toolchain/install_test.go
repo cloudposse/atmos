@@ -1,0 +1,57 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// Add a mock ToolResolver for tests
+
+func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
+	dir := t.TempDir()
+	os.Setenv("HOME", dir)
+	os.Chdir(dir)
+
+	// Write a .tool-versions file with the full alias key
+	toolVersionsPath := filepath.Join(dir, ".tool-versions")
+	err := os.WriteFile(toolVersionsPath, []byte("opentofu/opentofu 1.10.0\n"), 0644)
+	require.NoError(t, err)
+
+	// Write a minimal tools.yaml with the alias
+	toolsYamlPath := filepath.Join(dir, "tools.yaml")
+
+	toolsYaml := `aliases:
+  opentofu: opentofu/opentofu
+`
+	err = os.WriteFile(toolsYamlPath, []byte(toolsYaml), 0644)
+	require.NoError(t, err)
+
+	// Simulate install: should resolve alias 'opentofu' to 'opentofu/opentofu'
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform": {"hashicorp", "terraform"},
+			"opentofu":  {"opentofu", "opentofu"},
+			"kubectl":   {"kubernetes", "kubectl"},
+			"helm":      {"helm", "helm"},
+			"helmfile":  {"helmfile", "helmfile"},
+		},
+	}
+	installer := NewInstallerWithResolver(mockResolver)
+	owner, repo, err := installer.parseToolSpec("opentofu")
+	assert.NoError(t, err)
+	assert.Equal(t, "opentofu", owner)
+	assert.Equal(t, "opentofu", repo)
+
+	// Now test the install logic (mock actual install)
+	// This should not error, as the alias is resolved and found in .tool-versions
+	// We'll just call the lookup logic directly
+	toolVersions, err := LoadToolVersions(toolVersionsPath)
+	assert.NoError(t, err)
+	version, exists := toolVersions.Tools[owner+"/"+repo]
+	assert.True(t, exists)
+	assert.Equal(t, []string{"1.10.0"}, version)
+}
