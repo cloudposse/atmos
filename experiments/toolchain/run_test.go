@@ -17,6 +17,38 @@ import (
 // Remove mockToolResolver type and its Resolve method from this file.
 // Replace installer.resolveToolName(...) with installer.resolver.Resolve(...)
 
+type mockInstaller struct {
+	resolver ToolResolver
+}
+
+func (m *mockInstaller) findBinaryPath(owner, repo, version string) (string, error) {
+	// Always return a dummy binary path
+	return "/bin/echo", nil
+}
+
+func (m *mockInstaller) GetResolver() ToolResolver {
+	return m.resolver
+}
+
+func (m *mockInstaller) createLatestFile(owner, repo, version string) error {
+	return nil // no-op for tests
+}
+
+func (m *mockInstaller) readLatestFile(owner, repo string) (string, error) {
+	return "1.0.0", nil // dummy version for tests
+}
+
+func (m *mockInstaller) Run(owner, repo, version string, args []string) error {
+	// Simulate running the binary (no-op)
+	return nil
+}
+
+// Add a helper to create a mockInstaller with a given resolver
+func newMockInstaller(resolver ToolResolver) *mockInstaller {
+	return &mockInstaller{resolver: resolver}
+}
+
+// Refactor TestRunTool to use mockInstaller
 func TestRunTool(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "toolchain-test")
@@ -105,7 +137,7 @@ func TestRunTool(t *testing.T) {
 			if len(tt.args) == 0 {
 				err = fmt.Errorf("no arguments provided")
 			} else {
-				installer := NewInstallerWithResolver(mockResolver)
+				installer := newMockInstaller(mockResolver)
 				err = runToolWithInstaller(installer, cmd, tt.args)
 			}
 

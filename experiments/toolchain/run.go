@@ -26,7 +26,15 @@ Examples:
 	DisableFlagParsing: true,
 }
 
-func runToolWithInstaller(installer *Installer, cmd *cobra.Command, args []string) error {
+// ToolRunner defines the interface for running and resolving tools (for real and mock installers)
+type ToolRunner interface {
+	findBinaryPath(owner, repo, version string) (string, error)
+	GetResolver() ToolResolver
+	createLatestFile(owner, repo, version string) error
+	readLatestFile(owner, repo string) (string, error)
+}
+
+func runToolWithInstaller(installer ToolRunner, cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no arguments provided. Expected format: tool@version")
 	}
@@ -46,7 +54,7 @@ func runToolWithInstaller(installer *Installer, cmd *cobra.Command, args []strin
 
 		// First, check .tool-versions file using LookupToolVersion
 		if toolVersions, err := LoadToolVersions(".tool-versions"); err == nil {
-			_, configuredVersion, found := LookupToolVersion(tool, toolVersions, installer.resolver)
+			_, configuredVersion, found := LookupToolVersion(tool, toolVersions, installer.GetResolver())
 			if found {
 				version = configuredVersion
 				usedLatest = false
@@ -55,7 +63,7 @@ func runToolWithInstaller(installer *Installer, cmd *cobra.Command, args []strin
 
 		// If still "latest", check if there's a latest file for this tool
 		if version == "latest" {
-			owner, repo, err := installer.resolver.Resolve(tool)
+			owner, repo, err := installer.GetResolver().Resolve(tool)
 			if err == nil {
 				if latestVersion, err := installer.readLatestFile(owner, repo); err == nil {
 					version = latestVersion
@@ -68,7 +76,7 @@ func runToolWithInstaller(installer *Installer, cmd *cobra.Command, args []strin
 			if usedLatest {
 				_ = AddToolToVersions(".tool-versions", tool, "latest")
 				// Write the actual version to the latest file
-				owner, repo, err := installer.resolver.Resolve(tool)
+				owner, repo, err := installer.GetResolver().Resolve(tool)
 				if err == nil {
 					_ = installer.createLatestFile(owner, repo, version)
 				}
@@ -83,7 +91,7 @@ func runToolWithInstaller(installer *Installer, cmd *cobra.Command, args []strin
 	}
 
 	// Parse tool into owner/repo using installer's tool resolution
-	owner, repo, err := installer.resolver.Resolve(tool)
+	owner, repo, err := installer.GetResolver().Resolve(tool)
 	if err != nil {
 		return fmt.Errorf("invalid tool name: %w", err)
 	}

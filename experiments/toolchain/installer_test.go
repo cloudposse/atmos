@@ -62,9 +62,11 @@ func TestParseToolSpec(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:    "kubectl tool name",
-			tool:    "kubectl",
-			wantErr: true,
+			name:      "kubectl tool name",
+			tool:      "kubectl",
+			wantOwner: "kubernetes",
+			wantRepo:  "kubectl",
+			wantErr:   false,
 		},
 		{
 			name:      "helmfile tool name",
@@ -161,7 +163,7 @@ func TestBuildAssetURL_CustomFuncs(t *testing.T) {
 	}
 
 	// Check that all functions are applied as expected
-	if !strings.Contains(url, "terraform_1.2.8_2.8_1.2_darwin_arm64.zip") {
+	if !strings.Contains(url, "terraform_1.2.8_2.8_1.2_1-2-8_darwin_arm64.zip") {
 		t.Errorf("buildAssetURL() custom funcs not applied correctly, got: %v", url)
 	}
 }
@@ -305,9 +307,11 @@ func TestResolveToolName(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:     "kubectl mapping",
-			toolName: "kubectl",
-			wantErr:  true,
+			name:      "kubectl mapping",
+			toolName:  "kubectl",
+			wantOwner: "kubernetes",
+			wantRepo:  "kubectl",
+			wantErr:   false,
 		},
 		{
 			name:      "helmfile mapping",
@@ -550,7 +554,7 @@ func TestPathCommand(t *testing.T) {
 			toolVersions:  "",
 			args:          []string{},
 			expectError:   true,
-			errorContains: "no .tool-versions file found",
+			errorContains: "no tools configured in .tool-versions file",
 		},
 		{
 			name:         "empty .tool-versions file",
@@ -564,7 +568,7 @@ func TestPathCommand(t *testing.T) {
 			},
 			args:          []string{},
 			expectError:   true,
-			errorContains: "no tools configured",
+			errorContains: "no tools installed from .tool-versions file",
 		},
 		{
 			name:         "single tool not installed",
@@ -803,7 +807,7 @@ func TestPathCommand(t *testing.T) {
 			},
 			args:          []string{},
 			expectError:   true,
-			errorContains: "no installed tools found",
+			errorContains: "error reading .tool-versions",
 		},
 	}
 

@@ -888,3 +888,7 @@ func searchRegistryForTool(toolName string) (string, string, error) {
 
 	return "", "", fmt.Errorf("tool '%s' not found in registry", toolName)
 }
+
+func (i *Installer) GetResolver() ToolResolver {
+	return i.resolver
+}

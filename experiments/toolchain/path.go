@@ -45,13 +45,13 @@ func emitPath(cmd *cobra.Command, args []string) error {
 	toolVersions, err := LoadToolVersions(".tool-versions")
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("no .tool-versions file found in current directory")
+			return fmt.Errorf("no tools configured in .tool-versions file")
 		}
 		return fmt.Errorf("error reading .tool-versions: %w", err)
 	}
 
 	if len(toolVersions.Tools) == 0 {
-		return fmt.Errorf("no tools configured in .tool-versions file")
+		return fmt.Errorf("no tools installed from .tool-versions file")
 	}
 
 	// Build PATH entries for each tool
