@@ -12,15 +12,6 @@ import (
 	"golang.org/x/term"
 )
 
-func printProgressBar(stderr *os.File, isTTY bool, line string) {
-	if isTTY {
-		fmt.Fprintf(stderr, "\r\033[K%s", line)
-	} else {
-		fmt.Fprintln(stderr, line)
-	}
-	stderr.Sync()
-}
-
 var installCmd = &cobra.Command{
 	Use:   "install [package]",
 	Short: "Install a CLI binary from the registry",
@@ -35,8 +26,11 @@ Examples:
 	RunE: runInstall,
 }
 
+var reinstallFlag bool
+
 func init() {
 	installCmd.Flags().Bool("default", false, "Set installed version as default (front of .tool-versions)")
+	installCmd.Flags().BoolVar(&reinstallFlag, "reinstall", false, "Reinstall even if already installed")
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
@@ -111,9 +105,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 func InstallSinglePackage(owner, repo, version string, isLatest bool, showProgressBar bool) error {
 	restoreLogger := SuppressLogger()
 	defer restoreLogger()
-
 	installer := NewInstaller()
-
 	if showProgressBar {
 		spinner := bspinner.New()
 		progressBar := progress.New(progress.WithDefaultGradient())
@@ -126,22 +118,18 @@ func InstallSinglePackage(owner, repo, version string, isLatest bool, showProgre
 			{"Extracting", 0.7},
 			{"Complete", 1.0},
 		}
-
 		fmt.Fprint(os.Stderr, "\n")
-
 		// Phase 1: Looking up package
 		bar := progressBar.ViewAs(phases[0].percent)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
 		spinner.Tick()
-		time.Sleep(200 * time.Millisecond)
-
+		time.Sleep(100 * time.Millisecond)
 		// Phase 2: Downloading
 		bar = progressBar.ViewAs(phases[1].percent)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
 		spinner.Tick()
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
-
 	// Perform installation
 	binaryPath, err := installer.Install(owner, repo, version)
 	if err != nil {
@@ -150,17 +138,13 @@ func InstallSinglePackage(owner, repo, version string, isLatest bool, showProgre
 		}
 		return err
 	}
-
-	// Create latest file if this is a latest installation
 	if isLatest {
 		if err := installer.createLatestFile(owner, repo, version); err != nil {
 			if showProgressBar {
 				fmt.Fprintf(os.Stderr, "\r%s Failed to create latest file for %s/%s: %v\n", xMark.Render(), owner, repo, err)
 			}
-			// Don't fail the installation, just warn
 		}
 	}
-
 	if showProgressBar {
 		// Phase 3: Extracting
 		progressBar := progress.New(progress.WithDefaultGradient())
@@ -168,25 +152,19 @@ func InstallSinglePackage(owner, repo, version string, isLatest bool, showProgre
 		bar := progressBar.ViewAs(0.7)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Extracting %s %3.0f%%", spinner.View(), bar, 70.0))
 		spinner.Tick()
-		time.Sleep(200 * time.Millisecond)
-
+		time.Sleep(100 * time.Millisecond)
 		// Phase 4: Complete
 		bar = progressBar.ViewAs(1.0)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Complete %s %3.0f%%", spinner.View(), bar, 100.0))
-		time.Sleep(500 * time.Millisecond)
-
-		// Clear the line before printing the summary
+		time.Sleep(100 * time.Millisecond)
 		if term.IsTerminal(int(os.Stderr.Fd())) {
 			fmt.Fprint(os.Stderr, "\r\033[K")
 		}
 		fmt.Fprintf(os.Stderr, "%s Installed %s/%s@%s to %s\n", checkMark.Render(), owner, repo, version, binaryPath)
 	}
-
-	// Register in .tool-versions
 	if err := AddToolToVersions(".tool-versions", repo, version); err == nil && showProgressBar {
 		fmt.Fprintf(os.Stderr, "%s Registered %s %s in .tool-versions\n", checkMark.Render(), repo, version)
 	}
-
 	return nil
 }
 
@@ -210,10 +188,12 @@ func installFromToolVersions(toolVersionsPath string) error {
 	spinner := bspinner.New()
 	progressBar := progress.New(progress.WithDefaultGradient())
 
-	fmt.Fprint(os.Stderr, "\n")
-
 	installedCount := 0
 	failedCount := 0
+	alreadyInstalledCount := 0
+
+	// In installFromToolVersions, add a history slice to track actions
+	var history []string
 
 	toolList := make([]struct {
 		tool    string
@@ -242,36 +222,66 @@ func installFromToolVersions(toolVersionsPath string) error {
 			registry := NewAquaRegistry()
 			latestVersion, err := registry.GetLatestVersion(pkg.owner, pkg.repo)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "\r%s Failed to get latest version for %s/%s: %v\n", xMark.Render(), pkg.owner, pkg.repo, err)
+				msg := fmt.Sprintf("%s %s/%s@%s Failed to get latest version: %v", xMark.Render(), pkg.owner, pkg.repo, version, err)
+				resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
+				fmt.Fprintln(os.Stderr, msg)
+				percent := float64(i+1) / float64(totalPackages)
+				bar := progressBar.ViewAs(percent)
+				printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
+				time.Sleep(100 * time.Millisecond)
+				history = append(history, msg)
 				failedCount++
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "\r📦 Using latest version for %s/%s: %s\n", pkg.owner, pkg.repo, latestVersion)
 			version = latestVersion
 		}
 
-		percent := float64(i) / float64(totalPackages)
+		_, err := installer.findBinaryPath(pkg.owner, pkg.repo, version)
+		if err == nil && !reinstallFlag {
+			msg := fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), pkg.owner, pkg.repo, version)
+			percent := float64(i+1) / float64(totalPackages)
+			bar := progressBar.ViewAs(percent)
+			resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
+			fmt.Fprintln(os.Stderr, msg)
+			printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
+			time.Sleep(100 * time.Millisecond)
+			history = append(history, msg)
+			alreadyInstalledCount++
+			continue
+		}
+
+		err = InstallSinglePackage(pkg.owner, pkg.repo, version, pkg.version == "latest", false)
+		var msg string
+		if err == nil {
+			msg = fmt.Sprintf("%s Installed %s/%s@%s", checkMark.Render(), pkg.owner, pkg.repo, version)
+			installedCount++
+		} else {
+			msg = fmt.Sprintf("%s Failed to install %s/%s@%s: %v", xMark.Render(), pkg.owner, pkg.repo, version, err)
+			failedCount++
+		}
+		percent := float64(i+1) / float64(totalPackages)
 		bar := progressBar.ViewAs(percent)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installing %s@%s %s %d/%d", spinner.View(), pkg.tool, version, bar, i+1, totalPackages))
-		spinner.Tick()
+		resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
+		fmt.Fprintln(os.Stderr, msg)
+		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
 		time.Sleep(100 * time.Millisecond)
-
-		_ = InstallSinglePackage(pkg.owner, pkg.repo, version, pkg.version == "latest", false)
+		history = append(history, msg)
 	}
-
-	percent := 1.0
-	bar := progressBar.ViewAs(percent)
-	printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Complete %s %d/%d", spinner.View(), bar, totalPackages, totalPackages))
-	time.Sleep(500 * time.Millisecond)
-
-	// Clear the line before printing the summary
-	if term.IsTerminal(int(os.Stderr.Fd())) {
-		fmt.Fprint(os.Stderr, "\r\033[K")
-	}
-	if failedCount == 0 {
-		fmt.Fprintf(os.Stderr, "%s Successfully installed %d packages\n", checkMark.Render(), installedCount)
+	// At the end, clear the progress bar line before printing the summary
+	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
+	fmt.Fprintln(os.Stderr)
+	if totalPackages == 0 {
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s No tools to install", checkMark.Render()))
+	} else if failedCount == 0 && alreadyInstalledCount == 0 {
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools", checkMark.Render(), installedCount))
+	} else if failedCount == 0 && alreadyInstalledCount > 0 {
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, %d already installed", checkMark.Render(), installedCount, alreadyInstalledCount))
+	} else if failedCount > 0 && alreadyInstalledCount == 0 {
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, %d failed", xMark.Render(), installedCount, failedCount))
+	} else if failedCount > 0 && alreadyInstalledCount > 0 {
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, %d failed, %d already installed", xMark.Render(), installedCount, failedCount, alreadyInstalledCount))
 	} else {
-		fmt.Fprintf(os.Stderr, "\r⚠️  Installed %d packages, %d failed\n", installedCount, failedCount)
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, %d failed, %d already installed", checkMark.Render(), installedCount, failedCount, alreadyInstalledCount))
 	}
 
 	return nil
