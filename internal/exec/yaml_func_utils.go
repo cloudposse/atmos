@@ -69,13 +69,13 @@ func processNodes(
 		}
 	}
 
-	// Start recursion with original map
+	// Start recursion with the original map.
 	newMap := make(map[string]any)
 	for k, v := range data {
 		newMap[k] = recurse(v, newMap, k)
 	}
 
-	// Process `!terraform.state` tags concurrently.
+	// Process `!terraform.state` tags concurrently and insert the results back into the structure.
 	var wg sync.WaitGroup
 	for _, node := range stateNodes {
 		wg.Add(1)
@@ -95,46 +95,6 @@ func processNodes(
 
 	return newMap
 }
-
-//func processNodes(
-//	atmosConfig *schema.AtmosConfiguration,
-//	data map[string]any,
-//	currentStack string,
-//	skip []string,
-//) map[string]any {
-//	newMap := make(map[string]any)
-//	var recurse func(any) any
-//
-//	recurse = func(node any) any {
-//		switch v := node.(type) {
-//		case string:
-//			return processCustomTags(atmosConfig, v, currentStack, skip)
-//
-//		case map[string]any:
-//			newNestedMap := make(map[string]any)
-//			for k, val := range v {
-//				newNestedMap[k] = recurse(val)
-//			}
-//			return newNestedMap
-//
-//		case []any:
-//			newSlice := make([]any, len(v))
-//			for i, val := range v {
-//				newSlice[i] = recurse(val)
-//			}
-//			return newSlice
-//
-//		default:
-//			return v
-//		}
-//	}
-//
-//	for k, v := range data {
-//		newMap[k] = recurse(v)
-//	}
-//
-//	return newMap
-//}
 
 func processCustomTags(
 	atmosConfig *schema.AtmosConfiguration,
