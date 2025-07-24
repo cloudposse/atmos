@@ -12,12 +12,14 @@ import (
 	_ "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsUtils "github.com/cloudposse/atmos/internal/aws_utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// maxRetryCount defines the max attempts to read a state file from an S3 bucket.
 const maxRetryCount = 2
 
 // GetS3BackendAssumeRoleArn returns the s3 backend role ARN from the S3 backend config.
@@ -90,29 +92,34 @@ func ReadTerraformBackendS3Internal(
 	for attempt := 0; attempt <= maxRetryCount; attempt++ {
 		// 30 sec timeout to read the state file from the S3 bucket.
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		defer cancel()
 
 		output, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(tfStateFilePath),
 		})
+
+		cancel()
+
 		if err != nil {
 			// Check if the error is because the object doesn't exist.
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
 			var nsk *types.NoSuchKey
 			if errors.As(err, &nsk) {
+				log.Debug("Terraform state file doesn't exist in the S3 bucket; returning 'null'", "file", tfStateFilePath, "bucket", bucket)
 				return nil, nil
 			}
+
 			lastErr = err
 			if attempt < maxRetryCount {
+				log.Debug("Failed to read Terraform state file from the S3 bucket", "attempt", attempt+1, "file", tfStateFilePath, "bucket", bucket, "error", err)
 				time.Sleep(time.Second * 2) // backoff
 				continue
 			}
 			return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
 		}
 
-		defer output.Body.Close()
 		content, err := io.ReadAll(output.Body)
+		_ = output.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadS3ObjectBody, err)
 		}
