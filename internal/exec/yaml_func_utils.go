@@ -40,7 +40,8 @@ func processNodes(
 		switch v := node.(type) {
 		case string:
 			if strings.HasPrefix(v, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState) {
-				// Defer processing this tag
+				// Defer processing `!terraform.state` tags, just collect them.
+				// All of them will be processed concurrently later in the flow, and the results will be inserted back into the structure.
 				mu.Lock()
 				stateNodes = append(stateNodes, stateNode{parent: parent, key: key, value: v})
 				mu.Unlock()
@@ -74,7 +75,7 @@ func processNodes(
 		newMap[k] = recurse(v, newMap, k)
 	}
 
-	// Process !terraform.state tags in parallel
+	// Process `!terraform.state` tags concurrently.
 	var wg sync.WaitGroup
 	for _, node := range stateNodes {
 		wg.Add(1)
