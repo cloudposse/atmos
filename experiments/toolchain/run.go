@@ -103,7 +103,7 @@ func runToolWithInstaller(installer ToolRunner, cmd *cobra.Command, args []strin
 		fmt.Printf("🔧 Tool %s@%s is not installed. Installing automatically...\n", tool, version)
 
 		// Use the same installation UI as the install command
-		installErr := InstallSinglePackage(owner, repo, version, false, true)
+		installErr := InstallSingleTool(owner, repo, version, false, true)
 		if installErr != nil {
 			return fmt.Errorf("failed to auto-install %s@%s: %w. Run 'toolchain install %s/%s@%s' manually",
 				tool, version, installErr, owner, repo, version)
@@ -120,7 +120,7 @@ func runToolWithInstaller(installer ToolRunner, cmd *cobra.Command, args []strin
 			fmt.Printf("🔧 Tool %s@%s is not installed. Installing automatically...\n", tool, version)
 
 			// Use the same installation UI as the install command
-			installErr := InstallSinglePackage(owner, repo, version, false, true)
+			installErr := InstallSingleTool(owner, repo, version, false, true)
 			if installErr != nil {
 				return fmt.Errorf("failed to auto-install %s@%s: %w. Run 'toolchain install %s/%s@%s' manually",
 					tool, version, installErr, owner, repo, version)

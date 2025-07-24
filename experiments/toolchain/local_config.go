@@ -141,8 +141,8 @@ func (lcm *LocalConfigManager) ResolveVersionConstraint(tool *LocalTool, version
 	return nil
 }
 
-// GetPackageWithVersion returns a Package for the given owner/repo and version, using local config (asdf-style versioned local tool lookup)
-func (lcm *LocalConfigManager) GetPackageWithVersion(owner, repo, version string) (*Package, error) {
+// GetToolWithVersion returns a Tool for the given owner/repo and version, using local config (asdf-style versioned local tool lookup)
+func (lcm *LocalConfigManager) GetToolWithVersion(owner, repo, version string) (*Tool, error) {
 	tool, exists := lcm.GetTool(owner, repo)
 	if !exists {
 		return nil, fmt.Errorf("tool %s/%s not found in local config", owner, repo)
@@ -150,7 +150,7 @@ func (lcm *LocalConfigManager) GetPackageWithVersion(owner, repo, version string
 
 	constraint := lcm.ResolveVersionConstraint(tool, version)
 
-	pkg := &Package{
+	t := &Tool{
 		Name:      repo,
 		Type:      tool.Type,
 		RepoOwner: tool.RepoOwner,
@@ -162,25 +162,25 @@ func (lcm *LocalConfigManager) GetPackageWithVersion(owner, repo, version string
 
 	// Set binary name if specified
 	if tool.BinaryName != "" {
-		pkg.Name = tool.BinaryName
+		t.Name = tool.BinaryName
 	}
 
 	// Handle URL for http type
 	if tool.Type == "http" {
-		pkg.Asset = tool.URL
+		t.Asset = tool.URL
 	}
 
 	if constraint != nil {
 		if constraint.Asset != "" {
-			pkg.Asset = constraint.Asset
+			t.Asset = constraint.Asset
 		}
 		if constraint.Format != "" {
-			pkg.Format = constraint.Format
+			t.Format = constraint.Format
 		}
 		if constraint.BinaryName != "" {
-			pkg.Name = constraint.BinaryName
+			t.Name = constraint.BinaryName
 		}
 	}
 
-	return pkg, nil
+	return t, nil
 }
