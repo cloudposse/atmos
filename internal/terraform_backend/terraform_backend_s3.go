@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -46,6 +47,37 @@ type S3API interface {
 	GetObject(ctx context.Context, input *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
+// s3ClientCache caches the S3 clients based on a deterministic cache key.
+// It's a map[string]S3API.
+var s3ClientCache sync.Map
+
+func getCachedS3Client(backend *map[string]any) (S3API, error) {
+	region := GetBackendAttribute(backend, "region")
+	roleArn := GetS3BackendAssumeRoleArn(backend)
+
+	// Build a deterministic cache key
+	cacheKey := fmt.Sprintf("region=%s;role_arn=%s", region, roleArn)
+
+	// Check the cache
+	if cached, ok := s3ClientCache.Load(cacheKey); ok {
+		return cached.(S3API), nil
+	}
+
+	// Build the S3 client if not cached
+	// 30 sec timeout to configure an AWS client (and assume a role if provided).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cfg, err := awsUtils.LoadAWSConfig(ctx, region, roleArn, 3*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
+	s3Client := s3.NewFromConfig(cfg)
+	s3ClientCache.Store(cacheKey, s3Client)
+	return s3Client, nil
+}
+
 // ReadTerraformBackendS3 reads the Terraform state file from the configured S3 backend.
 // If the state file does not exist in the bucket, the function returns `nil`.
 func ReadTerraformBackendS3(
@@ -54,21 +86,10 @@ func ReadTerraformBackendS3(
 ) ([]byte, error) {
 	backend := GetComponentBackend(componentSections)
 
-	region := GetBackendAttribute(&backend, "region")
-	roleArn := GetS3BackendAssumeRoleArn(&backend)
-
-	// 30 sec timeout to configure an AWS client (and assume a role if provided).
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Load AWS config and assume the backend IAM role (using the AWS SDK).
-	awsConfig, err := awsUtils.LoadAWSConfig(ctx, region, roleArn, time.Minute*3)
+	s3Client, err := getCachedS3Client(&backend)
 	if err != nil {
 		return nil, err
 	}
-
-	// Create an S3 client.
-	s3Client := s3.NewFromConfig(awsConfig)
 
 	return ReadTerraformBackendS3Internal(s3Client, componentSections, &backend)
 }
