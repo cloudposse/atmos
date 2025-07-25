@@ -62,3 +62,11 @@ tools:
       - constraint: "< 1.10.0"
         asset: tofu_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip
         format: zip
+
+  helm/helm:
+    type: http
+    repo_owner: helm
+    repo_name: helm
+    url: https://get.helm.sh/helm-v{{.Version}}-{{.OS}}-{{.Arch}}.tar.gz
+    format: tar.gz
+    binary_name: helm

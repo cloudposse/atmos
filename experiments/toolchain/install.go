@@ -275,13 +275,13 @@ func installFromToolVersions(toolVersionsPath string) error {
 	} else if failedCount == 0 && alreadyInstalledCount == 0 {
 		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools", checkMark.Render(), installedCount))
 	} else if failedCount == 0 && alreadyInstalledCount > 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, %d already installed", checkMark.Render(), installedCount, alreadyInstalledCount))
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, skipped %d", checkMark.Render(), installedCount, alreadyInstalledCount))
 	} else if failedCount > 0 && alreadyInstalledCount == 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, %d failed", xMark.Render(), installedCount, failedCount))
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d", xMark.Render(), installedCount, failedCount))
 	} else if failedCount > 0 && alreadyInstalledCount > 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, %d failed, %d already installed", xMark.Render(), installedCount, failedCount, alreadyInstalledCount))
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d, skipped %d", xMark.Render(), installedCount, failedCount, alreadyInstalledCount))
 	} else {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, %d failed, %d already installed", checkMark.Render(), installedCount, failedCount, alreadyInstalledCount))
+		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d, skipped %d", checkMark.Render(), installedCount, failedCount, alreadyInstalledCount))
 	}
 
 	return nil

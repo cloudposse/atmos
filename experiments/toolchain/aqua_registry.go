@@ -246,61 +246,30 @@ func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Tool, error
 
 // parseRegistryFile parses Aqua registry YAML data
 func (ar *AquaRegistry) parseRegistryFile(data []byte, owner, repo string) (*Tool, error) {
-	var registry struct {
-		Packages []struct {
-			Type             string `yaml:"type"`
-			RepoOwner        string `yaml:"repo_owner"`
-			RepoName         string `yaml:"repo_name"`
-			URL              string `yaml:"url"`
-			Description      string `yaml:"description"`
-			VersionOverrides []struct {
-				VersionConstraint string `yaml:"version_constraint"`
-				Asset             string `yaml:"asset"`
-				Format            string `yaml:"format"`
-				Files             []struct {
-					Name string `yaml:"name"`
-				} `yaml:"files"`
-			} `yaml:"version_overrides"`
-		} `yaml:"packages"`
-	}
-
-	if err := yaml.Unmarshal(data, &registry); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
-	}
-
-	if len(registry.Packages) == 0 {
-		return nil, fmt.Errorf("no packages found in registry file")
-	}
-
-	// Use the first package definition
-	pkgDef := registry.Packages[0]
-
-	// Create base tool
-	tool := &Tool{
-		Name:      repo,
-		Type:      pkgDef.Type,
-		RepoOwner: pkgDef.RepoOwner,
-		RepoName:  pkgDef.RepoName,
-	}
-
-	// Handle different package types
-	switch pkgDef.Type {
-	case "http":
-		// Simple HTTP package with direct URL
-		tool.Asset = pkgDef.URL
-	case "github_release":
-		// GitHub release package - we'll need version to determine asset
-		// For now, use a default asset template that can be overridden
-		tool.Asset = "{{.RepoName}}_{{trimV .Version}}_{{.OS}}_{{.Arch}}.{{.Format}}"
-		if len(pkgDef.VersionOverrides) > 0 {
-			// Use the first version override as default
-			tool.Asset = pkgDef.VersionOverrides[0].Asset
+	// Try AquaRegistryFile (packages)
+	var aquaRegistry AquaRegistryFile
+	if err := yaml.Unmarshal(data, &aquaRegistry); err == nil && len(aquaRegistry.Packages) > 0 {
+		pkg := aquaRegistry.Packages[0]
+		// Convert AquaPackage to Tool
+		tool := &Tool{
+			Name:       pkg.BinaryName,
+			RepoOwner:  pkg.RepoOwner,
+			RepoName:   pkg.RepoName,
+			Asset:      pkg.URL,
+			Format:     pkg.Format,
+			Type:       pkg.Type,
+			BinaryName: pkg.BinaryName,
 		}
-	default:
-		return nil, fmt.Errorf("unsupported package type: %s", pkgDef.Type)
+		return tool, nil
 	}
 
-	return tool, nil
+	// Fallback to ToolRegistry (tools)
+	var toolRegistry ToolRegistry
+	if err := yaml.Unmarshal(data, &toolRegistry); err == nil && len(toolRegistry.Tools) > 0 {
+		return &toolRegistry.Tools[0], nil
+	}
+
+	return nil, fmt.Errorf("no tools or packages found in registry file")
 }
 
 // BuildAssetURL constructs the download URL for a tool version
@@ -377,7 +346,7 @@ func (ar *AquaRegistry) convertLocalToolToTool(localTool *LocalTool, owner, repo
 		Type:      localTool.Type,
 		RepoOwner: localTool.RepoOwner,
 		RepoName:  localTool.RepoName,
-		Asset:     localTool.Asset,
+		Asset:     localTool.URL,
 		Format:    localTool.Format,
 	}
 

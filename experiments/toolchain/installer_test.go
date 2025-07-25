@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"net/http"
+	"net/http/httptest"
+
 	"github.com/charmbracelet/log"
 )
 
@@ -126,13 +129,13 @@ func TestBuildAssetURL(t *testing.T) {
 	}
 	installer := NewInstallerWithResolver(mockResolver)
 
-	pkg := &Package{
+	tool := &Tool{
 		RepoOwner: "suzuki-shunsuke",
 		RepoName:  "github-comment",
 		Asset:     "github-comment_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz",
 	}
 
-	url, err := installer.buildAssetURL(pkg, "v6.3.4")
+	url, err := installer.buildAssetURL(tool, "v6.3.4")
 	if err != nil {
 		t.Fatalf("buildAssetURL() error: %v", err)
 	}
@@ -151,13 +154,13 @@ func TestBuildAssetURL_CustomFuncs(t *testing.T) {
 	}
 	installer := NewInstallerWithResolver(mockResolver)
 
-	pkg := &Package{
+	tool := &Tool{
 		RepoOwner: "hashicorp",
 		RepoName:  "terraform",
 		Asset:     "terraform_{{trimV .Version}}_{{trimPrefix \"1.\" .Version}}_{{trimSuffix \".8\" .Version}}_{{replace \".\" \"-\" .Version}}_{{.OS}}_{{.Arch}}.zip",
 	}
 
-	url, err := installer.buildAssetURL(pkg, "v1.2.8")
+	url, err := installer.buildAssetURL(tool, "v1.2.8")
 	if err != nil {
 		t.Fatalf("buildAssetURL() error: %v", err)
 	}
@@ -188,7 +191,7 @@ func TestGetBinaryPath(t *testing.T) {
 	}
 }
 
-func TestFindPackage(t *testing.T) {
+func TestFindTool(t *testing.T) {
 	mockResolver := &mockToolResolver{
 		mapping: map[string][2]string{
 			"terraform": {"hashicorp", "terraform"},
@@ -200,24 +203,24 @@ func TestFindPackage(t *testing.T) {
 	}
 	installer := NewInstallerWithResolver(mockResolver)
 
-	// Test with known package
-	pkg, err := installer.findPackage("suzuki-shunsuke", "github-comment", "v6.3.4")
+	// Test with known tool
+	tool, err := installer.findTool("suzuki-shunsuke", "github-comment", "v6.3.4")
 	if err != nil {
-		t.Fatalf("findPackage() error: %v", err)
+		t.Fatalf("findTool() error: %v", err)
 	}
 
-	if pkg.RepoOwner != "suzuki-shunsuke" {
-		t.Errorf("findPackage() RepoOwner = %v, want suzuki-shunsuke", pkg.RepoOwner)
+	if tool.RepoOwner != "suzuki-shunsuke" {
+		t.Errorf("findTool() RepoOwner = %v, want suzuki-shunsuke", tool.RepoOwner)
 	}
 
-	if pkg.RepoName != "github-comment" {
-		t.Errorf("findPackage() RepoName = %v, want github-comment", pkg.RepoName)
+	if tool.RepoName != "github-comment" {
+		t.Errorf("findTool() RepoName = %v, want github-comment", tool.RepoName)
 	}
 
-	// Test with unknown package
-	_, err = installer.findPackage("unknown", "package", "v1.0.0")
+	// Test with unknown tool
+	_, err = installer.findTool("unknown", "package", "v1.0.0")
 	if err == nil {
-		t.Error("findPackage() expected error for unknown package but got none")
+		t.Error("findTool() expected error for unknown tool but got none")
 	}
 }
 
@@ -231,7 +234,12 @@ func TestNewInstaller(t *testing.T) {
 			"helmfile":  {"helmfile", "helmfile"},
 		},
 	}
-	installer := NewInstallerWithResolver(mockResolver)
+	customRegistries := []string{"mock-remote-registry", "mock-local-registry"}
+	installer := &Installer{
+		binDir:     "./.tools/bin",
+		registries: customRegistries,
+		resolver:   mockResolver,
+	}
 
 	if installer == nil {
 		t.Fatal("NewInstaller() returned nil")
@@ -245,14 +253,14 @@ func TestNewInstaller(t *testing.T) {
 		t.Error("NewInstaller() registries is empty")
 	}
 
-	// Check that default registries are set
+	// Check that custom registries are set
 	foundRemote := false
 	foundLocal := false
 	for _, registry := range installer.registries {
-		if strings.HasPrefix(registry, "http") {
+		if registry == "mock-remote-registry" {
 			foundRemote = true
 		}
-		if registry == "./package-registry" {
+		if registry == "mock-local-registry" {
 			foundLocal = true
 		}
 	}
@@ -422,13 +430,13 @@ func TestUninstall(t *testing.T) {
 	}
 	installer := NewInstallerWithResolver(mockResolver)
 
-	// Test uninstalling a non-existent package
+	// Test uninstalling a non-existent tool
 	err := installer.Uninstall("nonexistent", "package", "1.0.0")
 	if err == nil {
-		t.Error("Expected error when uninstalling non-existent package")
+		t.Error("Expected error when uninstalling non-existent tool")
 	}
 
-	// Test uninstalling an existing package (if we had one installed)
+	// Test uninstalling an existing tool (if we had one installed)
 	// This would require setting up a test environment with actual binaries
 	// For now, we just test that the method exists and handles errors properly
 }
@@ -970,5 +978,43 @@ func TestEmitJSONPath(t *testing.T) {
 				t.Errorf("Output mismatch:\nGot:  %s\nWant: %s", output, tt.expected)
 			}
 		})
+	}
+}
+
+func TestAquaRegistryFallback_PackagesKey(t *testing.T) {
+	// Mock Aqua registry YAML with 'packages' key
+	registryYAML := `
+packages:
+  - type: http
+    repo_owner: helm
+    repo_name: helm
+    url: https://get.helm.sh/helm-{{.Version}}-{{.OS}}-{{.Arch}}.tar.gz
+    format: tar.gz
+    binary_name: helm
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	// Use the test server as the registry
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir() // avoid polluting real cache
+
+	// Directly call fetchFromRegistry with the test server URL
+	tool, err := ar.fetchFromRegistry(ts.URL, "helm", "helm")
+	if err != nil {
+		t.Fatalf("Expected to fetch tool from Aqua registry, got error: %v", err)
+	}
+	if tool == nil {
+		t.Fatalf("Expected tool, got nil")
+	}
+	if tool.RepoOwner != "helm" || tool.RepoName != "helm" {
+		t.Errorf("Unexpected tool fields: %+v", tool)
+	}
+	if tool.Asset == "" {
+		t.Errorf("Expected asset template to be set")
 	}
 }

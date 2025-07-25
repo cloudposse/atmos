@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetPackageWithVersion(t *testing.T) {
+func TestGetToolWithVersion(t *testing.T) {
 	lcm := &LocalConfigManager{
 		config: &LocalConfig{
 			Tools: map[string]LocalTool{
@@ -68,20 +68,20 @@ func TestGetPackageWithVersion(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			pkg, err := lcm.GetPackageWithVersion(tc.owner, tc.repo, tc.version)
+			tool, err := lcm.GetToolWithVersion(tc.owner, tc.repo, tc.version)
 			if tc.wantErr {
 				assert.Error(t, err)
 				return
 			}
 			assert.NoError(t, err)
-			assert.Equal(t, tc.wantAsset, pkg.Asset)
-			assert.Equal(t, tc.wantFormat, pkg.Format)
-			assert.Equal(t, tc.wantBinary, pkg.Name)
+			assert.Equal(t, tc.wantAsset, tool.Asset)
+			assert.Equal(t, tc.wantFormat, tool.Format)
+			assert.Equal(t, tc.wantBinary, tool.Name)
 		})
 	}
 }
 
-func TestGetPackageWithVersion_BinaryNameAndHttpType(t *testing.T) {
+func TestGetToolWithVersion_BinaryNameAndHttpType(t *testing.T) {
 	lcm := &LocalConfigManager{
 		config: &LocalConfig{
 			Tools: map[string]LocalTool{
@@ -144,11 +144,11 @@ func TestGetPackageWithVersion_BinaryNameAndHttpType(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			pkg, err := lcm.GetPackageWithVersion(tc.owner, tc.repo, tc.version)
+			tool, err := lcm.GetToolWithVersion(tc.owner, tc.repo, tc.version)
 			assert.NoError(t, err)
-			assert.Equal(t, tc.wantName, pkg.Name)
-			assert.Equal(t, tc.wantAsset, pkg.Asset)
-			assert.Equal(t, tc.wantFormat, pkg.Format)
+			assert.Equal(t, tc.wantName, tool.Name)
+			assert.Equal(t, tc.wantAsset, tool.Asset)
+			assert.Equal(t, tc.wantFormat, tool.Format)
 		})
 	}
 }

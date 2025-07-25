@@ -107,7 +107,8 @@ func (i *Installer) installFromTool(tool *Tool, version string) (string, error) 
 		return "", fmt.Errorf("failed to build asset URL: %w", err)
 	}
 	log.Debug("Downloading tool", "owner", tool.RepoOwner, "repo", tool.RepoName, "version", version, "url", assetURL)
-	assetPath, err := i.downloadAsset(assetURL)
+
+	assetPath, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download asset: %w", err)
 	}
@@ -447,6 +448,42 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 	}
 
 	return cachePath, nil
+}
+
+// downloadAssetWithVersionFallback tries the asset URL as-is, then with 'v' prefix or without, if 404
+func (i *Installer) downloadAssetWithVersionFallback(tool *Tool, version, assetURL string) (string, error) {
+	assetPath, err := i.downloadAsset(assetURL)
+	if err == nil {
+		return assetPath, nil
+	}
+	if !isHTTP404(err) {
+		return "", err
+	}
+	// Try fallback with or without 'v'
+	var fallbackVersion string
+	if strings.HasPrefix(version, "v") {
+		fallbackVersion = strings.TrimPrefix(version, "v")
+	} else {
+		fallbackVersion = "v" + version
+	}
+	if fallbackVersion == version {
+		return "", err // nothing to try
+	}
+	fallbackURL, buildErr := i.buildAssetURL(tool, fallbackVersion)
+	if buildErr != nil {
+		return "", fmt.Errorf("failed to build fallback asset URL: %w", buildErr)
+	}
+	log.Warn("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
+	assetPath, err = i.downloadAsset(fallbackURL)
+	if err == nil {
+		return assetPath, nil
+	}
+	return "", fmt.Errorf("failed to download asset: tried %s and %s: %w", assetURL, fallbackURL, err)
+}
+
+// isHTTP404 returns true if the error is a 404 from downloadAsset
+func isHTTP404(err error) bool {
+	return strings.Contains(err.Error(), "HTTP 404")
 }
 
 // extractAndInstall extracts the binary from the asset and installs it
