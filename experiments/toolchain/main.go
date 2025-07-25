@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -65,12 +66,40 @@ var removeCmd = &cobra.Command{
 	},
 }
 
+var cleanCmd = &cobra.Command{
+	Use:   "clean",
+	Short: "Remove all installed tools by deleting the .tools directory",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		toolsDir := ".tools"
+		count := 0
+		err := filepath.Walk(toolsDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if path != toolsDir {
+				count++
+			}
+			return nil
+		})
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to count files in %s: %w", toolsDir, err)
+		}
+		err = os.RemoveAll(toolsDir)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to delete %s: %w", toolsDir, err)
+		}
+		cmd.Printf("%s Deleted %d files/directories from %s\n", checkMark.Render(), count, toolsDir)
+		return nil
+	},
+}
+
 func init() {
 	// Initialize the global logger
 	InitLogger()
 
 	// Add log level flag
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "Set log level (debug, info, warn, error)")
+	rootCmd.AddCommand(cleanCmd)
 }
 
 func main() {
@@ -80,6 +109,7 @@ func main() {
 	rootCmd.AddCommand(removeCmd)
 	rootCmd.AddCommand(toolVersionsCmd)
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(execCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(uninstallCmd)

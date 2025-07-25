@@ -19,6 +19,7 @@ type Tool struct {
 	Overrides    []Override        `yaml:"overrides"`
 	SupportedIf  *SupportedIf      `yaml:"supported_if"`
 	Replacements map[string]string `yaml:"replacements"`
+	BinaryName   string            `yaml:"binary_name"`
 }
 
 // File represents a file to be extracted from the archive
@@ -39,4 +40,22 @@ type Override struct {
 type SupportedIf struct {
 	GOOS   string `yaml:"goos"`
 	GOARCH string `yaml:"goarch"`
+}
+
+// AquaPackage represents a single package in the Aqua registry format
+// This struct matches the Aqua registry YAML fields exactly
+// and is used only for parsing Aqua registry files.
+type AquaPackage struct {
+	Type       string `yaml:"type"`
+	RepoOwner  string `yaml:"repo_owner"`
+	RepoName   string `yaml:"repo_name"`
+	URL        string `yaml:"url"`
+	Format     string `yaml:"format"`
+	BinaryName string `yaml:"binary_name"`
+	// Add other Aqua fields as needed
+}
+
+// AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key)
+type AquaRegistryFile struct {
+	Packages []AquaPackage `yaml:"packages"`
 }
