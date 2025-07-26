@@ -345,20 +345,31 @@ func TestProcessCustomYamlTags(t *testing.T) {
 		"component-3",
 		stack,
 		true,
-		true,
+		false,
 		nil,
 	)
 	assert.NoError(t, err)
 
-	y, err = u.ConvertToYAML(res)
-	assert.Nil(t, err)
-	assert.Contains(t, y, "foo: component-1-a")
-	assert.Contains(t, y, "bar: component-1-b")
-	assert.Contains(t, y, "baz: default-value")
-	assert.Contains(t, y, `test_list:
-    - fallback1
-    - fallback2`)
-	assert.Contains(t, y, `test_map:
-    key1: fallback1
-    key2: fallback2`)
+	processed, err := ProcessCustomYamlTags(&atmosConfig, res, stack, []string{})
+	assert.NoError(t, err)
+
+	val, err := u.EvaluateYqExpression(&atmosConfig, processed, ".vars.foo")
+	assert.NoError(t, err)
+	assert.Equal(t, "component-1-a", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, processed, ".vars.bar")
+	assert.NoError(t, err)
+	assert.Equal(t, "component-1-b", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, processed, ".vars.baz")
+	assert.NoError(t, err)
+	assert.Equal(t, "default-value", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, processed, ".vars.test_map.key1")
+	assert.NoError(t, err)
+	assert.Equal(t, "fallback1", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, processed, ".vars.test_list[1]")
+	assert.NoError(t, err)
+	assert.Equal(t, "fallback2", val)
 }
