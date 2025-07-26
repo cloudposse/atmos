@@ -34,7 +34,7 @@ workflows:
 The `command` section of the workflow schema has been updated to allow for retrying of failed commands. The `retry` section
 accepts the following parameters:
 
-* `max_attempts`: The maximum number of times the command will be retried. The default is `3`.
+* `max_attempts`: The maximum number of times the command will be retried. The default is `1`.
 * `delay`: The amount of time to delay between retries. The default is `5s`.
 * `backoff_strategy`: The backoff strategy to use. The default is `constant`. The other options are `exponential` and `linear`.
 * `initial_delay`: The initial delay to use when retrying. The default is `5s`.
