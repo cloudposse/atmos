@@ -21,10 +21,10 @@ func ProcessCustomYamlTags(
 
 func processNodes(
 	atmosConfig *schema.AtmosConfiguration,
-	data map[string]any,
+	data schema.AtmosSectionMapType,
 	currentStack string,
 	skip []string,
-) map[string]any {
+) schema.AtmosSectionMapType {
 	type stateNode struct {
 		parent any    // *map[string]any or *[]any
 		key    any    // string (for maps) or int (for slices)
