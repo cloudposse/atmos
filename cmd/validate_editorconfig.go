@@ -2,13 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/pkg/version"
-
+	log "github.com/charmbracelet/log"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
@@ -16,6 +12,11 @@ import (
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/utils"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/validation"
 	"github.com/spf13/cobra"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 var (
@@ -36,12 +37,13 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		initializeConfig(cmd)
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		if len(args) > 0 {
 			showUsageAndExit(cmd, args)
 		}
 		runMainLogic()
+		return nil
 	},
 }
 
@@ -67,7 +69,7 @@ func initializeConfig(cmd *cobra.Command) {
 	if initEditorConfig {
 		err := currentConfig.Save(version.Version)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 	}
 
@@ -99,13 +101,13 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("format") && atmosConfig.Validate.EditorConfig.Format != "" {
 		format := outputformat.OutputFormat(atmosConfig.Validate.EditorConfig.Format)
 		if ok := format.IsValid(); !ok {
-			u.LogErrorAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
 		}
 		cliConfig.Format = format
 	} else if cmd.Flags().Changed("format") {
 		format := outputformat.OutputFormat(format)
 		if ok := format.IsValid(); !ok {
-			u.LogErrorAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()), "", "")
 		}
 		cliConfig.Format = format
 	}
@@ -144,31 +146,29 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 // runMainLogic contains the main logic
 func runMainLogic() {
 	config := *currentConfig
-	u.LogDebug(config.String())
-	u.LogTrace(fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
+	log.Debug(config.String())
+	log.Debug("Excluding", "regex", config.GetExcludesAsRegularExpression())
 
 	if err := checkVersion(config); err != nil {
-		u.LogErrorAndExit(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	filePaths, err := files.GetFiles(config)
-	if err != nil {
-		u.LogErrorAndExit(err)
-	}
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	if config.DryRun {
 		for _, file := range filePaths {
-			u.LogInfo(file)
+			log.Info(file)
 		}
-		os.Exit(0)
+		return
 	}
 
 	errors := validation.ProcessValidation(filePaths, config)
-	u.LogDebug(fmt.Sprintf("%d files checked", len(filePaths)))
+	log.Debug("Files checked", "count", len(filePaths))
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
-		os.Exit(1)
+		errUtils.Exit(1)
 	}
 	u.PrintMessage("No errors found")
 }

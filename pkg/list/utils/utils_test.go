@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	listErrors "github.com/cloudposse/atmos/pkg/list/errors"
 	"github.com/cloudposse/atmos/pkg/list/utils"
-	"github.com/stretchr/testify/assert"
 )
 
 // Mock NoValuesFoundError for testing IsNoValuesFoundError.

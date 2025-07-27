@@ -6,7 +6,10 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 )
 
-var checkFlag bool
+var (
+	checkFlag     bool
+	versionFormat string
+)
 
 var versionCmd = &cobra.Command{
 	Use:     "version",
@@ -14,14 +17,14 @@ var versionCmd = &cobra.Command{
 	Long:    `This command shows the version of the Atmos CLI you are currently running and checks if a newer version is available. Use this command to verify your installation and ensure you are up to date.`,
 	Example: "atmos version",
 	Args:    cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
-		exec.NewVersionExec().Execute(checkFlag)
-		// Check for the cache and print update message
-		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		err := exec.NewVersionExec(&atmosConfig).Execute(checkFlag, versionFormat)
+		return err
 	},
 }
 
 func init() {
 	versionCmd.Flags().BoolVarP(&checkFlag, "check", "c", false, "Run additional checks after displaying version info")
+	versionCmd.Flags().StringVar(&versionFormat, "format", "", "Specify the output format")
 	RootCmd.AddCommand(versionCmd)
 }

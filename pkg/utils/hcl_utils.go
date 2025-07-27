@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"
 	jsonParser "github.com/hashicorp/hcl/json/parser"
@@ -48,7 +49,7 @@ func WriteToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(err.Error())
+			log.Warn(err.Error())
 		}
 	}(f)
 
@@ -129,7 +130,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(err.Error())
+			log.Warn(err.Error())
 		}
 	}(f)
 

@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var (

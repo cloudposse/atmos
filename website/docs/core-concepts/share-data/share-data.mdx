@@ -67,7 +67,9 @@ For more advanced examples, check out the `!store` YAML function documentation.
 ###  Function: `!terraform.output`
 
 The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/share-data/remote-state))
-of components directly in Atmos stack manifests.
+of components directly in Atmos stack manifests by internally executing a
+[`terraform output`](https://developer.hashicorp.com/terraform/cli/commands/output) or
+[`tofu output`](https://opentofu.org/docs/cli/commands/output/) command.
 
 For example, we can read the `vpc_id` output of the `vpc` component in the current stack:
 
@@ -94,6 +96,47 @@ components:
 For more advanced examples, check out the `!terraform.output` YAML function documentation.
 <PrimaryCTA to="/core-concepts/stacks/yaml-functions/terraform.output">Learn More</PrimaryCTA>
 </ActionCard>
+
+###  Function: `!terraform.state`
+
+The [`!terraform.state`](/core-concepts/stacks/yaml-functions/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it’s **very fast**, doesn’t require provider initialization, and currently supports [S3 and local backends](/core-concepts/components/terraform/backends) for accessing [remote state](/core-concepts/share-data/remote-state).
+
+For example, we can read the `vpc_id` output of the `vpc` component in the current stack:
+
+```yaml
+components:
+  terraform:
+    cluster:
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+```
+
+To access the configuration of a component in a different stack, you can specify the stack name as the second argument.
+For example, here we're reading the `vpc_id` output of the `vpc` component in the `prod` stack:
+
+```yaml
+components:
+  terraform:
+    cluster:
+      vars:
+        vpc_id: !terraform.state vpc prod vpc_id
+```
+
+<ActionCard>
+    For more advanced examples, check out the `!terraform.state` YAML function documentation.
+    <PrimaryCTA to="/core-concepts/stacks/yaml-functions/terraform.state">Learn More</PrimaryCTA>
+</ActionCard>
+
+:::tip
+The [`!terraform.state`](/core-concepts/stacks/yaml-functions/terraform.state) function accepts the same parameters and
+produces the same result as the [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output) function,
+but has significantly less impact on performance as it reads the state file directly from the configured backend without
+executing Terraform/OpenTofu commands, generating varfiles and backend config files, and initializing all modules and providers.
+
+To understand the performance implications of the `!terraform.output` and `!terraform.state` functions,
+compare the [!terraform.output Execution Flow](/core-concepts/stacks/yaml-functions/terraform.output#terraformoutput-function-execution-flow) with the
+[!terraform.state Execution Flow](/core-concepts/stacks/yaml-functions/terraform.state#terraformstate-function-execution-flow).
+:::
 
 ## Using Template Functions
 

@@ -23,6 +23,16 @@ variable "tags" {
   default = {}
 }
 
+variable "test_list" {
+  type    = list(string)
+  default = []
+}
+
+variable "test_map" {
+  type    = map(string)
+  default = {}
+}
+
 output "stage" {
   value = var.stage
 }
@@ -41,4 +51,12 @@ output "baz" {
 
 output "tags" {
   value = var.tags
+}
+
+output "test_list" {
+  value = var.test_list
+}
+
+output "test_map" {
+  value = var.test_map
 }

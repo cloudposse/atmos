@@ -10,8 +10,8 @@ var helmfileVersionCmd = &cobra.Command{
 	Short:              "Get Helmfile version",
 	Long:               "This command returns Helmfile version.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Run: func(cmd *cobra.Command, args []string) {
-		helmfileRun(cmd, "version", args)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return helmfileRun(cmd, "version", args)
 	},
 }
 

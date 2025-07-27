@@ -39,8 +39,12 @@ the `version.check.enabled` settings in `atmos.yaml`.
 atmos version --check
 ```
 
-The version command supports a `--check` flag. 
-This will force Atmos to check for a new version, irrespective of the configuration settings.  
+## Flags
+
+| Flag          | Description                                                                                   | Alias | Required |
+|:--------------|:----------------------------------------------------------------------------------------------|:------|:---------|
+| `--check`      |  Force Atmos to check for a new version, irrespective of the configuration settings          |       | no       |
+| `--format`     |  Specify the output format of the version (yaml|json)                                        |       | no       |
 
 :::tip
 To find the latest version of Atmos, go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub.

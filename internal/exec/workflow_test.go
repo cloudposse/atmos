@@ -167,6 +167,46 @@ func TestExecuteWorkflow(t *testing.T) {
 			fromStep:         "",
 			wantErr:          false,
 		},
+		{
+			name:         "failing atmos command with stack",
+			workflow:     "failing-atmos-with-stack",
+			workflowPath: workflowPath,
+			workflowDef: &schema.WorkflowDefinition{
+				Stack: "prod",
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "atmos",
+						Command: "terraform plan mock -s idontexist",
+					},
+				},
+			},
+			dryRun:           false,
+			commandLineStack: "",
+			fromStep:         "",
+			wantErr:          true,
+			errMsg:           "workflow step execution failed",
+		},
+		{
+			name:         "failing atmos command with command line stack override",
+			workflow:     "failing-atmos-with-cli-stack",
+			workflowPath: workflowPath,
+			workflowDef: &schema.WorkflowDefinition{
+				Stack: "prod",
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "atmos",
+						Command: "terraform plan mock -s idontexist",
+					},
+				},
+			},
+			dryRun:           false,
+			commandLineStack: "dev",
+			fromStep:         "",
+			wantErr:          true,
+			errMsg:           "workflow step execution failed",
+		},
 	}
 
 	for _, tt := range tests {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -28,7 +29,7 @@ var docsCmd = &cobra.Command{
 	Args:               cobra.MaximumNArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
 			info := schema.ConfigAndStacksInfo{
 				Component:             args[0],
@@ -37,7 +38,7 @@ var docsCmd = &cobra.Command{
 
 			atmosConfig, err := cfg.InitCliConfig(info, true)
 			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
+				return err
 			}
 
 			// Detect terminal width if not specified in `atmos.yaml`
@@ -45,7 +46,7 @@ var docsCmd = &cobra.Command{
 			maxWidth := atmosConfig.Settings.Terminal.MaxWidth
 			if maxWidth == 0 && atmosConfig.Settings.Docs.MaxWidth > 0 {
 				maxWidth = atmosConfig.Settings.Docs.MaxWidth
-				u.LogWarning("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
+				log.Warn("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
 			}
 			defaultWidth := 120
 			screenWidth := defaultWidth
@@ -67,24 +68,27 @@ var docsCmd = &cobra.Command{
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
+				return err
 			}
+
 			if !componentPathExists {
-				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component `%s` not found in path: `%s`", info.Component, componentPath), "")
+				er := fmt.Errorf("component `%s` not found in path: `%s`", info.Component, componentPath)
+				return er
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); err != nil {
 				if os.IsNotExist(err) {
-					u.LogErrorAndExit(fmt.Errorf("No README found for component: %s", info.Component))
+					er := fmt.Errorf("No README found for component: %s", info.Component)
+					return er
 				} else {
-					u.LogErrorAndExit(fmt.Errorf("Component %s not found", info.Component))
+					return err
 				}
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				return err
 			}
 
 			r, err := glamour.NewTermRenderer(
@@ -94,32 +98,32 @@ var docsCmd = &cobra.Command{
 				glamour.WithWordWrap(screenWidth),
 			)
 			if err != nil {
-				u.LogErrorAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err))
+				return err
 			}
 
 			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
-				u.LogErrorAndExit(err)
+				return err
 			}
 
 			pager := atmosConfig.Settings.Terminal.IsPagerEnabled()
 			if !pager && atmosConfig.Settings.Docs.Pagination {
 				pager = atmosConfig.Settings.Docs.Pagination
-				u.LogWarning("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
+				log.Warn("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {
-				u.LogErrorAndExit(fmt.Errorf("failed to display documentation: %w", err))
+				return err
 			}
 
-			return
+			return nil
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
 		var err error
 
 		if os.Getenv("GO_TEST") == "1" {
-			u.LogDebug("Skipping browser launch in test environment")
+			log.Debug("Skipping browser launch in test environment")
 		} else {
 			switch runtime.GOOS {
 			case "linux":
@@ -133,11 +137,12 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err != nil {
-				u.LogErrorAndExit(err)
+				return err
 			}
 		}
 
 		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
+		return nil
 	},
 }
 

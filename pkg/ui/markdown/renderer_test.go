@@ -3,9 +3,10 @@ package markdown
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestRenderer(t *testing.T) {

@@ -1,16 +1,16 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
-	"github.com/pkg/errors"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
@@ -231,7 +231,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 
 	if kubeconfigPath != "" {
 		message := fmt.Sprintf("\n'kubeconfig' has been downloaded to '%s'\nYou can set 'KUBECONFIG' ENV var to use in other scripts\n", kubeconfigPath)
-		u.LogDebug(message)
+		log.Debug(message)
 	}
 
 	return nil

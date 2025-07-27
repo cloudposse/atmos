@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -260,10 +262,10 @@ func ExecuteTerraformGenerateBackends(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					u.LogErrorAndExit(err)
+					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)
+				componentSectionFinal, err := ProcessCustomYamlTags(&atmosConfig, componentSectionConverted, stackName, nil)
 				if err != nil {
 					return err
 				}
@@ -330,7 +332,7 @@ func ExecuteTerraformGenerateBackends(
 					}
 
 					// Write the backend config to the file
-					u.LogDebug(fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
+					log.Debug("Writing backend config for the component to file", "component", terraformComponent, "file", backendFilePath)
 
 					if format == "json" {
 						componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, "")

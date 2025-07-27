@@ -7,9 +7,10 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/muesli/termenv"
+
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/muesli/termenv"
 )
 
 const defaultWidth = 80
@@ -24,7 +25,7 @@ type Renderer struct {
 	isTTYSupportForStderr func() bool
 }
 
-// NewRenderer creates a new markdown renderer with the given options
+// NewRenderer creates a new Markdown renderer with the given options.
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	r := &Renderer{
 		width:                 defaultWidth,           // default width
@@ -117,7 +118,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 	return result, err
 }
 
-// Render renders markdown content to ANSI styled text
+// Render renders markdown content to ANSI styled text.
 func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
 	var err error
@@ -178,14 +179,14 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	return renderer.Render(content)
 }
 
-// RenderWorkflow renders workflow documentation with specific styling
+// RenderWorkflow renders workflow documentation with specific styling.
 func (r *Renderer) RenderWorkflow(content string) (string, error) {
 	// Add workflow header
 	content = "# Workflow\n\n" + content
 	return r.Render(content)
 }
 
-// RenderError renders an error message with specific styling
+// RenderError renders an error message with specific styling.
 func (r *Renderer) RenderError(title, details, suggestion string) (string, error) {
 	var content string
 
@@ -207,7 +208,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	return r.RenderErrorf(content)
 }
 
-// RenderErrorf renders an error message with specific styling
+// RenderErrorf renders an error message with specific styling.
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
 	if r.isTTYSupportForStderr() {
 		return r.Render(content)
@@ -216,7 +217,7 @@ func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, er
 	return r.RenderAscii(content)
 }
 
-// RenderSuccess renders a success message with specific styling
+// RenderSuccess renders a success message with specific styling.
 func (r *Renderer) RenderSuccess(title, details string) (string, error) {
 	content := fmt.Sprintf("# %s\n\n", title)
 
@@ -227,10 +228,10 @@ func (r *Renderer) RenderSuccess(title, details string) (string, error) {
 	return r.Render(content)
 }
 
-// Option is a function that configures the renderer
+// Option is a function that configures the renderer.
 type Option func(*Renderer)
 
-// WithWidth sets the word wrap width for the renderer
+// WithWidth sets the word wrap width for the renderer.
 func WithWidth(width uint) Option {
 	return func(r *Renderer) {
 		r.width = width

@@ -7,6 +7,7 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -355,7 +356,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(err)
+									errUtils.CheckErrorPrintAndExit(err, "", "")
 								}
 
 								componentSection = componentSectionConverted
@@ -364,7 +365,7 @@ func ExecuteDescribeStacks(
 							// Process YAML functions
 							if processYamlFunctions {
 								componentSectionConverted, err := ProcessCustomYamlTags(
-									atmosConfig,
+									&atmosConfig,
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,
@@ -574,7 +575,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(err)
+									errUtils.CheckErrorPrintAndExit(err, "", "")
 								}
 
 								componentSection = componentSectionConverted
@@ -583,7 +584,7 @@ func ExecuteDescribeStacks(
 							// Process YAML functions
 							if processYamlFunctions {
 								componentSectionConverted, err := ProcessCustomYamlTags(
-									atmosConfig,
+									&atmosConfig,
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,

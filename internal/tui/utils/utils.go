@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/alecthomas/chroma/quick"
@@ -31,6 +32,10 @@ func PrintStyledText(text string) error {
 		return figurine.Write(os.Stdout, text, "ANSI Regular.flf")
 	}
 	return nil
+}
+
+func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
+	return figurine.Write(out, text, "ANSI Regular.flf")
 }
 
 // RenderMarkdown renders markdown text with terminal styling
