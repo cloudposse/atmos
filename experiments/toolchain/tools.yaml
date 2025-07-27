@@ -24,8 +24,23 @@ aliases:
   waypoint: hashicorp/waypoint
   boundary: hashicorp/boundary
   helmfile: helmfile/helmfile
+  atmos: cloudposse/atmos
 
 tools:
+  # Atmos configuration supporting both raw and gzipped binaries
+  cloudposse/atmos:
+    type: github_release
+    repo_owner: cloudposse
+    repo_name: atmos
+    binary_name: atmos
+    version_constraints:
+      - constraint: ">= 1.0.0"
+        asset: atmos_{{trimV .Version}}_{{.OS}}_{{.Arch}}
+        format: raw
+      - constraint: ">= 1.0.0"
+        asset: atmos_{{trimV .Version}}_{{.OS}}_{{.Arch}}.gz
+        format: gzip
+
   # Override a registry tool with local settings
   hashicorp/terraform:
     type: http

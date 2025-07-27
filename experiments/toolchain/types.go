@@ -1,5 +1,7 @@
 package main
 
+import "gopkg.in/yaml.v3"
+
 // ToolRegistry represents the structure of a tool registry YAML file
 type ToolRegistry struct {
 	Tools []Tool `yaml:"tools"`
@@ -58,4 +60,13 @@ type AquaPackage struct {
 // AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key)
 type AquaRegistryFile struct {
 	Packages []AquaPackage `yaml:"packages"`
+}
+
+// toolToYAML converts a Tool struct to YAML string representation
+func toolToYAML(tool *Tool) (string, error) {
+	yamlData, err := yaml.Marshal(tool)
+	if err != nil {
+		return "", err
+	}
+	return string(yamlData), nil
 }

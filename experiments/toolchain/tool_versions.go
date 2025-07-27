@@ -257,6 +257,32 @@ func AddToolToVersions(filePath, tool, version string) error {
 	return SaveToolVersions(filePath, toolVersions)
 }
 
+// AddToolToVersionsAsDefault adds a tool and version to the .tool-versions file as the default
+// If the tool already exists, it updates the version and sets it as default
+func AddToolToVersionsAsDefault(filePath, tool, version string) error {
+	if version == "" {
+		return fmt.Errorf("cannot add tool '%s' without a version", tool)
+	}
+	// Load existing tool versions
+	toolVersions, err := LoadToolVersions(filePath)
+	if err != nil {
+		// If file doesn't exist, create a new one
+		if os.IsNotExist(err) {
+			toolVersions = &ToolVersions{
+				Tools: make(map[string][]string),
+			}
+		} else {
+			return fmt.Errorf("failed to load existing .tool-versions: %w", err)
+		}
+	}
+
+	// Add or update the tool as default
+	AddVersionToTool(toolVersions, tool, version, true)
+
+	// Save back to file
+	return SaveToolVersions(filePath, toolVersions)
+}
+
 // RemoveToolFromVersions removes a tool from the .tool-versions file
 func RemoveToolFromVersions(filePath, tool string) error {
 	// Load existing tool versions

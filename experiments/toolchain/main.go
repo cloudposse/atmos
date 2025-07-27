@@ -9,7 +9,8 @@ import (
 )
 
 var (
-	logLevel string
+	logLevel    string
+	githubToken string
 )
 
 var rootCmd = &cobra.Command{
@@ -66,6 +67,69 @@ var removeCmd = &cobra.Command{
 	},
 }
 
+var infoCmd = &cobra.Command{
+	Use:   "info <tool>",
+	Short: "Display the rendered YAML configuration for a tool",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		toolName := args[0]
+
+		// Create installer to access tool resolution
+		installer := NewInstaller()
+
+		// Parse tool name to get owner/repo
+		owner, repo, err := installer.parseToolSpec(toolName)
+		if err != nil {
+			return fmt.Errorf("failed to parse tool name: %w", err)
+		}
+
+		// Find the tool configuration (use "latest" as default version)
+		tool, err := installer.findTool(owner, repo, "latest")
+		if err != nil {
+			return fmt.Errorf("failed to find tool %s: %w", toolName, err)
+		}
+
+		// Display tool information in a more readable format
+		cmd.Printf("Tool: %s\n", toolName)
+		cmd.Printf("Owner/Repo: %s/%s\n", owner, repo)
+		cmd.Printf("Type: %s\n", tool.Type)
+		if tool.RepoOwner != "" {
+			cmd.Printf("Repository: %s/%s\n", tool.RepoOwner, tool.RepoName)
+		}
+		if tool.Asset != "" {
+			cmd.Printf("Asset Template: %s\n", tool.Asset)
+		}
+		if tool.Format != "" {
+			cmd.Printf("Format: %s\n", tool.Format)
+		}
+		if tool.BinaryName != "" {
+			cmd.Printf("Binary Name: %s\n", tool.BinaryName)
+		}
+		if len(tool.Files) > 0 {
+			cmd.Printf("Files:\n")
+			for _, file := range tool.Files {
+				cmd.Printf("  - %s -> %s\n", file.Src, file.Name)
+			}
+		}
+		if len(tool.Overrides) > 0 {
+			cmd.Printf("Overrides:\n")
+			for _, override := range tool.Overrides {
+				cmd.Printf("  - %s/%s: %s\n", override.GOOS, override.GOARCH, override.Asset)
+			}
+		}
+
+		// Also show the raw YAML for debugging
+		cmd.Printf("\nRaw YAML Configuration:\n")
+		yamlData, err := toolToYAML(tool)
+		if err != nil {
+			return fmt.Errorf("failed to convert tool to YAML: %w", err)
+		}
+		cmd.Printf("%s\n", yamlData)
+
+		return nil
+	},
+}
+
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Remove all installed tools by deleting the .tools directory",
@@ -99,6 +163,18 @@ func init() {
 
 	// Add log level flag
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "Set log level (debug, info, warn, error)")
+
+	// Add GitHub token flag and bind to environment variables
+	rootCmd.PersistentFlags().StringVar(&githubToken, "github-token", "", "GitHub token for authenticated requests")
+	rootCmd.PersistentFlags().MarkHidden("github-token") // Hide from help since it's primarily for env vars
+
+	// Set default value from environment variables (ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN)
+	if token := os.Getenv("ATMOS_GITHUB_TOKEN"); token != "" {
+		rootCmd.PersistentFlags().Set("github-token", token)
+	} else if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		rootCmd.PersistentFlags().Set("github-token", token)
+	}
+
 	rootCmd.AddCommand(cleanCmd)
 }
 
@@ -114,6 +190,7 @@ func main() {
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(uninstallCmd)
 	rootCmd.AddCommand(pathCmd)
+	rootCmd.AddCommand(infoCmd)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
