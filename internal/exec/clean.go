@@ -1,6 +1,11 @@
 package exec
 
-import "github.com/cloudposse/atmos/pkg/filematch"
+import (
+	"fmt"
+	"os"
+
+	"github.com/cloudposse/atmos/pkg/filematch"
+)
 
 // GetFilesToBeDeleted retrieves file paths to be deleted based on stack and component filters.
 func GetFilesToBeDeleted(stackMap map[string]any, component, stack string) ([]string, error) {
@@ -104,4 +109,46 @@ func convertToStringArray(arr []any) []string {
 		}
 	}
 	return result
+}
+
+// DeletePaths deletes all files/folders in the input slice, with detailed logging.
+func DeletePaths(paths []string) error {
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+
+		// Check if path exists
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			fmt.Printf("Path does not exist: %s\n", path)
+			continue
+		}
+		if err != nil {
+			fmt.Printf("Lstat error for %s: %v\n", path, err)
+			continue
+		}
+
+		// Print permissions for debugging
+		fmt.Printf("Attempting to delete: %s (mode: %s)\n", path, info.Mode())
+
+		// Try to delete
+		err = os.RemoveAll(path)
+		if err != nil {
+			fmt.Printf("RemoveAll failed for %s: %v\n", path, err)
+			continue
+		}
+
+		// Double-check if it still exists
+		_, err = os.Stat(path)
+		switch {
+		case err == nil:
+			fmt.Printf("Warning: %s still exists after attempted deletion\n", path)
+		case !os.IsNotExist(err):
+			fmt.Printf("Post-deletion stat error for %s\n", path)
+		default:
+			fmt.Printf("Successfully deleted: %s\n", path)
+		}
+	}
+	return nil
 }
