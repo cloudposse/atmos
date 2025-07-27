@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// mockFileInfo implements os.FileInfo
+// mockFileInfo implements os.FileInfo.
 type mockFileInfo struct {
 	name    string
 	size    int64
