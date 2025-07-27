@@ -257,7 +257,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 		for j := 0; j < 5; j++ {
 			printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
 			spinner, _ = spinner.Update(bspinner.TickMsg{})
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
