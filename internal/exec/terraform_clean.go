@@ -9,9 +9,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/pkg/filematch"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -485,7 +485,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	for _, folder := range folders {
 		objectCount += len(folder.Files)
 	}
-	userFiles, err := GetFilesToBeDeleted(stacksMap, info.ComponentFromArg, info.Stack)
+	userFiles, err := utils.GetFilesToBeDeleted(stacksMap, info.ComponentFromArg, info.Stack)
 	userFilesCount := len(userFiles)
 	if err != nil {
 		return err
@@ -532,52 +532,6 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	}
 
 	return nil
-}
-
-func GetFilesToBeDeleted(stackMap map[string]any, component string, stack string) ([]string, error) {
-	paths := make([]string, 0)
-	for stackName, stackInfo := range stackMap {
-		if stackInfo == nil || (stack != "" && stackName != stack) {
-			continue
-		}
-		info, ok := stackInfo.(map[string]any)
-		if !ok {
-			continue
-		}
-		for componentType, componenentTypeMap := range info["components"].(map[string]any) {
-			if componentType != "terraform" {
-				continue
-			}
-			componenentTypeMapValue, ok := componenentTypeMap.(map[string]any)
-			if !ok {
-				continue
-			}
-			for componentName, componentValue := range componenentTypeMapValue {
-				if component != "" && componentName != component {
-					continue
-				}
-				cleanPatterns, ok := componentValue.(map[string]any)["settings"].(map[string]any)["clean"].([]any)
-				if !ok {
-					continue
-				}
-				fpaths, err := filematch.NewGlobMatcher().MatchFiles(convertToStringArray(cleanPatterns))
-				if err != nil {
-					return nil, err
-				}
-				paths = append(paths, fpaths...)
-			}
-		}
-
-	}
-	return paths, nil
-}
-
-func convertToStringArray(inter []interface{}) []string {
-	strs := make([]string, len(inter))
-	for i, v := range inter {
-		strs[i] = v.(string)
-	}
-	return strs
 }
 
 // DeletePaths deletes all files/folders in the input slice, with detailed logging.
