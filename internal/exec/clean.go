@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/filematch"
+	"github.com/hashicorp/go-multierror"
 )
 
 // GetFilesToBeDeleted retrieves file paths to be deleted based on stack and component filters.
@@ -111,44 +113,88 @@ func convertToStringArray(arr []any) []string {
 	return result
 }
 
-// DeletePaths deletes all files/folders in the input slice, with detailed logging.
-func DeletePaths(paths []string) error {
+// Filesystem defines the filesystem operations required for DeletePaths.
+//
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+type Filesystem interface {
+	Lstat(name string) (os.FileInfo, error)
+	RemoveAll(name string) error
+	Stat(name string) (os.FileInfo, error)
+}
+
+// DeletePaths deletes all files and directories in the provided paths slice, logging detailed information.
+// It skips empty paths, logs non-existent paths, and aggregates errors encountered during deletion.
+// The function checks if paths still exist after deletion attempts and logs warnings or errors accordingly.
+// Returns a combined error if any operations fail, or nil if all succeed or no actions are taken.
+func deletePaths(fs Filesystem, paths []string) error {
+	var result *multierror.Error
+
 	for _, path := range paths {
 		if path == "" {
+			log.Info("Skipping empty path")
 			continue
 		}
 
 		// Check if path exists
-		info, err := os.Lstat(path)
+		info, err := fs.Lstat(path)
 		if os.IsNotExist(err) {
-			fmt.Printf("Path does not exist: %s\n", path)
+			log.Infof("Path does not exist: %s", path)
 			continue
 		}
 		if err != nil {
-			fmt.Printf("Lstat error for %s: %v\n", path, err)
+			log.Errorf("Failed to stat path %s: %v", path, err)
+			result = multierror.Append(result, fmt.Errorf("stat %s: %w", path, err))
 			continue
 		}
 
-		// Print permissions for debugging
-		fmt.Printf("Attempting to delete: %s (mode: %s)\n", path, info.Mode())
+		// Log deletion attempt with permissions
+		log.Infof("Attempting to delete: %s (mode: %s)", path, info.Mode())
 
-		// Try to delete
-		err = os.RemoveAll(path)
-		if err != nil {
-			fmt.Printf("RemoveAll failed for %s: %v\n", path, err)
+		// Attempt deletion
+		if err := fs.RemoveAll(path); err != nil {
+			log.Errorf("Failed to delete path %s: %v", path, err)
+			result = multierror.Append(result, fmt.Errorf("delete %s: %w", path, err))
 			continue
 		}
 
-		// Double-check if it still exists
-		_, err = os.Stat(path)
+		// Verify deletion
+		_, err = fs.Stat(path)
 		switch {
 		case err == nil:
-			fmt.Printf("Warning: %s still exists after attempted deletion\n", path)
+			log.Warnf("Path still exists after deletion: %s", path)
+			result = multierror.Append(result, fmt.Errorf("path %s still exists after deletion", path))
 		case !os.IsNotExist(err):
-			fmt.Printf("Post-deletion stat error for %s\n", path)
+			log.Errorf("Post-deletion stat error for %s: %v", path, err)
+			result = multierror.Append(result, fmt.Errorf("post-deletion stat %s: %w", path, err))
 		default:
-			fmt.Printf("Successfully deleted: %s\n", path)
+			log.Infof("Successfully deleted: %s", path)
 		}
 	}
-	return nil
+
+	return result.ErrorOrNil()
+}
+
+// DeletePaths deletes all files and directories in the provided paths slice, logging detailed information.
+// It skips empty paths, logs non-existent paths, and aggregates errors encountered during deletion.
+// The function checks if paths still exist after deletion attempts and logs warnings or errors to the standard logger.
+// Returns a combined error if any operations fail, or nil if all succeed or no actions are taken.
+func DeletePaths(paths []string) error {
+	// Use os as the filesystem implementation
+	fs := &osFilesystem{}
+	return deletePaths(fs, paths)
+}
+
+// osFilesystem adapts the os package to the Filesystem interface.
+type osFilesystem struct{}
+
+func (fs *osFilesystem) Lstat(name string) (os.FileInfo, error) {
+	return os.Lstat(name)
+}
+
+func (fs *osFilesystem) RemoveAll(name string) error {
+	return os.RemoveAll(name)
+}
+
+func (fs *osFilesystem) Stat(name string) (os.FileInfo, error) {
+	return os.Stat(name)
 }
