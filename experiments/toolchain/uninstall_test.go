@@ -129,3 +129,93 @@ func TestUninstallCleansUpLatestFile_Missing(t *testing.T) {
 	_, statErr = os.Stat(binaryPath)
 	assert.NoError(t, statErr)
 }
+
+func TestUninstallWithNoArgs(t *testing.T) {
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+
+	// Create a .tool-versions file with some tools
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.11.4", "1.9.8"},
+			"helm":      {"3.17.4"},
+		},
+	}
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
+
+	// Create mock installed binaries
+	installer := NewInstaller()
+	installer.binDir = tempDir
+
+	// Create terraform binaries
+	terraformPath1 := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
+	err = os.MkdirAll(filepath.Dir(terraformPath1), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(terraformPath1, []byte("mock terraform 1.11.4"), 0755)
+	require.NoError(t, err)
+
+	terraformPath2 := installer.getBinaryPath("hashicorp", "terraform", "1.9.8")
+	err = os.MkdirAll(filepath.Dir(terraformPath2), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(terraformPath2, []byte("mock terraform 1.9.8"), 0755)
+	require.NoError(t, err)
+
+	// Create helm binary
+	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4")
+	err = os.MkdirAll(filepath.Dir(helmPath), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), 0755)
+	require.NoError(t, err)
+
+	// Verify binaries exist
+	_, err = os.Stat(terraformPath1)
+	assert.NoError(t, err)
+	_, err = os.Stat(terraformPath2)
+	assert.NoError(t, err)
+	_, err = os.Stat(helmPath)
+	assert.NoError(t, err)
+
+	// Test uninstall with no arguments by calling uninstallFromToolVersions directly
+	err = uninstallFromToolVersions(toolVersionsPath, installer)
+	assert.NoError(t, err)
+
+	// Verify all binaries are removed
+	_, err = os.Stat(terraformPath1)
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(terraformPath2)
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(helmPath)
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestRunUninstallWithNoArgs(t *testing.T) {
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+
+	// Create a .tool-versions file with some tools
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.11.4"},
+			"helm":      {"3.17.4"},
+		},
+	}
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
+
+	// Temporarily set the global toolVersionsFile variable
+	originalToolVersionsFile := toolVersionsFile
+	toolVersionsFile = toolVersionsPath
+	defer func() { toolVersionsFile = originalToolVersionsFile }()
+
+	// Test that runUninstall with no arguments doesn't error
+	// This prevents regression where the function might error when no specific tool is provided
+	cmd := &cobra.Command{}
+	err = runUninstall(cmd, []string{})
+	assert.NoError(t, err)
+}

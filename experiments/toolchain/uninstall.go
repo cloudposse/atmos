@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -18,49 +19,38 @@ var uninstallCmd = &cobra.Command{
 	Short: "Uninstall a CLI binary from the registry",
 	Long: `Uninstall a CLI binary using metadata from the registry.
 
-The tool should be specified in the format: owner/repo@version or tool@version`,
+The tool should be specified in the format: owner/repo@version or tool@version.
+If no tool is specified, uninstalls all tools from the .tool-versions file.
+
+Examples:
+  toolchain uninstall terraform@1.9.8
+  toolchain uninstall hashicorp/terraform@1.11.4
+  toolchain uninstall                    # Uninstall all tools from .tool-versions`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runUninstall,
 }
 
 // Refactored runUninstall to accept an optional installer parameter for testability
 func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Installer) error {
-	// If no arguments, uninstall from .tool-versions
+	// If no arguments, uninstall from tool-versions file
 	if len(args) == 0 {
 		return uninstallFromToolVersions(".tool-versions", installer)
 	}
-
 	toolSpec := args[0]
-	parts := strings.Split(toolSpec, "@")
-	if len(parts) == 1 {
-		// Try to look up version in .tool-versions using LookupToolVersion
-		tool := parts[0]
-		toolVersions, err := LoadToolVersions(".tool-versions")
-		if err != nil {
-			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", toolSpec, err)
-		}
-		if installer == nil {
-			installer = NewInstaller()
-		}
-		resolvedKey, version, found := LookupToolVersion(tool, toolVersions, installer.resolver)
-		if !found {
-			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions", toolSpec)
-		}
-		toolSpec = resolvedKey + "@" + version
-		parts = strings.Split(toolSpec, "@")
+	tool, version, err := ParseToolVersionArg(toolSpec)
+	if err != nil {
+		return err
 	}
-	if len(parts) != 2 {
+	if tool == "" || version == "" {
 		return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version", toolSpec)
 	}
-	repoPath := parts[0]
-	version := parts[1]
 
 	if installer == nil {
 		installer = NewInstaller()
 	}
-	owner, repo, err := installer.parseToolSpec(repoPath)
+	owner, repo, err := installer.parseToolSpec(tool)
 	if err != nil {
-		return fmt.Errorf("invalid repository path: %s. Expected format: owner/repo or tool name", repoPath)
+		return fmt.Errorf("invalid repository path: %s. Expected format: owner/repo or tool name", tool)
 	}
 
 	if version == "latest" {
@@ -127,21 +117,18 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 		progressBar := progress.New(progress.WithDefaultGradient())
 		percent := 0.0
 
-		// Start spinner
-		spinner.Tick()
-
 		// Show progress for finding tool
 		percent = 0.2
 		bar := progressBar.ViewAs(percent)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-		spinner.Tick()
+		spinner, _ = spinner.Update(bspinner.TickMsg{})
 		time.Sleep(100 * time.Millisecond)
 
 		// Show progress for removing
 		percent = 0.6
 		bar = progressBar.ViewAs(percent)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-		spinner.Tick()
+		spinner, _ = spinner.Update(bspinner.TickMsg{})
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -203,10 +190,9 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	defer restoreLogger()
 
 	spinner := bspinner.New()
+	spinner.Spinner = bspinner.Dot
+	spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	progressBar := progress.New(progress.WithDefaultGradient())
-
-	// Start spinner
-	spinner.Tick()
 
 	// Collect installed tools
 	var installedTools []struct {
@@ -263,12 +249,16 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 				failedCount++
 			}
 		}
+		percent := float64(i+1) / float64(len(installedTools))
+		bar := progressBar.ViewAs(percent)
 		resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 		fmt.Fprintln(os.Stderr, msg)
-		percent := float64(i+1) / float64(totalTools)
-		bar := progressBar.ViewAs(percent)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-		time.Sleep(100 * time.Millisecond)
+		// Show animated progress for a moment
+		for j := 0; j < 5; j++ {
+			printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
+			spinner, _ = spinner.Update(bspinner.TickMsg{})
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 	fmt.Fprintln(os.Stderr)

@@ -567,7 +567,7 @@ func TestPathCommand(t *testing.T) {
 			toolVersions:  "",
 			args:          []string{},
 			expectError:   true,
-			errorContains: "no tools configured in .tool-versions file",
+			errorContains: "no tools configured in tool-versions file",
 		},
 		{
 			name:         "empty .tool-versions file",
@@ -820,7 +820,7 @@ func TestPathCommand(t *testing.T) {
 			},
 			args:          []string{},
 			expectError:   true,
-			errorContains: "error reading .tool-versions",
+			errorContains: "error reading tool-versions file",
 		},
 	}
 

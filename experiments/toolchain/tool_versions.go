@@ -233,33 +233,20 @@ func GetAllVersions(toolVersions *ToolVersions, tool string) []string {
 
 // AddToolToVersions adds a tool/version combination to the .tool-versions file
 // If the tool already exists, it updates the version
+// If the aliased version already exists, it skips adding the non-aliased version to prevent duplicates
 func AddToolToVersions(filePath, tool, version string) error {
-	if version == "" {
-		return fmt.Errorf("cannot add tool '%s' without a version", tool)
-	}
-	// Load existing tool versions
-	toolVersions, err := LoadToolVersions(filePath)
-	if err != nil {
-		// If file doesn't exist, create a new one
-		if os.IsNotExist(err) {
-			toolVersions = &ToolVersions{
-				Tools: make(map[string][]string),
-			}
-		} else {
-			return fmt.Errorf("failed to load existing .tool-versions: %w", err)
-		}
-	}
-
-	// Add or update the tool
-	AddVersionToTool(toolVersions, tool, version, false)
-
-	// Save back to file
-	return SaveToolVersions(filePath, toolVersions)
+	return addToolToVersionsInternal(filePath, tool, version, false)
 }
 
 // AddToolToVersionsAsDefault adds a tool and version to the .tool-versions file as the default
 // If the tool already exists, it updates the version and sets it as default
 func AddToolToVersionsAsDefault(filePath, tool, version string) error {
+	return addToolToVersionsInternal(filePath, tool, version, true)
+}
+
+// addToolToVersionsInternal is the single path for adding tools to .tool-versions
+// All other functions should use this to ensure consistent duplicate checking
+func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) error {
 	if version == "" {
 		return fmt.Errorf("cannot add tool '%s' without a version", tool)
 	}
@@ -276,11 +263,64 @@ func AddToolToVersionsAsDefault(filePath, tool, version string) error {
 		}
 	}
 
-	// Add or update the tool as default
-	AddVersionToTool(toolVersions, tool, version, true)
+	// Check if this would create a duplicate with an aliased version
+	if wouldCreateDuplicate(toolVersions, tool, version) {
+		// Skip adding this entry as it would create a duplicate
+		return nil
+	}
+
+	// Add or update the tool
+	AddVersionToTool(toolVersions, tool, version, asDefault)
 
 	// Save back to file
 	return SaveToolVersions(filePath, toolVersions)
+}
+
+// wouldCreateDuplicate checks if adding a tool/version combination would create a duplicate
+// with an existing aliased version. For example, if "opentofu/opentofu 1.10.3" already exists,
+// adding "opentofu 1.10.3" would create a duplicate.
+func wouldCreateDuplicate(toolVersions *ToolVersions, tool, version string) bool {
+	// Create an installer to use its resolver
+	installer := NewInstaller()
+
+	// Check if the tool is an alias (e.g., "opentofu")
+	owner, repo, err := installer.parseToolSpec(tool)
+	if err == nil && owner != "" && repo != "" {
+		// This is an alias, check if the full name already exists
+		aliasKey := owner + "/" + repo
+		if versions, ok := toolVersions.Tools[aliasKey]; ok {
+			for _, v := range versions {
+				if v == version {
+					return true // Duplicate found
+				}
+			}
+		}
+	}
+
+	// Check if this is a full name (e.g., "opentofu/opentofu") and if the alias exists
+	// We need to check if there's an alias that resolves to this full name
+	for existingTool, versions := range toolVersions.Tools {
+		// Skip if it's the same tool
+		if existingTool == tool {
+			continue
+		}
+
+		// Try to resolve the existing tool as an alias
+		existingOwner, existingRepo, err := installer.parseToolSpec(existingTool)
+		if err == nil && existingOwner != "" && existingRepo != "" {
+			existingAliasKey := existingOwner + "/" + existingRepo
+			if existingAliasKey == tool {
+				// The existing tool is an alias for this full name
+				for _, v := range versions {
+					if v == version {
+						return true // Duplicate found
+					}
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // RemoveToolFromVersions removes a tool from the .tool-versions file
@@ -439,4 +479,29 @@ func LookupToolVersionOrLatest(tool string, toolVersions *ToolVersions, resolver
 		return aliasKey, "latest", false, true
 	}
 	return "", "", false, false
+}
+
+// ParseToolVersionArg parses a CLI argument in the form tool, tool@version, or owner/repo@version.
+// Returns tool (or owner/repo), version (may be empty), and error if invalid.
+func ParseToolVersionArg(arg string) (string, string, error) {
+	if arg == "" {
+		return "", "", fmt.Errorf("empty tool argument")
+	}
+	if strings.Count(arg, "@") > 1 {
+		return "", "", fmt.Errorf("invalid tool specification: %q (multiple @)", arg)
+	}
+	parts := strings.SplitN(arg, "@", 2)
+	if len(parts) == 1 {
+		if parts[0] == "" {
+			return "", "", fmt.Errorf("invalid tool specification: %q (missing tool name)", arg)
+		}
+		return parts[0], "", nil
+	}
+	if parts[0] == "" {
+		return "", "", fmt.Errorf("invalid tool specification: %q (missing tool name before @)", arg)
+	}
+	if parts[1] == "" {
+		return "", "", fmt.Errorf("invalid tool specification: %q (missing version after @)", arg)
+	}
+	return parts[0], parts[1], nil
 }

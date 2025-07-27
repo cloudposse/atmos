@@ -151,13 +151,15 @@ func (lcm *LocalConfigManager) GetToolWithVersion(owner, repo, version string) (
 	constraint := lcm.ResolveVersionConstraint(tool, version)
 
 	t := &Tool{
-		Name:      repo,
-		Type:      tool.Type,
-		RepoOwner: tool.RepoOwner,
-		RepoName:  tool.RepoName,
-		Asset:     tool.Asset,
-		Format:    tool.Format,
-		Version:   version,
+		Name:       repo,
+		Type:       tool.Type,
+		RepoOwner:  owner,
+		RepoName:   repo,
+		Asset:      tool.Asset,
+		URL:        tool.URL,
+		Format:     tool.Format,
+		BinaryName: tool.BinaryName,
+		Version:    version,
 	}
 
 	// Set binary name if specified
@@ -165,7 +167,7 @@ func (lcm *LocalConfigManager) GetToolWithVersion(owner, repo, version string) (
 		t.Name = tool.BinaryName
 	}
 
-	// Handle URL for http type
+	// Handle URL for http type (copy URL to Asset for compatibility)
 	if tool.Type == "http" {
 		t.Asset = tool.URL
 	}

@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 // HTTPClientConfig holds configuration for HTTP clients
@@ -72,9 +74,9 @@ func containsSubstring(s, substr string) bool {
 	return false
 }
 
-// GetGitHubToken retrieves GitHub token from the global variable set by Cobra
+// GetGitHubToken retrieves GitHub token from Viper configuration
 func GetGitHubToken() string {
-	return githubToken
+	return viper.GetString("github-token")
 }
 
 // NewDefaultHTTPClient creates a new HTTP client with default configuration and GitHub token support

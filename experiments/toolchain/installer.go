@@ -46,7 +46,7 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 	if err == nil {
 		return owner, repo, nil
 	}
-	return "", "", fmt.Errorf("tool '%s' not found in aliases or registry", toolName)
+	return "", "", fmt.Errorf("tool '%s' not found in local aliases or Aqua registry", toolName)
 }
 
 // Installer handles the installation of CLI binaries
@@ -62,7 +62,7 @@ type Installer struct {
 func NewInstallerWithResolver(resolver ToolResolver) *Installer {
 	homeDir, _ := os.UserHomeDir()
 	cacheDir := filepath.Join(homeDir, ".cache", "installer")
-	binDir := "./.tools/bin"
+	binDir := filepath.Join(GetToolsDirPath(), "bin")
 	registries := []string{
 		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
 		"./tool-registry",
@@ -125,11 +125,11 @@ func (i *Installer) installFromTool(tool *Tool, version string) (string, error) 
 	return binaryPath, nil
 }
 
-// InstallFromToolVersions installs tools specified in .tool-versions file
+// InstallFromToolVersions installs tools specified in tool-versions file
 func (i *Installer) InstallFromToolVersions(toolVersionsPath string) error {
 	toolVersions, err := LoadToolVersions(toolVersionsPath)
 	if err != nil {
-		return fmt.Errorf("failed to load .tool-versions: %w", err)
+		return fmt.Errorf("failed to load tool-versions file: %w", err)
 	}
 
 	for tool, versions := range toolVersions.Tools {
@@ -177,20 +177,20 @@ func (i *Installer) Run(owner, repo, version string, args []string) error {
 	return i.executeBinary(binaryPath, args)
 }
 
-// RunFromToolVersions runs a tool using the version specified in .tool-versions
+// RunFromToolVersions runs a tool using the version specified in tool-versions file
 func (i *Installer) RunFromToolVersions(tool string, args []string) error {
-	toolVersions, err := LoadToolVersions(".tool-versions")
+	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
 	if err != nil {
-		return fmt.Errorf("failed to load .tool-versions: %w", err)
+		return fmt.Errorf("failed to load tool-versions file: %w", err)
 	}
 
 	versions, exists := toolVersions.Tools[tool]
 	if !exists {
-		return fmt.Errorf("tool '%s' not found in .tool-versions", tool)
+		return fmt.Errorf("tool '%s' not found in tool-versions file", tool)
 	}
 
 	if len(versions) == 0 {
-		return fmt.Errorf("no version specified for tool '%s' in .tool-versions", tool)
+		return fmt.Errorf("no version specified for tool '%s' in tool-versions file", tool)
 	}
 
 	owner, repo, err := i.parseToolSpec(tool)
@@ -204,6 +204,15 @@ func (i *Installer) RunFromToolVersions(tool string, args []string) error {
 
 // findTool searches for a tool in the registry
 func (i *Installer) findTool(owner, repo, version string) (*Tool, error) {
+	// First, try to find the tool in local configuration
+	lcm := i.getLocalConfigManager()
+	if lcm != nil {
+		tool, err := lcm.GetToolWithVersion(owner, repo, version)
+		if err == nil {
+			return tool, nil
+		}
+	}
+
 	// Search through all registries
 	for _, registry := range i.registries {
 		tool, err := i.searchRegistry(registry, owner, repo, version)

@@ -41,13 +41,13 @@ func init() {
 func emitPath(cmd *cobra.Command, args []string) error {
 	installer := NewInstaller()
 
-	// Read .tool-versions file
-	toolVersions, err := LoadToolVersions(".tool-versions")
+	// Read tool-versions file
+	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("no tools configured in .tool-versions file")
+			return fmt.Errorf("no tools configured in tool-versions file")
 		}
-		return fmt.Errorf("error reading .tool-versions: %w", err)
+		return fmt.Errorf("error reading tool-versions file: %w", err)
 	}
 
 	if len(toolVersions.Tools) == 0 {
@@ -100,7 +100,7 @@ func emitPath(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(pathEntries) == 0 {
-		return fmt.Errorf("no installed tools found from .tool-versions")
+		return fmt.Errorf("no installed tools found from tool-versions file")
 	}
 
 	// Sort for consistent output
