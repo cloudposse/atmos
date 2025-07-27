@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
@@ -31,9 +30,7 @@ type RegistryCache struct {
 // NewAquaRegistry creates a new Aqua registry client
 func NewAquaRegistry() *AquaRegistry {
 	return &AquaRegistry{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client: NewDefaultHTTPClient(),
 		cache: &RegistryCache{
 			baseDir: filepath.Join(os.TempDir(), "installer-registry-cache"),
 		},
@@ -403,6 +400,53 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+}
+
+// GetAvailableVersions fetches all available versions from GitHub releases
+func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, error) {
+	// GitHub API endpoint for releases
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
+
+	resp, err := ar.client.Get(apiURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch releases from GitHub: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Parse the JSON response
+	var releases []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
+	}
+
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return nil, fmt.Errorf("failed to parse releases JSON: %w", err)
+	}
+
+	// Extract all non-prerelease versions
+	var versions []string
+	for _, release := range releases {
+		if !release.Prerelease {
+			// Remove 'v' prefix if present
+			version := strings.TrimPrefix(release.TagName, "v")
+			versions = append(versions, version)
+		}
+	}
+
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+	}
+
+	return versions, nil
 }
 
 // getOS returns the current operating system

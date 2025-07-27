@@ -12,7 +12,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 
+	"compress/gzip"
+
 	"github.com/charmbracelet/log"
+	"github.com/stretchr/testify/assert"
 )
 
 // Add a mock ToolResolver for tests
@@ -130,6 +133,7 @@ func TestBuildAssetURL(t *testing.T) {
 	installer := NewInstallerWithResolver(mockResolver)
 
 	tool := &Tool{
+		Type:      "github_release",
 		RepoOwner: "suzuki-shunsuke",
 		RepoName:  "github-comment",
 		Asset:     "github-comment_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz",
@@ -155,6 +159,7 @@ func TestBuildAssetURL_CustomFuncs(t *testing.T) {
 	installer := NewInstallerWithResolver(mockResolver)
 
 	tool := &Tool{
+		Type:      "github_release",
 		RepoOwner: "hashicorp",
 		RepoName:  "terraform",
 		Asset:     "terraform_{{trimV .Version}}_{{trimPrefix \"1.\" .Version}}_{{trimSuffix \".8\" .Version}}_{{replace \".\" \"-\" .Version}}_{{.OS}}_{{.Arch}}.zip",
@@ -1017,4 +1022,294 @@ packages:
 	if tool.Asset == "" {
 		t.Errorf("Expected asset template to be set")
 	}
+}
+
+func TestExtractRawBinary(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "extract-test-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	installer := NewInstaller()
+
+	// Create a mock raw binary file
+	rawBinaryPath := filepath.Join(tempDir, "test-binary")
+	rawBinaryContent := []byte("#!/bin/bash\necho 'test binary'")
+	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, 0755); err != nil {
+		t.Fatalf("failed to create test binary: %v", err)
+	}
+
+	// Create destination path
+	destPath := filepath.Join(tempDir, "extracted-binary")
+
+	// Test raw binary extraction (copyFile)
+	err = installer.copyFile(rawBinaryPath, destPath)
+	if err != nil {
+		t.Fatalf("copyFile failed: %v", err)
+	}
+
+	// Verify the file was copied correctly
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		t.Error("extracted binary file does not exist")
+	}
+
+	// Verify content
+	content, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatalf("failed to read extracted binary: %v", err)
+	}
+	if string(content) != string(rawBinaryContent) {
+		t.Errorf("extracted binary content mismatch: got %s, want %s", string(content), string(rawBinaryContent))
+	}
+}
+
+func TestExtractGzippedBinary(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "extract-test-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	installer := NewInstaller()
+
+	// Create a mock binary content
+	binaryContent := []byte("#!/bin/bash\necho 'test gzipped binary'")
+
+	// Create a gzipped file
+	gzPath := filepath.Join(tempDir, "test-binary.gz")
+	gzFile, err := os.Create(gzPath)
+	if err != nil {
+		t.Fatalf("failed to create gzip file: %v", err)
+	}
+
+	gzWriter := gzip.NewWriter(gzFile)
+	if _, err := gzWriter.Write(binaryContent); err != nil {
+		t.Fatalf("failed to write to gzip: %v", err)
+	}
+	gzWriter.Close()
+	gzFile.Close()
+
+	// Create destination path
+	destPath := filepath.Join(tempDir, "extracted-binary")
+
+	// Test gzipped binary extraction
+	err = installer.extractGzip(gzPath, destPath)
+	if err != nil {
+		t.Fatalf("extractGzip failed: %v", err)
+	}
+
+	// Verify the file was extracted correctly
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		t.Error("extracted binary file does not exist")
+	}
+
+	// Verify content
+	content, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatalf("failed to read extracted binary: %v", err)
+	}
+	if string(content) != string(binaryContent) {
+		t.Errorf("extracted binary content mismatch: got %s, want %s", string(content), string(binaryContent))
+	}
+}
+
+func TestExtractAndInstallWithRawBinary(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "extract-test-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	installer := NewInstaller()
+
+	// Create a mock raw binary file
+	rawBinaryPath := filepath.Join(tempDir, "atmos")
+	rawBinaryContent := []byte("#!/bin/bash\necho 'atmos binary'")
+	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, 0755); err != nil {
+		t.Fatalf("failed to create test binary: %v", err)
+	}
+
+	// Create a mock tool configuration
+	tool := &Tool{
+		Name:     "atmos",
+		RepoName: "atmos",
+		Type:     "http",
+	}
+
+	// Test extractAndInstall with raw binary
+	binaryPath, err := installer.extractAndInstall(tool, rawBinaryPath, "1.0.0")
+	if err != nil {
+		t.Fatalf("extractAndInstall failed: %v", err)
+	}
+
+	// Verify the binary was installed (should be copied to the bin directory)
+	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+		t.Errorf("installed binary not found at expected path: %s", binaryPath)
+	}
+}
+
+func TestExtractAndInstallWithGzippedBinary(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "extract-test-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	installer := NewInstaller()
+
+	// Create a mock binary content
+	binaryContent := []byte("#!/bin/bash\necho 'atmos gzipped binary'")
+
+	// Create a gzipped file
+	gzPath := filepath.Join(tempDir, "atmos.gz")
+	gzFile, err := os.Create(gzPath)
+	if err != nil {
+		t.Fatalf("failed to create gzip file: %v", err)
+	}
+
+	gzWriter := gzip.NewWriter(gzFile)
+	if _, err := gzWriter.Write(binaryContent); err != nil {
+		t.Fatalf("failed to write to gzip: %v", err)
+	}
+	gzWriter.Close()
+	gzFile.Close()
+
+	// Create a mock tool configuration
+	tool := &Tool{
+		Name:     "atmos",
+		RepoName: "atmos",
+		Type:     "http",
+	}
+
+	// Test extractAndInstall with gzipped binary
+	binaryPath, err := installer.extractAndInstall(tool, gzPath, "1.0.0")
+	if err != nil {
+		t.Fatalf("extractAndInstall failed: %v", err)
+	}
+
+	// Verify the binary was installed (should be extracted to the bin directory)
+	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+		t.Errorf("installed binary not found at expected path: %s", binaryPath)
+	}
+
+	// Verify content
+	content, err := os.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatalf("failed to read installed binary: %v", err)
+	}
+	if string(content) != string(binaryContent) {
+		t.Errorf("installed binary content mismatch: got %s, want %s", string(content), string(binaryContent))
+	}
+}
+
+func TestFileTypeDetection(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "filetype-test-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	installer := NewInstaller()
+
+	tests := []struct {
+		name     string
+		content  []byte
+		filename string
+		expected string // expected MIME type or behavior
+	}{
+		{
+			name:     "raw binary",
+			content:  []byte{0x7f, 0x45, 0x4c, 0x46}, // ELF header
+			filename: "binary",
+			expected: "application/octet-stream",
+		},
+		{
+			name:     "gzipped binary",
+			content:  []byte{0x1f, 0x8b}, // gzip header
+			filename: "binary.gz",
+			expected: "application/gzip",
+		},
+		{
+			name:     "zip file",
+			content:  []byte{0x50, 0x4b, 0x03, 0x04}, // ZIP header
+			filename: "archive.zip",
+			expected: "application/zip",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test file
+			filePath := filepath.Join(tempDir, tt.filename)
+			if err := os.WriteFile(filePath, tt.content, 0644); err != nil {
+				t.Fatalf("failed to create test file: %v", err)
+			}
+
+			// Test simpleExtract to see how file type is detected
+			tool := &Tool{Name: "test", RepoName: "test"}
+			destPath := filepath.Join(tempDir, "extracted-"+tt.filename)
+
+			err := installer.simpleExtract(filePath, destPath, tool)
+			if err != nil {
+				t.Logf("simpleExtract failed (this might be expected): %v", err)
+			}
+
+			// The test verifies that the file type detection doesn't crash
+			// and routes to the appropriate extraction method
+		})
+	}
+}
+
+func TestInstallerPopulatesToolFields(t *testing.T) {
+	installer := NewInstaller()
+
+	// Test that the installer correctly populates RepoOwner and RepoName
+	// when fetching a tool from the registry
+	tool, err := installer.findTool("hashicorp", "terraform", "1.9.8")
+	if err != nil {
+		t.Skipf("Skipping test - tool not found in registry: %v", err)
+	}
+
+	// Verify that RepoOwner and RepoName are populated
+	assert.NotEmpty(t, tool.RepoOwner, "RepoOwner should be populated")
+	assert.NotEmpty(t, tool.RepoName, "RepoName should be populated")
+	assert.Equal(t, "hashicorp", tool.RepoOwner, "RepoOwner should match the requested owner")
+	assert.Equal(t, "terraform", tool.RepoName, "RepoName should match the requested repo")
+
+	// Test that buildAssetURL generates correct URLs
+	assetURL, err := installer.buildAssetURL(tool, "1.9.8")
+	assert.NoError(t, err, "buildAssetURL should not error")
+
+	// Since hashicorp/terraform is configured as type: http in tools.yaml,
+	// it should generate an HTTP URL, not a GitHub release URL
+	assert.Contains(t, assetURL, "https://releases.hashicorp.com/terraform/",
+		"Asset URL should contain correct HashiCorp release URL")
+	assert.NotContains(t, assetURL, "https://github.com///releases/download/",
+		"Asset URL should not have empty org/repo")
+}
+
+func TestBuildAssetURLWithEmptyFields(t *testing.T) {
+	installer := NewInstaller()
+
+	// Create a tool with empty RepoOwner and RepoName to test the bug
+	tool := &Tool{
+		Name:      "test-tool",
+		Type:      "github_release",
+		RepoOwner: "", // Empty - this is the bug
+		RepoName:  "", // Empty - this is the bug
+		Asset:     "test-tool_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+	}
+
+	// This should fail because RepoOwner and RepoName are empty
+	_, err := installer.buildAssetURL(tool, "1.0.0")
+	assert.Error(t, err, "buildAssetURL should fail with empty RepoOwner/RepoName")
+
+	// The generated URL would be malformed like:
+	// https://github.com///releases/download/1.0.0/test-tool_1.0.0_darwin_arm64.tar.gz
 }

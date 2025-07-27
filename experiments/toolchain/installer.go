@@ -136,13 +136,13 @@ func (i *Installer) InstallFromToolVersions(toolVersionsPath string) error {
 		// Parse tool specification (owner/repo@version or just repo@version)
 		owner, repo, err := i.parseToolSpec(tool)
 		if err != nil {
-			log.Warn("Skipping invalid tool specification", "tool", tool)
+			Logger.Warn("Skipping invalid tool specification", "tool", tool)
 			continue
 		}
 
 		// If no version is specified, try to get the latest non-prerelease version
 		if len(versions) == 0 {
-			log.Warn("No version specified for tool, skipping", "tool", tool)
+			Logger.Warn("No version specified for tool, skipping", "tool", tool)
 			continue
 		}
 		version := versions[0]
@@ -237,9 +237,18 @@ func (i *Installer) searchRegistry(registry, owner, repo, version string) (*Tool
 		}, nil
 	}
 
-	// Try to fetch from remote registry
+	// Try to fetch from Aqua registry for remote registries
 	if strings.HasPrefix(registry, "http") {
-		return i.fetchFromRemoteRegistry(registry, owner, repo, version)
+		// Use the Aqua registry implementation
+		ar := NewAquaRegistry()
+		tool, err := ar.GetTool(owner, repo)
+		if err != nil {
+			return nil, err
+		}
+		// Ensure RepoOwner and RepoName are set correctly
+		tool.RepoOwner = owner
+		tool.RepoName = repo
+		return tool, nil
 	}
 
 	// Try local registry
@@ -263,7 +272,8 @@ func (i *Installer) fetchFromRemoteRegistry(registryURL, owner, repo, version st
 	if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
 		// Fetch from remote
 		url := fmt.Sprintf("%s/%s/%s.yaml", registryURL, owner, repo)
-		resp, err := http.Get(url)
+		client := NewDefaultHTTPClient()
+		resp, err := client.Get(url)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch from remote registry: %w", err)
 		}
@@ -335,7 +345,7 @@ func (i *Installer) parseToolSpec(tool string) (string, string, error) {
 func (i *Installer) getLocalConfigManager() *LocalConfigManager {
 	lcm := NewLocalConfigManager()
 	if err := lcm.Load("tools.yaml"); err != nil {
-		log.Warn("Failed to load local config", "error", err)
+		Logger.Warn("Failed to load local config", "error", err)
 		return nil
 	}
 	return lcm
@@ -343,65 +353,132 @@ func (i *Installer) getLocalConfigManager() *LocalConfigManager {
 
 // buildAssetURL constructs the download URL for the asset
 func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
-	// Use the asset template from the tool
-	assetTemplate := tool.Asset
-	if assetTemplate == "" {
-		// Fallback to a common pattern
-		assetTemplate = "{{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+	// Handle different tool types
+	switch tool.Type {
+	case "http":
+		// For HTTP type, the Asset field contains the full URL template
+		if tool.Asset == "" {
+			return "", fmt.Errorf("invalid tool configuration: Asset URL template is required for HTTP type tools")
+		}
+
+		// Remove 'v' prefix from version for asset naming
+		versionForAsset := version
+		if strings.HasPrefix(versionForAsset, "v") {
+			versionForAsset = versionForAsset[1:]
+		}
+
+		// Create template data
+		data := struct {
+			Version   string
+			OS        string
+			Arch      string
+			RepoOwner string
+			RepoName  string
+		}{
+			Version:   versionForAsset,
+			OS:        runtime.GOOS,
+			Arch:      runtime.GOARCH,
+			RepoOwner: tool.RepoOwner,
+			RepoName:  tool.RepoName,
+		}
+
+		// Register custom template functions
+		funcMap := template.FuncMap{
+			"trimV": func(s string) string {
+				return strings.TrimPrefix(s, "v")
+			},
+			"trimPrefix": func(prefix, s string) string {
+				return strings.TrimPrefix(s, prefix)
+			},
+			"trimSuffix": func(suffix, s string) string {
+				return strings.TrimSuffix(s, suffix)
+			},
+			"replace": func(old, new, s string) string {
+				return strings.ReplaceAll(s, old, new)
+			},
+		}
+
+		tmpl, err := template.New("asset").Funcs(funcMap).Parse(tool.Asset)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse asset template: %w", err)
+		}
+
+		var url strings.Builder
+		if err := tmpl.Execute(&url, data); err != nil {
+			return "", fmt.Errorf("failed to execute asset template: %w", err)
+		}
+
+		return url.String(), nil
+
+	case "github_release":
+		// For GitHub releases, validate that RepoOwner and RepoName are set
+		if tool.RepoOwner == "" || tool.RepoName == "" {
+			return "", fmt.Errorf("invalid tool configuration: RepoOwner and RepoName must be set for github_release type (got RepoOwner=%q, RepoName=%q)", tool.RepoOwner, tool.RepoName)
+		}
+
+		// Use the asset template from the tool
+		assetTemplate := tool.Asset
+		if assetTemplate == "" {
+			// Fallback to a common pattern
+			assetTemplate = "{{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+		}
+
+		// Remove 'v' prefix from version for asset naming
+		versionForAsset := version
+		if strings.HasPrefix(versionForAsset, "v") {
+			versionForAsset = versionForAsset[1:]
+		}
+
+		// Create template data
+		data := struct {
+			Version   string
+			OS        string
+			Arch      string
+			RepoOwner string
+			RepoName  string
+		}{
+			Version:   versionForAsset,
+			OS:        runtime.GOOS,
+			Arch:      runtime.GOARCH,
+			RepoOwner: tool.RepoOwner,
+			RepoName:  tool.RepoName,
+		}
+
+		// Register custom template functions
+		funcMap := template.FuncMap{
+			"trimV": func(s string) string {
+				return strings.TrimPrefix(s, "v")
+			},
+			"trimPrefix": func(prefix, s string) string {
+				return strings.TrimPrefix(s, prefix)
+			},
+			"trimSuffix": func(suffix, s string) string {
+				return strings.TrimSuffix(s, suffix)
+			},
+			"replace": func(old, new, s string) string {
+				return strings.ReplaceAll(s, old, new)
+			},
+		}
+
+		tmpl, err := template.New("asset").Funcs(funcMap).Parse(assetTemplate)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse asset template: %w", err)
+		}
+
+		var assetName strings.Builder
+		if err := tmpl.Execute(&assetName, data); err != nil {
+			return "", fmt.Errorf("failed to execute asset template: %w", err)
+		}
+
+		// Construct the full GitHub release URL
+		url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
+			tool.RepoOwner, tool.RepoName, version, assetName.String())
+
+		return url, nil
+
+	default:
+		return "", fmt.Errorf("unsupported tool type: %s", tool.Type)
 	}
-
-	// Remove 'v' prefix from version for asset naming
-	versionForAsset := version
-	if strings.HasPrefix(versionForAsset, "v") {
-		versionForAsset = versionForAsset[1:]
-	}
-
-	// Create template data
-	data := struct {
-		Version   string
-		OS        string
-		Arch      string
-		RepoOwner string
-		RepoName  string
-	}{
-		Version:   versionForAsset,
-		OS:        runtime.GOOS,
-		Arch:      runtime.GOARCH,
-		RepoOwner: tool.RepoOwner,
-		RepoName:  tool.RepoName,
-	}
-
-	// Register custom template functions
-	funcMap := template.FuncMap{
-		"trimV": func(s string) string {
-			return strings.TrimPrefix(s, "v")
-		},
-		"trimPrefix": func(prefix, s string) string {
-			return strings.TrimPrefix(s, prefix)
-		},
-		"trimSuffix": func(suffix, s string) string {
-			return strings.TrimSuffix(s, suffix)
-		},
-		"replace": func(old, new, s string) string {
-			return strings.ReplaceAll(s, old, new)
-		},
-	}
-
-	tmpl, err := template.New("asset").Funcs(funcMap).Parse(assetTemplate)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse asset template: %w", err)
-	}
-
-	var assetName strings.Builder
-	if err := tmpl.Execute(&assetName, data); err != nil {
-		return "", fmt.Errorf("failed to execute asset template: %w", err)
-	}
-
-	// Construct the full URL
-	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
-		tool.RepoOwner, tool.RepoName, version, assetName.String())
-
-	return url, nil
 }
 
 // downloadAsset downloads an asset to the cache directory
@@ -422,9 +499,10 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 		return cachePath, nil
 	}
 
-	// Download the file
+	// Download the file using authenticated HTTP client
 	log.Debug("Downloading asset", "filename", filename)
-	resp, err := http.Get(url)
+	client := NewDefaultHTTPClient()
+	resp, err := client.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("failed to download asset: %w", err)
 	}
@@ -473,7 +551,7 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *Tool, version, assetU
 	if buildErr != nil {
 		return "", fmt.Errorf("failed to build fallback asset URL: %w", buildErr)
 	}
-	log.Warn("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
+	Logger.Warn("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
 	assetPath, err = i.downloadAsset(fallbackURL)
 	if err == nil {
 		return assetPath, nil
@@ -864,8 +942,9 @@ func searchRegistryForTool(toolName string) (string, string, error) {
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/opentofu/%s/registry.yaml", toolName),
 	}
 
+	client := NewDefaultHTTPClient()
 	for _, path := range commonPaths {
-		resp, err := http.Get(path)
+		resp, err := client.Get(path)
 		if err == nil && resp.StatusCode == http.StatusOK {
 			resp.Body.Close()
 			// Extract owner/repo from the URL

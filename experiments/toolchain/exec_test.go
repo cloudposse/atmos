@@ -10,14 +10,27 @@ type mockToolRunner struct {
 	binaryPath string
 }
 
+type mockResolver struct{}
+
+func (m *mockResolver) Resolve(toolName string) (string, string, error) {
+	return "test-owner", "test-repo", nil
+}
+
 func (m *mockToolRunner) findBinaryPath(owner, repo, version string) (string, error) {
 	return m.binaryPath, nil
 }
-func (m *mockToolRunner) GetResolver() ToolResolver                          { return nil }
+func (m *mockToolRunner) GetResolver() ToolResolver                          { return &mockResolver{} }
 func (m *mockToolRunner) createLatestFile(owner, repo, version string) error { return nil }
 func (m *mockToolRunner) readLatestFile(owner, repo string) (string, error)  { return "", nil }
 
 func TestExecToolWithInstaller_CallsExecFunc(t *testing.T) {
+	// Create a temporary file that actually exists
+	tmpFile, err := os.CreateTemp("", "fake-tool-*")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
 	// Save and restore execFunc
 	origExecFunc := execFunc
 	defer func() { execFunc = origExecFunc }()
@@ -34,10 +47,10 @@ func TestExecToolWithInstaller_CallsExecFunc(t *testing.T) {
 		return nil
 	}
 
-	mockBin := "/usr/local/bin/fake-tool"
+	mockBin := tmpFile.Name()
 	installer := &mockToolRunner{binaryPath: mockBin}
 	args := []string{"fake-tool@1.2.3", "--foo", "bar"}
-	err := execToolWithInstaller(installer, nil, args)
+	err = execToolWithInstaller(installer, nil, args)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -46,3 +46,4 @@ tests/fixtures/scenarios/vendor/components/**
 # Coverage files
 coverage.out
 coverage.html
+node_modules
