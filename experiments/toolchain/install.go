@@ -3,14 +3,73 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
+
+// Bubble Tea spinner model
+type spinnerModel struct {
+	spinner bspinner.Model
+	message string
+	done    bool
+}
+
+func initialSpinnerModel(message string) spinnerModel {
+	s := bspinner.New()
+	s.Spinner = bspinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	return spinnerModel{
+		spinner: s,
+		message: message,
+	}
+}
+
+func (m spinnerModel) Init() tea.Cmd {
+	return bspinner.Tick
+}
+
+func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc", "ctrl+c":
+			return m, tea.Quit
+		}
+	case bspinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m spinnerModel) View() string {
+	if m.done {
+		return ""
+	}
+	return fmt.Sprintf("%s %s", m.spinner.View(), m.message)
+}
+
+// Run spinner with Bubble Tea
+func runBubbleTeaSpinner(message string, done *atomic.Bool) {
+	p := tea.NewProgram(initialSpinnerModel(message))
+
+	go func() {
+		for !done.Load() {
+			time.Sleep(100 * time.Millisecond)
+		}
+		p.Quit()
+	}()
+
+	p.Run()
+}
 
 var installCmd = &cobra.Command{
 	Use:   "install [tool]",
@@ -34,41 +93,41 @@ func init() {
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
-	// If no arguments, install from .tool-versions
+	// If no arguments, install from tool-versions file
 	if len(args) == 0 {
-		return installFromToolVersions(".tool-versions")
+		return installFromToolVersions(GetToolVersionsFilePath())
 	}
 
 	setDefault, _ := cmd.Flags().GetBool("default")
 
 	toolSpec := args[0]
-	parts := strings.Split(toolSpec, "@")
-	if len(parts) == 1 {
+	tool, version, err := ParseToolVersionArg(toolSpec)
+	if err != nil {
+		return err
+	}
+	if version == "" {
 		// Try to look up version in .tool-versions or fallback to alias/latest
-		tool := parts[0]
 		toolVersions, err := LoadToolVersions(".tool-versions")
 		if err != nil {
 			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", toolSpec, err)
 		}
 		installer := NewInstaller()
-		resolvedKey, version, found, usedLatest := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
+		resolvedKey, foundVersion, found, usedLatest := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
 		if !found && !usedLatest {
 			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions or as an alias", toolSpec)
 		}
-		toolSpec = resolvedKey + "@" + version
-		parts = strings.Split(toolSpec, "@")
+		tool = resolvedKey
+		version = foundVersion
 	}
-	if len(parts) != 2 {
+	if tool == "" || version == "" {
 		return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version", toolSpec)
 	}
-	repoPath := parts[0]
-	version := parts[1]
 
 	// Use the enhanced parseToolSpec to handle both owner/repo and tool name formats
 	installer := NewInstaller()
-	owner, repo, err := installer.parseToolSpec(repoPath)
+	owner, repo, err := installer.parseToolSpec(tool)
 	if err != nil {
-		return fmt.Errorf("invalid repository path: %s. Expected format: owner/repo or tool name", repoPath)
+		return fmt.Errorf("invalid repository path: %s. Expected format: owner/repo or tool name", tool)
 	}
 
 	// Handle "latest" keyword
@@ -90,13 +149,14 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update .tool-versions: add version, set as default if requested
-	toolVersions, err := LoadToolVersions(".tool-versions")
-	if err != nil {
-		toolVersions = &ToolVersions{Tools: make(map[string][]string)}
-	}
-	AddVersionToTool(toolVersions, repoPath, version, setDefault)
-	if err := SaveToolVersions(".tool-versions", toolVersions); err != nil {
-		return fmt.Errorf("failed to update .tool-versions: %w", err)
+	if setDefault {
+		if err := AddToolToVersionsAsDefault(".tool-versions", tool, version); err != nil {
+			return fmt.Errorf("failed to update .tool-versions: %w", err)
+		}
+	} else {
+		if err := AddToolToVersions(".tool-versions", tool, version); err != nil {
+			return fmt.Errorf("failed to update .tool-versions: %w", err)
+		}
 	}
 
 	return nil
@@ -107,28 +167,12 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 	defer restoreLogger()
 	installer := NewInstaller()
 	if showProgressBar {
-		spinner := bspinner.New()
-		progressBar := progress.New(progress.WithDefaultGradient())
-		phases := []struct {
-			phase   string
-			percent float64
-		}{
-			{"Looking up tool", 0.1},
-			{"Downloading", 0.3},
-			{"Extracting", 0.7},
-			{"Complete", 1.0},
-		}
-		fmt.Fprint(os.Stderr, "\n")
-		// Phase 1: Looking up tool
-		bar := progressBar.ViewAs(phases[0].percent)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-		spinner.Tick()
-		time.Sleep(100 * time.Millisecond)
-		// Phase 2: Downloading
-		bar = progressBar.ViewAs(phases[1].percent)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-		spinner.Tick()
-		time.Sleep(100 * time.Millisecond)
+		var done atomic.Bool
+		message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
+		go runBubbleTeaSpinner(message, &done)
+		// Simulate install work (replace with real install logic below)
+		time.Sleep(2 * time.Second)
+		done.Store(true)
 	}
 	// Perform installation
 	binaryPath, err := installer.Install(owner, repo, version)
@@ -146,20 +190,6 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		}
 	}
 	if showProgressBar {
-		// Phase 3: Extracting
-		progressBar := progress.New(progress.WithDefaultGradient())
-		spinner := bspinner.New()
-		bar := progressBar.ViewAs(0.7)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Extracting %s %3.0f%%", spinner.View(), bar, 70.0))
-		spinner.Tick()
-		time.Sleep(100 * time.Millisecond)
-		// Phase 4: Complete
-		bar = progressBar.ViewAs(1.0)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s Complete %s %3.0f%%", spinner.View(), bar, 100.0))
-		time.Sleep(100 * time.Millisecond)
-		if term.IsTerminal(int(os.Stderr.Fd())) {
-			fmt.Fprint(os.Stderr, "\r\033[K")
-		}
 		fmt.Fprintf(os.Stderr, "%s Installed %s/%s@%s to %s\n", checkMark.Render(), owner, repo, version, binaryPath)
 	}
 	if err := AddToolToVersions(".tool-versions", repo, version); err == nil && showProgressBar {
@@ -185,15 +215,9 @@ func installFromToolVersions(toolVersionsPath string) error {
 		return nil
 	}
 
-	spinner := bspinner.New()
-	progressBar := progress.New(progress.WithDefaultGradient())
-
 	installedCount := 0
 	failedCount := 0
 	alreadyInstalledCount := 0
-
-	// In installFromToolVersions, add a history slice to track actions
-	var history []string
 
 	toolList := make([]struct {
 		tool    string
@@ -216,57 +240,53 @@ func installFromToolVersions(toolVersionsPath string) error {
 		}
 	}
 
-	for i, tool := range toolList {
-		version := tool.version
-		if version == "latest" {
-			registry := NewAquaRegistry()
-			latestVersion, err := registry.GetLatestVersion(tool.owner, tool.repo)
-			if err != nil {
-				msg := fmt.Sprintf("%s %s/%s@%s Failed to get latest version: %v", xMark.Render(), tool.owner, tool.repo, version, err)
-				resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
-				fmt.Fprintln(os.Stderr, msg)
-				percent := float64(i+1) / float64(totalTools)
-				bar := progressBar.ViewAs(percent)
-				printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-				time.Sleep(100 * time.Millisecond)
-				history = append(history, msg)
-				failedCount++
-				continue
-			}
-			version = latestVersion
-		}
+	spinner := bspinner.New()
+	spinner.Spinner = bspinner.Dot
+	spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	progressBar := progress.New(progress.WithDefaultGradient())
 
-		_, err := installer.findBinaryPath(tool.owner, tool.repo, version)
+	for i, tool := range toolList {
+		_, err := installer.findBinaryPath(tool.owner, tool.repo, tool.version)
 		if err == nil && !reinstallFlag {
-			msg := fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), tool.owner, tool.repo, version)
-			percent := float64(i+1) / float64(totalTools)
+			msg := fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), tool.owner, tool.repo, tool.version)
+			percent := float64(i+1) / float64(len(toolList))
 			bar := progressBar.ViewAs(percent)
 			resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 			fmt.Fprintln(os.Stderr, msg)
-			printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-			time.Sleep(100 * time.Millisecond)
-			history = append(history, msg)
+			// Show animated progress for a moment
+			for j := 0; j < 5; j++ {
+				printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
+				spinner, _ = spinner.Update(bspinner.TickMsg{})
+				time.Sleep(100 * time.Millisecond)
+			}
 			alreadyInstalledCount++
 			continue
 		}
 
-		err = InstallSingleTool(tool.owner, tool.repo, version, tool.version == "latest", false)
+		err = InstallSingleTool(tool.owner, tool.repo, tool.version, tool.version == "latest", false)
 		var msg string
 		if err == nil {
-			msg = fmt.Sprintf("%s Installed %s/%s@%s", checkMark.Render(), tool.owner, tool.repo, version)
+			msg = fmt.Sprintf("%s Installed %s/%s@%s", checkMark.Render(), tool.owner, tool.repo, tool.version)
 			installedCount++
 		} else {
-			msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", xMark.Render(), tool.owner, tool.repo, version, err)
+			msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", xMark.Render(), tool.owner, tool.repo, tool.version, err)
 			failedCount++
 		}
-		percent := float64(i+1) / float64(totalTools)
+		percent := float64(i+1) / float64(len(toolList))
 		bar := progressBar.ViewAs(percent)
 		resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 		fmt.Fprintln(os.Stderr, msg)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-		time.Sleep(100 * time.Millisecond)
-		history = append(history, msg)
+		// Show animated progress for a moment
+		for j := 0; j < 5; j++ {
+			printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
+			spinner, _ = spinner.Update(bspinner.TickMsg{})
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
+
+	// Stop spinner animation
+	// spinnerDone.Store(true) // This line is removed as per the new_code
+
 	// At the end, clear the progress bar line before printing the summary
 	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 	fmt.Fprintln(os.Stderr)

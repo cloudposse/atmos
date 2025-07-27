@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,4 +55,31 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 	version, exists := toolVersions.Tools[owner+"/"+repo]
 	assert.True(t, exists)
 	assert.Equal(t, []string{"1.10.0"}, version)
+}
+
+func TestRunInstallWithNoArgs(t *testing.T) {
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+
+	// Create a .tool-versions file with some tools
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.11.4"},
+			"helm":      {"3.17.4"},
+		},
+	}
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
+
+	// Temporarily set the global toolVersionsFile variable
+	originalToolVersionsFile := toolVersionsFile
+	toolVersionsFile = toolVersionsPath
+	defer func() { toolVersionsFile = originalToolVersionsFile }()
+
+	// Test that runInstall with no arguments doesn't error
+	// This prevents regression where the function might error when no specific tool is provided
+	cmd := &cobra.Command{}
+	err = runInstall(cmd, []string{})
+	assert.NoError(t, err)
 }

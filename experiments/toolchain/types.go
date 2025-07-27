@@ -1,6 +1,10 @@
 package main
 
-import "gopkg.in/yaml.v3"
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
 
 // ToolRegistry represents the structure of a tool registry YAML file
 type ToolRegistry struct {
@@ -16,6 +20,7 @@ type Tool struct {
 	RepoOwner    string            `yaml:"repo_owner"`
 	RepoName     string            `yaml:"repo_name"`
 	Asset        string            `yaml:"asset"`
+	URL          string            `yaml:"url"`
 	Format       string            `yaml:"format"`
 	Files        []File            `yaml:"files"`
 	Overrides    []Override        `yaml:"overrides"`
@@ -68,5 +73,32 @@ func toolToYAML(tool *Tool) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return string(yamlData), nil
+}
+
+// getEvaluatedToolYAML creates a YAML representation with all templates processed
+func getEvaluatedToolYAML(tool *Tool, version string, installer *Installer) (string, error) {
+	// Create a copy of the tool with processed templates
+	evaluatedTool := *tool
+
+	// Process asset/URL templates using the existing buildAssetURL function
+	if tool.Asset != "" || tool.URL != "" {
+		processedURL, err := installer.buildAssetURL(tool, version)
+		if err != nil {
+			return "", fmt.Errorf("failed to process asset/URL template: %w", err)
+		}
+		evaluatedTool.Asset = processedURL
+		evaluatedTool.URL = processedURL
+	}
+
+	// Set the version field to show what version was used for evaluation
+	evaluatedTool.Version = version
+
+	// Marshal the evaluated tool to YAML
+	yamlData, err := yaml.Marshal(evaluatedTool)
+	if err != nil {
+		return "", err
+	}
+
 	return string(yamlData), nil
 }

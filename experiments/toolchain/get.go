@@ -1,0 +1,278 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"sort"
+	"strings"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+var getCmd = &cobra.Command{
+	Use:   "get <tool>",
+	Short: "Show all versions configured for a tool, sorted in semver order",
+	Long: `Show all versions configured for a tool in the .tool-versions file, sorted in semantic version order.
+
+The default version (first in the list) will be highlighted with a *.
+
+Use --all to fetch all available versions from GitHub API.
+
+Examples:
+  toolchain get terraform
+  toolchain get hashicorp/terraform
+  toolchain get --file /path/to/.tool-versions kubectl
+  toolchain get --all terraform
+  toolchain get --all --limit 100 terraform`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		filePath, _ := cmd.Flags().GetString("file")
+		showAll, _ := cmd.Flags().GetBool("all")
+		limit, _ := cmd.Flags().GetInt("limit")
+
+		if filePath == "" {
+			filePath = GetToolVersionsFilePath()
+		}
+		toolName := args[0]
+
+		// Resolve the tool name to handle aliases
+		installer := NewInstaller()
+		owner, repo, err := installer.parseToolSpec(toolName)
+		if err != nil {
+			return fmt.Errorf("invalid tool name: %w", err)
+		}
+		resolvedKey := owner + "/" + repo
+
+		var versions []string
+		var defaultVersion string
+
+		if showAll {
+			// Fetch all available versions from GitHub
+			allVersions, err := fetchAllGitHubVersions(owner, repo, limit)
+			if err != nil {
+				return fmt.Errorf("failed to fetch versions from GitHub: %w", err)
+			}
+			versions = allVersions
+
+			// Load tool versions to get the default
+			toolVersions, err := LoadToolVersions(filePath)
+			if err == nil {
+				if configuredVersions, exists := toolVersions.Tools[resolvedKey]; exists && len(configuredVersions) > 0 {
+					defaultVersion = configuredVersions[0]
+				} else if configuredVersions, exists := toolVersions.Tools[toolName]; exists && len(configuredVersions) > 0 {
+					defaultVersion = configuredVersions[0]
+				}
+			}
+		} else {
+			// Load tool versions from file
+			toolVersions, err := LoadToolVersions(filePath)
+			if err != nil {
+				return fmt.Errorf("failed to load .tool-versions: %w", err)
+			}
+
+			// Get versions for the tool - try both resolved key and original tool name
+			fileVersions, exists := toolVersions.Tools[resolvedKey]
+			if !exists {
+				fileVersions, exists = toolVersions.Tools[toolName]
+				if !exists {
+					return fmt.Errorf("tool '%s' not found in %s", toolName, filePath)
+				}
+			}
+
+			if len(fileVersions) == 0 {
+				return fmt.Errorf("no versions configured for tool '%s' in %s", toolName, filePath)
+			}
+
+			versions = fileVersions
+			defaultVersion = versions[0]
+		}
+
+		// Sort versions in semver order
+		sortedVersions, err := sortVersionsSemver(versions)
+		if err != nil {
+			// If semver sorting fails, fall back to string sorting
+			sort.Strings(versions)
+			sortedVersions = versions
+		}
+
+		// Check which versions are actually installed
+		installedVersions := make(map[string]bool)
+		for _, version := range sortedVersions {
+			_, err := installer.findBinaryPath(owner, repo, version)
+			installedVersions[version] = err == nil
+		}
+
+		// Define styles with TTY-aware dark/light mode detection
+		profile := termenv.ColorProfile()
+
+		var installedStyle, notInstalledStyle lipgloss.Style
+
+		if profile == termenv.ANSI256 || profile == termenv.TrueColor {
+			// Dark background - use grayscale
+			installedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("15")) // Bright white
+
+			notInstalledStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("240")) // Dim gray
+		} else {
+			// Light background or no color support - use basic styling
+			installedStyle = lipgloss.NewStyle().
+				Bold(true)
+
+			notInstalledStyle = lipgloss.NewStyle()
+		}
+
+		// Display the results cleanly
+		for _, version := range sortedVersions {
+			isInstalled := installedVersions[version]
+			isDefault := version == defaultVersion
+
+			var indicator string
+
+			if isDefault {
+				indicator = checkMark.String()
+			} else {
+				indicator = " "
+			}
+
+			// Apply styling based on installation status
+			if isInstalled {
+				fmt.Printf("%s %s\n", indicator, installedStyle.Render(version))
+			} else {
+				fmt.Printf("%s %s\n", indicator, notInstalledStyle.Render(version))
+			}
+		}
+
+		return nil
+	},
+}
+
+func init() {
+	getCmd.Flags().String("file", "", "Path to tool-versions file (defaults to global --tool-versions-file)")
+	getCmd.Flags().Bool("all", false, "Fetch all available versions from GitHub API")
+	getCmd.Flags().Int("limit", 50, "Maximum number of versions to fetch when using --all")
+}
+
+// sortVersionsSemver sorts versions in semantic version order
+func sortVersionsSemver(versions []string) ([]string, error) {
+	// Create a slice of semver versions
+	var semverVersions []*semver.Version
+	var nonSemverVersions []string
+
+	for _, version := range versions {
+		// Handle special versions like "latest", "system", etc.
+		if isSpecialVersion(version) {
+			nonSemverVersions = append(nonSemverVersions, version)
+			continue
+		}
+
+		// Try to parse as semver
+		v, err := semver.NewVersion(version)
+		if err != nil {
+			// If it's not a valid semver, treat it as a special version
+			nonSemverVersions = append(nonSemverVersions, version)
+			continue
+		}
+		semverVersions = append(semverVersions, v)
+	}
+
+	// Sort semver versions
+	sort.Sort(semver.Collection(semverVersions))
+
+	// Convert back to strings
+	var result []string
+	for _, v := range semverVersions {
+		result = append(result, v.Original())
+	}
+
+	// Add non-semver versions at the end, sorted alphabetically
+	sort.Strings(nonSemverVersions)
+	result = append(result, nonSemverVersions...)
+
+	return result, nil
+}
+
+// isSpecialVersion checks if a version string is a special version (not semver)
+func isSpecialVersion(version string) bool {
+	specialVersions := []string{
+		"latest", "system", "current", "stable", "nightly", "dev", "master", "main",
+		"head", "tip", "edge", "beta", "alpha", "rc", "pre", "snapshot",
+	}
+
+	versionLower := strings.ToLower(version)
+	for _, special := range specialVersions {
+		if versionLower == special || strings.HasPrefix(versionLower, special) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// fetchAllGitHubVersions fetches all available versions from GitHub API
+func fetchAllGitHubVersions(owner, repo string, limit int) ([]string, error) {
+	// GitHub API endpoint for releases with per_page parameter
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=%d", owner, repo, limit)
+
+	// Get GitHub token for authenticated requests
+	token := viper.GetString("github-token")
+
+	// Create HTTP client
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add GitHub token if available
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch releases from GitHub: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Parse the JSON response
+	var releases []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
+	}
+
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return nil, fmt.Errorf("failed to parse releases JSON: %w", err)
+	}
+
+	// Extract all non-prerelease versions
+	var versions []string
+	for _, release := range releases {
+		if !release.Prerelease {
+			// Remove 'v' prefix if present
+			version := strings.TrimPrefix(release.TagName, "v")
+			versions = append(versions, version)
+		}
+	}
+
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
+	}
+
+	return versions, nil
+}

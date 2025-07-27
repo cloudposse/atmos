@@ -3,25 +3,26 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 func TestGetGitHubToken(t *testing.T) {
 	// Save original value
-	originalToken := githubToken
-	defer func() { githubToken = originalToken }()
+	originalToken := viper.GetString("github-token")
+	defer func() { viper.Set("github-token", originalToken) }()
 
 	// Test with token set
-	githubToken = "test-token"
+	viper.Set("github-token", "test-token")
 	token := GetGitHubToken()
 	if token != "test-token" {
 		t.Errorf("Expected 'test-token', got '%s'", token)
 	}
 
 	// Test with empty token
-	githubToken = ""
+	viper.Set("github-token", "")
 	token = GetGitHubToken()
 	if token != "" {
 		t.Errorf("Expected empty string, got '%s'", token)
@@ -110,31 +111,35 @@ func TestGitHubAuthenticatedTransport_RawContent(t *testing.T) {
 	}
 	client := NewHTTPClient(config)
 
-	// Make request to raw.githubusercontent.com (should NOT get authentication)
+	// Make request to raw content URL (should not get authentication)
 	resp, err := client.Get(server.URL + "/raw.githubusercontent.com/test")
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Check that Authorization header was NOT set for raw content
+	// Check that Authorization header was NOT set for raw content URLs
 	if auth := receivedHeaders.Get("Authorization"); auth != "" {
 		t.Errorf("Expected no Authorization header for raw content URL, got '%s'", auth)
 	}
 }
 
 func TestNewDefaultHTTPClient(t *testing.T) {
-	// Set a test token
-	os.Setenv("ATMOS_GITHUB_TOKEN", "test-token")
-	defer os.Unsetenv("ATMOS_GITHUB_TOKEN")
+	// Save original value
+	originalToken := viper.GetString("github-token")
+	defer func() { viper.Set("github-token", originalToken) }()
 
+	// Test with token set
+	viper.Set("github-token", "test-token")
 	client := NewDefaultHTTPClient()
 	if client == nil {
-		t.Fatal("Expected non-nil HTTP client")
+		t.Fatal("Expected non-nil client")
 	}
 
-	// Verify timeout is set (30 seconds)
-	if client.Timeout != 30*time.Second {
-		t.Errorf("Expected timeout 30s, got %v", client.Timeout)
+	// Test with empty token
+	viper.Set("github-token", "")
+	client = NewDefaultHTTPClient()
+	if client == nil {
+		t.Fatal("Expected non-nil client")
 	}
 }

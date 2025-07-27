@@ -120,16 +120,29 @@ toolchain run opentofu@1.10.3 -- --version
 
 ## Architecture
 
-- `main.go` - CLI entry point using Cobra
-- `install.go` - Install command with spinner/progress UI
-- `run.go` - Run command for executing specific versions
-- `tool_versions.go` - .tool-versions file support
-- `list.go` - List installed tools
-- `installer.go` - Core installation logic
-- `aqua_registry.go` - Custom Aqua registry parser
+The toolchain follows a modular architecture with each command in its own file:
+
+### Core Files
+- `main.go` - CLI entry point using Cobra with global flags (`--tool-versions`, `--tools-dir`, `--log-level`, `--github-token`)
+- `installer.go` - Core installation logic, asset URL building, and binary extraction
 - `http_client.go` - HTTP client with GitHub token authentication
-- `local_config.go` - Local tool configuration management
-- `types.go` - Core data structures and types
+- `local_config.go` - Local `tools.yaml` configuration management
+- `aqua_registry.go` - Aqua registry integration for tool discovery
+- `tool_versions.go` - `.tool-versions` file management
+- `types.go` - Core data structures and YAML marshalling
+
+### Command Files
+- `add.go` - Add/update tool versions in `.tool-versions`
+- `remove.go` - Remove tools from `.tool-versions`
+- `install.go` - Install CLI binaries from registry
+- `uninstall.go` - Uninstall CLI binaries
+- `list.go` - List installed tools and versions
+- `run.go` - Run specific version of a tool
+- `exec.go` - Exec specific version of a tool (replaces current process)
+- `path.go` - Emit PATH environment variable
+- `info.go` - Display tool configuration information
+- `clean.go` - Remove all installed tools
+- `aliases.go` - List configured tool aliases
 
 ## Commands
 
@@ -150,12 +163,12 @@ toolchain info opentofu/opentofu
 **Output includes:**
 - Tool name and owner/repo
 - Tool type (http, github_release)
-- Asset template URLs
+- Asset template URLs (with processed examples)
 - Format information
 - Binary name
 - Raw YAML configuration for debugging
 
-**Note:** The command automatically uses "latest" version to find the tool configuration, which is consistent with how other commands work when no specific version is provided.
+**Note:** The command automatically uses "latest" version to find the tool configuration, which is consistent with how other commands work when no specific version is provided. Template processing shows what the actual download URLs would look like.
 
 ## Registry Integration
 
@@ -168,6 +181,21 @@ The tool integrates with the Aqua registry by:
 5. **Version Handling**: Supports version constraints and overrides
 
 ## Recent Improvements
+
+### Code Organization
+- **Command Refactoring**: All commands moved to standalone files for better maintainability
+- **Modular Architecture**: Clear separation between core logic and command interfaces
+- **Improved Documentation**: Enhanced help text and examples for all commands
+
+### Global Flags
+- **`--tools-dir`**: Configurable tools directory (default: `.tools`)
+- **`--tool-versions`**: Configurable tool-versions file path (default: `.tool-versions`)
+- **`--log-level`**: Configurable logging levels
+- **`--github-token`**: GitHub token support for authenticated requests
+
+### New Commands
+- **`aliases`**: List all configured tool aliases with beautiful table output
+- **`info`**: Display tool configuration with table or YAML output formats
 
 ### Duplicate Prevention
 - Fixed issue with duplicate entries in `.tool-versions` files
@@ -212,7 +240,7 @@ go build -o toolchain
 The tool automatically:
 - Caches registry files in `~/.cache/installer/registries`
 - Caches downloaded assets in `~/.cache/installer`
-- Installs binaries to `./.tools/bin/`
+- Installs binaries to `./.tools/bin/` (configurable via `--tools-dir` flag)
 
 ### GitHub Token Support
 
@@ -271,6 +299,72 @@ No additional permissions are required for the toolchain's current functionality
 - Use environment variables or secure credential managers
 - Consider using GitHub's fine-grained personal access tokens for minimal permissions
 - Rotate tokens regularly for security best practices
+
+### Global Flags
+
+The toolchain supports several global flags that apply to all commands:
+
+#### `--tool-versions`
+
+Specifies the path to the tool-versions file. Defaults to `.tool-versions` in the current directory.
+
+```bash
+# Use a custom tool-versions file
+./toolchain --tool-versions /path/to/custom/.tool-versions install
+
+# Use the default .tool-versions file (same as above)
+./toolchain install
+
+# Use a different file for a specific command
+./toolchain --tool-versions /tmp/test-versions add terraform 1.9.8
+```
+
+This flag allows you to:
+- Use different tool-versions files for different projects
+- Test configurations without affecting your main `.tool-versions` file
+- Use absolute paths for consistent behavior across directories
+
+#### `--tools-dir`
+
+Specifies the directory where installed tools are stored. Defaults to `.tools` in the current directory.
+
+```bash
+# Use a custom tools directory
+./toolchain --tools-dir /tmp/custom-tools install terraform@1.9.8
+
+# Use the default .tools directory (same as above)
+./toolchain install terraform@1.9.8
+
+# Clean a specific tools directory
+./toolchain --tools-dir /tmp/custom-tools clean
+```
+
+This flag allows you to:
+- Install tools to different directories for different projects
+- Use absolute paths for consistent behavior across directories
+- Test installations without affecting your main `.tools` directory
+
+#### `--log-level`
+
+Sets the logging level for debugging. Valid values: `debug`, `info`, `warn`, `error`.
+
+```bash
+# Enable debug logging
+./toolchain --log-level debug install terraform@1.9.8
+
+# Show only warnings and errors
+./toolchain --log-level warn install terraform@1.9.8
+```
+
+#### `--github-token`
+
+Directly specify a GitHub token (hidden flag, primarily for environment variables).
+
+```bash
+./toolchain --github-token your_token_here install terraform@1.9.8
+```
+
+**Note:** It's recommended to use environment variables (`ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`) instead of this flag for security reasons.
 
 ### Tool Aliases
 

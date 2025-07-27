@@ -17,13 +17,13 @@ var listCmd = &cobra.Command{
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	// Read .tool-versions file
-	toolVersions, err := LoadToolVersions(".tool-versions")
+	// Read tool-versions file
+	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("no .tool-versions file found in current directory")
+			return fmt.Errorf("no tool-versions file found in current directory")
 		}
-		return fmt.Errorf("error reading .tool-versions: %w", err)
+		return fmt.Errorf("error reading tool-versions file: %w", err)
 	}
 
 	if len(toolVersions.Tools) == 0 {
@@ -35,7 +35,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	fmt.Printf("%-20s %-15s %-20s %-10s\n", "TOOL", "VERSION", "INSTALL DATE", "SIZE")
 	fmt.Println(strings.Repeat("-", 70))
 
-	// Check each tool in .tool-versions to see if it's installed
+	// Check each tool in tool-versions file to see if it's installed
 	for toolName, versions := range toolVersions.Tools {
 		if len(versions) == 0 {
 			continue

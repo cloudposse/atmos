@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -37,48 +36,15 @@ func execToolWithInstaller(installer ToolRunner, cmd *cobra.Command, args []stri
 	if len(args) == 0 {
 		return fmt.Errorf("no arguments provided. Expected format: tool@version")
 	}
-
 	toolSpec := args[0]
-	remainingArgs := args[1:]
-
-	// Parse tool@version specification
-	parts := strings.Split(toolSpec, "@")
-	var tool, version string
-
-	if len(parts) == 1 {
-		tool = parts[0]
-		version = "latest"
-		usedLatest := true
-		if toolVersions, err := LoadToolVersions(".tool-versions"); err == nil {
-			_, configuredVersion, found := LookupToolVersion(tool, toolVersions, installer.GetResolver())
-			if found {
-				version = configuredVersion
-				usedLatest = false
-			}
-		}
-		if version == "latest" {
-			owner, repo, err := installer.GetResolver().Resolve(tool)
-			if err == nil {
-				if latestVersion, err := installer.readLatestFile(owner, repo); err == nil {
-					version = latestVersion
-				}
-			}
-		}
-		defer func() {
-			if usedLatest {
-				_ = AddToolToVersions(".tool-versions", tool, "latest")
-				owner, repo, err := installer.GetResolver().Resolve(tool)
-				if err == nil {
-					_ = installer.createLatestFile(owner, repo, version)
-				}
-			}
-		}()
-	} else if len(parts) == 2 {
-		tool = parts[0]
-		version = parts[1]
-	} else {
-		return fmt.Errorf("invalid tool specification: %s. Expected format: tool or tool@version", toolSpec)
+	tool, version, err := ParseToolVersionArg(toolSpec)
+	if err != nil {
+		return err
 	}
+	if tool == "" {
+		return fmt.Errorf("invalid tool specification: missing tool name")
+	}
+	remainingArgs := args[1:]
 
 	owner, repo, err := installer.GetResolver().Resolve(tool)
 	if err != nil {
