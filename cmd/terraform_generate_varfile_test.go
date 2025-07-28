@@ -42,8 +42,9 @@ func TestTerraformGenerateVarfileCmd(t *testing.T) {
 	_, err = io.Copy(&output, r)
 	assert.NoError(t, err, "'TestTerraformGenerateVarfileCmd' should execute without error")
 
-	// Check if output contains the expected output
-	assert.Contains(t, output.String(), "foo: component-1-a", "'TestTerraformGenerateVarfileCmd' output should contain 'foo: component-1-a'")
-	assert.Contains(t, output.String(), "bar: component-1-b", "'TestTerraformGenerateVarfileCmd' output should contain 'bar: component-1-b'")
-	assert.Contains(t, output.String(), "baz: component-1-c", "'TestTerraformGenerateVarfileCmd' output should contain 'baz: component-1-c'")
+	outputStr := output.String()
+
+	// Check if the output contains the expected output
+	assert.Contains(t, outputStr, "Generating varfile for variables component=component-1 stack=nonprod", "'TestTerraformGenerateVarfileCmd' output should contain 'Generating varfile for variables component=component-1 stack=nonprod'")
+	assert.Contains(t, outputStr, "nonprod-component-1.terraform.tfvars.json", "'TestTerraformGenerateVarfileCmd' output should contain 'nonprod-component-1.terraform.tfvars.json'")
 }

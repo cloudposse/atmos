@@ -113,7 +113,7 @@ func TestProcessTagStore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processTagStore(atmosConfig, tt.input, tt.currentStack)
+			result := processTagStore(&atmosConfig, tt.input, tt.currentStack)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

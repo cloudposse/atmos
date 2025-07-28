@@ -238,6 +238,15 @@ type AtmosSettings struct {
 	GitlabToken          string           `yaml:"gitlab_token,omitempty" mapstructure:"gitlab_token"`
 	// Atmos Pro integration settings
 	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
+	// Telemetry settings
+	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
+}
+
+// TelemetrySettings contains configuration for telemetry collection.
+type TelemetrySettings struct {
+	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
+	Token    string `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
 }
 
 type Docs struct {

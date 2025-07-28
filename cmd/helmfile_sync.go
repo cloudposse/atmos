@@ -20,8 +20,8 @@ var helmfileSyncCmd = &cobra.Command{
 	Short:              helmfileSyncShort,
 	Long:               helmfileSyncLong,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Run: func(cmd *cobra.Command, args []string) {
-		helmfileRun(cmd, "sync", args)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return helmfileRun(cmd, "sync", args)
 	},
 }
 

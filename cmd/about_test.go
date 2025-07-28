@@ -30,6 +30,6 @@ func TestAboutCmd(t *testing.T) {
 	_, err = io.Copy(&output, r)
 	assert.NoError(t, err, "'atmos about' command should execute without error")
 
-	// Check if output contains expected markdown content
+	// Check if the output contains expected markdown content
 	assert.Contains(t, output.String(), aboutMarkdown, "'atmos about' output should contain information about Atmos")
 }

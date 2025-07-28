@@ -4,25 +4,22 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// vendorPullCmd executes 'vendor pull' CLI commands
+// vendorPullCmd executes 'vendor pull' CLI commands.
 var vendorPullCmd = &cobra.Command{
 	Use:                "pull",
 	Short:              "Pull the latest vendor configurations or dependencies",
 	Long:               "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// WithStackValidation is a functional option that enables/disables stack configuration validation
 		// based on whether the --stack flag is provided
 		checkAtmosConfig(WithStackValidation(cmd.Flag("stack").Changed))
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		return err
 	},
 }
 

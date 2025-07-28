@@ -11,6 +11,7 @@ coverage:
   ignore:
     - "**/mock_*.go"  # Adjust this pattern based on your project structure
     - "mock_*.go"  # Adjust this pattern based on your project structure
+    - "**/mock/*.go" # Adjust interface required for mocking
 
 comment:
   layout: "reach,diff,flags,tree"  # Display different coverage views

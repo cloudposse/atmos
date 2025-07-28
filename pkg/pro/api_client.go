@@ -92,8 +92,8 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	// If API key is not set, attempt to use GitHub OIDC token exchange
 	oidcToken, err := getGitHubOIDCToken(atmosConfig.Settings.Pro.GithubOIDC)
 	if err != nil {
-		log.Debug("Error while getting GitHub OIDC token", "err", err)
-		return nil, fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetGitHubOIDCToken, err)
+		log.Debug("Error while getting GitHub OIDC token", "error", err)
+		return nil, fmt.Errorf("error while getting GitHub OIDC token: %w", err)
 	}
 
 	// Get workspace ID from environment
@@ -270,14 +270,14 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, e
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Debug("got error", "err", err)
-		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetOIDCToken, err)
+		log.Debug("getGitHubOIDCToken", "error", err)
+		return "", fmt.Errorf(ErrFormatString, ErrFailedToGetOIDCToken, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Debug("got error", "resp.StatusCode", resp.StatusCode)
-		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetOIDCToken, resp.Status)
+		log.Debug("getGitHubOIDCToken", "resp.StatusCode", resp.StatusCode)
+		return "", fmt.Errorf(ErrFormatString, ErrFailedToGetOIDCToken, resp.Status)
 	}
 
 	var tokenResp dtos.GetGitHubOIDCResponse
