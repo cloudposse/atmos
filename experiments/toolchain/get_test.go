@@ -2,8 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -206,6 +210,12 @@ func TestGetCommand(t *testing.T) {
 }
 
 func TestGetCommandWithAllFlag(t *testing.T) {
+	// Set up mock GitHub API
+	mockAPI := NewMockGitHubAPI()
+	mockAPI.SetReleases("hashicorp", "terraform", []string{"1.12.0", "1.11.4", "1.9.8", "1.8.0"})
+	SetGitHubAPI(mockAPI)
+	defer ResetGitHubAPI()
+
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, ".tool-versions")
 
@@ -220,13 +230,36 @@ func TestGetCommandWithAllFlag(t *testing.T) {
 
 	// Test with --all flag using the actual getCmd
 	getCmd.Flags().Set("file", filePath)
-	getCmd.SetArgs([]string{"--all", "terraform"})
+	getCmd.Flags().Set("all", "true")
+	getCmd.SetArgs([]string{"terraform"})
 	err = getCmd.Execute()
+	assert.NoError(t, err)
+}
+
+func TestGetCommandWithAllFlagAndLimit(t *testing.T) {
+	// Set up mock GitHub API
+	mockAPI := NewMockGitHubAPI()
+	mockAPI.SetReleases("hashicorp", "terraform", []string{"1.12.0", "1.11.4", "1.9.8", "1.8.0"})
+	SetGitHubAPI(mockAPI)
+	defer ResetGitHubAPI()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, ".tool-versions")
+
+	// Create a .tool-versions file with some tools
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.11.4", "1.9.8"},
+		},
+	}
+	err := SaveToolVersions(filePath, toolVersions)
 	assert.NoError(t, err)
 
 	// Test with --all and --limit flags
+	getCmd.Flags().Set("file", filePath)
+	getCmd.Flags().Set("all", "true")
 	getCmd.Flags().Set("limit", "2")
-	getCmd.SetArgs([]string{"--all", "--limit", "2", "terraform"})
+	getCmd.SetArgs([]string{"terraform"})
 	err = getCmd.Execute()
 	assert.NoError(t, err)
 }
@@ -298,4 +331,170 @@ func TestGetCommandToolResolution(t *testing.T) {
 	getCmd.SetArgs([]string{"hashicorp/terraform"})
 	err = getCmd.Execute()
 	assert.NoError(t, err)
+}
+
+func TestGetCommandNoDuplicateVersions(t *testing.T) {
+	// Set up mock GitHub API
+	mockAPI := NewMockGitHubAPI()
+	mockAPI.SetReleases("hashicorp", "terraform", []string{"1.12.0", "1.11.4", "1.9.8", "1.8.0"})
+	SetGitHubAPI(mockAPI)
+	defer ResetGitHubAPI()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, ".tool-versions")
+
+	// Create a .tool-versions file with some tools
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.11.4", "1.9.8"},
+		},
+	}
+	err := SaveToolVersions(filePath, toolVersions)
+	assert.NoError(t, err)
+
+	// Capture output by redirecting stdout
+	originalStdout := os.Stdout
+	r, w, err := os.Pipe()
+	assert.NoError(t, err)
+	os.Stdout = w
+	defer func() {
+		os.Stdout = originalStdout
+	}()
+
+	// Run the get command with --all flag
+	getCmd.Flags().Set("file", filePath)
+	getCmd.Flags().Set("all", "true")
+	getCmd.SetArgs([]string{"terraform"})
+	err = getCmd.Execute()
+	assert.NoError(t, err)
+
+	// Close the write end and read the output
+	w.Close()
+	output, err := io.ReadAll(r)
+	assert.NoError(t, err)
+
+	// Parse the output to extract version lines
+	lines := strings.Split(string(output), "\n")
+	var versions []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Remove all ANSI color codes first
+		re := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+		cleanLine := re.ReplaceAllString(line, "")
+		cleanLine = strings.TrimSpace(cleanLine)
+
+		// Extract version from line (remove checkmark and styling)
+		parts := strings.Fields(cleanLine)
+		if len(parts) >= 2 {
+			// Get the version part (second field)
+			version := parts[1]
+			versions = append(versions, version)
+		} else if len(parts) == 1 {
+			// Single field might be just a version
+			version := parts[0]
+			versions = append(versions, version)
+		}
+	}
+
+	// Check for duplicates
+	seen := make(map[string]bool)
+	duplicates := []string{}
+	for _, version := range versions {
+		if seen[version] {
+			duplicates = append(duplicates, version)
+		}
+		seen[version] = true
+	}
+
+	// This test should NOT have duplicates - if duplicates are found, that's a bug
+	assert.Equal(t, 0, len(duplicates), "Found duplicate versions in output: %v", duplicates)
+
+	// Verify we have the expected versions
+	expectedVersions := []string{"1.9.8", "1.11.4"}
+	for _, expected := range expectedVersions {
+		assert.True(t, seen[expected], "Expected version %s not found in output", expected)
+	}
+}
+
+func TestGetCommandNoDuplicateVersionsFromFile(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, ".tool-versions")
+
+	// Create a .tool-versions file with some tools
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.11.4", "1.9.8", "1.11.4"}, // Intentionally add duplicate
+		},
+	}
+	err := SaveToolVersions(filePath, toolVersions)
+	assert.NoError(t, err)
+
+	// Capture output by redirecting stdout
+	originalStdout := os.Stdout
+	r, w, err := os.Pipe()
+	assert.NoError(t, err)
+	os.Stdout = w
+	defer func() {
+		os.Stdout = originalStdout
+	}()
+
+	// Run the get command without --all flag (reads from file)
+	getCmd.Flags().Set("file", filePath)
+	getCmd.Flags().Set("all", "false")
+	getCmd.SetArgs([]string{"terraform"})
+	err = getCmd.Execute()
+	assert.NoError(t, err)
+
+	// Close the write end and read the output
+	w.Close()
+	output, err := io.ReadAll(r)
+	assert.NoError(t, err)
+
+	// Parse the output to extract version lines
+	lines := strings.Split(string(output), "\n")
+	var versions []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Remove all ANSI color codes first
+		re := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+		cleanLine := re.ReplaceAllString(line, "")
+		cleanLine = strings.TrimSpace(cleanLine)
+
+		// Extract version from line (remove checkmark and styling)
+		parts := strings.Fields(cleanLine)
+		if len(parts) >= 2 {
+			// Get the version part (second field)
+			version := parts[1]
+			versions = append(versions, version)
+		} else if len(parts) == 1 {
+			// Single field might be just a version
+			version := parts[0]
+			versions = append(versions, version)
+		}
+	}
+
+	// Check for duplicates
+	seen := make(map[string]bool)
+	duplicates := []string{}
+	for _, version := range versions {
+		if seen[version] {
+			duplicates = append(duplicates, version)
+		}
+		seen[version] = true
+	}
+
+	// This test should NOT have duplicates - if duplicates are found, that's a bug
+	assert.Equal(t, 0, len(duplicates), "Found duplicate versions in output: %v", duplicates)
+
+	// Verify we have the expected versions
+	expectedVersions := []string{"1.9.8", "1.11.4"}
+	for _, expected := range expectedVersions {
+		assert.True(t, seen[expected], "Expected version %s not found in output", expected)
+	}
 }

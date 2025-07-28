@@ -1,10 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"strings"
 
@@ -12,7 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var getCmd = &cobra.Command{
@@ -92,6 +88,17 @@ Examples:
 			versions = fileVersions
 			defaultVersion = versions[0]
 		}
+
+		// Deduplicate versions to avoid showing the same version multiple times
+		seen := make(map[string]bool)
+		uniqueVersions := []string{}
+		for _, version := range versions {
+			if !seen[version] {
+				seen[version] = true
+				uniqueVersions = append(uniqueVersions, version)
+			}
+		}
+		versions = uniqueVersions
 
 		// Sort versions in semver order
 		sortedVersions, err := sortVersionsSemver(versions)
@@ -213,66 +220,4 @@ func isSpecialVersion(version string) bool {
 	}
 
 	return false
-}
-
-// fetchAllGitHubVersions fetches all available versions from GitHub API
-func fetchAllGitHubVersions(owner, repo string, limit int) ([]string, error) {
-	// GitHub API endpoint for releases with per_page parameter
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=%d", owner, repo, limit)
-
-	// Get GitHub token for authenticated requests
-	token := viper.GetString("github-token")
-
-	// Create HTTP client
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Add GitHub token if available
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch releases from GitHub: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Parse the JSON response
-	var releases []struct {
-		TagName    string `json:"tag_name"`
-		Prerelease bool   `json:"prerelease"`
-	}
-
-	if err := json.Unmarshal(body, &releases); err != nil {
-		return nil, fmt.Errorf("failed to parse releases JSON: %w", err)
-	}
-
-	// Extract all non-prerelease versions
-	var versions []string
-	for _, release := range releases {
-		if !release.Prerelease {
-			// Remove 'v' prefix if present
-			version := strings.TrimPrefix(release.TagName, "v")
-			versions = append(versions, version)
-		}
-	}
-
-	if len(versions) == 0 {
-		return nil, fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
-	}
-
-	return versions, nil
 }
