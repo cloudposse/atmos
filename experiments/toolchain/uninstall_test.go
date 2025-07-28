@@ -208,6 +208,24 @@ func TestRunUninstallWithNoArgs(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
+	// Create mock installed binaries so uninstall has something to work with
+	installer := NewInstaller()
+	installer.binDir = tempDir
+
+	// Create terraform binary
+	terraformPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
+	err = os.MkdirAll(filepath.Dir(terraformPath), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(terraformPath, []byte("mock terraform 1.11.4"), 0755)
+	require.NoError(t, err)
+
+	// Create helm binary
+	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4")
+	err = os.MkdirAll(filepath.Dir(helmPath), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), 0755)
+	require.NoError(t, err)
+
 	// Temporarily set the global toolVersionsFile variable
 	originalToolVersionsFile := toolVersionsFile
 	toolVersionsFile = toolVersionsPath
