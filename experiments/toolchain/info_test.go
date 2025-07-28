@@ -113,7 +113,7 @@ func TestGetEvaluatedToolYAML(t *testing.T) {
 }
 
 func TestFormatToolInfoAsTable(t *testing.T) {
-	// Test the table formatting function
+	// Test that table output format contains all required information
 	installer := NewInstaller()
 	tool := &Tool{
 		Type:       "http",
@@ -126,23 +126,39 @@ func TestFormatToolInfoAsTable(t *testing.T) {
 
 	table := formatToolInfoAsTable("terraform", "hashicorp", "terraform", tool, "1.11.4", installer)
 
-	// Should contain all the key information
-	assert.Contains(t, table, "Tool")
-	assert.Contains(t, table, "terraform")
-	assert.Contains(t, table, "Owner/Repo")
-	assert.Contains(t, table, "hashicorp/terraform")
-	assert.Contains(t, table, "Type")
-	assert.Contains(t, table, "http")
-	assert.Contains(t, table, "Repository")
-	assert.Contains(t, table, "hashicorp/terraform")
-	assert.Contains(t, table, "Version")
-	assert.Contains(t, table, "1.11.4")
+	// Verify all required information is present
+	requiredInfo := []string{
+		"Tool",
+		"terraform",
+		"Owner/Repo",
+		"hashicorp/terraform",
+		"Type",
+		"http",
+		"Repository",
+		"hashicorp/terraform",
+		"Version",
+		"1.11.4",
+		"Format",
+		"zip",
+		"Binary Name",
+		"terraform",
+		"Asset Template",
+		"Processed URL",
+	}
+
+	for _, info := range requiredInfo {
+		assert.Contains(t, table, info, "Table should contain: %s", info)
+	}
+
+	// Should contain both raw template and processed URL
 	assert.Contains(t, table, "Asset Template")
 	assert.Contains(t, table, "Processed URL")
 
-	// Should contain processed URL (without template syntax)
+	// Should contain the raw template (with template syntax)
+	assert.Contains(t, table, "{{trimV .Version}}")
+
+	// Should also contain processed URL (without template syntax)
 	assert.Contains(t, table, "https://releases.hashicorp.com/terraform/1.11.4/terraform_1.11.4_")
-	assert.NotContains(t, table, "{{trimV .Version}}")
 }
 
 func TestInfoCommand_CompleteToolConfiguration(t *testing.T) {
