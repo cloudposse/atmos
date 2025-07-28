@@ -315,7 +315,10 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "Uninstalling all versions of %s/%s (%d versions)\n", owner, repo, len(versionsToUninstall))
+	// Only show the "Uninstalling all versions" message if there's more than 1 version
+	if len(versionsToUninstall) > 1 {
+		fmt.Fprintf(os.Stderr, "Uninstalling all versions of %s/%s (%d versions)\n", owner, repo, len(versionsToUninstall))
+	}
 
 	// Uninstall each version
 	for _, version := range versionsToUninstall {
@@ -323,7 +326,12 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s Failed to uninstall %s/%s@%s: %v\n", xMark.Render(), owner, repo, version, err)
 		} else {
-			fmt.Fprintf(os.Stderr, "%s Uninstalled %s/%s@%s\n", checkMark.Render(), owner, repo, version)
+			// For single version, show simple message; for multiple versions, show detailed message
+			if len(versionsToUninstall) == 1 {
+				fmt.Fprintf(os.Stderr, "%s Uninstalled %s/%s@%s\n", checkMark.Render(), owner, repo, version)
+			} else {
+				fmt.Fprintf(os.Stderr, "%s Uninstalled %s/%s@%s\n", checkMark.Render(), owner, repo, version)
+			}
 		}
 	}
 
@@ -336,6 +344,9 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 	// Try to remove the tool directory (will only succeed if empty)
 	_ = os.Remove(toolDir)
 
-	fmt.Fprintf(os.Stderr, "%s Uninstalled all versions of %s/%s\n", checkMark.Render(), owner, repo)
+	// Only show summary if there are multiple versions
+	if len(versionsToUninstall) > 1 {
+		fmt.Fprintf(os.Stderr, "%s Uninstalled all versions of %s/%s\n", checkMark.Render(), owner, repo)
+	}
 	return nil
 }

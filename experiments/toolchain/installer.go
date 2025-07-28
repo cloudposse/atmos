@@ -61,7 +61,7 @@ type Installer struct {
 // NewInstallerWithResolver allows injecting a custom ToolResolver (for tests)
 func NewInstallerWithResolver(resolver ToolResolver) *Installer {
 	homeDir, _ := os.UserHomeDir()
-	cacheDir := filepath.Join(homeDir, ".cache", "installer")
+	cacheDir := filepath.Join(homeDir, ".cache", "tools-cache")
 	binDir := filepath.Join(GetToolsDirPath(), "bin")
 	registries := []string{
 		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",

@@ -32,7 +32,7 @@ func NewAquaRegistry() *AquaRegistry {
 	return &AquaRegistry{
 		client: NewDefaultHTTPClient(),
 		cache: &RegistryCache{
-			baseDir: filepath.Join(os.TempDir(), "installer-registry-cache"),
+			baseDir: filepath.Join(os.TempDir(), "tools-cache"),
 		},
 		local: NewLocalConfigManager(),
 	}

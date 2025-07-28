@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -46,6 +45,9 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+	case installDoneMsg:
+		m.done = true
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -57,18 +59,13 @@ func (m spinnerModel) View() string {
 	return fmt.Sprintf("%s %s", m.spinner.View(), m.message)
 }
 
-// Run spinner with Bubble Tea
-func runBubbleTeaSpinner(message string, done *atomic.Bool) {
+// Custom message type for signaling installation completion
+type installDoneMsg struct{}
+
+// Run spinner with Bubble Tea - proper way
+func runBubbleTeaSpinner(message string) *tea.Program {
 	p := tea.NewProgram(initialSpinnerModel(message))
-
-	go func() {
-		for !done.Load() {
-			time.Sleep(100 * time.Millisecond)
-		}
-		p.Quit()
-	}()
-
-	p.Run()
+	return p
 }
 
 var installCmd = &cobra.Command{
@@ -166,31 +163,39 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 	restoreLogger := SuppressLogger()
 	defer restoreLogger()
 	installer := NewInstaller()
+
+	var p *tea.Program
 	if showProgressBar {
-		var done atomic.Bool
 		message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
-		go runBubbleTeaSpinner(message, &done)
-		// Simulate install work (replace with real install logic below)
-		time.Sleep(2 * time.Second)
-		done.Store(true)
+		p = runBubbleTeaSpinner(message)
+		go p.Run()
 	}
+
 	// Perform installation
 	binaryPath, err := installer.Install(owner, repo, version)
 	if err != nil {
+		if showProgressBar && p != nil {
+			p.Send(installDoneMsg{})
+		}
 		if showProgressBar {
-			fmt.Fprintf(os.Stderr, "\r%s Install failed %s/%s@%s: %v\n", xMark.Render(), owner, repo, version, err)
+			fmt.Fprintf(os.Stderr, "%s Install failed %s/%s@%s: %v\n", xMark.Render(), owner, repo, version, err)
 		}
 		return err
 	}
 	if isLatest {
 		if err := installer.createLatestFile(owner, repo, version); err != nil {
 			if showProgressBar {
-				fmt.Fprintf(os.Stderr, "\r%s Failed to create latest file for %s/%s: %v\n", xMark.Render(), owner, repo, err)
+				fmt.Fprintf(os.Stderr, "%s Failed to create latest file for %s/%s: %v\n", xMark.Render(), owner, repo, err)
 			}
 		}
 	}
 	if showProgressBar {
 		fmt.Fprintf(os.Stderr, "%s Installed %s/%s@%s to %s\n", checkMark.Render(), owner, repo, version, binaryPath)
+	}
+	if showProgressBar && p != nil {
+		p.Send(installDoneMsg{})
+		// Small delay to ensure spinner is cleared
+		time.Sleep(100 * time.Millisecond)
 	}
 	if err := AddToolToVersions(".tool-versions", repo, version); err == nil && showProgressBar {
 		fmt.Fprintf(os.Stderr, "%s Registered %s %s in .tool-versions\n", checkMark.Render(), repo, version)
