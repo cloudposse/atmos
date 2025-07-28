@@ -68,7 +68,8 @@ func getCachedS3Client(backend *map[string]any) (S3API, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cfg, err := awsUtils.LoadAWSConfig(ctx, region, roleArn, 3*time.Minute)
+	// The minimum `assume role` duration allowed by AWS is 15 minutes
+	cfg, err := awsUtils.LoadAWSConfig(ctx, region, roleArn, 15*time.Minute)
 	if err != nil {
 		return nil, err
 	}
@@ -112,14 +113,13 @@ func ReadTerraformBackendS3Internal(
 	var lastErr error
 	for attempt := 0; attempt <= maxRetryCount; attempt++ {
 		// 30 sec timeout to read the state file from the S3 bucket.
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
 		output, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(tfStateFilePath),
 		})
-
-		cancel()
 
 		if err != nil {
 			// Check if the error is because the object doesn't exist.

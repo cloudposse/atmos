@@ -57,7 +57,7 @@ require (
 	github.com/kubescape/go-git-url v0.0.30
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/mattn/go-runewidth v0.0.16
-	github.com/mikefarah/yq/v4 v4.46.1
+	github.com/mikefarah/yq/v4 v4.47.1
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6

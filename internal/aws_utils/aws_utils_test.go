@@ -61,7 +61,7 @@ func TestLoadAWSConfig(t *testing.T) {
 			}
 
 			// Execute
-			cfg, err := LoadAWSConfig(context.Background(), tt.region, tt.roleArn, time.Second*10)
+			cfg, err := LoadAWSConfig(context.Background(), tt.region, tt.roleArn, time.Minute*15)
 
 			// Assert
 			if tt.wantErr {
