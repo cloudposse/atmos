@@ -11,7 +11,7 @@ type DeploymentsUploadRequest struct {
 	RepoName    string              `json:"repo_name"`
 	RepoOwner   string              `json:"repo_owner"`
 	RepoHost    string              `json:"repo_host"`
-	Deployments []schema.Deployment `json:"stacks"`
+	Deployments []schema.Deployment `json:"deployments"`
 }
 
 // DeploymentStatusUploadRequest represents the data structure for uploading a single deployment's status.
