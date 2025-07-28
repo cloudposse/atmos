@@ -1,78 +1,239 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWhichCommand_ToolNotConfigured(t *testing.T) {
-	// Test with a tool that exists in registry but is not configured in .tool-versions
-	cmd := whichCmd
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Create an empty .tool-versions file so the command can load it
+	emptyToolVersions := &ToolVersions{
+		Tools: map[string][]string{},
+	}
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
+	require.NoError(t, err)
+
+	// Create a new command instance to avoid interference
+	cmd := &cobra.Command{
+		Use:   "which",
+		Short: "Display the path to an executable",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Override the tool versions file path for this test
+			originalPath := GetToolVersionsFilePath()
+			defer func() { toolVersionsFile = originalPath }()
+			toolVersionsFile = toolVersionsPath
+			return whichCmd.RunE(cmd, args)
+		},
+	}
 	cmd.SetArgs([]string{"kubectl"})
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	require.Error(t, err, "Should fail when tool is not configured in .tool-versions")
 	assert.Contains(t, err.Error(), "not configured in .tool-versions")
 }
 
 func TestWhichCommand_InvalidTool(t *testing.T) {
-	// Test with a tool that doesn't exist
-	cmd := whichCmd
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Create an empty .tool-versions file so the command can load it
+	emptyToolVersions := &ToolVersions{
+		Tools: map[string][]string{},
+	}
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
+	require.NoError(t, err)
+
+	// Create a new command instance to avoid interference
+	cmd := &cobra.Command{
+		Use:   "which",
+		Short: "Display the path to an executable",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Override the tool versions file path for this test
+			originalPath := GetToolVersionsFilePath()
+			defer func() { toolVersionsFile = originalPath }()
+			toolVersionsFile = toolVersionsPath
+			return whichCmd.RunE(cmd, args)
+		},
+	}
 	cmd.SetArgs([]string{"nonexistent-tool-12345"})
 
-	err := cmd.Execute()
-	require.Error(t, err, "Should fail when tool doesn't exist")
-	assert.Contains(t, err.Error(), "not found in local aliases or Aqua registry")
+	err = cmd.Execute()
+	require.Error(t, err, "Should fail when tool doesn't exist in .tool-versions")
+	assert.Contains(t, err.Error(), "not configured in .tool-versions")
 }
 
 func TestWhichCommand_InvalidToolName(t *testing.T) {
-	// Test with an invalid tool name that can't be resolved
-	cmd := whichCmd
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Create a .tool-versions file with an invalid tool name
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"invalid/tool/name": {"1.0.0"},
+		},
+	}
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
+
+	// Create a new command instance to avoid interference
+	cmd := &cobra.Command{
+		Use:   "which",
+		Short: "Display the path to an executable",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Override the tool versions file path for this test
+			originalPath := GetToolVersionsFilePath()
+			defer func() { toolVersionsFile = originalPath }()
+			toolVersionsFile = toolVersionsPath
+			return whichCmd.RunE(cmd, args)
+		},
+	}
 	cmd.SetArgs([]string{"invalid/tool/name"})
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	require.Error(t, err, "Should fail when tool name is invalid")
-	assert.Contains(t, err.Error(), "invalid tool specification")
+	assert.Contains(t, err.Error(), "failed to resolve tool")
 }
 
 func TestWhichCommand_EmptyToolName(t *testing.T) {
-	// Test with empty tool name
-	cmd := whichCmd
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Create an empty .tool-versions file so the command can load it
+	emptyToolVersions := &ToolVersions{
+		Tools: map[string][]string{},
+	}
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
+	require.NoError(t, err)
+
+	// Create a new command instance to avoid interference
+	cmd := &cobra.Command{
+		Use:   "which",
+		Short: "Display the path to an executable",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Override the tool versions file path for this test
+			originalPath := GetToolVersionsFilePath()
+			defer func() { toolVersionsFile = originalPath }()
+			toolVersionsFile = toolVersionsPath
+			return whichCmd.RunE(cmd, args)
+		},
+	}
 	cmd.SetArgs([]string{""})
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	require.Error(t, err, "Should fail when tool name is empty")
-	assert.Contains(t, err.Error(), "not found in local aliases or Aqua registry")
+	assert.Contains(t, err.Error(), "not configured in .tool-versions")
 }
 
-func TestWhichCommand_ToolInToolVersionsButNotInstalled(t *testing.T) {
-	// Create a temporary .tool-versions file with a tool that's not installed
+func TestWhichCommand_ToolConfiguredButNotInstalled(t *testing.T) {
+	// Create a temporary directory
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
 
-	// Create a .tool-versions file with a tool that exists in registry but won't be installed
-	testToolVersions := &ToolVersions{
+	// Create a .tool-versions file with a tool that's configured but won't be installed
+	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
 			"terraform": {"999.999.999"}, // Use a version that won't be installed
 		},
 	}
-	err := SaveToolVersions(toolVersionsFile, testToolVersions)
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Temporarily set the global tool versions file path
-	originalPath := toolVersionsFile
-	toolVersionsFile = tempDir + "/.tool-versions"
-	defer func() { toolVersionsFile = originalPath }()
-
-	// Test the which command with a tool that's configured but not installed
-	cmd := whichCmd
+	// Create a new command instance to avoid interference
+	cmd := &cobra.Command{
+		Use:   "which",
+		Short: "Display the path to an executable",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Override the tool versions file path for this test
+			originalPath := GetToolVersionsFilePath()
+			defer func() { toolVersionsFile = originalPath }()
+			toolVersionsFile = toolVersionsPath
+			return whichCmd.RunE(cmd, args)
+		},
+	}
 	cmd.SetArgs([]string{"terraform"})
 
 	err = cmd.Execute()
 	require.Error(t, err, "Should fail when tool is configured but not installed")
+	assert.Contains(t, err.Error(), "is configured but not installed")
+}
+
+func TestWhichCommand_ToolConfiguredAndInstalled(t *testing.T) {
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Create a .tool-versions file with a tool
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.11.4"},
+		},
+	}
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
+
+	// Create mock installed binary at the exact path the which command expects
+	// The which command uses NewInstaller() which has binDir = filepath.Join(GetToolsDirPath(), "bin")
+	// So we need to create the binary in ./.tools/bin/hashicorp/terraform/1.11.4/terraform
+	installer := NewInstaller()
+	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
+	err = os.MkdirAll(filepath.Dir(binaryPath), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(binaryPath, []byte("mock terraform"), 0755)
+	require.NoError(t, err)
+
+	// Create a new command instance to avoid interference
+	cmd := &cobra.Command{
+		Use:   "which",
+		Short: "Display the path to an executable",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Override the tool versions file path for this test
+			originalPath := GetToolVersionsFilePath()
+			defer func() { toolVersionsFile = originalPath }()
+			toolVersionsFile = toolVersionsPath
+			return whichCmd.RunE(cmd, args)
+		},
+	}
+	cmd.SetArgs([]string{"terraform"})
+
+	err = cmd.Execute()
+	require.NoError(t, err, "Should succeed when tool is configured and installed")
+}
+
+func TestWhichCommand_NoToolVersionsFile(t *testing.T) {
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Don't create a .tool-versions file
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+
+	// Create a new command instance to avoid interference
+	cmd := &cobra.Command{
+		Use:   "which",
+		Short: "Display the path to an executable",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Override the tool versions file path for this test
+			originalPath := GetToolVersionsFilePath()
+			defer func() { toolVersionsFile = originalPath }()
+			toolVersionsFile = toolVersionsPath
+			return whichCmd.RunE(cmd, args)
+		},
+	}
+	cmd.SetArgs([]string{"terraform"})
+
+	err := cmd.Execute()
+	require.Error(t, err, "Should fail when .tool-versions file doesn't exist")
 	assert.Contains(t, err.Error(), "failed to load .tool-versions file")
 }
 

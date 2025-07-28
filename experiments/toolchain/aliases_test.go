@@ -75,8 +75,7 @@ func TestAliasesCommand_NoConfigFile(t *testing.T) {
 	cmd := aliasesCmd
 	cmd.SetArgs([]string{})
 	err = cmd.Execute()
-	require.Error(t, err, "Should error when no config file exists")
-	assert.Contains(t, err.Error(), "failed to load local config")
+	require.NoError(t, err, "Should not error when no config file exists - just show no aliases")
 }
 
 func TestAliasesCommand_InvalidConfigFile(t *testing.T) {
@@ -172,8 +171,7 @@ func TestAliasesCommand_EmptyConfigFile(t *testing.T) {
 	cmd := aliasesCmd
 	cmd.SetArgs([]string{})
 	err = cmd.Execute()
-	require.Error(t, err, "Should error when config file is empty")
-	assert.Contains(t, err.Error(), "failed to load local config")
+	require.NoError(t, err, "Should handle empty config file gracefully - just show no aliases")
 }
 
 func TestAliasesCommand_ConfigWithoutAliases(t *testing.T) {

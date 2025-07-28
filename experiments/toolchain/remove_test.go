@@ -53,7 +53,8 @@ func TestRemoveCommand_NonExistentTool(t *testing.T) {
 	cmd := removeCmd
 	cmd.SetArgs([]string{"--file", toolVersionsFile, "nonexistent"})
 	err = cmd.Execute()
-	require.NoError(t, err, "Should not error when removing non-existent tool")
+	require.Error(t, err, "Should error when removing non-existent tool")
+	assert.Contains(t, err.Error(), "not found")
 
 	// Verify file is unchanged
 	updatedToolVersions, err := LoadToolVersions(toolVersionsFile)
@@ -77,7 +78,8 @@ func TestRemoveCommand_EmptyFile(t *testing.T) {
 	cmd := removeCmd
 	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform"})
 	err = cmd.Execute()
-	require.NoError(t, err, "Should not error when removing from empty file")
+	require.Error(t, err, "Should error when removing from empty file")
+	assert.Contains(t, err.Error(), "not found")
 
 	// Verify file remains empty
 	updatedToolVersions, err := LoadToolVersions(toolVersionsFile)
@@ -315,7 +317,8 @@ func TestRemoveCommand_RemoveNonExistentVersion(t *testing.T) {
 	cmd := removeCmd
 	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform@2.0.0"})
 	err = cmd.Execute()
-	require.NoError(t, err, "Should not error when removing non-existent version")
+	require.Error(t, err, "Should error when removing non-existent version")
+	assert.Contains(t, err.Error(), "not found")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
 	require.NoError(t, err)
@@ -427,7 +430,7 @@ func TestRemoveCommand_RemoveNonExistentTool(t *testing.T) {
 	cmd := removeCmd
 	cmd.SetArgs([]string{"--file", toolVersionsFile, "nonexistent"})
 	err = cmd.Execute()
-	require.NoError(t, err, "Should not error when removing non-existent tool")
+	require.Error(t, err, "Should error when removing non-existent tool")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
 	require.NoError(t, err)
@@ -449,7 +452,8 @@ func TestRemoveCommand_RemoveNonExistentToolWithVersion(t *testing.T) {
 	cmd := removeCmd
 	cmd.SetArgs([]string{"--file", toolVersionsFile, "nonexistent@1.0.0"})
 	err = cmd.Execute()
-	require.NoError(t, err, "Should not error when removing non-existent tool with version")
+	require.Error(t, err, "Should error when removing non-existent tool with version")
+	assert.Contains(t, err.Error(), "not found")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
 	require.NoError(t, err)
