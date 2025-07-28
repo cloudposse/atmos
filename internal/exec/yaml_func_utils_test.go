@@ -372,4 +372,8 @@ func TestProcessCustomYamlTags(t *testing.T) {
 	val, err = u.EvaluateYqExpression(&atmosConfig, processed, ".vars.test_list[1]")
 	assert.NoError(t, err)
 	assert.Equal(t, "fallback2", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, processed, ".vars.test_val")
+	assert.NoError(t, err)
+	assert.Equal(t, "jdbc:postgresql://component-1-a:5432/events", val)
 }
