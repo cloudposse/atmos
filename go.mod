@@ -21,8 +21,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.84.1
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.60.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.34.1
-	github.com/aws/smithy-go v1.22.4
-	github.com/bmatcuk/doublestar/v4 v4.9.0
+	github.com/aws/smithy-go v1.22.5
+	github.com/bmatcuk/doublestar/v4 v4.9.1
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/glamour v0.10.0
@@ -51,7 +51,7 @@ require (
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20250515145901-f4c50e64fd6d
 	github.com/hashicorp/terraform-exec v0.23.0
 	github.com/hexops/gotextdiff v1.0.3
-	github.com/jfrog/jfrog-client-go v1.54.2
+	github.com/jfrog/jfrog-client-go v1.54.3
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30
