@@ -7,7 +7,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/list"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // listDeploymentsCmd lists atmos deployments.
@@ -17,14 +16,14 @@ var listDeploymentsCmd = &cobra.Command{
 	Long:               "This command lists all Atmos deployments or is used to upload deployments to the pro API.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
 		err := ExecuteListDeploymentsCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorMarkdownAndExit("Error listing deployments", err, "")
-			return
+			return err
 		}
+		return nil
 	},
 }
 

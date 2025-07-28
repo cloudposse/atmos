@@ -18,10 +18,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/go-git/go-git/v5/plumbing"
-	giturl "github.com/kubescape/go-git-url"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
