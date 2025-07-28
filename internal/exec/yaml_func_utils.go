@@ -2,10 +2,11 @@ package exec
 
 import (
 	"fmt"
+	"strings"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"strings"
 )
 
 func ProcessCustomYamlTags(
