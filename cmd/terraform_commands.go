@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/spf13/cobra"
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/cobra"
