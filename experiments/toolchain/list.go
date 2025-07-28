@@ -3,104 +3,422 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
+
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
 )
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List installed tools and versions",
-	Long:  `List all installed tools, versions, install date, and file size in human readable format.`,
+	Short: "List configured tools and their installation status",
+	Long:  `List all tools configured in .tool-versions file, showing their installation status, install date, and file size.`,
 	RunE:  runList,
 }
 
+// Table row data structure
+type toolRow struct {
+	alias       string
+	registry    string
+	binary      string
+	version     string
+	status      string
+	installDate string
+	size        string
+	isDefault   bool
+	isInstalled bool
+}
+
 func runList(cmd *cobra.Command, args []string) error {
-	// Read tool-versions file
+	installer := NewInstaller()
+
+	// Load tool versions from file
 	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("no tool-versions file found in current directory")
-		}
-		return fmt.Errorf("error reading tool-versions file: %w", err)
+		return fmt.Errorf("failed to load .tool-versions: %w", err)
 	}
 
 	if len(toolVersions.Tools) == 0 {
-		fmt.Println("No tools installed.")
+		cmd.Println("No tools configured in .tool-versions file")
 		return nil
 	}
 
-	// Print header
-	fmt.Printf("%-20s %-15s %-20s %-10s\n", "TOOL", "VERSION", "INSTALL DATE", "SIZE")
-	fmt.Println(strings.Repeat("-", 70))
+	// Load local config for aliases and binary names
+	lcm := NewLocalConfigManager()
+	if err := lcm.Load(GetToolsConfigFilePath()); err != nil {
+		// Log warning but continue - local config is optional
+		Logger.Warn("Failed to load local config", "error", err)
+	}
 
-	// Check each tool in tool-versions file to see if it's installed
+	var rows []toolRow
+
+	// Process each tool and its versions
 	for toolName, versions := range toolVersions.Tools {
 		if len(versions) == 0 {
 			continue
 		}
-		version := versions[0] // default version
-		installer := NewInstaller()
-		_, _, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
+
+		// Use existing infrastructure to resolve tool
+		resolvedKey, version, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
 		if !found {
-			continue // skip if not found (shouldn't happen)
-		}
-		// Resolve tool name to owner/repo
-		owner, repo, err := installer.resolver.Resolve(toolName)
-		if err != nil {
-			// Skip tools that can't be resolved
+			Logger.Warn("Could not resolve tool", "tool", toolName)
 			continue
 		}
 
-		// If no version is specified, try to get the latest non-prerelease version
-		if version == "" {
-			registry := NewAquaRegistry()
-			latestVersion, err := registry.GetLatestVersion(owner, repo)
-			if err != nil {
-				// Skip tools where we can't get the latest version
-				continue
-			}
-			version = latestVersion
+		// Get owner/repo from resolved key
+		owner, repo, err := installer.resolver.Resolve(resolvedKey)
+		if err != nil {
+			Logger.Warn("Could not resolve owner/repo", "tool", resolvedKey, "error", err)
+			continue
 		}
 
-		// Check if the tool is installed
+		// Get alias using existing infrastructure
+		alias := ""
+		if resolvedKey != toolName {
+			// If resolved key is different from tool name, tool name is the alias
+			alias = toolName
+		} else {
+			// Otherwise, toolName is already the full path, so we need to find what alias maps to it
+			// Reverse lookup: find alias name for this owner/repo
+			ownerRepo := fmt.Sprintf("%s/%s", owner, repo)
+			for aliasName, aliasValue := range lcm.config.Aliases {
+				if aliasValue == ownerRepo {
+					alias = aliasName
+					break
+				}
+			}
+		}
+
+		// Get binary name from local config
+		binaryName := repo // Default to repo name
+		if toolConfig, exists := lcm.GetToolConfig(fmt.Sprintf("%s/%s", owner, repo)); exists {
+			if toolConfig.BinaryName != "" {
+				binaryName = toolConfig.BinaryName
+			}
+		}
+
+		// Check installation status
 		binaryPath, err := installer.findBinaryPath(owner, repo, version)
-		if err != nil {
-			// Tool not installed, skip it
-			continue
+		isInstalled := err == nil
+
+		// Debug: log the binary path
+		if isInstalled {
+			Logger.Debug("Found binary path", "path", binaryPath, "tool", toolName, "version", version)
 		}
 
-		// Get file info for size and date
-		fileInfo, err := os.Stat(binaryPath)
-		if err != nil {
-			// Skip if we can't get file info
-			continue
-		}
+		// Build row data
+		status := "✗"
+		installDate := "N/A"
+		size := "N/A"
 
-		// Format file size
-		size := formatFileSize(fileInfo.Size())
+		if isInstalled {
+			status = "✓"
+			if fileInfo, err := os.Stat(binaryPath); err == nil {
+				size = formatFileSize(fileInfo.Size())
+				installDate = fileInfo.ModTime().Format("2006-01-02 15:04")
+				// Debug: log the file size
+				Logger.Debug("File size calculated", "path", binaryPath, "size", size, "raw_size", fileInfo.Size())
 
-		// Format install date
-		installDate := fileInfo.ModTime().Format("2006-01-02 15:04")
-
-		// Get the binary name from the path
-		binaryName := filepath.Base(binaryPath)
-
-		// Resolve "latest" to actual version for display
-		displayVersion := version
-		if version == "latest" {
-			actualVersion, err := installer.readLatestFile(owner, repo)
-			if err == nil {
-				displayVersion = actualVersion
+			} else {
+				// Debug: log the error
+				Logger.Debug("Failed to get file info", "path", binaryPath, "error", err)
+				size = "N/A"
+				installDate = "N/A"
 			}
 		}
 
-		// Print formatted output
-		fmt.Printf("%-20s %-15s %-20s %-10s\n", binaryName, displayVersion, installDate, size)
+		rows = append(rows, toolRow{
+			alias:       alias,
+			registry:    fmt.Sprintf("%s/%s", owner, repo),
+			binary:      binaryName,
+			version:     version,
+			status:      status,
+			installDate: installDate,
+			size:        size,
+			isDefault:   true, // First version is default
+			isInstalled: isInstalled,
+		})
+
+		// Add additional versions if they exist
+		for i := 1; i < len(versions); i++ {
+			version := versions[i]
+			binaryPath, err := installer.findBinaryPath(owner, repo, version)
+			isInstalled := err == nil
+
+			// Debug: log the binary path
+			if isInstalled {
+				Logger.Debug("Found binary path", "path", binaryPath, "tool", toolName, "version", version)
+			}
+
+			status := "✗"
+			installDate := "N/A"
+			size := "N/A"
+
+			if isInstalled {
+				status = "✓"
+				if fileInfo, err := os.Stat(binaryPath); err == nil {
+					size = formatFileSize(fileInfo.Size())
+					installDate = fileInfo.ModTime().Format("2006-01-02 15:04")
+					// Debug: log the file size
+					Logger.Debug("File size calculated", "path", binaryPath, "size", size, "raw_size", fileInfo.Size())
+				} else {
+					// Debug: log the error
+					Logger.Debug("Failed to get file info", "path", binaryPath, "error", err)
+					size = "N/A"
+					installDate = "N/A"
+				}
+			}
+
+			rows = append(rows, toolRow{
+				alias:       alias,
+				registry:    fmt.Sprintf("%s/%s", owner, repo),
+				binary:      binaryName,
+				version:     version,
+				status:      status,
+				installDate: installDate,
+				size:        size,
+				isDefault:   false,
+				isInstalled: isInstalled,
+			})
+		}
 	}
 
+	// Sort rows by registry, then by semantic version
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].registry != rows[j].registry {
+			return rows[i].registry < rows[j].registry
+		}
+		// If same registry, sort by version (newest first)
+		return rows[i].version > rows[j].version
+	})
+
+	// Get terminal width
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width == 0 {
+		width = 120 // fallback width
+	}
+
+	// Calculate optimal column widths based on content
+	aliasWidth := 0
+	registryWidth := 0
+	binaryWidth := 0
+	versionWidth := 0
+	statusWidth := 2 // Just enough for ✓/✗ symbols
+	installDateWidth := 0
+	sizeWidth := 0
+
+	// Find the maximum width needed for each column
+	for _, row := range rows {
+		if len(row.alias) > aliasWidth {
+			aliasWidth = len(row.alias)
+		}
+		if len(row.registry) > registryWidth {
+			registryWidth = len(row.registry)
+		}
+		if len(row.binary) > binaryWidth {
+			binaryWidth = len(row.binary)
+		}
+		if len(row.version) > versionWidth {
+			versionWidth = len(row.version)
+		}
+		if len(row.installDate) > installDateWidth {
+			installDateWidth = len(row.installDate)
+		}
+		if len(row.size) > sizeWidth {
+			sizeWidth = len(row.size)
+		}
+		// Debug: log the size width calculation
+		Logger.Debug("Size width calculation", "row_size", row.size, "row_size_len", len(row.size), "current_size_width", sizeWidth)
+	}
+
+	// Ensure columns are never narrower than their headers
+	headerAliasWidth := len("ALIAS")
+	headerRegistryWidth := len("REGISTRY")
+	headerBinaryWidth := len("BINARY")
+	headerVersionWidth := len("VERSION")
+	headerStatusWidth := len("INSTALLED")
+	headerInstallDateWidth := len("INSTALL DATE")
+	headerSizeWidth := len("SIZE")
+
+	if aliasWidth < headerAliasWidth {
+		aliasWidth = headerAliasWidth
+	}
+	if registryWidth < headerRegistryWidth {
+		registryWidth = headerRegistryWidth
+	}
+	if binaryWidth < headerBinaryWidth {
+		binaryWidth = headerBinaryWidth
+	}
+	if versionWidth < headerVersionWidth {
+		versionWidth = headerVersionWidth
+	}
+	if statusWidth < headerStatusWidth {
+		statusWidth = headerStatusWidth
+	}
+	if installDateWidth < headerInstallDateWidth {
+		installDateWidth = headerInstallDateWidth
+	}
+	if sizeWidth < headerSizeWidth {
+		sizeWidth = headerSizeWidth
+	}
+
+	// Add buffer (2 spaces on each side)
+	aliasWidth += 4
+	registryWidth += 4
+	binaryWidth += 4
+	versionWidth += 4
+	installDateWidth += 4
+	sizeWidth += 4
+
+	// Calculate total width needed
+	totalNeededWidth := aliasWidth + registryWidth + binaryWidth + versionWidth + statusWidth + installDateWidth + sizeWidth
+
+	// Debug: log the width calculation
+	Logger.Debug("Width calculation", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, "version", versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total", totalNeededWidth, "terminal", width)
+
+	// If screen is narrow, truncate columns proportionally
+	if totalNeededWidth > width {
+		excess := totalNeededWidth - width
+
+		// Truncate proportionally, but keep minimums
+		registryReduce := min(excess*3/10, registryWidth-8)
+		aliasReduce := min(excess*2/10, aliasWidth-6)
+		binaryReduce := min(excess*1/10, binaryWidth-6)
+		versionReduce := min(excess*2/10, versionWidth-8)
+		installDateReduce := min(excess*1/10, installDateWidth-12)
+		sizeReduce := min(excess*1/10, sizeWidth-8)
+
+		registryWidth -= registryReduce
+		aliasWidth -= aliasReduce
+		binaryWidth -= binaryReduce
+		versionWidth -= versionReduce
+		installDateWidth -= installDateReduce
+		sizeWidth -= sizeReduce
+	}
+
+	// Create table columns with calculated widths
+	columns := []table.Column{
+		{Title: "ALIAS", Width: aliasWidth},
+		{Title: "REGISTRY", Width: registryWidth},
+		{Title: "BINARY", Width: binaryWidth},
+		{Title: "VERSION", Width: versionWidth},
+		{Title: "INSTALLED", Width: statusWidth},
+		{Title: "INSTALL DATE", Width: installDateWidth},
+		{Title: "SIZE", Width: sizeWidth},
+	}
+
+	// Debug: log the final column widths
+	Logger.Debug("Final column widths", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, "version", versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total_width", totalNeededWidth, "terminal_width", width)
+
+	// Convert rows to table format - use plain text for proper sizing
+	var tableRows []table.Row
+	for i, row := range rows {
+		// Debug: log the row data
+		Logger.Debug("Creating table row", "index", i, "alias", row.alias, "registry", row.registry, "binary", row.binary, "version", row.version, "status", row.status, "installDate", row.installDate, "size", row.size, "size_len", len(row.size))
+
+		// Check if size is empty or nil
+		if row.size == "" {
+			Logger.Debug("WARNING: Empty size for row", "index", i, "tool", row.alias)
+		}
+
+		tableRows = append(tableRows, table.Row{
+			row.alias,
+			row.registry,
+			row.binary,
+			row.version,
+			row.status,
+			row.installDate,
+			row.size,
+		})
+	}
+
+	// Create and configure table
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(tableRows),
+		table.WithFocused(false), // Non-interactive
+		table.WithHeight(len(tableRows)),
+	)
+
+	// Debug: log table configuration
+	Logger.Debug("Table configuration", "num_columns", len(columns), "num_rows", len(tableRows), "height", len(tableRows))
+
+	// Set table width to use the calculated width
+	// t.SetWidth(totalNeededWidth) // Comment out to see if this is causing the issue
+
+	// Debug: log the table width
+	Logger.Debug("Table width set", "width", totalNeededWidth)
+
+	// Create custom styles for different states
+	defaultStyle := table.DefaultStyles()
+	defaultStyle.Header = defaultStyle.Header.Bold(true)
+	defaultStyle.Cell = defaultStyle.Cell.PaddingLeft(1).PaddingRight(1)
+	defaultStyle.Selected = defaultStyle.Cell
+
+	// Create styles for uninstalled tools (gray)
+	uninstalledStyle := table.DefaultStyles()
+	uninstalledStyle.Header = uninstalledStyle.Header.Bold(true)
+	uninstalledStyle.Cell = uninstalledStyle.Cell.PaddingLeft(1).PaddingRight(1).Foreground(lipgloss.Color("240"))
+	uninstalledStyle.Selected = uninstalledStyle.Cell
+
+	// Set the default styles
+	t.SetStyles(defaultStyle)
+
+	// Print the table with conditional styling
+	// fmt.Println(renderTableWithConditionalStyling(t, rows, defaultStyle, uninstalledStyle))
+	// fmt.Println(t.View())
+
+	// Print the table with conditional styling
+	fmt.Println(renderTableWithConditionalStyling(t, rows, defaultStyle, uninstalledStyle))
+
 	return nil
+}
+
+// renderTableWithConditionalStyling renders the table with proper conditional styling
+func renderTableWithConditionalStyling(t table.Model, rows []toolRow, defaultStyle, uninstalledStyle table.Styles) string {
+	// Get the base table view
+	tableView := t.View()
+
+	// Split into lines
+	lines := strings.Split(tableView, "\n")
+
+	// Apply conditional styling to each row
+	for i, line := range lines {
+		if i == 0 {
+			// Header line - keep as is
+			continue
+		}
+
+		// Skip empty lines
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		// Apply styling based on row data (adjust index for header)
+		rowIndex := i - 1
+		if rowIndex < len(rows) {
+			rowData := rows[rowIndex]
+			if !rowData.isInstalled {
+				// Gray for uninstalled - preserve the exact line structure
+				lines[i] = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(line)
+			}
+			// Default and installed non-default stay white (default color)
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// min returns the smaller of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // formatFileSize formats file size in human readable format

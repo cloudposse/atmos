@@ -15,23 +15,45 @@ This tool demonstrates how to integrate with the Aqua registry ecosystem while m
 
 ## Design Rationale
 
-### Why a Custom Parser?
+### Why Reimplement the Aqua Registry?
 
-We chose to implement a custom Aqua registry parser rather than using Aqua as a Go module dependency for several reasons:
+We chose to reimplement the Aqua registry functionality rather than using Aqua's Go modules as dependencies for several important reasons:
 
-1. **API Stability**: The Aqua author has explicitly stated that their API is not stable for external use. This means any integration would be fragile and subject to breaking changes.
+#### **No Stable SDK**
+Despite providing public Go modules, Aqua's author has explicitly stated that their API is **not stable for external use**. The modules are intended for internal Aqua CLI use only, making any integration fragile and subject to breaking changes without notice.
 
-2. **Dependency Control**: By implementing our own parser, we maintain full control over our dependencies and avoid potential conflicts or version lock-in.
+#### **Focused Use Case**
+Our implementation serves a specific subset of Aqua's functionality tailored to our needs:
+- **Atmos Integration**: We provide native integration with Atmos framework for infrastructure automation
+- **Seamless Workflow**: Integration with Atmos commands, workflows, components, and other features
+- **Not Standalone**: We're not optimizing for standalone shell experience like Aqua CLI
 
-3. **Focused Scope**: We only need a subset of Aqua's functionality. A custom parser allows us to implement exactly what we need without the overhead of the full Aqua codebase.
+#### **Dependency Control**
+By implementing our own parser, we maintain:
+- **Full Control**: Complete control over our dependencies and avoid potential conflicts
+- **Version Independence**: No lock-in to Aqua's development timeline or breaking changes
+- **Long-term Maintainability**: Our implementation evolves with our specific needs
 
-4. **Long-term Maintainability**: Having our own parser means we're not dependent on Aqua's development timeline or breaking changes.
+#### **Extensible Architecture**
+Our approach allows us to:
+- **Extend as Needed**: Add features specific to Atmos integration
+- **Custom Optimizations**: Optimize for our infrastructure automation workflows
+- **Future Flexibility**: Adapt to changing requirements without external dependencies
 
-### Limited Subset Support
+### Why Use Aqua Registry Format?
 
-Our parser supports a focused subset of Aqua registry features:
+While we reimplement the functionality, we still leverage the Aqua registry ecosystem because:
 
-**Supported Package Types (from Aqua registry):**
+1. **Community Standard**: The Aqua registry is a well-maintained, community-driven collection of package definitions
+2. **Rich Ecosystem**: Access to hundreds of pre-configured tools with proper metadata
+3. **Proven Format**: The YAML format is well-tested and widely adopted
+4. **Remote Integration**: We fetch registry files directly from GitHub, avoiding local maintenance
+
+### Focused Feature Set
+
+Our implementation supports a carefully selected subset of Aqua registry features that align with our infrastructure automation use case:
+
+**Supported Package Types:**
 - `http` - Direct HTTP downloads (e.g., HashiCorp releases)
 - `github_release` - GitHub release assets with version overrides
 
@@ -52,15 +74,23 @@ Our parser supports a focused subset of Aqua registry features:
 - Asset template resolution
 - Format detection (zip vs tar.gz)
 
+**Atmos-Specific Features:**
+- Native integration with Atmos configuration
+- Workflow-aware tool management
+- Component-level tool dependencies
+- Seamless command integration
+
 ### Why Use Aqua Registry Without Aqua CLI?
 
 1. **Registry Ecosystem**: The Aqua registry is a well-maintained, community-driven collection of package definitions. It's the de facto standard for CLI tool metadata.
 
-2. **Avoiding CLI Dependencies**: We don't want to require users to install Aqua CLI just to use Atmos tools. This keeps the dependency chain minimal.
+2. **Minimal Dependencies**: We don't require users to install Aqua CLI just to use Atmos tools. This keeps the dependency chain minimal and focused.
 
 3. **Remote Integration**: We fetch registry files directly from GitHub, avoiding the need to clone or maintain a local copy of the registry.
 
-4. **Caching**: We implement our own caching layer for registry files and downloaded assets, optimized for our use case.
+4. **Optimized Caching**: We implement our own caching layer for registry files and downloaded assets, optimized for our infrastructure automation workflows.
+
+5. **Atmos Integration**: Our implementation is designed specifically for seamless integration with Atmos framework features, not as a standalone tool manager.
 
 ## Features
 
