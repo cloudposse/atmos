@@ -13,6 +13,7 @@ var (
 	githubToken      string
 	toolVersionsFile string
 	toolsDir         string
+	toolsConfigFile  string
 )
 
 var rootCmd = &cobra.Command{
@@ -53,6 +54,9 @@ func init() {
 
 	// Add tools directory flag
 	rootCmd.PersistentFlags().StringVar(&toolsDir, "tools-dir", ".tools", "Directory to store installed tools")
+
+	// Add tools config file flag
+	rootCmd.PersistentFlags().StringVar(&toolsConfigFile, "tools-config", "tools.yaml", "Path to tools configuration file")
 }
 
 // GetToolVersionsFilePath returns the path to the tool-versions file
@@ -65,6 +69,11 @@ func GetToolsDirPath() string {
 	return toolsDir
 }
 
+// GetToolsConfigFilePath returns the path to the tools configuration file
+func GetToolsConfigFilePath() string {
+	return toolsConfigFile
+}
+
 func main() {
 	infoCmd.Flags().String("output", "table", "Output format: table or yaml")
 	rootCmd.AddCommand(addCmd)
@@ -72,7 +81,7 @@ func main() {
 	rootCmd.AddCommand(setCmd)
 	rootCmd.AddCommand(getCmd)
 	rootCmd.AddCommand(cleanCmd)
-	rootCmd.AddCommand(toolVersionsCmd)
+	// toolVersionsCmd removed - functionality merged into listCmd, but file kept as library
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(execCmd)
 	rootCmd.AddCommand(listCmd)

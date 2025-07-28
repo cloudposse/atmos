@@ -33,7 +33,7 @@ type DefaultToolResolver struct{}
 func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 	// First, check local config aliases
 	lcm := NewLocalConfigManager()
-	if err := lcm.Load("tools.yaml"); err == nil {
+	if err := lcm.Load(GetToolsConfigFilePath()); err == nil {
 		if alias, exists := lcm.ResolveAlias(toolName); exists {
 			parts := strings.Split(alias, "/")
 			if len(parts) == 2 {
@@ -353,7 +353,7 @@ func (i *Installer) parseToolSpec(tool string) (string, string, error) {
 // getLocalConfigManager returns a local config manager instance
 func (i *Installer) getLocalConfigManager() *LocalConfigManager {
 	lcm := NewLocalConfigManager()
-	if err := lcm.Load("tools.yaml"); err != nil {
+	if err := lcm.Load(GetToolsConfigFilePath()); err != nil {
 		Logger.Warn("Failed to load local config", "error", err)
 		return nil
 	}

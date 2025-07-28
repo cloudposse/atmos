@@ -5,116 +5,12 @@ import (
 	"os"
 	"sort"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
 // Define an interface for Resolve for testability
 // This allows both *Installer and *fakeInstaller to be used
 type toolNameResolver interface {
 	Resolve(toolName string) (string, string, error)
-}
-
-var toolVersionsCmd = &cobra.Command{
-	Use:   "tool-versions [file]",
-	Short: "List tools from .tool-versions file and their install status",
-	Long: `List all tools specified in a .tool-versions file and show their install status.
-
-Examples:
-  toolchain tool-versions                    # Use .tool-versions in current directory
-  toolchain tool-versions .tool-versions     # Use specific file`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runToolVersions,
-}
-
-var toolVersionsAddCmd = &cobra.Command{
-	Use:   "add <tool> <version>",
-	Short: "Add or update a tool and version in .tool-versions",
-	Args:  cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		filePath, _ := cmd.Flags().GetString("file")
-		if filePath == "" {
-			filePath = ".tool-versions"
-		}
-		tool := args[0]
-		version := args[1]
-		err := AddToolToVersions(filePath, tool, version)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("%s Added/updated %s %s in %s\n", checkMark.Render(), tool, version, filePath)
-		return nil
-	},
-}
-
-var toolVersionsRemoveCmd = &cobra.Command{
-	Use:   "remove <tool>",
-	Short: "Remove a tool from .tool-versions",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		filePath, _ := cmd.Flags().GetString("file")
-		if filePath == "" {
-			filePath = ".tool-versions"
-		}
-		tool := args[0]
-		err := RemoveToolFromVersions(filePath, tool)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✅ Removed %s from %s\n", tool, filePath)
-		return nil
-	},
-}
-
-func init() {
-	toolVersionsCmd.AddCommand(toolVersionsAddCmd)
-	toolVersionsCmd.AddCommand(toolVersionsRemoveCmd)
-	toolVersionsAddCmd.Flags().String("file", ".tool-versions", "Path to .tool-versions file")
-	toolVersionsRemoveCmd.Flags().String("file", ".tool-versions", "Path to .tool-versions file")
-}
-
-func runToolVersions(cmd *cobra.Command, args []string) error {
-	filePath := ".tool-versions"
-	if len(args) > 0 {
-		filePath = args[0]
-	}
-
-	// Check if file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return fmt.Errorf("file not found: %s", filePath)
-	}
-
-	// Load tool versions
-	toolVersions, err := LoadToolVersions(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to load .tool-versions: %w", err)
-	}
-
-	installer := NewInstaller()
-
-	fmt.Printf("📋 Tools from %s:\n", filePath)
-	fmt.Printf("%-30s %-15s\n", "Tool", "Version")
-	fmt.Printf("%s\n", strings.Repeat("-", 50))
-
-	for tool, versions := range toolVersions.Tools {
-		// Parse tool specification (owner/repo@version or just repo@version)
-		owner, repo, err := installer.parseToolSpec(tool)
-		if err != nil {
-			fmt.Printf("%-30s %-15s %s\n", tool, versions[0], xMark.Render())
-			continue
-		}
-
-		// Check if installed
-		_, err = installer.findBinaryPath(owner, repo, versions[0])
-		status := xMark.Render()
-		if err == nil {
-			status = checkMark.Render()
-		}
-
-		fmt.Printf("%-30s %-15s %s\n", tool, versions[0], status)
-	}
-
-	return nil
 }
 
 // ToolVersions represents the .tool-versions file format (asdf-compatible: tool -> list of versions, first is default)

@@ -19,7 +19,7 @@ full owner/repo paths (like 'hashicorp/terraform') in commands.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Load local configuration
 		lcm := NewLocalConfigManager()
-		if err := lcm.Load("tools.yaml"); err != nil {
+		if err := lcm.Load(GetToolsConfigFilePath()); err != nil {
 			return fmt.Errorf("failed to load local config: %w", err)
 		}
 
