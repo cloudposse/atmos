@@ -120,7 +120,6 @@ func ReadTerraformBackendS3Internal(
 			Bucket: aws.String(bucket),
 			Key:    aws.String(tfStateFilePath),
 		})
-
 		if err != nil {
 			// Check if the error is because the object doesn't exist.
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
