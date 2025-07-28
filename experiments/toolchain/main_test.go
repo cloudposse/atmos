@@ -20,8 +20,8 @@ func executeCommand(root *cobra.Command, args ...string) (output string, err err
 }
 
 func TestCleanCommand_RemovesToolsDirectory(t *testing.T) {
-	// Create a fake .tools directory with files in the current directory
-	toolsDir := ".tools"
+	// Create a fake .tools directory with files in the correct location
+	toolsDir := GetToolsDirPath()
 	binDir := filepath.Join(toolsDir, "bin")
 	os.MkdirAll(binDir, 0755)
 	ioutil.WriteFile(filepath.Join(binDir, "dummy-tool"), []byte("binary"), 0644)
@@ -31,8 +31,15 @@ func TestCleanCommand_RemovesToolsDirectory(t *testing.T) {
 		os.RemoveAll(toolsDir)
 	}()
 
+	// Create a new command instance to avoid interference
+	testCmd := &cobra.Command{
+		Use:   "test",
+		Short: "Test command",
+	}
+	testCmd.AddCommand(cleanCmd)
+
 	// Run the clean command
-	output, err := executeCommand(rootCmd, "clean")
+	output, err := executeCommand(testCmd, "clean")
 	if err != nil {
 		t.Fatalf("clean command failed: %v", err)
 	}
