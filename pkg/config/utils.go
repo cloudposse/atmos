@@ -273,6 +273,16 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 	}
 
+	componentsPlanSkipPlanfile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE")
+	if len(componentsPlanSkipPlanfile) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE", componentsPlanSkipPlanfile)
+		planSkipPlanfileBool, err := strconv.ParseBool(componentsPlanSkipPlanfile)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
+	}
+
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE", componentsTerraformAutoGenerateBackendFile)
@@ -512,6 +522,14 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		}
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 		log.Debug(cmdLineArg, InitPassVars, configAndStacksInfo.InitPassVars)
+	}
+	if len(configAndStacksInfo.PlanSkipPlanfile) > 0 {
+		planSkipPlanfileBool, err := strconv.ParseBool(configAndStacksInfo.PlanSkipPlanfile)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
+		log.Debug(cmdLineArg, InitPassVars, configAndStacksInfo.PlanSkipPlanfile)
 	}
 	return nil
 }

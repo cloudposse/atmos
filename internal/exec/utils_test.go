@@ -10,6 +10,7 @@ func TestProcessArgsAndFlags(t *testing.T) {
 	inputArgsAndFlags := []string{
 		"--deploy-run-init=true",
 		"--init-pass-vars=true",
+		"--plan-skip-planfile=true",
 		"--logs-level",
 		"Debug",
 	}
@@ -22,6 +23,7 @@ func TestProcessArgsAndFlags(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, info.DeployRunInit, "true")
 	assert.Equal(t, info.InitPassVars, "true")
+	assert.Equal(t, info.PlanSkipPlanfile, "true")
 	assert.Equal(t, info.LogsLevel, "Debug")
 }
 

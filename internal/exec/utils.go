@@ -250,6 +250,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
 	configAndStacksInfo.InitRunReconfigure = argsAndFlagsInfo.InitRunReconfigure
 	configAndStacksInfo.InitPassVars = argsAndFlagsInfo.InitPassVars
+	configAndStacksInfo.PlanSkipPlanfile = argsAndFlagsInfo.PlanSkipPlanfile
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
 	configAndStacksInfo.PlanFile = argsAndFlagsInfo.PlanFile
@@ -895,6 +896,19 @@ func processArgsAndFlags(
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.InitPassVars = initPassVarsParts[1]
+		}
+
+		if arg == cfg.PlanSkipPlanfile {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PlanSkipPlanfile = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.PlanSkipPlanfile) {
+			planSkipPlanfileParts := strings.Split(arg, "=")
+			if len(planSkipPlanfileParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.PlanSkipPlanfile = planSkipPlanfileParts[1]
 		}
 
 		if arg == cfg.JsonSchemaDirFlag {

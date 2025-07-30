@@ -57,7 +57,7 @@ require (
 	github.com/kubescape/go-git-url v0.0.30
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/mattn/go-runewidth v0.0.16
-	github.com/mikefarah/yq/v4 v4.46.1
+	github.com/mikefarah/yq/v4 v4.47.1
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
@@ -67,7 +67,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
-	github.com/posthog/posthog-go v1.5.15
+	github.com/posthog/posthog-go v1.6.1
 	github.com/redis/go-redis/v9 v9.11.0
 	github.com/samber/lo v1.51.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
@@ -337,7 +337,7 @@ require (
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 	golang.org/x/mod v0.25.0 // indirect
-	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/time v0.12.0 // indirect

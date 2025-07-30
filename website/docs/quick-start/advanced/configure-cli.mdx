@@ -58,6 +58,9 @@ components:
     init:
       # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS' ENV var, or '--init-pass-vars' command-line argument
       pass_vars: false
+    plan:
+      # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE' ENV var, or '--plan-skip-planfile' command-line argument
+      skip_planfile: false
 
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
