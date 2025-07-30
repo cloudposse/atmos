@@ -529,7 +529,7 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 			return err
 		}
 		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
-		log.Debug(cmdLineArg, InitPassVars, configAndStacksInfo.PlanSkipPlanfile)
+		log.Debug(cmdLineArg, PlanSkipPlanfile, configAndStacksInfo.PlanSkipPlanfile)
 	}
 	return nil
 }

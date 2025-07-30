@@ -322,6 +322,7 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 	"plan": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("affected", false, "Plan the affected components in dependency order")
 		cmd.PersistentFlags().Bool("all", false, "Plan all components in all stacks")
+		cmd.PersistentFlags().Bool("plan-skip-planfile", false, "Skip passing the `-out` flag when executing the command. Set it to `false` when using Terraform Cloud since the `-out` flag is not supported. Terraform Cloud automatically stores plans in its backend")
 	},
 	"deploy": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("deploy-run-init", false, "If set atmos will run `terraform init` before executing the command")
