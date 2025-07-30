@@ -32,7 +32,7 @@ const (
 	AppendUserAgentFlag         = "--append-user-agent"
 	InitRunReconfigure          = "--init-run-reconfigure"
 	InitPassVars                = "--init-pass-vars"
-	PlanSkipPlanfile            = "--plan-skip-planfile"
+	PlanSkipPlanfile            = "--skip-planfile"
 
 	FromPlanFlag       = "--from-plan"
 	PlanFileFlag       = "--planfile"

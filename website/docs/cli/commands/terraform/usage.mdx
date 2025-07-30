@@ -118,8 +118,8 @@ atmos terraform <command> --query '.settings.context.account_id == 12345'
   file on disk, and then execute the command `atmos terraform apply <component> -s <stack> --planfile <FILE>` to apply the previously generated
   planfile
 
-- `atmos terraform plan` command accepts a `--plan-skip-planfile` flag to skip writing the plan to a file. If the flag is set to `true`
-  (e.g., `atmos terraform plan <component> -s <stack> --plan-skip-planfile=true`), Atmos will not pass the `-out` flag
+- `atmos terraform plan` command accepts a `--skip-planfile` flag to skip writing the plan to a file. If the flag is set to `true`
+  (e.g., `atmos terraform plan <component> -s <stack> --skip-planfile=true`), Atmos will not pass the `-out` flag
   when executing the command. Set it to `true` when using Terraform Cloud since the `-out` flag is not supported.
   Terraform Cloud automatically stores plans in its backend and can't store it in a local file
 
@@ -265,7 +265,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         ```
     </dd>
 
-    <dt>`--plan-skip-planfile` <em>(optional)</em></dt>
+    <dt>`--skip-planfile` <em>(optional)</em></dt>
     <dd>
         Skip writing the plan to a file.
         If the flag is set to `true`, Atmos will not pass the `-out` flag to Terraform
@@ -273,7 +273,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         Terraform Cloud automatically stores plans in its backend and can't store it in a local file
 
         ```shell
-        atmos terraform plan <component> -s <stack> --plan-skip-planfile=true
+        atmos terraform plan <component> -s <stack> --skip-planfile=true
         ```
     </dd>
 

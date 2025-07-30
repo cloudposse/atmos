@@ -10,7 +10,7 @@ func TestProcessArgsAndFlags(t *testing.T) {
 	inputArgsAndFlags := []string{
 		"--deploy-run-init=true",
 		"--init-pass-vars=true",
-		"--plan-skip-planfile=true",
+		"--skip-planfile=true",
 		"--logs-level",
 		"Debug",
 	}
