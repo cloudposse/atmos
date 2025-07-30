@@ -58,6 +58,7 @@ var commonFlags = []string{
 	cfg.SkipFlag,
 	cfg.AffectedFlag,
 	cfg.AllFlag,
+	cfg.InitPassVars,
 	cfg.PlanSkipPlanfile,
 }
 

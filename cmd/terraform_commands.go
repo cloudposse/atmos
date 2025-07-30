@@ -271,6 +271,7 @@ Arguments:
 func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: `Atmos/%s (Cloud Posse; +https://atmos.tools)`. This flag works with almost all commands.", version.Version))
 	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running `terraform init` before executing terraform commands")
+	parentCmd.PersistentFlags().Bool("init-pass-vars", false, "Pass the generated varfile to `terraform init` using the `--var-file` flag. OpenTofu supports passing a varfile to `init` to dynamically configure backends")
 	parentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands")
