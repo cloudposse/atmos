@@ -390,7 +390,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
 		// Add planfile
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, outFlag) &&
-			!u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, outFlag+"=") {
+			!u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, outFlag+"=") &&
+			!atmosConfig.Components.Terraform.Plan.SkipPlanfile {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
 	case "destroy":
