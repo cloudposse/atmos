@@ -9,7 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestSetFeatureFlags(t *testing.T) {
+func Test_setFeatureFlags(t *testing.T) {
 	// Test cases
 	tests := []struct {
 		name            string
@@ -127,7 +127,7 @@ func TestSetFeatureFlags(t *testing.T) {
 	}
 }
 
-func TestProcessEnvVars(t *testing.T) {
+func Test_processEnvVars(t *testing.T) {
 	// Test cases
 	tests := []struct {
 		name           string
