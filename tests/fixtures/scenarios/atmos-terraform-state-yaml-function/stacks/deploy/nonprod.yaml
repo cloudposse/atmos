@@ -35,3 +35,4 @@ components:
         baz: !terraform.state component-2 {{ .stack }} ".invalid-output // ""default-value"""
         test_list: !terraform.state component-2 ".invalid-output2 // [""fallback1"", ""fallback2""]"
         test_map: !terraform.state 'component-2 ".invalid-output3 // {""key1"": ""fallback1"", ""key2"": ""fallback2""}"'
+        test_val: !terraform.state component-2 ".foo | ""jdbc:postgresql://"" + . + "":5432/events"""

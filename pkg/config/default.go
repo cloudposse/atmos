@@ -42,6 +42,9 @@ var (
 				Init: schema.TerraformInit{
 					PassVars: false,
 				},
+				Plan: schema.TerraformPlan{
+					SkipPlanfile: false,
+				},
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",

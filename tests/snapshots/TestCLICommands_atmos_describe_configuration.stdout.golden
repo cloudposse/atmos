@@ -12,6 +12,8 @@ components:
       prompt: ""
     init:
       pass_vars: false
+    plan:
+      skip_planfile: false
   helmfile:
     base_path: components/helmfile
     use_eks: true

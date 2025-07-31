@@ -402,11 +402,10 @@ docs:
         show_outputs: true
         sort_by: "name"
         hide_empty: false
-        indent_level: 2   
+        indent_level: 2
 
 version:
   check:
     enabled: true
     timeout: 1000 # ms
     frequency: 1h
-

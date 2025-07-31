@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -91,16 +92,28 @@ func processCustomCommands(
 			// Process and add flags to the command
 			for _, flag := range commandConfig.Flags {
 				if flag.Type == "bool" {
+					defaultVal := false
+					if flag.Default != "" {
+						// Accept "true"/"false" as string for bool default
+						parsed, err := strconv.ParseBool(flag.Default)
+						if err == nil {
+							defaultVal = parsed
+						}
+					}
 					if flag.Shorthand != "" {
-						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, false, flag.Usage)
+						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
-						customCommand.PersistentFlags().Bool(flag.Name, false, flag.Usage)
+						customCommand.PersistentFlags().Bool(flag.Name, defaultVal, flag.Usage)
 					}
 				} else {
+					defaultVal := ""
+					if flag.Default != "" {
+						defaultVal = flag.Default
+					}
 					if flag.Shorthand != "" {
-						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, "", flag.Usage)
+						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
-						customCommand.PersistentFlags().String(flag.Name, "", flag.Usage)
+						customCommand.PersistentFlags().String(flag.Name, defaultVal, flag.Usage)
 					}
 				}
 

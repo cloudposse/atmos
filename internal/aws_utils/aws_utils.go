@@ -3,6 +3,7 @@ package aws_utils
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -44,7 +45,7 @@ import (
 	Custom credential sources:
 	  Provided programmatically using config.WithCredentialsProvider(...)
 */
-func LoadAWSConfig(ctx context.Context, region string, roleArn string) (aws.Config, error) {
+func LoadAWSConfig(ctx context.Context, region string, roleArn string, assumeRoleDuration time.Duration) (aws.Config, error) {
 	var cfgOpts []func(*config.LoadOptions) error
 
 	// Conditionally set the region
@@ -60,9 +61,13 @@ func LoadAWSConfig(ctx context.Context, region string, roleArn string) (aws.Conf
 
 	// Conditionally assume the role
 	if roleArn != "" {
-		log.Debug("Assuming role", "arn", roleArn)
+		log.Debug("Assuming role", "ARN", roleArn)
 		stsClient := sts.NewFromConfig(baseCfg)
-		creds := stscreds.NewAssumeRoleProvider(stsClient, roleArn)
+
+		creds := stscreds.NewAssumeRoleProvider(stsClient, roleArn, func(o *stscreds.AssumeRoleOptions) {
+			o.Duration = assumeRoleDuration
+		})
+
 		cfgOpts = append(cfgOpts, config.WithCredentialsProvider(aws.NewCredentialsCache(creds)))
 
 		// Reload full config with assumed role credentials
