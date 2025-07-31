@@ -5,7 +5,7 @@ go 1.24.5
 require (
 	cloud.google.com/go/secretmanager v1.15.0
 	dario.cat/mergo v1.0.2
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.1
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.2
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.10.1
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets v1.4.0
 	github.com/Masterminds/sprig/v3 v3.3.0
@@ -14,15 +14,6 @@ require (
 	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
-	github.com/aws/aws-sdk-go-v2 v1.36.6
-	github.com/aws/aws-sdk-go-v2/config v1.29.18
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.71
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.85
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.84.1
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.60.2
-	github.com/aws/aws-sdk-go-v2/service/sts v1.34.1
-	github.com/aws/smithy-go v1.22.4
-	github.com/bmatcuk/doublestar/v4 v4.9.0
 	github.com/aws/aws-sdk-go-v2 v1.37.1
 	github.com/aws/aws-sdk-go-v2/config v1.30.2
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.2
@@ -91,7 +82,6 @@ require (
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/term v0.33.0
 	golang.org/x/text v0.27.0
-	google.golang.org/api v0.243.0
 	google.golang.org/api v0.244.0
 	google.golang.org/grpc v1.74.2
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
@@ -110,7 +100,7 @@ require (
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/storage v1.51.0 // indirect
 	cuelang.org/go v0.13.2 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal v1.2.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.1 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
@@ -137,19 +127,6 @@ require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/arsham/rainbow v1.2.1 // indirect
 	github.com/aws/aws-sdk-go v1.55.7 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.11 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.33 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.37 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.37 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.3 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.37 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.7.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.18 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.18.18 // indirect
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.35.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.25.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.30.4 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.0 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.1 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.1 // indirect
@@ -371,7 +348,6 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250715232539-7130f93afb79 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250728155136-f173205681a0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect

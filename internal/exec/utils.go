@@ -17,48 +17,6 @@ import (
 )
 
 // ProcessComponentConfig processes component config sections.
-// `commonFlags` are a list of flags that atmos understands, but the underlying tools do not (e.g. terraform, helmfile, etc.).
-// These flags get removed from the arg list after atmos uses them so the underlying tool does not get passed a flag it doesn't accept.
-var commonFlags = []string{
-	"--stack",
-	"-s",
-	cfg.DryRunFlag,
-	cfg.SkipInitFlag,
-	cfg.KubeConfigConfigFlag,
-	cfg.TerraformCommandFlag,
-	cfg.TerraformDirFlag,
-	cfg.HelmfileCommandFlag,
-	cfg.HelmfileDirFlag,
-	cfg.CliConfigDirFlag,
-	cfg.StackDirFlag,
-	cfg.BasePathFlag,
-	cfg.VendorBasePathFlag,
-	cfg.GlobalOptionsFlag,
-	cfg.DeployRunInitFlag,
-	cfg.InitRunReconfigure,
-	cfg.AutoGenerateBackendFileFlag,
-	cfg.AppendUserAgentFlag,
-	cfg.FromPlanFlag,
-	cfg.PlanFileFlag,
-	cfg.HelpFlag1,
-	cfg.HelpFlag2,
-	cfg.WorkflowDirFlag,
-	cfg.JsonSchemaDirFlag,
-	cfg.OpaDirFlag,
-	cfg.CueDirFlag,
-	cfg.AtmosManifestJsonSchemaFlag,
-	cfg.RedirectStdErrFlag,
-	cfg.LogsLevelFlag,
-	cfg.LogsFileFlag,
-	cfg.QueryFlag,
-	cfg.ProcessTemplatesFlag,
-	cfg.ProcessFunctionsFlag,
-	cfg.SkipFlag,
-	cfg.AffectedFlag,
-	cfg.AllFlag,
-}
-
-// ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
@@ -194,7 +152,7 @@ func ProcessComponentConfig(
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks.
-func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles bool) (
+func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
 	error,
@@ -205,6 +163,7 @@ func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles boo
 		atmosConfig.StacksBaseAbsolutePath,
 		atmosConfig.TerraformDirAbsolutePath,
 		atmosConfig.HelmfileDirAbsolutePath,
+		atmosConfig.PackerDirAbsolutePath,
 		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,
@@ -254,7 +213,7 @@ func ProcessStacks(
 			msg = "\nFound stack manifests:"
 		}
 		log.Debug(msg)
-		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
