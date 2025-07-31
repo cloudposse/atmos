@@ -4,7 +4,10 @@ import (
 	"errors"
 )
 
-const ErrWrappingFormat = "%w: %w"
+const (
+	ErrWrappingFormat       = "%w: %w"
+	ErrStringWrappingFormat = "%w: %s"
+)
 
 var (
 	ErrDownloadPackage                       = errors.New("failed to download package")
