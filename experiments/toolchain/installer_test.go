@@ -1,17 +1,15 @@
 package main
 
 import (
+	"compress/gzip"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"net/http"
-	"net/http/httptest"
-
-	"compress/gzip"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -455,7 +453,7 @@ tools:
     url: https://example.com/terraform.zip
 `
 
-	err := os.WriteFile(toolsYamlPath, []byte(content), 0644)
+	err := os.WriteFile(toolsYamlPath, []byte(content), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create test tools.yaml file: %v", err)
 	}
@@ -549,7 +547,7 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create empty .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte(""), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte(""), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create empty .tool-versions: %v", err)
 				}
@@ -564,7 +562,7 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create .tool-versions: %v", err)
 				}
@@ -579,7 +577,7 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create .tool-versions: %v", err)
 				}
@@ -594,20 +592,20 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create .tool-versions: %v", err)
 				}
 
 				// Create mock installed tool
 				toolDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-				if err := os.MkdirAll(toolDir, 0755); err != nil {
+				if err := os.MkdirAll(toolDir, 0o755); err != nil {
 					t.Fatalf("Failed to create tool directory: %v", err)
 				}
 
 				// Create mock binary
 				binaryPath := filepath.Join(toolDir, "terraform")
-				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
 					t.Fatalf("Failed to create mock binary: %v", err)
 				}
 			},
@@ -623,18 +621,18 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nhelm 3.12.0\nkubectl 1.28.0\n"), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create .tool-versions: %v", err)
 				}
 
 				// Create mock installed terraform
 				terraformDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-				if err := os.MkdirAll(terraformDir, 0755); err != nil {
+				if err := os.MkdirAll(terraformDir, 0o755); err != nil {
 					t.Fatalf("Failed to create terraform directory: %v", err)
 				}
 				terraformBinary := filepath.Join(terraformDir, "terraform")
-				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
 					t.Fatalf("Failed to create terraform binary: %v", err)
 				}
 			},
@@ -650,20 +648,20 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create .tool-versions: %v", err)
 				}
 
 				// Create mock installed tool
 				toolDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-				if err := os.MkdirAll(toolDir, 0755); err != nil {
+				if err := os.MkdirAll(toolDir, 0o755); err != nil {
 					t.Fatalf("Failed to create tool directory: %v", err)
 				}
 
 				// Create mock binary
 				binaryPath := filepath.Join(toolDir, "terraform")
-				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
 					t.Fatalf("Failed to create mock binary: %v", err)
 				}
 			},
@@ -679,20 +677,20 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\n"), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create .tool-versions: %v", err)
 				}
 
 				// Create mock installed tool
 				toolDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-				if err := os.MkdirAll(toolDir, 0755); err != nil {
+				if err := os.MkdirAll(toolDir, 0o755); err != nil {
 					t.Fatalf("Failed to create tool directory: %v", err)
 				}
 
 				// Create mock binary
 				binaryPath := filepath.Join(toolDir, "terraform")
-				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
 					t.Fatalf("Failed to create mock binary: %v", err)
 				}
 			},
@@ -708,18 +706,18 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nunknown-tool 1.0.0\n"), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte("terraform 1.5.0\nunknown-tool 1.0.0\n"), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create .tool-versions: %v", err)
 				}
 
 				// Create mock installed terraform
 				terraformDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-				if err := os.MkdirAll(terraformDir, 0755); err != nil {
+				if err := os.MkdirAll(terraformDir, 0o755); err != nil {
 					t.Fatalf("Failed to create terraform directory: %v", err)
 				}
 				terraformBinary := filepath.Join(terraformDir, "terraform")
-				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+				if err := os.WriteFile(terraformBinary, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
 					t.Fatalf("Failed to create terraform binary: %v", err)
 				}
 			},
@@ -735,20 +733,20 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte("# This is a comment\nterraform 1.5.0\n# Another comment\n"), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte("# This is a comment\nterraform 1.5.0\n# Another comment\n"), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create .tool-versions: %v", err)
 				}
 
 				// Create mock installed tool
 				toolDir := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.5.0")
-				if err := os.MkdirAll(toolDir, 0755); err != nil {
+				if err := os.MkdirAll(toolDir, 0o755); err != nil {
 					t.Fatalf("Failed to create tool directory: %v", err)
 				}
 
 				// Create mock binary
 				binaryPath := filepath.Join(toolDir, "terraform")
-				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0755); err != nil {
+				if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho terraform"), 0o755); err != nil {
 					t.Fatalf("Failed to create mock binary: %v", err)
 				}
 			},
@@ -764,7 +762,7 @@ func TestPathCommand(t *testing.T) {
 			setupTools: func(tempDir string) {
 				// Create malformed .tool-versions file
 				toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-				err := os.WriteFile(toolVersionsPath, []byte("terraform\ninvalid line\n1.5.0\n"), 0644)
+				err := os.WriteFile(toolVersionsPath, []byte("terraform\ninvalid line\n1.5.0\n"), 0o644)
 				if err != nil {
 					t.Fatalf("Failed to create .tool-versions: %v", err)
 				}
@@ -1063,7 +1061,7 @@ func TestExtractRawBinary(t *testing.T) {
 	// Create a mock raw binary file
 	rawBinaryPath := filepath.Join(tempDir, "test-binary")
 	rawBinaryContent := []byte("#!/bin/bash\necho 'test binary'")
-	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, 0755); err != nil {
+	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, 0o755); err != nil {
 		t.Fatalf("failed to create test binary: %v", err)
 	}
 
@@ -1155,7 +1153,7 @@ func TestExtractAndInstallWithRawBinary(t *testing.T) {
 	// Create a mock raw binary file
 	rawBinaryPath := filepath.Join(tempDir, "atmos")
 	rawBinaryContent := []byte("#!/bin/bash\necho 'atmos binary'")
-	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, 0755); err != nil {
+	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, 0o755); err != nil {
 		t.Fatalf("failed to create test binary: %v", err)
 	}
 
@@ -1273,7 +1271,7 @@ func TestFileTypeDetection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create test file
 			filePath := filepath.Join(tempDir, tt.filename)
-			if err := os.WriteFile(filePath, tt.content, 0644); err != nil {
+			if err := os.WriteFile(filePath, tt.content, 0o644); err != nil {
 				t.Fatalf("failed to create test file: %v", err)
 			}
 

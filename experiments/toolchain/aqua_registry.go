@@ -183,7 +183,7 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*T
 // fetchFromRegistry fetches tool metadata from a specific registry
 func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Tool, error) {
 	// Create cache directory
-	if err := os.MkdirAll(ar.cache.baseDir, 0755); err != nil {
+	if err := os.MkdirAll(ar.cache.baseDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -233,7 +233,7 @@ func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Tool, error
 	}
 
 	// Cache the response
-	if err := os.WriteFile(cacheFile, data, 0644); err != nil {
+	if err := os.WriteFile(cacheFile, data, 0o644); err != nil {
 		// Log but don't fail
 		Logger.Debug("Failed to cache registry file", "error", err)
 	}

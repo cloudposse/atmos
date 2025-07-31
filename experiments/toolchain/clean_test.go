@@ -14,17 +14,17 @@ func TestCleanCommand_ExistingToolsDirectory(t *testing.T) {
 	toolsDir := filepath.Join(tempDir, ".tools")
 
 	// Create a mock tools directory with some files
-	err := os.MkdirAll(filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4"), 0755)
+	err := os.MkdirAll(filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4"), 0o755)
 	require.NoError(t, err)
 
 	// Create some mock binary files
-	err = os.WriteFile(filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4", "terraform"), []byte("mock binary"), 0755)
+	err = os.WriteFile(filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4", "terraform"), []byte("mock binary"), 0o755)
 	require.NoError(t, err)
 
-	err = os.MkdirAll(filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0"), 0755)
+	err = os.MkdirAll(filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0"), 0o755)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0", "kubectl"), []byte("mock binary"), 0755)
+	err = os.WriteFile(filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0", "kubectl"), []byte("mock binary"), 0o755)
 	require.NoError(t, err)
 
 	// Verify the directory exists and has content
@@ -68,7 +68,7 @@ func TestCleanCommand_EmptyToolsDirectory(t *testing.T) {
 	toolsDir := filepath.Join(tempDir, ".tools")
 
 	// Create an empty tools directory
-	err := os.MkdirAll(toolsDir, 0755)
+	err := os.MkdirAll(toolsDir, 0o755)
 	require.NoError(t, err)
 
 	// Verify the directory exists
@@ -103,7 +103,7 @@ func TestCleanCommand_ComplexDirectoryStructure(t *testing.T) {
 	}
 
 	for _, dir := range dirs {
-		err := os.MkdirAll(dir, 0755)
+		err := os.MkdirAll(dir, 0o755)
 		require.NoError(t, err)
 	}
 
@@ -118,7 +118,7 @@ func TestCleanCommand_ComplexDirectoryStructure(t *testing.T) {
 	}
 
 	for _, file := range files {
-		err := os.WriteFile(file, []byte("mock content"), 0644)
+		err := os.WriteFile(file, []byte("mock content"), 0o644)
 		require.NoError(t, err)
 	}
 
@@ -144,12 +144,12 @@ func TestCleanCommand_WithSymlinks(t *testing.T) {
 	toolsDir := filepath.Join(tempDir, ".tools")
 
 	// Create a tools directory with symlinks
-	err := os.MkdirAll(filepath.Join(toolsDir, "bin"), 0755)
+	err := os.MkdirAll(filepath.Join(toolsDir, "bin"), 0o755)
 	require.NoError(t, err)
 
 	// Create a target file
 	targetFile := filepath.Join(toolsDir, "bin", "target")
-	err = os.WriteFile(targetFile, []byte("target content"), 0644)
+	err = os.WriteFile(targetFile, []byte("target content"), 0o644)
 	require.NoError(t, err)
 
 	// Create a symlink
@@ -179,12 +179,12 @@ func TestCleanCommand_WithReadOnlyFiles(t *testing.T) {
 	toolsDir := filepath.Join(tempDir, ".tools")
 
 	// Create a tools directory with read-only files
-	err := os.MkdirAll(filepath.Join(toolsDir, "bin"), 0755)
+	err := os.MkdirAll(filepath.Join(toolsDir, "bin"), 0o755)
 	require.NoError(t, err)
 
 	// Create a read-only file
 	readOnlyFile := filepath.Join(toolsDir, "bin", "readonly")
-	err = os.WriteFile(readOnlyFile, []byte("readonly content"), 0444)
+	err = os.WriteFile(readOnlyFile, []byte("readonly content"), 0o444)
 	require.NoError(t, err)
 
 	// Verify the directory exists
@@ -227,10 +227,10 @@ func TestCleanCommand_CountsCorrectly(t *testing.T) {
 	toolsDir := filepath.Join(tempDir, ".tools")
 
 	// Create a simple structure to test counting
-	err := os.MkdirAll(filepath.Join(toolsDir, "bin", "test"), 0755)
+	err := os.MkdirAll(filepath.Join(toolsDir, "bin", "test"), 0o755)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(toolsDir, "bin", "test", "binary"), []byte("test"), 0755)
+	err = os.WriteFile(filepath.Join(toolsDir, "bin", "test", "binary"), []byte("test"), 0o755)
 	require.NoError(t, err)
 
 	// Count manually to verify

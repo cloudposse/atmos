@@ -116,7 +116,7 @@ func (i *Installer) installFromTool(tool *Tool, version string) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("failed to extract and install: %w", err)
 	}
-	if err := os.Chmod(binaryPath, 0755); err != nil {
+	if err := os.Chmod(binaryPath, 0o755); err != nil {
 		return "", fmt.Errorf("failed to make binary executable: %w", err)
 	}
 	// Set mod time to now so install date reflects installation, not archive timestamp
@@ -268,7 +268,7 @@ func (i *Installer) searchRegistry(registry, owner, repo, version string) (*Tool
 func (i *Installer) fetchFromRemoteRegistry(registryURL, owner, repo, version string) (*Tool, error) {
 	// Create cache directory for registry files
 	registryCacheDir := filepath.Join(i.cacheDir, "registries")
-	if err := os.MkdirAll(registryCacheDir, 0755); err != nil {
+	if err := os.MkdirAll(registryCacheDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create registry cache directory: %w", err)
 	}
 
@@ -493,7 +493,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 // downloadAsset downloads an asset to the cache directory
 func (i *Installer) downloadAsset(url string) (string, error) {
 	// Create cache directory if it doesn't exist
-	if err := os.MkdirAll(i.cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(i.cacheDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -577,7 +577,7 @@ func isHTTP404(err error) bool {
 func (i *Installer) extractAndInstall(tool *Tool, assetPath, version string) (string, error) {
 	// Create version-specific directory
 	versionDir := filepath.Join(i.binDir, tool.RepoOwner, tool.RepoName, version)
-	if err := os.MkdirAll(versionDir, 0755); err != nil {
+	if err := os.MkdirAll(versionDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create version directory: %w", err)
 	}
 
@@ -678,7 +678,7 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 
 	// Ensure the destination directory exists
 	dir := filepath.Dir(binaryPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -731,7 +731,7 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 
 	// Ensure the destination directory exists
 	dir := filepath.Dir(binaryPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -905,14 +905,14 @@ func (i *Installer) findBinaryPath(owner, repo, version string) (string, error) 
 func (i *Installer) createLatestFile(owner, repo, version string) error {
 	// Create the latest file path
 	latestDir := filepath.Join(i.binDir, owner, repo)
-	if err := os.MkdirAll(latestDir, 0755); err != nil {
+	if err := os.MkdirAll(latestDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create latest directory: %w", err)
 	}
 
 	latestFilePath := filepath.Join(latestDir, "latest")
 
 	// Write the version to the latest file
-	if err := os.WriteFile(latestFilePath, []byte(version), 0644); err != nil {
+	if err := os.WriteFile(latestFilePath, []byte(version), 0o644); err != nil {
 		return fmt.Errorf("failed to write latest file: %w", err)
 	}
 

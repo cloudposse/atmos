@@ -244,12 +244,12 @@ func TestBinaryPathResolution(t *testing.T) {
 
 	// Create mock directory structure
 	toolDir := filepath.Join(tempDir, "hashicorp", "terraform", "1.9.8")
-	err = os.MkdirAll(toolDir, 0755)
+	err = os.MkdirAll(toolDir, 0o755)
 	require.NoError(t, err)
 
 	// Create mock binary
 	binaryPath := filepath.Join(toolDir, "terraform")
-	err = os.WriteFile(binaryPath, []byte("mock binary"), 0755)
+	err = os.WriteFile(binaryPath, []byte("mock binary"), 0o755)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -305,11 +305,11 @@ func TestLatestVersionResolution(t *testing.T) {
 
 	// Create mock latest file
 	toolDir := filepath.Join(tempDir, "hashicorp", "terraform")
-	err = os.MkdirAll(toolDir, 0755)
+	err = os.MkdirAll(toolDir, 0o755)
 	require.NoError(t, err)
 
 	latestFile := filepath.Join(toolDir, "latest")
-	err = os.WriteFile(latestFile, []byte("1.9.8"), 0644)
+	err = os.WriteFile(latestFile, []byte("1.9.8"), 0o644)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -367,7 +367,7 @@ func TestFileOperations(t *testing.T) {
 	// Test file creation
 	testFile := filepath.Join(tempDir, "test.txt")
 	content := "test content"
-	err = os.WriteFile(testFile, []byte(content), 0644)
+	err = os.WriteFile(testFile, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Test file reading
@@ -381,7 +381,7 @@ func TestFileOperations(t *testing.T) {
 
 	// Test directory creation
 	testDir := filepath.Join(tempDir, "testdir")
-	err = os.MkdirAll(testDir, 0755)
+	err = os.MkdirAll(testDir, 0o755)
 	require.NoError(t, err)
 
 	// Test directory existence
@@ -472,7 +472,7 @@ func TestFileReadingOperations(t *testing.T) {
 	// Test file creation and reading
 	testFile := filepath.Join(tempDir, "test.txt")
 	content := "test content\n"
-	err = os.WriteFile(testFile, []byte(content), 0644)
+	err = os.WriteFile(testFile, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Test reading file content
@@ -531,11 +531,11 @@ func TestLatestFileReading(t *testing.T) {
 			if tt.shouldExist {
 				// Create latest file
 				latestDir := filepath.Join(tempDir, tt.owner, tt.repo)
-				err := os.MkdirAll(latestDir, 0755)
+				err := os.MkdirAll(latestDir, 0o755)
 				require.NoError(t, err)
 
 				latestFile := filepath.Join(latestDir, "latest")
-				err = os.WriteFile(latestFile, []byte(tt.version), 0644)
+				err = os.WriteFile(latestFile, []byte(tt.version), 0o644)
 				require.NoError(t, err)
 
 				// Test reading
@@ -565,11 +565,11 @@ func TestPathResolution(t *testing.T) {
 
 	// Create the directory structure
 	dir := filepath.Dir(expectedPath)
-	err = os.MkdirAll(dir, 0755)
+	err = os.MkdirAll(dir, 0o755)
 	require.NoError(t, err)
 
 	// Create the binary file
-	err = os.WriteFile(expectedPath, []byte("mock binary"), 0755)
+	err = os.WriteFile(expectedPath, []byte("mock binary"), 0o755)
 	require.NoError(t, err)
 
 	// Test that the path exists
@@ -605,7 +605,7 @@ func TestFileContentReading(t *testing.T) {
 	// Test reading latest file content
 	latestFile := filepath.Join(tempDir, "latest")
 	version := "1.9.8"
-	err = os.WriteFile(latestFile, []byte(version), 0644)
+	err = os.WriteFile(latestFile, []byte(version), 0o644)
 	require.NoError(t, err)
 
 	// Read with os.ReadFile
@@ -616,7 +616,7 @@ func TestFileContentReading(t *testing.T) {
 
 	// Test reading with newlines
 	versionWithNewlines := "1.9.8\n"
-	err = os.WriteFile(latestFile, []byte(versionWithNewlines), 0644)
+	err = os.WriteFile(latestFile, []byte(versionWithNewlines), 0o644)
 	require.NoError(t, err)
 
 	content, err = os.ReadFile(latestFile)
@@ -626,7 +626,7 @@ func TestFileContentReading(t *testing.T) {
 
 	// Test reading with multiple newlines and spaces
 	versionWithSpaces := "  1.9.8  \n\n"
-	err = os.WriteFile(latestFile, []byte(versionWithSpaces), 0644)
+	err = os.WriteFile(latestFile, []byte(versionWithSpaces), 0o644)
 	require.NoError(t, err)
 
 	content, err = os.ReadFile(latestFile)
@@ -682,7 +682,7 @@ func TestRunToolVersionResolution(t *testing.T) {
 			setupFiles: func() error {
 				// Create .tool-versions file
 				content := "terraform 1.9.8\nopentofu 1.10.3\n"
-				return os.WriteFile(".tool-versions", []byte(content), 0644)
+				return os.WriteFile(".tool-versions", []byte(content), 0o644)
 			},
 			expectedTool:    "terraform",
 			expectedVersion: "1.9.8",
@@ -694,11 +694,11 @@ func TestRunToolVersionResolution(t *testing.T) {
 			setupFiles: func() error {
 				// Create latest file for opentofu
 				latestDir := filepath.Join(tempDir, "opentofu", "opentofu")
-				if err := os.MkdirAll(latestDir, 0755); err != nil {
+				if err := os.MkdirAll(latestDir, 0o755); err != nil {
 					return err
 				}
 				latestFile := filepath.Join(latestDir, "latest")
-				return os.WriteFile(latestFile, []byte("1.10.3"), 0644)
+				return os.WriteFile(latestFile, []byte("1.10.3"), 0o644)
 			},
 			expectedTool:    "opentofu",
 			expectedVersion: "1.10.3",
@@ -710,7 +710,7 @@ func TestRunToolVersionResolution(t *testing.T) {
 			setupFiles: func() error {
 				// Create .tool-versions file without the tool
 				content := "terraform 1.9.8\n"
-				return os.WriteFile(".tool-versions", []byte(content), 0644)
+				return os.WriteFile(".tool-versions", []byte(content), 0o644)
 			},
 			expectedTool:    "nonexistent",
 			expectedVersion: "latest",
@@ -722,16 +722,16 @@ func TestRunToolVersionResolution(t *testing.T) {
 			setupFiles: func() error {
 				// Create .tool-versions file
 				content := "terraform 1.9.8\n"
-				if err := os.WriteFile(".tool-versions", []byte(content), 0644); err != nil {
+				if err := os.WriteFile(".tool-versions", []byte(content), 0o644); err != nil {
 					return err
 				}
 				// Create latest file that should be ignored
 				latestDir := filepath.Join(tempDir, "hashicorp", "terraform")
-				if err := os.MkdirAll(latestDir, 0755); err != nil {
+				if err := os.MkdirAll(latestDir, 0o755); err != nil {
 					return err
 				}
 				latestFile := filepath.Join(latestDir, "latest")
-				return os.WriteFile(latestFile, []byte("2.0.0"), 0644)
+				return os.WriteFile(latestFile, []byte("2.0.0"), 0o644)
 			},
 			expectedTool:    "terraform",
 			expectedVersion: "1.9.8",
@@ -847,7 +847,7 @@ opentofu 1.10.3
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary .tool-versions file
 			toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
-			err := os.WriteFile(toolVersionsFile, []byte(tt.content), 0644)
+			err := os.WriteFile(toolVersionsFile, []byte(tt.content), 0o644)
 			require.NoError(t, err)
 
 			// Load and parse

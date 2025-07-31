@@ -23,8 +23,8 @@ func TestCleanCommand_RemovesToolsDirectory(t *testing.T) {
 	// Create a fake .tools directory with files in the correct location
 	toolsDir := GetToolsDirPath()
 	binDir := filepath.Join(toolsDir, "bin")
-	os.MkdirAll(binDir, 0755)
-	ioutil.WriteFile(filepath.Join(binDir, "dummy-tool"), []byte("binary"), 0644)
+	os.MkdirAll(binDir, 0o755)
+	ioutil.WriteFile(filepath.Join(binDir, "dummy-tool"), []byte("binary"), 0o644)
 
 	// Clean up after the test
 	defer func() {

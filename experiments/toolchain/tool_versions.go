@@ -74,7 +74,7 @@ func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
 		lines = append(lines, fmt.Sprintf("%s %s", tool, strings.Join(versions, " ")))
 	}
 	content := strings.Join(lines, "\n") + "\n"
-	return os.WriteFile(filePath, []byte(content), 0644)
+	return os.WriteFile(filePath, []byte(content), 0o644)
 }
 
 // AddVersionToTool adds a version to a tool, optionally as default (front of list)
