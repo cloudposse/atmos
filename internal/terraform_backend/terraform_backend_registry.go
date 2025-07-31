@@ -20,10 +20,10 @@ func RegisterTerraformBackends() {
 
 	terraformBackends[cfg.BackendTypeLocal] = ReadTerraformBackendLocal
 	terraformBackends[cfg.BackendTypeS3] = ReadTerraformBackendS3
+	terraformBackends[cfg.BackendTypeGCS] = ReadTerraformBackendGCS
 
 	// Add other backends once they are implemented.
 	terraformBackends[cfg.BackendTypeAzurerm] = nil
-	terraformBackends[cfg.BackendTypeGCS] = nil
 }
 
 // GetTerraformBackendReadFunc accepts a backend type and returns a function to read the state file from the backend.
