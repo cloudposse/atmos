@@ -5,10 +5,10 @@ vars:
 
 components:
   terraform:
-    component-1:
+    cmp-1:
       metadata:
         component: mock
       vars:
-        foo: component-1-a
-        bar: component-1-b
-        baz: component-1-c
+        foo: cmp-1-a
+        bar: cmp-1-b
+        baz: cmp-1-c

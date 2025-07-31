@@ -538,7 +538,7 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 		Stack:            "nonprod",
 		StackFile:        "",
 		ComponentType:    "terraform",
-		ComponentFromArg: "component-1",
+		ComponentFromArg: "cmp-1",
 		SubCommand:       "plan",
 		ProcessTemplates: true,
 		ProcessFunctions: true,
@@ -570,8 +570,8 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	output := buf.String()
 
 	// Check the output
-	expected := "plan -var-file nonprod-component-1.terraform.tfvars.json"
-	notExpected := "-out nonprod-component-1.planfile"
+	expected := "plan -var-file nonprod-cmp-1.terraform.tfvars.json"
+	notExpected := "-out nonprod-cmp-1.planfile"
 
 	if !strings.Contains(output, expected) {
 		t.Logf("TestExecuteTerraform_TerraformPlanWithSkipPlanfile output:\n%s", output)
