@@ -88,6 +88,12 @@ Flags:
                                       terraform  --affected
                                       --include-dependents (default false)
 
+        --init-pass-vars              Pass the generated varfile to terraform
+                                      init using the --var-file flag.
+                                      OpenTofu supports passing a varfile to
+                                      init to dynamically configure backends
+                                      (default false)
+
         --process-functions           Enable/disable YAML functions processing
                                       in Atmos stack manifests when executing
                                       terraform commands (default true)
