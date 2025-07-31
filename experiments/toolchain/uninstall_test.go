@@ -24,12 +24,12 @@ func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 		// Simulate install: create versioned binary and latest file
 		binaryPath := installer.getBinaryPath(owner, repo, actualVersion)
 		versionDir := filepath.Dir(binaryPath)
-		err := os.MkdirAll(versionDir, 0755)
+		err := os.MkdirAll(versionDir, 0o755)
 		require.NoError(t, err)
-		err = os.WriteFile(binaryPath, []byte("mock binary"), 0755)
+		err = os.WriteFile(binaryPath, []byte("mock binary"), 0o755)
 		require.NoError(t, err)
 		latestFile := filepath.Join(tempDir, owner, repo, "latest")
-		err = os.WriteFile(latestFile, []byte(actualVersion), 0644)
+		err = os.WriteFile(latestFile, []byte(actualVersion), 0o644)
 		require.NoError(t, err)
 
 		// Ensure latest file exists
@@ -65,9 +65,9 @@ func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 
 		// Do NOT create versioned binary, only latest file
 		latestFile := filepath.Join(tempDir, owner, repo, "latest")
-		err := os.MkdirAll(filepath.Join(tempDir, owner, repo), 0755)
+		err := os.MkdirAll(filepath.Join(tempDir, owner, repo), 0o755)
 		require.NoError(t, err)
-		err = os.WriteFile(latestFile, []byte(actualVersion), 0644)
+		err = os.WriteFile(latestFile, []byte(actualVersion), 0o644)
 		require.NoError(t, err)
 
 		// Ensure latest file exists
@@ -105,10 +105,10 @@ func TestUninstallCleansUpLatestFile_Missing(t *testing.T) {
 
 	// Simulate install: create versioned binary but NO latest file
 	versionDir := filepath.Join(tempDir, owner, repo, actualVersion)
-	err := os.MkdirAll(versionDir, 0755)
+	err := os.MkdirAll(versionDir, 0o755)
 	require.NoError(t, err)
 	binaryPath := filepath.Join(versionDir, repo)
-	err = os.WriteFile(binaryPath, []byte("mock binary"), 0755)
+	err = os.WriteFile(binaryPath, []byte("mock binary"), 0o755)
 	require.NoError(t, err)
 	latestFile := filepath.Join(tempDir, owner, repo, "latest")
 	_ = os.Remove(latestFile) // Ensure latest file does not exist
@@ -151,22 +151,22 @@ func TestUninstallWithNoArgs(t *testing.T) {
 
 	// Create terraform binaries
 	terraformPath1 := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
-	err = os.MkdirAll(filepath.Dir(terraformPath1), 0755)
+	err = os.MkdirAll(filepath.Dir(terraformPath1), 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(terraformPath1, []byte("mock terraform 1.11.4"), 0755)
+	err = os.WriteFile(terraformPath1, []byte("mock terraform 1.11.4"), 0o755)
 	require.NoError(t, err)
 
 	terraformPath2 := installer.getBinaryPath("hashicorp", "terraform", "1.9.8")
-	err = os.MkdirAll(filepath.Dir(terraformPath2), 0755)
+	err = os.MkdirAll(filepath.Dir(terraformPath2), 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(terraformPath2, []byte("mock terraform 1.9.8"), 0755)
+	err = os.WriteFile(terraformPath2, []byte("mock terraform 1.9.8"), 0o755)
 	require.NoError(t, err)
 
 	// Create helm binary
 	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4")
-	err = os.MkdirAll(filepath.Dir(helmPath), 0755)
+	err = os.MkdirAll(filepath.Dir(helmPath), 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), 0755)
+	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), 0o755)
 	require.NoError(t, err)
 
 	// Verify binaries exist
@@ -214,16 +214,16 @@ func TestRunUninstallWithNoArgs(t *testing.T) {
 
 	// Create terraform binary
 	terraformPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
-	err = os.MkdirAll(filepath.Dir(terraformPath), 0755)
+	err = os.MkdirAll(filepath.Dir(terraformPath), 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(terraformPath, []byte("mock terraform 1.11.4"), 0755)
+	err = os.WriteFile(terraformPath, []byte("mock terraform 1.11.4"), 0o755)
 	require.NoError(t, err)
 
 	// Create helm binary
 	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4")
-	err = os.MkdirAll(filepath.Dir(helmPath), 0755)
+	err = os.MkdirAll(filepath.Dir(helmPath), 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), 0755)
+	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), 0o755)
 	require.NoError(t, err)
 
 	// Temporarily set the global toolVersionsFile variable

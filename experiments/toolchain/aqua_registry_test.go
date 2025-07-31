@@ -43,7 +43,7 @@ tools:
     format: zip
     binary_name: terraform
 `
-	err = os.WriteFile(configPath, []byte(configContent), 0644)
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	err = ar.LoadLocalConfig(configPath)
@@ -66,7 +66,7 @@ tools:
     format: zip
     binary_name: terraform
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	err = ar.LoadLocalConfig(configPath)
@@ -128,7 +128,7 @@ tools:
     format: zip
     binary_name: terraform
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	err = ar.LoadLocalConfig(configPath)
@@ -514,7 +514,7 @@ func TestAquaRegistry_CacheDirectory(t *testing.T) {
 	assert.Contains(t, ar.cache.baseDir, "tools-cache")
 
 	// Test that cache directory can be created
-	err := os.MkdirAll(ar.cache.baseDir, 0755)
+	err := os.MkdirAll(ar.cache.baseDir, 0o755)
 	assert.NoError(t, err)
 
 	// Verify directory exists
