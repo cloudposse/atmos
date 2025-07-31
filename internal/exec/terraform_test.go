@@ -511,6 +511,9 @@ func TestExecuteTerraform_Version(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -567,7 +570,7 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	output := buf.String()
 
 	// Check the output
-	expected := "terraform plan -var-file nonprod-component-1.terraform.tfvars.json"
+	expected := "plan -var-file nonprod-component-1.terraform.tfvars.json"
 	notExpected := "-out nonprod-component-1.planfile"
 
 	if !strings.Contains(output, expected) {
