@@ -50,11 +50,11 @@ type AtmosConfiguration struct {
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
-	Stores        store.StoreRegistry      `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
-	CliConfigPath string                   `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Import        []string                 `yaml:"import" json:"import" mapstructure:"import"`
-	Docs          Docs                     `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Auth          map[string]AwsAuthConfig `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
+	Docs          Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth          AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -933,6 +933,9 @@ type ListColumnConfig struct {
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }
 
+type AuthConfig struct {
+	Aws map[string]AwsAuthConfig `yaml:"aws" json:"aws" mapstructure:"aws"`
+}
 type AuthMethod string
 
 const (
@@ -946,7 +949,9 @@ type AwsAuthConfig struct {
 	Region  string     `yaml:"region" json:"region" mapstructure:"region"`
 	Profile string     `yaml:"profile" json:"profile" mapstructure:"profile"`
 	// SSO
-	StartUrl string `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url,omitempty"`
+	StartUrl         string `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url,omitempty"`
+	AutoLoginAccount string `yaml:"auto_login_account,omitempty" json:"auto_login_account,omitempty" mapstructure:"auto_login_account,omitempty"`
+	AutoLoginRole    string `yaml:"auto_login_role,omitempty" json:"auto_login_role,omitempty" mapstructure:"auto_login_role,omitempty"`
 	// SAML
 	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
 	IdpArn  string `yaml:"idp_arn,omitempty" json:"idp_arn,omitempty" mapstructure:"idp_arn,omitempty"`

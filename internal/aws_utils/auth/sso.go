@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	ssooidctypes "github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/charmbracelet/log"
-	"time"
 )
 
 func SsoSync(startUrl, region string) *ssooidc.CreateTokenOutput {
@@ -50,7 +51,7 @@ func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {
 		return nil, err
 	}
 
-	fmt.Printf("🔐 Please visit %s and enter code: %s\n", *authOut.VerificationUriComplete, *authOut.UserCode)
+	log.Infof("🔐 Please visit %s and enter code: %s", *authOut.VerificationUriComplete, *authOut.UserCode)
 
 	// 4. Poll for token
 	var tokenOut *ssooidc.CreateTokenOutput

@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/aws_utils/auth"
 	"github.com/cloudposse/atmos/internal/tui/picker"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -33,11 +36,11 @@ func ExecuteAwsAuthCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	Auth := atmosConfig.Auth
-	if Auth == nil {
+	AwsAuth := atmosConfig.Auth.Aws
+	if AwsAuth == nil {
 		return errors.New("no auth config found")
 	}
-	log.Debug("Auth Config", "auth", Auth)
+	log.Debug("AwsAuth Config", "auth", AwsAuth)
 
 	profile, err := flags.GetString("profile")
 	if err != nil {
@@ -47,10 +50,10 @@ func ExecuteAwsAuthCommand(cmd *cobra.Command, args []string) error {
 
 		// Simple Picker
 		items := []string{}
-		for k, _ := range Auth {
+		for k, _ := range AwsAuth {
 			items = append(items, k)
 		}
-		choose, err := picker.NewSimplePicker("Choose an Auth Config", items).Choose()
+		choose, err := picker.NewSimplePicker("Choose an AwsAuth Config", items).Choose()
 
 		if err != nil {
 			return err
@@ -59,7 +62,7 @@ func ExecuteAwsAuthCommand(cmd *cobra.Command, args []string) error {
 		profile = choose
 	}
 
-	config := Auth[profile]
+	config := AwsAuth[profile]
 	// TODO validate config
 	return ExecuteAwsAuth(profile, config)
 }
@@ -80,14 +83,14 @@ func ExecuteAwsAuth(alias string, config schema.AwsAuthConfig) error {
 	cred, err := store.Get(keyringKey)
 	if err == nil && store.IsValid(cred) {
 		// 1.A Valid Token, proceed.
-		fmt.Printf("Existing valid token for %s found. Skipping login.\n", alias)
+		log.Info("Valid token found", "alias", alias)
 		credentials = cred
 	} else {
 		// 1.B No valid token, log in
 		// 1.B.1. Start SSO flow
 		tokenOut := auth.SsoSync(config.StartUrl, config.Region)
 		accessToken := *tokenOut.AccessToken
-		fmt.Println("✅ Logged in! Token acquired.")
+		log.Info("✅ Logged in! Token acquired.")
 
 		newCred := &authstore.AuthCredential{
 			Method:    authstore.MethodSSO,
@@ -98,30 +101,73 @@ func ExecuteAwsAuth(alias string, config schema.AwsAuthConfig) error {
 		credentials = newCred
 		err = store.Set(keyringKey, newCred)
 		if err != nil {
-			panic(fmt.Errorf("failed to save token: %w", err))
+			return fmt.Errorf("failed to save token: %w", err)
 		}
 	}
 
-	accounts, err := listAccounts(ctx, ssoClient, credentials.Token)
+	// 2. Authenticate and store to ~/.aws/credentials
+	accounts, err := getAccountsInfo(ctx, ssoClient, credentials.Token)
 	if err != nil {
-		panic(fmt.Errorf("failed to list accounts: %w", err))
+		return fmt.Errorf("failed to get accounts info: %w", err)
 	}
 
+	var accountID string
+	// TODO if no auto login account is specified, prompt the user to select one
 	for i := 0; i < len(accounts); i++ {
-		fmt.Println("Account:", *accounts[i].AccountName)
-		roles, err := listAccountRoles(ctx, ssoClient, credentials.Token, *accounts[i].AccountId)
-		if err != nil {
-			panic(fmt.Errorf("failed to list roles: %w", err))
-		}
-		for j := 0; j < len(roles); j++ {
-			fmt.Println("  Role:", *roles[j].RoleName)
+		if *accounts[i].AccountName == config.AutoLoginAccount {
+			accountID = *accounts[i].AccountId
 		}
 	}
+
+	roleCredentials, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
+		AccessToken: aws.String(credentials.Token),
+		AccountId:   aws.String(accountID),
+		RoleName:    aws.String(config.AutoLoginRole),
+	})
+
+	log.Info("✅ Logged in! Role credentials acquired.", "roleCredentials", roleCredentials.RoleCredentials, "ResultMetadata", roleCredentials.ResultMetadata)
+
+	// Resolve home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		panic(fmt.Errorf("failed to get user home directory: %w", err))
+	}
+
+	// Path to ~/.aws/credentials
+	awsCredentialsPath := filepath.Join(homeDir, ".aws", "credentials")
+	content := fmt.Sprintf(`
+[%s]
+aws_access_key_id=%s
+aws_secret_access_key=%s
+aws_session_token=%s
+`, config.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken)
+	err = os.WriteFile(awsCredentialsPath, []byte(content), 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write credentials file: %w", err)
+	}
+
+	log.Info("✅ Logged in! Credentials written to ~/.aws/credentials", "profile", config.Profile)
+
+	// accounts, err := listAccounts(ctx, ssoClient, credentials.Token)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to list accounts: %w", err)
+	// }
+
+	// for i := 0; i < len(accounts); i++ {
+	// 	fmt.Println("Account:", *accounts[i].AccountName)
+	// 	roles, err := listAccountRoles(ctx, ssoClient, credentials.Token, *accounts[i].AccountId)
+	// 	if err != nil {
+	// 		return fmt.Errorf("failed to list roles: %w", err)
+	// 	}
+	// 	for j := 0; j < len(roles); j++ {
+	// 		fmt.Println("  Role:", *roles[j].RoleName)
+	// 	}
+	// }
 
 	return nil
 }
 
-func listAccounts(ctx context.Context, client *sso.Client, token string) ([]types.AccountInfo, error) {
+func getAccountsInfo(ctx context.Context, client *sso.Client, token string) ([]types.AccountInfo, error) {
 	var accounts []types.AccountInfo
 	input := &sso.ListAccountsInput{AccessToken: aws.String(token)}
 	paginator := sso.NewListAccountsPaginator(client, input)
@@ -135,7 +181,7 @@ func listAccounts(ctx context.Context, client *sso.Client, token string) ([]type
 	return accounts, nil
 }
 
-func listAccountRoles(ctx context.Context, client *sso.Client, token, accountID string) ([]types.RoleInfo, error) {
+func getAccountRoles(ctx context.Context, client *sso.Client, token, accountID string) ([]types.RoleInfo, error) {
 	var roles []types.RoleInfo
 	input := &sso.ListAccountRolesInput{
 		AccessToken: aws.String(token),
