@@ -184,32 +184,12 @@ jobs:
       #        ]
       #       }
 
-      - name: Get modules list
-        id: modules
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: |
-          echo "list=$(go list ./... | tr '\n' ' ')" >> $GITHUB_OUTPUT
-
-
-      - name: "Acceptance tests"
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: robherley/go-test-action@v0
-        with:
-          testArguments: ./... -coverpkg=./... -timeout 40m -coverprofile=coverage.out.tmp
-          
-
-      - name: Prepare coverage report
+      - name: Acceptance tests
         timeout-minutes: 30
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: cat coverage.out.tmp | grep -v "mock_" > coverage.out
-
-
-      # - name: Acceptance tests
-      #   timeout-minutes: 30
-      #   if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   run: make testacc-cover
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make testacc-cover
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'
