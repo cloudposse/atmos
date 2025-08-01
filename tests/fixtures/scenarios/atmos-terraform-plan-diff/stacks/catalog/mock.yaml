@@ -5,6 +5,7 @@ components:
     mycomponent:
       metadata:
         component: s3-bucket
+      command: "terraform"
       vars:
         name: test-demo-34
         enabled: true
