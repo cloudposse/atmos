@@ -13,7 +13,7 @@ components:
           source_ami_description: "Amazon Linux 2023 AMI 2023.7.20250527.1 arm64 HVM kernel-6.12"
           source_ami_owner_account_id: "137112412989"
           region: "us-east-2"
-          org_id: "o-xxxxxxxx"
+          org_id: "o-xxxxxxxxx"
           org_management_account_id: "xxxxxxxxxxxx"
       metadata:
         component: aws/bastion
@@ -22,7 +22,10 @@ components:
         ami_name: "bastion-al2023-{{ now | unixEpoch }}"
         source_ami: "{{ .settings.ami.source_ami }}"
         region: "{{ .settings.ami.region }}"
-        org_arn: "arn:aws:organizations::{{ .settings.ami.org_management_account_id }}:organization/{{ .settings.ami.org_id }}"
+        ami_org_arns:
+          - "arn:aws:organizations::{{ .settings.ami.org_management_account_id }}:organization/{{ .settings.ami.org_id }}"
+        ami_ou_arns: []
+        ami_users: []
         kms_key_arn: null
         encrypt_boot: false
         ssh_username: "ec2-user"
@@ -34,9 +37,8 @@ components:
         assume_role_session_name: "atmos-packer"
         assume_role_duration_seconds: 1800
         # SSM Agent is pre-installed on AL2023 AMIs but should be enabled explicitly as done above.
-        # MySQL client on AL2023 is installed via dnf install mysql (the mysql package includes the CLI tools).
-        # `cloud-init clean` ensures the image will boot as a new instance on the next launch.
         # `dnf clean all` removes cached metadata and packages to reduce AMI size.
+        # `cloud-init clean` ensures the image will boot as a new instance on the next launch.
         provisioner_shell_commands:
           # Enable and start the SSM agent (already installed by default on AL2023)
           - "sudo systemctl enable --now amazon-ssm-agent"

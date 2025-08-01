@@ -25,9 +25,22 @@ variable "stage" {
   default = null
 }
 
-variable "org_arn" {
-  type        = string
-  description = "Organization ARN"
+variable "ami_org_arns" {
+  type        = list(string)
+  description = "List of Amazon Resource Names (ARN) of AWS Organizations that have access to launch the resulting AMI(s). By default no organizations have permission to launch the AMI"
+  default     = []
+}
+
+variable "ami_ou_arns" {
+  type        = list(string)
+  description = "List of Amazon Resource Names (ARN) of AWS Organizations organizational units (OU) that have access to launch the resulting AMI(s). By default no organizational units have permission to launch the AMI."
+  default     = []
+}
+
+variable "ami_users" {
+  type        = list(string)
+  description = "List of account IDs that have access to launch the resulting AMI(s). By default no additional users other than the user creating the AMI has permissions to launch it."
+  default     = []
 }
 
 variable "kms_key_arn" {
@@ -123,7 +136,9 @@ source "amazon-ebs" "al2023" {
   instance_type = var.instance_type
   region        = var.region
   ssh_username  = var.ssh_username
-  ami_org_arns = [var.org_arn]
+  ami_org_arns  = var.ami_org_arns
+  ami_ou_arns   = var.ami_ou_arns
+  ami_users     = var.ami_users
   kms_key_id    = var.kms_key_arn
   encrypt_boot  = var.encrypt_boot
 
