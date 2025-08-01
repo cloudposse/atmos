@@ -3,16 +3,55 @@ package picker
 import (
 	"errors"
 	"fmt"
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"io"
 	"strings"
+
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 )
+
+/**
+ * NewSimplePicker creates and returns a new SimplePicker instance.
+ *
+ * It initializes a list of items from the provided choices and sets up
+ * the picker with default styles and configurations.
+ *
+ * @param Title   The Title to display at the top of the picker.
+ * @param choices A slice of strings representing the options to display in the picker.
+ * @return        A pointer to the initialized SimplePicker struct. Use Choose() to present and wait for user input.
+ * @example
+  		items := []string{}
+		for k, v := range myMap {
+			items = append(items, k)
+		}
+		choose, err := picker.NewSimplePicker("Choose an Option", items).Choose()
+		if err != nil {
+			return err
+		}
+
+*/
+
+func NewSimplePicker(Title string, choices []string) *SimplePicker {
+	p := &SimplePicker{}
+	var items []list.Item
+
+	for _, option := range choices {
+		items = append(items, item(option))
+	}
+	p.list = list.New(items, itemDelegate{}, defaultWidth, listHeight)
+	p.list.Title = Title
+	p.list.Styles.Title = titleStyle
+	p.list.SetShowStatusBar(false)
+	p.list.SetFilteringEnabled(false)
+	p.list.Styles.PaginationStyle = paginationStyle
+	p.list.Styles.HelpStyle = helpStyle
+	return p
+}
 
 const (
 	listHeight   = 10
-	defaultWidth = 20
+	defaultWidth = 60
 )
 
 var (
@@ -23,10 +62,6 @@ var (
 	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
 	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
 )
-
-type item string
-
-func (i item) FilterValue() string { return "" }
 
 type itemDelegate struct{}
 
@@ -51,28 +86,14 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	fmt.Fprint(w, fn(str))
 }
 
+type item string
+
+func (i item) FilterValue() string { return "" }
+
 type SimplePicker struct {
 	list     list.Model
 	choice   string
 	quitting bool
-}
-
-func NewSimplePicker(Title string, choices []string) *SimplePicker {
-	p := &SimplePicker{}
-	var items []list.Item
-
-	for _, option := range choices {
-		items = append(items, item(option))
-	}
-	p.list = list.New(items, itemDelegate{}, defaultWidth, listHeight)
-	p.list.Title = Title
-	p.list.Styles.Title = titleStyle
-	p.list.SetShowStatusBar(false)
-	p.list.SetFilteringEnabled(false)
-	p.list.Styles.Title = titleStyle
-	p.list.Styles.PaginationStyle = paginationStyle
-	p.list.Styles.HelpStyle = helpStyle
-	return p
 }
 
 func (p *SimplePicker) Init() tea.Cmd {
@@ -104,7 +125,7 @@ func (p *SimplePicker) View() string {
 }
 
 func (p *SimplePicker) Choose() (string, error) {
-	m, err := tea.NewProgram(p).Run()
+	m, err := tea.NewProgram(p, tea.WithAltScreen()).Run()
 	if err != nil {
 		return "", err
 	}

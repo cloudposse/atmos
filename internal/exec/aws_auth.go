@@ -37,17 +37,21 @@ func ExecuteAwsAuthCommand(cmd *cobra.Command, args []string) error {
 	if Auth == nil {
 		return errors.New("no auth config found")
 	}
+	log.Debug("Auth Config", "auth", Auth)
 
 	profile, err := flags.GetString("profile")
 	if err != nil {
 		return err
 	}
 	if profile == "" {
+
+		// Simple Picker
 		items := []string{}
 		for k, _ := range Auth {
 			items = append(items, k)
 		}
 		choose, err := picker.NewSimplePicker("Choose an Auth Config", items).Choose()
+
 		if err != nil {
 			return err
 		}

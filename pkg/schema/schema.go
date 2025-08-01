@@ -942,12 +942,13 @@ const (
 
 // AwsAuthConfig is a generic struct that supports both SSO and SAML methods.
 type AwsAuthConfig struct {
-	Method   AuthMethod `json:"method"`
-	Region   string     `json:"region"`
-	Profile  string     `json:"profile"`
-	StartUrl string     `json:"start_url,omitempty"` // SSO
-	RoleArn  string     `json:"role_arn,omitempty"`  // SAML
-	IdpArn   string     `json:"idp_arn,omitempty"`   // SAML
-	SamlUrl  string     `json:"saml_url,omitempty"`  // SAML
-
+	Method  AuthMethod `yaml:"method" json:"method" mapstructure:"method"`
+	Region  string     `yaml:"region" json:"region" mapstructure:"region"`
+	Profile string     `yaml:"profile" json:"profile" mapstructure:"profile"`
+	// SSO
+	StartUrl string `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url,omitempty"`
+	// SAML
+	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
+	IdpArn  string `yaml:"idp_arn,omitempty" json:"idp_arn,omitempty" mapstructure:"idp_arn,omitempty"`
+	SamlUrl string `yaml:"saml_url,omitempty" json:"saml_url,omitempty" mapstructure:"saml_url,omitempty"`
 }

@@ -21,9 +21,9 @@ func SsoSync(startUrl, region string) *ssooidc.CreateTokenOutput {
 }
 
 func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {
+	log.Debug("Syncing with SSO", "startUrl", startUrl, "region", region)
 	// 1. Load config for SSO region
 	ctx := context.Background()
-
 	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
 	oidc := ssooidc.NewFromConfig(cfg)
 
@@ -33,7 +33,9 @@ func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {
 		ClientType: aws.String("public"),
 	})
 	if err != nil {
-		panic(fmt.Errorf("failed to register client: %w", err))
+		err = fmt.Errorf("failed to register client: %w", err)
+		log.Error(err)
+		return nil, err
 	}
 
 	// 3. Start device authorization
@@ -43,7 +45,9 @@ func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {
 		StartUrl:     aws.String(startUrl),
 	})
 	if err != nil {
-		panic(fmt.Errorf("start device auth failed: %w", err))
+		err = fmt.Errorf("start device auth failed: %w", err)
+		log.Error(err)
+		return nil, err
 	}
 
 	fmt.Printf("🔐 Please visit %s and enter code: %s\n", *authOut.VerificationUriComplete, *authOut.UserCode)
