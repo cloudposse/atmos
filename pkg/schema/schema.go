@@ -50,10 +50,11 @@ type AtmosConfiguration struct {
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
-	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
-	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
-	Docs          Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Stores        store.StoreRegistry      `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	CliConfigPath string                   `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	Import        []string                 `yaml:"import" json:"import" mapstructure:"import"`
+	Docs          Docs                     `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth          map[string]AwsAuthConfig `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -930,4 +931,23 @@ type ListConfig struct {
 type ListColumnConfig struct {
 	Name  string `yaml:"name" json:"name" mapstructure:"name"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
+}
+
+type AuthMethod string
+
+const (
+	MethodSSO  AuthMethod = "sso"
+	MethodSAML AuthMethod = "saml"
+)
+
+// AwsAuthConfig is a generic struct that supports both SSO and SAML methods.
+type AwsAuthConfig struct {
+	Method   AuthMethod `json:"method"`
+	Region   string     `json:"region"`
+	Profile  string     `json:"profile"`
+	StartUrl string     `json:"start_url,omitempty"` // SSO
+	RoleArn  string     `json:"role_arn,omitempty"`  // SAML
+	IdpArn   string     `json:"idp_arn,omitempty"`   // SAML
+	SamlUrl  string     `json:"saml_url,omitempty"`  // SAML
+
 }
