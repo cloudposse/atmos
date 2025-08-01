@@ -35,7 +35,7 @@ components:
         assume_role_duration_seconds: 1800
         # SSM Agent is pre-installed on AL2023 AMIs but should be enabled explicitly as done above.
         # MySQL client on AL2023 is installed via dnf install mysql (the mysql package includes the CLI tools).
-        # `cloud-init clean` ensures the image will boot as a new instance on next launch.
+        # `cloud-init clean` ensures the image will boot as a new instance on the next launch.
         # `dnf clean all` removes cached metadata and packages to reduce AMI size.
         provisioner_shell_commands:
           # Enable and start the SSM agent (already installed by default on AL2023)
