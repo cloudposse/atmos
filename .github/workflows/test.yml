@@ -188,7 +188,7 @@ jobs:
         id: modules
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          echo "list=$(go list ./...)" >> $GITHUB_OUTPUT
+          echo "list=$(go list ./... | tr '\n' ' ')" >> $GITHUB_OUTPUT
 
 
       - name: "Acceptance tests"
