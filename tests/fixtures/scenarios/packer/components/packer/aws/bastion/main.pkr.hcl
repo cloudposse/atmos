@@ -111,6 +111,12 @@ variable "associate_public_ip_address" {
   description = "If this is `true`, the new instance will get a Public IP"
 }
 
+variable "provisioner_shell_commands" {
+  type        = list(string)
+  description = "List of commands to execute on the machine that Packer builds"
+  default     = []
+}
+
 source "amazon-ebs" "al2023" {
   ami_name      = var.ami_name
   source_ami    = var.source_ami
@@ -147,18 +153,8 @@ source "amazon-ebs" "al2023" {
 build {
   sources = ["source.amazon-ebs.al2023"]
 
-  # SSM Agent is pre-installed on AL2023 AMIs but should be enabled explicitly as done above.
-  # MySQL client on AL2023 is installed via dnf install mysql (the mysql package includes the CLI tools).
-  # `cloud-init clean` ensures the image will boot as a new instance on next launch.
-  # `dnf clean all` removes cached metadata and packages to reduce AMI size.
   provisioner "shell" {
-    inline = [
-      # Enable and start the SSM agent (already installed by default on AL2023)
-      "sudo systemctl enable --now amazon-ssm-agent",
-
-      # Install packages, clean metadata and cloud-init
-      "sudo -E bash -c 'dnf install -y jq && dnf clean all && cloud-init clean'"
-    ]
+    inline = var.provisioner_shell_commands
   }
 
   # https://developer.hashicorp.com/packer/tutorials/docker-get-started/docker-get-started-post-processors
