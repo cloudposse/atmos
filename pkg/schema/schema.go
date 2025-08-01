@@ -312,10 +312,15 @@ type Terraform struct {
 	Command                 string        `yaml:"command" json:"command" mapstructure:"command"`
 	Shell                   ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
 	Init                    TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
+	Plan                    TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
 }
 
 type TerraformInit struct {
 	PassVars bool `yaml:"pass_vars" json:"pass_vars" mapstructure:"pass_vars"`
+}
+
+type TerraformPlan struct {
+	SkipPlanfile bool `yaml:"skip_planfile" json:"skip_planfile" mapstructure:"skip_planfile"`
 }
 
 type ShellConfig struct {
@@ -418,6 +423,7 @@ type ArgsAndFlagsInfo struct {
 	DeployRunInit             string
 	InitRunReconfigure        string
 	InitPassVars              string
+	PlanSkipPlanfile          string
 	AutoGenerateBackendFile   string
 	AppendUserAgent           string
 	UseTerraformPlan          bool
@@ -479,6 +485,7 @@ type ConfigAndStacksInfo struct {
 	DeployRunInit                 string
 	InitRunReconfigure            string
 	InitPassVars                  string
+	PlanSkipPlanfile              string
 	AutoGenerateBackendFile       string
 	UseTerraformPlan              bool
 	PlanFile                      string
@@ -644,6 +651,7 @@ type CommandFlag struct {
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
 	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
 	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+	Default     string `yaml:"default" json:"default" mapstructure:"default"`
 }
 
 type CommandEnv struct {

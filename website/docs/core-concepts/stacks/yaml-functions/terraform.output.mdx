@@ -171,6 +171,50 @@ For more details, review the following docs:
 
 - [YQ Alternative (Default value)](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
 
+## Using YQ Expressions to modify values returned from the remote state
+
+Since the `output` parameter of the `!terraform.output` function is a [YQ](https://mikefarah.gitbook.io/yq) expression,
+you can use [YQ pipes](https://mikefarah.gitbook.io/yq/operators/pipe) and
+[YQ operators](https://mikefarah.gitbook.io/yq/operators) (including [YQ string concatenation functions](https://mikefarah.gitbook.io/yq/operators/add#string-concatenation)
+and [YQ arithmetic functions](https://mikefarah.gitbook.io/yq/operators/add))
+to modify the values returned from the remote state.
+
+For example, suppose you have an `aurora-postgres` Atmos component which has the output `master_hostname`.
+
+To read the output without modification, you can use the following expressions:
+
+```yaml
+postgres_url: !terraform.output aurora-postgres master_hostname
+```
+
+```yaml
+postgres_url: !terraform.output aurora-postgres .master_hostname
+```
+
+To prepend and append strings to the output, you can use YQ pipes and the `add` function (`+` operator):
+
+```yaml
+postgres_url: !terraform.output aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432/events"""
+```
+
+:::note
+The double quotes are required around the whole YQ expression, and around the strings inside the YQ expression,
+hence the double-double quotes `""` to escape it.
+:::
+
+After the `!terraform.output` function is executed, the `postgres_url` variable will have the final value similar to:
+
+```yaml
+postgres_url: "jdbc:postgresql://aurora-postgres-cluster-writer.prod.plat.mydomain.net:5432/events"
+```
+
+For more details, review the following docs:
+
+- [YQ pipe](https://mikefarah.gitbook.io/yq/operators/pipe)
+- [YQ operators](https://mikefarah.gitbook.io/yq/operators)
+- [YQ string concatenation](https://mikefarah.gitbook.io/yq/operators/add#string-concatenation)
+- [YQ `add` function](https://mikefarah.gitbook.io/yq/operators/add)
+
 ## Examples
 
 <File title="stack.yaml">
