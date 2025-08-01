@@ -195,7 +195,7 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: robherley/go-test-action@v0
         with:
-          testArguments: ./... -v -coverpkg=./... -timeout 40m -coverprofile=coverage.out.tmp
+          testArguments: ./... -coverpkg=./... -timeout 40m -coverprofile=coverage.out.tmp
           
 
       - name: Prepare coverage report
