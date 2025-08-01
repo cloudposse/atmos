@@ -184,10 +184,19 @@ jobs:
       #        ]
       #       }
 
+      - name: Get modules list
+        id: modules
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          echo "list=$(go list ./...)" >> $GITHUB_OUTPUT
+
+
       - name: "Acceptance tests"
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: robherley/go-test-action@v0
         with:
+          moduleDirectory: |-
+            ${{ steps.modules.outputs.list }}
           testArguments: -v -coverpkg=./... -timeout 40m -coverprofile=coverage.out.tmp
           
 
