@@ -70,6 +70,7 @@ const (
 	TerraformSectionName              = "terraform"
 	HelmfileSectionName               = "helmfile"
 	PackerSectionName                 = "packer"
+	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"

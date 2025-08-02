@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ import (
 )
 
 // ExecutePacker executes Packer commands.
-func ExecutePacker(info schema.ConfigAndStacksInfo) error {
+func ExecutePacker(info schema.ConfigAndStacksInfo, template string) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
@@ -68,7 +69,7 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
 	if (info.SubCommand == "build") && info.ComponentIsAbstract {
-		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
+		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being provisioned "+
 			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
@@ -80,6 +81,23 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 			return fmt.Errorf("component `%s` is locked and cannot be modified (metadata.locked = true)",
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
+	}
+
+	// Find Packer template.
+	// It can be specified in the `settings.packer.template` section in the Atmos component manifest,
+	// or on the command line via the flag `--template <template> (shorthand `-t`)`.
+	if template == "" {
+		packerSettingTemplate, err := GetPackerTemplateFromSettings(&info.ComponentSettingsSection)
+		if err != nil {
+			return err
+		}
+
+		if packerSettingTemplate != "" {
+			template = packerSettingTemplate
+		}
+	}
+	if template == "" {
+		return errUtils.ErrMissingPackerTemplate
 	}
 
 	// Print component variables
@@ -108,12 +126,13 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 	log.Debug("Packer context",
 		"executable", info.Command,
 		"command", info.SubCommand,
-		"component", info.ComponentFromArg,
-		"stack", info.StackFromArg,
-		"arguments and flags", info.AdditionalArgsAndFlags,
+		"atmos component", info.ComponentFromArg,
+		"atmos stack", info.StackFromArg,
 		"packer component", info.BaseComponentPath,
-		"inheritance", inheritance,
+		"packer template", template,
 		"working directory", workingDir,
+		"inheritance", inheritance,
+		"arguments and flags", info.AdditionalArgsAndFlags,
 	)
 
 	// Prepare arguments and flags
@@ -121,6 +140,7 @@ func ExecutePacker(info schema.ConfigAndStacksInfo) error {
 	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
 	allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
+	allArgsAndFlags = append(allArgsAndFlags, template)
 
 	// Prepare ENV vars
 	envVars := append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))

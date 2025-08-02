@@ -54,4 +54,6 @@ var (
 
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
+
+	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 )
