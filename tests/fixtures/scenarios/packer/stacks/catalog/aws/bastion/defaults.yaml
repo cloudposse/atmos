@@ -44,6 +44,7 @@ components:
           - "sudo systemctl enable --now amazon-ssm-agent"
           # Install packages, clean metadata and cloud-init
           - "sudo -E bash -c 'dnf install -y jq && dnf clean all && cloud-init clean'"
+          # Install other packages
         ami_tags:
           SourceAMI: "{{ .settings.ami.source_ami }}"
           SourceAMIName: "{{ .settings.ami.source_ami_name }}"

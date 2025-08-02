@@ -10,8 +10,9 @@ var (
 	packerOutputLong  = `The command is used to get an output for a build from a Packer manifest.
 
 Example usage:
-  atmos packer output <component> --stack <stack> --build al2023 --output artifact_id
-  atmos packer output <component> -s <stack> --output artifact_id
+  atmos packer output <component> -s <stack>
+  atmos packer output <component> -s <stack> --output <output>
+  atmos packer output <component> --stack <stack> --build <build-id> --output <output>
 `
 )
 
