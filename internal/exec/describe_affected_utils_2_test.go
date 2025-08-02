@@ -16,7 +16,7 @@ func TestAddAffectedSpaceliftAdminStack(t *testing.T) {
 		{
 			Component:     componentName,
 			Stack:         stackName,
-			ComponentType: "terraform",
+			ComponentType: "spacelift",
 			Affected:      "foo",
 		},
 	}
@@ -32,7 +32,7 @@ func TestAddAffectedSpaceliftAdminStack(t *testing.T) {
 	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
 
 	// Call the function under test
-	_, err := addAffectedSpaceliftAdminStack(
+	affectedListResult, err := addAffectedSpaceliftAdminStack(
 		atmosConfig,
 		&affectedList,
 		&settingsSection,
@@ -47,8 +47,8 @@ func TestAddAffectedSpaceliftAdminStack(t *testing.T) {
 
 	// Check that the spacelift admin stack was added to the affected list
 	found := false
-	for _, affected := range affectedList {
-		if affected.Component == spaceliftAdminStack && affected.ComponentType == "spacelift" {
+	for _, affected := range *affectedListResult {
+		if affected.Component == componentName && affected.ComponentType == "spacelift" {
 			found = true
 			break
 		}
