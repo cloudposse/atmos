@@ -130,6 +130,18 @@ variable "provisioner_shell_commands" {
   default     = []
 }
 
+variable "force_deregister" {
+  type        = bool
+  description = "Force Packer to first deregister an existing AMI if one with the same name already exists"
+  default     = false
+}
+
+variable "force_delete_snapshot" {
+  type        = bool
+  description = "Force Packer to delete snapshots associated with AMIs, which have been deregistered by `force_deregister`"
+  default     = false
+}
+
 source "amazon-ebs" "al2023" {
   ami_name      = var.ami_name
   source_ami    = var.source_ami
@@ -141,6 +153,9 @@ source "amazon-ebs" "al2023" {
   ami_users     = var.ami_users
   kms_key_id    = var.kms_key_arn
   encrypt_boot  = var.encrypt_boot
+
+  force_deregister      = var.force_deregister
+  force_delete_snapshot = var.force_delete_snapshot
 
   associate_public_ip_address = var.associate_public_ip_address
 

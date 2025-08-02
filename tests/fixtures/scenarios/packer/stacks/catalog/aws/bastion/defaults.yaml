@@ -37,6 +37,8 @@ components:
         manifest_strip_path: false
         assume_role_session_name: "atmos-packer"
         assume_role_duration_seconds: 1800
+        force_deregister: false
+        force_delete_snapshot: false
         # SSM Agent is pre-installed on AL2023 AMIs but should be enabled explicitly as done above.
         # `dnf clean all` removes cached metadata and packages to reduce AMI size.
         # `cloud-init clean` ensures the image will boot as a new instance on the next launch.
