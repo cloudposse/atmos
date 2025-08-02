@@ -12,8 +12,9 @@ var (
 	packerValidateLong  = `The command is used to validate the syntax and configuration of a Packer template.
 
 Example usage:
-  atmos packer validate <component> <packer-template> --stack <stack> [options]
-  atmos packer validate <component> <packer-template> -s <stack> [options]
+  atmos packer validate <component> --stack <stack> [options]
+  atmos packer validate <component> --stack <stack> --template <template> [options]
+  atmos packer validate <component> -s <stack> --t <template> [options]
 
 To see all available options, refer to https://developer.hashicorp.com/packer/docs/commands/validate
 `

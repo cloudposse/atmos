@@ -11,7 +11,7 @@ var packerCmd = &cobra.Command{
 	Use:                "packer",
 	Aliases:            []string{"pk"},
 	Short:              "Manage packer-based machine images for multiple platforms",
-	Long:               `This command runs Packer commands for creating identical machine images for multiple platforms from a single source configuration.`,
+	Long:               `Run Packer commands for creating identical machine images for multiple platforms from a single source configuration.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Args:               cobra.NoArgs,
 }
@@ -19,6 +19,8 @@ var packerCmd = &cobra.Command{
 func init() {
 	packerCmd.DisableFlagParsing = true
 	packerCmd.PersistentFlags().Bool("", false, doubleDashHint)
+	packerCmd.PersistentFlags().StringP("template", "t", "", "Packer template for building machine images")
+
 	AddStackCompletion(packerCmd)
 	RootCmd.AddCommand(packerCmd)
 }

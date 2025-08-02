@@ -12,8 +12,9 @@ var (
 	packerInspectLong  = `The command takes a Packer template and outputs the various components the template defines.
 
 Example usage:
-  atmos packer inspect <component> <packer-template> --stack <stack>
-  atmos packer inspect <component> <packer-template> -s <stack>
+  atmos packer inspect <component> --stack <stack>
+  atmos packer inspect <component> --stack <stack> --template <template> 
+  atmos packer inspect <component> -s <stack> --t <template> 
 `
 )
 

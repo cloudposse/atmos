@@ -12,8 +12,9 @@ var (
 	packerBuildLong  = `This command takes a Packer template and runs all the builds within it in order to generate a set of artifacts.
 
 Example usage:
-  atmos packer build <component> <packer-template> --stack <stack> [options]
-  atmos packer build <component> <packer-template> -s <stack> [options]
+  atmos packer build <component> --stack <stack> [options]
+  atmos packer build <component> --stack <stack> --template <template> [options]
+  atmos packer build <component> -s <stack> --t <template> [options]
 
 To see all available options, refer to https://developer.hashicorp.com/packer/docs/commands/build
 `
