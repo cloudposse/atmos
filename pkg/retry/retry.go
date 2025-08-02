@@ -105,9 +105,10 @@ func (e *Executor) calculateDelay(attempt int) time.Duration {
 		delay = e.config.MaxDelay
 	}
 
-	// Apply random jitter if enabled
-	if e.config.RandomJitter {
-		jitter := time.Duration(e.rand.Float64() * float64(delay) * 0.1) // 10% jitter
+	// Apply random jitter if configured
+	jitterFactor := e.config.RandomJitter // assuming RandomJitter is now a float value
+	if jitterFactor > 0 {
+		jitter := time.Duration(e.rand.Float64() * float64(delay) * jitterFactor)
 		if e.rand.Float64() < jitterFlipChance {
 			delay += jitter
 		} else {
@@ -166,7 +167,7 @@ func DefaultConfig() schema.RetryConfig {
 		BackoffStrategy: schema.BackoffExponential,
 		InitialDelay:    defaultInitialDelay,
 		MaxDelay:        defaultMaxDelay,
-		RandomJitter:    true,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 		MaxElapsedTime:  defaultMaxElapsedTime,
 	}

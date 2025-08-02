@@ -16,7 +16,7 @@ func TestExecutor_Execute_Success(t *testing.T) {
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    10 * time.Millisecond,
 		MaxDelay:        100 * time.Millisecond,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
 	}
@@ -48,7 +48,7 @@ func TestExecutor_Execute_MaxAttemptsExceeded(t *testing.T) {
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    1 * time.Millisecond,
 		MaxDelay:        100 * time.Millisecond,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
 	}
@@ -83,7 +83,7 @@ func TestExecutor_Execute_ContextCancelled(t *testing.T) {
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    50 * time.Millisecond,
 		MaxDelay:        100 * time.Millisecond,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
 	}
@@ -117,7 +117,7 @@ func TestExecutor_Execute_MaxElapsedTimeExceeded(t *testing.T) {
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    1 * time.Millisecond,
 		MaxDelay:        100 * time.Millisecond,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 		MaxElapsedTime:  20 * time.Millisecond,
 	}
@@ -147,7 +147,7 @@ func TestExecutor_CalculateDelay_Constant(t *testing.T) {
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    100 * time.Millisecond,
 		MaxDelay:        1 * time.Second,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 	}
 
@@ -168,7 +168,7 @@ func TestExecutor_CalculateDelay_Linear(t *testing.T) {
 		BackoffStrategy: schema.BackoffLinear,
 		InitialDelay:    100 * time.Millisecond,
 		MaxDelay:        1 * time.Second,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 	}
 
@@ -196,7 +196,7 @@ func TestExecutor_CalculateDelay_Exponential(t *testing.T) {
 		BackoffStrategy: schema.BackoffExponential,
 		InitialDelay:    100 * time.Millisecond,
 		MaxDelay:        1 * time.Second,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 	}
 
@@ -224,7 +224,7 @@ func TestExecutor_CalculateDelay_MaxDelayLimit(t *testing.T) {
 		BackoffStrategy: schema.BackoffExponential,
 		InitialDelay:    100 * time.Millisecond,
 		MaxDelay:        300 * time.Millisecond,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 	}
 
@@ -243,7 +243,7 @@ func TestExecutor_CalculateDelay_WithJitter(t *testing.T) {
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    100 * time.Millisecond,
 		MaxDelay:        1 * time.Second,
-		RandomJitter:    true,
+		RandomJitter:    0.1,
 		Multiplier:      2.0,
 	}
 
@@ -273,7 +273,7 @@ func TestDo_ConvenienceFunction(t *testing.T) {
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    1 * time.Millisecond,
 		MaxDelay:        100 * time.Millisecond,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
 	}
@@ -303,7 +303,7 @@ func TestWithPredicate_RetryOnSpecificErrors(t *testing.T) {
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    1 * time.Millisecond,
 		MaxDelay:        100 * time.Millisecond,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
 	}
@@ -370,8 +370,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Expected MaxDelay to be 5s, got %v", config.MaxDelay)
 	}
 
-	if !config.RandomJitter {
-		t.Error("Expected RandomJitter to be true")
+	if config.RandomJitter != 0.0 {
+		t.Error("Expected RandomJitter to be 0.0")
 	}
 
 	if config.Multiplier != 2.0 {
@@ -389,7 +389,7 @@ func BenchmarkExecutor_Execute_Success(b *testing.B) {
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    1 * time.Microsecond,
 		MaxDelay:        100 * time.Microsecond,
-		RandomJitter:    false,
+		RandomJitter:    0.0,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
 	}
