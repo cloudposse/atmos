@@ -81,26 +81,10 @@ jobs:
           path: |
             ./build/
 
-  modules: 
-    name: Modules
-    needs: build
-    timeout-minutes: 30
-    runs-on: ubuntu-latest
-    outputs:
-      list: ${{ steps.modules.outputs.list }}
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
-
-      - name: Get modules list
-        id: modules
-        run: |
-          echo "list=$(go list ./... | jq --slurp --compact-output --monochrome-output --raw-input 'split("\n")|map(select(. != ""))')" >> $GITHUB_OUTPUT
-
   # run acceptance tests
   test:
     name: Acceptance Tests
-    needs: [build, modules]
+    needs: build
     strategy:
       fail-fast: false
       matrix:
@@ -108,7 +92,6 @@ jobs:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
-        module: ${{ fromJson(needs.modules.outputs.list) }}
     timeout-minutes: 30
     runs-on: ${{ matrix.flavor.os }}
     steps:
@@ -136,7 +119,7 @@ jobs:
       - name: Add build artifacts directory to PATH for windows
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
-        run: |-
+        run: |
           $atmosPath = Join-Path ${{ github.workspace }} "atmos.exe"
           if (-not (Test-Path $atmosPath)) {
             throw "atmos.exe not found at: $atmosPath"
@@ -201,18 +184,12 @@ jobs:
       #        ]
       #       }
 
-      - name: "Acceptance tests"
+      - name: Acceptance tests
+        timeout-minutes: 30
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: robherley/go-test-action@v0
-        with:
-          testArguments: ${{ matrix.module }} -coverpkg=./... -timeout 40m -coverprofile=coverage.out.tmp
-
-      # - name: Acceptance tests
-      #   timeout-minutes: 30
-      #   if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   run: make testacc-cover
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make testacc-cover
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'
