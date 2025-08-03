@@ -515,17 +515,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 				u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
 				u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
 			}
-			var message string
-			if info.ComponentFromArg == "" {
-				message = fmt.Sprintf("This will delete %v local terraform state files affecting all components and %d user files", total, userFilesCount)
-			} else if info.Component != "" && info.Stack != "" {
-				message = fmt.Sprintf("This will delete %v local terraform state files and %d user files for component '%s' in stack '%s'", total, userFilesCount, info.Component, info.Stack)
-			} else if info.ComponentFromArg != "" {
-				message = fmt.Sprintf("This will delete %v local terraform state files and %d user files for component '%s'", total, userFilesCount, info.ComponentFromArg)
-			} else {
-				message = "This will delete selected terraform state files"
-			}
-			u.PrintMessage(message)
+			u.PrintMessage(getDeleteMessage(total, info.Component, info.Stack, info.ComponentFromArg))
 			println()
 			if confirm, err := confirmDeletion(); err != nil || !confirm {
 				return err
@@ -543,4 +533,16 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	}
 
 	return nil
+}
+
+func getDeleteMessage(total int, component string, stack string, componentFromArg string) string {
+	var message string
+	if componentFromArg == "" {
+		message = fmt.Sprintf("This will delete %v local terraform state files affecting all components", total)
+	} else if component != "" && stack != "" {
+		message = fmt.Sprintf("This will delete %v local terraform state files for component '%s' in stack '%s'", total, component, stack)
+	} else if componentFromArg != "" {
+		message = fmt.Sprintf("This will delete %v local terraform state files for component '%s'", total, componentFromArg)
+	}
+	return message
 }

@@ -340,3 +340,49 @@ func TestCollectComponentsDirectoryObjects(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDeleteMessage(t *testing.T) {
+	tests := []struct {
+		name             string
+		total            int
+		component        string
+		stack            string
+		componentFromArg string
+		expected         string
+	}{
+		{
+			name:             "componentFromArg is empty",
+			total:            5,
+			component:        "web",
+			stack:            "prod",
+			componentFromArg: "",
+			expected:         "This will delete 5 local terraform state files affecting all components",
+		},
+		{
+			name:             "component and stack non-empty",
+			total:            3,
+			component:        "api",
+			stack:            "dev",
+			componentFromArg: "api",
+			expected:         "This will delete 3 local terraform state files for component 'api' in stack 'dev'",
+		},
+		{
+			name:             "componentFromArg non-empty, component or stack empty",
+			total:            2,
+			component:        "",
+			stack:            "test",
+			componentFromArg: "db",
+			expected:         "This will delete 2 local terraform state files for component 'db'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getDeleteMessage(tt.total, tt.component, tt.stack, tt.componentFromArg)
+			if result != tt.expected {
+				t.Errorf("getDeleteMessage(%d, %q, %q, %q) = %q; want %q",
+					tt.total, tt.component, tt.stack, tt.componentFromArg, result, tt.expected)
+			}
+		})
+	}
+}
