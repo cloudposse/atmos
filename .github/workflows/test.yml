@@ -108,7 +108,7 @@ jobs:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
-        module: ${{ fromJson(format('"{0}"',needs.modules.outputs.list)) }}
+        module: ${{ fromJson(needs.modules.outputs.list) }}
     timeout-minutes: 30
     runs-on: ${{ matrix.flavor.os }}
     steps:
