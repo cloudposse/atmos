@@ -736,7 +736,6 @@ func removeCacheFile() error {
 }
 
 func TestCLICommands(t *testing.T) {
-	if testing.Short() {
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {
