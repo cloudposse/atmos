@@ -201,12 +201,18 @@ jobs:
       #        ]
       #       }
 
-      - name: Acceptance tests
-        timeout-minutes: 30
+      - name: "Acceptance tests"
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make testacc-cover
+        uses: robherley/go-test-action@v0
+        with:
+          testArguments: ${{ matrix.module }} -coverpkg=./... -timeout 40m -coverprofile=coverage.out.tmp
+
+      # - name: Acceptance tests
+      #   timeout-minutes: 30
+      #   if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   run: make testacc-cover
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'
