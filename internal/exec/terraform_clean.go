@@ -537,11 +537,12 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 
 func getDeleteMessage(total int, component string, stack string, componentFromArg string) string {
 	var message string
-	if componentFromArg == "" {
+	switch {
+	case componentFromArg == "":
 		message = fmt.Sprintf("This will delete %v local terraform state files affecting all components", total)
-	} else if component != "" && stack != "" {
+	case component != "" && stack != "":
 		message = fmt.Sprintf("This will delete %v local terraform state files for component '%s' in stack '%s'", total, component, stack)
-	} else if componentFromArg != "" {
+	case componentFromArg != "":
 		message = fmt.Sprintf("This will delete %v local terraform state files for component '%s'", total, componentFromArg)
 	}
 	return message
