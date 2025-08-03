@@ -141,7 +141,7 @@ jobs:
             throw "atmos.exe not found at: $atmosPath"
           }
 
-          echo <<EOF
+          cat << 'EOF'
             ${{ needs.modules.outputs.list }}
           EOF
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
