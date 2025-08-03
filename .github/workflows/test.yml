@@ -135,14 +135,14 @@ jobs:
       - name: Add build artifacts directory to PATH for windows
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
-        run: |
+        run: |-
           $atmosPath = Join-Path ${{ github.workspace }} "atmos.exe"
           if (-not (Test-Path $atmosPath)) {
             throw "atmos.exe not found at: $atmosPath"
           }
 
           echo <<EOF
-            ${{ fromJson(needs.modules.outputs.list) }}
+            ${{ needs.modules.outputs.list }}
           EOF
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
