@@ -100,7 +100,7 @@ jobs:
   # run acceptance tests
   test:
     name: Acceptance Tests
-    needs: build
+    needs: [build, modules]
     strategy:
       fail-fast: false
       matrix:
