@@ -108,7 +108,6 @@ jobs:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
-        module: ${{ fromJson(needs.modules.outputs.list) }}
     timeout-minutes: 30
     runs-on: ${{ matrix.flavor.os }}
     steps:
@@ -141,6 +140,10 @@ jobs:
           if (-not (Test-Path $atmosPath)) {
             throw "atmos.exe not found at: $atmosPath"
           }
+
+          echo <<EOF
+            ${{ fromJson(needs.modules.outputs.list) }}
+          EOF
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - name: Install Terraform
