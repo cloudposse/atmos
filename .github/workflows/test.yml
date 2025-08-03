@@ -95,7 +95,7 @@ jobs:
       - name: Get modules list
         id: modules
         run: |
-          echo "list=$(go list ./... | jq --slurp --raw-input  'split("\n")|map(select(. != ""))')" >> $GITHUB_OUTPUT
+          echo "list=$(go list ./... | jq --slurp --compact-output --monochrome-output --raw-input  'split("\n")|map(select(. != ""))' | sed 's/"/\\"/g')" >> $GITHUB_OUTPUT
 
   # run acceptance tests
   test:
