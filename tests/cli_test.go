@@ -737,9 +737,6 @@ func removeCacheFile() error {
 
 func TestCLICommands(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Skipping test suite in short mode")
-	}
-
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {
