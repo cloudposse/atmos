@@ -142,7 +142,7 @@ jobs:
           }
 
           cat << 'EOF'
-            ${{ fromJson(needs.modules.outputs.list) }}
+            ${{ toJson(needs.modules.outputs.list) }}
           EOF
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
