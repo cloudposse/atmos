@@ -189,10 +189,10 @@ jobs:
         with:
           aqua_version: v2.43.1
 
-      - name: Install aqua
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        run: |
-          aqua g -i Songmu/gotesplit
+      # - name: Install aqua
+      #   if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+      #   run: |
+      #     aqua g -i Songmu/gotesplit
 
       - name: Acceptance tests with coverage
         timeout-minutes: 30
@@ -206,7 +206,9 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) && ( matrix.flavor.target != 'linux' ) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make testacc-split
+        run: |-
+          curl -sfL https://raw.githubusercontent.com/Songmu/gotesplit/main/install.sh | sh -s
+          make testacc-split
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'
