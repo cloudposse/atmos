@@ -18,7 +18,7 @@ import (
 )
 
 func TestReadTerraformBackendS3_InvalidConfig(t *testing.T) {
-	t.Skip("Skipping test in short mode")
+	// t.Skip("Skipping test in short mode")
 	tests := []struct {
 		name          string
 		componentData map[string]any
