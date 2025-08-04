@@ -57,15 +57,11 @@ deps:
 
 testacc: get
 	@echo "Running acceptance tests"
-	go test $(TEST) -short -v $(TESTARGS) -timeout 40m
-
-testacc-split: get
-	@echo "Running acceptance tests with split"
-	bin/gotesplit -total=10 -index=0 -- $(TEST) -short -v $(TESTARGS) -timeout 40m
+	go test $(TEST) -v $(TESTARGS) -timeout 40m
 
 testacc-cover: get
 	@echo "Running tests with coverage"
-	go test $(TEST) -short  -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp
+	go test $(TEST) -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp
 	cat coverage.out.tmp | grep -v "mock_" > coverage.out
 
 # Run acceptance tests with coverage report
