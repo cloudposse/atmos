@@ -512,6 +512,80 @@ func TestExecuteTerraform_Version(t *testing.T) {
 	}
 }
 
+func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "../../tests/fixtures/scenarios/terraform-cloud"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	info := schema.ConfigAndStacksInfo{
+		StackFromArg:     "",
+		Stack:            "nonprod",
+		StackFile:        "",
+		ComponentType:    "terraform",
+		ComponentFromArg: "cmp-1",
+		SubCommand:       "plan",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	log.SetLevel(log.DebugLevel)
+	log.SetOutput(w)
+
+	err = ExecuteTerraform(info)
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+
+	// Restore stderr
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stderr = oldStderr
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	// Check the output
+	expected := "plan -var-file nonprod-cmp-1.terraform.tfvars.json"
+	notExpected := "-out nonprod-cmp-1.planfile"
+
+	if !strings.Contains(output, expected) {
+		t.Logf("TestExecuteTerraform_TerraformPlanWithSkipPlanfile output:\n%s", output)
+		t.Errorf("Output should contain '%s'", expected)
+	}
+
+	if strings.Contains(output, notExpected) {
+		t.Logf("TestExecuteTerraform_TerraformPlanWithSkipPlanfile output:\n%s", output)
+		t.Errorf("Output should not contain '%s'", notExpected)
+	}
+}
+
 func TestExecuteTerraform_DeploymentStatuss(t *testing.T) {
 	startingDir, err := os.Getwd()
 	if err != nil {

@@ -4,7 +4,10 @@ import (
 	"errors"
 )
 
-const ErrWrappingFormat = "%w: %w"
+const (
+	ErrWrappingFormat       = "%w: %w"
+	ErrStringWrappingFormat = "%w: %s"
+)
 
 var (
 	ErrDownloadPackage                       = errors.New("failed to download package")
@@ -49,5 +52,6 @@ var (
 	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
 	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
 
-	ErrReadFile = errors.New("error reading file")
+	ErrReadFile    = errors.New("error reading file")
+	ErrInvalidFlag = errors.New("invalid flag")
 )

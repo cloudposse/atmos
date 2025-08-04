@@ -296,10 +296,15 @@ type Terraform struct {
 	Command                 string        `yaml:"command" json:"command" mapstructure:"command"`
 	Shell                   ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
 	Init                    TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
+	Plan                    TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
 }
 
 type TerraformInit struct {
 	PassVars bool `yaml:"pass_vars" json:"pass_vars" mapstructure:"pass_vars"`
+}
+
+type TerraformPlan struct {
+	SkipPlanfile bool `yaml:"skip_planfile" json:"skip_planfile" mapstructure:"skip_planfile"`
 }
 
 type ShellConfig struct {
@@ -392,6 +397,7 @@ type ArgsAndFlagsInfo struct {
 	DeployRunInit             string
 	InitRunReconfigure        string
 	InitPassVars              string
+	PlanSkipPlanfile          string
 	AutoGenerateBackendFile   string
 	AppendUserAgent           string
 	UseTerraformPlan          bool
@@ -453,6 +459,7 @@ type ConfigAndStacksInfo struct {
 	DeployRunInit                 string
 	InitRunReconfigure            string
 	InitPassVars                  string
+	PlanSkipPlanfile              string
 	AutoGenerateBackendFile       string
 	UseTerraformPlan              bool
 	PlanFile                      string
@@ -506,6 +513,86 @@ type AwsEksUpdateKubeconfigContext struct {
 	Stage       string
 	Region      string
 }
+
+// Component vendoring (`component.yaml` file)
+
+type VendorComponentSource struct {
+	Type          string   `yaml:"type" json:"type" mapstructure:"type"`
+	Uri           string   `yaml:"uri" json:"uri" mapstructure:"uri"`
+	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
+	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
+	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+}
+
+type VendorComponentMixins struct {
+	Type     string `yaml:"type" json:"type" mapstructure:"type"`
+	Uri      string `yaml:"uri" json:"uri" mapstructure:"uri"`
+	Version  string `yaml:"version" json:"version" mapstructure:"version"`
+	Filename string `yaml:"filename" json:"filename" mapstructure:"filename"`
+}
+
+type VendorComponentSpec struct {
+	Source VendorComponentSource   `yaml:"source" json:"source" mapstructure:"source"`
+	Mixins []VendorComponentMixins `yaml:"mixins" json:"mixins" mapstructure:"mixins"`
+}
+
+type VendorComponentMetadata struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+}
+
+type VendorComponentConfig struct {
+	ApiVersion string                  `yaml:"apiVersion" json:"apiVersion" mapstructure:"apiVersion"`
+	Kind       string                  `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Metadata   VendorComponentMetadata `yaml:"metadata" json:"metadata" mapstructure:"metadata"`
+	Spec       VendorComponentSpec     `yaml:"spec" json:"spec" mapstructure:"spec"`
+}
+
+// Custom CLI commands
+
+type Command struct {
+	Name            string                 `yaml:"name" json:"name" mapstructure:"name"`
+	Description     string                 `yaml:"description" json:"description" mapstructure:"description"`
+	Env             []CommandEnv           `yaml:"env" json:"env" mapstructure:"env"`
+	Arguments       []CommandArgument      `yaml:"arguments" json:"arguments" mapstructure:"arguments"`
+	Flags           []CommandFlag          `yaml:"flags" json:"flags" mapstructure:"flags"`
+	ComponentConfig CommandComponentConfig `yaml:"component_config" json:"component_config" mapstructure:"component_config"`
+	Steps           []string               `yaml:"steps" json:"steps" mapstructure:"steps"`
+	Commands        []Command              `yaml:"commands" json:"commands" mapstructure:"commands"`
+	Verbose         bool                   `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
+}
+
+type CommandArgument struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+	Default     string `yaml:"default" json:"default" mapstructure:"default"`
+}
+
+type CommandFlag struct {
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Shorthand   string `yaml:"shorthand" json:"shorthand" mapstructure:"shorthand"`
+	Type        string `yaml:"type" json:"type" mapstructure:"type"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
+	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+	Default     string `yaml:"default" json:"default" mapstructure:"default"`
+}
+
+type CommandEnv struct {
+	Key          string `yaml:"key" json:"key" mapstructure:"key"`
+	Value        string `yaml:"value" json:"value" mapstructure:"value"`
+	ValueCommand string `yaml:"valueCommand" json:"valueCommand" mapstructure:"valueCommand"`
+}
+
+type CommandComponentConfig struct {
+	Component string `yaml:"component" json:"component" mapstructure:"component"`
+	Stack     string `yaml:"stack" json:"stack" mapstructure:"stack"`
+}
+
+// CLI command aliases
+
+type CommandAliases map[string]string
 
 // Integrations
 
