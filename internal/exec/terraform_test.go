@@ -514,6 +514,7 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/terraform-cloud"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
