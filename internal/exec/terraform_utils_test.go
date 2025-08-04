@@ -88,7 +88,6 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 }
 
 func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
-	// t.Skip("Skipping test in short mode")
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
