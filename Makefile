@@ -59,6 +59,10 @@ testacc: get
 	@echo "Running acceptance tests"
 	go test $(TEST) -short -v $(TESTARGS) -timeout 40m
 
+testacc-split: get
+	@echo "Running acceptance tests with split"
+	gotesplit -total=10 -index=0 -- $(TEST) -short -v $(TESTARGS) -timeout 40m
+
 testacc-cover: get
 	@echo "Running tests with coverage"
 	go test $(TEST) -short  -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp
