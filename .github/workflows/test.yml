@@ -184,7 +184,7 @@ jobs:
       #        ]
       #       }
 
-      - name: Acceptance tests
+      - name: Acceptance tests with coverage
         timeout-minutes: 30
         if: matrix.flavor.target == 'linux'
         env:
@@ -193,7 +193,7 @@ jobs:
 
       - name: Acceptance tests
         timeout-minutes: 30
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) && ! matrix.flavor.target == 'linux' }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) || ! matrix.flavor.target == 'linux' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc
