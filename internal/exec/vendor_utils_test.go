@@ -73,7 +73,6 @@ func TestReadAndProcessVendorConfigFile(t *testing.T) {
 // and that the vendor components are correctly pulled.
 // The function also verifies that the state files are existing and deleted after the vendor pull command is executed.
 func TestExecuteVendorPull(t *testing.T) {
-	// t.Skip("Skipping test in short mode")
 	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
 		err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 		if err != nil {
