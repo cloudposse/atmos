@@ -1,15 +1,14 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
-	errUtils "github.com/cloudposse/atmos/errors"
 	"os"
 	"path/filepath"
 	"strings"
 
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -48,7 +47,7 @@ func ExecutePacker(info schema.ConfigAndStacksInfo, template string) error {
 	}
 
 	if len(info.Stack) < 1 {
-		return errors.New("stack must be specified")
+		return errUtils.ErrMissingStack
 	}
 
 	if !info.ComponentIsEnabled {
@@ -60,7 +59,8 @@ func ExecutePacker(info schema.ConfigAndStacksInfo, template string) error {
 	componentPath := filepath.Join(atmosConfig.PackerDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return fmt.Errorf("'%s' points to the Packer component '%s', but it does not exist in '%s'",
+		return fmt.Errorf("%w: Atmos component '%s' points to the Packer component '%s', but it does not exist in '%s'",
+			errUtils.ErrInvalidComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,
 			filepath.Join(atmosConfig.Components.Packer.BasePath, info.ComponentFolderPrefix),
@@ -69,8 +69,12 @@ func ExecutePacker(info schema.ConfigAndStacksInfo, template string) error {
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
 	if (info.SubCommand == "build") && info.ComponentIsAbstract {
-		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being provisioned "+
-			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
+		return fmt.Errorf("%w: component '%s' cannot be provisioned since it's explicitly prohibited from being provisioned "+
+			"by 'metadata.type: abstract' attribute",
+			errUtils.ErrAbstractComponentCantBeProvisioned,
+			filepath.Join(info.ComponentFolderPrefix,
+				info.Component,
+			))
 	}
 
 	// Check if the component is locked (`metadata.locked` is set to true)
@@ -78,7 +82,8 @@ func ExecutePacker(info schema.ConfigAndStacksInfo, template string) error {
 		// Allow read-only commands, block modification commands
 		switch info.SubCommand {
 		case "build":
-			return fmt.Errorf("component `%s` is locked and cannot be modified (metadata.locked = true)",
+			return fmt.Errorf("%w: component `%s` is locked and cannot be modified (metadata.locked = true)",
+				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
 	}

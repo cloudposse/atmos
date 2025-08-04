@@ -55,5 +55,10 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)\"")
+	ErrInvalidComponent                   = errors.New("invalid component")
+	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
+	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
+
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 )
