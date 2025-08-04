@@ -61,7 +61,7 @@ testacc: get
 
 testacc-split: get
 	@echo "Running acceptance tests with split"
-	bin/gotesplit -total=10 -index=8 -- $(TEST) -short -v $(TESTARGS) -timeout 40m
+	bin/gotesplit -total=10 -index=9 -- $(TEST) -short -v $(TESTARGS) -timeout 40m
 
 testacc-cover: get
 	@echo "Running tests with coverage"
