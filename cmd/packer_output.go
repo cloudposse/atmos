@@ -11,8 +11,8 @@ var (
 
 Example usage:
   atmos packer output <component> -s <stack>
-  atmos packer output <component> -s <stack> --output <output>
-  atmos packer output <component> --stack <stack> --build <build-id> --output <output>
+  atmos packer output <component> -s <stack> --query <yq-expression>
+  atmos packer output <component> --stack <stack> --query <yq-expression>
 `
 )
 
@@ -29,8 +29,7 @@ var packerOutputCmd = &cobra.Command{
 }
 
 func init() {
-	packerOutputCmd.PersistentFlags().String("build", "", "The name of the build from which to get the output (e.g., al2023)")
-	packerOutputCmd.PersistentFlags().String("output", "", "The name of the output to get (e.g., artifact_id)")
+	packerOutputCmd.PersistentFlags().String("query", "", "YQ expression to read the output from the manifest")
 
 	packerCmd.AddCommand(packerOutputCmd)
 }
