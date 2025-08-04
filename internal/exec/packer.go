@@ -14,8 +14,17 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// PackerFlags type represents Packer command-line flags.
+type PackerFlags struct {
+	Template string
+	Query    string
+}
+
 // ExecutePacker executes Packer commands.
-func ExecutePacker(info schema.ConfigAndStacksInfo, template string) error {
+func ExecutePacker(
+	info schema.ConfigAndStacksInfo,
+	packerFlags PackerFlags,
+) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
@@ -88,6 +97,7 @@ func ExecutePacker(info schema.ConfigAndStacksInfo, template string) error {
 	// Find Packer template.
 	// It can be specified in the `settings.packer.template` section in the Atmos component manifest,
 	// or on the command line via the flag `--template <template> (shorthand `-t`)`.
+	template := packerFlags.Template
 	if template == "" {
 		packerSettingTemplate, err := GetPackerTemplateFromSettings(&info.ComponentSettingsSection)
 		if err != nil {

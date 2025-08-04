@@ -39,6 +39,16 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 		return err
 	}
 
-	err = e.ExecutePacker(info, template)
+	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
+	packerFlags := e.PackerFlags{
+		Template: template,
+		Query:    query,
+	}
+
+	err = e.ExecutePacker(info, packerFlags)
 	return err
 }
