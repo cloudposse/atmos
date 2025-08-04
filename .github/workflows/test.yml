@@ -208,7 +208,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |-
           curl -sfL https://raw.githubusercontent.com/Songmu/gotesplit/main/install.sh | sh -s
-          make testacc-split
+          make testacc
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'
