@@ -532,7 +532,10 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	os.Stderr = w
 
 	log.SetLevel(log.DebugLevel)
-	log.SetOutput(w)
+
+	// Create a buffer to capture the output
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
 
 	err := ExecuteTerraform(info)
 	if err != nil {
@@ -545,7 +548,6 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	os.Stderr = oldStderr
 
 	// Read the captured output
-	var buf bytes.Buffer
 	_, err = buf.ReadFrom(r)
 	if err != nil {
 		t.Fatalf("Failed to read from pipe: %v", err)
