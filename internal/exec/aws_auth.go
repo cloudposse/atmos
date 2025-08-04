@@ -125,8 +125,6 @@ func ExecuteAwsAuth(alias string, config schema.AwsAuthConfig) error {
 		RoleName:    aws.String(config.AutoLoginRole),
 	})
 
-	log.Info("✅ Logged in! Role credentials acquired.", "roleCredentials", roleCredentials.RoleCredentials, "ResultMetadata", roleCredentials.ResultMetadata)
-
 	// Resolve home directory
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
