@@ -934,26 +934,16 @@ type ListColumnConfig struct {
 }
 
 type AuthConfig struct {
-	Aws map[string]AwsAuthConfig `yaml:"aws" json:"aws" mapstructure:"aws"`
+	Identities    map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
+	DefaultRegion string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
 }
-type AuthMethod string
 
-const (
-	MethodSSO  AuthMethod = "sso"
-	MethodSAML AuthMethod = "saml"
-)
+type IdentityDefaultConfig struct {
+	Alias string // To be set by the key in `identities`
 
-// AwsAuthConfig is a generic struct that supports both SSO and SAML methods.
-type AwsAuthConfig struct {
-	Method  AuthMethod `yaml:"method" json:"method" mapstructure:"method"`
-	Region  string     `yaml:"region" json:"region" mapstructure:"region"`
-	Profile string     `yaml:"profile" json:"profile" mapstructure:"profile"`
-	// SSO
-	StartUrl         string `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url,omitempty"`
-	AutoLoginAccount string `yaml:"auto_login_account,omitempty" json:"auto_login_account,omitempty" mapstructure:"auto_login_account,omitempty"`
-	AutoLoginRole    string `yaml:"auto_login_role,omitempty" json:"auto_login_role,omitempty" mapstructure:"auto_login_role,omitempty"`
-	// SAML
-	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
-	IdpArn  string `yaml:"idp_arn,omitempty" json:"idp_arn,omitempty" mapstructure:"idp_arn,omitempty"`
-	SamlUrl string `yaml:"saml_url,omitempty" json:"saml_url,omitempty" mapstructure:"saml_url,omitempty"`
+	Default bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
+	Enabled bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
+	Type    string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
+	Profile string `yaml:"profile,omitempty" json:"profile,omitempty" mapstructure:"profile,omitempty"`
+	Region  string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
 }

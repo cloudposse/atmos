@@ -1,0 +1,71 @@
+package auth
+
+import (
+	"errors"
+	"fmt"
+	l "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"gopkg.in/yaml.v3"
+)
+
+// TODO decide if we want to use this map of functions or a switch statement.
+var identityRegistry = map[string]func() LoginMethod{
+	"aws/iam-identity-center": func() LoginMethod { return &awsIamIdentityCenter{} },
+	//"oidc":                    func() LoginMethod { return &awsSaml{} },
+	"aws/saml": func() LoginMethod { return &awsSaml{} },
+}
+
+func GetType(identity string, config schema.AuthConfig) (string, error) {
+	for k, _ := range config.Identities {
+		if k == identity {
+			rawBytes, err := yaml.Marshal(config.Identities[k])
+			if err != nil {
+				l.Errorf("failed to marshal identity %q: %w", k, err)
+				return "", err
+			}
+
+			identityConfig := &schema.IdentityDefaultConfig{}
+			if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
+				l.Errorf("failed to unmarshal identity %q: %w", k, err)
+				return "", err
+			}
+			return identityConfig.Type, nil
+		}
+	}
+	return "", fmt.Errorf("identity %q not found", identity)
+}
+
+func GetIdentityInstance(identity string, config schema.AuthConfig) (LoginMethod, error) {
+	typeVal, err := GetType(identity, config)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO see above decision
+	switch typeVal {
+	case "aws/iam-identity-center":
+		var data = &awsIamIdentityCenter{}
+		b, err := yaml.Marshal(config.Identities[identity])
+		if err != nil {
+			return nil, err
+		}
+		err = yaml.Unmarshal(b, data)
+		data.Alias = identity
+		if data.Region == "" {
+			data.Region = config.DefaultRegion
+		}
+		return data, err
+	case "aws/saml":
+		var data = &awsSaml{}
+		b, err := yaml.Marshal(config.Identities[identity])
+		if err != nil {
+			return nil, err
+		}
+		err = yaml.Unmarshal(b, data)
+		data.Alias = identity
+		return data, err
+	}
+
+	l.Error("unsupported identity type", "type", typeVal, "identity", identity)
+	return nil, errors.New("unsupported identity type")
+}
