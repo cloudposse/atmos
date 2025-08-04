@@ -184,30 +184,12 @@ jobs:
       #        ]
       #       }
 
-      - uses: aquaproj/aqua-installer@d1fe50798dbadd4eb5b98957290ca175f6b4870f # v4.0.2
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        with:
-          aqua_version: v2.43.1
-
-      # - name: Install aqua
-      #   if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-      #   run: |
-      #     aqua g -i Songmu/gotesplit
-
-      - name: Acceptance tests with coverage
+      - name: Acceptance tests
         timeout-minutes: 30
-        if: matrix.flavor.target == 'linux'
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-cover
-
-      - name: Acceptance tests
-        timeout-minutes: 30
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) && ( matrix.flavor.target != 'linux' ) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |-
-          make testacc
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'
