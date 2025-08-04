@@ -38,7 +38,6 @@ func TestExecuteAtlantisGenerateRepoConfigWithStackNameTemplate(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
-	// t.Skip("Skipping test in short mode")
 	stacksPath := "../../tests/fixtures/scenarios/atlantis-generate-repo-config"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
