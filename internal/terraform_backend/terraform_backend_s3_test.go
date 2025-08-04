@@ -18,7 +18,6 @@ import (
 )
 
 func TestReadTerraformBackendS3_InvalidConfig(t *testing.T) {
-	// t.Skip("Skipping test in short mode")
 	tests := []struct {
 		name          string
 		componentData map[string]any
@@ -175,7 +174,6 @@ func (m *erroringS3Client) GetObject(ctx context.Context, input *s3.GetObjectInp
 }
 
 func Test_ReadTerraformBackendS3Internal_Errors(t *testing.T) {
-	t.Skip("Skipping test in short mode")
 	tests := []struct {
 		name            string
 		client          *erroringS3Client
