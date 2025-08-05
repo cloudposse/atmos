@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // packerCmd represents the base command for all Packer sub-commands.
@@ -50,7 +51,12 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 	}
 
 	if commandName == "output" {
-		return e.ExecutePackerOutput(&info)
+		d, err := e.ExecutePackerOutput(&info, &packerFlags)
+		if err != nil {
+			return err
+		}
+		err = u.PrintAsYAML(&atmosConfig, d)
+		return err
 	}
 
 	return e.ExecutePacker(&info, &packerFlags)

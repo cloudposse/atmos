@@ -13,6 +13,9 @@ Example usage:
   atmos packer output <component> -s <stack>
   atmos packer output <component> -s <stack> --q <yq-expression>
   atmos packer output <component> --stack <stack> --query <yq-expression>
+  atmos packer output <component> --stack <stack> --query '.builds[0]'
+  atmos packer output <component> --stack <stack> --query '.builds[0].artifact_id'
+  atmos packer output <component> --stack <stack> --query '.builds[0].artifact_id | split(":")[1]'
 `
 )
 
