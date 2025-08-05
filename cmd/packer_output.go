@@ -7,11 +7,11 @@ import (
 // Command: `atmos packer output`.
 var (
 	packerOutputShort = "Get an output from a Packer manifest."
-	packerOutputLong  = `The command is used to get an output for a build from a Packer manifest.
+	packerOutputLong  = `The command is used to get an output from a Packer manifest.
 
 Example usage:
   atmos packer output <component> -s <stack>
-  atmos packer output <component> -s <stack> --query <yq-expression>
+  atmos packer output <component> -s <stack> --q <yq-expression>
   atmos packer output <component> --stack <stack> --query <yq-expression>
 `
 )
@@ -29,7 +29,7 @@ var packerOutputCmd = &cobra.Command{
 }
 
 func init() {
-	packerOutputCmd.PersistentFlags().String("query", "", "YQ expression to read an output from the Packer manifest")
+	packerOutputCmd.PersistentFlags().StringP("query", "q", "", "YQ expression to read an output from the Packer manifest")
 
 	packerCmd.AddCommand(packerOutputCmd)
 }

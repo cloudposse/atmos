@@ -73,3 +73,61 @@ func TestGetPackerTemplateFromSettings(t *testing.T) {
 		})
 	}
 }
+
+func TestGetPackerManifestFromVars(t *testing.T) {
+	tests := []struct {
+		name    string
+		vars    *schema.AtmosSectionMapType
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "valid manifest file name",
+			vars: &schema.AtmosSectionMapType{
+				"manifest_file_name": "manifest.json",
+			},
+			want:    "manifest.json",
+			wantErr: false,
+		},
+		{
+			name:    "nil vars",
+			vars:    nil,
+			want:    "",
+			wantErr: false,
+		},
+		{
+			name:    "empty vars map",
+			vars:    &schema.AtmosSectionMapType{},
+			want:    "",
+			wantErr: false,
+		},
+		{
+			name: "manifest file name not string",
+			vars: &schema.AtmosSectionMapType{
+				"manifest_file_name": 123,
+			},
+			want:    "",
+			wantErr: false,
+		},
+		{
+			name: "different key present",
+			vars: &schema.AtmosSectionMapType{
+				"other_key": "manifest.json",
+			},
+			want:    "",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GetPackerManifestFromVars(tt.vars)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

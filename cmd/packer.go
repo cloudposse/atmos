@@ -49,6 +49,9 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 		Query:    query,
 	}
 
-	err = e.ExecutePacker(info, packerFlags)
-	return err
+	if commandName == "output" {
+		return e.ExecutePackerOutput(&info)
+	}
+
+	return e.ExecutePacker(&info, &packerFlags)
 }

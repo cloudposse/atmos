@@ -10,6 +10,7 @@ func GetPackerTemplateFromSettings(settings *schema.AtmosSectionMapType) (string
 	if settings == nil {
 		return "", nil
 	}
+
 	var packerSection schema.AtmosSectionMapType
 	var packerTemplate string
 	var ok bool
@@ -21,4 +22,19 @@ func GetPackerTemplateFromSettings(settings *schema.AtmosSectionMapType) (string
 		return "", nil
 	}
 	return packerTemplate, nil
+}
+
+// GetPackerManifestFromVars returns the Packer manifest filename from the `vars.manifest_file_name`.
+func GetPackerManifestFromVars(vars *schema.AtmosSectionMapType) (string, error) {
+	if vars == nil {
+		return "", nil
+	}
+
+	var packerManifest string
+	var ok bool
+
+	if packerManifest, ok = (*vars)["manifest_file_name"].(string); !ok {
+		return "", nil
+	}
+	return packerManifest, nil
 }

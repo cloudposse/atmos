@@ -22,10 +22,10 @@ type PackerFlags struct {
 
 // ExecutePacker executes Packer commands.
 func ExecutePacker(
-	info schema.ConfigAndStacksInfo,
-	packerFlags PackerFlags,
+	info *schema.ConfigAndStacksInfo,
+	packerFlags *PackerFlags,
 ) error {
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func ExecutePacker(
 		)
 	}
 
-	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil)
+	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil)
 	if err != nil {
 		return err
 	}
@@ -116,8 +116,8 @@ func ExecutePacker(
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
 	// Write variables to a file
-	varFile := constructPackerComponentVarfileName(&info)
-	varFilePath := constructPackerComponentVarfilePath(&atmosConfig, &info)
+	varFile := constructPackerComponentVarfileName(info)
+	varFilePath := constructPackerComponentVarfilePath(&atmosConfig, info)
 
 	log.Debug("Writing the variables to file:", "file", varFilePath)
 
@@ -133,7 +133,7 @@ func ExecutePacker(
 		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
 
-	workingDir := constructPackerComponentWorkingDir(&atmosConfig, &info)
+	workingDir := constructPackerComponentWorkingDir(&atmosConfig, info)
 
 	log.Debug("Packer context",
 		"executable", info.Command,
