@@ -7,6 +7,9 @@ import (
 
 // GetPackerTemplateFromSettings returns a Packer template name from the `settings.packer.template` section in the Atmos component manifest.
 func GetPackerTemplateFromSettings(settings *schema.AtmosSectionMapType) (string, error) {
+	if settings == nil {
+		return "", nil
+	}
 	var packerSection schema.AtmosSectionMapType
 	var packerTemplate string
 	var ok bool
