@@ -26,7 +26,6 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	if Identities == nil {
 		log.Fatal("no auth identities found")
 	}
-	//log.Info("Identities Config", "auth", Identities)
 
 	// Get Identity or prompt for one
 	identity, err := flags.GetString("identity")
@@ -34,10 +33,16 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if identity == "" {
-		identity, err = pickIdentity(atmosConfig.Auth)
-		if err != nil {
-			return err
+		identity, _ = GetDefaultIdentity(atmosConfig.Auth)
+		if identity != "" {
+			log.Info("Using default identity", "identity", identity)
+		} else {
+			identity, err = pickIdentity(atmosConfig.Auth)
+			if err != nil {
+				return err
+			}
 		}
+
 	}
 	IdentityInstance, err := GetIdentityInstance(identity, atmosConfig.Auth)
 	if err != nil {
@@ -64,9 +69,7 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 // an identity, and the chosen identity is returned.
 //
 // If the user cancels the picker, an error is returned.
-// func pickIdentity(Identities map[string]schema.IdentityDefaultConfig) (string, error) {
 func pickIdentity(AuthConfig schema.AuthConfig) (string, error) {
-	//func pickIdentity(Identities map[string]interface{}) (string, error) {
 	// Simple Picker
 	items := []string{}
 	for k, _ := range AuthConfig.Identities {
