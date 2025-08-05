@@ -210,6 +210,14 @@ func TestCiProvider(t *testing.T) {
 			},
 			expectedResult: "GITHUB_ACTIONS", // Should return the first one in the map iteration order.
 		},
+		// Test Spacelift CI
+		{
+			name: "SPACELIFT",
+			envVars: map[string]string{
+				"TF_VAR_spacelift_run_id": "12345",
+			},
+			expectedResult: "SPACELIFT",
+		},
 	}
 
 	for _, tc := range testCases {

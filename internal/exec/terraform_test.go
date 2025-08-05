@@ -511,27 +511,10 @@ func TestExecuteTerraform_Version(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
-	os.Unsetenv("ATMOS_BASE_PATH")
-	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
-	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/terraform-cloud"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	t.Setenv("ATMOS_BASE_PATH", workDir)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
@@ -549,9 +532,12 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	os.Stderr = w
 
 	log.SetLevel(log.DebugLevel)
-	log.SetOutput(w)
 
-	err = ExecuteTerraform(info)
+	// Create a buffer to capture the output
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+
+	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
@@ -562,7 +548,6 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	os.Stderr = oldStderr
 
 	// Read the captured output
-	var buf bytes.Buffer
 	_, err = buf.ReadFrom(r)
 	if err != nil {
 		t.Fatalf("Failed to read from pipe: %v", err)
