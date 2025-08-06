@@ -1,9 +1,10 @@
 package exec
 
 import (
-	"github.com/cloudposse/atmos/pkg/config"
 	"os"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/config"
 
 	log "github.com/charmbracelet/log"
 	"github.com/golang/mock/gomock"
