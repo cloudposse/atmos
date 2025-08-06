@@ -594,7 +594,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 	}, nil
 }
 
-// generateComponentProviderOverrides generates provider overrides for components
+// generateComponentProviderOverrides generates provider overrides for components.
 func generateComponentProviderOverrides(providerOverrides map[string]any) map[string]any {
 	return map[string]any{
 		"provider": providerOverrides,
