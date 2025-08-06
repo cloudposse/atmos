@@ -1,6 +1,6 @@
 {
-  "label": "pro",
-  "position": 8,
+  "label": "packer",
+  "position": 7,
   "className": "command",
   "collapsible": true,
   "collapsed": true,
