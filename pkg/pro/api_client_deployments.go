@@ -3,7 +3,6 @@ package pro
 import (
 	"bytes"
 	"fmt"
-	"net/http"
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -35,8 +34,8 @@ func (c *AtmosProAPIClient) UploadDeployments(dto *dtos.DeploymentsUploadRequest
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDeploymentStatus, resp.Status)
+	if err := handleAPIResponse(resp, "UploadDeployments"); err != nil {
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDeploymentStatus, err)
 	}
 	log.Debug(fmt.Sprintf("\nUploaded deployments to %s", url))
 

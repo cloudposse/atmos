@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -32,8 +31,8 @@ func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUpl
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDeploymentStatus, resp.Status)
+	if err := handleAPIResponse(resp, "UploadDeploymentStatus"); err != nil {
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDeploymentStatus, err)
 	}
 
 	log.Debug(fmt.Sprintf("\nUploaded deployment status at %s", url))
