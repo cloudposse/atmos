@@ -99,6 +99,7 @@ func ProcessStackConfig(
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
+		"",
 		stack,
 		config,
 		processStackDeps,
