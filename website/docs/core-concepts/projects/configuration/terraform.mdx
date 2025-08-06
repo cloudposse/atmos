@@ -4,12 +4,14 @@ sidebar_position: 1
 sidebar_label: Configure Terraform
 id: terraform
 ---
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Atmos natively supports opinionated workflows for [Terraform](https://www.terraform.io/) and [OpenTofu](/core-concepts/projects/configuration/opentofu).
 It's compatible with every version of terraform and designed to work with multiple different versions of Terraform
 concurrently.
+<img width="170" align="right" src={useBaseUrl('/img/hashicorp-terraform.svg')} alt="Terraform"/>
 </Intro>
 
 Keep in mind that Atmos does not handle the downloading or installation of Terraform; it assumes that any
