@@ -45,11 +45,10 @@ func TestReadTerraformBackendGCS_InvalidConfig(t *testing.T) {
 		},
 	}
 
+	// Create a mock client that should never be called due to validation errors
+	mockClient := &mockGCSClient{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock client that should never be called due to validation errors
-			mockClient := &mockGCSClient{}
-
 			result, err := tb.ReadTerraformBackendGCSInternal(mockClient, &tt.componentData, &tt.gcsBackend)
 
 			if tt.wantErr {
@@ -123,7 +122,7 @@ func (o *mockGCSObjectHandle) NewReader(ctx context.Context) (io.ReadCloser, err
 	return nil, status.Error(codes.NotFound, "object not found")
 }
 
-func Test_ReadTerraformBackendGCSInternal(t *testing.T) {
+func TestReadTerraformBackendGCSInternal(t *testing.T) {
 	componentSections := map[string]any{
 		"workspace": "test-workspace",
 	}
@@ -344,9 +343,7 @@ func TestGetGCSBackendCredentials(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tb.GetGCSBackendCredentials(&tt.backend)
-			if got != tt.expected {
-				t.Errorf("GetGCSBackendCredentials() = %v, want %v", got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got, "GetGCSBackendCredentials() should return expected value")
 		})
 	}
 }
@@ -381,9 +378,7 @@ func TestGetGCSBackendImpersonateServiceAccount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tb.GetGCSBackendImpersonateServiceAccount(&tt.backend)
-			if got != tt.expected {
-				t.Errorf("GetGCSBackendImpersonateServiceAccount() = %v, want %v", got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got, "GetGCSBackendImpersonateServiceAccount() should return expected value")
 		})
 	}
 }
@@ -434,11 +429,11 @@ func TestGCSRetryLogic(t *testing.T) {
 				assert.Contains(t, err.Error(), tt.expectedErrSub)
 			}
 
-					if tt.expectedNilBody {
-			assert.Nil(t, content)
-		} else {
-			assert.NotNil(t, content)
-		}
+			if tt.expectedNilBody {
+				assert.Nil(t, content)
+			} else {
+				assert.NotNil(t, content)
+			}
 		})
 	}
 }

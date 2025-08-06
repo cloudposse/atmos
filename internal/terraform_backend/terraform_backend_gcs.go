@@ -2,6 +2,8 @@ package terraform_backend
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"path"
@@ -87,8 +89,10 @@ func getCachedGCSClient(backend *map[string]any) (GCSClient, error) {
 	impersonateServiceAccount := GetGCSBackendImpersonateServiceAccount(backend)
 
 	// Build a deterministic cache key (hash credentials to avoid exposing sensitive data in cache key)
-	cacheKey := fmt.Sprintf("credentials_hash=%d;impersonate=%s", 
-		len(credentials), // Simple hash based on length - not cryptographic but sufficient for caching
+	// Create a proper hash to avoid collisions
+	h := sha256.Sum256([]byte(credentials))
+	cacheKey := fmt.Sprintf("credentials_hash=%s;impersonate=%s",
+		hex.EncodeToString(h[:8]), // Use first 8 bytes for brevity
 		impersonateServiceAccount)
 
 	// Check the cache
@@ -202,12 +206,12 @@ func ReadTerraformBackendGCSInternal(
 	for attempt := 0; attempt <= maxGCSRetryCount; attempt++ {
 		// 30 sec timeout to read the state file from the GCS bucket.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
 
 		// Get the object from GCS
 		objectHandle := gcsClient.Bucket(bucket).Object(tfStateFilePath)
 		reader, err := objectHandle.NewReader(ctx)
 		if err != nil {
+			cancel() // Cancel immediately after use
 			// Check if the error is because the object doesn't exist
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error
 			if status.Code(err) == codes.NotFound {
@@ -226,6 +230,7 @@ func ReadTerraformBackendGCSInternal(
 
 		content, err := io.ReadAll(reader)
 		_ = reader.Close() // Explicit close instead of defer
+		cancel() // Cancel immediately after use
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadGCSObjectBody, err)
 		}
