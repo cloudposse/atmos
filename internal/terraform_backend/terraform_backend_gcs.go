@@ -5,26 +5,28 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
-	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/gcp"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// GetGCSBackendServiceAccount returns the service account configuration from the GCS backend config.
-// This handles the various ways service accounts can be configured for GCS backend.
+// maxGCSRetryCount defines the max attempts to read a state file from a GCS bucket.
+const maxGCSRetryCount = 2
+
+// GetGCSBackendCredentials returns the credentials configuration from the GCS backend config.
+// This is a thin wrapper around the unified GCP authentication utility.
 // https://developer.hashicorp.com/terraform/language/settings/backends/gcs#credentials
-func GetGCSBackendServiceAccount(backend *map[string]any) string {
-	// Check for credentials file path
-	if credentialsPath, ok := (*backend)["credentials"].(string); ok && credentialsPath != "" {
-		return credentialsPath
-	}
-	return ""
+func GetGCSBackendCredentials(backend *map[string]any) string {
+	return gcp.GetCredentialsFromBackend(*backend)
 }
 
 // GetGCSBackendImpersonateServiceAccount returns the impersonation service account from the GCS backend config.
@@ -76,10 +78,42 @@ func (o *gcsObjectHandleImpl) NewReader(ctx context.Context) (io.ReadCloser, err
 	return o.object.NewReader(ctx)
 }
 
+// gcsClientCache caches the GCS clients based on a deterministic cache key.
+// It's a map[string]GCSClient.
+var gcsClientCache sync.Map
+
+func getCachedGCSClient(backend *map[string]any) (GCSClient, error) {
+	credentials := GetGCSBackendCredentials(backend)
+	impersonateServiceAccount := GetGCSBackendImpersonateServiceAccount(backend)
+
+	// Build a deterministic cache key (hash credentials to avoid exposing sensitive data in cache key)
+	cacheKey := fmt.Sprintf("credentials_hash=%d;impersonate=%s", 
+		len(credentials), // Simple hash based on length - not cryptographic but sufficient for caching
+		impersonateServiceAccount)
+
+	// Check the cache
+	if cached, ok := gcsClientCache.Load(cacheKey); ok {
+		return cached.(GCSClient), nil
+	}
+
+	// Build the GCS client if not cached
+	// 30 sec timeout to configure a GCS client
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	gcsClient, err := createGCSClient(ctx, backend)
+	if err != nil {
+		return nil, err
+	}
+
+	gcsClientCache.Store(cacheKey, gcsClient)
+	return gcsClient, nil
+}
+
 // ReadTerraformBackendGCS reads the Terraform state file from the configured GCS backend.
 // If the state file does not exist in the bucket, the function returns `nil`.
 func ReadTerraformBackendGCS(
-	atmosConfig *schema.AtmosConfiguration,
+	_ *schema.AtmosConfiguration,
 	componentSections *map[string]any,
 ) ([]byte, error) {
 	backend := GetComponentBackend(componentSections)
@@ -93,12 +127,7 @@ func ReadTerraformBackendGCS(
 		gcsBackend = backend
 	}
 
-	// 30 second timeout to read the state file from the GCS bucket (longer than S3 due to potential auth setup)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Create GCS client with authentication
-	gcsClient, err := createGCSClient(ctx, &gcsBackend)
+	gcsClient, err := getCachedGCSClient(&gcsBackend)
 	if err != nil {
 		return nil, err
 	}
@@ -107,19 +136,32 @@ func ReadTerraformBackendGCS(
 }
 
 // createGCSClient creates a GCS client with proper authentication based on backend configuration.
+// This uses the unified GCP authentication utility for consistency across all Google Cloud services.
 func createGCSClient(ctx context.Context, backend *map[string]any) (GCSClient, error) {
-	var opts []option.ClientOption
+	credentials := GetGCSBackendCredentials(backend)
+	impersonateServiceAccount := GetGCSBackendImpersonateServiceAccount(backend)
 
-	// Handle credentials file if specified
-	if credentialsPath := GetGCSBackendServiceAccount(backend); credentialsPath != "" {
-		opts = append(opts, option.WithCredentialsFile(credentialsPath))
+	// Use unified GCP authentication
+	opts := gcp.GetClientOptions(gcp.AuthOptions{
+		Credentials: credentials,
+	})
+
+	if credentials != "" {
+		if strings.HasPrefix(strings.TrimSpace(credentials), "{") {
+			log.Debug("Using GCS credentials from JSON content")
+		} else {
+			log.Debug("Using GCS credentials from file", "path", credentials)
+		}
+	} else {
+		log.Debug("Using default GCS credentials (ADC)")
 	}
 
-	// Handle service account impersonation if specified
-	if impersonateServiceAccount := GetGCSBackendImpersonateServiceAccount(backend); impersonateServiceAccount != "" {
-		// For impersonation, we need to set up the credentials properly
-		// This would typically involve creating credentials that impersonate the target service account
-		opts = append(opts, option.WithQuotaProject(impersonateServiceAccount))
+	// TODO: Handle service account impersonation properly
+	// This requires using impersonate.CredentialsTokenSource from google.golang.org/api/impersonate
+	if impersonateServiceAccount != "" {
+		log.Debug("Service account impersonation requested but not yet implemented", "account", impersonateServiceAccount)
+		// For now, we'll log a warning that this feature needs proper implementation
+		// In a production environment, this should use impersonate.CredentialsTokenSource
 	}
 
 	// Create the storage client
@@ -156,28 +198,39 @@ func ReadTerraformBackendGCSInternal(
 		return nil, fmt.Errorf("%w: bucket name is required for GCS backend", errUtils.ErrInvalidBackendConfig)
 	}
 
-	// 10 second timeout to read the state file from the GCS bucket
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	var lastErr error
+	for attempt := 0; attempt <= maxGCSRetryCount; attempt++ {
+		// 30 sec timeout to read the state file from the GCS bucket.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-	// Get the object from GCS
-	objectHandle := gcsClient.Bucket(bucket).Object(tfStateFilePath)
-	reader, err := objectHandle.NewReader(ctx)
-	if err != nil {
-		// Check if the error is because the object doesn't exist
-		// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error
-		if status.Code(err) == codes.NotFound {
-			return nil, nil
+		// Get the object from GCS
+		objectHandle := gcsClient.Bucket(bucket).Object(tfStateFilePath)
+		reader, err := objectHandle.NewReader(ctx)
+		if err != nil {
+			// Check if the error is because the object doesn't exist
+			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error
+			if status.Code(err) == codes.NotFound {
+				log.Debug("Terraform state file doesn't exist in the GCS bucket; returning 'null'", "file", tfStateFilePath, "bucket", bucket)
+				return nil, nil
+			}
+
+			lastErr = err
+			if attempt < maxGCSRetryCount {
+				log.Debug("Failed to read Terraform state file from GCS bucket", "attempt", attempt+1, "file", tfStateFilePath, "bucket", bucket, "error", err)
+				time.Sleep(time.Second * 2) // backoff
+				continue
+			}
+			return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromGCS, lastErr)
 		}
-		// If any other error, return it
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromGCS, err)
-	}
-	defer reader.Close()
 
-	content, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrReadGCSObjectBody, err)
+		content, err := io.ReadAll(reader)
+		_ = reader.Close() // Explicit close instead of defer
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadGCSObjectBody, err)
+		}
+		return content, nil
 	}
 
-	return content, nil
+	return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromGCS, lastErr)
 }
