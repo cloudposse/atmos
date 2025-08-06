@@ -1,8 +1,8 @@
 ---
-title: atmos packer validate
-sidebar_label: validate
+title: atmos packer init
+sidebar_label: init
 sidebar_class_name: command
-id: validate
+id: init
 ---
 
 import File from '@site/src/components/File'
@@ -12,19 +12,19 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 <img width="80" align="right" src={useBaseUrl('/img/hashicorp-packer.svg')} alt="Packer"/>
 
 :::note purpose
-Use this command to validate the syntax and configuration of a Packer template configured for an Atmos component in a stack.
+Use this command to initialize Packer and install plugins according to an HCL template configuration for an Atmos component in a stack.
 :::
 
 ## Usage
 
-Execute the `packer validate` command like this:
+Execute the `packer init` command like this:
 
 ```shell
-atmos packer validate <component> --stack <stack> [flags] -- [packer-options]
+atmos packer init <component> --stack <stack> [flags] -- [packer-options]
 ```
 
 :::tip
-For more details on the `packer validate` command and options, refer to [Packer validate command reference](https://developer.hashicorp.com/packer/docs/commands/validate).
+For more details on the `packer init` command and options, refer to [Packer init command reference](https://developer.hashicorp.com/packer/docs/commands/init).
 :::
 
 ## Arguments
@@ -57,8 +57,16 @@ For more details on the `packer validate` command and options, refer to [Packer 
 
 <Terminal>
 ```shell
-atmos packer validate aws/bastion --stack prod
-atmos packer validate aws/bastion -s prod --template main.pkr.hcl
-atmos packer validate aws/bastion -s nonprod -t main.nonprod.pkr.hcl
+atmos packer init aws/bastion --stack nonprod
+atmos packer init aws/bastion -s prod --template main.pkr.hcl
+atmos packer init aws/bastion -s nonprod -t main.nonprod.pkr.hcl
+```
+</Terminal>
+
+<Terminal title="atmos packer init aws/bastion --stack nonprod">
+```shell
+> atmos packer init aws/bastion --stack nonprod
+
+Installed plugin github.com/hashicorp/amazon v1.3.9 in "~/.config/packer/plugins/github.com/hashicorp/amazon/packer-plugin-amazon_v1.3.9_x5.0_darwin_arm64"
 ```
 </Terminal>
