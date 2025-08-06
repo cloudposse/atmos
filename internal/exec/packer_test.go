@@ -30,13 +30,12 @@ func TestExecutePacker_Validate(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	packerFlags := PackerFlags{}
-
 	oldStd := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
 	log.SetOutput(w)
+	packerFlags := PackerFlags{}
 
 	err := ExecutePacker(&info, &packerFlags)
 	assert.NoError(t, err)
@@ -79,13 +78,12 @@ func TestExecutePacker_Inspect(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	packerFlags := PackerFlags{}
-
 	oldStd := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
 	log.SetOutput(w)
+	packerFlags := PackerFlags{}
 
 	err := ExecutePacker(&info, &packerFlags)
 	assert.NoError(t, err)
@@ -122,13 +120,12 @@ func TestExecutePacker_Version(t *testing.T) {
 		SubCommand:    "version",
 	}
 
-	packerFlags := PackerFlags{}
-
 	oldStd := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
 	log.SetOutput(w)
+	packerFlags := PackerFlags{}
 
 	err := ExecutePacker(&info, &packerFlags)
 	assert.NoError(t, err)
