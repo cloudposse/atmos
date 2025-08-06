@@ -7,6 +7,8 @@ id: packer
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import KeyPoints from '@site/src/components/KeyPoints'
 import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
 
 <Intro>
 Atmos natively supports [HashiCorp Packer](https://developer.hashicorp.com/packer) and lets you create identical
@@ -24,8 +26,9 @@ It's compatible with every version of Packer and designed to work with multiple 
 Keep in mind that Atmos does not handle the downloading or installation
 of Packer; it assumes that any required binaries for the commands are already installed on your system.
 
-## CLI Configuration
+## CLI Configuration (`atmos.yaml`)
 
+<File title="atmos.yaml">
 ```yaml
 components:
   packer:
@@ -35,6 +38,7 @@ components:
     # Supports both absolute and relative paths
     base_path: "components/packer"
 ```
+</File>
 
 <dl>
     <dt>`components.packer.command`</dt>
@@ -57,6 +61,7 @@ While defaults for everything are defined in the `atmos.yaml`, the same settings
 
 For instance, you can modify the command executed for a specific component by overriding the `command` parameter.
 
+<File title="atmos.yaml">
 ```yaml
 components:
   packer:
@@ -64,11 +69,13 @@ components:
       # Use Packer v1.14.1 to provision the `bastion` component
       command: "/usr/local/bin/packer-1.14.1"
 ```
+</File>
 
 ## Example: Configure and Provision a Packer Component with Atmos
 
 ### Configure Packer in `atmos.yaml`
 
+<File title="atmos.yaml">
 ```yaml
 base_path: "./"
 
@@ -107,9 +114,11 @@ templates:
       # https://docs.gomplate.ca/datasources
       datasources: {}
 ```
+</File>
 
 ### Add Packer template (Packer component)
 
+<File title="components/packer/aws/bastion/main.pkr.hcl">
 ```hcl
 # https://developer.hashicorp.com/packer/docs/templates/hcl_templates/blocks/source
 # https://developer.hashicorp.com/packer/integrations/hashicorp/amazon/latest/components/builder/ebs
@@ -309,9 +318,11 @@ build {
   }
 }
 ```
+</File>
 
 ### Configure defaults for the Packer component in the `catalog`
 
+<File title="stacks/catalog/aws/bastion/defaults.yaml">
 ```yaml
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
@@ -367,9 +378,11 @@ components:
           SourceAMIOwnerAccountId: "{{ .settings.packer.source_ami_owner_account_id }}"
           ScanStatus: pending
 ```
+</File>
 
-### Define Atmos `prod` and `nonprod` stacks
+### Define Atmos `nonprod` and `prod` stacks
 
+<File title="stacks/deploy/nonprod.yaml">
 ```yaml
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
@@ -390,7 +403,9 @@ components:
         ami_tags:
           Stage: nonprod
 ```
+</File>
 
+<File title="stacks/deploy/prod.yaml">
 ```yaml
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
@@ -411,15 +426,19 @@ components:
         ami_tags:
           Stage: prod
 ```
+</File>
 
 ### Execute Atmos Packer commands
 
+<Terminal title="atmos packer version">
 ```shell
 > atmos packer version
 
 Packer v1.14.1
 ```
+</Terminal>
 
+<Terminal title="atmos packer validate aws/bastion -s nonprod">
 ```shell
 # https://developer.hashicorp.com/packer/docs/commands/validate
 
@@ -427,7 +446,9 @@ Packer v1.14.1
 
 The configuration is valid.
 ```
+</Terminal>
 
+<Terminal title="atmos packer inspect aws/bastion -s nonprod">
 ```shell
 # https://developer.hashicorp.com/packer/docs/commands/inspect
 
@@ -477,7 +498,9 @@ var.volume_type: "gp3"
       0:
         manifest
 ```
+</Terminal>
 
+<Terminal title="atmos packer init aws/bastion -s nonprod">
 ```shell
 # https://developer.hashicorp.com/packer/docs/commands/init
 
@@ -485,7 +508,9 @@ var.volume_type: "gp3"
 
 Installed plugin github.com/hashicorp/amazon v1.3.9 in "~/.config/packer/plugins/github.com/hashicorp/amazon/packer-plugin-amazon_v1.3.9_x5.0_darwin_arm64"
 ```
+</Terminal>
 
+<Terminal title="atmos packer build aws/bastion -s nonprod">
 ```shell
 # https://developer.hashicorp.com/packer/docs/commands/build
 
@@ -557,7 +582,9 @@ us-east-2: ami-0b2b3b68aa3c5ada8
 --> amazon-ebs.al2023: AMIs were created:
 us-east-2: ami-0b2b3b68aa3c5ada8
 ```
+</Terminal>
 
+<Terminal title="atmos packer output aws/bastion -s nonprod">
 ```shell
 # `atmos packer output` command is specific to Atmos (Packer itself does not have an `output` command)
 # The command is used to get an output from a Packer manifest
@@ -582,7 +609,9 @@ builds:
     packer_run_uuid: a57874d1-c478-63d7-cfde-9d91e513eb9a
 last_run_uuid: a57874d1-c478-63d7-cfde-9d91e513eb9a
 ```
+</Terminal>
 
+<Terminal title="atmos packer output aws/bastion -s nonprod --query '.builds[0].artifact_id'">
 ```shell
 # `atmos packer output` command is specific to Atmos (Packer itself does not have an `output` command)
 # The command is used to get an output from a Packer manifest
@@ -594,7 +623,9 @@ last_run_uuid: a57874d1-c478-63d7-cfde-9d91e513eb9a
 
 us-east-2:ami-0c2ca16b7fcac7529
 ```
+</Terminal>
 
+<Terminal title="atmos packer output aws/bastion -s nonprod -q '.builds[0].artifact_id | split(:)[1]'">
 ```shell
 # `atmos packer output` command is specific to Atmos (Packer itself does not have an `output` command)
 # The command is used to get an output from a Packer manifest
@@ -606,3 +637,4 @@ us-east-2:ami-0c2ca16b7fcac7529
 
 ami-0c2ca16b7fcac7529
 ```
+</Terminal>
