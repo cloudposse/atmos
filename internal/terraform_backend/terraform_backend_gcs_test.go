@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
@@ -92,7 +92,7 @@ func (o *mockGCSObjectHandle) NewReader(ctx context.Context) (io.ReadCloser, err
 		"test-prefix/test-workspace.tfstate",
 		"test-workspace.tfstate", // For no prefix
 	}
-	
+
 	pathMatches := false
 	for _, validPath := range validPaths {
 		if o.bucketName == "mock-bucket" && o.objectName == validPath {
@@ -105,7 +105,7 @@ func (o *mockGCSObjectHandle) NewReader(ctx context.Context) (io.ReadCloser, err
 			break
 		}
 	}
-	
+
 	if pathMatches {
 		body := `{
 			"version": 4,
@@ -270,7 +270,7 @@ func Test_ReadTerraformBackendGCSInternal_Errors(t *testing.T) {
 			expectedNilBody: true,
 		},
 		{
-			name: "missing bucket configuration",
+			name:   "missing bucket configuration",
 			client: &erroringGCSClient{},
 			backend: map[string]any{
 				"prefix": "test-prefix",
@@ -447,7 +447,7 @@ func TestGCSClientCaching(t *testing.T) {
 	}
 
 	backend2 := map[string]any{
-		"bucket":      "test-bucket-2", 
+		"bucket":      "test-bucket-2",
 		"credentials": "/path/to/creds1.json", // Same credentials, different bucket
 	}
 
@@ -457,24 +457,24 @@ func TestGCSClientCaching(t *testing.T) {
 	}
 
 	// Verify different backends with same auth config should have same cache key
-	assert.Equal(t, 
-		tb.GetGCSBackendCredentials(&backend1), 
+	assert.Equal(t,
+		tb.GetGCSBackendCredentials(&backend1),
 		tb.GetGCSBackendCredentials(&backend2),
 		"Backends with same credentials should have same cache key component")
 
 	// Verify different auth configs have different cache keys
-	assert.NotEqual(t, 
-		tb.GetGCSBackendCredentials(&backend1), 
+	assert.NotEqual(t,
+		tb.GetGCSBackendCredentials(&backend1),
 		tb.GetGCSBackendCredentials(&backend3),
 		"Backends with different credentials should have different cache key components")
 
 	// Test impersonation in cache key
 	backendWithImpersonation := map[string]any{
-		"bucket": "test-bucket",
+		"bucket":                      "test-bucket",
 		"impersonate_service_account": "test@project.iam.gserviceaccount.com",
 	}
 
-	assert.Equal(t, 
+	assert.Equal(t,
 		"test@project.iam.gserviceaccount.com",
 		tb.GetGCSBackendImpersonateServiceAccount(&backendWithImpersonation),
 		"Should extract impersonation service account correctly")

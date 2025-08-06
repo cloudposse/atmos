@@ -24,11 +24,11 @@ type AuthOptions struct {
 // Authentication precedence:
 // 1. Explicit credentials (JSON content or file path)
 // 2. Application Default Credentials (ADC) which automatically handles:
-//    - GOOGLE_APPLICATION_CREDENTIALS environment variable
-//    - Compute Engine metadata service
-//    - Cloud Shell credentials
-//    - gcloud user credentials (from `gcloud auth application-default login`)
-//    - Workload Identity (in GKE)
+//   - GOOGLE_APPLICATION_CREDENTIALS environment variable
+//   - Compute Engine metadata service
+//   - Cloud Shell credentials
+//   - gcloud user credentials (from `gcloud auth application-default login`)
+//   - Workload Identity (in GKE)
 func GetClientOptions(opts AuthOptions) []option.ClientOption {
 	var clientOpts []option.ClientOption
 

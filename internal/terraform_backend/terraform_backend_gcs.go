@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	log "github.com/charmbracelet/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/gcp"
@@ -121,7 +121,7 @@ func ReadTerraformBackendGCS(
 	componentSections *map[string]any,
 ) ([]byte, error) {
 	backend := GetComponentBackend(componentSections)
-	
+
 	// Extract the GCS-specific configuration section (same pattern as stack processor)
 	gcsBackend := map[string]any{}
 	if gcsSection, ok := backend["gcs"].(map[string]any); ok {
@@ -187,7 +187,7 @@ func ReadTerraformBackendGCSInternal(
 	// According to Terraform docs: "Named states for workspaces are stored in an object called `<prefix>/<workspace>.tfstate`"
 	prefix := GetBackendAttribute(backend, "prefix")
 	workspace := GetTerraformWorkspace(componentSections)
-	
+
 	var tfStateFilePath string
 	if prefix == "" {
 		// If no prefix is set, store at root level: <workspace>.tfstate
@@ -230,7 +230,7 @@ func ReadTerraformBackendGCSInternal(
 
 		content, err := io.ReadAll(reader)
 		_ = reader.Close() // Explicit close instead of defer
-		cancel() // Cancel immediately after use
+		cancel()           // Cancel immediately after use
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadGCSObjectBody, err)
 		}

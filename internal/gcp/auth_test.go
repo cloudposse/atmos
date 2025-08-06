@@ -148,7 +148,7 @@ func TestClientOptionsCreation(t *testing.T) {
 			expectType:  "JSON",
 		},
 		{
-			name:        "file path creates WithCredentialsFile option", 
+			name:        "file path creates WithCredentialsFile option",
 			credentials: "/path/to/service-account.json",
 			expectType:  "File",
 		},
@@ -159,13 +159,13 @@ func TestClientOptionsCreation(t *testing.T) {
 			opts := GetClientOptions(AuthOptions{
 				Credentials: tt.credentials,
 			})
-			
+
 			// We can't easily inspect the actual option type without reflection,
 			// but we can verify that an option was created
 			if len(opts) != 1 {
 				t.Errorf("Expected 1 client option, got %d", len(opts))
 			}
-			
+
 			// Verify the option is of type option.ClientOption
 			var _ option.ClientOption = opts[0]
 		})
