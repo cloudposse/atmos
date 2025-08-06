@@ -25,11 +25,19 @@ func TestExecutePackerOutput(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	packerFlags := PackerFlags{
-		Query: ".builds[0].artifact_id | split(\":\")[1]",
-	}
+	packerFlags := PackerFlags{}
 
 	d, err := ExecutePackerOutput(&info, &packerFlags)
 	assert.NoError(t, err)
+	assert.Equal(t, 2, len(d.(map[string]any)["builds"].([]any)))
+
+	packerFlags.Query = ".builds[0].artifact_id | split(\":\")[1]"
+	d, err = ExecutePackerOutput(&info, &packerFlags)
+	assert.NoError(t, err)
 	assert.Equal(t, "ami-0c2ca16b7fcac7529", d)
+
+	packerFlags.Query = ".builds[0].artifact_id"
+	d, err = ExecutePackerOutput(&info, &packerFlags)
+	assert.NoError(t, err)
+	assert.Equal(t, "us-east-2:ami-0c2ca16b7fcac7529", d)
 }
