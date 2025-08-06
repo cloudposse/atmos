@@ -19,6 +19,7 @@ import (
 
 // ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
+	atmosConfig schema.AtmosConfiguration,
 	command string,
 	args []string,
 	dir string,

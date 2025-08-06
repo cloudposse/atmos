@@ -41,6 +41,7 @@ func ExecutePacker(
 
 	if info.SubCommand == "version" {
 		return ExecuteShellCommand(
+			atmosConfig,
 			info.Command,
 			[]string{info.SubCommand},
 			"",
@@ -164,6 +165,7 @@ func ExecutePacker(
 	log.Debug("Using ENV", "variables", envVars)
 
 	err = ExecuteShellCommand(
+		atmosConfig,
 		info.Command,
 		allArgsAndFlags,
 		componentPath,

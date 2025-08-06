@@ -58,6 +58,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	if info.SubCommand == "version" {
 		return ExecuteShellCommand(
+			atmosConfig,
 			info.Command,
 			[]string{info.SubCommand},
 			"",
@@ -330,6 +331,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		cleanTerraformWorkspace(atmosConfig, componentPath)
 
 		err = ExecuteShellCommand(
+			atmosConfig,
 			info.Command,
 			initCommandWithArguments,
 			componentPath,
@@ -461,6 +463,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				}
 
 				err = ExecuteShellCommand(
+					atmosConfig,
 					info.Command,
 					[]string{"workspace", "select", info.TerraformWorkspace},
 					componentPath,
@@ -476,6 +479,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 						return err
 					}
 					err = ExecuteShellCommand(
+						atmosConfig,
 						info.Command,
 						[]string{"workspace", "new", info.TerraformWorkspace},
 						componentPath,
@@ -529,6 +533,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Execute the provided command (except for `terraform workspace` which was executed above)
 	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
 		err = ExecuteShellCommand(
+			atmosConfig,
 			info.Command,
 			allArgsAndFlags,
 			componentPath,

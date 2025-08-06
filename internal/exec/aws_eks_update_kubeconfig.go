@@ -224,7 +224,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err = ExecuteShellCommand("aws", args, shellCommandWorkingDir, nil, dryRun, "")
+	err = ExecuteShellCommand(atmosConfig, "aws", args, shellCommandWorkingDir, nil, dryRun, "")
 	if err != nil {
 		return err
 	}
