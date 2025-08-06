@@ -1,0 +1,61 @@
+---
+title: atmos packer validate
+sidebar_label: validate
+sidebar_class_name: command
+id: validate
+---
+
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+
+:::note purpose
+Use this command to validate the syntax and configuration of a Packer template configured for an Atmos component in a stack.
+:::
+
+## Usage
+
+Execute the `packer validate` command like this:
+
+```shell
+atmos packer validate <component> --stack <stack> [flags] -- [packer-options]
+```
+
+:::tip
+For more details on the `packer validate` command and options, refer to [Packer validate command reference](https://developer.hashicorp.com/packer/docs/commands/validate).
+:::
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos Packer component.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em><em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--template` <em>(alias `-t`)</em><em>(optional)</em></dt>
+    <dd>
+        Packer template.
+        It can be specified in the `settings.packer.template` section in the Atmos component manifest,
+        or on the command line via the flag `--template <template>` (shorthand `-t`).
+        The command line flag takes precedence over `settings.packer.template`.
+    </dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos packer validate aws/bastion --stack prod
+atmos packer validate aws/bastion -s prod --template main.pkr.hcl
+atmos packer validate aws/bastion -s nonprod -t main.nonprod.pkr.hcl
+```
+</Terminal>
