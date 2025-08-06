@@ -1,5 +1,3 @@
-// https://developer.hashicorp.com/packer/docs/commands/init
-
 package cmd
 
 import (

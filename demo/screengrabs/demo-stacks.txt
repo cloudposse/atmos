@@ -24,6 +24,13 @@ atmos describe dependents --help
 atmos describe stacks --help
 atmos describe workflows --help
 atmos docs --help
+atmos packer --help
+atmos packer version --help
+atmos packer validate--help
+atmos packer inspect --help
+atmos packer init --help
+atmos packer build --help
+atmos packer output --help
 atmos pro lock --help
 atmos pro unlock --help
 atmos terraform --help
