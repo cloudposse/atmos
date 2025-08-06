@@ -2,6 +2,7 @@ package schema
 
 import (
 	"encoding/json"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -535,10 +536,31 @@ type ConfigAndStacksInfo struct {
 // Workflows
 
 type WorkflowStep struct {
-	Name    string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
-	Command string `yaml:"command" json:"command" mapstructure:"command"`
-	Stack   string `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
-	Type    string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
+	Name    string       `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	Command string       `yaml:"command" json:"command" mapstructure:"command"`
+	Stack   string       `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
+	Type    string       `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
+	Retry   *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry,omitempty"`
+}
+
+type BackoffStrategy string
+
+// Backoff strategies constants.
+var (
+	BackoffConstant    BackoffStrategy = "constant"
+	BackoffLinear      BackoffStrategy = "linear"
+	BackoffExponential BackoffStrategy = "exponential"
+)
+
+// RetryConfig represents the retry configuration.
+type RetryConfig struct {
+	MaxAttempts     int             `yaml:"max_attempts" json:"max_attempts" mapstructure:"max_attempts"`
+	BackoffStrategy BackoffStrategy `yaml:"backoff_strategy" json:"backoff_strategy" mapstructure:"backoff_strategy"`
+	InitialDelay    time.Duration   `yaml:"initial_delay" json:"initial_delay" mapstructure:"initial_delay"`
+	MaxDelay        time.Duration   `yaml:"max_delay" json:"max_delay" mapstructure:"max_delay"`
+	RandomJitter    float64         `yaml:"random_jitter" json:"random_jitter" mapstructure:"random_jitter"`
+	Multiplier      float64         `yaml:"multiplier" json:"multiplier" mapstructure:"multiplier"`
+	MaxElapsedTime  time.Duration   `yaml:"max_elapsed_time" json:"max_elapsed_time" mapstructure:"max_elapsed_time"`
 }
 
 type WorkflowDefinition struct {
