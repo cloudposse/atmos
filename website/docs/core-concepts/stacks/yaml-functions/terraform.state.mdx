@@ -368,8 +368,6 @@ components:
           bucket: "my-terraform-state"
           prefix: "terraform/state"
           credentials: "/path/to/service-account-key.json"
-          # Or use impersonation:
-          # impersonate_service_account: "terraform@my-project.iam.gserviceaccount.com"
       vars:
         # Read state from another component
         vpc_id: !terraform.state vpc dev vpc_id
@@ -385,16 +383,18 @@ The GCS backend supports multiple authentication methods:
 
 1. **Service Account Key File**: Specify the path to a service account JSON key file using the `credentials` parameter.
 2. **Default Credentials**: When no credentials are specified, the Google Cloud SDK default credentials are used.
-3. **Service Account Impersonation**: Use the `impersonate_service_account` parameter to impersonate a service account.
-4. **Workload Identity** (GKE): Automatically uses the workload identity when running in GKE with Workload Identity enabled.
+3. **Workload Identity** (GKE): Automatically uses the workload identity when running in GKE with Workload Identity enabled.
 
 ### GCS Backend Configuration Parameters
 
 - `bucket`: The GCS bucket name where Terraform state files are stored
 - `prefix`: Optional prefix for the state file path within the bucket
 - `credentials`: Optional path to a service account JSON key file
-- `impersonate_service_account`: Optional service account email to impersonate
 - `state_file`: Optional custom name for the state file (defaults to `default.tfstate`)
+
+:::note Current Limitations
+The `impersonate_service_account` parameter is parsed but not yet implemented. This feature is planned for a future release.
+:::
 
 ## Using `!terraform.state` with `static` remote state backend
 
