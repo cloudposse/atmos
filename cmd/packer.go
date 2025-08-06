@@ -21,6 +21,7 @@ func init() {
 	packerCmd.DisableFlagParsing = true
 	packerCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	packerCmd.PersistentFlags().StringP("template", "t", "", "Packer template for building machine images")
+	packerCmd.PersistentFlags().StringP("query", "q", "", "YQ expression to read an output from the Packer manifest")
 
 	AddStackCompletion(packerCmd)
 	RootCmd.AddCommand(packerCmd)

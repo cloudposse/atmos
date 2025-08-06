@@ -32,7 +32,5 @@ var packerOutputCmd = &cobra.Command{
 }
 
 func init() {
-	packerOutputCmd.PersistentFlags().StringP("query", "q", "", "YQ expression to read an output from the Packer manifest")
-
 	packerCmd.AddCommand(packerOutputCmd)
 }
