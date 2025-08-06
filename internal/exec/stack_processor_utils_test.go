@@ -506,3 +506,157 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "product", contextProviderPropertyOrder0)
 }
+
+func TestProcessSettingsIntegrationsGithub(t *testing.T) {
+	tests := []struct {
+		name           string
+		inputSettings  map[string]any
+		expectedOutput map[string]any
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name: "Valid GitHub integration settings",
+			inputSettings: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"branch":     "main",
+				},
+			},
+			expectedOutput: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"branch":     "main",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Additional valid fields",
+			inputSettings: map[string]any{
+				"github": map[string]any{
+					"token":          "test-token",
+					"owner":          "test-owner",
+					"repository":     "test-repo",
+					"branch":         "develop",
+					"base_branch":    "main",
+					"webhook_secret": "secret123",
+				},
+			},
+			expectedOutput: map[string]any{
+				"github": map[string]any{
+					"token":          "test-token",
+					"owner":          "test-owner",
+					"repository":     "test-repo",
+					"branch":         "develop",
+					"base_branch":    "main",
+					"webhook_secret": "secret123",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "With workspace configuration",
+			inputSettings: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"workspaces": map[string]any{
+						"prefix": "test-",
+						"suffix": "-prod",
+					},
+				},
+			},
+			expectedOutput: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"workspaces": map[string]any{
+						"prefix": "test-",
+						"suffix": "-prod",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "With path configuration",
+			inputSettings: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"paths": []any{
+						"terraform/**",
+						"modules/**",
+					},
+				},
+			},
+			expectedOutput: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"paths": []any{
+						"terraform/**",
+						"modules/**",
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processSettingsIntegrationsGithub(&schema.AtmosConfiguration{}, tt.inputSettings)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedOutput, result)
+
+				// Additional validation for required fields
+				githubConfig := result["github"].(map[string]any)
+				assert.Contains(t, githubConfig, "token")
+				assert.Contains(t, githubConfig, "owner")
+				assert.Contains(t, githubConfig, "repository")
+
+				// Type assertions for key fields
+				assert.IsType(t, "", githubConfig["token"])
+				assert.IsType(t, "", githubConfig["owner"])
+				assert.IsType(t, "", githubConfig["repository"])
+
+				// Optional field type assertions
+				if branch, ok := githubConfig["branch"]; ok {
+					assert.IsType(t, "", branch)
+				}
+				if workspaces, ok := githubConfig["workspaces"]; ok {
+					assert.IsType(t, map[string]any{}, workspaces)
+				}
+				if paths, ok := githubConfig["paths"]; ok {
+					assert.IsType(t, []any{}, paths)
+				}
+			}
+		})
+	}
+}
+
+func TestProcessSettingsIntegrationsGithub_MissingGithubConfig(t *testing.T) {
+	input := map[string]any{
+		"other_config": "value",
+	}
+	result, err := processSettingsIntegrationsGithub(&schema.AtmosConfiguration{}, input)
+	assert.NoError(t, err)
+	assert.Equal(t, input, result)
+}
