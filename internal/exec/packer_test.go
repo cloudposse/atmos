@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -181,6 +182,13 @@ func TestExecutePacker_Errors(t *testing.T) {
 	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
 	log.SetLevel(log.InfoLevel)
 
+	// Store original PATH and modify it to ensure packer is not found in PATH
+	originalPath := os.Getenv("PATH")
+	t.Cleanup(func() {
+		// Restore original PATH after test
+		os.Setenv("PATH", originalPath)
+	})
+
 	t.Run("missing stack", func(t *testing.T) {
 		info := schema.ConfigAndStacksInfo{
 			ComponentType:    "packer",
@@ -307,5 +315,77 @@ func TestExecutePacker_Errors(t *testing.T) {
 
 		// Reset config path
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	})
+
+	t.Run("missing component", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "",
+			SubCommand:       "validate",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "`component` is required")
+	})
+
+	t.Run("invalid packer template syntax", func(t *testing.T) {
+		// Create a temporary directory with an invalid packer template
+		tmpDir := t.TempDir()
+		templatePath := filepath.Join(tmpDir, "invalid_template.json")
+		err := os.WriteFile(templatePath, []byte("{\n  \"variables\": {\n    \"invalid_json\": true,\n  } // Trailing comma and missing closing brace"), 0644)
+		assert.NoError(t, err)
+
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "validate",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+		packerFlags := PackerFlags{
+			Template: templatePath,
+		}
+
+		err = ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	t.Run("missing packer binary", func(t *testing.T) {
+		// Temporarily modify PATH to ensure packer is not found
+		os.Setenv("PATH", "/nonexistent/path")
+
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "validate",
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "executable file not found")
+
+		// Restore PATH
+		os.Setenv("PATH", originalPath)
+	})
+
+	t.Run("invalid command arguments", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "validate me",
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
 	})
 }

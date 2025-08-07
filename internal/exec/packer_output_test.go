@@ -1,9 +1,12 @@
 package exec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -87,6 +90,89 @@ func TestExecutePackerOutput(t *testing.T) {
 		d, err := ExecutePackerOutput(&info, &packerFlags)
 		assert.NoError(t, err)
 		assert.NotNil(t, d)
+	})
+
+	// Test missing manifest file
+	t.Run("missing manifest file", func(t *testing.T) {
+		// Create a temporary directory for this test
+		tempDir := t.TempDir()
+		// Create a minimal packer config without a manifest file
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+		err := os.WriteFile(configPath, []byte(`components:
+  terraform:
+    base_path: ""
+  helmfile:
+    base_path: ""
+  packer:
+    base_path: ""
+`), 0644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "nonexistent/component",
+			SubCommand:       "output",
+		}
+
+		packerFlags := PackerFlags{}
+
+		_, err = ExecutePackerOutput(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	// Test invalid stack configuration
+	t.Run("invalid stack configuration", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "invalid-stack",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "output",
+		}
+
+		packerFlags := PackerFlags{}
+
+		_, err := ExecutePackerOutput(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	t.Run("custom output format", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "output",
+		}
+
+		packerFlags := PackerFlags{}
+
+		_, err := ExecutePackerOutput(&info, &packerFlags)
+		assert.NoError(t, err)
+	})
+
+	// Test with invalid query
+	t.Run("invalid query", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "output",
+		}
+
+		packerFlags := PackerFlags{
+			Query: ".invalid.path",
+		}
+
+		r, err := ExecutePackerOutput(&info, &packerFlags)
+		assert.NoError(t, err)
+		assert.Equal(t, nil, r)
 	})
 
 	// Test query processing (original test cases)
