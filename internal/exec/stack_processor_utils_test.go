@@ -808,10 +808,56 @@ func TestProcessSettingsIntegrationsGithub(t *testing.T) {
 }
 
 func TestProcessSettingsIntegrationsGithub_MissingGithubConfig(t *testing.T) {
-	input := map[string]any{
-		"other_config": "value",
+	settings := map[string]any{}
+
+	result, err := processSettingsIntegrationsGithub(&schema.AtmosConfiguration{}, settings)
+
+	assert.Nil(t, err)
+	assert.Equal(t, settings, result)
+}
+
+func TestProcessYAMLConfigFiles(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/relative-paths/stacks"
+	filePaths := []string{
+		"../../tests/fixtures/scenarios/relative-paths/stacks/orgs/acme/platform/dev.yaml",
+		"../../tests/fixtures/scenarios/relative-paths/stacks/orgs/acme/platform/prod.yaml",
 	}
-	result, err := processSettingsIntegrationsGithub(&schema.AtmosConfiguration{}, input)
-	assert.NoError(t, err)
-	assert.Equal(t, input, result)
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	listResult, mapResult, rawStackConfigs, err := ProcessYAMLConfigFiles(
+		&atmosConfig,
+		stacksBasePath,
+		"", // terraformComponentsBasePath
+		"", // helmfileComponentsBasePath
+		"", // packerComponentsBasePath
+		filePaths,
+		true,  // processStackDeps
+		true,  // processComponentDeps
+		false, // ignoreMissingFiles
+	)
+
+	// Verify no error occurred
+	assert.Nil(t, err)
+
+	// Verify listResult contains the expected number of results
+	assert.Equal(t, len(filePaths), len(listResult))
+
+	// Verify mapResult contains the expected stack names
+	assert.Equal(t, len(filePaths), len(mapResult))
+
+	// Verify rawStackConfigs contains the expected stack names
+	assert.Equal(t, len(filePaths), len(rawStackConfigs))
 }

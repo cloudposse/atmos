@@ -32,8 +32,7 @@ var (
 	processYAMLConfigFilesLock = &sync.Mutex{}
 )
 
-// ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
-// and returns a list of stack configs
+// ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
 func ProcessYAMLConfigFiles(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksBasePath string,
@@ -154,8 +153,8 @@ func ProcessYAMLConfigFiles(
 }
 
 // ProcessYAMLConfigFile takes a path to a YAML stack manifest,
-// recursively processes and deep-merges all imports,
-// and returns the final stack config
+// recursively processes and deep-merges all the imports,
+// and returns the final stack config.
 func ProcessYAMLConfigFile(
 	atmosConfig *schema.AtmosConfiguration,
 	basePath string,
@@ -2009,8 +2008,7 @@ func ProcessStackConfig(
 	return result, nil
 }
 
-// processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with
-// the `integrations.github` section from `atmos.yaml`
+// processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with the `integrations.github` section from `atmos.yaml`.
 func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, settings map[string]any) (map[string]any, error) {
 	settingsIntegrationsSection := make(map[string]any)
 	settingsIntegrationsGithubSection := make(map[string]any)
@@ -2047,7 +2045,7 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 	return settings, nil
 }
 
-// FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined
+// FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined.
 func FindComponentStacks(
 	componentType string,
 	component string,
@@ -2073,7 +2071,7 @@ func FindComponentStacks(
 	return unique, nil
 }
 
-// FindComponentDependenciesLegacy finds all imports where the component or the base component(s) are defined
+// FindComponentDependenciesLegacy finds all imports where the component or the base component(s) are defined.
 // Component depends on the imported config file if any of the following conditions is true:
 //  1. The imported config file has any of the global `backend`, `backend_type`, `env`, `remote_state_backend`, `remote_state_backend_type`,
 //     `settings` or `vars` sections which are not empty.
@@ -2190,7 +2188,7 @@ func FindComponentDependenciesLegacy(
 	return unique, nil
 }
 
-// ProcessImportSection processes the `import` section in stack manifests
+// ProcessImportSection processes the `import` section in stack manifests.
 // The `import` section can contain:
 // 1. Project-relative paths (e.g. "mixins/region/us-east-2")
 // 2. Paths relative to the current stack file (e.g. "./_defaults")
@@ -2258,120 +2256,6 @@ func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck 
 	return false
 }
 
-// CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies
-func CreateComponentStackMap(
-	atmosConfig *schema.AtmosConfiguration,
-	stacksBasePath string,
-	terraformComponentsBasePath string,
-	helmfileComponentsBasePath string,
-	packerComponentsBasePath string,
-	filePath string,
-) (map[string]map[string][]string, error) {
-	stackComponentMap := map[string]map[string][]string{}
-	stackComponentMap["terraform"] = map[string][]string{}
-	stackComponentMap["helmfile"] = map[string][]string{}
-
-	componentStackMap := map[string]map[string][]string{}
-	componentStackMap["terraform"] = map[string][]string{}
-	componentStackMap["helmfile"] = map[string][]string{}
-
-	dir := filepath.Dir(filePath)
-
-	err := filepath.Walk(dir,
-		func(p string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			isDirectory, err := u.IsDirectory(p)
-			if err != nil {
-				return err
-			}
-
-			isYaml := u.IsYaml(p)
-
-			if !isDirectory && isYaml {
-				config, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-					atmosConfig,
-					stacksBasePath,
-					p,
-					map[string]map[string]any{},
-					nil,
-					false,
-					false,
-					false,
-					false,
-					map[string]any{},
-					map[string]any{},
-					map[string]any{},
-					map[string]any{},
-					"",
-				)
-				if err != nil {
-					return err
-				}
-
-				finalConfig, err := ProcessStackConfig(
-					atmosConfig,
-					stacksBasePath,
-					terraformComponentsBasePath,
-					helmfileComponentsBasePath,
-					packerComponentsBasePath,
-					p,
-					config,
-					false,
-					false,
-					"",
-					nil,
-					nil,
-					true)
-				if err != nil {
-					return err
-				}
-
-				if componentsConfig, componentsConfigExists := finalConfig["components"]; componentsConfigExists {
-					componentsSection := componentsConfig.(map[string]any)
-					stackName := strings.Replace(p, stacksBasePath+"/", "", 1)
-
-					if terraformConfig, terraformConfigExists := componentsSection["terraform"]; terraformConfigExists {
-						terraformSection := terraformConfig.(map[string]any)
-
-						for k := range terraformSection {
-							stackComponentMap["terraform"][stackName] = append(stackComponentMap["terraform"][stackName], k)
-						}
-					}
-
-					if helmfileConfig, helmfileConfigExists := componentsSection["helmfile"]; helmfileConfigExists {
-						helmfileSection := helmfileConfig.(map[string]any)
-
-						for k := range helmfileSection {
-							stackComponentMap["helmfile"][stackName] = append(stackComponentMap["helmfile"][stackName], k)
-						}
-					}
-				}
-			}
-
-			return nil
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	for stack, components := range stackComponentMap["terraform"] {
-		for _, component := range components {
-			componentStackMap["terraform"][component] = append(componentStackMap["terraform"][component], strings.Replace(stack, u.DefaultStackConfigFileExtension, "", 1))
-		}
-	}
-
-	for stack, components := range stackComponentMap["helmfile"] {
-		for _, component := range components {
-			componentStackMap["helmfile"][component] = append(componentStackMap["helmfile"][component], strings.Replace(stack, u.DefaultStackConfigFileExtension, "", 1))
-		}
-	}
-
-	return componentStackMap, nil
-}
-
 // GetFileContent tries to read and return the file content from the sync map if it exists in the map,
 // otherwise it reads the file, stores its content in the map and returns the content
 func GetFileContent(filePath string) (string, error) {
@@ -2389,7 +2273,7 @@ func GetFileContent(filePath string) (string, error) {
 	return string(content), nil
 }
 
-// ProcessBaseComponentConfig processes base component(s) config
+// ProcessBaseComponentConfig processes base component(s) config.
 func ProcessBaseComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	baseComponentConfig *schema.BaseComponentConfig,
@@ -2656,7 +2540,7 @@ func ProcessBaseComponentConfig(
 	return nil
 }
 
-// FindComponentsDerivedFromBaseComponents finds all components that derive from the given base components
+// FindComponentsDerivedFromBaseComponents finds all components that derive from the given base components.
 func FindComponentsDerivedFromBaseComponents(
 	stack string,
 	allComponents map[string]any,
