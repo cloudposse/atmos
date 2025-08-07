@@ -28,14 +28,18 @@ func ProcessComponentInStack(
 		return nil, err
 	}
 
-	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
+	configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
 	if err != nil {
-		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
+		configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
 		if err != nil {
-			log.Error(err)
-			return nil, err
+			configAndStacksInfo.ComponentType = cfg.PackerComponentType
+			configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+			if err != nil {
+				log.Error(err)
+				return nil, err
+			}
 		}
 	}
 
@@ -64,7 +68,7 @@ func ProcessComponentFromContext(
 	}
 
 	stackNameTemplate := e.GetStackNameTemplate(&atmosConfig)
-	stackNamePattern := e.GetStackNamePattern(atmosConfig)
+	stackNamePattern := e.GetStackNamePattern(&atmosConfig)
 	var stack string
 
 	switch {

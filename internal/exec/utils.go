@@ -152,7 +152,7 @@ func ProcessComponentConfig(
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks.
-func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles bool) (
+func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
 	error,
@@ -163,6 +163,7 @@ func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles boo
 		atmosConfig.StacksBaseAbsolutePath,
 		atmosConfig.TerraformDirAbsolutePath,
 		atmosConfig.HelmfileDirAbsolutePath,
+		atmosConfig.PackerDirAbsolutePath,
 		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,
@@ -177,7 +178,7 @@ func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles boo
 
 // ProcessStacks processes stack config.
 func ProcessStacks(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
 	processTemplates bool,
@@ -212,7 +213,7 @@ func ProcessStacks(
 			msg = "\nFound stack manifests:"
 		}
 		log.Debug(msg)
-		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -398,7 +399,7 @@ func ProcessStacks(
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
-			&atmosConfig,
+			atmosConfig,
 			&configAndStacksInfo,
 			settingsSectionStruct,
 			"templates-all-atmos-sections",
@@ -428,7 +429,7 @@ func ProcessStacks(
 
 	// Process YAML functions in Atmos manifest sections
 	if processYamlFunctions {
-		componentSectionConverted, err := ProcessCustomYamlTags(&atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip)
+		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -506,13 +507,16 @@ func ProcessStacks(
 	componentInfo := map[string]any{}
 	componentInfo["component_type"] = configAndStacksInfo.ComponentType
 
-	if configAndStacksInfo.ComponentType == "terraform" {
-		componentPath := constructTerraformComponentWorkingDir(atmosConfig, configAndStacksInfo)
-		componentInfo["component_path"] = componentPath
+	switch configAndStacksInfo.ComponentType {
+	case cfg.TerraformComponentType:
+		componentPath := constructTerraformComponentWorkingDir(atmosConfig, &configAndStacksInfo)
+		componentInfo[cfg.ComponentPathSectionName] = componentPath
 		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
 		componentInfo["terraform_config"] = terraformConfiguration
-	} else if configAndStacksInfo.ComponentType == "helmfile" {
-		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(atmosConfig, configAndStacksInfo)
+	case cfg.HelmfileComponentType:
+		componentInfo[cfg.ComponentPathSectionName] = constructHelmfileComponentWorkingDir(atmosConfig, &configAndStacksInfo)
+	case cfg.PackerComponentType:
+		componentInfo[cfg.ComponentPathSectionName] = constructPackerComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 	}
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo

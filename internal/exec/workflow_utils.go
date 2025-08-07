@@ -116,7 +116,7 @@ func ExecuteWorkflow(
 		var err error
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(atmosConfig, command, commandName, ".", []string{}, dryRun)
+			err = ExecuteShell(command, commandName, ".", []string{}, dryRun)
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
