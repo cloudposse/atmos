@@ -6,10 +6,165 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+func TestProcessBaseComponentConfig(t *testing.T) {
+	tests := []struct {
+		name                string
+		baseComponentConfig *schema.BaseComponentConfig
+		allComponentsMap    map[string]any
+		component           string
+		stack               string
+		baseComponent       string
+		expectedError       string
+		expectedVars        map[string]any
+		expectedSettings    map[string]any
+		expectedEnv         map[string]any
+		expectedBackendType string
+		expectBaseComponent string
+	}{
+		{
+			name: "basic-base-component",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"vars": map[string]any{
+						"environment": "dev",
+						"region":      "us-east-1",
+					},
+					"settings": map[string]any{
+						"enabled": true,
+					},
+					"backend_type": "s3",
+				},
+			},
+			component:     "test",
+			stack:         "test-stack",
+			baseComponent: "base",
+			expectedVars: map[string]any{
+				"environment": "dev",
+				"region":      "us-east-1",
+			},
+			expectedSettings: map[string]any{
+				"enabled": true,
+			},
+			expectedBackendType: "s3",
+			expectBaseComponent: "base",
+		},
+		{
+			name: "inheritance-chain",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"component": "base2",
+					"vars": map[string]any{
+						"environment": "dev",
+					},
+				},
+				"base2": map[string]any{
+					"vars": map[string]any{
+						"region": "us-east-1",
+					},
+					"settings": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			component:     "test",
+			stack:         "test-stack",
+			baseComponent: "base",
+			expectedVars: map[string]any{
+				"environment": "dev",
+				"region":      "us-east-1",
+			},
+			expectedSettings: map[string]any{
+				"enabled": true,
+			},
+			expectBaseComponent: "base2",
+		},
+		{
+			name: "invalid-base-component",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": "invalid-type",
+			},
+			component:     "test",
+			stack:         "test-stack",
+			baseComponent: "base",
+			expectedError: "invalid config for the base component",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			baseComponents := []string{}
+
+			err := ProcessBaseComponentConfig(
+				atmosConfig,
+				tt.baseComponentConfig,
+				tt.allComponentsMap,
+				tt.component,
+				tt.stack,
+				tt.baseComponent,
+				"/dummy/path",
+				true,
+				&baseComponents,
+			)
+
+			if tt.expectedError != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tt.expectedVars != nil {
+				assert.Equal(t, tt.expectedVars, tt.baseComponentConfig.BaseComponentVars)
+			}
+
+			if tt.expectedSettings != nil {
+				assert.Equal(t, tt.expectedSettings, tt.baseComponentConfig.BaseComponentSettings)
+			}
+
+			if tt.expectedEnv != nil {
+				assert.Equal(t, tt.expectedEnv, tt.baseComponentConfig.BaseComponentEnv)
+			}
+
+			if tt.expectedBackendType != "" {
+				assert.Equal(t, tt.expectedBackendType, tt.baseComponentConfig.BaseComponentBackendType)
+			}
+
+			if tt.expectBaseComponent != "" {
+				assert.Equal(t, tt.expectBaseComponent, tt.baseComponentConfig.FinalBaseComponentName)
+			}
+
+			// Verify baseComponents slice contains the expected components
+			expectedComponents := []string{tt.baseComponent}
+			if tt.expectBaseComponent != tt.baseComponent && tt.expectBaseComponent != "" {
+				expectedComponents = append(expectedComponents, tt.expectBaseComponent)
+			}
+			assert.ElementsMatch(t, expectedComponents, baseComponents)
+		})
+	}
+}
 
 func TestProcessYAMLConfigFile(t *testing.T) {
 	stacksBasePath := "../../tests/fixtures/scenarios/relative-paths/stacks"

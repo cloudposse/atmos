@@ -16,7 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
+// ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
@@ -69,7 +69,7 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 	return ExecuteTerraformGenerateBackends(&atmosConfig, fileTemplate, format, stacks, components)
 }
 
-// ExecuteTerraformGenerateBackends generates backend configs for all terraform components
+// ExecuteTerraformGenerateBackends generates backend configs for all terraform components.
 func ExecuteTerraformGenerateBackends(
 	atmosConfig *schema.AtmosConfiguration,
 	fileTemplate string,
