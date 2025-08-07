@@ -139,7 +139,7 @@ func TestExecuteDescribeAffected(t *testing.T) {
 	}
 }
 
-// Helper function to create a mock repository with a valid HEAD
+// Helper function to create a mock repository with a valid HEAD.
 func createMockRepoWithHead(t *testing.T) *git.Repository {
 	t.Helper()
 
@@ -153,12 +153,12 @@ func createMockRepoWithHead(t *testing.T) *git.Repository {
 	}
 }
 
-// Mock storer implementation
+// Mock storer implementation.
 type mockStorer struct {
 	head *plumbing.Reference
 }
 
-// Reference-related methods
+// Reference-related methods.
 func (s *mockStorer) Reference(name plumbing.ReferenceName) (*plumbing.Reference, error) {
 	if name == plumbing.HEAD {
 		return s.head, nil
@@ -173,7 +173,7 @@ func (s *mockStorer) CountLooseRefs() (int, error)                              
 func (s *mockStorer) PackRefs() error                                                     { return nil }
 func (s *mockStorer) IterReferences() (storer.ReferenceIter, error)                       { return nil, nil }
 
-// Object-related methods
+// Object-related methods.
 func (s *mockStorer) NewEncodedObject() plumbing.EncodedObject {
 	return nil
 }
@@ -190,7 +190,7 @@ func (s *mockStorer) IterEncodedObjects(t plumbing.ObjectType) (storer.EncodedOb
 	return nil, errors.New("not implemented")
 }
 
-// Added missing object-related methods
+// Added missing object-related methods.
 func (s *mockStorer) HasEncodedObject(h plumbing.Hash) error {
 	return errors.New("not implemented")
 }
@@ -199,7 +199,7 @@ func (s *mockStorer) EncodedObjectSize(h plumbing.Hash) (int64, error) {
 	return 0, errors.New("not implemented")
 }
 
-// Index-related methods
+// Index-related methods.
 func (s *mockStorer) SetIndex(object *index.Index) error {
 	return nil
 }
@@ -208,7 +208,7 @@ func (s *mockStorer) Index() (*index.Index, error) {
 	return nil, errors.New("not implemented")
 }
 
-// Config-related methods
+// Config-related methods.
 func (s *mockStorer) Config() (*config.Config, error) {
 	return nil, errors.New("not implemented")
 }
@@ -217,7 +217,7 @@ func (s *mockStorer) SetConfig(config *config.Config) error {
 	return nil
 }
 
-// Shallow-related methods
+// Shallow-related methods.
 func (s *mockStorer) Shallow() ([]plumbing.Hash, error) {
 	return nil, nil
 }
@@ -226,7 +226,7 @@ func (s *mockStorer) SetShallow([]plumbing.Hash) error {
 	return nil
 }
 
-// Module-related methods
+// Module-related methods.
 func (s *mockStorer) Module(name string) (storage.Storer, error) {
 	return nil, errors.New("not implemented")
 }
