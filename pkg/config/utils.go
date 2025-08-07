@@ -16,7 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack
+// FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack.
 func FindAllStackConfigsInPathsForStack(
 	atmosConfig schema.AtmosConfiguration,
 	stack string,
@@ -110,7 +110,7 @@ func FindAllStackConfigsInPathsForStack(
 	return absolutePaths, relativePaths, false, nil
 }
 
-// FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs
+// FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs.
 func FindAllStackConfigsInPaths(
 	atmosConfig *schema.AtmosConfiguration,
 	includeStackPaths []string,
@@ -608,7 +608,7 @@ func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 	return nil
 }
 
-// processStoreConfig creates a store registry from the provided stores config and assigns it to the atmosConfig
+// processStoreConfig creates a store registry from the provided stores config and assigns it to the atmosConfig.
 func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 	if len(atmosConfig.StoresConfig) > 0 {
 		log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
@@ -623,7 +623,7 @@ func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-// GetContextFromVars creates a context object from the provided variables
+// GetContextFromVars creates a context object from the provided variables.
 func GetContextFromVars(vars map[string]any) schema.Context {
 	var context schema.Context
 
@@ -654,7 +654,7 @@ func GetContextFromVars(vars map[string]any) schema.Context {
 	return context
 }
 
-// GetContextPrefix calculates context prefix from the context
+// GetContextPrefix calculates context prefix from the context.
 func GetContextPrefix(stack string, context schema.Context, stackNamePattern string, stackFile string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
@@ -727,7 +727,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 	return contextPrefix, nil
 }
 
-// ReplaceContextTokens replaces context tokens in the provided pattern and returns a string with all the tokens replaced
+// ReplaceContextTokens replaces context tokens in the provided pattern and returns a string with all the tokens replaced.
 func ReplaceContextTokens(context schema.Context, pattern string) string {
 	r := strings.NewReplacer(
 		"{base-component}", context.BaseComponent,
@@ -745,7 +745,7 @@ func ReplaceContextTokens(context schema.Context, pattern string) string {
 	return r.Replace(pattern)
 }
 
-// GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern
+// GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern.
 func GetStackNameFromContextAndStackNamePattern(
 	namespace string,
 	tenant string,
@@ -804,7 +804,7 @@ func GetStackNameFromContextAndStackNamePattern(
 	return stack, nil
 }
 
-// getStackFilePatterns returns a slice of possible file patterns for a given base path
+// getStackFilePatterns returns a slice of possible file patterns for a given base path.
 func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 	patterns := []string{
 		basePath + u.YamlFileExtension,
@@ -821,7 +821,7 @@ func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 	return patterns
 }
 
-// matchesStackFilePattern checks if a file path matches any of the valid stack file patterns
+// matchesStackFilePattern checks if a file path matches any of the valid stack file patterns.
 func matchesStackFilePattern(filePath, stackName string) bool {
 	// Always include template files for normal operations (imports, etc.)
 	patterns := getStackFilePatterns(stackName, true)
