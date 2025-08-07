@@ -27,7 +27,7 @@ func TestDescribeStacksRunnable(t *testing.T) {
 		func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 			return schema.AtmosConfiguration{}, nil
 		},
-		func(atmosConfig schema.AtmosConfiguration) error {
+		func(atmosConfig *schema.AtmosConfiguration) error {
 			return nil
 		},
 		func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {

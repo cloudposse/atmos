@@ -12,17 +12,17 @@ function Home() {
 
   return (
     <div className="landing-page">
-      <Layout title={`Hello from ${siteConfig.title}`} description="Manage Environments Easily in Terraform using Atmos">
+      <Layout title={`Hello from ${siteConfig.title}`} description="Manage Environments Easily in Terraform, OpenTofu, Packer using Atmos">
         <header className="hero hero--full-height">
           <div className="intro">
-            <h1>Manage Environments Easily in Terraform</h1>
+            <h1>Manage Environments Easily<br/>in Terraform, OpenTofu, Packer</h1>
           </div>
           <img src={useBaseUrl('/img/demo.gif')} alt="Product Screenshot" className="screenshot" />
           <div className="hero__cta">
             <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
             <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
           </div>
-          <h3>Use a Modern <strong className="underline">Composable Framework</strong> for Terraform backed by YAML</h3>
+          <h3>Use a Modern <strong className="underline">Composable Framework</strong> for Terraform, OpenTofu, Packer and Helmfile backed by YAML</h3>
         </header>
         <main>
           <h2 className="section">Simplify complex architectures with <strong className="atmos__text">DRY configuration</strong></h2>
@@ -63,7 +63,7 @@ function Home() {
         </main>
         <footer>
             <h2>What are you waiting for? <strong className="atmos__text">It's FREE and Open Source</strong></h2>
-            <h3><strong className="underline">Your team can succeed</strong> with Terraform today.</h3>
+            <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu and Packer today.</h3>
             <section className="cta-section">
               <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
             </section>

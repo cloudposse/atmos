@@ -11,11 +11,11 @@ import (
 )
 
 // BuildTerraformWorkspace builds Terraform workspace.
-func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	// Return 'default' workspace if workspaces are disabled
 	// Terraform always operates in the `default` workspace when multiple workspaces are unsupported or disabled,
 	// preventing switching or creating additional workspaces.
-	if !isWorkspacesEnabled(&atmosConfig, &configAndStacksInfo) {
+	if !isWorkspacesEnabled(atmosConfig, &configAndStacksInfo) {
 		return cfg.TerraformDefaultWorkspace, nil
 	}
 
@@ -167,17 +167,20 @@ func BuildDependentStackNameFromDependsOn(
 
 // BuildComponentPath builds component path (path to the component's physical location on disk).
 func BuildComponentPath(
-	atmosConfig schema.AtmosConfiguration,
-	componentSectionMap map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	componentSectionMap *map[string]any,
 	componentType string,
 ) string {
 	var componentPath string
 
-	if stackComponentSection, ok := componentSectionMap[cfg.ComponentSectionName].(string); ok {
-		if componentType == "terraform" {
+	if stackComponentSection, ok := (*componentSectionMap)[cfg.ComponentSectionName].(string); ok {
+		switch componentType {
+		case cfg.TerraformComponentType:
 			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, stackComponentSection)
-		} else if componentType == "helmfile" {
+		case cfg.HelmfileComponentType:
 			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, stackComponentSection)
+		case cfg.PackerComponentType:
+			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, stackComponentSection)
 		}
 	}
 
@@ -185,7 +188,7 @@ func BuildComponentPath(
 }
 
 // GetStackNamePattern returns the stack name pattern.
-func GetStackNamePattern(atmosConfig schema.AtmosConfiguration) string {
+func GetStackNamePattern(atmosConfig *schema.AtmosConfiguration) string {
 	return atmosConfig.Stacks.NamePattern
 }
 

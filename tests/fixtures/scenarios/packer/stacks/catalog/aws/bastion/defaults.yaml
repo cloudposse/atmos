@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# https://developer.hashicorp.com/packer/integrations/hashicorp/amazon/latest/components/builder/ebs
+# https://masterminds.github.io/sprig/date.html
+
+components:
+  packer:
+    aws/bastion:
+      settings:
+        packer:
+          template: "main.pkr.hcl"
+          source_ami: "ami-0013ceeff668b979b"
+          source_ami_name: "al2023-ami-2023.7.20250527.1-kernel-6.12-arm64"
+          source_ami_description: "Amazon Linux 2023 AMI 2023.7.20250527.1 arm64 HVM kernel-6.12"
+          source_ami_owner_account_id: "137112412989"
+          region: "us-east-2"
+          org_id: "o-xxxxxxxxx"
+          org_management_account_id: "xxxxxxxxxxxx"
+      metadata:
+        component: aws/bastion
+      vars:
+        # https://masterminds.github.io/sprig/date.html
+        ami_name: "bastion-al2023-{{ now | unixEpoch }}"
+        source_ami: "{{ .settings.packer.source_ami }}"
+        region: "{{ .settings.packer.region }}"
+        ami_org_arns:
+          - "arn:aws:organizations::{{ .settings.packer.org_management_account_id }}:organization/{{ .settings.packer.org_id }}"
+        ami_ou_arns: []
+        ami_users: []
+        kms_key_arn: null
+        encrypt_boot: false
+        ssh_username: "ec2-user"
+        associate_public_ip_address: true
+        volume_type: "gp3"
+        skip_create_ami: false
+        manifest_file_name: "manifest.json"
+        manifest_strip_path: false
+        assume_role_session_name: "atmos-packer"
+        assume_role_duration_seconds: 1800
+        force_deregister: false
+        force_delete_snapshot: false
+        # SSM Agent is pre-installed on AL2023 AMIs but should be enabled explicitly as done above.
+        # `dnf clean all` removes cached metadata and packages to reduce AMI size.
+        # `cloud-init clean` ensures the image will boot as a new instance on the next launch.
+        provisioner_shell_commands:
+          # Enable and start the SSM agent (already installed by default on AL2023)
+          - "sudo systemctl enable --now amazon-ssm-agent"
+          # Install packages, clean metadata and cloud-init
+          - "sudo -E bash -c 'dnf install -y jq && dnf clean all && cloud-init clean'"
+          # Install other packages
+        ami_tags:
+          SourceAMI: "{{ .settings.packer.source_ami }}"
+          SourceAMIName: "{{ .settings.packer.source_ami_name }}"
+          SourceAMIDescription: "{{ .settings.packer.source_ami_description }}"
+          SourceAMIOwnerAccountId: "{{ .settings.packer.source_ami_owner_account_id }}"
+          ScanStatus: pending

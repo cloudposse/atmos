@@ -18,7 +18,7 @@ func TestMergeBasic(t *testing.T) {
 	inputs := []map[string]any{map1, map2}
 	expected := map[string]any{"foo": "bar", "baz": "bat"}
 
-	result, err := Merge(atmosConfig, inputs)
+	result, err := Merge(&atmosConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 }
@@ -33,7 +33,7 @@ func TestMergeBasicOverride(t *testing.T) {
 	inputs := []map[string]any{map1, map2, map3}
 	expected := map[string]any{"foo": "ood", "baz": "bat"}
 
-	result, err := Merge(atmosConfig, inputs)
+	result, err := Merge(&atmosConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 }
@@ -56,7 +56,7 @@ func TestMergeListReplace(t *testing.T) {
 	inputs := []map[string]any{map1, map2}
 	expected := map[string]any{"list": []any{"4", "5", "6"}}
 
-	result, err := Merge(atmosConfig, inputs)
+	result, err := Merge(&atmosConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 
@@ -83,7 +83,7 @@ func TestMergeListAppend(t *testing.T) {
 	inputs := []map[string]any{map1, map2}
 	expected := map[string]any{"list": []any{"1", "2", "3", "4", "5", "6"}}
 
-	result, err := Merge(atmosConfig, inputs)
+	result, err := Merge(&atmosConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 
@@ -123,7 +123,7 @@ func TestMergeListMerge(t *testing.T) {
 
 	inputs := []map[string]any{map1, map2}
 
-	result, err := Merge(atmosConfig, inputs)
+	result, err := Merge(&atmosConfig, inputs)
 	assert.Nil(t, err)
 
 	var mergedList []any
