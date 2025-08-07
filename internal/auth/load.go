@@ -8,10 +8,34 @@ import (
 )
 
 // TODO decide if we want to use this map of functions or a switch statement.
-var identityRegistry = map[string]func() LoginMethod{
-	"aws/iam-identity-center": func() LoginMethod { return &awsIamIdentityCenter{} },
+var identityRegistry = map[string]func(identity string, config schema.AuthConfig) (LoginMethod, error){
+	"aws/iam-identity-center": func(identity string, config schema.AuthConfig) (LoginMethod, error) {
+		var data = &awsIamIdentityCenter{}
+		b, err := yaml.Marshal(config.Identities[identity])
+		if err != nil {
+			return nil, err
+		}
+		err = yaml.Unmarshal(b, data)
+		data.Alias = identity
+		if data.Region == "" {
+			data.Region = config.DefaultRegion
+		}
+		return data, err
+	},
 	//"oidc":                    func() LoginMethod { return &awsSaml{} },
-	"aws/saml": func() LoginMethod { return &awsSaml{} },
+	"aws/saml": func(identity string, config schema.AuthConfig) (LoginMethod, error) {
+		var data = &awsSaml{}
+		b, err := yaml.Marshal(config.Identities[identity])
+		if err != nil {
+			return nil, err
+		}
+		err = yaml.Unmarshal(b, data)
+		data.Alias = identity
+		if data.IdpAccount.Region == "" {
+			data.IdpAccount.Region = config.DefaultRegion
+		}
+		return data, err
+	},
 }
 
 func GetDefaultIdentity(config schema.AuthConfig) (string, error) {
@@ -61,23 +85,6 @@ func GetType(identity string, config schema.AuthConfig) (string, error) {
 		return "", err
 	}
 	return identityConfigs[identity].Type, nil
-	//for k, _ := range config.Identities {
-	//	if k == identity {
-	//		rawBytes, err := yaml.Marshal(config.Identities[k])
-	//		if err != nil {
-	//			l.Errorf("failed to marshal identity %q: %w", k, err)
-	//			return "", err
-	//		}
-	//
-	//		identityConfig := &schema.IdentityDefaultConfig{}
-	//		if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
-	//			l.Errorf("failed to unmarshal identity %q: %w", k, err)
-	//			return "", err
-	//		}
-	//		return identityConfig.Type, nil
-	//	}
-	//}
-	//return "", fmt.Errorf("identity %q not found", identity)
 }
 
 func GetIdentityInstance(identity string, config schema.AuthConfig) (LoginMethod, error) {
@@ -86,31 +93,14 @@ func GetIdentityInstance(identity string, config schema.AuthConfig) (LoginMethod
 		return nil, err
 	}
 
-	// TODO see above decision
-	switch typeVal {
-	case "aws/iam-identity-center":
-		var data = &awsIamIdentityCenter{}
-		b, err := yaml.Marshal(config.Identities[identity])
-		if err != nil {
-			return nil, err
-		}
-		err = yaml.Unmarshal(b, data)
-		data.Alias = identity
-		if data.Region == "" {
-			data.Region = config.DefaultRegion
-		}
-		return data, err
-	case "aws/saml":
-		var data = &awsSaml{}
-		b, err := yaml.Marshal(config.Identities[identity])
-		if err != nil {
-			return nil, err
-		}
-		err = yaml.Unmarshal(b, data)
-		data.Alias = identity
-		return data, err
+	if f, ok := identityRegistry[typeVal]; ok {
+		return f(identity, config)
+	}
+	var supportedTypes []string
+	for k, _ := range identityRegistry {
+		supportedTypes = append(supportedTypes, k)
 	}
 
-	l.Error("unsupported identity type", "type", typeVal, "identity", identity)
+	l.Error("unsupported identity type", "type", typeVal, "identity", identity, "supported_types", supportedTypes)
 	return nil, errors.New("unsupported identity type")
 }
