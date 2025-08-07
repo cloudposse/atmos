@@ -38,6 +38,7 @@ var (
 	ErrFailedToGetGitHubOIDCToken     = errors.New("failed to get GitHub OIDC token")
 	ErrFailedToUploadDeployments      = errors.New("failed to upload deployments")
 	ErrFailedToUploadDeploymentStatus = errors.New("failed to upload deployment status")
+	ErrAPIResponseError               = errors.New("API response error")
 )
 
 const (
@@ -318,7 +319,7 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 
 	// For error HTTP responses, return an error
 	errorMsg := logAndReturnProAPIError(operation, apiResponse)
-	return errors.New(errorMsg)
+	return fmt.Errorf("%w: %s", ErrAPIResponseError, errorMsg)
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
