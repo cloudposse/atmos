@@ -291,6 +291,11 @@ func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string
 // runTerraformInit runs a basic terraform init in the specified directory using
 // terraformRun method (ExecuteTerraform).
 func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, info *schema.ConfigAndStacksInfo) error {
+
+	if info.SkipInit {
+		return nil
+	}
+
 	// Clean terraform workspace to prevent workspace selection prompt
 	cleanTerraformWorkspace(*atmosConfig, dir)
 
