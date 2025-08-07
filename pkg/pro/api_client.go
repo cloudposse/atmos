@@ -70,7 +70,7 @@ func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse
 	)
 
 	if errorMsg == "" {
-		errorMsg = fmt.Sprintf("API request failed with status %s", apiResponse.Status)
+		errorMsg = fmt.Sprintf("API request failed with status %d", apiResponse.Status)
 	}
 
 	if traceID != "" {
@@ -310,13 +310,15 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 	// Log the structured response for debugging (only if we successfully unmarshaled)
 	logProAPIResponse(operation, apiResponse)
 
-	// Check both the API response success flag and HTTP status code
-	if !apiResponse.Success || resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		errorMsg := logAndReturnProAPIError(operation, apiResponse)
-		return errors.New(errorMsg)
+	// For successful HTTP responses, trust the status code over the Success field
+	// (some APIs might return minimal responses without the Success field)
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest {
+		return nil
 	}
 
-	return nil
+	// For error HTTP responses, return an error
+	errorMsg := logAndReturnProAPIError(operation, apiResponse)
+	return errors.New(errorMsg)
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
@@ -398,13 +400,9 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	// Try to parse the response to get trace ID from the response body
 	var apiResponse dtos.AtmosApiResponse
-
-	// Log the full response for debugging
-	logProAPIResponse("ExchangeOIDCToken", apiResponse)
-
-	if !apiResponse.Success {
-		errorMsg := logAndReturnProAPIError("ExchangeOIDCToken", apiResponse)
-		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToExchangeOIDCToken, errorMsg)
+	if err := json.Unmarshal(body, &apiResponse); err == nil {
+		// Log the full response for debugging (only if we successfully unmarshaled)
+		logProAPIResponse("ExchangeOIDCToken", apiResponse)
 	}
 
 	var tokenResp dtos.ExchangeGitHubOIDCTokenResponse
