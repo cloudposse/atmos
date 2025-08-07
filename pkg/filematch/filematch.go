@@ -51,9 +51,6 @@ func (m *matcher) createWalkFunc(basePath string, g compiledGlob, isRecursive bo
 		if filePathErr != nil {
 			return filePathErr
 		}
-		if info.IsDir() {
-			return nil
-		}
 		relPath, err := filepath.Rel(basePath, path)
 		if err != nil {
 			return err
@@ -103,7 +100,9 @@ func extractBasePathAndGlob(pattern string) (string, string) {
 	if strings.HasSuffix(pattern, "/") {
 		globPattern = filepath.Join(globPattern, "**")
 	}
-
+	if basePath == "" {
+		basePath = "./"
+	}
 	return basePath, globPattern
 }
 
