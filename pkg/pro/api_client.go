@@ -44,6 +44,42 @@ const (
 	DefaultHTTPTimeoutSecs = 30
 )
 
+func logProAPIResponse(operation string, apiResponse dtos.AtmosApiResponse) {
+	log.Debug("Pro API Response",
+		"operation", operation,
+		"request", apiResponse.Request,
+		"status", apiResponse.Status,
+		"success", apiResponse.Success,
+		"trace_id", apiResponse.TraceID,
+		"context", apiResponse.Context,
+	)
+}
+
+func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse) string {
+	errorMsg := apiResponse.ErrorMessage
+	traceID := apiResponse.TraceID
+
+	log.Error("Pro API Error",
+		"operation", operation,
+		"request", apiResponse.Request,
+		"status", apiResponse.Status,
+		"success", apiResponse.Success,
+		"trace_id", traceID,
+		"error_message", errorMsg,
+		"context", apiResponse.Context,
+	)
+
+	if errorMsg == "" {
+		errorMsg = fmt.Sprintf("API request failed with status %s", apiResponse.Status)
+	}
+
+	if traceID != "" {
+		errorMsg = fmt.Sprintf("%s (trace_id: %s)", errorMsg, traceID)
+	}
+
+	return errorMsg
+}
+
 // AtmosProAPIClientInterface defines the interface for the AtmosProAPIClient.
 type AtmosProAPIClientInterface interface {
 	UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error
@@ -189,38 +225,12 @@ func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStack
 		return dtos.LockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToUnmarshalJSON, err)
 	}
 
-	// Get trace ID from response body
-	traceID := responseData.AtmosApiResponse.TraceID
-
-	// Log the full response for debugging
-	log.Debug("API Response",
-		"operation", "LockStack",
-		"status_code", resp.StatusCode,
-		"status", resp.Status,
-		"trace_id", traceID,
-		"response_body", string(body),
-	)
+	// Log the structured response for debugging
+	logProAPIResponse("LockStack", responseData.AtmosApiResponse)
 
 	if !responseData.Success {
-		// Log the structured error response
-		log.Error("API request failed",
-			"operation", "LockStack",
-			"status_code", resp.StatusCode,
-			"success", responseData.Success,
-			"error_message", responseData.ErrorMessage,
-			"context", responseData.Context,
-			"trace_id", traceID,
-		)
-
-		// Return a detailed error message
-		errorMsg := responseData.ErrorMessage
-		if errorMsg == "" {
-			errorMsg = fmt.Sprintf("API request failed with status %s", resp.Status)
-		}
-
-		if traceID != "" {
-			errorMsg = fmt.Sprintf("%s (trace_id: %s)", errorMsg, traceID)
-		}
+		// Log the structured error response and return the formatted error message
+		errorMsg := logAndReturnProAPIError("LockStack", responseData.AtmosApiResponse)
 
 		return dtos.LockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToLockStack, errorMsg)
 	}
@@ -263,34 +273,12 @@ func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.Unloc
 		return dtos.UnlockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToUnmarshalJSON, err)
 	}
 
-	// Get trace ID from response body
-	traceID := responseData.AtmosApiResponse.TraceID
-
-	// Log the full response for debugging
-	log.Debug("API Response",
-		"operation", "UnlockStack",
-		"status_code", resp.StatusCode,
-		"status", resp.Status,
-		"trace_id", traceID,
-		"response_body", string(body),
-	)
+	// Log the structured response for debugging
+	logProAPIResponse("UnlockStack", responseData.AtmosApiResponse)
 
 	if !responseData.Success {
-		// Log the structured error response
-		log.Error("API request failed",
-			"operation", "UnlockStack",
-			"status_code", resp.StatusCode,
-			"success", responseData.Success,
-			"error_message", responseData.ErrorMessage,
-			"context", responseData.Context,
-			"trace_id", traceID,
-		)
-
-		// Return a detailed error message
-		errorMsg := responseData.ErrorMessage
-		if errorMsg == "" {
-			errorMsg = fmt.Sprintf("API request failed with status %s", resp.Status)
-		}
+		// Log the structured error response and return the formatted error message
+		errorMsg := logAndReturnProAPIError("UnlockStack", responseData.AtmosApiResponse)
 
 		return dtos.UnlockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToUnlockStack, errorMsg)
 	}
@@ -307,61 +295,25 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToReadResponseBody, err)
 	}
 
-	// Try to parse the response to get trace ID from the response body
 	var apiResponse dtos.AtmosApiResponse
-	traceID := ""
-	if err := json.Unmarshal(body, &apiResponse); err == nil {
-		traceID = apiResponse.TraceID
+
+	// Try to unmarshal the response to get structured data
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		// If we can't parse the response as JSON, handle based on status code
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUnmarshalJSON, resp.Status)
+		}
+		// For successful responses that can't be parsed, just return nil
+		return nil
 	}
 
-	// Log the full response for debugging
-	log.Debug("API Response",
-		"operation", operation,
-		"status_code", resp.StatusCode,
-		"status", resp.Status,
-		"trace_id", traceID,
-		"response_body", string(body),
-	)
+	// Log the structured response for debugging (only if we successfully unmarshaled)
+	logProAPIResponse(operation, apiResponse)
 
-	// If the response is not successful, try to parse the error response
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		if err := json.Unmarshal(body, &apiResponse); err != nil {
-			// If we can't parse the response as JSON, return a generic error with the status
-			log.Error("Failed to parse API error response",
-				"operation", operation,
-				"status_code", resp.StatusCode,
-				"trace_id", traceID,
-				"response_body", string(body),
-				"error", err,
-			)
-			return fmt.Errorf("API request failed with status %s (trace_id: %s)", resp.Status, traceID)
-		}
-
-		// Log the structured error response
-		log.Error("API request failed",
-			"operation", operation,
-			"status_code", resp.StatusCode,
-			"success", apiResponse.Success,
-			"error_message", apiResponse.ErrorMessage,
-			"context", apiResponse.Context,
-			"trace_id", traceID,
-		)
-
-		// Return a detailed error message
-		errorMsg := apiResponse.ErrorMessage
-		if errorMsg == "" {
-			errorMsg = fmt.Sprintf("API request failed with status %s", resp.Status)
-		}
-
+	// Check both the API response success flag and HTTP status code
+	if !apiResponse.Success || resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+		errorMsg := logAndReturnProAPIError(operation, apiResponse)
 		return errors.New(errorMsg)
-	} else {
-		// For successful responses, log the success with trace ID
-		log.Debug("API request successful",
-			"operation", operation,
-			"status_code", resp.StatusCode,
-			"trace_id", traceID,
-			"response_body", string(body),
-		)
 	}
 
 	return nil
@@ -399,19 +351,9 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, e
 		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToReadResponseBody, err)
 	}
 
-	// Log the full response for debugging
-	log.Debug("GitHub OIDC Response",
-		"operation", "GetGitHubOIDCToken",
-		"status_code", resp.StatusCode,
-		"status", resp.Status,
-		"trace_id", "",
-		"response_body", string(body),
-	)
-
 	if resp.StatusCode != http.StatusOK {
-		log.Debug("getGitHubOIDCToken", "resp.StatusCode", resp.StatusCode, "trace_id", "")
-		errorMsg := fmt.Sprintf("GitHub OIDC request failed with status %s", resp.Status)
-		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetOIDCToken, errorMsg)
+		log.Debug("getGitHubOIDCToken", "resp.StatusCode", resp.StatusCode)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetOIDCToken, resp.Status)
 	}
 
 	var tokenResp dtos.GetGitHubOIDCResponse
@@ -456,33 +398,13 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	// Try to parse the response to get trace ID from the response body
 	var apiResponse dtos.AtmosApiResponse
-	traceID := ""
-	if err := json.Unmarshal(body, &apiResponse); err == nil {
-		traceID = apiResponse.TraceID
-	}
 
 	// Log the full response for debugging
-	log.Debug("API Response",
-		"operation", "ExchangeOIDCToken",
-		"status_code", resp.StatusCode,
-		"status", resp.Status,
-		"trace_id", traceID,
-		"response_body", string(body),
-	)
+	logProAPIResponse("ExchangeOIDCToken", apiResponse)
 
-	if resp.StatusCode != http.StatusOK {
-		// Try to parse error response
-		if err := json.Unmarshal(body, &apiResponse); err == nil && !apiResponse.Success {
-			errorMsg := apiResponse.ErrorMessage
-			if errorMsg == "" {
-				errorMsg = fmt.Sprintf("API request failed with status %s", resp.Status)
-			}
-			if traceID != "" {
-				errorMsg = fmt.Sprintf("%s (trace_id: %s)", errorMsg, traceID)
-			}
-			return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToExchangeOIDCToken, errorMsg)
-		}
-		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToExchangeOIDCToken, resp.Status)
+	if !apiResponse.Success {
+		errorMsg := logAndReturnProAPIError("ExchangeOIDCToken", apiResponse)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToExchangeOIDCToken, errorMsg)
 	}
 
 	var tokenResp dtos.ExchangeGitHubOIDCTokenResponse
@@ -491,14 +413,8 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 	}
 
 	if !tokenResp.Success {
-		errorMsg := tokenResp.ErrorMessage
-		if errorMsg == "" {
-			errorMsg = "OIDC token exchange failed"
-		}
-		if traceID != "" {
-			errorMsg = fmt.Sprintf("%s (trace_id: %s)", errorMsg, traceID)
-		}
-		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToExchangeOIDCToken, errorMsg)
+		errMsg := logAndReturnProAPIError("ExchangeOIDCToken", tokenResp.AtmosApiResponse)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToExchangeOIDCToken, errMsg)
 	}
 
 	return tokenResp.Data.Token, nil
