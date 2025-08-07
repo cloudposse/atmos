@@ -1,9 +1,0 @@
-tools:
-  - name: github-comment
-    type: github_release
-    repo_owner: suzuki-shunsuke
-    repo_name: github-comment
-    asset: "github-comment_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
-    files:
-      - name: github-comment
-        src: github-comment
