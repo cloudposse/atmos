@@ -58,6 +58,196 @@ func TestFindAffected(t *testing.T) {
 			expectedAffected: []schema.Affected{},
 			expectedError:    false,
 		},
+		{
+			name: "Should detect changed Terraform component",
+			currentStacks: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"metadata": map[string]any{
+									"component": "terraform-vpc",
+								},
+							},
+						},
+					},
+				},
+			},
+			remoteStacks: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{},
+					},
+				},
+			},
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "components/terraform",
+					},
+				},
+			},
+			changedFiles: []string{"components/terraform/vpc/main.tf"},
+			expectedAffected: []schema.Affected{
+				{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Affected:      "stack.metadata",
+					AffectedAll:   []string{"stack.metadata"},
+					StackSlug:     "dev-vpc",
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "Should detect changed Helmfile component",
+			currentStacks: map[string]any{
+				"staging": map[string]any{
+					"components": map[string]any{
+						"helmfile": map[string]any{
+							"ingress": map[string]any{
+								"metadata": map[string]any{
+									"component": "helmfile-ingress",
+								},
+							},
+						},
+					},
+				},
+			},
+			remoteStacks: map[string]any{
+				"staging": map[string]any{
+					"components": map[string]any{
+						"helmfile": map[string]any{},
+					},
+				},
+			},
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						BasePath: "components/helmfile",
+					},
+				},
+			},
+			changedFiles: []string{"components/helmfile/ingress/values.yaml"},
+			expectedAffected: []schema.Affected{
+				{
+					Component:     "ingress",
+					ComponentType: "helmfile",
+					Stack:         "staging",
+					StackSlug:     "staging-ingress",
+					Affected:      "stack.metadata",
+					AffectedAll:   []string{"stack.metadata"},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "Should detect changed Packer component",
+			currentStacks: map[string]any{
+				"prod": map[string]any{
+					"components": map[string]any{
+						"packer": map[string]any{
+							"custom-ami": map[string]any{
+								"metadata": map[string]any{
+									"component": "packer-custom-ami",
+								},
+							},
+						},
+					},
+				},
+			},
+			remoteStacks: map[string]any{
+				"prod": map[string]any{
+					"components": map[string]any{
+						"packer": map[string]any{},
+					},
+				},
+			},
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Packer: schema.Packer{
+						BasePath: "components/packer",
+					},
+				},
+			},
+			changedFiles: []string{"components/packer/custom-ami/ubuntu.pkr.hcl"},
+			expectedAffected: []schema.Affected{
+				{
+					Component:     "custom-ami",
+					ComponentType: "packer",
+					Stack:         "prod",
+					StackSlug:     "prod-custom-ami",
+					Affected:      "stack.metadata",
+					AffectedAll:   []string{"stack.metadata"},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "Should detect multiple component types in the same stack",
+			currentStacks: map[string]any{
+				"prod": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"metadata": map[string]any{
+									"component": "terraform-vpc",
+								},
+							},
+						},
+						"helmfile": map[string]any{
+							"ingress": map[string]any{
+								"metadata": map[string]any{
+									"component": "helmfile-ingress",
+								},
+							},
+						},
+					},
+				},
+			},
+			remoteStacks: map[string]any{
+				"prod": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{},
+						"helmfile":  map[string]any{},
+					},
+				},
+			},
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "components/terraform",
+					},
+					Helmfile: schema.Helmfile{
+						BasePath: "components/helmfile",
+					},
+				},
+			},
+			changedFiles: []string{
+				"components/terraform/vpc/main.tf",
+				"components/helmfile/ingress/values.yaml",
+			},
+			expectedAffected: []schema.Affected{
+				{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					StackSlug:     "prod-vpc",
+					Affected:      "stack.metadata",
+					AffectedAll:   []string{"stack.metadata"},
+				},
+				{
+					Component:     "ingress",
+					ComponentType: "helmfile",
+					Stack:         "prod",
+					StackSlug:     "prod-ingress",
+					Affected:      "stack.metadata",
+					AffectedAll:   []string{"stack.metadata"},
+				},
+			},
+			expectedError: false,
+		},
 	}
 
 	for _, tt := range tests {
