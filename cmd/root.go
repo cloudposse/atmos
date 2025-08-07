@@ -32,6 +32,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/toolchain"
 
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
@@ -623,6 +624,9 @@ func init() {
 	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
 	// Set custom usage template.
+
+	RootCmd.AddCommand(toolchain.ToolChainCmd)
+	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
