@@ -26,8 +26,11 @@ type awsIamIdentityCenter struct {
 	schema.IdentityDefaultConfig `yaml:",inline"`
 
 	// SSO
-	Role string `yaml:"role,omitempty" json:"role,omitempty" mapstructure:"role,omitempty"`
-	Url  string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
+	Role        string `yaml:"role,omitempty" json:"role,omitempty" mapstructure:"role,omitempty"`
+	AccountId   string `yaml:"account_id,omitempty" json:"account_id,omitempty" mapstructure:"account_id,omitempty"`
+	AccountName string `yaml:"account_name,omitempty" json:"account_name,omitempty" mapstructure:"account_name,omitempty"`
+	RoleName    string `yaml:"role_name,omitempty" json:"role_name,omitempty" mapstructure:"role_name,omitempty"`
+	Url         string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
 }
 
 func (config *awsIamIdentityCenter) Login() error {
@@ -74,21 +77,48 @@ func (config *awsIamIdentityCenter) Login() error {
 	}
 
 	// 2. Authenticate and store to ~/.aws/credentials
-	Arn, _ := arn.Parse(config.Role)
-	accountId := RoleToAccountId(config.Role)
+	var accountId, RoleName string
+	// Support passing in a role
+	if config.Role != "" {
+		Arn, _ := arn.Parse(config.Role)
+		RoleName = Arn.Resource
+		accountId = RoleToAccountId(config.Role)
+	}
+
+	// Support passing in a role_name
+	if RoleName == "" {
+		RoleName = config.RoleName
+	}
+
+	// Support passing in an account_id
+	if accountId == "" {
+		accountId = config.AccountId
+		// Support passing in an account_name
+		if accountId == "" {
+			accounts, _ := getAccountsInfo(ctx, ssoClient, credentials.Token)
+			for _, account := range accounts {
+				if *account.AccountName == config.AccountName {
+					accountId = *account.AccountId
+					break
+				}
+			}
+		}
+	}
+
+	// We now have the information we need to get credentials
 	roleCredentials, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
 		AccessToken: aws.String(credentials.Token),
 		AccountId:   aws.String(accountId),
-		RoleName:    aws.String(Arn.Resource),
+		RoleName:    aws.String(RoleName),
 	})
-	log.Debug("Role Credentials", "role_name", Arn.Resource, "accountid", accountId, "rolename", config.Role)
+	log.Debug("Role Credentials", "role_name", RoleName, "accountid", accountId, "rolename", config.Role)
 	if err != nil {
 		var roles []string
 		r, _ := getAccountRoles(ctx, ssoClient, credentials.Token, accountId)
 		for _, role := range r {
 			roles = append(roles, *role.RoleName)
 		}
-		log.Error("Failed to get role credentials", "error", err, "available roles", roles)
+		log.Error("Failed to get role credentials", "error", err, "account_id", accountId, "role_name", RoleName, "available roles", roles)
 		return err
 	}
 
