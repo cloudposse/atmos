@@ -237,16 +237,16 @@ func TestIsComponentFolderChanged(t *testing.T) {
 	helmfileComponentPath := filepath.Join(tempDir, "helmfile", "test-component")
 	packerComponentPath := filepath.Join(tempDir, "packer", "test-component")
 
-	err = os.MkdirAll(terraformComponentPath, 0755)
+	err = os.MkdirAll(terraformComponentPath, 0o755)
 	require.NoError(t, err)
-	err = os.MkdirAll(helmfileComponentPath, 0755)
+	err = os.MkdirAll(helmfileComponentPath, 0o755)
 	require.NoError(t, err)
-	err = os.MkdirAll(packerComponentPath, 0755)
+	err = os.MkdirAll(packerComponentPath, 0o755)
 	require.NoError(t, err)
 
 	// Create some test files in the component directories
 	createTestFile := func(path string) {
-		err = os.WriteFile(path, []byte("test"), 0644)
+		err = os.WriteFile(path, []byte("test"), 0o644)
 		require.NoError(t, err)
 	}
 
@@ -256,7 +256,7 @@ func TestIsComponentFolderChanged(t *testing.T) {
 
 	// Create a subdirectory with a file
 	subDir := filepath.Join(terraformComponentPath, "modules")
-	err = os.MkdirAll(subDir, 0755)
+	err = os.MkdirAll(subDir, 0o755)
 	require.NoError(t, err)
 	createTestFile(filepath.Join(subDir, "module.tf"))
 
