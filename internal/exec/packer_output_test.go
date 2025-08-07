@@ -105,7 +105,7 @@ func TestExecutePackerOutput(t *testing.T) {
     base_path: ""
   packer:
     base_path: ""
-`), 0644)
+`), 0o644)
 		require.NoError(t, err)
 
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)

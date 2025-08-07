@@ -337,7 +337,7 @@ func TestExecutePacker_Errors(t *testing.T) {
 		// Create a temporary directory with an invalid packer template
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "invalid_template.json")
-		err := os.WriteFile(templatePath, []byte("{\n  \"variables\": {\n    \"invalid_json\": true,\n  } // Trailing comma and missing closing brace"), 0644)
+		err := os.WriteFile(templatePath, []byte("{\n  \"variables\": {\n    \"invalid_json\": true,\n  } // Trailing comma and missing closing brace"), 0o644)
 		assert.NoError(t, err)
 
 		info := schema.ConfigAndStacksInfo{
