@@ -3,8 +3,10 @@ package exec
 import (
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestAddAffectedSpaceliftAdminStack(t *testing.T) {
@@ -126,4 +128,173 @@ func TestAddAffectedSpaceliftAdminStack_DuplicateNotAdded(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, count, "Spacelift admin stack should not be added twice")
+}
+
+func TestAppendToAffected(t *testing.T) {
+	t.Run("should add new affected component", func(t *testing.T) {
+		// Setup
+		atmosConfig := &schema.AtmosConfiguration{}
+		componentName := "test-component"
+		stackName := "test-stack"
+		affectedList := []schema.Affected{}
+		affected := &schema.Affected{
+			Component:     componentName,
+			Stack:         stackName,
+			ComponentType: "terraform",
+			Affected:      "test-change",
+		}
+
+		componentSection := map[string]any{
+			"settings": map[string]any{},
+		}
+
+		// Execute
+		err := appendToAffected(
+			atmosConfig,
+			componentName,
+			stackName,
+			&componentSection,
+			&affectedList,
+			affected,
+			false,
+			&map[string]any{},
+			true,
+		)
+
+		// Verify
+		require.NoError(t, err)
+		assert.Len(t, affectedList, 1)
+		assert.Equal(t, componentName, affectedList[0].Component)
+		assert.Equal(t, stackName, affectedList[0].Stack)
+		assert.Equal(t, "test-change", affectedList[0].Affected)
+		assert.Len(t, affectedList[0].AffectedAll, 1)
+	})
+
+	t.Run("should update existing component with new affected reason", func(t *testing.T) {
+		// Setup
+		atmosConfig := &schema.AtmosConfiguration{}
+		componentName := "test-component"
+		stackName := "test-stack"
+		affectedList := []schema.Affected{
+			{
+				Component:     componentName,
+				Stack:         stackName,
+				ComponentType: "terraform",
+				Affected:      "initial-change",
+				AffectedAll:   []string{"initial-change"},
+			},
+		}
+
+		affected := &schema.Affected{
+			Component:     componentName,
+			Stack:         stackName,
+			ComponentType: "terraform",
+			Affected:      "another-change",
+		}
+
+		componentSection := map[string]any{
+			"settings": map[string]any{},
+		}
+
+		// Execute
+		err := appendToAffected(
+			atmosConfig,
+			componentName,
+			stackName,
+			&componentSection,
+			&affectedList,
+			affected,
+			false,
+			&map[string]any{},
+			true,
+		)
+
+		// Verify
+		require.NoError(t, err)
+		assert.Len(t, affectedList, 1)
+		assert.Equal(t, componentName, affectedList[0].Component)
+		assert.Len(t, affectedList[0].AffectedAll, 2)
+		assert.Contains(t, affectedList[0].AffectedAll, "initial-change")
+		assert.Contains(t, affectedList[0].AffectedAll, "another-change")
+	})
+
+	t.Run("should include settings when requested", func(t *testing.T) {
+		// Setup
+		atmosConfig := &schema.AtmosConfiguration{}
+		componentName := "test-component"
+		stackName := "test-stack"
+		affectedList := []schema.Affected{}
+		affected := &schema.Affected{
+			Component:     componentName,
+			Stack:         stackName,
+			ComponentType: "terraform",
+			Affected:      "test-change",
+		}
+
+		settings := map[string]any{
+			"setting1": "value1",
+			"setting2": 42,
+		}
+
+		componentSection := map[string]any{
+			"settings": settings,
+		}
+
+		// Execute with includeSettings = true
+		err := appendToAffected(
+			atmosConfig,
+			componentName,
+			stackName,
+			&componentSection,
+			&affectedList,
+			affected,
+			false,
+			&map[string]any{},
+			true,
+		)
+
+		// Verify
+		require.NoError(t, err)
+		assert.Len(t, affectedList, 1)
+		assert.NotNil(t, affectedList[0].Settings)
+		assert.Equal(t, "value1", affectedList[0].Settings["setting1"])
+	})
+
+	t.Run("should not include settings when not requested", func(t *testing.T) {
+		// Setup
+		atmosConfig := &schema.AtmosConfiguration{}
+		componentName := "test-component"
+		stackName := "test-stack"
+		affectedList := []schema.Affected{}
+		affected := &schema.Affected{
+			Component:     componentName,
+			Stack:         stackName,
+			ComponentType: "terraform",
+			Affected:      "test-change",
+		}
+
+		componentSection := map[string]any{
+			"settings": map[string]any{
+				"setting1": "value1",
+			},
+		}
+
+		// Execute with includeSettings = false
+		err := appendToAffected(
+			atmosConfig,
+			componentName,
+			stackName,
+			&componentSection,
+			&affectedList,
+			affected,
+			false,
+			&map[string]any{},
+			false,
+		)
+
+		// Verify
+		require.NoError(t, err)
+		assert.Len(t, affectedList, 1)
+		assert.Nil(t, affectedList[0].Settings)
+	})
 }
