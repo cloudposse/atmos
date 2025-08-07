@@ -173,3 +173,139 @@ func TestExecutePacker_Init(t *testing.T) {
 	err := ExecutePacker(&info, &packerFlags)
 	assert.NoError(t, err)
 }
+
+func TestExecutePacker_Errors(t *testing.T) {
+	workDir := "../../tests/fixtures/scenarios/packer"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	t.Setenv("ATMOS_BASE_PATH", workDir)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	log.SetLevel(log.InfoLevel)
+
+	t.Run("missing stack", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "validate",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid component path", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "invalid/component",
+			SubCommand:       "validate",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	t.Run("disabled component", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			Stack:              "nonprod",
+			ComponentType:      "packer",
+			ComponentFromArg:   "aws/bastion",
+			SubCommand:         "validate",
+			ComponentIsEnabled: false,
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.NoError(t, err) // Should return nil for disabled components
+	})
+
+	t.Run("invalid subcommand", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "invalid_command",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid working directory", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/path")
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "validate",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+		// Reset working directory
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	})
+
+	t.Run("invalid configuration", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "invalid_stack",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "validate",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	t.Run("inspect with invalid template", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "invalid/template",
+			SubCommand:       "inspect",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	t.Run("validate with corrupted template", func(t *testing.T) {
+		// Create a temporary corrupted template file
+		tmpDir := t.TempDir()
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "corrupted/template",
+			SubCommand:       "validate",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+		packerFlags := PackerFlags{}
+
+		err := ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+
+		// Reset config path
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	})
+}

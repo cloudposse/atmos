@@ -14,30 +14,117 @@ func TestExecutePackerOutput(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
 
-	info := schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            "nonprod",
-		StackFile:        "",
-		ComponentType:    "packer",
-		ComponentFromArg: "aws/bastion",
-		SubCommand:       "output",
-		ProcessTemplates: true,
-		ProcessFunctions: true,
-	}
+	// Test successful case (original test)
+	t.Run("successful execution", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "output",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
 
-	packerFlags := PackerFlags{}
+		packerFlags := PackerFlags{}
 
-	d, err := ExecutePackerOutput(&info, &packerFlags)
-	assert.NoError(t, err)
-	assert.Equal(t, 2, len(d.(map[string]any)["builds"].([]any)))
+		d, err := ExecutePackerOutput(&info, &packerFlags)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(d.(map[string]any)["builds"].([]any)))
+	})
 
-	packerFlags.Query = ".builds[0].artifact_id | split(\":\")[1]"
-	d, err = ExecutePackerOutput(&info, &packerFlags)
-	assert.NoError(t, err)
-	assert.Equal(t, "ami-0c2ca16b7fcac7529", d)
+	// Test missing stack
+	t.Run("missing stack", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "output",
+		}
 
-	packerFlags.Query = ".builds[0].artifact_id"
-	d, err = ExecutePackerOutput(&info, &packerFlags)
-	assert.NoError(t, err)
-	assert.Equal(t, "us-east-2:ami-0c2ca16b7fcac7529", d)
+		packerFlags := PackerFlags{}
+
+		_, err := ExecutePackerOutput(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	// Test invalid component path
+	t.Run("invalid component path", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "invalid/component",
+			SubCommand:       "output",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+
+		packerFlags := PackerFlags{}
+
+		_, err := ExecutePackerOutput(&info, &packerFlags)
+		assert.Error(t, err)
+	})
+
+	// Test custom manifest filename
+	t.Run("custom manifest filename", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "output",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+			ComponentVarsSection: map[string]any{
+				"manifest_file_name": "manifest.json",
+			},
+		}
+
+		packerFlags := PackerFlags{}
+
+		d, err := ExecutePackerOutput(&info, &packerFlags)
+		assert.NoError(t, err)
+		assert.NotNil(t, d)
+	})
+
+	// Test query processing (original test cases)
+	t.Run("query processing", func(t *testing.T) {
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "output",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+
+		t.Run("split query", func(t *testing.T) {
+			packerFlags := PackerFlags{
+				Query: ".builds[0].artifact_id | split(\":\")[1]",
+			}
+			d, err := ExecutePackerOutput(&info, &packerFlags)
+			assert.NoError(t, err)
+			assert.Equal(t, "ami-0c2ca16b7fcac7529", d)
+		})
+
+		t.Run("simple query", func(t *testing.T) {
+			packerFlags := PackerFlags{
+				Query: ".builds[0].artifact_id",
+			}
+			d, err := ExecutePackerOutput(&info, &packerFlags)
+			assert.NoError(t, err)
+			assert.Equal(t, "us-east-2:ami-0c2ca16b7fcac7529", d)
+		})
+
+		t.Run("invalid query", func(t *testing.T) {
+			packerFlags := PackerFlags{
+				Query: "invalid.query[",
+			}
+			_, err := ExecutePackerOutput(&info, &packerFlags)
+			assert.Error(t, err)
+		})
+	})
 }
