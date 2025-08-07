@@ -55,6 +55,7 @@ type AtmosConfiguration struct {
 	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
 	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
 	Docs          Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth          AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -952,4 +953,19 @@ type ListConfig struct {
 type ListColumnConfig struct {
 	Name  string `yaml:"name" json:"name" mapstructure:"name"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
+}
+
+type AuthConfig struct {
+	Identities    map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
+	DefaultRegion string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
+}
+
+type IdentityDefaultConfig struct {
+	Alias string // To be set by the key in `identities`
+
+	Default bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
+	Enabled bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
+	Type    string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
+	Profile string `yaml:"profile,omitempty" json:"profile,omitempty" mapstructure:"profile,omitempty"`
+	Region  string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
 }
