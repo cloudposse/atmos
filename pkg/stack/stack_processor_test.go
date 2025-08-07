@@ -296,3 +296,112 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 	assert.Equal(t, "import", mapResultKeys[1])
 	assert.Equal(t, "vars", mapResultKeys[2])
 }
+
+func TestProcessYAMLConfigFiles(t *testing.T) {
+	t.Run("should handle empty file paths", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{
+					Enabled: true,
+					Sprig: schema.TemplatesSettingsSprig{
+						Enabled: true,
+					},
+					Gomplate: schema.TemplatesSettingsGomplate{
+						Enabled: true,
+					},
+				},
+			},
+		}
+
+		listResult, mapResult, importsConfig, err := ProcessYAMLConfigFiles(
+			atmosConfig,
+			"stacks",
+			"terraform",
+			"helmfile",
+			"packer",
+			[]string{},
+			true,
+			true,
+			false,
+		)
+
+		assert.NoError(t, err)
+		assert.Empty(t, listResult)
+		assert.Empty(t, mapResult)
+		assert.Empty(t, importsConfig)
+	})
+
+	t.Run("should error on missing files without ignoreMissingFiles", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{
+					Enabled: true,
+				},
+			},
+		}
+
+		_, _, _, err := ProcessYAMLConfigFiles(
+			atmosConfig,
+			"stacks",
+			"terraform",
+			"helmfile",
+			"packer",
+			[]string{"non-existent-file.yaml"},
+			true,
+			true,
+			false,
+		)
+
+		assert.Error(t, err)
+	})
+
+	t.Run("should process valid config files", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{
+					Enabled: true,
+					Sprig: schema.TemplatesSettingsSprig{
+						Enabled: true,
+					},
+					Gomplate: schema.TemplatesSettingsGomplate{
+						Enabled: true,
+					},
+				},
+			},
+		}
+
+		filePaths := []string{
+			"../../tests/fixtures/scenarios/complete/stacks/orgs/cp/tenant1/dev/us-east-2.yaml",
+		}
+
+		listResult, mapResult, _, err := ProcessYAMLConfigFiles(
+			atmosConfig,
+			"../../tests/fixtures/scenarios/complete/stacks",
+			"../../tests/fixtures/scenarios/complete/components/terraform",
+			"../../tests/fixtures/scenarios/complete/components/helmfile",
+			"../../tests/fixtures/scenarios/complete/components/packer",
+			filePaths,
+			true,
+			true,
+			false,
+		)
+
+		assert.NoError(t, err)
+		assert.NotEmpty(t, listResult)
+		assert.NotEmpty(t, mapResult)
+		assert.Equal(t, 1, len(listResult))
+		assert.Equal(t, 1, len(mapResult))
+
+		// Verify the content of the processed file
+		config, err := u.UnmarshalYAML[schema.AtmosSectionMapType](listResult[0])
+		assert.NoError(t, err)
+
+		// Check if the components section exists
+		components, ok := config["components"].(map[string]any)
+		assert.True(t, ok)
+		assert.NotNil(t, components)
+
+		// Verify the stack name is correctly mapped
+		assert.Contains(t, mapResult, "orgs/cp/tenant1/dev/us-east-2")
+	})
+}

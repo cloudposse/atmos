@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
-
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/pkg/errors"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
@@ -148,7 +148,7 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 
 // atmosConfigAbsolutePaths converts paths to absolute paths.
 func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
-	// Convert stacks base path to absolute path
+	// Convert stacks base path to an absolute path
 	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
