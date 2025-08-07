@@ -72,11 +72,10 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 func pickIdentity(AuthConfig schema.AuthConfig) (string, error) {
 	// Simple Picker
 	items := []string{}
-	for k, _ := range AuthConfig.Identities {
+	for k := range AuthConfig.Identities {
 		items = append(items, k)
 	}
 	choose, err := picker.NewSimplePicker("Choose an Identities Config", items).Choose()
-
 	if err != nil {
 		return "", err
 	}

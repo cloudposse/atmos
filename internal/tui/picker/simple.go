@@ -3,9 +3,10 @@ package picker
 import (
 	"errors"
 	"fmt"
-	"github.com/charmbracelet/lipgloss"
 	"io"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"

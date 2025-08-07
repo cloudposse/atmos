@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
-	"os"
-	"path/filepath"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"

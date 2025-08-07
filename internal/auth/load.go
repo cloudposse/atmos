@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+
 	l "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
@@ -21,7 +22,7 @@ func GetDefaultIdentity(config schema.AuthConfig) (string, error) {
 	}
 
 	var defaultIdentities []string
-	for k, _ := range identityConfigs {
+	for k := range identityConfigs {
 		if identityConfigs[k].Default && identityConfigs[k].Enabled {
 			defaultIdentities = append(defaultIdentities, k)
 		}
@@ -37,7 +38,7 @@ func GetDefaultIdentity(config schema.AuthConfig) (string, error) {
 
 func GetIdentityConfigs(config schema.AuthConfig) (map[string]schema.IdentityDefaultConfig, error) {
 	identityConfigs := make(map[string]schema.IdentityDefaultConfig)
-	for k, _ := range config.Identities {
+	for k := range config.Identities {
 		rawBytes, err := yaml.Marshal(config.Identities[k])
 		if err != nil {
 			l.Errorf("failed to marshal identity %q: %w", k, err)
@@ -89,7 +90,7 @@ func GetIdentityInstance(identity string, config schema.AuthConfig) (LoginMethod
 	// TODO see above decision
 	switch typeVal {
 	case "aws/iam-identity-center":
-		var data = &awsIamIdentityCenter{}
+		data := &awsIamIdentityCenter{}
 		b, err := yaml.Marshal(config.Identities[identity])
 		if err != nil {
 			return nil, err
@@ -101,7 +102,7 @@ func GetIdentityInstance(identity string, config schema.AuthConfig) (LoginMethod
 		}
 		return data, err
 	case "aws/saml":
-		var data = &awsSaml{}
+		data := &awsSaml{}
 		b, err := yaml.Marshal(config.Identities[identity])
 		if err != nil {
 			return nil, err

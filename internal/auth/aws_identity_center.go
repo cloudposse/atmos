@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/sso/types"
 	"github.com/cloudposse/atmos/internal/auth/authstore"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/zalando/go-keyring"
-	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
@@ -41,7 +42,6 @@ func (config *awsIamIdentityCenter) Login() error {
 	store := authstore.NewKeyringAuthStore()
 	keyringKey := fmt.Sprintf("%s-%s", config.Alias, config.Profile)
 	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(config.Region))
-
 	if err != nil {
 		panic(fmt.Errorf("failed to load config: %w", err))
 	}
@@ -136,7 +136,7 @@ aws_access_key_id=%s
 aws_secret_access_key=%s
 aws_session_token=%s
 `, config.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken)
-	err = os.WriteFile(awsCredentialsPath, []byte(content), 0600)
+	err = os.WriteFile(awsCredentialsPath, []byte(content), 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to write credentials file: %w", err)
 	}
@@ -208,6 +208,7 @@ func RoleToAccountId(role string) string {
 	}
 	return roleArn.AccountID
 }
+
 func SsoSync(startUrl, region string) *ssooidc.CreateTokenOutput {
 	tokenOut, err := SsoSyncE(startUrl, region)
 	if err != nil {
