@@ -29,8 +29,6 @@ type awsIamIdentityCenter struct {
 	AccountId   string `yaml:"account_id,omitempty" json:"account_id,omitempty" mapstructure:"account_id,omitempty"`
 	AccountName string `yaml:"account_name,omitempty" json:"account_name,omitempty" mapstructure:"account_name,omitempty"`
 	RoleName    string `yaml:"role_name,omitempty" json:"role_name,omitempty" mapstructure:"role_name,omitempty"`
-	Url         string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
-	Region      string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
 }
 
 func (config *awsIamIdentityCenter) Login() error {
