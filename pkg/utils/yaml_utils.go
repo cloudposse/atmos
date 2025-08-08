@@ -20,6 +20,7 @@ const (
 	// Atmos YAML functions.
 	AtmosYamlFuncExec            = "!exec"
 	AtmosYamlFuncStore           = "!store"
+	AtmosYamlFuncStoreGetKey     = "!store.getkey"
 	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
 	AtmosYamlFuncTerraformState  = "!terraform.state"
@@ -34,6 +35,7 @@ var (
 	AtmosYamlTags = []string{
 		AtmosYamlFuncExec,
 		AtmosYamlFuncStore,
+		AtmosYamlFuncStoreGetKey,
 		AtmosYamlFuncTemplate,
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,

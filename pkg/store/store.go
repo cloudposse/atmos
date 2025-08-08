@@ -6,6 +6,7 @@ import "strings"
 type Store interface {
 	Set(stack string, component string, key string, value interface{}) error
 	Get(stack string, component string, key string) (interface{}, error)
+	GetKey(key string) (interface{}, error)
 }
 
 // StoreFactory is a function type to initialize a new store.
