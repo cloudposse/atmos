@@ -1,0 +1,29 @@
+imports:
+  - catalog/helmfile/services
+
+vars:
+  stage: dev
+  tenant: tenant
+  environment: dev
+  region: us-east-2
+  cluster_name: "{{ .vars.stage }}-{{ .vars.tenant }}"
+
+components:
+  helmfile:
+    nginx:
+      metadata:
+        component: "infrastructure/nginx"
+      settings:
+        spacelift:
+          workspace_enabled: true
+      vars:
+        namespace: "default"
+        ingress_class: "nginx"
+        replicas: 2
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi 
