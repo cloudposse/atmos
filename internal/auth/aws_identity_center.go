@@ -15,7 +15,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	ssooidctypes "github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/charmbracelet/log"
@@ -38,12 +37,19 @@ func (config *awsIamIdentityCenter) Login() error {
 	ctx := context.Background()
 	store := authstore.NewKeyringAuthStore()
 	keyringKey := fmt.Sprintf("%s-%s", config.Alias, config.Profile)
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(config.Region))
-
-	if err != nil {
-		panic(fmt.Errorf("failed to load config: %w", err))
-	}
-	ssoClient := sso.NewFromConfig(cfg)
+	//cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(config.Region))
+	//
+	//if err != nil {
+	//	panic(fmt.Errorf("failed to load config: %w", err))
+	//}
+	log.Info("Creating SSO Client", "region", config.Region)
+	//ssoClient := sso.NewFromConfig(cfg)
+	//if ssoClient == nil {
+	//	return errors.New("failed to create sso client")
+	//}
+	ssoClient := sso.New(sso.Options{
+		Region: config.Region,
+	})
 
 	var credentials *authstore.AuthCredential
 	// 1. Log into Method - Perhaps we already have a valid token
@@ -55,7 +61,11 @@ func (config *awsIamIdentityCenter) Login() error {
 	} else {
 		// 1.B No valid token, log in
 		// 1.B.1. Start SSO flow
-		tokenOut := SsoSync(config.Url, config.Region)
+		tokenOut, err := SsoSyncE(config.Url, config.Region)
+		if err != nil {
+			return err
+		}
+
 		accessToken := *tokenOut.AccessToken
 		log.Info("✅ Logged in! Token acquired.")
 
@@ -70,7 +80,7 @@ func (config *awsIamIdentityCenter) Login() error {
 		credentials = newCred
 		err = store.Set(keyringKey, newCred)
 		if err != nil {
-			return fmt.Errorf("failed to save token: %w", err)
+			log.Warn("failed to save token:", "error", err)
 		}
 	}
 
@@ -109,7 +119,7 @@ func (config *awsIamIdentityCenter) Login() error {
 		AccountId:   aws.String(accountId),
 		RoleName:    aws.String(RoleName),
 	})
-	log.Debug("Role Credentials", "role_name", RoleName, "accountid", accountId, "rolename", config.Role)
+	log.Debug("Role Credentials", "role_name", RoleName, "accountid", accountId, "role", config.Role)
 	if err != nil {
 		var roles []string
 		r, _ := getAccountRoles(ctx, ssoClient, credentials.Token, accountId)
@@ -120,7 +130,7 @@ func (config *awsIamIdentityCenter) Login() error {
 		return err
 	}
 
-	WriteAwsCredentials(config.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken)
+	WriteAwsCredentials(config.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken, config.Alias)
 
 	log.Info("✅ Logged in! Credentials written to ~/.aws/credentials", "profile", config.Profile)
 
@@ -201,8 +211,16 @@ func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {
 	log.Debug("Syncing with SSO", "startUrl", startUrl, "region", region)
 	// 1. Load config for SSO region
 	ctx := context.Background()
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
-	oidc := ssooidc.NewFromConfig(cfg)
+	//cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	//if err != nil {
+	//	err = fmt.Errorf("failed to load config: %w", err)
+	//	log.Error(err)
+	//	return nil, err
+	//}
+	//oidc := ssooidc.NewFromConfig(cfg)
+	oidc := ssooidc.New(ssooidc.Options{
+		Region: region,
+	})
 
 	// 2. Register client
 	regOut, err := oidc.RegisterClient(ctx, &ssooidc.RegisterClientInput{
@@ -228,7 +246,7 @@ func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {
 	}
 	err = utils.OpenUrl(*authOut.VerificationUriComplete)
 	if err != nil {
-		log.Error(err)
+		log.Warn(err)
 		log.Infof("🔐 Please visit %s and enter code: %s", *authOut.VerificationUriComplete, *authOut.UserCode)
 	}
 	// 4. Poll for token

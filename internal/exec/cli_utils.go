@@ -56,6 +56,7 @@ var commonFlags = []string{
 	cfg.AllFlag,
 	cfg.InitPassVars,
 	cfg.PlanSkipPlanfile,
+	cfg.IdentityFlag,
 }
 
 // ProcessCommandLineArgs processes command-line args.
@@ -128,6 +129,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
+	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
 	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
 	configAndStacksInfo.All = argsAndFlagsInfo.All
 
@@ -505,6 +507,19 @@ func processArgsAndFlags(
 				return info, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, arg)
 			}
 			info.Query = parts[1]
+		}
+
+		if arg == cfg.IdentityFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, arg)
+			}
+			info.Identity = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.IdentityFlag) {
+			parts := strings.Split(arg, "=")
+			if len(parts) != 2 {
+				return info, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidFlag, arg)
+			}
+			info.Identity = parts[1]
 		}
 
 		if arg == cfg.FromPlanFlag {

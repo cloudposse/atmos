@@ -106,4 +106,6 @@ const (
 
 	ComponentStr = "component"
 	StackStr     = "stack"
+
+	IdentityFlag = "--identity"
 )

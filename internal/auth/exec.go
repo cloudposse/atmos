@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/tui/picker"
 
@@ -10,11 +11,36 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func TerraformPreHook(identity string, atmosConfig schema.AuthConfig) error {
 	log.SetPrefix("[atmos-auth] ")
+	defer log.SetPrefix("")
+	// If no explicit identity passed, try to use the configured default one (if any)
+	if identity == "" {
+		if def, derr := GetDefaultIdentity(atmosConfig); derr == nil && def != "" {
+			log.Info("Using default identity", "identity", def)
+			identity = def
+		}
+	}
+	if identity != "" {
+		identityInstance, err := GetIdentityInstance(identity, atmosConfig)
+		if err != nil {
+			return err
+		}
+		if err = identityInstance.Validate(); err != nil {
+			return fmt.Errorf("identity validation error: %w", err)
+		}
+		if err = identityInstance.Login(); err != nil {
+			return fmt.Errorf("identity login failed: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
+	log.SetPrefix("[atmos-auth] ")
+	defer log.SetPrefix("")
+
 	flags := cmd.Flags()
 
 	// Get Atmos Auth Configuration
@@ -27,7 +53,7 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		log.Fatal("no auth identities found")
 	}
 
-	// Get Identity or prompt for one
+	// Get IdentityFlag or prompt for one
 	identity, err := flags.GetString("identity")
 	if err != nil {
 		return err
@@ -50,7 +76,7 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 	validationErr := IdentityInstance.Validate()
 	if validationErr != nil {
-		log.Fatal("Identity Validation Error", "error", validationErr, "config", IdentityInstance)
+		log.Fatal("IdentityFlag Validation Error", "error", validationErr, "config", IdentityInstance)
 	}
 
 	return IdentityInstance.Login()

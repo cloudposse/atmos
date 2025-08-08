@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -123,12 +122,15 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 		targetRole = selected
 	}
 
-	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
-	if err != nil {
-		return nil, fmt.Errorf("load AWS config: %w", err)
-	}
-	stsClient := sts.NewFromConfig(awsCfg)
+	//awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	//if err != nil {
+	//	return nil, fmt.Errorf("load AWS config: %w", err)
+	//}
+	//stsClient := sts.NewFromConfig(awsCfg)
 
+	stsClient := sts.New(sts.Options{
+		Region: region,
+	})
 	out, err := stsClient.AssumeRoleWithSAML(ctx, &sts.AssumeRoleWithSAMLInput{
 		PrincipalArn:  aws.String(targetRole.PrincipalARN),
 		RoleArn:       aws.String(targetRole.RoleARN),
@@ -185,12 +187,15 @@ func (i *awsSaml) Login() error {
 		Region:          i.Region,
 		SessionDuration: 3600,
 	})
+	if err != nil {
+		return err
+	}
 	log.Info("Success",
 		"arn", res.AssumedRole,
 		"expires", res.Expires,
 	)
 
-	WriteAwsCredentials(i.Profile, res.Credentials.AccessKeyID, res.Credentials.SecretAccessKey, res.Credentials.SessionToken)
+	WriteAwsCredentials(i.Profile, res.Credentials.AccessKeyID, res.Credentials.SecretAccessKey, res.Credentials.SessionToken, i.Alias)
 
 	if err != nil {
 		return err

@@ -442,6 +442,7 @@ type ArgsAndFlagsInfo struct {
 	Query                     string
 	Affected                  bool
 	All                       bool
+	Identity                  string
 }
 
 type ConfigAndStacksInfo struct {
@@ -519,6 +520,7 @@ type ConfigAndStacksInfo struct {
 	Affected                      bool
 	All                           bool
 	Components                    []string
+	Identity                      string
 }
 
 // Workflows

@@ -12,7 +12,7 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken string) error {
+func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken, identity string) error {
 	if profile == "" {
 		return fmt.Errorf("profile is required")
 	}
@@ -56,7 +56,7 @@ func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken str
 	sec.Key("aws_session_token").SetValue(sessionToken)
 	// Some legacy consumers still look at aws_security_token; set it too.
 	sec.Key("aws_security_token").SetValue(sessionToken)
-	sec.Comment = fmt.Sprintf("updated by atmos-auth on %s (%s)", time.Now().Format(time.RFC3339), runtime.GOOS)
+	sec.Comment = fmt.Sprintf("atmos-auth [identity=%s] generated on %s (%s)", identity, time.Now().Format(time.RFC3339), runtime.GOOS)
 
 	// Write atomically: dump to memory, write temp w/ 0600, then rename
 	var buf bytes.Buffer
