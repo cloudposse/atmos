@@ -1,0 +1,27 @@
+imports:
+  - catalog/terraform/services
+
+vars:
+  stage: dev
+  tenant: tenant
+  environment: dev
+  region: us-east-2
+  account_id: "123456789012"
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: "infrastructure/vpc"
+      settings:
+        spacelift:
+          workspace_enabled: true
+      vars:
+        name: "main"
+        cidr_block: "10.0.0.0/16"
+        availability_zones: ["us-east-2a", "us-east-2b", "us-east-2c"]
+        public_subnets: ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+        private_subnets: ["10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24"]
+        tags:
+          Environment: "<no value>"
+          Tenant: "<no value>" 
