@@ -178,6 +178,7 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 
 func (i *awsSaml) Login() error {
 	ctx := context.Background()
+	// TODO check for existing credentials and expiry
 	res, err := Saml2AwsLogin(ctx, LoginOpts{
 		URL:             i.Url,
 		RoleARN:         i.RoleArn,
