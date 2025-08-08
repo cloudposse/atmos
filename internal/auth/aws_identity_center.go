@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/sso/types"
 	"github.com/cloudposse/atmos/internal/auth/authstore"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/zalando/go-keyring"
-	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
@@ -123,24 +122,7 @@ func (config *awsIamIdentityCenter) Login() error {
 		return err
 	}
 
-	// Resolve home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		panic(fmt.Errorf("failed to get user home directory: %w", err))
-	}
-
-	// Path to ~/.aws/credentials
-	awsCredentialsPath := filepath.Join(homeDir, ".aws", "credentials")
-	content := fmt.Sprintf(`
-[%s]
-aws_access_key_id=%s
-aws_secret_access_key=%s
-aws_session_token=%s
-`, config.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken)
-	err = os.WriteFile(awsCredentialsPath, []byte(content), 0600)
-	if err != nil {
-		return fmt.Errorf("failed to write credentials file: %w", err)
-	}
+	WriteAwsCredentials(config.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken)
 
 	log.Info("✅ Logged in! Credentials written to ~/.aws/credentials", "profile", config.Profile)
 

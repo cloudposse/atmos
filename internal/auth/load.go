@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+
 	l "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
@@ -31,8 +32,8 @@ var identityRegistry = map[string]func(identity string, config schema.AuthConfig
 		}
 		err = yaml.Unmarshal(b, data)
 		data.Alias = identity
-		if data.IdpAccount.Region == "" {
-			data.IdpAccount.Region = config.DefaultRegion
+		if data.Region == "" {
+			data.Region = config.DefaultRegion
 		}
 		return data, err
 	},

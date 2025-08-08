@@ -945,4 +945,6 @@ type IdentityDefaultConfig struct {
 	Enabled bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
 	Type    string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
 	Profile string `yaml:"profile,omitempty" json:"profile,omitempty" mapstructure:"profile,omitempty"`
+	Url     string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
+	Region  string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
 }

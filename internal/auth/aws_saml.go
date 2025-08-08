@@ -5,6 +5,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -14,14 +18,12 @@ import (
 	_ "github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
 	"github.com/versent/saml2aws/v2/pkg/creds"
-	"os"
-	"path/filepath"
-	"time"
 )
 
 type awsSaml struct {
 	schema.IdentityDefaultConfig `yaml:",inline"`
-	IdpAccount                   cfg.IDPAccount `yaml:",inline"`
+	RoleArn                      string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
+	SessionDuration              int32  `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
 }
 
 // Input options for login.
@@ -34,12 +36,6 @@ type LoginOpts struct {
 	Region string
 	// Session duration in seconds (1h default if 0).
 	SessionDuration int32
-	// Auto-download playwright browser drivers if needed.
-	AutoDownloadBrowserDriver bool
-	// Optional: path to put the browser driver cache. Empty = default.
-	BrowserDriverDir string
-	// Optional: set a specific browser executable path (rare).
-	BrowserExecutablePath string
 }
 
 // Output credentials + metadata.
@@ -71,9 +67,7 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 	idp.URL = in.URL
 	idp.Provider = "Browser" // non-headless, real browser window
 	idp.Headless = false
-	idp.DownloadBrowser = in.AutoDownloadBrowserDriver
-	idp.BrowserDriverDir = in.BrowserDriverDir
-	idp.BrowserExecutablePath = in.BrowserExecutablePath
+	idp.DownloadBrowser = true
 	idp.SessionDuration = int(in.SessionDuration)
 
 	if err := idp.Validate(); err != nil {
@@ -89,7 +83,7 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 	// No username/password: the Browser provider will launch a UI and the user signs in.
 	loginDetails := &creds.LoginDetails{
 		URL:             idp.URL,
-		DownloadBrowser: in.AutoDownloadBrowserDriver,
+		DownloadBrowser: true,
 	}
 
 	log.Info("Launching IDP login in browser...", "url", in.URL)
@@ -101,8 +95,12 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 	}
 	log.Info("Received SAML assertion from IDP")
 
-	// saml2aws helpers to parse available roles from the assertion
-	rolesStr, err := saml2aws.ExtractAwsRoles([]byte(assertionB64))
+	decodedXML, err := base64.StdEncoding.DecodeString(assertionB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode SAML assertion: %w", err)
+	}
+
+	rolesStr, err := saml2aws.ExtractAwsRoles(decodedXML)
 	if err != nil {
 		return nil, fmt.Errorf("extract AWS roles: %w", err)
 	}
@@ -111,7 +109,8 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 		return nil, fmt.Errorf("parse AWS roles: %w", err)
 	}
 	if len(roles) == 0 {
-		return nil, errors.New("no AWS roles found in SAML assertion")
+		// Add a helpful hint for Google/Okta etc.
+		return nil, fmt.Errorf("no AWS roles found in SAML assertion (IDP = Google?). Check that the IdP app is configured to include AWS role attributes (https://aws.amazon.com/SAML/Attributes) and that you’re assigned to at least one role")
 	}
 
 	// Pick target role
@@ -124,12 +123,6 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 		targetRole = selected
 	}
 
-	// Exchange assertion for AWS credentials via AssumeRoleWithSAML
-	decodedAssertion, err := base64.StdEncoding.DecodeString(assertionB64)
-	if err != nil {
-		return nil, fmt.Errorf("decode assertion: %w", err)
-	}
-
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
@@ -139,7 +132,7 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 	out, err := stsClient.AssumeRoleWithSAML(ctx, &sts.AssumeRoleWithSAMLInput{
 		PrincipalArn:  aws.String(targetRole.PrincipalARN),
 		RoleArn:       aws.String(targetRole.RoleARN),
-		SAMLAssertion: aws.String(base64.StdEncoding.EncodeToString(decodedAssertion)),
+		SAMLAssertion: aws.String(assertionB64),
 		DurationSeconds: aws.Int32(func() int32 {
 			// Respect requested duration within STS/account limits.
 			if in.SessionDuration > 0 {
@@ -186,16 +179,17 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 func (i *awsSaml) Login() error {
 	ctx := context.Background()
 	res, err := Saml2AwsLogin(ctx, LoginOpts{
-		URL:                       "https://accounts.google.com/o/saml2/initsso?idpid=C01yjz1jl&spid=1081421647897&forceauthn=false",
-		RoleARN:                   "arn:aws:iam::555042905974:role/cplive-core-gbl-identity-managers", // optional
-		Region:                    "us-west-2",
-		SessionDuration:           3600,
-		AutoDownloadBrowserDriver: true,
+		URL:             i.Url,
+		RoleARN:         i.RoleArn,
+		Region:          i.Region,
+		SessionDuration: 3600,
 	})
-	log.Info("Logging in...", "login", res)
 	log.Info("Success",
 		"arn", res.AssumedRole,
-		"expires", res.Expires)
+		"expires", res.Expires,
+	)
+
+	WriteAwsCredentials(i.Profile, res.Credentials.AccessKeyID, res.Credentials.SecretAccessKey, res.Credentials.SessionToken)
 
 	if err != nil {
 		return err
