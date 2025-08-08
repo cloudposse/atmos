@@ -3,14 +3,19 @@ package auth
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/log"
-	"github.com/chromedp/chromedp"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/versent/saml2aws/v2"
 	_ "github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
-
-	"net/http"
+	"github.com/versent/saml2aws/v2/pkg/creds"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -19,78 +24,183 @@ type awsSaml struct {
 	IdpAccount                   cfg.IDPAccount `yaml:",inline"`
 }
 
-func (i *awsSaml) Login() error {
+// Input options for login.
+type LoginOpts struct {
+	// The IDP SAML login URL (e.g., Okta, Ping, ADFS, etc.)
+	URL string
+	// Optional: force a specific role ARN to assume. If empty, the first role will be used.
+	RoleARN string
+	// Optional AWS region for STS calls.
+	Region string
+	// Session duration in seconds (1h default if 0).
+	SessionDuration int32
+	// Auto-download playwright browser drivers if needed.
+	AutoDownloadBrowserDriver bool
+	// Optional: path to put the browser driver cache. Empty = default.
+	BrowserDriverDir string
+	// Optional: set a specific browser executable path (rare).
+	BrowserExecutablePath string
+}
 
-	samlResponse, err := captureSAMLResponse(i.IdpAccount.URL)
+// Output credentials + metadata.
+type LoginResult struct {
+	Credentials  aws.Credentials
+	AssumedRole  string
+	PrincipalARN string
+	Expires      time.Time
+	AllRoles     []string
+}
+
+// Login opens a non-headless browser to authenticate with the IDP via saml2aws Browser provider,
+// exchanges the SAML assertion for AWS creds, and returns them.
+func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
+	_ = ensureSaml2awsStorageDir()
+	if in.URL == "" {
+		return nil, errors.New("URL is required")
+	}
+	if in.SessionDuration == 0 {
+		in.SessionDuration = 3600
+	}
+	region := in.Region
+	if region == "" {
+		region = "us-east-1"
+	}
+
+	// Build the saml2aws IDP account using the Browser provider.
+	idp := cfg.NewIDPAccount()
+	idp.URL = in.URL
+	idp.Provider = "Browser" // non-headless, real browser window
+	idp.Headless = false
+	idp.DownloadBrowser = in.AutoDownloadBrowserDriver
+	idp.BrowserDriverDir = in.BrowserDriverDir
+	idp.BrowserExecutablePath = in.BrowserExecutablePath
+	idp.SessionDuration = int(in.SessionDuration)
+
+	if err := idp.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid idp account: %w", err)
+	}
+
+	// Create SAML client
+	client, err := saml2aws.NewSAMLClient(idp)
+	if err != nil {
+		return nil, fmt.Errorf("create SAML client: %w", err)
+	}
+
+	// No username/password: the Browser provider will launch a UI and the user signs in.
+	loginDetails := &creds.LoginDetails{
+		URL:             idp.URL,
+		DownloadBrowser: in.AutoDownloadBrowserDriver,
+	}
+
+	log.Info("Launching IDP login in browser...", "url", in.URL)
+
+	// Authenticate and get base64-encoded SAML assertion.
+	assertionB64, err := client.Authenticate(loginDetails)
+	if err != nil {
+		return nil, fmt.Errorf("authenticate to IDP: %w", err)
+	}
+	log.Info("Received SAML assertion from IDP")
+
+	// saml2aws helpers to parse available roles from the assertion
+	rolesStr, err := saml2aws.ExtractAwsRoles([]byte(assertionB64))
+	if err != nil {
+		return nil, fmt.Errorf("extract AWS roles: %w", err)
+	}
+	roles, err := saml2aws.ParseAWSRoles(rolesStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse AWS roles: %w", err)
+	}
+	if len(roles) == 0 {
+		return nil, errors.New("no AWS roles found in SAML assertion")
+	}
+
+	// Pick target role
+	targetRole := roles[0]
+	if in.RoleARN != "" {
+		selected, err := saml2aws.LocateRole(roles, in.RoleARN)
+		if err != nil {
+			return nil, fmt.Errorf("role %s not present in assertion: %w", in.RoleARN, err)
+		}
+		targetRole = selected
+	}
+
+	// Exchange assertion for AWS credentials via AssumeRoleWithSAML
+	decodedAssertion, err := base64.StdEncoding.DecodeString(assertionB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode assertion: %w", err)
+	}
+
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return nil, fmt.Errorf("load AWS config: %w", err)
+	}
+	stsClient := sts.NewFromConfig(awsCfg)
+
+	out, err := stsClient.AssumeRoleWithSAML(ctx, &sts.AssumeRoleWithSAMLInput{
+		PrincipalArn:  aws.String(targetRole.PrincipalARN),
+		RoleArn:       aws.String(targetRole.RoleARN),
+		SAMLAssertion: aws.String(base64.StdEncoding.EncodeToString(decodedAssertion)),
+		DurationSeconds: aws.Int32(func() int32 {
+			// Respect requested duration within STS/account limits.
+			if in.SessionDuration > 0 {
+				return in.SessionDuration
+			}
+			return 3600
+		}()),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("assume role with SAML: %w", err)
+	}
+
+	credsOut := out.Credentials
+	if credsOut == nil {
+		return nil, errors.New("no credentials returned by STS")
+	}
+
+	all := make([]string, 0, len(roles))
+	for _, r := range roles {
+		all = append(all, fmt.Sprintf("%s|%s", r.RoleARN, r.PrincipalARN))
+	}
+
+	log.Info("Assumed role with SAML",
+		"role", targetRole.RoleARN,
+		"principal", targetRole.PrincipalARN,
+		"expires", credsOut.Expiration)
+
+	return &LoginResult{
+		Credentials: aws.Credentials{
+			AccessKeyID:     aws.ToString(credsOut.AccessKeyId),
+			SecretAccessKey: aws.ToString(credsOut.SecretAccessKey),
+			SessionToken:    aws.ToString(credsOut.SessionToken),
+			Source:          "saml2aws",
+			CanExpire:       true,
+			Expires:         aws.ToTime(credsOut.Expiration),
+		},
+		AssumedRole:  targetRole.RoleARN,
+		PrincipalARN: targetRole.PrincipalARN,
+		Expires:      aws.ToTime(credsOut.Expiration),
+		AllRoles:     all,
+	}, nil
+}
+
+func (i *awsSaml) Login() error {
+	ctx := context.Background()
+	res, err := Saml2AwsLogin(ctx, LoginOpts{
+		URL:                       "https://accounts.google.com/o/saml2/initsso?idpid=C01yjz1jl&spid=1081421647897&forceauthn=false",
+		RoleARN:                   "arn:aws:iam::555042905974:role/cplive-core-gbl-identity-managers", // optional
+		Region:                    "us-west-2",
+		SessionDuration:           3600,
+		AutoDownloadBrowserDriver: true,
+	})
+	log.Info("Logging in...", "login", res)
+	log.Info("Success",
+		"arn", res.AssumedRole,
+		"expires", res.Expires)
+
 	if err != nil {
 		return err
 	}
-	log.Info("SAML Response", "response", samlResponse)
 	return nil
-}
-
-func captureSAMLResponse(ssoURL string) (string, error) {
-	log.Info("Capturing SAML Response...", "sso_url", ssoURL)
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", false), // ⬅️ disables headless mode
-		chromedp.Flag("disable-gpu", false),
-		chromedp.Flag("start-maximized", true),
-	)
-	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), opts...)
-	ctx, cancel := chromedp.NewContext(allocCtx)
-	defer cancel()
-
-	// Set a timeout to avoid hanging
-	ctx, timeoutCancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer timeoutCancel()
-
-	var samlValue string
-
-	tasks := chromedp.Tasks{
-		chromedp.Navigate(ssoURL),
-
-		// Wait for form input to appear — this may take time due to SSO/MFA
-		chromedp.WaitVisible(`input[name="SAMLResponse"]`, chromedp.ByQuery),
-
-		// Read its value
-		chromedp.Value(`input[name="SAMLResponse"]`, &samlValue, chromedp.ByQuery),
-	}
-
-	err := chromedp.Run(ctx, tasks)
-	if err != nil {
-		return "", fmt.Errorf("chromedp failed: %w", err)
-	}
-
-	// Optional: Decode to verify it's a valid SAML XML blob
-	decoded, err := base64.StdEncoding.DecodeString(samlValue)
-	if err != nil {
-		return "", fmt.Errorf("base64 decode failed: %w", err)
-	}
-
-	log.Info("SAML XML snippet:", string(decoded[:120])+"...")
-
-	return samlValue, nil
-}
-
-func startSAMLServer(samlChan chan string) {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "ParseForm() error", http.StatusBadRequest)
-			return
-		}
-
-		saml := r.FormValue("SAMLResponse")
-		if saml == "" {
-			http.Error(w, "Missing SAMLResponse", http.StatusBadRequest)
-			return
-		}
-
-		log.Info("Received SAML assertion")
-		fmt.Fprint(w, "SAML assertion received. You can close this tab.")
-		samlChan <- saml
-	})
-
-	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func (i *awsSaml) Logout() error {
@@ -99,4 +209,14 @@ func (i *awsSaml) Logout() error {
 
 func (i *awsSaml) Validate() error {
 	return nil
+}
+
+// ensure saml2aws browser storage dir exists so storageState.json can be saved
+func ensureSaml2awsStorageDir() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(home, ".aws", "saml2aws")
+	return os.MkdirAll(dir, 0o700)
 }
