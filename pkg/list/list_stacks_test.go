@@ -17,7 +17,7 @@ func TestListStacks(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
 		nil, false, true, true, false, nil)
 	assert.Nil(t, err)
 
@@ -33,7 +33,7 @@ func TestListStacksWithComponent(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
 		nil, false, true, true, false, nil)
 	assert.Nil(t, err)
 

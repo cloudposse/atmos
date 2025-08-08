@@ -16,7 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
+// ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
@@ -66,12 +66,12 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 		format = "hcl"
 	}
 
-	return ExecuteTerraformGenerateBackends(atmosConfig, fileTemplate, format, stacks, components)
+	return ExecuteTerraformGenerateBackends(&atmosConfig, fileTemplate, format, stacks, components)
 }
 
-// ExecuteTerraformGenerateBackends generates backend configs for all terraform components
+// ExecuteTerraformGenerateBackends generates backend configs for all terraform components.
 func ExecuteTerraformGenerateBackends(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	fileTemplate string,
 	format string,
 	stacks []string,
@@ -241,7 +241,7 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
-					&atmosConfig,
+					atmosConfig,
 					&configAndStacksInfo,
 					settingsSectionStruct,
 					"terraform-generate-backends",
@@ -265,7 +265,7 @@ func ExecuteTerraformGenerateBackends(
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(&atmosConfig, componentSectionConverted, stackName, nil)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)
 				if err != nil {
 					return err
 				}
@@ -345,12 +345,12 @@ func ExecuteTerraformGenerateBackends(
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteTerraformBackendConfigToFileAsHcl(atmosConfig, backendFileAbsolutePath, backendTypeSection, backendSection)
+						err = u.WriteTerraformBackendConfigToFileAsHcl(backendFileAbsolutePath, backendTypeSection, backendSection)
 						if err != nil {
 							return err
 						}
 					} else if format == "backend-config" {
-						err = u.WriteToFileAsHcl(atmosConfig, backendFileAbsolutePath, backendSection, 0o644)
+						err = u.WriteToFileAsHcl(backendFileAbsolutePath, backendSection, 0o644)
 						if err != nil {
 							return err
 						}

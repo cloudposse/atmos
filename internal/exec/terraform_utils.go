@@ -425,7 +425,7 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	}
 
 	stacks, err := ExecuteDescribeStacks(
-		atmosConfig,
+		&atmosConfig,
 		info.Stack,
 		info.Components,
 		[]string{cfg.TerraformComponentType},
