@@ -1,0 +1,72 @@
+---
+title: atmos packer init
+sidebar_label: init
+sidebar_class_name: command
+id: init
+---
+
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
+<img width="80" align="right" src={useBaseUrl('/img/hashicorp-packer.svg')} alt="Packer"/>
+
+:::note purpose
+Use this command to initialize Packer and install plugins according to an HCL template configuration for an Atmos component in a stack.
+:::
+
+## Usage
+
+Execute the `packer init` command like this:
+
+```shell
+atmos packer init <component> --stack <stack> [flags] -- [packer-options]
+```
+
+:::tip
+For more details on the `packer init` command and options, refer to [Packer init command reference](https://developer.hashicorp.com/packer/docs/commands/init).
+:::
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos Packer component.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em><em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--template` <em>(alias `-t`)</em><em>(optional)</em></dt>
+    <dd>
+        Packer template.
+        It can be specified in the `settings.packer.template` section in the Atmos component manifest,
+        or on the command line via the flag `--template <template>` (shorthand `-t`).
+        The command line flag takes precedence over `settings.packer.template`.
+    </dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos packer init aws/bastion --stack nonprod
+atmos packer init aws/bastion -s prod --template main.pkr.hcl
+atmos packer init aws/bastion -s nonprod -t main.nonprod.pkr.hcl
+```
+</Terminal>
+
+<Terminal title="atmos packer init aws/bastion --stack nonprod">
+```shell
+> atmos packer init aws/bastion --stack nonprod
+
+Installed plugin github.com/hashicorp/amazon v1.3.9 in "~/.config/packer/plugins/github.com/hashicorp/amazon/packer-plugin-amazon_v1.3.9_x5.0_darwin_arm64"
+```
+</Terminal>

@@ -23,7 +23,7 @@ func TestListComponents(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	require.NoError(t, err)
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
 		nil, false, true, true, false, nil)
 	assert.Nil(t, err)
 
@@ -44,7 +44,7 @@ func TestListComponentsWithStack(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	require.NoError(t, err)
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, testStack, nil, nil,
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, testStack, nil, nil,
 		nil, false, true, true, false, nil)
 	assert.Nil(t, err)
 
@@ -277,7 +277,7 @@ func TestFilterAndListComponentsIntegration(t *testing.T) {
 
 	// Test with invalid stack name
 	t.Run("invalid stack name", func(t *testing.T) {
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
+		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
 			nil, false, false, false, false, nil)
 		require.NoError(t, err)
 

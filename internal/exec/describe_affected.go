@@ -126,7 +126,7 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
-	if err := ValidateStacks(atmosConfig); err != nil {
+	if err := ValidateStacks(&atmosConfig); err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
 	// Process flags
