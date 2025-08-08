@@ -1,8 +1,8 @@
 # ADR: Approach for AWS SAML Login Implementation
 
-**Date:** 2025-08-08
+## Date: 2025-08-08
 
-**Status:** Accepted
+## Status: Accepted
 
 ## Context
 
