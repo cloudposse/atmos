@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-//go:embed templates/atmos-yaml/* templates/default/* templates/demo-helmfile/* templates/demo-localstack/* templates/demo-stacks/* templates/rich-project/*
+//go:embed templates/atmos-yaml/* templates/default/* templates/demo-helmfile/* templates/demo-localstack/* templates/demo-stacks/* templates/rich-project/* templates/path-test/*
 var templateFS embed.FS
 
 //go:embed templates/editorconfig/.editorconfig
@@ -312,6 +312,42 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 		Description: "Demonstration of using Atmos with Helmfile",
 		Files:       demoHelmfileFiles,
 		README:      demoHelmfileReadme,
+	}
+
+	// Path templating test configuration
+	pathTestFiles, err := readAllFilesFromDir("path-test")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read path-test configuration: %w", err)
+	}
+
+	// Read metadata from project-config.yaml
+	pathTestName, pathTestDescription, err := readProjectConfigMetadata("path-test")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read path-test metadata: %w", err)
+	}
+
+	// Find README for path-test
+	var pathTestReadme string
+	for _, file := range pathTestFiles {
+		if file.Path == "README.md" {
+			pathTestReadme = file.Content
+			break
+		}
+	}
+
+	// Use metadata if available, otherwise use defaults
+	if pathTestName == "" {
+		pathTestName = "path-test"
+	}
+	if pathTestDescription == "" {
+		pathTestDescription = "Test configuration for templated file paths"
+	}
+
+	configs["path-test"] = Configuration{
+		Name:        pathTestName,
+		Description: pathTestDescription,
+		Files:       pathTestFiles,
+		README:      pathTestReadme,
 	}
 
 	return configs, nil
