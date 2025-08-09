@@ -25,6 +25,7 @@ type Configuration struct {
 	Description string
 	Files       []File
 	README      string
+	TargetDir   string // Optional default target directory
 }
 
 // File represents a file to be created during initialization
@@ -44,26 +45,27 @@ func readTemplateFromDir(dir, name string) (string, error) {
 	return string(content), nil
 }
 
-// readProjectConfigMetadata reads name and description from project-config.yaml
-func readProjectConfigMetadata(dir string) (name, description string, err error) {
+// readProjectConfigMetadata reads name, description, and target_dir from project-config.yaml
+func readProjectConfigMetadata(dir string) (name, description, targetDir string, err error) {
 	// Try to read project-config.yaml
 	content, err := templateFS.ReadFile(filepath.Join("templates", dir, "project-config.yaml"))
 	if err != nil {
 		// If no project-config.yaml exists, return empty strings
-		return "", "", nil
+		return "", "", "", nil
 	}
 
-	// Simple struct to extract just name and description
+	// Simple struct to extract just name, description, and target_dir
 	var config struct {
 		Name        string `yaml:"name"`
 		Description string `yaml:"description"`
+		TargetDir   string `yaml:"target_dir"`
 	}
 
 	if err := yaml.Unmarshal(content, &config); err != nil {
-		return "", "", fmt.Errorf("failed to unmarshal project config: %w", err)
+		return "", "", "", fmt.Errorf("failed to unmarshal project config: %w", err)
 	}
 
-	return config.Name, config.Description, nil
+	return config.Name, config.Description, config.TargetDir, nil
 }
 
 // readAllFilesFromDir reads all files from a directory and returns them as File structs
@@ -130,7 +132,7 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 	}
 
 	// Read metadata from project-config.yaml if it exists
-	name, description, err := readProjectConfigMetadata("default")
+	name, description, targetDir, err := readProjectConfigMetadata("default")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read default metadata: %w", err)
 	}
@@ -157,6 +159,7 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 		Description: description,
 		Files:       defaultFiles,
 		README:      defaultReadme,
+		TargetDir:   targetDir,
 	}
 
 	// Rich project configuration
@@ -166,7 +169,7 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 	}
 
 	// Read metadata from project-config.yaml
-	richName, richDescription, err := readProjectConfigMetadata("rich-project")
+	richName, richDescription, richTargetDir, err := readProjectConfigMetadata("rich-project")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read rich-project metadata: %w", err)
 	}
@@ -193,6 +196,7 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 		Description: richDescription,
 		Files:       richProjectFiles,
 		README:      richProjectReadme,
+		TargetDir:   richTargetDir,
 	}
 
 	// Individual file configurations
@@ -321,7 +325,7 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 	}
 
 	// Read metadata from project-config.yaml
-	pathTestName, pathTestDescription, err := readProjectConfigMetadata("path-test")
+	pathTestName, pathTestDescription, pathTestTargetDir, err := readProjectConfigMetadata("path-test")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read path-test metadata: %w", err)
 	}
@@ -348,6 +352,7 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 		Description: pathTestDescription,
 		Files:       pathTestFiles,
 		README:      pathTestReadme,
+		TargetDir:   pathTestTargetDir,
 	}
 
 	return configs, nil

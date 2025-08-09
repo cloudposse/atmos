@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/experiments/init/embeds"
@@ -92,10 +93,10 @@ func NewInitCmd() *cobra.Command {
 	var templateValues []string
 
 	initCmd := &cobra.Command{
-		Use:   "init <configuration> [target path]",
+		Use:   "init [configuration] [target path]",
 		Short: "Initialize configurations and examples",
 		Long:  generateHelpText(),
-		Args:  cobra.RangeArgs(1, 2),
+		Args:  cobra.RangeArgs(0, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeInit(cmd, args, force, update, useDefaults, templateValues)
 		},
@@ -111,24 +112,141 @@ func NewInitCmd() *cobra.Command {
 	return initCmd
 }
 
+// promptForConfigurationAndPath prompts the user to select a configuration and target path
+func promptForConfigurationAndPath(configs map[string]embeds.Configuration) (string, string, error) {
+	// Create options for the select
+	var options []huh.Option[string]
+	var configKeys []string
+
+	// Sort configs for consistent ordering (basic ones first)
+	basicConfigs := []string{"default", "rich-project", "atmos.yaml", ".editorconfig", ".gitignore"}
+
+	// Add basic configs first if they exist
+	for _, key := range basicConfigs {
+		if config, exists := configs[key]; exists {
+			options = append(options, huh.NewOption(fmt.Sprintf("%s - %s", config.Name, config.Description), key))
+			configKeys = append(configKeys, key)
+		}
+	}
+
+	// Add remaining configs (examples, demos, etc.)
+	for key, config := range configs {
+		// Skip if already added in basic configs
+		found := false
+		for _, basicKey := range configKeys {
+			if key == basicKey {
+				found = true
+				break
+			}
+		}
+		if !found {
+			options = append(options, huh.NewOption(fmt.Sprintf("%s - %s", config.Name, config.Description), key))
+		}
+	}
+
+	var selectedConfig string
+
+	// First form to select configuration
+	configForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Select a configuration to initialize").
+				Description("Choose from the available project templates and configurations").
+				Options(options...).
+				Value(&selectedConfig),
+		),
+	)
+
+	err := configForm.Run()
+	if err != nil {
+		return "", "", err
+	}
+
+	// Generate suggested directory name based on template
+	suggestedDir := generateSuggestedDirectory(selectedConfig, configs[selectedConfig])
+	targetPath := suggestedDir
+
+	// Second form to get target directory with smart default
+	pathForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Target directory").
+				Description(fmt.Sprintf("Where should the files be created? (suggested: %s)", suggestedDir)).
+				Placeholder(suggestedDir).
+				Value(&targetPath).
+				Validate(func(s string) error {
+					if s == "" {
+						return nil // Empty is OK, will use suggested default
+					}
+					return nil
+				}),
+		),
+	)
+
+	err = pathForm.Run()
+	if err != nil {
+		return "", "", err
+	}
+
+	// Use suggested directory if empty
+	if targetPath == "" {
+		targetPath = suggestedDir
+	}
+
+	return selectedConfig, targetPath, nil
+}
+
+// generateSuggestedDirectory creates a sensible default directory name based on the template configuration
+func generateSuggestedDirectory(configName string, config embeds.Configuration) string {
+	// If the template specifies a target_dir, use that
+	if config.TargetDir != "" {
+		return config.TargetDir
+	}
+	
+	// Check if this template creates only single files at the root level
+	// If so, and it's a single file, suggest current directory
+	if len(config.Files) == 1 {
+		file := config.Files[0]
+		// If it's a single file at the root (no subdirectories), use current directory
+		if !strings.Contains(file.Path, "/") {
+			return "."
+		}
+	}
+	
+	// For all other cases, use the template folder name as the suggested directory
+	return "./" + filepath.Base(configName)
+}
+
 func executeInit(cmd *cobra.Command, args []string, force, update, useDefaults bool, templateValues []string) error {
-	// Parse arguments - Cobra ensures we have at least 1 argument
-	configName := args[0]
-	targetPath := "."
-	if len(args) == 2 {
-		targetPath = args[1]
+	// Get available configurations first
+	configs, err := embeds.GetAvailableConfigurations()
+	if err != nil {
+		return fmt.Errorf("failed to get available configurations: %w", err)
+	}
+
+	var configName, targetPath string
+
+	// Handle interactive mode when no arguments provided
+	if len(args) == 0 {
+		selectedConfig, selectedPath, err := promptForConfigurationAndPath(configs)
+		if err != nil {
+			return fmt.Errorf("failed to prompt for configuration: %w", err)
+		}
+		configName = selectedConfig
+		targetPath = selectedPath
+	} else {
+		// Parse arguments when provided
+		configName = args[0]
+		targetPath = "."
+		if len(args) == 2 {
+			targetPath = args[1]
+		}
 	}
 
 	// Resolve target path
 	absTargetPath, err := filepath.Abs(targetPath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve target path: %w", err)
-	}
-
-	// Get available configurations
-	configs, err := embeds.GetAvailableConfigurations()
-	if err != nil {
-		return fmt.Errorf("failed to get available configurations: %w", err)
 	}
 
 	// Find the requested configuration
