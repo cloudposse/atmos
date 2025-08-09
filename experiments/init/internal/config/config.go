@@ -424,7 +424,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 	}
 
 	switch field.Type {
-	case "input", "text":
+	case "input", "text", "string":
 		var value string
 		if str, ok := currentValue.(string); ok {
 			value = str
@@ -510,7 +510,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 
 		return multiSelect, func() interface{} { return value }
 
-	case "confirm":
+	case "confirm", "bool", "boolean":
 		var value bool
 		if b, ok := currentValue.(bool); ok {
 			value = b
@@ -526,17 +526,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 		return confirm, func() interface{} { return value }
 
 	default:
-		// Default to input
-		var value string
-		if str, ok := currentValue.(string); ok {
-			value = str
-		}
-		input := huh.NewInput().
-			Title(field.Label).
-			Description(field.Description).
-			Placeholder(field.Placeholder).
-			Value(&value)
-
-		return input, func() interface{} { return value }
+		// Reject unknown field types instead of defaulting to input
+		panic(fmt.Sprintf("unsupported field type '%s' for field '%s'. Supported types: input, text, string, select, multiselect, confirm, bool, boolean", field.Type, key))
 	}
 }
