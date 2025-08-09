@@ -46,7 +46,7 @@ func TestExecuteInit_ValidArgs(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"atmos.yaml", tempDir}
 
-	err := executeInit(cmd, args, false, false, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err != nil {
 		t.Fatalf("Expected no error for valid args, got: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestExecuteInit_InvalidConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"nonexistent", tempDir}
 
-	err := executeInit(cmd, args, false, false, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err == nil {
 		t.Fatal("Expected error for invalid config")
 	}
@@ -77,7 +77,7 @@ func TestExecuteInit_RelativePath(t *testing.T) {
 	cmd := &cobra.Command{}
 	args := []string{"atmos.yaml", "./test"}
 
-	err := executeInit(cmd, args, false, false, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err != nil {
 		t.Fatalf("Expected no error for relative path, got: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestExecuteInit_AbsolutePath(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"atmos.yaml", tempDir}
 
-	err := executeInit(cmd, args, false, false, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err != nil {
 		t.Fatalf("Expected no error for absolute path, got: %v", err)
 	}
@@ -103,13 +103,13 @@ func TestExecuteInit_ForceFlag(t *testing.T) {
 	args := []string{"atmos.yaml", tempDir}
 
 	// First run
-	err := executeInit(cmd, args, false, false, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err != nil {
 		t.Fatalf("Expected no error for first run, got: %v", err)
 	}
 
 	// Second run with force
-	err = executeInit(cmd, args, true, false, []string{"author=Test User", "year=2024", "license=MIT"})
+	err = executeInit(cmd, args, true, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err != nil {
 		t.Fatalf("Expected no error with force flag, got: %v", err)
 	}
@@ -121,13 +121,13 @@ func TestExecuteInit_UpdateFlag(t *testing.T) {
 	args := []string{"atmos.yaml", tempDir}
 
 	// First run
-	err := executeInit(cmd, args, false, false, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err != nil {
 		t.Fatalf("Expected no error for first run, got: %v", err)
 	}
 
 	// Second run with update
-	err = executeInit(cmd, args, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err = executeInit(cmd, args, false, true, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err != nil {
 		t.Fatalf("Expected no error with update flag, got: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestExecuteInit_DefaultConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"default", tempDir}
 
-	err := executeInit(cmd, args, false, false, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err != nil {
 		t.Fatalf("Expected no error for default config, got: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestExecuteInit_DemoConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"examples/demo-stacks", tempDir}
 
-	err := executeInit(cmd, args, false, false, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
 	if err != nil {
 		t.Fatalf("Expected no error for demo config, got: %v", err)
 	}
@@ -215,6 +215,37 @@ func TestGenerateHelpText_Examples(t *testing.T) {
 	for _, example := range expectedExamples {
 		if !contains(helpText, example) {
 			t.Errorf("Expected help text to contain example: %s", example)
+		}
+	}
+}
+
+func TestExecuteInit_PathTemplating(t *testing.T) {
+	cmd := &cobra.Command{}
+	tempDir := t.TempDir()
+	args := []string{"path-test", tempDir}
+
+	templateValues := []string{
+		"namespace=production",
+		"author=test-user",
+		"description=Integration test for path templating",
+	}
+
+	err := executeInit(cmd, args, false, false, true, templateValues)
+	if err != nil {
+		t.Fatalf("Expected no error for path-test config, got: %v", err)
+	}
+
+	// Check that files were created with templated paths
+	expectedFiles := []string{
+		"production/config.yaml",
+		"production/docs/README.md",
+		"production-monitoring.yaml",
+	}
+
+	for _, file := range expectedFiles {
+		filePath := filepath.Join(tempDir, file)
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			t.Errorf("Expected file %s to be created", file)
 		}
 	}
 }
@@ -345,7 +376,7 @@ func TestExecuteInit_WithValues(t *testing.T) {
 	args := []string{"atmos.yaml", tempDir}
 	templateValues := []string{"author=John", "year=2024", "license=MIT"}
 
-	err := executeInit(cmd, args, false, false, templateValues)
+	err := executeInit(cmd, args, false, false, true, templateValues)
 	if err != nil {
 		t.Fatalf("Expected no error for valid template values, got: %v", err)
 	}
@@ -363,7 +394,7 @@ func TestExecuteInit_WithInvalidValues(t *testing.T) {
 	args := []string{"atmos.yaml", tempDir}
 	invalidValues := []string{"author=John", "invalid-format"}
 
-	err := executeInit(cmd, args, false, false, invalidValues)
+	err := executeInit(cmd, args, false, false, true, invalidValues)
 	if err == nil {
 		t.Fatal("Expected error for invalid template values")
 	}
@@ -386,7 +417,7 @@ func TestExecuteInit_WithRichProjectValues(t *testing.T) {
 		"enable_monitoring=true",
 	}
 
-	err := executeInit(cmd, args, false, false, templateValues)
+	err := executeInit(cmd, args, false, false, true, templateValues)
 	if err != nil {
 		t.Fatalf("Expected no error for rich project with template values, got: %v", err)
 	}

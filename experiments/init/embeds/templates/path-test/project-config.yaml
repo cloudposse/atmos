@@ -1,0 +1,74 @@
+name: "Path Template Test"
+description: "Test configuration for templated file paths with conditional creation"
+
+fields:
+  namespace:
+    type: string
+    label: "Namespace"
+    prompt: "What namespace should be used?"
+    default: "default"
+    help: "The namespace will be used in file paths and configuration"
+
+  author:
+    type: string
+    label: "Author"
+    prompt: "Who is the author?"
+    default: "Anonymous"
+    help: "Author name for the configuration files"
+
+  description:
+    type: string
+    label: "Project Description"
+    prompt: "What is the project description?"
+    default: "A test project with templated paths"
+    help: "Description of what this namespace/project does"
+
+  cloud_provider:
+    type: select
+    label: "Cloud Provider"
+    prompt: "Which cloud provider will you use?"
+    options: ["aws", "gcp", "azure", "none"]
+    default: "none"
+    help: "Cloud provider-specific files will only be created for the selected provider"
+
+  aws_region:
+    type: string
+    label: "AWS Region"
+    prompt: "Which AWS region?"
+    default: "us-east-1"
+    help: "AWS region for resources (only used if cloud_provider is aws)"
+
+  gcp_project_id:
+    type: string
+    label: "GCP Project ID"
+    prompt: "What is your GCP project ID?"
+    default: ""
+    help: "GCP project ID (only used if cloud_provider is gcp)"
+
+  gcp_region:
+    type: string
+    label: "GCP Region"
+    prompt: "Which GCP region?"
+    default: "us-central1"
+    help: "GCP region for resources (only used if cloud_provider is gcp)"
+
+  enable_monitoring:
+    type: bool
+    label: "Enable Monitoring"
+    prompt: "Enable monitoring configuration?"
+    default: false
+    help: "Whether to create monitoring configuration files"
+
+  environment:
+    type: string
+    label: "Environment"
+    prompt: "What environment is this for?"
+    default: "dev"
+    help: "Environment name (dev, staging, prod, etc.)"
+
+  subdirectory:
+    type: string
+    label: "Subdirectory"
+    prompt: "What subdirectory name (leave empty to skip deep config file)?"
+    default: ""
+    help: "Optional subdirectory - if empty, files with this path segment won't be created"

@@ -1,0 +1,7 @@
+# Deep configuration file
+# This file demonstrates nested templates in paths
+# If subdirectory is empty, this file won't be created due to empty path segment
+
+namespace: { { .Config.namespace } }
+subdirectory: { { .Config.subdirectory } }
+deep_config: true
