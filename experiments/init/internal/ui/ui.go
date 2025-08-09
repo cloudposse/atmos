@@ -878,7 +878,7 @@ func (ui *InitUI) processTemplateWithConfig(content string, targetPath string, u
 		"TargetPath":         targetPath,
 		"Author":             userConfig.Author,
 		"Year":               userConfig.Year,
-		"License":            userConfig.License[0], // Use first license as default
+		"License":            userConfig.License,
 	}
 
 	// Add template functions to avoid conflicts with reserved names
