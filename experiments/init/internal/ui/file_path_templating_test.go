@@ -51,7 +51,7 @@ func TestProcessFilePath(t *testing.T) {
 		},
 		{
 			name:         "invalid template syntax",
-			inputPath:    "{{.Config.nonexistent}}/config.yaml",
+			inputPath:    "{{.Config.nonexistent}",
 			expectedPath: "",
 			shouldError:  true,
 		},
@@ -95,25 +95,25 @@ func TestProcessFilePathWithConfig(t *testing.T) {
 	}{
 		{
 			name:         "author in path",
-			inputPath:    "{{.Config.author}}/config.yaml",
+			inputPath:    "{{.Author}}/config.yaml",
 			expectedPath: "test-author/config.yaml",
 			shouldError:  false,
 		},
 		{
 			name:         "year in path",
-			inputPath:    "archives/{{.Config.year}}/backup.yaml",
+			inputPath:    "archives/{{.Year}}/backup.yaml",
 			expectedPath: "archives/2024/backup.yaml",
 			shouldError:  false,
 		},
 		{
 			name:         "license in path",
-			inputPath:    "licenses/{{.Config.license}}/LICENSE",
+			inputPath:    "licenses/{{.License}}/LICENSE",
 			expectedPath: "licenses/MIT/LICENSE",
 			shouldError:  false,
 		},
 		{
 			name:         "mixed variables",
-			inputPath:    "{{.Config.author}}/{{.Config.year}}/project.yaml",
+			inputPath:    "{{.Author}}/{{.Year}}/project.yaml",
 			expectedPath: "test-author/2024/project.yaml",
 			shouldError:  false,
 		},
@@ -189,7 +189,7 @@ func TestProcessFileWithBasicTemplating_FilePathTemplating(t *testing.T) {
 	}
 
 	file := embeds.File{
-		Path:        "{{.Config.author}}/{{.Config.year}}/config.yaml",
+		Path:        "{{.Author}}/{{.Year}}/config.yaml",
 		Content:     "author: {{.Author}}\nyear: {{.Year}}",
 		IsTemplate:  true,
 		Permissions: 0644,

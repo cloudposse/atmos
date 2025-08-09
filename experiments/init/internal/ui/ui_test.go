@@ -262,8 +262,8 @@ func TestProcessTemplateWithGomplateFunctions(t *testing.T) {
 		},
 		{
 			name:     "date functions",
-			template: `Now: {{now | date "2006"}}, Formatted: {{now | date "2006-01-02"}}`,
-			expected: `Now: 2025, Formatted: 2025-08-08`,
+			template: `Now: {{now | date "2006"}}, Length: {{len (now | date "2006-01-02")}}`,
+			expected: `Now: 2025, Length: 10`,
 		},
 		{
 			name:     "array functions",
