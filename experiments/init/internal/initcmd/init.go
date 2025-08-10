@@ -279,6 +279,11 @@ func parseTemplateValues(templateValues []string) (map[string]interface{}, error
 	result := make(map[string]interface{})
 
 	for _, templateValue := range templateValues {
+		// Check for multiple equals signs first
+		if strings.Count(templateValue, "=") != 1 {
+			return nil, fmt.Errorf("invalid template value format: %s (expected key=value)", templateValue)
+		}
+
 		// Split on equals sign
 		parts := strings.SplitN(templateValue, "=", 2)
 		if len(parts) != 2 {
@@ -288,6 +293,7 @@ func parseTemplateValues(templateValues []string) (map[string]interface{}, error
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 
+		// Check for empty key (including whitespace-only keys)
 		if key == "" {
 			return nil, fmt.Errorf("empty key in template value: %s", templateValue)
 		}
@@ -306,7 +312,7 @@ func parseTemplateValues(templateValues []string) (map[string]interface{}, error
 
 // parseValue attempts to parse a string value into the most appropriate type
 func parseValue(value string) (interface{}, error) {
-	// Try to parse as boolean
+	// Try to parse as boolean first
 	switch strings.ToLower(value) {
 	case "true", "yes", "1":
 		return true, nil
