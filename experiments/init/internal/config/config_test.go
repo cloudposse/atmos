@@ -90,35 +90,36 @@ license: "MIT"`
 
 func TestLoadUserValues_ExistingConfig(t *testing.T) {
 	tempDir := t.TempDir()
-	
+
 	// Create a mock config.yaml with existing values
-	configContent := `author: Foobar
-year: "2025"
-license: Apache Software License 2.0
-cloud_provider: aws
-enable_logging: true
-enable_monitoring: true
-environment: dev
-project_description: An Atmos project for managing infrastructure as code
-project_name: my-atmos-project
-regions:
-  - us-west-2
-  - eu-west-1
-terraform_version: 1.5.0`
-	
+	configContent := `values:
+  author: Foobar
+  year: "2025"
+  license: Apache Software License 2.0
+  cloud_provider: aws
+  enable_logging: true
+  enable_monitoring: true
+  environment: dev
+  project_description: An Atmos project for managing infrastructure as code
+  project_name: my-atmos-project
+  regions:
+    - us-west-2
+    - eu-west-1
+  terraform_version: 1.5.0`
+
 	// Create the .atmos directory and config.yaml
 	atmosDir := filepath.Join(tempDir, ".atmos")
 	err := os.MkdirAll(atmosDir, 0755)
 	assert.NoError(t, err)
-	
+
 	configPath := filepath.Join(atmosDir, "config.yaml")
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	assert.NoError(t, err)
-	
+
 	// Load the values
 	values, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
-	
+
 	// Verify all values are loaded correctly
 	assert.Equal(t, "Foobar", values["author"])
 	assert.Equal(t, "2025", values["year"])

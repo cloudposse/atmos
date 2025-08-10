@@ -127,12 +127,30 @@ func LoadUserValues(projectPath string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to read user values: %w", err)
 	}
 
-	var values map[string]interface{}
-	if err := yaml.Unmarshal(data, &values); err != nil {
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user values: %w", err)
 	}
 
-	return values, nil
+	// Extract values from the values key, or return the whole config if no values key
+	if values, ok := config["values"].(map[string]interface{}); ok {
+		return values, nil
+	}
+	
+	// Handle map[interface{}]interface{} (YAML default)
+	if values, ok := config["values"].(map[interface{}]interface{}); ok {
+		// Convert to map[string]interface{}
+		result := make(map[string]interface{})
+		for k, v := range values {
+			if strKey, ok := k.(string); ok {
+				result[strKey] = v
+			}
+		}
+		return result, nil
+	}
+	
+	// Backward compatibility: if no values key, return the whole config
+	return config, nil
 }
 
 // SaveUserValues saves user values to a project directory
@@ -146,7 +164,12 @@ func SaveUserValues(projectPath string, values map[string]interface{}) error {
 		return fmt.Errorf("failed to create .atmos directory: %w", err)
 	}
 
-	data, err := yaml.Marshal(values)
+	// Wrap values under a values key
+	config := map[string]interface{}{
+		"values": values,
+	}
+
+	data, err := yaml.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("failed to marshal user values: %w", err)
 	}
