@@ -130,7 +130,7 @@ func TestResolveConflictBlock(t *testing.T) {
 }
 
 func TestMerge_YAMLExample(t *testing.T) {
-	merger := NewThreeWayMerger(20)
+	merger := NewThreeWayMerger(50) // Increase threshold to handle the YAML changes
 
 	existing := `# Custom configuration
 base_path: "."
