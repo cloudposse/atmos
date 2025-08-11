@@ -30,7 +30,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v0.4.2
 	github.com/creack/pty v1.1.24
-	github.com/editorconfig-checker/editorconfig-checker/v3 v3.3.0
+	github.com/editorconfig-checker/editorconfig-checker/v3 v3.4.0
 	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.16.2
