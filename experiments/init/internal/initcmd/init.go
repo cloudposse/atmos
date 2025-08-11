@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/experiments/init/embeds"
@@ -91,6 +92,7 @@ Examples:
 func NewInitCmd() *cobra.Command {
 	var force, update, useDefaults bool
 	var templateValues []string
+	var threshold int
 
 	initCmd := &cobra.Command{
 		Use:   "init [configuration] [target path]",
@@ -98,7 +100,7 @@ func NewInitCmd() *cobra.Command {
 		Long:  generateHelpText(),
 		Args:  cobra.RangeArgs(0, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeInit(cmd, args, force, update, useDefaults, templateValues)
+			return executeInit(cmd, args, force, update, useDefaults, templateValues, threshold)
 		},
 	}
 
@@ -107,6 +109,7 @@ func NewInitCmd() *cobra.Command {
 	initCmd.Flags().BoolVarP(&update, "update", "u", false, "Attempt 3-way merge for existing files")
 	initCmd.Flags().BoolVar(&useDefaults, "use-defaults", false, "Use default values without prompting")
 	initCmd.Flags().StringArrayVarP(&templateValues, "values", "V", []string{}, "Set template values (format: key=value, can be specified multiple times)")
+	initCmd.Flags().IntVar(&threshold, "threshold", 0, "Percentage threshold for 3-way merge (0-100, 0 = use default 50%%)")
 	initCmd.MarkFlagsMutuallyExclusive("force", "update")
 
 	return initCmd
@@ -114,23 +117,19 @@ func NewInitCmd() *cobra.Command {
 
 // promptForConfigurationAndPath prompts the user to select a configuration and target path
 func promptForConfigurationAndPath(configs map[string]embeds.Configuration) (string, string, error) {
-	// Create options for the select
-	var options []huh.Option[string]
+	// Build config keys for consistent ordering (basic ones first)
 	var configKeys []string
-
-	// Sort configs for consistent ordering (basic ones first)
 	basicConfigs := []string{"default", "rich-project", "atmos.yaml", ".editorconfig", ".gitignore"}
 
 	// Add basic configs first if they exist
 	for _, key := range basicConfigs {
-		if config, exists := configs[key]; exists {
-			options = append(options, huh.NewOption(fmt.Sprintf("%s - %s", config.Name, config.Description), key))
+		if _, exists := configs[key]; exists {
 			configKeys = append(configKeys, key)
 		}
 	}
 
 	// Add remaining configs (examples, demos, etc.)
-	for key, config := range configs {
+	for key := range configs {
 		// Skip if already added in basic configs
 		found := false
 		for _, basicKey := range configKeys {
@@ -140,27 +139,51 @@ func promptForConfigurationAndPath(configs map[string]embeds.Configuration) (str
 			}
 		}
 		if !found {
-			options = append(options, huh.NewOption(fmt.Sprintf("%s - %s", config.Name, config.Description), key))
+			configKeys = append(configKeys, key)
 		}
+	}
+
+	// Create a select with the table data
+	var options []huh.Option[string]
+	for _, key := range configKeys {
+		config := configs[key]
+		// Format as "ID   Name   Description" for better readability
+		displayText := fmt.Sprintf("%-15s   %-35s   %s", key, config.Name, config.Description)
+		options = append(options, huh.NewOption(displayText, key))
 	}
 
 	var selectedConfig string
 
-	// First form to select configuration
-	configForm := huh.NewForm(
+	// Create the selection form
+	selectionForm := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Select a configuration to initialize").
-				Description("Choose from the available project templates and configurations").
+				Description("Choose from the available project templates and configurations (press 'q' to quit)").
 				Options(options...).
 				Value(&selectedConfig),
 		),
 	)
 
-	err := configForm.Run()
+	err := selectionForm.Run()
 	if err != nil {
 		return "", "", err
 	}
+
+	// Display selected template details
+	selectedTemplate := configs[selectedConfig]
+	fmt.Println()
+
+	descStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 1)
+
+	// Display the template details
+	fmt.Println(descStyle.Render(selectedTemplate.Name))
+	if selectedTemplate.Description != "" {
+		fmt.Println(descStyle.Render(selectedTemplate.Description))
+	}
+	fmt.Println()
 
 	// Generate suggested directory name based on template
 	suggestedDir := generateSuggestedDirectory(selectedConfig, configs[selectedConfig])
@@ -202,7 +225,7 @@ func generateSuggestedDirectory(configName string, config embeds.Configuration) 
 	if config.TargetDir != "" {
 		return config.TargetDir
 	}
-	
+
 	// Check if this template creates only single files at the root level
 	// If so, and it's a single file, suggest current directory
 	if len(config.Files) == 1 {
@@ -212,12 +235,12 @@ func generateSuggestedDirectory(configName string, config embeds.Configuration) 
 			return "."
 		}
 	}
-	
+
 	// For all other cases, use the template folder name as the suggested directory
 	return "./" + filepath.Base(configName)
 }
 
-func executeInit(cmd *cobra.Command, args []string, force, update, useDefaults bool, templateValues []string) error {
+func executeInit(cmd *cobra.Command, args []string, force, update, useDefaults bool, templateValues []string, threshold int) error {
 	// Get available configurations first
 	configs, err := embeds.GetAvailableConfigurations()
 	if err != nil {
@@ -266,8 +289,11 @@ func executeInit(cmd *cobra.Command, args []string, force, update, useDefaults b
 		return fmt.Errorf("failed to parse template values: %w", err)
 	}
 
-	// Initialize the UI
+	// Initialize the UI with custom threshold if specified
 	initUI := ui.NewInitUI()
+	if threshold > 0 {
+		initUI.SetThresholdPercent(threshold)
+	}
 
 	// Execute the initialization
 	return initUI.Execute(config, absTargetPath, force, update, useDefaults, parsedTemplateValues)

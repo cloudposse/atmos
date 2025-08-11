@@ -10,14 +10,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-//go:embed templates/atmos-yaml/* templates/default/* templates/demo-helmfile/* templates/demo-localstack/* templates/demo-stacks/* templates/rich-project/* templates/path-test/*
-var templateFS embed.FS
-
+//go:embed templates/*
 //go:embed templates/editorconfig/.editorconfig
-var editorConfigFS embed.FS
-
 //go:embed templates/gitignore/.gitignore
-var gitignoreFS embed.FS
+var templateFS embed.FS
 
 // Configuration represents an initialization configuration
 type Configuration struct {
@@ -26,6 +22,7 @@ type Configuration struct {
 	Files       []File
 	README      string
 	TargetDir   string // Optional default target directory
+	TemplateID  string // Template identifier (e.g., "default", "rich-project")
 }
 
 // File represents a file to be created during initialization
@@ -45,27 +42,33 @@ func readTemplateFromDir(dir, name string) (string, error) {
 	return string(content), nil
 }
 
-// readProjectConfigMetadata reads name, description, and target_dir from project-config.yaml
-func readProjectConfigMetadata(dir string) (name, description, targetDir string, err error) {
+// readProjectConfigMetadata reads name, description, target_dir, and template_id from project-config.yaml
+func readProjectConfigMetadata(dir string) (name, description, targetDir, templateID string, err error) {
 	// Try to read project-config.yaml
 	content, err := templateFS.ReadFile(filepath.Join("templates", dir, "project-config.yaml"))
 	if err != nil {
 		// If no project-config.yaml exists, return empty strings
-		return "", "", "", nil
+		return "", "", "", "", nil
 	}
 
-	// Simple struct to extract just name, description, and target_dir
+	// Simple struct to extract just name, description, target_dir, and template_id
 	var config struct {
 		Name        string `yaml:"name"`
 		Description string `yaml:"description"`
 		TargetDir   string `yaml:"target_dir"`
+		TemplateID  string `yaml:"template_id"`
 	}
 
 	if err := yaml.Unmarshal(content, &config); err != nil {
-		return "", "", "", fmt.Errorf("failed to unmarshal project config: %w", err)
+		return "", "", "", "", fmt.Errorf("failed to unmarshal project config: %w", err)
 	}
 
-	return config.Name, config.Description, config.TargetDir, nil
+	// If template_id is not specified, use the directory name as fallback
+	if config.TemplateID == "" {
+		config.TemplateID = dir
+	}
+
+	return config.Name, config.Description, config.TargetDir, config.TemplateID, nil
 }
 
 // readAllFilesFromDir reads all files from a directory and returns them as File structs
@@ -125,240 +128,162 @@ func readAllFilesFromDir(dir string) ([]File, error) {
 func GetAvailableConfigurations() (map[string]Configuration, error) {
 	configs := make(map[string]Configuration)
 
-	// Default project configuration
-	defaultFiles, err := readAllFilesFromDir("default")
+	// Discover all template directories dynamically
+	templateDirs, err := discoverTemplateDirectories()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read default configuration: %w", err)
+		return nil, fmt.Errorf("failed to discover template directories: %w", err)
 	}
 
-	// Read metadata from project-config.yaml if it exists
-	name, description, targetDir, err := readProjectConfigMetadata("default")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read default metadata: %w", err)
+	// Process each discovered template directory
+	for _, dir := range templateDirs {
+		config, err := loadConfigurationFromDirectory(dir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load configuration from %s: %w", dir, err)
+		}
+		configs[dir] = config
 	}
 
-	// Find README for default config
-	var defaultReadme string
-	for _, file := range defaultFiles {
+	// Handle special single-file templates
+	singleFileTemplates := []struct {
+		name        string
+		description string
+		filePath    string
+		outputPath  string
+	}{
+		{
+			name:        "atmos.yaml",
+			description: "Initialize a local atmos CLI configuration file",
+			filePath:    "templates/atmos-yaml/atmos.yaml",
+			outputPath:  "atmos.yaml",
+		},
+		{
+			name:        ".editorconfig",
+			description: "Initialize a local Editor Config file",
+			filePath:    "templates/editorconfig/.editorconfig",
+			outputPath:  ".editorconfig",
+		},
+		{
+			name:        ".gitignore",
+			description: "Initialize a recommend Git ignore file",
+			filePath:    "templates/gitignore/.gitignore",
+			outputPath:  ".gitignore",
+		},
+	}
+
+	for _, tmpl := range singleFileTemplates {
+		content, err := templateFS.ReadFile(tmpl.filePath)
+		if err != nil {
+			// Skip if file doesn't exist
+			continue
+		}
+
+		configs[tmpl.name] = Configuration{
+			Name:        tmpl.name,
+			Description: tmpl.description,
+			Files: []File{
+				{
+					Path:        tmpl.outputPath,
+					Content:     string(content),
+					IsTemplate:  true,
+					Permissions: 0644,
+				},
+			},
+			TemplateID: tmpl.name,
+		}
+	}
+
+	return configs, nil
+}
+
+// discoverTemplateDirectories finds all template directories in the embedded filesystem
+func discoverTemplateDirectories() ([]string, error) {
+	var dirs []string
+
+	// Walk through the templates directory
+	err := fs.WalkDir(templateFS, "templates", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip the root templates directory
+		if path == "templates" {
+			return nil
+		}
+
+		// Only process directories that contain project-config.yaml or multiple files
+		if d.IsDir() {
+			// Check if this directory has a project-config.yaml (multi-file template)
+			if hasProjectConfig(path) {
+				// Get relative path from templates directory
+				relPath, err := filepath.Rel("templates", path)
+				if err != nil {
+					return fmt.Errorf("failed to get relative path for %s: %w", path, err)
+				}
+				dirs = append(dirs, relPath)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to walk templates directory: %w", err)
+	}
+
+	return dirs, nil
+}
+
+// hasProjectConfig checks if a directory contains a project-config.yaml file
+func hasProjectConfig(dirPath string) bool {
+	_, err := templateFS.ReadFile(filepath.Join(dirPath, "project-config.yaml"))
+	return err == nil
+}
+
+// loadConfigurationFromDirectory loads a configuration from a template directory
+func loadConfigurationFromDirectory(dir string) (Configuration, error) {
+	// Read all files from the directory
+	files, err := readAllFilesFromDir(dir)
+	if err != nil {
+		return Configuration{}, fmt.Errorf("failed to read files from %s: %w", dir, err)
+	}
+
+	// Read metadata from project-config.yaml
+	name, description, targetDir, templateID, err := readProjectConfigMetadata(dir)
+	if err != nil {
+		return Configuration{}, fmt.Errorf("failed to read metadata from %s: %w", dir, err)
+	}
+
+	// Find README
+	var readme string
+	for _, file := range files {
 		if file.Path == "README.md" {
-			defaultReadme = file.Content
+			readme = file.Content
 			break
 		}
 	}
 
 	// Use metadata if available, otherwise use defaults
 	if name == "" {
-		name = "default"
+		name = dir
 	}
 	if description == "" {
-		description = "Initialize a typical project for atmos"
+		description = fmt.Sprintf("Template: %s", dir)
+	}
+	if templateID == "" {
+		templateID = dir
 	}
 
-	configs["default"] = Configuration{
+	return Configuration{
 		Name:        name,
 		Description: description,
-		Files:       defaultFiles,
-		README:      defaultReadme,
+		Files:       files,
+		README:      readme,
 		TargetDir:   targetDir,
-	}
-
-	// Rich project configuration
-	richProjectFiles, err := readAllFilesFromDir("rich-project")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read rich-project configuration: %w", err)
-	}
-
-	// Read metadata from project-config.yaml
-	richName, richDescription, richTargetDir, err := readProjectConfigMetadata("rich-project")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read rich-project metadata: %w", err)
-	}
-
-	// Find README for rich project
-	var richProjectReadme string
-	for _, file := range richProjectFiles {
-		if file.Path == "README.md" {
-			richProjectReadme = file.Content
-			break
-		}
-	}
-
-	// Use metadata if available, otherwise use defaults
-	if richName == "" {
-		richName = "rich-project"
-	}
-	if richDescription == "" {
-		richDescription = "Initialize a project with rich configuration and interactive prompts"
-	}
-
-	configs["rich-project"] = Configuration{
-		Name:        richName,
-		Description: richDescription,
-		Files:       richProjectFiles,
-		README:      richProjectReadme,
-		TargetDir:   richTargetDir,
-	}
-
-	// Individual file configurations
-	atmosYAML, err := readTemplateFromDir("atmos-yaml", "atmos.yaml")
-	if err != nil {
-		return nil, err
-	}
-
-	configs["atmos.yaml"] = Configuration{
-		Name:        "atmos.yaml",
-		Description: "Initialize a local atmos CLI configuration file",
-		Files: []File{
-			{
-				Path:        "atmos.yaml",
-				Content:     atmosYAML,
-				IsTemplate:  true,
-				Permissions: 0644,
-			},
-		},
-	}
-
-	editorConfig, err := editorConfigFS.ReadFile("templates/editorconfig/.editorconfig")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read editorconfig: %w", err)
-	}
-
-	configs[".editorconfig"] = Configuration{
-		Name:        ".editorconfig",
-		Description: "Initialize a local Editor Config file",
-		Files: []File{
-			{
-				Path:        ".editorconfig",
-				Content:     string(editorConfig),
-				IsTemplate:  false,
-				Permissions: 0644,
-			},
-		},
-	}
-
-	gitignore, err := gitignoreFS.ReadFile("templates/gitignore/.gitignore")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read gitignore: %w", err)
-	}
-
-	configs[".gitignore"] = Configuration{
-		Name:        ".gitignore",
-		Description: "Initialize a recommend Git ignore file",
-		Files: []File{
-			{
-				Path:        ".gitignore",
-				Content:     string(gitignore),
-				IsTemplate:  false,
-				Permissions: 0644,
-			},
-		},
-	}
-
-	// Demo configurations
-	demoStacksFiles, err := readAllFilesFromDir("demo-stacks")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read demo-stacks configuration: %w", err)
-	}
-
-	// Find README for demo-stacks
-	var demoStacksReadme string
-	for _, file := range demoStacksFiles {
-		if file.Path == "README.md" {
-			demoStacksReadme = file.Content
-			break
-		}
-	}
-
-	configs["examples/demo-stacks"] = Configuration{
-		Name:        "examples/demo-stacks",
-		Description: "Demonstration of using Atmos stacks",
-		Files:       demoStacksFiles,
-		README:      demoStacksReadme,
-	}
-
-	demoLocalstackFiles, err := readAllFilesFromDir("demo-localstack")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read demo-localstack configuration: %w", err)
-	}
-
-	// Find README for demo-localstack
-	var demoLocalstackReadme string
-	for _, file := range demoLocalstackFiles {
-		if file.Path == "README.md" {
-			demoLocalstackReadme = file.Content
-			break
-		}
-	}
-
-	configs["examples/demo-localstack"] = Configuration{
-		Name:        "examples/demo-localstack",
-		Description: "Demonstration of using Atmos with localstack",
-		Files:       demoLocalstackFiles,
-		README:      demoLocalstackReadme,
-	}
-
-	demoHelmfileFiles, err := readAllFilesFromDir("demo-helmfile")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read demo-helmfile configuration: %w", err)
-	}
-
-	// Find README for demo-helmfile
-	var demoHelmfileReadme string
-	for _, file := range demoHelmfileFiles {
-		if file.Path == "README.md" {
-			demoHelmfileReadme = file.Content
-			break
-		}
-	}
-
-	configs["examples/demo-helmfile"] = Configuration{
-		Name:        "examples/demo-helmfile",
-		Description: "Demonstration of using Atmos with Helmfile",
-		Files:       demoHelmfileFiles,
-		README:      demoHelmfileReadme,
-	}
-
-	// Path templating test configuration
-	pathTestFiles, err := readAllFilesFromDir("path-test")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read path-test configuration: %w", err)
-	}
-
-	// Read metadata from project-config.yaml
-	pathTestName, pathTestDescription, pathTestTargetDir, err := readProjectConfigMetadata("path-test")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read path-test metadata: %w", err)
-	}
-
-	// Find README for path-test
-	var pathTestReadme string
-	for _, file := range pathTestFiles {
-		if file.Path == "README.md" {
-			pathTestReadme = file.Content
-			break
-		}
-	}
-
-	// Use metadata if available, otherwise use defaults
-	if pathTestName == "" {
-		pathTestName = "path-test"
-	}
-	if pathTestDescription == "" {
-		pathTestDescription = "Test configuration for templated file paths"
-	}
-
-	configs["path-test"] = Configuration{
-		Name:        pathTestName,
-		Description: pathTestDescription,
-		Files:       pathTestFiles,
-		README:      pathTestReadme,
-		TargetDir:   pathTestTargetDir,
-	}
-
-	return configs, nil
+		TemplateID:  templateID,
+	}, nil
 }
 
-// GetEmbeddedTemplate retrieves an embedded template file by name
+// GetEmbeddedTemplate retrieves a specific embedded template by name
 func GetEmbeddedTemplate(name string) (string, error) {
 	content, err := templateFS.ReadFile(filepath.Join("templates", name))
 	if err != nil {
