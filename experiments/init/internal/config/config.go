@@ -127,30 +127,12 @@ func LoadUserValues(projectPath string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to read user values: %w", err)
 	}
 
-	var config map[string]interface{}
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	var values map[string]interface{}
+	if err := yaml.Unmarshal(data, &values); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user values: %w", err)
 	}
 
-	// Extract values from the values key, or return the whole config if no values key
-	if values, ok := config["values"].(map[string]interface{}); ok {
-		return values, nil
-	}
-	
-	// Handle map[interface{}]interface{} (YAML default)
-	if values, ok := config["values"].(map[interface{}]interface{}); ok {
-		// Convert to map[string]interface{}
-		result := make(map[string]interface{})
-		for k, v := range values {
-			if strKey, ok := k.(string); ok {
-				result[strKey] = v
-			}
-		}
-		return result, nil
-	}
-	
-	// Backward compatibility: if no values key, return the whole config
-	return config, nil
+	return values, nil
 }
 
 // SaveUserValues saves user values to a project directory
@@ -164,12 +146,7 @@ func SaveUserValues(projectPath string, values map[string]interface{}) error {
 		return fmt.Errorf("failed to create .atmos directory: %w", err)
 	}
 
-	// Wrap values under a values key
-	config := map[string]interface{}{
-		"values": values,
-	}
-
-	data, err := yaml.Marshal(config)
+	data, err := yaml.Marshal(values)
 	if err != nil {
 		return fmt.Errorf("failed to marshal user values: %w", err)
 	}
@@ -447,7 +424,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 	}
 
 	switch field.Type {
-	case "input", "text", "string":
+	case "input", "text":
 		var value string
 		if str, ok := currentValue.(string); ok {
 			value = str
@@ -533,7 +510,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 
 		return multiSelect, func() interface{} { return value }
 
-	case "confirm", "bool", "boolean":
+	case "confirm":
 		var value bool
 		if b, ok := currentValue.(bool); ok {
 			value = b
@@ -549,7 +526,17 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 		return confirm, func() interface{} { return value }
 
 	default:
-		// Reject unknown field types instead of defaulting to input
-		panic(fmt.Sprintf("unsupported field type '%s' for field '%s'. Supported types: input, text, string, select, multiselect, confirm, bool, boolean", field.Type, key))
+		// Default to input
+		var value string
+		if str, ok := currentValue.(string); ok {
+			value = str
+		}
+		input := huh.NewInput().
+			Title(field.Label).
+			Description(field.Description).
+			Placeholder(field.Placeholder).
+			Value(&value)
+
+		return input, func() interface{} { return value }
 	}
 }

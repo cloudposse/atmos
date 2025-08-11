@@ -2,6 +2,7 @@ name: "Atmos Project Configuration"
 description: "Configuration for initializing an Atmos project"
 version: "1.0.0"
 target_dir: "atmos-example"
+template_id: "rich-project"
 
 fields:
   project_name:

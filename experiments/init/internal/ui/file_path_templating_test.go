@@ -421,8 +421,8 @@ func TestFilePathTemplating_ConditionalCreation(t *testing.T) {
 			os.RemoveAll(testDir)
 			os.MkdirAll(testDir, 0755)
 
-						err := ui.processFileWithTemplating(tc.file, testDir, false, false, nil, tc.userValues)
-			
+			err := ui.processFileWithTemplating(tc.file, testDir, false, false, nil, tc.userValues)
+
 			if tc.shouldCreate {
 				if err != nil {
 					t.Fatalf("Unexpected error when file should be created: %v", err)
@@ -439,20 +439,20 @@ func TestFilePathTemplating_ConditionalCreation(t *testing.T) {
 				} else if !IsFileSkipped(err) {
 					t.Errorf("Expected FileSkippedError but got: %v", err)
 				}
-				
+
 				// Check that no files were created (directory should be empty or contain only directories)
 				entries, err := os.ReadDir(testDir)
 				if err != nil {
 					t.Fatalf("Failed to read test directory: %v", err)
 				}
-				
+
 				fileCount := 0
 				for _, entry := range entries {
 					if !entry.IsDir() {
 						fileCount++
 					}
 				}
-				
+
 				if fileCount > 0 {
 					t.Errorf("Expected no files to be created, but found %d files", fileCount)
 				}

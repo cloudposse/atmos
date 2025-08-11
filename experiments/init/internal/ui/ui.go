@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,22 +20,6 @@ import (
 	"github.com/cloudposse/atmos/experiments/init/internal/config"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
-
-// FileSkippedError represents a file that was skipped due to empty path segments
-type FileSkippedError struct {
-	OriginalPath string
-	Reason       string
-}
-
-func (e FileSkippedError) Error() string {
-	return fmt.Sprintf("file skipped: %s (%s)", e.OriginalPath, e.Reason)
-}
-
-// IsFileSkipped checks if an error is a FileSkippedError
-func IsFileSkipped(err error) bool {
-	var skipErr FileSkippedError
-	return errors.As(err, &skipErr)
-}
 
 // truncateString truncates a string to the specified length and adds "..." if truncated
 func truncateString(s string, maxLen int) string {
@@ -136,46 +119,21 @@ func (ui *InitUI) Execute(embedsConfig embeds.Configuration, targetPath string, 
 	// Process each file
 	var successCount, errorCount int
 	for _, file := range embedsConfig.Files {
-				// Calculate the display path (processed path for UI display)
-		displayPath := file.Path
-		if strings.Contains(file.Path, "{{") {
-			processedPath, err := ui.processFilePathWithConfig(file.Path, targetPath, userConfig)
-			if err == nil {
-				// Only update display path if template processing succeeded
-				// We'll let the actual file processing handle skipping logic
-				processedPath = strings.TrimSpace(processedPath)
-				if processedPath != "" && processedPath != "false" && processedPath != "null" && processedPath != "<no value>" {
-					if !strings.Contains(processedPath, "//") && !strings.HasPrefix(processedPath, "/") && !strings.HasSuffix(processedPath, "/") {
-						displayPath = processedPath
-					}
-				}
-			}
-		}
-
-		// Process the file with basic templating
-		err := ui.processFileWithBasicTemplating(file, targetPath, force, update, userConfig)
+		// Process the file with user configuration
+		err := ui.processFileWithConfig(file, targetPath, force, update, userConfig)
 
 		// Display result using proper UI output
 		if err != nil {
-			if IsFileSkipped(err) {
-				// File was skipped - show with grey check
-				ui.writeOutput("  %s %s %s\n",
-					ui.grayStyle.Render(ui.checkmark),
-					displayPath,
-					ui.grayStyle.Render("(skipped)"))
-			} else {
-				// Real error
-				errorCount++
-				ui.writeOutput("  %s %s %s\n",
-					ui.errorStyle.Render(ui.xMark),
-					displayPath,
-					ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
-			}
+			errorCount++
+			ui.writeOutput("  %s %s %s\n",
+				ui.errorStyle.Render(ui.xMark),
+				file.Path,
+				ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
 		} else {
 			successCount++
 			ui.writeOutput("  %s %s\n",
 				ui.successStyle.Render(ui.checkmark),
-				displayPath)
+				file.Path)
 		}
 	}
 
@@ -249,12 +207,6 @@ func (ui *InitUI) processFile(file embeds.File, targetPath string, force, update
 	return nil
 }
 
-// processFilePath processes Go templates in file paths using the same rich template engine as file content
-func (ui *InitUI) processFilePath(filePath string, targetPath string, projectConfig *config.ProjectConfig, userValues map[string]interface{}) (string, error) {
-	// Just reuse the existing rich template processing for file paths
-	return ui.processTemplate(filePath, targetPath, projectConfig, userValues)
-}
-
 // processTemplate processes Go templates in file content
 func (ui *InitUI) processTemplate(content string, targetPath string, projectConfig *config.ProjectConfig, userValues map[string]interface{}) (string, error) {
 	// Create template data with rich configuration
@@ -305,37 +257,10 @@ func (ui *InitUI) processTemplate(content string, targetPath string, projectConf
 	return result.String(), nil
 }
 
-// processFileWithTemplating processes a file with full templating support (gomplate + sprig)
-func (ui *InitUI) processFileWithTemplating(file embeds.File, targetPath string, force, update bool, projectConfig *config.ProjectConfig, userValues map[string]interface{}) error {
-	// Process file path as template if it contains template syntax
-	processedPath := file.Path
-	if strings.Contains(file.Path, "{{") {
-		var err error
-				processedPath, err = ui.processFilePath(file.Path, targetPath, projectConfig, userValues)
-		if err != nil {
-			return fmt.Errorf("failed to process file path template %s: %w", file.Path, err)
-		}
-		
-		// Skip file creation if template evaluates to empty string, "false", "null", or has empty path segments
-		processedPath = strings.TrimSpace(processedPath)
-		if processedPath == "" || processedPath == "false" || processedPath == "null" || processedPath == "<no value>" {
-			return FileSkippedError{
-				OriginalPath: file.Path,
-				Reason:       "template evaluates to empty",
-			}
-		}
-		
-		// Check for empty path segments (e.g., "foo//bar" or "/foo/bar/")
-		if strings.Contains(processedPath, "//") || strings.HasPrefix(processedPath, "/") || strings.HasSuffix(processedPath, "/") {
-			return FileSkippedError{
-				OriginalPath: file.Path,
-				Reason:       "empty path segment",
-			}
-		}
-	}
-
-	// Create full file path with processed path
-	fullPath := filepath.Join(targetPath, processedPath)
+// processFileWithRichConfig processes a file with rich project configuration
+func (ui *InitUI) processFileWithRichConfig(file embeds.File, targetPath string, force, update bool, projectConfig *config.ProjectConfig, userValues map[string]interface{}) error {
+	// Create full file path
+	fullPath := filepath.Join(targetPath, file.Path)
 
 	// Create directory if needed
 	dir := filepath.Dir(fullPath)
@@ -347,14 +272,14 @@ func (ui *InitUI) processFileWithTemplating(file embeds.File, targetPath string,
 	if _, err := os.Stat(fullPath); err == nil {
 		// File exists, handle based on flags
 		if !force && !update {
-			return fmt.Errorf("file already exists: %s (use --force to overwrite or --update to merge)", processedPath)
+			return fmt.Errorf("file already exists: %s (use --force to overwrite or --update to merge)", file.Path)
 		}
 
 		if update {
 			// Process template first, then attempt 3-way merge
 			processedContent, err := ui.processTemplate(file.Content, targetPath, projectConfig, userValues)
 			if err != nil {
-				return fmt.Errorf("failed to process template for file %s: %w", processedPath, err)
+				return fmt.Errorf("failed to process template for file %s: %w", file.Path, err)
 			}
 
 			// Create a temporary file with processed content for merging
@@ -362,7 +287,7 @@ func (ui *InitUI) processFileWithTemplating(file embeds.File, targetPath string,
 			tempFile.Content = processedContent
 
 			if err := ui.mergeFile(fullPath, tempFile, targetPath); err != nil {
-				return fmt.Errorf("failed to merge file %s: %w", processedPath, err)
+				return fmt.Errorf("failed to merge file %s: %w", file.Path, err)
 			}
 			return nil
 		}
@@ -376,7 +301,7 @@ func (ui *InitUI) processFileWithTemplating(file embeds.File, targetPath string,
 	if err != nil {
 		// Add detailed debugging information
 		return fmt.Errorf("failed to process template for file %s: %w\nTemplate content preview: %s\nUser values: %+v",
-			processedPath, err,
+			file.Path, err,
 			truncateString(content, 200),
 			userValues)
 	}
@@ -489,47 +414,22 @@ func (ui *InitUI) executeWithSetup(embedsConfig embeds.Configuration, targetPath
 			continue
 		}
 
-				// Calculate the display path (processed path for UI display)
-		displayPath := file.Path
-		if strings.Contains(file.Path, "{{") {
-			processedPath, err := ui.processFilePath(file.Path, targetPath, projectConfig, mergedValues)
-			if err == nil {
-				// Only update display path if template processing succeeded
-				// We'll let the actual file processing handle skipping logic
-				processedPath = strings.TrimSpace(processedPath)
-				if processedPath != "" && processedPath != "false" && processedPath != "null" && processedPath != "<no value>" {
-					if !strings.Contains(processedPath, "//") && !strings.HasPrefix(processedPath, "/") && !strings.HasSuffix(processedPath, "/") {
-						displayPath = processedPath
-					}
-				}
-			}
-		}
-
-		// Process the file with full templating using the updated mergedValues
-		err := ui.processFileWithTemplating(file, targetPath, force, update, projectConfig, mergedValues)
+		// Process the file with rich configuration using the updated mergedValues
+		err := ui.processFileWithRichConfig(file, targetPath, force, update, projectConfig, mergedValues)
 
 		// Display result using proper UI output
 		if err != nil {
-			if IsFileSkipped(err) {
-				// File was skipped - show with grey check
-				ui.writeOutput("  %s %s %s\n",
-					ui.grayStyle.Render(ui.checkmark),
-					displayPath,
-					ui.grayStyle.Render("(skipped)"))
-			} else {
-				// Real error
-				errorCount++
-				failedFiles = append(failedFiles, displayPath)
-				ui.writeOutput("  %s %s %s\n",
-					ui.errorStyle.Render(ui.xMark),
-					displayPath,
-					ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
-			}
+			errorCount++
+			failedFiles = append(failedFiles, file.Path)
+			ui.writeOutput("  %s %s %s\n",
+				ui.errorStyle.Render(ui.xMark),
+				file.Path,
+				ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
 		} else {
 			successCount++
 			ui.writeOutput("  %s %s\n",
 				ui.successStyle.Render(ui.checkmark),
-				displayPath)
+				file.Path)
 		}
 	}
 
@@ -790,37 +690,10 @@ func (ui *InitUI) loadUserConfiguration() (*config.Config, error) {
 	return userConfig, nil
 }
 
-// processFileWithBasicTemplating processes a file with basic templating support
-func (ui *InitUI) processFileWithBasicTemplating(file embeds.File, targetPath string, force, update bool, userConfig *config.Config) error {
-	// Process file path as template if it contains template syntax
-	processedPath := file.Path
-	if strings.Contains(file.Path, "{{") {
-		var err error
-				processedPath, err = ui.processFilePathWithConfig(file.Path, targetPath, userConfig)
-		if err != nil {
-			return fmt.Errorf("failed to process file path template %s: %w", file.Path, err)
-		}
-		
-		// Skip file creation if template evaluates to empty string, "false", "null", or has empty path segments
-		processedPath = strings.TrimSpace(processedPath)
-		if processedPath == "" || processedPath == "false" || processedPath == "null" || processedPath == "<no value>" {
-			return FileSkippedError{
-				OriginalPath: file.Path,
-				Reason:       "template evaluates to empty",
-			}
-		}
-		
-		// Check for empty path segments (e.g., "foo//bar" or "/foo/bar/")
-		if strings.Contains(processedPath, "//") || strings.HasPrefix(processedPath, "/") || strings.HasSuffix(processedPath, "/") {
-			return FileSkippedError{
-				OriginalPath: file.Path,
-				Reason:       "empty path segment",
-			}
-		}
-	}
-
-	// Create full file path with processed path
-	fullPath := filepath.Join(targetPath, processedPath)
+// processFileWithConfig processes a file with user configuration
+func (ui *InitUI) processFileWithConfig(file embeds.File, targetPath string, force, update bool, userConfig *config.Config) error {
+	// Create full file path
+	fullPath := filepath.Join(targetPath, file.Path)
 
 	// Create directory if needed
 	dir := filepath.Dir(fullPath)
@@ -832,13 +705,13 @@ func (ui *InitUI) processFileWithBasicTemplating(file embeds.File, targetPath st
 	if _, err := os.Stat(fullPath); err == nil {
 		// File exists, handle based on flags
 		if !force && !update {
-			return fmt.Errorf("file already exists: %s (use --force to overwrite or --update to merge)", processedPath)
+			return fmt.Errorf("file already exists: %s (use --force to overwrite or --update to merge)", file.Path)
 		}
 
 		if update {
 			// Attempt 3-way merge
 			if err := ui.mergeFile(fullPath, file, targetPath); err != nil {
-				return fmt.Errorf("failed to merge file %s: %w", processedPath, err)
+				return fmt.Errorf("failed to merge file %s: %w", file.Path, err)
 			}
 			return nil
 		}
@@ -863,12 +736,6 @@ func (ui *InitUI) processFileWithBasicTemplating(file embeds.File, targetPath st
 	return nil
 }
 
-// processFilePathWithConfig processes Go templates in file paths using the same template engine as file content
-func (ui *InitUI) processFilePathWithConfig(filePath string, targetPath string, userConfig *config.Config) (string, error) {
-	// Just reuse the existing template processing for file paths
-	return ui.processTemplateWithConfig(filePath, targetPath, userConfig)
-}
-
 // processTemplateWithConfig processes Go templates with user configuration
 func (ui *InitUI) processTemplateWithConfig(content string, targetPath string, userConfig *config.Config) (string, error) {
 	// Create template data with user configuration
@@ -878,7 +745,7 @@ func (ui *InitUI) processTemplateWithConfig(content string, targetPath string, u
 		"TargetPath":         targetPath,
 		"Author":             userConfig.Author,
 		"Year":               userConfig.Year,
-		"License":            userConfig.License,
+		"License":            userConfig.License[0], // Use first license as default
 	}
 
 	// Add template functions to avoid conflicts with reserved names
