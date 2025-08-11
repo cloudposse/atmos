@@ -46,7 +46,7 @@ func TestExecuteInit_ValidArgs(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"atmos.yaml", tempDir}
 
-	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err != nil {
 		t.Fatalf("Expected no error for valid args, got: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestExecuteInit_InvalidConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"nonexistent", tempDir}
 
-	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err == nil {
 		t.Fatal("Expected error for invalid config")
 	}
@@ -77,7 +77,7 @@ func TestExecuteInit_RelativePath(t *testing.T) {
 	cmd := &cobra.Command{}
 	args := []string{"atmos.yaml", "./test"}
 
-	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err != nil {
 		t.Fatalf("Expected no error for relative path, got: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestExecuteInit_AbsolutePath(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"atmos.yaml", tempDir}
 
-	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err != nil {
 		t.Fatalf("Expected no error for absolute path, got: %v", err)
 	}
@@ -103,13 +103,13 @@ func TestExecuteInit_ForceFlag(t *testing.T) {
 	args := []string{"atmos.yaml", tempDir}
 
 	// First run
-	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err != nil {
 		t.Fatalf("Expected no error for first run, got: %v", err)
 	}
 
 	// Second run with force
-	err = executeInit(cmd, args, true, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err = executeInit(cmd, args, true, false, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err != nil {
 		t.Fatalf("Expected no error with force flag, got: %v", err)
 	}
@@ -121,13 +121,13 @@ func TestExecuteInit_UpdateFlag(t *testing.T) {
 	args := []string{"atmos.yaml", tempDir}
 
 	// First run
-	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err != nil {
 		t.Fatalf("Expected no error for first run, got: %v", err)
 	}
 
 	// Second run with update
-	err = executeInit(cmd, args, false, true, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err = executeInit(cmd, args, false, true, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err != nil {
 		t.Fatalf("Expected no error with update flag, got: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestExecuteInit_DefaultConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"default", tempDir}
 
-	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err != nil {
 		t.Fatalf("Expected no error for default config, got: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestExecuteInit_DemoConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	args := []string{"examples/demo-stacks", tempDir}
 
-	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"})
+	err := executeInit(cmd, args, false, false, true, []string{"author=Test User", "year=2024", "license=MIT"}, 0)
 	if err != nil {
 		t.Fatalf("Expected no error for demo config, got: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestExecuteInit_PathTemplating(t *testing.T) {
 		"description=Integration test for path templating",
 	}
 
-	err := executeInit(cmd, args, false, false, true, templateValues)
+	err := executeInit(cmd, args, false, false, true, templateValues, 0)
 	if err != nil {
 		t.Fatalf("Expected no error for path-test config, got: %v", err)
 	}
@@ -384,7 +384,7 @@ func TestExecuteInit_WithValues(t *testing.T) {
 	args := []string{"atmos.yaml", tempDir}
 	templateValues := []string{"author=John", "year=2024", "license=MIT"}
 
-	err := executeInit(cmd, args, false, false, true, templateValues)
+	err := executeInit(cmd, args, false, false, true, templateValues, 0)
 	if err != nil {
 		t.Fatalf("Expected no error for valid template values, got: %v", err)
 	}
@@ -402,7 +402,7 @@ func TestExecuteInit_WithInvalidValues(t *testing.T) {
 	args := []string{"atmos.yaml", tempDir}
 	invalidValues := []string{"author=John", "invalid-format"}
 
-	err := executeInit(cmd, args, false, false, true, invalidValues)
+	err := executeInit(cmd, args, false, false, true, invalidValues, 0)
 	if err == nil {
 		t.Fatal("Expected error for invalid template values")
 	}
@@ -412,7 +412,7 @@ func TestExecuteInit_WithInvalidValues(t *testing.T) {
 	}
 }
 
-func TestExecuteInit_WithRichProjectValues(t *testing.T) {
+func TestExecuteInit_WithProjectValues(t *testing.T) {
 	cmd := &cobra.Command{}
 	tempDir := t.TempDir()
 	args := []string{"rich-project", tempDir}
@@ -425,9 +425,9 @@ func TestExecuteInit_WithRichProjectValues(t *testing.T) {
 		"enable_monitoring=true",
 	}
 
-	err := executeInit(cmd, args, false, false, true, templateValues)
+	err := executeInit(cmd, args, false, false, true, templateValues, 0)
 	if err != nil {
-		t.Fatalf("Expected no error for rich project with template values, got: %v", err)
+		t.Fatalf("Expected no error for project with template values, got: %v", err)
 	}
 
 	// Check that the project was created with the template values

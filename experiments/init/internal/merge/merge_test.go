@@ -6,9 +6,9 @@ import (
 )
 
 func TestNewThreeWayMerger(t *testing.T) {
-	merger := NewThreeWayMerger(5)
-	if merger.maxChanges != 5 {
-		t.Errorf("Expected maxChanges to be 5, got %d", merger.maxChanges)
+	merger := NewThreeWayMerger(25)
+	if merger.thresholdPercent != 25 {
+		t.Errorf("Expected thresholdPercent to be 25, got %d", merger.thresholdPercent)
 	}
 }
 
@@ -45,10 +45,10 @@ func TestMerge_NoChanges(t *testing.T) {
 }
 
 func TestMerge_TooManyChanges(t *testing.T) {
-	merger := NewThreeWayMerger(5)
+	merger := NewThreeWayMerger(5) // 5% threshold
 
-	existing := strings.Repeat("line1\n", 10)
-	newContent := strings.Repeat("line2\n", 10)
+	existing := strings.Repeat("line1\n", 100)
+	newContent := strings.Repeat("line2\n", 100)
 
 	_, err := merger.Merge(existing, newContent, "test.txt")
 	if err == nil {
@@ -57,6 +57,10 @@ func TestMerge_TooManyChanges(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "too many changes detected") {
 		t.Errorf("Expected error about too many changes, got: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "%") {
+		t.Errorf("Expected percentage in error message, got: %v", err)
 	}
 }
 
@@ -130,7 +134,7 @@ func TestResolveConflictBlock(t *testing.T) {
 }
 
 func TestMerge_YAMLExample(t *testing.T) {
-	merger := NewThreeWayMerger(50) // Increase threshold to handle the YAML changes
+	merger := NewThreeWayMerger(20) // Back to original threshold - dynamic threshold should handle it
 
 	existing := `# Custom configuration
 base_path: "."

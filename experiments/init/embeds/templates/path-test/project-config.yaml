@@ -1,6 +1,7 @@
 name: "Path Template Test"
 description: "Test configuration for templated file paths with conditional creation"
 target_dir: "path-test-example"
+template_id: "path-test"
 
 fields:
   namespace:
