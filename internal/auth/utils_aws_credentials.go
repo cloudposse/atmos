@@ -79,6 +79,6 @@ func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken, id
 		return fmt.Errorf("atomic rename credentials: %w", err)
 	}
 
-	log.Info("Updated AWS credentials", "profile", profile, "path", targetPath)
+	log.Debug("Updated AWS credentials", "profile", profile, "path", targetPath)
 	return nil
 }

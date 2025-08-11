@@ -128,6 +128,5 @@ func pickIdentity(AuthConfig schema.AuthConfig) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	log.Info("Selected identity", "identity", choose)
 	return choose, nil
 }

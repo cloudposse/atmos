@@ -20,6 +20,14 @@ import (
 	"github.com/charmbracelet/log"
 )
 
+// ssoAuthStore is the structure we persist in the keyring as JSON
+type ssoAuthStore struct {
+	Token       string                     `json:"token"`
+	ExpiresAt   time.Time                  `json:"expires_at"`
+	LastUpdated time.Time                  `json:"last_updated"`
+	TokenOutput *ssooidc.CreateTokenOutput `json:"token_output"`
+}
+
 type awsIamIdentityCenter struct {
 	Common   schema.IdentityProviderDefaultConfig `yaml:",inline"`
 	Identity schema.Identity                      `yaml:",inline"`
@@ -36,20 +44,20 @@ func (config *awsIamIdentityCenter) Login() error {
 	log.Debug("Identity Config", "config", config)
 	ctx := context.Background()
 	store := authstore.NewKeyringAuthStore()
-	keyringKey := fmt.Sprintf("%s-%s", config.Common.Alias, config.Identity.Profile)
-	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "Alias", config.Common.Alias, "Profile", config.Identity.Profile)
+	keyringKey := fmt.Sprintf("%s-%s", config.Common.Provider, config.Identity.Profile)
+	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "Provider", config.Common.Provider, "Identity", config.Identity.Identity, "Profile", config.Identity.Profile)
 
 	ssoClient := sso.New(sso.Options{
 		Region: config.Common.Region,
 	})
 
-	var credentials *authstore.AuthCredential
+	var credentials ssoAuthStore
 	// 1. Log into Method - Perhaps we already have a valid token
-	cred, err := store.Get(keyringKey)
-	if err == nil && store.IsValid(cred) {
-		// 1.A Valid Token, proceed.
-		log.Debug("Cached token found", "alias", config.Common.Alias)
-		credentials = cred
+	err := store.GetInto(keyringKey, &credentials)
+	if err == nil && time.Until(credentials.ExpiresAt) > 30*time.Minute {
+		//	// 1.A Valid Token, proceed.
+		log.Debug("Cached token found", "alias", config.Common.Provider)
+		//	// We have a valid token, use it
 	} else {
 		// 1.B No valid token, log in
 		// 1.B.1. Start SSO flow
@@ -59,18 +67,17 @@ func (config *awsIamIdentityCenter) Login() error {
 		}
 
 		accessToken := *tokenOut.AccessToken
-		log.Info("✅ Logged in! Token acquired.")
+		log.Debug("✅ Logged in! Token acquired.")
 
 		// This is our struct to store the login data in a meaningful way
 		// We need to store this so we know when the token expires, and for what identity and configuration we are using
-		newCred := &authstore.AuthCredential{
-			Method:    authstore.MethodSSO,
-			Token:     accessToken,
-			ExpiresAt: time.Now().Add(time.Duration(tokenOut.ExpiresIn) * time.Second),
+		credentials = ssoAuthStore{
+			Token:       accessToken,
+			ExpiresAt:   time.Now().Add(time.Duration(tokenOut.ExpiresIn) * time.Second),
+			LastUpdated: time.Now(),
+			TokenOutput: tokenOut,
 		}
-
-		credentials = newCred
-		err = store.Set(keyringKey, newCred)
+		err = store.SetAny(keyringKey, &credentials)
 		if err != nil {
 			log.Warn("failed to save token:", "error", err)
 		}
@@ -122,7 +129,7 @@ func (config *awsIamIdentityCenter) Login() error {
 		return err
 	}
 
-	WriteAwsCredentials(config.Identity.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken, config.Common.Alias)
+	WriteAwsCredentials(config.Identity.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken, config.Common.Provider)
 
 	log.Info("✅ Logged in! Credentials written to ~/.aws/credentials", "profile", config.Identity.Profile)
 
@@ -201,29 +208,7 @@ func SsoSync(startUrl, region string) *ssooidc.CreateTokenOutput {
 
 func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {
 	log.Debug("Syncing with SSO", "startUrl", startUrl, "region", region)
-	// 1. Load config for SSO region
-	ctx := context.Background()
-	//cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
-	//if err != nil {
-	//	err = fmt.Errorf("failed to load config: %w", err)
-	//	log.Error(err)
-	//	return nil, err
-	//}
-	//oidc := ssooidc.NewFromConfig(cfg)
-	oidc := ssooidc.New(ssooidc.Options{
-		Region: region,
-	})
-
-	// 2. Register client
-	regOut, err := oidc.RegisterClient(ctx, &ssooidc.RegisterClientInput{
-		ClientName: aws.String("atmos-sso"),
-		ClientType: aws.String("public"),
-	})
-	if err != nil {
-		err = fmt.Errorf("failed to register client: %w", err)
-		log.Error(err)
-		return nil, err
-	}
+	oidc, regOut, ctx, err := getSsoOidcClients(region)
 
 	// 3. Start device authorization
 	authOut, err := oidc.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
@@ -271,4 +256,28 @@ func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {
 	}
 
 	return tokenOut, nil
+}
+
+func getSsoOidcClients(region string) (*ssooidc.Client, *ssooidc.RegisterClientOutput, context.Context, error) {
+	// 1. Load config for SSO region
+	ctx := context.Background()
+	oidc := ssooidc.New(ssooidc.Options{
+		Region: region,
+	})
+
+	// 2. Register client
+	regOut, err := oidc.RegisterClient(ctx, &ssooidc.RegisterClientInput{
+		ClientName: aws.String("atmos-sso"),
+		ClientType: aws.String("public"),
+		GrantTypes: []string{
+			"urn:ietf:params:oauth:grant-type:device_code",
+			"refresh_token",
+		},
+	})
+	if err != nil {
+		err = fmt.Errorf("failed to register client: %w", err)
+		log.Error(err)
+		return nil, nil, nil, err
+	}
+	return oidc, regOut, ctx, nil
 }

@@ -8,8 +8,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var identityRegistry = map[string]func(provider string, config schema.AuthConfig) (LoginMethod, error){
-	"aws/iam-identity-center": func(provider string, config schema.AuthConfig) (LoginMethod, error) {
+var identityRegistry = map[string]func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error){
+	"aws/iam-identity-center": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
 		var data = &awsIamIdentityCenter{}
 		b, err := yaml.Marshal(config.IdentityProviders[provider])
 		if err != nil {
@@ -17,9 +17,10 @@ var identityRegistry = map[string]func(provider string, config schema.AuthConfig
 		}
 		err = yaml.Unmarshal(b, data)
 		setDefaults(&data.Common, provider, config)
+		data.Identity.Identity = identity
 		return data, err
 	},
-	"aws/saml": func(provider string, config schema.AuthConfig) (LoginMethod, error) {
+	"aws/saml": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
 		var data = &awsSaml{}
 		b, err := yaml.Marshal(config.IdentityProviders[provider])
 		if err != nil {
@@ -27,13 +28,14 @@ var identityRegistry = map[string]func(provider string, config schema.AuthConfig
 		}
 		err = yaml.Unmarshal(b, data)
 		setDefaults(&data.Common, provider, config)
+		data.Identity.Identity = identity
 		return data, err
 	},
 	//"oidc":                    func() LoginMethod { return &awsSaml{} },
 }
 
 func setDefaults(data *schema.IdentityProviderDefaultConfig, provider string, config schema.AuthConfig) {
-	data.Alias = provider
+	data.Provider = provider
 	if data.Region == "" {
 		data.Region = config.DefaultRegion
 	}
@@ -124,7 +126,7 @@ func GetIdentityInstance(identity string, config schema.AuthConfig) (LoginMethod
 	}
 
 	if providerFunc, ok := identityRegistry[typeVal]; ok {
-		Lm, err := providerFunc(idpName, config)
+		Lm, err := providerFunc(idpName, identity, config)
 		if err != nil {
 			return nil, err
 		}

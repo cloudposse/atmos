@@ -942,7 +942,7 @@ type AuthConfig struct {
 }
 
 type IdentityProviderDefaultConfig struct {
-	Alias string // To be set by the key in `identities`
+	Provider string
 
 	Type   string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
 	Url    string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
@@ -950,6 +950,8 @@ type IdentityProviderDefaultConfig struct {
 }
 
 type Identity struct {
+	Identity string
+
 	Default bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
 	Enabled bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
 	Profile string `yaml:"profile,omitempty" json:"profile,omitempty" mapstructure:"profile,omitempty"`

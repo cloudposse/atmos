@@ -202,7 +202,7 @@ func (i *awsSaml) Login() error {
 		"expires", res.Expires,
 	)
 
-	WriteAwsCredentials(i.Identity.Profile, res.Credentials.AccessKeyID, res.Credentials.SecretAccessKey, res.Credentials.SessionToken, i.Common.Alias)
+	WriteAwsCredentials(i.Identity.Profile, res.Credentials.AccessKeyID, res.Credentials.SecretAccessKey, res.Credentials.SessionToken, i.Common.Provider)
 
 	if err != nil {
 		return err
