@@ -64,7 +64,7 @@ func TestLoadUserValues(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Test loading from non-existent file
-	values, err := LoadUserValues(tempDir)
+	values, templateID, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
 	assert.Empty(t, values)
 
@@ -81,7 +81,7 @@ license: "MIT"`
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	assert.NoError(t, err)
 
-	values, err = LoadUserValues(tempDir)
+	values, templateID, err = LoadUserValues(tempDir)
 	assert.NoError(t, err)
 	assert.Equal(t, "test-project", values["project_name"])
 	assert.Equal(t, "Test User", values["author"])
@@ -117,7 +117,7 @@ func TestLoadUserValues_ExistingConfig(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Load the values
-	values, err := LoadUserValues(tempDir)
+	values, templateID, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
 
 	// Verify all values are loaded correctly
@@ -145,7 +145,7 @@ func TestSaveUserValues(t *testing.T) {
 		"monitoring":   true,
 	}
 
-	err := SaveUserValues(tempDir, values)
+	err := SaveUserValues(tempDir, values, "test-template")
 	assert.NoError(t, err)
 
 	// Verify file was created
@@ -153,8 +153,9 @@ func TestSaveUserValues(t *testing.T) {
 	assert.FileExists(t, configPath)
 
 	// Load and verify content
-	loadedValues, err := LoadUserValues(tempDir)
+	loadedValues, loadedTemplateID, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
+	assert.Equal(t, "test-template", loadedTemplateID)
 	assert.Equal(t, "test-project", loadedValues["project_name"])
 	assert.Equal(t, "Test User", loadedValues["author"])
 	assert.Equal(t, "MIT", loadedValues["license"])
@@ -278,7 +279,7 @@ func TestPersistenceFlow(t *testing.T) {
 	assert.FileExists(t, configPath)
 
 	// Load and verify all values are persisted correctly
-	loadedValues, err := LoadUserValues(tempDir)
+	loadedValues, loadedTemplateID, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
 
 	// Test all the key values
@@ -374,12 +375,13 @@ func TestPersistenceWithProjectConfig(t *testing.T) {
 	assert.Equal(t, true, mergedValues["enable_monitoring"])
 
 	// Save the merged values
-	err := SaveUserValues(tempDir, mergedValues)
+	err := SaveUserValues(tempDir, mergedValues, "test-template")
 	assert.NoError(t, err)
 
 	// Load and verify persistence
-	loadedValues, err := LoadUserValues(tempDir)
+	loadedValues, loadedTemplateID, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
+	assert.Equal(t, "test-template", loadedTemplateID)
 
 	assert.Equal(t, "my-custom-project", loadedValues["project_name"])
 	assert.Equal(t, "Jane Smith", loadedValues["author"])

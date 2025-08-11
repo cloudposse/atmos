@@ -21,8 +21,8 @@ func TestNewInitUI(t *testing.T) {
 		t.Errorf("Expected xMark to be ✗, got %s", ui.xMark)
 	}
 
-	if ui.maxChanges != 10 {
-		t.Errorf("Expected maxChanges to be 10, got %d", ui.maxChanges)
+	if ui.thresholdPercent != 50 {
+		t.Errorf("Expected thresholdPercent to be 50, got %d", ui.thresholdPercent)
 	}
 }
 
@@ -43,7 +43,7 @@ func TestProcessTemplate(t *testing.T) {
 	}
 }
 
-func TestProcessTemplateWithRichConfig(t *testing.T) {
+func TestProcessTemplateWithConfig(t *testing.T) {
 	ui := NewInitUI()
 
 	projectConfig := &config.ProjectConfig{
@@ -291,10 +291,10 @@ func TestProcessTemplateWithGomplateFunctions(t *testing.T) {
 	}
 }
 
-func TestProcessTemplateWithRichProjectTemplate(t *testing.T) {
+func TestProcessTemplateWithProjectTemplate(t *testing.T) {
 	ui := NewInitUI()
 
-	// Test data that matches what the rich-project template expects
+	// Test data that matches what the project template expects
 	userValues := map[string]interface{}{
 		"project_name":        "my-awesome-project",
 		"project_description": "An Atmos project for managing infrastructure as code",
@@ -309,8 +309,8 @@ func TestProcessTemplateWithRichProjectTemplate(t *testing.T) {
 		"enable_logging":      true,
 	}
 
-	// This is a simplified version of the rich-project README template
-	richProjectTemplate := `# {{ .Config.project_name | title }}
+	// This is a simplified version of the project README template
+	projectTemplate := `# {{ .Config.project_name | title }}
 
 {{ .Config.project_description }}
 
@@ -358,7 +358,7 @@ This project includes centralized logging infrastructure.
 
 Copyright (c) {{ .Config.year }} {{ .Config.author }}`
 
-	result, err := ui.processTemplate(richProjectTemplate, "/tmp/test", nil, userValues)
+	result, err := ui.processTemplate(projectTemplate, "/tmp/test", nil, userValues)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
