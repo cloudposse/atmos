@@ -936,17 +936,22 @@ type ListColumnConfig struct {
 }
 
 type AuthConfig struct {
-	Identities    map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
-	DefaultRegion string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
+	IdentityProviders map[string]interface{} `yaml:"identity_providers" json:"identity_providers" mapstructure:"identity_providers"`
+	Identities        map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
+	DefaultRegion     string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
 }
 
-type IdentityDefaultConfig struct {
+type IdentityProviderDefaultConfig struct {
 	Alias string // To be set by the key in `identities`
 
+	Type   string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
+	Url    string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
+	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
+}
+
+type Identity struct {
 	Default bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
 	Enabled bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
-	Type    string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
 	Profile string `yaml:"profile,omitempty" json:"profile,omitempty" mapstructure:"profile,omitempty"`
-	Url     string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
-	Region  string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
+	Idp     string `yaml:"idp,omitempty" json:"idp,omitempty" mapstructure:"idp,omitempty"`
 }

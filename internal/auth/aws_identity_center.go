@@ -21,7 +21,8 @@ import (
 )
 
 type awsIamIdentityCenter struct {
-	schema.IdentityDefaultConfig `yaml:",inline"`
+	Common   schema.IdentityProviderDefaultConfig `yaml:",inline"`
+	Identity schema.Identity                      `yaml:",inline"`
 
 	// SSO
 	Role        string `yaml:"role,omitempty" json:"role,omitempty" mapstructure:"role,omitempty"`
@@ -31,24 +32,15 @@ type awsIamIdentityCenter struct {
 }
 
 func (config *awsIamIdentityCenter) Login() error {
-	log.Info("Logging in using IAM Identity Center")
 
 	log.Debug("Identity Config", "config", config)
 	ctx := context.Background()
 	store := authstore.NewKeyringAuthStore()
-	keyringKey := fmt.Sprintf("%s-%s", config.Alias, config.Profile)
-	//cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(config.Region))
-	//
-	//if err != nil {
-	//	panic(fmt.Errorf("failed to load config: %w", err))
-	//}
-	log.Info("Creating SSO Client", "region", config.Region)
-	//ssoClient := sso.NewFromConfig(cfg)
-	//if ssoClient == nil {
-	//	return errors.New("failed to create sso client")
-	//}
+	keyringKey := fmt.Sprintf("%s-%s", config.Common.Alias, config.Identity.Profile)
+	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "Alias", config.Common.Alias, "Profile", config.Identity.Profile)
+
 	ssoClient := sso.New(sso.Options{
-		Region: config.Region,
+		Region: config.Common.Region,
 	})
 
 	var credentials *authstore.AuthCredential
@@ -56,12 +48,12 @@ func (config *awsIamIdentityCenter) Login() error {
 	cred, err := store.Get(keyringKey)
 	if err == nil && store.IsValid(cred) {
 		// 1.A Valid Token, proceed.
-		log.Info("Valid token found", "alias", config.Alias)
+		log.Debug("Cached token found", "alias", config.Common.Alias)
 		credentials = cred
 	} else {
 		// 1.B No valid token, log in
 		// 1.B.1. Start SSO flow
-		tokenOut, err := SsoSyncE(config.Url, config.Region)
+		tokenOut, err := SsoSyncE(config.Common.Url, config.Common.Region)
 		if err != nil {
 			return err
 		}
@@ -130,9 +122,9 @@ func (config *awsIamIdentityCenter) Login() error {
 		return err
 	}
 
-	WriteAwsCredentials(config.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken, config.Alias)
+	WriteAwsCredentials(config.Identity.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken, config.Common.Alias)
 
-	log.Info("✅ Logged in! Credentials written to ~/.aws/credentials", "profile", config.Profile)
+	log.Info("✅ Logged in! Credentials written to ~/.aws/credentials", "profile", config.Identity.Profile)
 
 	return nil
 }

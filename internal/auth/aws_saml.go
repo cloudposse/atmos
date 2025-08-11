@@ -20,9 +20,11 @@ import (
 )
 
 type awsSaml struct {
-	schema.IdentityDefaultConfig `yaml:",inline"`
-	RoleArn                      string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
-	SessionDuration              int32  `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
+	Common   schema.IdentityProviderDefaultConfig `yaml:",inline"`
+	Identity schema.Identity                      `yaml:",inline"`
+
+	RoleArn         string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
+	SessionDuration int32  `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
 }
 
 // Input options for login.
@@ -65,7 +67,7 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 	idp := cfg.NewIDPAccount()
 	idp.URL = in.URL
 	idp.Provider = "Browser" // non-headless, real browser window
-	idp.Headless = false
+	idp.Headless = true
 	idp.DownloadBrowser = true
 	idp.SessionDuration = int(in.SessionDuration)
 
@@ -179,12 +181,17 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 }
 
 func (i *awsSaml) Login() error {
+	if IsInDocker() {
+		log.Info("Skipping saml login command in docker", "reason", "Unsupported")
+		return nil
+	}
+
 	ctx := context.Background()
 	// TODO check for existing credentials and expiry
 	res, err := Saml2AwsLogin(ctx, LoginOpts{
-		URL:             i.Url,
+		URL:             i.Common.Url,
 		RoleARN:         i.RoleArn,
-		Region:          i.Region,
+		Region:          i.Common.Region,
 		SessionDuration: 3600,
 	})
 	if err != nil {
@@ -195,7 +202,7 @@ func (i *awsSaml) Login() error {
 		"expires", res.Expires,
 	)
 
-	WriteAwsCredentials(i.Profile, res.Credentials.AccessKeyID, res.Credentials.SecretAccessKey, res.Credentials.SessionToken, i.Alias)
+	WriteAwsCredentials(i.Identity.Profile, res.Credentials.AccessKeyID, res.Credentials.SecretAccessKey, res.Credentials.SessionToken, i.Common.Alias)
 
 	if err != nil {
 		return err

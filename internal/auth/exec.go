@@ -11,6 +11,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ValidateAndLogin runs the Validate() method on the given LoginMethod and, if
+// that succeeds, runs the Login() method. If either of those methods returns an
+// error, this function will return that error wrapped in a error with a
+// descriptive message.
+// Furthermore, this is used as a "Shared Pre-Run" function for the Login Interface
+func ValidateAndLogin(IdentityInstance LoginMethod) error {
+	if err := IdentityInstance.Validate(); err != nil {
+		return fmt.Errorf("identity validation error: %w", err)
+	}
+	if err := IdentityInstance.Login(); err != nil {
+		return fmt.Errorf("identity login failed: %w", err)
+	}
+
+	return nil
+}
+
+// TerraformPreHook is a pre-hook function for the Terraform CLI that will, if given an identity, use
+// that identity to authenticate before executing the Terraform command. If no identity is given,
+// it will try to use the configured default identity (if any). If no default identity is found, it
+// will do nothing.
+//
+// The function returns an error if the identity is invalid or if the authentication fails.
 func TerraformPreHook(identity string, atmosConfig schema.AuthConfig) error {
 	log.SetPrefix("[atmos-auth] ")
 	defer log.SetPrefix("")
@@ -24,19 +46,32 @@ func TerraformPreHook(identity string, atmosConfig schema.AuthConfig) error {
 	if identity != "" {
 		identityInstance, err := GetIdentityInstance(identity, atmosConfig)
 		if err != nil {
+			/* <<<<<<<<<<<<<<  ✨ Windsurf Command ⭐ >>>>>>>>>>>>>>>> */
+			// ExecuteAuthLoginCommand executes the authentication login command for the Atmos CLI.
+			// It sets up the logging prefix, retrieves the Atmos authentication configuration,
+			// and attempts to obtain the identity from the command flags. If no identity is
+			// specified, it defaults to the configured default identity or prompts the user
+			// to pick one. Once the identity is determined, it retrieves the corresponding
+			// identity instance and performs validation and login. If any step encounters an
+			// error, it returns the error.
+
+			/* <<<<<<<<<<  c007e2ac-4fae-472e-8a00-33aa3c0b3a1c  >>>>>>>>>>> */
 			return err
 		}
-		if err = identityInstance.Validate(); err != nil {
-			return fmt.Errorf("identity validation error: %w", err)
-		}
-		if err = identityInstance.Login(); err != nil {
-			return fmt.Errorf("identity login failed: %w", err)
-		}
+		return ValidateAndLogin(identityInstance)
 	}
 
 	return nil
 }
 
+// ExecuteAuthLoginCommand executes the authentication login command for the Atmos CLI.
+//
+// It sets up the logging prefix, retrieves the Atmos authentication configuration,
+// and attempts to obtain the identity from the command flags. If no identity is
+// specified, it defaults to the configured default identity or prompts the user
+// to pick one. Once the identity is determined, it retrieves the corresponding
+// identity instance and performs validation and login. If any step encounters an
+// error, it returns the error.
 func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	log.SetPrefix("[atmos-auth] ")
 	defer log.SetPrefix("")
@@ -74,20 +109,7 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	validationErr := IdentityInstance.Validate()
-	if validationErr != nil {
-		log.Fatal("IdentityFlag Validation Error", "error", validationErr, "config", IdentityInstance)
-	}
-
-	return IdentityInstance.Login()
-	// Setup default region
-	//identityConfig := Identities[identity]
-	//if identityConfig.Region == "" {
-	//	identityConfig.Region = atmosConfig.Auth.DefaultRegion
-	//}
-	//identityConfig.Alias = identity
-	//
-	//return auth.ExecuteAuth(identity, identityConfig)
+	return ValidateAndLogin(IdentityInstance)
 }
 
 // pickIdentity presents a simple picker to the user, listing all the
