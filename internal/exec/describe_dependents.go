@@ -5,14 +5,13 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	"github.com/cloudposse/atmos/pkg/pager"
-	u "github.com/cloudposse/atmos/pkg/utils"
-
 	"github.com/mitchellh/mapstructure"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type DescribeDependentsExecProps struct {
@@ -100,7 +99,18 @@ func ExecuteDescribeDependents(
 	var ok bool
 
 	// Get all stacks with all components
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
+	stacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		true,
+		true,
+		false,
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
