@@ -210,6 +210,17 @@ func ExecuteDescribeDependents(
 						continue
 					}
 
+					// Include the component if any of the following is true:
+					// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`
+					// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`
+					if dependsOn.Stack != "" {
+						if stack != dependsOn.Stack {
+							continue
+						}
+					} else if stack != stackComponentVars.Stack {
+						continue
+					}
+
 					// Include the component from the stack if any of the following is true:
 					// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`
 					// - `namespace` is not specified in `depends_on` and the provided component is from the same namespace as the component in `depends_on`
