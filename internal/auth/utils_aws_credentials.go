@@ -82,3 +82,72 @@ func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken, id
 	log.Debug("Updated AWS credentials", "profile", profile, "path", targetPath)
 	return nil
 }
+
+// RemoveAwsCredentials removes a specific AWS profile from the credentials file.
+// If the profile doesn't exist, this is a no-op.
+func RemoveAwsCredentials(profile string) error {
+	if profile == "" {
+		return fmt.Errorf("profile is required")
+	}
+
+	// Determine credentials file path
+	targetPath := os.Getenv("AWS_SHARED_CREDENTIALS_FILE")
+	if targetPath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("resolve home dir: %w", err)
+		}
+		targetPath = filepath.Join(home, ".aws", "credentials")
+	}
+
+	// Check if file exists first
+	if _, statErr := os.Stat(targetPath); os.IsNotExist(statErr) {
+		log.Debug("AWS credentials file doesn't exist, nothing to remove", "path", targetPath)
+		return nil // No file exists, so nothing to remove
+	}
+
+	// Load credentials file
+	loadOpts := ini.LoadOptions{
+		IgnoreInlineComment: true,
+		Loose:               true,
+	}
+	f, err := ini.LoadSources(loadOpts, targetPath)
+	if err != nil {
+		return fmt.Errorf("load credentials ini: %w", err)
+	}
+
+	// Check if profile exists
+	if !f.HasSection(profile) {
+		log.Debug("Profile not found in credentials file", "profile", profile, "path", targetPath)
+		return nil // Profile doesn't exist, nothing to remove
+	}
+
+	// Remove the profile section
+	f.DeleteSection(profile)
+	log.Debug("Removed profile from AWS credentials", "profile", profile)
+
+	// Write atomically: dump to memory, write temp w/ 0600, then rename
+	var buf bytes.Buffer
+	if _, err := f.WriteTo(&buf); err != nil {
+		return fmt.Errorf("serialize ini: %w", err)
+	}
+
+	tmp := targetPath + ".tmp"
+	if err := os.WriteFile(tmp, buf.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("write temp credentials: %w", err)
+	}
+
+	// Best-effort fsync on POSIX (optional)
+	if ftmp, err := os.OpenFile(tmp, os.O_RDWR, 0o600); err == nil {
+		_ = ftmp.Sync()
+		_ = ftmp.Close()
+	}
+
+	if err := os.Rename(tmp, targetPath); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("atomic rename credentials: %w", err)
+	}
+
+	log.Info("Removed AWS credentials", "profile", profile, "path", targetPath)
+	return nil
+}

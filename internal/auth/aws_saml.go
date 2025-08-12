@@ -25,6 +25,10 @@ type awsSaml struct {
 
 	RoleArn         string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
 	SessionDuration int32  `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
+
+	// Store SAML assertion and roles between Login and AssumeRole steps
+	samlAssertion string
+	samlRoles     []*saml2aws.AWSRole
 }
 
 // Input options for login.
@@ -175,43 +179,158 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 	}, nil
 }
 
+func (i *awsSaml) Validate() error {
+	if i.Common.Url == "" {
+		return fmt.Errorf("url is required for AWS SAML")
+	}
+
+	if i.Identity.Profile == "" {
+		return fmt.Errorf("profile is required for AWS SAML")
+	}
+
+	return nil
+}
+
+// Login authenticates with the IdP and gets the SAML assertion
 func (i *awsSaml) Login() error {
 	if IsInDocker() {
 		log.Info("Skipping saml login command in docker", "reason", "Unsupported")
 		return nil
 	}
 
+	//ctx := context.Background()
+
+	// Build the saml2aws IDP account using the Browser provider.
+	idp := cfg.NewIDPAccount()
+	idp.URL = i.Common.Url
+	idp.Provider = "Browser" // non-headless, real browser window
+	idp.Headless = false
+	idp.BrowserAutoFill = true
+	idp.BrowserType = "chrome"
+	idp.SessionDuration = int(i.SessionDuration)
+
+	if err := idp.Validate(); err != nil {
+		return fmt.Errorf("invalid idp account: %w", err)
+	}
+
+	// Create SAML client
+	client, err := saml2aws.NewSAMLClient(idp)
+	if err != nil {
+		return fmt.Errorf("create SAML client: %w", err)
+	}
+
+	// No username/password: the Browser provider will launch a UI and the user signs in.
+	loginDetails := &creds.LoginDetails{
+		URL:             idp.URL,
+		DownloadBrowser: true,
+	}
+
+	log.Debug("Launching IDP login in browser...", "url", i.Common.Url)
+
+	// Authenticate and get base64-encoded SAML assertion.
+	assertionB64, err := client.Authenticate(loginDetails)
+	if err != nil {
+		return fmt.Errorf("authenticate to IDP: %w", err)
+	}
+	log.Debug("Received SAML assertion from IDP")
+
+	// Store the assertion for the AssumeRole step
+	i.samlAssertion = assertionB64
+
+	decodedXML, err := base64.StdEncoding.DecodeString(assertionB64)
+	if err != nil {
+		return fmt.Errorf("decode SAML assertion: %w", err)
+	}
+
+	rolesStr, err := saml2aws.ExtractAwsRoles(decodedXML)
+	if err != nil {
+		return fmt.Errorf("extract AWS roles: %w", err)
+	}
+	roles, err := saml2aws.ParseAWSRoles(rolesStr)
+	if err != nil {
+		return fmt.Errorf("parse AWS roles: %w", err)
+	}
+	if len(roles) == 0 {
+		// Add a helpful hint for Google/Okta etc.
+		return fmt.Errorf("no AWS roles found in SAML assertion (IDP = Google?). Check that the IdP app is configured to include AWS role attributes (https://aws.amazon.com/SAML/Attributes) and that you're assigned to at least one role")
+	}
+
+	// Store roles for the AssumeRole step
+	i.samlRoles = roles
+
+	log.Info("✅ Successfully authenticated with IdP", "url", i.Common.Url)
+	return nil
+}
+
+// AssumeRole uses the SAML assertion from Login to assume an AWS role
+func (i *awsSaml) AssumeRole() error {
+	if i.samlAssertion == "" {
+		return fmt.Errorf("no SAML assertion available, please login first")
+	}
+
+	if len(i.samlRoles) == 0 {
+		return fmt.Errorf("no roles available from SAML assertion")
+	}
+
 	ctx := context.Background()
-	// TODO check for existing credentials and expiry
-	res, err := Saml2AwsLogin(ctx, LoginOpts{
-		URL:             i.Common.Url,
-		RoleARN:         i.RoleArn,
-		Region:          i.Common.Region,
-		SessionDuration: 3600,
+
+	// Pick target role
+	targetRole := i.samlRoles[0]
+	if i.RoleArn != "" {
+		selected, err := saml2aws.LocateRole(i.samlRoles, i.RoleArn)
+		if err != nil {
+			return fmt.Errorf("role %s not present in assertion: %w", i.RoleArn, err)
+		}
+		targetRole = selected
+	}
+
+	region := i.Common.Region
+	if region == "" {
+		region = "us-east-1"
+	}
+
+	// Set session duration if not specified
+	sessionDuration := i.SessionDuration
+	if sessionDuration == 0 {
+		sessionDuration = 3600
+	}
+
+	stsClient := sts.New(sts.Options{
+		Region: region,
+	})
+	out, err := stsClient.AssumeRoleWithSAML(ctx, &sts.AssumeRoleWithSAMLInput{
+		PrincipalArn:    aws.String(targetRole.PrincipalARN),
+		RoleArn:         aws.String(targetRole.RoleARN),
+		SAMLAssertion:   aws.String(i.samlAssertion),
+		DurationSeconds: aws.Int32(sessionDuration),
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("assume role with SAML: %w", err)
 	}
-	log.Debug("Success",
-		"arn", res.AssumedRole,
-		"expires", res.Expires,
+
+	credsOut := out.Credentials
+	if credsOut == nil {
+		return errors.New("no credentials returned by STS")
+	}
+
+	WriteAwsCredentials(
+		i.Identity.Profile,
+		aws.ToString(credsOut.AccessKeyId),
+		aws.ToString(credsOut.SecretAccessKey),
+		aws.ToString(credsOut.SessionToken),
+		i.Common.Provider,
 	)
 
-	WriteAwsCredentials(i.Identity.Profile, res.Credentials.AccessKeyID, res.Credentials.SecretAccessKey, res.Credentials.SessionToken, i.Common.Provider)
-	log.Info("✅ Logged in! Credentials written to ~/.aws/credentials", "profile", i.Identity.Profile)
+	log.Info("✅ Assumed role with SAML",
+		"role", targetRole.RoleARN,
+		"profile", i.Identity.Profile,
+		"expires", aws.ToTime(credsOut.Expiration))
 
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
 func (i *awsSaml) Logout() error {
-	return nil
-}
-
-func (i *awsSaml) Validate() error {
-	return nil
+	return RemoveAwsCredentials(i.Identity.Profile)
 }
 
 // ensure saml2aws browser storage dir exists so storageState.json can be saved

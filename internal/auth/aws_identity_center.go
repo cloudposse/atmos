@@ -37,30 +37,59 @@ type awsIamIdentityCenter struct {
 	AccountId   string `yaml:"account_id,omitempty" json:"account_id,omitempty" mapstructure:"account_id,omitempty"`
 	AccountName string `yaml:"account_name,omitempty" json:"account_name,omitempty" mapstructure:"account_name,omitempty"`
 	RoleName    string `yaml:"role_name,omitempty" json:"role_name,omitempty" mapstructure:"role_name,omitempty"`
+
+	// Store token info for AssumeRole step
+	token     string
+	accountId string
+	roleName  string
 }
 
+// Validate checks if the configuration is valid
+func (config *awsIamIdentityCenter) Validate() error {
+	if config.Common.Url == "" {
+		return fmt.Errorf("url is required for AWS IAM Identity Center")
+	}
+
+	if config.Identity.Profile == "" {
+		return fmt.Errorf("profile is required for AWS IAM Identity Center")
+	}
+
+	// Validate we have enough information to determine the role
+	if config.Role == "" && config.RoleName == "" {
+		return fmt.Errorf("either role or role_name must be specified for AWS IAM Identity Center")
+	}
+
+	// Validate we have enough information to determine the account
+	if config.Role == "" && config.AccountId == "" && config.AccountName == "" {
+		return fmt.Errorf("either role, account_id, or account_name must be specified for AWS IAM Identity Center")
+	}
+
+	return nil
+}
+
+// Login authenticates with SSO and gets the token
 func (config *awsIamIdentityCenter) Login() error {
+	if IsInDocker() {
+		log.Info("Skipping SSO login command in docker", "reason", "Unsupported")
+		return nil
+	}
 
 	log.Debug("Identity Config", "config", config)
-	ctx := context.Background()
+	//ctx := context.Background()
 	store := authstore.NewKeyringAuthStore()
 	keyringKey := config.Common.Provider
 	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "Provider", config.Common.Provider, "Identity", config.Identity.Identity, "Profile", config.Identity.Profile)
 
-	ssoClient := sso.New(sso.Options{
-		Region: config.Common.Region,
-	})
-
 	var credentials ssoAuthStore
-	// 1. Log into Method - Perhaps we already have a valid token
+	// Check if we already have a valid token
 	err := store.GetInto(keyringKey, &credentials)
 	if err == nil && time.Until(credentials.ExpiresAt) > 30*time.Minute {
-		//	// 1.A Valid Token, proceed.
+		// Valid token, proceed
 		log.Debug("Cached token found", "alias", config.Common.Provider)
-		//	// We have a valid token, use it
+		config.token = credentials.Token
 	} else {
-		// 1.B No valid token, log in
-		// 1.B.1. Start SSO flow
+		// No valid token, log in
+		// Start SSO flow
 		tokenOut, err := SsoSyncE(config.Common.Url, config.Common.Region)
 		if err != nil {
 			return err
@@ -69,8 +98,7 @@ func (config *awsIamIdentityCenter) Login() error {
 		accessToken := *tokenOut.AccessToken
 		log.Debug("✅ Logged in! Token acquired.")
 
-		// This is our struct to store the login data in a meaningful way
-		// We need to store this so we know when the token expires, and for what identity and configuration we are using
+		// Store the login data
 		credentials = ssoAuthStore{
 			Token:       accessToken,
 			ExpiresAt:   time.Now().Add(time.Duration(tokenOut.ExpiresIn) * time.Second),
@@ -81,20 +109,38 @@ func (config *awsIamIdentityCenter) Login() error {
 		if err != nil {
 			log.Warn("failed to save token:", "error", err)
 		}
+
+		config.token = accessToken
 	}
 
-	// 2. Authenticate and store to ~/.aws/credentials
-	var accountId, RoleName string
+	log.Info("✅ Successfully authenticated with AWS IAM Identity Center")
+	return nil
+}
+
+// AssumeRole uses the token from Login to assume an AWS role
+func (config *awsIamIdentityCenter) AssumeRole() error {
+	if config.token == "" {
+		return fmt.Errorf("no SSO token available, please login first")
+	}
+
+	ctx := context.Background()
+	ssoClient := sso.New(sso.Options{
+		Region: config.Common.Region,
+	})
+
+	// Determine account ID and role name
+	var accountId, roleName string
+
 	// Support passing in a role
 	if config.Role != "" {
 		Arn, _ := arn.Parse(config.Role)
-		RoleName = Arn.Resource
+		roleName = Arn.Resource
 		accountId = RoleToAccountId(config.Role)
 	}
 
 	// Support passing in a role_name
-	if RoleName == "" {
-		RoleName = config.RoleName
+	if roleName == "" {
+		roleName = config.RoleName
 	}
 
 	// Support passing in an account_id
@@ -102,7 +148,7 @@ func (config *awsIamIdentityCenter) Login() error {
 		accountId = config.AccountId
 		// Support passing in an account_name
 		if accountId == "" {
-			accounts, _ := getAccountsInfo(ctx, ssoClient, credentials.Token)
+			accounts, _ := getAccountsInfo(ctx, ssoClient, config.token)
 			for _, account := range accounts {
 				if *account.AccountName == config.AccountName {
 					accountId = *account.AccountId
@@ -112,26 +158,37 @@ func (config *awsIamIdentityCenter) Login() error {
 		}
 	}
 
-	// We now have the information we need to get credentials
+	// Get role credentials
 	roleCredentials, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
-		AccessToken: aws.String(credentials.Token),
+		AccessToken: aws.String(config.token),
 		AccountId:   aws.String(accountId),
-		RoleName:    aws.String(RoleName),
+		RoleName:    aws.String(roleName),
 	})
-	log.Debug("Role Credentials", "role_name", RoleName, "accountid", accountId, "role", config.Role)
+	log.Debug("Role Credentials", "role_name", roleName, "accountid", accountId, "role", config.Role)
 	if err != nil {
 		var roles []string
-		r, _ := getAccountRoles(ctx, ssoClient, credentials.Token, accountId)
+		r, _ := getAccountRoles(ctx, ssoClient, config.token, accountId)
 		for _, role := range r {
 			roles = append(roles, *role.RoleName)
 		}
-		log.Error("Failed to get role credentials", "error", err, "account_id", accountId, "role_name", RoleName, "available roles", roles)
+		log.Error("Failed to get role credentials", "error", err, "account_id", accountId, "role_name", roleName, "available roles", roles)
 		return err
 	}
 
-	WriteAwsCredentials(config.Identity.Profile, *roleCredentials.RoleCredentials.AccessKeyId, *roleCredentials.RoleCredentials.SecretAccessKey, *roleCredentials.RoleCredentials.SessionToken, config.Common.Provider)
+	// Write credentials to AWS credentials file
+	WriteAwsCredentials(
+		config.Identity.Profile,
+		*roleCredentials.RoleCredentials.AccessKeyId,
+		*roleCredentials.RoleCredentials.SecretAccessKey,
+		*roleCredentials.RoleCredentials.SessionToken,
+		config.Common.Provider,
+	)
 
-	log.Info("✅ Logged in! Credentials written to ~/.aws/credentials", "profile", config.Identity.Profile)
+	log.Info("✅ Successfully assumed role! Credentials written to ~/.aws/credentials",
+		"profile", config.Identity.Profile,
+		"account", accountId,
+		"role", roleName,
+	)
 
 	return nil
 }
@@ -184,11 +241,7 @@ func DeleteSSOToken(profile string) error {
 }
 
 func (i *awsIamIdentityCenter) Logout() error {
-	return nil
-}
-
-func (i *awsIamIdentityCenter) Validate() error {
-	return nil
+	return RemoveAwsCredentials(i.Identity.Profile)
 }
 
 func RoleToAccountId(role string) string {
@@ -198,6 +251,7 @@ func RoleToAccountId(role string) string {
 	}
 	return roleArn.AccountID
 }
+
 func SsoSync(startUrl, region string) *ssooidc.CreateTokenOutput {
 	tokenOut, err := SsoSyncE(startUrl, region)
 	if err != nil {

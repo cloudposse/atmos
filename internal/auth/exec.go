@@ -11,19 +11,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ValidateAndLogin runs the Validate() method on the given LoginMethod and, if
+// ValidateLoginAssumeRole runs the Validate() method on the given LoginMethod and, if
 // that succeeds, runs the Login() method. If either of those methods returns an
 // error, this function will return that error wrapped in a error with a
 // descriptive message.
 // Furthermore, this is used as a "Shared Pre-Run" function for the Login Interface
-func ValidateAndLogin(IdentityInstance LoginMethod) error {
+func ValidateLoginAssumeRole(IdentityInstance LoginMethod) error {
 	if err := IdentityInstance.Validate(); err != nil {
 		return fmt.Errorf("identity validation error: %w", err)
 	}
 	if err := IdentityInstance.Login(); err != nil {
 		return fmt.Errorf("identity login failed: %w", err)
 	}
-
+	if err := IdentityInstance.AssumeRole(); err != nil {
+		return fmt.Errorf("identity assume role failed: %w", err)
+	}
 	return nil
 }
 
@@ -58,7 +60,7 @@ func TerraformPreHook(identity string, atmosConfig schema.AuthConfig) error {
 			/* <<<<<<<<<<  c007e2ac-4fae-472e-8a00-33aa3c0b3a1c  >>>>>>>>>>> */
 			return err
 		}
-		return ValidateAndLogin(identityInstance)
+		return ValidateLoginAssumeRole(identityInstance)
 	}
 
 	return nil
@@ -109,7 +111,7 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return ValidateAndLogin(IdentityInstance)
+	return ValidateLoginAssumeRole(IdentityInstance)
 }
 
 // pickIdentity presents a simple picker to the user, listing all the

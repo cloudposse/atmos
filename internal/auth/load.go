@@ -31,6 +31,18 @@ var identityRegistry = map[string]func(provider string, identity string, config 
 		data.Identity.Identity = identity
 		return data, err
 	},
+	// Empty - used for AssumeRole - no Provider
+	"": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
+		var data = &awsAssumeRole{}
+		b, err := yaml.Marshal(config.IdentityProviders[provider])
+		if err != nil {
+			return nil, err
+		}
+		err = yaml.Unmarshal(b, data)
+		setDefaults(&data.Common, provider, config)
+		data.Identity.Identity = identity
+		return data, err
+	},
 	//"oidc":                    func() LoginMethod { return &awsSaml{} },
 }
 
@@ -124,6 +136,7 @@ func GetIdp(identity string, config schema.AuthConfig) (string, error) {
 func GetIdentityInstance(identity string, config schema.AuthConfig) (LoginMethod, error) {
 	idpName, err := GetIdp(identity, config)
 	typeVal, err := GetType(idpName, config)
+	l.Debug("GetIdentityInstance", "identity", identity, "idp", idpName, "type", typeVal)
 	if err != nil {
 		return nil, err
 	}
