@@ -467,6 +467,7 @@ type ConfigAndStacksInfo struct {
 	ComponentProvidersSection     AtmosSectionMapType
 	ComponentHooksSection         AtmosSectionMapType
 	ComponentEnvSection           AtmosSectionMapType
+	ComponentIdentitiesSection    AtmosSectionMapType
 	ComponentEnvList              []string
 	ComponentBackendSection       AtmosSectionMapType
 	ComponentBackendType          string

@@ -870,7 +870,13 @@ func ProcessStackConfig(
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.hooks' section in the file '%s'", component, stackName)
 					}
 				}
-
+				componentIdentities := map[string]any{}
+				if i, ok := componentMap[cfg.IdentitiesSectionName]; ok {
+					componentIdentities, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.identities' section in the file '%s'", component, stackName)
+					}
+				}
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[string]any{}
@@ -1348,6 +1354,7 @@ func ProcessStackConfig(
 				comp[cfg.CommandSectionName] = finalComponentTerraformCommand
 				comp[cfg.InheritanceSectionName] = componentInheritanceChain
 				comp[cfg.MetadataSectionName] = componentMetadata
+				comp[cfg.IdentitiesSectionName] = componentIdentities
 				comp[cfg.OverridesSectionName] = componentOverrides
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
 				comp[cfg.HooksSectionName] = finalComponentHooks

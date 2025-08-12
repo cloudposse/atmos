@@ -67,6 +67,7 @@ const (
 	TerraformSectionName              = "terraform"
 	HelmfileSectionName               = "helmfile"
 	WorkspaceSectionName              = "workspace"
+	IdentitiesSectionName             = "identities"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"

@@ -125,6 +125,7 @@ func ExecuteDescribeStacks(
 	processedStacks := make(map[string]bool)
 	var varsSection map[string]any
 	var metadataSection map[string]any
+	var identitiesSection map[string]any
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
@@ -203,6 +204,10 @@ func ExecuteDescribeStacks(
 							metadataSection = map[string]any{}
 						}
 
+						if identitiesSection, ok = componentSection[cfg.IdentitiesSectionName].(map[string]any); !ok {
+							identitiesSection = map[string]any{}
+						}
+
 						if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
 							settingsSection = map[string]any{}
 						}
@@ -232,17 +237,18 @@ func ExecuteDescribeStacks(
 						}
 
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
-							ComponentFromArg:          componentName,
-							Stack:                     stackName,
-							ComponentMetadataSection:  metadataSection,
-							ComponentVarsSection:      varsSection,
-							ComponentSettingsSection:  settingsSection,
-							ComponentEnvSection:       envSection,
-							ComponentProvidersSection: providersSection,
-							ComponentHooksSection:     hooksSection,
-							ComponentOverridesSection: overridesSection,
-							ComponentBackendSection:   backendSection,
-							ComponentBackendType:      backendTypeSection,
+							ComponentFromArg:           componentName,
+							Stack:                      stackName,
+							ComponentMetadataSection:   metadataSection,
+							ComponentVarsSection:       varsSection,
+							ComponentSettingsSection:   settingsSection,
+							ComponentEnvSection:        envSection,
+							ComponentIdentitiesSection: identitiesSection,
+							ComponentProvidersSection:  providersSection,
+							ComponentHooksSection:      hooksSection,
+							ComponentOverridesSection:  overridesSection,
+							ComponentBackendSection:    backendSection,
+							ComponentBackendType:       backendTypeSection,
 							ComponentSection: map[string]any{
 								cfg.VarsSectionName:        varsSection,
 								cfg.MetadataSectionName:    metadataSection,
