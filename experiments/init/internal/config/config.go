@@ -17,10 +17,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
+)
+
+// Color constants for consistent styling using lipgloss hex colors (mapped from ANSI)
+const (
+	ColorWhite  = "#FFFFFF" // ANSI 15 - bright white
+	ColorBlack  = "#000000" // ANSI 0 - black
+	ColorBlue   = "#0000FF" // ANSI 12 - bright blue
+	ColorRed    = "#FF0000" // ANSI 9 - bright red
+	ColorGrey   = "#808080" // ANSI 240 - gray
+	ColorPurple = "#5F5FD7" // ANSI 63 - purple
 )
 
 // ProjectConfig represents the configuration for a project
@@ -539,4 +551,121 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 
 		return input, func() interface{} { return value }
 	}
+}
+
+// PrintConfigurationSummary displays the configuration values in a table format
+func PrintConfigurationSummary(projectConfig *ProjectConfig, mergedValues map[string]interface{}, valueSources map[string]string) {
+	// Get terminal width
+	width, _, err := term.GetSize(uintptr(os.Stdout.Fd()))
+	if err != nil {
+		width = 80 // fallback width
+	}
+
+	// Calculate table width (leave some margin)
+	tableWidth := width - 20
+
+	// Prepare table rows
+	var rows []table.Row
+	for key := range projectConfig.Fields {
+		if value, exists := mergedValues[key]; exists {
+			var valueStr string
+			switch v := value.(type) {
+			case []string:
+				valueStr = strings.Join(v, ", ")
+			case bool:
+				valueStr = fmt.Sprintf("%t", v)
+			default:
+				valueStr = fmt.Sprintf("%v", v)
+			}
+
+			source := valueSources[key]
+			if source == "" {
+				source = "default"
+			}
+
+			// Add color to source indicators
+			var coloredSource string
+			switch source {
+			case "scaffold":
+				coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorBlue)).Render("scaffold")
+			case "flag":
+				coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Render("flag")
+			default:
+				coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGrey)).Render("default")
+			}
+
+			rows = append(rows, table.Row{
+				key,
+				valueStr,
+				coloredSource,
+			})
+		}
+	}
+
+	// Calculate column widths based on content
+	settingWidth := 12 // Minimum width for setting names
+	valueWidth := 45   // Minimum width for values
+	sourceWidth := 12  // Minimum width for sources
+
+	// Find the maximum content width for each column
+	for _, row := range rows {
+		if len(row[0]) > settingWidth {
+			settingWidth = len(row[0])
+		}
+		if len(row[1]) > valueWidth {
+			valueWidth = len(row[1])
+		}
+		if len(row[2]) > sourceWidth {
+			sourceWidth = len(row[2])
+		}
+	}
+
+	// Add some padding to each column
+	settingWidth += 2
+	valueWidth += 2
+	sourceWidth += 2
+
+	// Calculate total table width needed
+	totalContentWidth := settingWidth + valueWidth + sourceWidth + 6 // +6 for borders and spacing
+
+	// If content is wider than screen, use content width; otherwise use screen width
+	if totalContentWidth > tableWidth {
+		tableWidth = totalContentWidth
+	}
+
+	// Create table
+	t := table.New(
+		table.WithColumns([]table.Column{
+			{Title: "Setting", Width: settingWidth},
+			{Title: "Value", Width: valueWidth},
+			{Title: "Source", Width: sourceWidth},
+		}),
+		table.WithRows(rows),
+		table.WithWidth(tableWidth),
+		table.WithFocused(false),
+		table.WithHeight(len(rows)+1), // Set explicit height to minimize spacing
+	)
+
+	// Style the table with colors
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(ColorPurple)).
+		BorderBottom(true).
+		Bold(true).
+		Foreground(lipgloss.Color(ColorWhite))
+	s.Cell = s.Cell.
+		Foreground(lipgloss.Color(ColorWhite)).
+		Bold(false)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color(ColorWhite)).
+		Background(lipgloss.Color(ColorBlack))
+
+	t.SetStyles(s)
+
+	// Print the table
+	fmt.Println(lipgloss.NewStyle().Bold(true).Render("CONFIGURATION SUMMARY"))
+	fmt.Println()
+	fmt.Println(t.View())
+	fmt.Println()
 }
