@@ -44,7 +44,7 @@ func (config *awsIamIdentityCenter) Login() error {
 	log.Debug("Identity Config", "config", config)
 	ctx := context.Background()
 	store := authstore.NewKeyringAuthStore()
-	keyringKey := fmt.Sprintf("%s-%s", config.Common.Provider, config.Identity.Profile)
+	keyringKey := config.Common.Provider
 	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "Provider", config.Common.Provider, "Identity", config.Identity.Identity, "Profile", config.Identity.Profile)
 
 	ssoClient := sso.New(sso.Options{
@@ -269,10 +269,6 @@ func getSsoOidcClients(region string) (*ssooidc.Client, *ssooidc.RegisterClientO
 	regOut, err := oidc.RegisterClient(ctx, &ssooidc.RegisterClientInput{
 		ClientName: aws.String("atmos-sso"),
 		ClientType: aws.String("public"),
-		GrantTypes: []string{
-			"urn:ietf:params:oauth:grant-type:device_code",
-			"refresh_token",
-		},
 	})
 	if err != nil {
 		err = fmt.Errorf("failed to register client: %w", err)

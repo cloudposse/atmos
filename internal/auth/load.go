@@ -91,7 +91,10 @@ func GetIdentityConfigs(config schema.AuthConfig) (map[string]schema.Identity, e
 			return nil, err
 		}
 
-		identityConfig := &schema.Identity{}
+		identityConfig := &schema.Identity{
+			// Defaults to be overridden by unmarshalling
+			Enabled: true,
+		}
 		if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
 			l.Errorf("failed to unmarshal identity %q: %w", k, err)
 			return nil, err

@@ -67,8 +67,9 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 	idp := cfg.NewIDPAccount()
 	idp.URL = in.URL
 	idp.Provider = "Browser" // non-headless, real browser window
-	idp.Headless = true
-	idp.DownloadBrowser = true
+	idp.Headless = false
+	idp.BrowserAutoFill = true
+	idp.BrowserType = "chrome" // maybe we try iterating over other browsers to see what launches?
 	idp.SessionDuration = int(in.SessionDuration)
 
 	if err := idp.Validate(); err != nil {
@@ -87,14 +88,14 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 		DownloadBrowser: true,
 	}
 
-	log.Info("Launching IDP login in browser...", "url", in.URL)
+	log.Debug("Launching IDP login in browser...", "url", in.URL)
 
 	// Authenticate and get base64-encoded SAML assertion.
 	assertionB64, err := client.Authenticate(loginDetails)
 	if err != nil {
 		return nil, fmt.Errorf("authenticate to IDP: %w", err)
 	}
-	log.Info("Received SAML assertion from IDP")
+	log.Debug("Received SAML assertion from IDP")
 
 	decodedXML, err := base64.StdEncoding.DecodeString(assertionB64)
 	if err != nil {
@@ -123,12 +124,6 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 		}
 		targetRole = selected
 	}
-
-	//awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
-	//if err != nil {
-	//	return nil, fmt.Errorf("load AWS config: %w", err)
-	//}
-	//stsClient := sts.NewFromConfig(awsCfg)
 
 	stsClient := sts.New(sts.Options{
 		Region: region,
@@ -159,7 +154,7 @@ func Saml2AwsLogin(ctx context.Context, in LoginOpts) (*LoginResult, error) {
 		all = append(all, fmt.Sprintf("%s|%s", r.RoleARN, r.PrincipalARN))
 	}
 
-	log.Info("Assumed role with SAML",
+	log.Debug("Assumed role with SAML",
 		"role", targetRole.RoleARN,
 		"principal", targetRole.PrincipalARN,
 		"expires", credsOut.Expiration)
@@ -197,12 +192,13 @@ func (i *awsSaml) Login() error {
 	if err != nil {
 		return err
 	}
-	log.Info("Success",
+	log.Debug("Success",
 		"arn", res.AssumedRole,
 		"expires", res.Expires,
 	)
 
 	WriteAwsCredentials(i.Identity.Profile, res.Credentials.AccessKeyID, res.Credentials.SecretAccessKey, res.Credentials.SessionToken, i.Common.Provider)
+	log.Info("✅ Logged in! Credentials written to ~/.aws/credentials", "profile", i.Identity.Profile)
 
 	if err != nil {
 		return err
