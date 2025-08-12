@@ -11,6 +11,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,16 +24,8 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
-)
 
-// Color constants for consistent styling using lipgloss hex colors (mapped from ANSI)
-const (
-	ColorWhite  = "#FFFFFF" // ANSI 15 - bright white
-	ColorBlack  = "#000000" // ANSI 0 - black
-	ColorBlue   = "#0000FF" // ANSI 12 - bright blue
-	ColorRed    = "#FF0000" // ANSI 9 - bright red
-	ColorGrey   = "#808080" // ANSI 240 - gray
-	ColorPurple = "#5F5FD7" // ANSI 63 - purple
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // ProjectConfig represents the configuration for a project
@@ -587,11 +580,11 @@ func PrintConfigurationSummary(projectConfig *ProjectConfig, mergedValues map[st
 			var coloredSource string
 			switch source {
 			case "scaffold":
-				coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorBlue)).Render("scaffold")
+				coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBlue)).Render("scaffold")
 			case "flag":
-				coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Render("flag")
+				coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed)).Render("flag")
 			default:
-				coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGrey)).Render("default")
+				coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Render("default")
 			}
 
 			rows = append(rows, table.Row{
@@ -604,7 +597,7 @@ func PrintConfigurationSummary(projectConfig *ProjectConfig, mergedValues map[st
 
 	// Calculate column widths based on content
 	settingWidth := 12 // Minimum width for setting names
-	valueWidth := 45   // Minimum width for values
+	valueWidth := 30   // Minimum width for values
 	sourceWidth := 12  // Minimum width for sources
 
 	// Find the maximum content width for each column
@@ -625,12 +618,19 @@ func PrintConfigurationSummary(projectConfig *ProjectConfig, mergedValues map[st
 	valueWidth += 2
 	sourceWidth += 2
 
-	// Calculate total table width needed
+	// Calculate total content width needed
 	totalContentWidth := settingWidth + valueWidth + sourceWidth + 6 // +6 for borders and spacing
 
-	// If content is wider than screen, use content width; otherwise use screen width
+	// If content is wider than screen, adjust column widths proportionally
 	if totalContentWidth > tableWidth {
-		tableWidth = totalContentWidth
+		// Calculate how much we need to reduce
+		excess := totalContentWidth - tableWidth
+
+		// Reduce value column proportionally (it's most likely to be long)
+		if valueWidth > 20 {
+			reduceValue := int(math.Min(float64(excess), float64(valueWidth-20)))
+			valueWidth -= reduceValue
+		}
 	}
 
 	// Create table
@@ -646,25 +646,31 @@ func PrintConfigurationSummary(projectConfig *ProjectConfig, mergedValues map[st
 		table.WithHeight(len(rows)+1), // Set explicit height to minimize spacing
 	)
 
+	// Ensure no row is selected
+	t.SetCursor(-1)
+
 	// Style the table with colors
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(ColorPurple)).
+		BorderForeground(lipgloss.Color(theme.ColorBorder)).
 		BorderBottom(true).
 		Bold(true).
-		Foreground(lipgloss.Color(ColorWhite))
-	s.Cell = s.Cell.
-		Foreground(lipgloss.Color(ColorWhite)).
+		Foreground(lipgloss.Color(theme.ColorWhite))
+
+	// Explicitly set cell style to ensure no bold
+	s.Cell = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorWhite)).
 		Bold(false)
+
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color(ColorWhite)).
-		Background(lipgloss.Color(ColorBlack))
+		Foreground(lipgloss.Color(theme.ColorWhite)).
+		Background(lipgloss.Color(theme.ColorDarkGray))
 
 	t.SetStyles(s)
 
 	// Print the table
-	fmt.Println(lipgloss.NewStyle().Bold(true).Render("CONFIGURATION SUMMARY"))
+	fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.ColorGreen)).Render("CONFIGURATION SUMMARY"))
 	fmt.Println()
 	fmt.Println(t.View())
 	fmt.Println()
