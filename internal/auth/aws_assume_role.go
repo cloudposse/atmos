@@ -3,13 +3,13 @@ package auth
 import (
 	"context"
 	"fmt"
-	"os"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"os"
+	"time"
 )
 
 type awsAssumeRole struct {
@@ -30,6 +30,11 @@ func (i *awsAssumeRole) Validate() error {
 		return fmt.Errorf("profile is required for AWS assume role")
 	}
 
+	// Set default region if not specified
+	if i.Common.Region == "" {
+		i.Common.Region = "us-east-1" // Default region
+	}
+
 	return nil
 }
 
@@ -42,33 +47,44 @@ func (i *awsAssumeRole) Login() error {
 		i.SessionDuration = 3600 // Default to 1 hour
 	}
 
-	// Verify that credentials are available
+	// Verify that credentials are available - load from the specified profile if given
 	ctx := context.Background()
-	_, err := config.LoadDefaultConfig(ctx)
+
+	// Create config options to specify profile or use default
+	var opts []func(*config.LoadOptions) error
+
+	// Ensure we have a region
+	if i.Common.Region == "" {
+		i.Common.Region = "us-east-1" // Default region
+	}
+
+	// Add region to the configuration
+	opts = append(opts, config.WithRegion(i.Common.Region))
+
+	// If we're assuming a role, we need to make sure we're properly loading the source profile
+	// The source profile comes from the identity's profile
+	if i.Identity.Profile != "" {
+		opts = append(opts, config.WithSharedConfigProfile(i.Identity.Profile))
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to load AWS credentials: %w", err)
 	}
 
-	// Assume the role
-	stsClient := sts.New(sts.Options{
-		Region: i.Common.Region,
-	})
-	log.Debug("Assuming role", "role", i.RoleArn, "source_identity", i.Identity.Profile)
-	result, err := stsClient.AssumeRole(ctx, &sts.AssumeRoleInput{
-		RoleArn:         aws.String(i.RoleArn),
-		SourceIdentity:  aws.String(i.Identity.Profile),
-		RoleSessionName: aws.String(fmt.Sprintf("atmos-%s-%s", i.Identity.Profile, os.Getenv("USER"))),
-		DurationSeconds: aws.Int32(i.SessionDuration),
-	})
+	// Verify credentials work by calling STS GetCallerIdentity
+	stsClient := sts.NewFromConfig(cfg)
+	identity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return fmt.Errorf("failed to assume role %s: %w", i.RoleArn, err)
+		return fmt.Errorf("failed to validate AWS credentials: %w", err)
 	}
-	log.Debug("Assumed role", "role", result.AssumedRoleUser.Arn)
-	//
-	//// Save the temporary credentials
-	//i.Identity.Credentials.AccessKeyId = *result.Credentials.AccessKeyId
-	//i.Identity.Credentials.SecretAccessKey = *result.Credentials.SecretAccessKey
-	//i.Identity.Credentials.SessionToken = *result.Credentials.SessionToken
+
+	log.Debug("AWS credentials validated",
+		"user", aws.ToString(identity.UserId),
+		"account", aws.ToString(identity.Account),
+		"arn", aws.ToString(identity.Arn),
+	)
+
 	return nil
 }
 
@@ -76,8 +92,23 @@ func (i *awsAssumeRole) Login() error {
 func (i *awsAssumeRole) AssumeRole() error {
 	ctx := context.Background()
 
-	// Load the AWS configuration
-	cfg, err := config.LoadDefaultConfig(ctx)
+	// Load the AWS configuration with the specified profile
+	var opts []func(*config.LoadOptions) error
+
+	// Ensure we have a region
+	if i.Common.Region == "" {
+		i.Common.Region = "us-east-1" // Default region
+	}
+
+	// Add region to the configuration
+	opts = append(opts, config.WithRegion(i.Common.Region))
+
+	// If we're assuming a role, we need to make sure we're properly loading the source profile
+	if i.Identity.Profile != "" {
+		opts = append(opts, config.WithSharedConfigProfile(i.Identity.Profile))
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to load AWS config: %w", err)
 	}
@@ -92,7 +123,13 @@ func (i *awsAssumeRole) AssumeRole() error {
 	}
 
 	// Extract user ID for session name
-	sessionName := fmt.Sprintf("AtmosSession-%s", aws.ToString(callerIdentity.UserId))
+	sessionName := fmt.Sprintf("AtmosSession-%s", os.Getenv("USER"))
+
+	log.Debug("Assuming role",
+		"role_arn", i.RoleArn,
+		"source_identity", aws.ToString(callerIdentity.Arn),
+		"session_name", sessionName,
+	)
 
 	// Assume the specified role
 	result, err := stsClient.AssumeRole(ctx, &sts.AssumeRoleInput{
@@ -116,7 +153,7 @@ func (i *awsAssumeRole) AssumeRole() error {
 		log.Info("✅ Successfully assumed role",
 			"role", i.RoleArn,
 			"profile", i.Identity.Profile,
-			"expires", result.Credentials.Expiration,
+			"expires", result.Credentials.Expiration.Local().Format(time.RFC1123),
 		)
 		return nil
 	}
