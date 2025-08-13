@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/logger"
@@ -126,7 +127,7 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
-	if err := ValidateStacks(atmosConfig); err != nil {
+	if err := ValidateStacks(&atmosConfig); err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
 	// Process flags
@@ -184,11 +185,10 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		case *[]string:
 			*v, err = flags.GetStringSlice(k)
 		default:
-			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
+			er := fmt.Errorf("unsupported type %T for flag %s", v, k)
+			errUtils.CheckErrorPrintAndExit(er, "", "")
 		}
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	// When uploading, always include dependents and settings for all affected components
 	if describe.Upload {
@@ -281,7 +281,7 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 }
 
 func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
-	log.Debug("\nAffected components and stacks: \n")
+	log.Debug("Affected components and stacks:")
 
 	err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
 	if err != nil {

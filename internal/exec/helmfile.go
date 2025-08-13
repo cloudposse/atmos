@@ -43,7 +43,8 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "version" {
-		return ExecuteShellCommand(atmosConfig,
+		return ExecuteShellCommand(
+			atmosConfig,
 			info.Command,
 			[]string{info.SubCommand},
 			"",
@@ -53,7 +54,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil)
 	if err != nil {
 		return err
 	}
@@ -63,7 +64,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if !info.ComponentIsEnabled {
-		log.Info(fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		log.Info("Component is not enabled and skipped", "component", info.ComponentFromArg)
 		return nil
 	}
 
@@ -100,18 +101,11 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Print component variables
-	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack)
-
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
-		if err != nil {
-			return err
-		}
-	}
+	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
 	// Check if component 'settings.validation' section is specified and validate the component
 	valid, err := ValidateComponent(
-		atmosConfig,
+		&atmosConfig,
 		info.ComponentFromArg,
 		info.ComponentSection,
 		"",
@@ -123,12 +117,12 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	if !valid {
-		return fmt.Errorf("\nComponent '%s' did not pass the validation policies.\n", info.ComponentFromArg)
+		return fmt.Errorf("component '%s' did not pass the validation policies", info.ComponentFromArg)
 	}
 
 	// Write variables to a file
-	varFile := constructHelmfileComponentVarfileName(info)
-	varFilePath := constructHelmfileComponentVarfilePath(atmosConfig, info)
+	varFile := constructHelmfileComponentVarfileName(&info)
+	varFilePath := constructHelmfileComponentVarfilePath(&atmosConfig, &info)
 
 	log.Debug("Writing the variables to file:", "file", varFilePath)
 
@@ -151,12 +145,12 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	if atmosConfig.Components.Helmfile.UseEKS {
 		// Prepare AWS profile
 		helmAwsProfile := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
-		u.LogDebug(fmt.Sprintf("\nUsing AWS_PROFILE=%s\n\n", helmAwsProfile))
+		log.Debug("Using AWS_PROFILE", "profile", helmAwsProfile)
 
 		// Download kubeconfig by running `aws eks update-kubeconfig`
 		kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", atmosConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
 		clusterName := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
-		u.LogDebug(fmt.Sprintf("Downloading kubeconfig from the cluster '%s' and saving it to %s\n\n", clusterName, kubeconfigPath))
+		log.Debug("Downloading and saving kubeconfig", "cluster", clusterName, "path", kubeconfigPath)
 
 		err = ExecuteShellCommand(
 			atmosConfig,
@@ -186,33 +180,33 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Print command info
-	u.LogDebug("\nCommand info:")
-	u.LogDebug("Helmfile binary: " + info.Command)
-	u.LogDebug("Helmfile command: " + info.SubCommand)
+	log.Debug("\nCommand info:")
+	log.Debug("Helmfile binary: " + info.Command)
+	log.Debug("Helmfile command: " + info.SubCommand)
 
 	// https://github.com/roboll/helmfile#cli-reference
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options "--no-color --namespace test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace=test"
 	// atmos helmfile diff echo-server -s tenant1-ue2-dev --global-options="--no-color --namespace test"
-	u.LogDebug(fmt.Sprintf("Global options: %v", info.GlobalOptions))
+	log.Debug("Global", "options", info.GlobalOptions)
 
-	u.LogDebug(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
-	u.LogDebug("Component: " + info.ComponentFromArg)
+	log.Debug("Arguments and flags", "additional", info.AdditionalArgsAndFlags)
+	log.Debug("Component: " + info.ComponentFromArg)
 
 	if len(info.BaseComponent) > 0 {
-		u.LogDebug("Helmfile component: " + info.BaseComponent)
+		log.Debug("Helmfile component: " + info.BaseComponent)
 	}
 
 	if info.Stack == info.StackFromArg {
-		u.LogDebug("Stack: " + info.StackFromArg)
+		log.Debug("Stack: " + info.StackFromArg)
 	} else {
-		u.LogDebug("Stack: " + info.StackFromArg)
-		u.LogDebug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
+		log.Debug("Stack: " + info.StackFromArg)
+		log.Debug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := constructHelmfileComponentWorkingDir(atmosConfig, info)
-	u.LogDebug(fmt.Sprintf("Working dir: %s\n\n", workingDir))
+	workingDir := constructHelmfileComponentWorkingDir(&atmosConfig, &info)
+	log.Debug("Using", "working dir", workingDir)
 
 	// Prepare arguments and flags
 	allArgsAndFlags := []string{"--state-values-file", varFile}
@@ -262,9 +256,9 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
-	u.LogTrace("Using ENV vars:")
+	log.Debug("Using ENV vars:")
 	for _, v := range envVars {
-		u.LogTrace(v)
+		log.Debug(v)
 	}
 
 	err = ExecuteShellCommand(
@@ -283,7 +277,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	// Cleanup
 	err = os.Remove(varFilePath)
 	if err != nil {
-		u.LogWarning(err.Error())
+		log.Warn(err.Error())
 	}
 
 	return nil

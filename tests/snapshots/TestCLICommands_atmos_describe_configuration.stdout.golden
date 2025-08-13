@@ -12,12 +12,17 @@ components:
       prompt: ""
     init:
       pass_vars: false
+    plan:
+      skip_planfile: false
   helmfile:
     base_path: components/helmfile
     use_eks: true
     kubeconfig_path: /dev/shm
     helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
     cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+    command: ""
+  packer:
+    base_path: ""
     command: ""
 stacks:
   base_path: stacks
@@ -62,6 +67,10 @@ settings:
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
+  telemetry:
+    enabled: true
+    endpoint: https://us.i.posthog.com
+    token: phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks
 includeStackAbsolutePaths:
@@ -70,6 +79,7 @@ excludeStackAbsolutePaths:
   - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks/**/_defaults.yaml
 terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/components/helmfile
+packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 default: false
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 import: []

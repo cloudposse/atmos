@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -271,6 +271,7 @@ Arguments:
 func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: `Atmos/%s (Cloud Posse; +https://atmos.tools)`. This flag works with almost all commands.", version.Version))
 	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running `terraform init` before executing terraform commands")
+	parentCmd.PersistentFlags().Bool("init-pass-vars", false, "Pass the generated varfile to `terraform init` using the `--var-file` flag. OpenTofu supports passing a varfile to `init` to dynamically configure backends")
 	parentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands")
@@ -300,7 +301,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 			setFlags(cmd)
 		}
 		cmd.ValidArgsFunction = ComponentsArgCompletion
-		cmd.Run = func(cmd_ *cobra.Command, args []string) {
+		cmd.RunE = func(cmd_ *cobra.Command, args []string) error {
 			// Because we disable flag parsing we require manual handle help Request
 			handleHelpRequest(cmd, args)
 			if len(os.Args) > 2 {
@@ -309,10 +310,10 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 			err := terraformRun(parentCmd, cmd_, args)
 			if err != nil {
-				// Let the main function handle errors like ErrPlanHasDiff
-				// by simply propagating them without exiting here
-				return
+				return err
 			}
+
+			return nil
 		}
 		parentCmd.AddCommand(cmd)
 	}
@@ -322,6 +323,7 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 	"plan": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("affected", false, "Plan the affected components in dependency order")
 		cmd.PersistentFlags().Bool("all", false, "Plan all components in all stacks")
+		cmd.PersistentFlags().Bool("skip-planfile", false, "Skip writing the plan to a file by not passing the `-out` flag to Terraform when executing the command. Set it to `true` when using Terraform Cloud since the `-out` flag is not supported. Terraform Cloud automatically stores plans in its backend")
 	},
 	"deploy": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("deploy-run-init", false, "If set atmos will run `terraform init` before executing the command")
@@ -346,8 +348,7 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 		cmd.PersistentFlags().String("new", "", "Path to the new Terraform plan file (optional)")
 		err := cmd.MarkPersistentFlagRequired("orig")
 		if err != nil {
-			//nolint:revive // intentional exit for initialization error
-			log.Fatalf("Error marking 'orig' flag as required: %v", err)
+			errUtils.CheckErrorPrintAndExit(err, "Error marking 'orig' flag as required", "")
 		}
 	},
 }

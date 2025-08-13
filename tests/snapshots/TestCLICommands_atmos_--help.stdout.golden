@@ -1,4 +1,9 @@
 
+Notice: Atmos now collects completely anonymous telemetry regarding usage.
+This information is used to shape Atmos roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
+by visiting the following URL: https://atmos.tools/cli/telemetry
+
 Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 
 Usage:
@@ -18,6 +23,7 @@ Available Commands:
   helmfile                       Manage Helmfile-based Kubernetes deployments
   help                           Display help information for Atmos commands
   list                           List available stacks and components
+  packer                         Manage packer-based machine images for multiple platforms
   pro                            Access premium features integrated with atmos-pro.com
   support                        Show Atmos support options
   terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
@@ -29,6 +35,7 @@ Available Commands:
 Subcommand Aliases:
 
   hf                             Alias of "atmos helmfile" command
+  pk                             Alias of "atmos packer" command
   tf                             Alias of "atmos terraform" command
 
 

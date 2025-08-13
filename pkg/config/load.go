@@ -10,10 +10,12 @@ import (
 	"runtime"
 
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/viper"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/spf13/viper"
 )
 
 //go:embed atmos.yaml
@@ -110,11 +112,16 @@ func setEnv(v *viper.Viper) {
 	// GitHub OIDC for Atmos Pro
 	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
 	bindEnv(v, "settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+
+	// Telemetry settings
+	bindEnv(v, "settings.telemetry.enabled", "ATMOS_TELEMETRY_ENABLED")
+	bindEnv(v, "settings.telemetry.token", "ATMOS_TELEMETRY_TOKEN")
+	bindEnv(v, "settings.telemetry.endpoint", "ATMOS_TELEMETRY_ENDPOINT")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
 	if err := v.BindEnv(key...); err != nil {
-		panic(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
 
@@ -158,7 +165,7 @@ func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStac
 	return readAtmosConfigCli(v, configAndStacksInfo.AtmosCliConfigPath)
 }
 
-// readSystemConfig load config from system dir .
+// readSystemConfig load config from system dir.
 func readSystemConfig(v *viper.Viper) error {
 	configFilePath := ""
 	if runtime.GOOS == "windows" {
@@ -182,7 +189,7 @@ func readSystemConfig(v *viper.Viper) error {
 	return nil
 }
 
-// readHomeConfig load config from user's HOME dir .
+// readHomeConfig load config from user's HOME dir.
 func readHomeConfig(v *viper.Viper) error {
 	home, err := homedir.Dir()
 	if err != nil {
@@ -202,7 +209,7 @@ func readHomeConfig(v *viper.Viper) error {
 	return nil
 }
 
-// readWorkDirConfig load config from current working directory .
+// readWorkDirConfig load config from current working directory.
 func readWorkDirConfig(v *viper.Viper) error {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -308,19 +315,13 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	var atmosFoundFilePaths []string
 	// Search for `atmos.d/` configurations
 	searchDir := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
-	foundPaths1, err := SearchAtmosConfig(searchDir)
-	if err != nil {
-		log.Debug("Atmos configuration not found", "path", searchDir, "error", err)
-	}
+	foundPaths1, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths1) > 0 {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths1...)
 	}
 	// Search for `.atmos.d` configurations
 	searchDir = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
-	foundPaths2, err := SearchAtmosConfig(searchDir)
-	if err != nil {
-		log.Debug("Atmos configuration not found", "path", searchDir, "error", err)
-	}
+	foundPaths2, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths2) > 0 {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths2...)
 	}

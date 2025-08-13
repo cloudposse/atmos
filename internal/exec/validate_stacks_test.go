@@ -43,6 +43,6 @@ func TestValidateStacks(t *testing.T) {
 		},
 	}
 
-	err = ValidateStacks(atmosConfig)
+	err = ValidateStacks(&atmosConfig)
 	assert.Nil(t, err)
 }

@@ -14,6 +14,7 @@ func TestStackProcessor(t *testing.T) {
 	stacksBasePath := "../../tests/fixtures/scenarios/complete/stacks"
 	terraformComponentsBasePath := "../../tests/fixtures/scenarios/complete/components/terraform"
 	helmfileComponentsBasePath := "../../tests/fixtures/scenarios/complete/components/helmfile"
+	packerComponentsBasePath := "../../tests/fixtures/scenarios/complete/components/packer"
 
 	filePaths := []string{
 		"../../tests/fixtures/scenarios/complete/stacks/orgs/cp/tenant1/dev/us-east-2.yaml",
@@ -40,10 +41,11 @@ func TestStackProcessor(t *testing.T) {
 	}
 
 	listResult, mapResult, _, err := ProcessYAMLConfigFiles(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
+		packerComponentsBasePath,
 		filePaths,
 		processStackDeps,
 		processComponentDeps,
@@ -68,33 +70,33 @@ func TestStackProcessor(t *testing.T) {
 	mapConfig2 := mapResult["orgs/cp/tenant1/dev/us-east-2"]
 	assert.Equal(t, len(imports), len(mapConfig2.(map[string]any)["imports"].([]string)))
 
-	assert.Equal(t, 26, len(imports))
+	assert.Equal(t, 27, len(imports))
 	assert.Equal(t, "catalog/helmfile/echo-server", imports[0])
 	assert.Equal(t, "catalog/helmfile/infra-server", imports[1])
 	assert.Equal(t, "catalog/helmfile/infra-server-override", imports[2])
-	assert.Equal(t, "catalog/terraform/mixins/test-1", imports[3])
-	assert.Equal(t, "catalog/terraform/mixins/test-2", imports[4])
-	assert.Equal(t, "catalog/terraform/services/service-1", imports[5])
-	assert.Equal(t, "catalog/terraform/services/service-1-override", imports[6])
-	assert.Equal(t, "catalog/terraform/services/service-1-override-2", imports[7])
-	assert.Equal(t, "catalog/terraform/services/service-2", imports[8])
-	assert.Equal(t, "catalog/terraform/services/service-2-override", imports[9])
-	assert.Equal(t, "catalog/terraform/services/service-2-override-2", imports[10])
-	assert.Equal(t, "catalog/terraform/services/top-level-service-1", imports[11])
-	assert.Equal(t, "catalog/terraform/services/top-level-service-2", imports[12])
-	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", imports[13])
-	assert.Equal(t, "catalog/terraform/tenant1-ue2-dev", imports[14])
-	assert.Equal(t, "catalog/terraform/test-component", imports[15])
-	assert.Equal(t, "catalog/terraform/test-component-override", imports[16])
-	assert.Equal(t, "catalog/terraform/test-component-override-2", imports[17])
-	assert.Equal(t, "catalog/terraform/test-component-override-3", imports[18])
-	assert.Equal(t, "catalog/terraform/top-level-component1", imports[19])
-	assert.Equal(t, "catalog/terraform/vpc", imports[20])
-	assert.Equal(t, "mixins/region/us-east-2", imports[21])
-	assert.Equal(t, "mixins/stage/dev", imports[22])
-	assert.Equal(t, "orgs/cp/_defaults", imports[23])
-	assert.Equal(t, "orgs/cp/tenant1/_defaults", imports[24])
-	assert.Equal(t, "orgs/cp/tenant1/dev/_defaults", imports[25])
+	assert.Equal(t, "catalog/terraform/mixins/test-1", imports[4])
+	assert.Equal(t, "catalog/terraform/mixins/test-2", imports[5])
+	assert.Equal(t, "catalog/terraform/services/service-1", imports[6])
+	assert.Equal(t, "catalog/terraform/services/service-1-override", imports[7])
+	assert.Equal(t, "catalog/terraform/services/service-1-override-2", imports[8])
+	assert.Equal(t, "catalog/terraform/services/service-2", imports[9])
+	assert.Equal(t, "catalog/terraform/services/service-2-override", imports[10])
+	assert.Equal(t, "catalog/terraform/services/service-2-override-2", imports[11])
+	assert.Equal(t, "catalog/terraform/services/top-level-service-1", imports[12])
+	assert.Equal(t, "catalog/terraform/services/top-level-service-2", imports[13])
+	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", imports[14])
+	assert.Equal(t, "catalog/terraform/tenant1-ue2-dev", imports[15])
+	assert.Equal(t, "catalog/terraform/test-component", imports[16])
+	assert.Equal(t, "catalog/terraform/test-component-override", imports[17])
+	assert.Equal(t, "catalog/terraform/test-component-override-2", imports[18])
+	assert.Equal(t, "catalog/terraform/test-component-override-3", imports[19])
+	assert.Equal(t, "catalog/terraform/top-level-component1", imports[20])
+	assert.Equal(t, "catalog/terraform/vpc", imports[21])
+	assert.Equal(t, "mixins/region/us-east-2", imports[22])
+	assert.Equal(t, "mixins/stage/dev", imports[23])
+	assert.Equal(t, "orgs/cp/_defaults", imports[24])
+	assert.Equal(t, "orgs/cp/tenant1/_defaults", imports[25])
+	assert.Equal(t, "orgs/cp/tenant1/dev/_defaults", imports[26])
 
 	components := mapConfig1["components"].(map[string]any)
 	terraformComponents := components["terraform"].(map[string]any)
@@ -219,9 +221,10 @@ func TestStackProcessorRelativePaths(t *testing.T) {
 	}
 
 	listResult, mapResult, _, err := ProcessYAMLConfigFiles(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		terraformComponentsBasePath,
+		"",
 		"",
 		filePaths,
 		true,
@@ -266,7 +269,7 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 	}
 
 	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -292,4 +295,113 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 	assert.Equal(t, "components", mapResultKeys[0])
 	assert.Equal(t, "import", mapResultKeys[1])
 	assert.Equal(t, "vars", mapResultKeys[2])
+}
+
+func TestProcessYAMLConfigFiles(t *testing.T) {
+	t.Run("should handle empty file paths", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{
+					Enabled: true,
+					Sprig: schema.TemplatesSettingsSprig{
+						Enabled: true,
+					},
+					Gomplate: schema.TemplatesSettingsGomplate{
+						Enabled: true,
+					},
+				},
+			},
+		}
+
+		listResult, mapResult, importsConfig, err := ProcessYAMLConfigFiles(
+			atmosConfig,
+			"stacks",
+			"terraform",
+			"helmfile",
+			"packer",
+			[]string{},
+			true,
+			true,
+			false,
+		)
+
+		assert.NoError(t, err)
+		assert.Empty(t, listResult)
+		assert.Empty(t, mapResult)
+		assert.Empty(t, importsConfig)
+	})
+
+	t.Run("should error on missing files without ignoreMissingFiles", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{
+					Enabled: true,
+				},
+			},
+		}
+
+		_, _, _, err := ProcessYAMLConfigFiles(
+			atmosConfig,
+			"stacks",
+			"terraform",
+			"helmfile",
+			"packer",
+			[]string{"non-existent-file.yaml"},
+			true,
+			true,
+			false,
+		)
+
+		assert.Error(t, err)
+	})
+
+	t.Run("should process valid config files", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{
+					Enabled: true,
+					Sprig: schema.TemplatesSettingsSprig{
+						Enabled: true,
+					},
+					Gomplate: schema.TemplatesSettingsGomplate{
+						Enabled: true,
+					},
+				},
+			},
+		}
+
+		filePaths := []string{
+			"../../tests/fixtures/scenarios/complete/stacks/orgs/cp/tenant1/dev/us-east-2.yaml",
+		}
+
+		listResult, mapResult, _, err := ProcessYAMLConfigFiles(
+			atmosConfig,
+			"../../tests/fixtures/scenarios/complete/stacks",
+			"../../tests/fixtures/scenarios/complete/components/terraform",
+			"../../tests/fixtures/scenarios/complete/components/helmfile",
+			"../../tests/fixtures/scenarios/complete/components/packer",
+			filePaths,
+			true,
+			true,
+			false,
+		)
+
+		assert.NoError(t, err)
+		assert.NotEmpty(t, listResult)
+		assert.NotEmpty(t, mapResult)
+		assert.Equal(t, 1, len(listResult))
+		assert.Equal(t, 1, len(mapResult))
+
+		// Verify the content of the processed file
+		config, err := u.UnmarshalYAML[schema.AtmosSectionMapType](listResult[0])
+		assert.NoError(t, err)
+
+		// Check if the components section exists
+		components, ok := config["components"].(map[string]any)
+		assert.True(t, ok)
+		assert.NotNil(t, components)
+
+		// Verify the stack name is correctly mapped
+		assert.Contains(t, mapResult, "orgs/cp/tenant1/dev/us-east-2")
+	})
 }

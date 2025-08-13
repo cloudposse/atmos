@@ -40,7 +40,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		varFilePath = constructHelmfileComponentVarfilePath(atmosConfig, info)
+		varFilePath = constructHelmfileComponentVarfilePath(&atmosConfig, &info)
 	}
 
 	// Print the component variables

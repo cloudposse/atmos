@@ -12,12 +12,17 @@ components:
       prompt: ""
     init:
       pass_vars: false
+    plan:
+      skip_planfile: false
   helmfile:
     base_path: ""
     use_eks: true
     kubeconfig_path: ""
     helm_aws_profile_pattern: ""
     cluster_name_pattern: ""
+    command: ""
+  packer:
+    base_path: ""
     command: ""
 stacks:
   base_path: stacks
@@ -49,6 +54,10 @@ settings:
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
+  telemetry:
+    enabled: true
+    endpoint: https://us.i.posthog.com
+    token: phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks
 includeStackAbsolutePaths:
@@ -57,6 +66,7 @@ excludeStackAbsolutePaths:
   - /absolute/path/to/repo/examples/demo-stacks/stacks/**/_defaults.yaml
 terraformDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
+packerDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 default: false
 cli_config_path: /absolute/path/to/repo/examples/demo-stacks
 import: []

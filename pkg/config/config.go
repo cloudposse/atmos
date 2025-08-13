@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
-
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/pkg/errors"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
@@ -148,7 +148,7 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 
 // atmosConfigAbsolutePaths converts paths to absolute paths.
 func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
-	// Convert stacks base path to absolute path
+	// Convert stacks base path to an absolute path
 	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
@@ -170,7 +170,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
-	// Convert terraform dir to absolute path
+	// Convert Terraform dir to an absolute path.
 	terraformBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
 	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
@@ -178,13 +178,21 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
-	// Convert helmfile dir to absolute path
+	// Convert Helmfile dir to an absolute path.
 	helmfileBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
 	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
 		return err
 	}
 	atmosConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
+
+	// Convert Packer dir to an absolute path.
+	packerBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
+	packerDirAbsPath, err := filepath.Abs(packerBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.PackerDirAbsolutePath = packerDirAbsPath
 
 	return nil
 }
@@ -216,9 +224,9 @@ func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacks
 	atmosConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 	if stackIsPhysicalPath {
-		log.Debug(fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
-			configAndStacksInfo.Stack,
-			stackConfigFilesRelativePaths[0]))
+		log.Debug("The stack matches the stack manifest",
+			"stack", configAndStacksInfo.Stack,
+			"manifest", stackConfigFilesRelativePaths[0])
 		atmosConfig.StackType = "Directory"
 	} else {
 		// The stack is a logical name

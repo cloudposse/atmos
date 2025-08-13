@@ -30,7 +30,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	spinnerDone := make(chan struct{})
 	// Run spinner in a goroutine
 	RunSpinner(p, spinnerDone, message)
-	// Ensure spinner is stopped before returning
+	// Ensure the spinner is stopped before returning
 	defer StopSpinner(p, spinnerDone)
 
 	// Process CLI arguments
@@ -56,12 +56,12 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	err = ValidateStacks(atmosConfig)
+	err = ValidateStacks(&atmosConfig)
 	return err
 }
 
 // ValidateStacks validates Atmos stack configuration
-func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
+func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	var validationErrorMessages []string
 
 	// 1. Process top-level stack manifests and detect duplicate components in the same stack
@@ -104,18 +104,18 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	switch {
 	case manifestSchema.Manifest == "":
 		// If the validation schema location is not specified, use the embedded one
-		f, err := getEmbeddedSchemaPath(&atmosConfig)
+		f, err := getEmbeddedSchemaPath(atmosConfig)
 		if err != nil {
 			return err
 		}
 		manifestSchema.Manifest = f
-		log.Debug("Atmos JSON Schema is not configured. Using the default embedded schema.")
+		log.Debug("Atmos JSON Schema is not configured. Using the default embedded schema")
 	case u.FileExists(manifestSchema.Manifest):
 		atmosManifestJsonSchemaFilePath = manifestSchema.Manifest
 	case u.FileExists(atmosManifestJsonSchemaFileAbsPath):
 		atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
 	case u.IsURL(manifestSchema.Manifest):
-		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(&atmosConfig)
+		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(atmosConfig)
 		if err != nil {
 			return err
 		}
@@ -179,6 +179,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			atmosConfig.StacksBaseAbsolutePath,
 			atmosConfig.TerraformDirAbsolutePath,
 			atmosConfig.HelmfileDirAbsolutePath,
+			atmosConfig.PackerDirAbsolutePath,
 			filePath,
 			stackConfig,
 			false,
@@ -201,7 +202,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 }
 
 func createComponentStackMap(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	stacksMap map[string]any,
 	componentType string,
 ) (map[string]map[string][]string, error) {
@@ -322,7 +323,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true, true, nil)
+					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, false, false, nil)
 					if err != nil {
 						return nil, err
 					}

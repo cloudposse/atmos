@@ -2,9 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
-
-	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -15,6 +12,7 @@ import (
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
+	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -32,6 +30,7 @@ var listMetadataCmd = &cobra.Command{
 		"atmos list metadata --stack 'prod-*'",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig()
+
 		output, err := listMetadata(cmd, args)
 		if err != nil {
 			return err
@@ -76,7 +75,7 @@ func setupMetadataOptions(commonFlags fl.CommonFlags, componentFilter string) *l
 // logNoMetadataFoundMessage logs an appropriate message when no metadata is found.
 func logNoMetadataFoundMessage(componentFilter string) {
 	if componentFilter != "" {
-		log.Info(fmt.Sprintf("No metadata found for component '%s'", componentFilter))
+		log.Info("No metadata found", "component", componentFilter)
 	} else {
 		log.Info("No metadata found")
 	}
@@ -137,7 +136,7 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false,
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false,
 		params.ProcessingFlags.Templates, params.ProcessingFlags.Functions, false, nil)
 	if err != nil {
 		return "", &listerrors.DescribeStacksError{Cause: err}

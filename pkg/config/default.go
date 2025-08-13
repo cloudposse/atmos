@@ -42,6 +42,9 @@ var (
 				Init: schema.TerraformInit{
 					PassVars: false,
 				},
+				Plan: schema.TerraformPlan{
+					SkipPlanfile: false,
+				},
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",
@@ -49,6 +52,10 @@ var (
 				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
 				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
 				UseEKS:                true,
+			},
+			Packer: schema.Packer{
+				BasePath: "components/packer",
+				Command:  "packer",
 			},
 		},
 		Settings: schema.AtmosSettings{

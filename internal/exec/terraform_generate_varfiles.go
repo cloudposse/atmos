@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -64,12 +66,12 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		format = "json"
 	}
 
-	return ExecuteTerraformGenerateVarfiles(atmosConfig, fileTemplate, format, stacks, components)
+	return ExecuteTerraformGenerateVarfiles(&atmosConfig, fileTemplate, format, stacks, components)
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
 func ExecuteTerraformGenerateVarfiles(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	fileTemplate string,
 	format string,
 	stacks []string,
@@ -248,7 +250,7 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
-					&atmosConfig,
+					atmosConfig,
 					&configAndStacksInfo,
 					settingsSectionStruct,
 					"terraform-generate-varfiles",
@@ -269,7 +271,7 @@ func ExecuteTerraformGenerateVarfiles(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					u.LogErrorAndExit(err)
+					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)
@@ -318,7 +320,7 @@ func ExecuteTerraformGenerateVarfiles(
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(atmosConfig, fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0o644)
 						if err != nil {
 							return err
 						}
@@ -326,11 +328,11 @@ func ExecuteTerraformGenerateVarfiles(
 						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 					}
 
-					u.LogDebug(fmt.Sprintf("varfile: %s", fileName))
-					u.LogDebug(fmt.Sprintf("terraform component: %s", terraformComponent))
-					u.LogDebug(fmt.Sprintf("atmos component: %s", componentName))
-					u.LogDebug(fmt.Sprintf("atmos stack: %s", stackName))
-					u.LogDebug(fmt.Sprintf("stack config file: %s", stackFileName))
+					log.Debug("varfile", fileName)
+					log.Debug("terraform component", terraformComponent)
+					log.Debug("atmos component", componentName)
+					log.Debug("atmos stack", stackName)
+					log.Debug("stack config file", stackFileName)
 				}
 			}
 		}

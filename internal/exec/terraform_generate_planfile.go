@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -117,7 +118,7 @@ func ExecuteTerraformGeneratePlanfile(
 		return err
 	}
 
-	*info, err = ProcessStacks(atmosConfig, *info, true, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip)
+	*info, err = ProcessStacks(&atmosConfig, *info, true, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip)
 	if err != nil {
 		return err
 	}
@@ -127,7 +128,7 @@ func ExecuteTerraformGeneratePlanfile(
 	// Create a temporary directory for all temporary files.
 	tmpDir, err := os.MkdirTemp("", "atmos-terraform-generate-planfile")
 	if err != nil {
-		return fmt.Errorf(ErrWrappingFormat, ErrCreatingTempDirectory, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrCreatingTempDirectory, err)
 	}
 
 	defer func(path string) {
@@ -146,7 +147,7 @@ func ExecuteTerraformGeneratePlanfile(
 	// Get the JSON representation of the new plan.
 	planJSON, err := getTerraformPlanJSON(&atmosConfig, info, componentPath, planFile)
 	if err != nil {
-		return fmt.Errorf(ErrWrappingFormat, ErrGettingJsonForPlanfile, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrGettingJsonForPlanfile, err)
 	}
 
 	// Resolve the planfile path based on options. If a custom file is specified, use that. Otherwise, use the default path.
@@ -196,12 +197,12 @@ func resolvePlanfilePath(componentPath, format string, customFile string, info *
 			planFilePath = filepath.Join(componentPath, customFile)
 		}
 	} else {
-		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(*atmosConfig, *info), format)
+		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
 	}
 
 	err := u.EnsureDir(planFilePath)
 	if err != nil {
-		return "", fmt.Errorf(ErrWrappingFormat, ErrCreatingIntermediateSubdirectories, err)
+		return "", fmt.Errorf(errUtils.ErrWrappingFormat, ErrCreatingIntermediateSubdirectories, err)
 	}
 
 	return planFilePath, nil

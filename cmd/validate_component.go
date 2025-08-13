@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"fmt"
-
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // validateComponentCmd validates atmos components
@@ -17,18 +15,18 @@ var validateComponentCmd = &cobra.Command{
 	Long:               "This command validates an Atmos component within a stack using JSON Schema or OPA policies.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
+			return err
 		}
 
-		m := fmt.Sprintf("component `%s` in stack `%s` validated successfully\n", component, stack)
-		u.PrintMessageInColor(m, theme.Colors.Success)
+		log.Info("Validated successfully", "component", component, "stack", stack)
+		return nil
 	},
 }
 
@@ -43,7 +41,7 @@ func init() {
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)

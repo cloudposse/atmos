@@ -1,4 +1,9 @@
 
+Notice: Atmos now collects completely anonymous telemetry regarding usage.
+This information is used to shape Atmos roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
+by visiting the following URL: https://atmos.tools/cli/telemetry
+
 Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
 
 Usage:
@@ -63,6 +68,12 @@ Global Flags:
                                       the dependency order, recursively: atmos
                                       terraform  --affected
                                       --include-dependents (default false)
+
+        --init-pass-vars              Pass the generated varfile to terraform
+                                      init using the --var-file flag.
+                                      OpenTofu supports passing a varfile to
+                                      init to dynamically configure backends
+                                      (default false)
 
         --logs-file string            The file to write Atmos logs to. Logs can
                                       be written to any file or any standard
