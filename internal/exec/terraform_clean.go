@@ -11,6 +11,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -485,36 +486,34 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	for _, folder := range folders {
 		objectCount += len(folder.Files)
 	}
+	userFiles, err := utils.GetFilesToBeDeleted(stacksMap, info.ComponentFromArg, info.Stack)
+	userFilesCount := len(userFiles)
+	if err != nil {
+		return err
+	}
 	total := objectCount + len(tfDataDirFolders)
 
-	if total == 0 {
+	if total+userFilesCount == 0 {
 		u.PrintMessage("Nothing to delete")
 		return nil
 	}
 
-	if total > 0 {
+	if total+userFilesCount > 0 {
 		if !force {
 			if len(tfDataDirFolders) > 0 {
 				u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
 				u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
 			}
-			var message string
-			if info.ComponentFromArg == "" {
-				message = fmt.Sprintf("This will delete %v local terraform state files affecting all components", total)
-			} else if info.Component != "" && info.Stack != "" {
-				message = fmt.Sprintf("This will delete %v local terraform state files for component '%s' in stack '%s'", total, info.Component, info.Stack)
-			} else if info.ComponentFromArg != "" {
-				message = fmt.Sprintf("This will delete %v local terraform state files for component '%s'", total, info.ComponentFromArg)
-			} else {
-				message = "This will delete selected terraform state files"
-			}
-			u.PrintMessage(message)
+			u.PrintMessage(getDeleteMessage(total, info.Component, info.Stack, info.ComponentFromArg))
 			println()
 			if confirm, err := confirmDeletion(); err != nil || !confirm {
 				return err
 			}
 		}
-
+		err := utils.DeletePaths(userFiles)
+		if err != nil {
+			return err
+		}
 		deleteFolders(folders, relativePath, atmosConfig)
 		if len(tfDataDirFolders) > 0 {
 			tfDataDirFolder := tfDataDirFolders[0]
@@ -523,4 +522,17 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	}
 
 	return nil
+}
+
+func getDeleteMessage(total int, component string, stack string, componentFromArg string) string {
+	var message string
+	switch {
+	case componentFromArg == "":
+		message = fmt.Sprintf("This will delete %v local terraform state files affecting all components", total)
+	case component != "" && stack != "":
+		message = fmt.Sprintf("This will delete %v local terraform state files for component '%s' in stack '%s'", total, component, stack)
+	case componentFromArg != "":
+		message = fmt.Sprintf("This will delete %v local terraform state files for component '%s'", total, componentFromArg)
+	}
+	return message
 }
