@@ -25,6 +25,7 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStoreGet)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return nil
 	}
 	log.Debug("After getStringAfterTag", "str", str)
 
@@ -77,6 +78,7 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 	if store == nil {
 		er := fmt.Errorf("failed to execute YAML function %s. Store %s not found", input, retParams.storeName)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil
 	}
 
 	// Retrieve the value from the store using the arbitrary key
@@ -85,15 +87,19 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
-		er := fmt.Errorf("error executing YAML function %s. Failed to get key %s. Error: %w", input, retParams.key, err)
+		er := fmt.Errorf("error executing YAML function %s. Failed to get key %s: %w", input, retParams.key, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil
 	}
 
 	// Execute the YQ expression if provided
 	res := value
 	if retParams.query != "" {
 		res, err = u.EvaluateYqExpression(atmosConfig, value, retParams.query)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return nil
+		}
 	}
 
 	return res
