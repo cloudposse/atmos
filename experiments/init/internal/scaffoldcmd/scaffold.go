@@ -6,13 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/experiments/init/embeds"
 	"github.com/cloudposse/atmos/experiments/init/internal/config"
-	"github.com/cloudposse/atmos/experiments/init/internal/templating"
 	"github.com/cloudposse/atmos/experiments/init/internal/ui"
 )
 
@@ -151,9 +149,9 @@ func generateProject(templatePath, targetPath string, force, update, useDefaults
 
 	// Determine if template is local or remote
 	if isRemoteTemplate(templatePath) {
-		return generateFromRemote(templatePath, targetPath, force, update, useDefaults, cmdValues, ui)
+		return generateFromRemote(templatePath, targetPath, force, update, useDefaults, cmdValues, ui, []string{"{{", "}}"})
 	} else {
-		return generateFromLocal(templatePath, targetPath, force, update, useDefaults, cmdValues, ui)
+		return generateFromLocal(templatePath, targetPath, force, update, useDefaults, cmdValues, ui, []string{"{{", "}}"})
 	}
 }
 
@@ -221,18 +219,81 @@ func generateFromScaffoldTemplate(templateName, targetPath string, force, update
 		return fmt.Errorf("template '%s' missing source", templateName)
 	}
 
+	// If no target path was provided, prompt for it after setup
+	if targetPath == "" {
+		// Check if source is a local filesystem path
+		if !isRemoteTemplate(source) {
+			// Load the local template to check if it has scaffold configuration
+			config, err := loadLocalTemplate(source, templateName)
+			if err != nil {
+				return fmt.Errorf("failed to load template: %w", err)
+			}
+
+			// For templates with scaffold configuration, we need to run setup first
+			if embeds.HasScaffoldConfig(config.Files) {
+				// Create a temporary directory for setup
+				tempDir, err := os.MkdirTemp("", "atmos-scaffold-*")
+				if err != nil {
+					return fmt.Errorf("failed to create temporary directory: %w", err)
+				}
+				defer os.RemoveAll(tempDir)
+
+				// Run setup to get configuration values
+				mergedValues, _, err := ui.RunSetupForm(nil, tempDir, useDefaults, cmdValues)
+				if err != nil {
+					return fmt.Errorf("failed to run setup form: %w", err)
+				}
+
+				// Now prompt for target directory with evaluated template
+				targetPath, err = ui.PromptForTargetDirectory(templateMap, mergedValues)
+				if err != nil {
+					return fmt.Errorf("failed to prompt for target directory: %w", err)
+				}
+			} else {
+				// For simple templates, prompt directly
+				targetPath, err = ui.PromptForTargetDirectory(templateMap, nil)
+				if err != nil {
+					return fmt.Errorf("failed to prompt for target directory: %w", err)
+				}
+			}
+		} else {
+			// For remote templates, prompt with basic template info
+			targetPath, err = ui.PromptForTargetDirectory(templateMap, nil)
+			if err != nil {
+				return fmt.Errorf("failed to prompt for target directory: %w", err)
+			}
+		}
+	}
+
 	// Validate scaffold template if .atmos/scaffold.yaml exists
 	if err := validateScaffoldTemplate(targetPath, templateName); err != nil {
 		return fmt.Errorf("scaffold validation failed: %w", err)
 	}
 
-	// For now, treat scaffold templates as remote templates
-	// In the future, this could be enhanced to handle local scaffold templates
-	return generateFromRemote(source, targetPath, force, update, useDefaults, cmdValues, ui)
+	// Get delimiters from template configuration
+	var delimiters []string
+	if delims, exists := templateMap["delimiters"]; exists {
+		if delimsSlice, ok := delims.([]interface{}); ok && len(delimsSlice) == 2 {
+			delimiters = []string{delimsSlice[0].(string), delimsSlice[1].(string)}
+		}
+	}
+	// Use default delimiters if not specified
+	if len(delimiters) == 0 {
+		delimiters = []string{"{{", "}}"}
+	}
+
+	// Check if source is a local filesystem path
+	if !isRemoteTemplate(source) {
+		// Treat as local template
+		return generateFromLocal(source, targetPath, force, update, useDefaults, cmdValues, ui, delimiters)
+	}
+
+	// For remote sources, treat as remote templates
+	return generateFromRemote(source, targetPath, force, update, useDefaults, cmdValues, ui, delimiters)
 }
 
 // generateFromLocal handles generation from a local filesystem path
-func generateFromLocal(templatePath, targetPath string, force, update, useDefaults bool, cmdValues map[string]interface{}, ui *ui.InitUI) error {
+func generateFromLocal(templatePath, targetPath string, force, update, useDefaults bool, cmdValues map[string]interface{}, ui *ui.InitUI, delimiters []string) error {
 	// Resolve absolute path
 	absTemplatePath, err := filepath.Abs(templatePath)
 	if err != nil {
@@ -245,13 +306,16 @@ func generateFromLocal(templatePath, targetPath string, force, update, useDefaul
 	}
 
 	// Load template configuration from local filesystem
-	config, err := loadLocalTemplate(absTemplatePath)
+	// For non-scaffold templates, use the directory name as the template key
+	templateKey := filepath.Base(absTemplatePath)
+	config, err := loadLocalTemplate(absTemplatePath, templateKey)
 	if err != nil {
 		return fmt.Errorf("failed to load template: %w", err)
 	}
 
 	// Execute the template generation using the existing UI logic
-	return ui.Execute(*config, targetPath, force, update, useDefaults, cmdValues)
+	// Pass delimiters to the UI for template processing
+	return ui.ExecuteWithDelimiters(*config, targetPath, force, update, useDefaults, cmdValues, delimiters)
 }
 
 // listScaffoldTemplates lists all available scaffold templates from atmos.yaml
@@ -282,48 +346,11 @@ func listScaffoldTemplates() error {
 		return nil
 	}
 
-	// Get template data for display
-	rows, header := getTemplateTableData(templatesMap)
-
 	// Use the UI package to display the table
 	uiInstance := ui.NewInitUI()
-	uiInstance.DisplayTemplateTable(header, rows)
+	uiInstance.DisplayScaffoldTemplateTable(templatesMap)
 
 	return nil
-}
-
-// getTemplateTableData extracts template data for table display
-func getTemplateTableData(templatesMap map[string]interface{}) ([][]string, []string) {
-	var rows [][]string
-	for templateName, templateConfig := range templatesMap {
-		templateMap, ok := templateConfig.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Get template source
-		source, _ := templateMap["source"].(string)
-		if source == "" {
-			source = "unknown"
-		}
-
-		// Get template description (if available)
-		description := ""
-		if desc, ok := templateMap["description"].(string); ok {
-			description = desc
-		}
-
-		// Get template ref (if available)
-		ref := ""
-		if r, ok := templateMap["ref"].(string); ok {
-			ref = r
-		}
-
-		rows = append(rows, []string{templateName, source, ref, description})
-	}
-
-	header := []string{"Template", "Source", "Version", "Description"}
-	return rows, header
 }
 
 // promptForTemplateAndTarget prompts the user to select a template and target directory
@@ -354,129 +381,22 @@ func promptForTemplateAndTarget() error {
 		return nil
 	}
 
-	// Create options for the select
-	var options []huh.Option[string]
-	for templateName, templateConfig := range templatesMap {
-		templateMap, ok := templateConfig.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Get template description
-		description := ""
-		if desc, ok := templateMap["description"].(string); ok {
-			description = desc
-		}
-
-		// Get template source
-		source := ""
-		if src, ok := templateMap["source"].(string); ok {
-			source = src
-		}
-
-		// Format display text
-		displayText := fmt.Sprintf("%-20s   %s", templateName, description)
-		if source != "" {
-			displayText += fmt.Sprintf(" (from %s)", source)
-		}
-
-		options = append(options, huh.NewOption(displayText, templateName))
-	}
-
-	var selectedTemplate string
-
-	// Create the selection form
-	selectionForm := huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Select a scaffold template").
-				Description("Choose from the available scaffold templates (press 'q' to quit)").
-				Options(options...).
-				Value(&selectedTemplate),
-		),
-	)
-
-	err = selectionForm.Run()
+	// Use the UI package to prompt for template selection
+	uiInstance := ui.NewInitUI()
+	selectedTemplate, err := uiInstance.PromptForTemplate("scaffold", templatesMap)
 	if err != nil {
 		return err
 	}
 
-	// Display selected template details
-	fmt.Println()
-	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1)
-
-	fmt.Println(descStyle.Render(fmt.Sprintf("Selected template: %s", selectedTemplate)))
-
-	// Get template config for target directory suggestion
-	templateConfig := templatesMap[selectedTemplate].(map[string]interface{})
-	targetDirTemplate, _ := templateConfig["target_dir"].(string)
-
-	// Check if the template has any field definitions
-	// For scaffold templates from atmos.yaml, we need to check if there's a schema defined
-	// For now, we'll assume no fields unless explicitly defined in the template
-	var userValues map[string]interface{}
-
-	// TODO: In the future, we could:
-	// 1. Download the template first to check for scaffold.yaml
-	// 2. Or define fields in the atmos.yaml template configuration
-	// 3. Or use a default schema for scaffold templates
-
-	// For now, use empty values since no fields are defined
-	userValues = make(map[string]interface{})
-
-	// Now render the target directory template with the collected values
-	suggestedDir := "./" + selectedTemplate
-	if targetDirTemplate != "" {
-		// Since no fields are defined, the template will render with empty values
-		// This is correct behavior - if no fields are defined, templates won't render properly
-		processor := templating.NewProcessor()
-		renderedTargetDir, err := processor.ProcessTemplate(targetDirTemplate, ".", nil, userValues)
-		if err != nil {
-			// If rendering fails, fall back to the template as-is
-			suggestedDir = targetDirTemplate
-		} else {
-			suggestedDir = renderedTargetDir
-		}
-	}
-
-	// Second form to get target directory with rendered suggestion
-	var targetPath string
-	pathForm := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Target directory").
-				Description(fmt.Sprintf("Where should the scaffold be generated? (suggested: %s)", suggestedDir)).
-				Placeholder(suggestedDir).
-				Value(&targetPath).
-				Validate(func(s string) error {
-					if s == "" {
-						return nil // Empty is OK, will use suggested default
-					}
-					return nil
-				}),
-		),
-	)
-
-	err = pathForm.Run()
-	if err != nil {
-		return err
-	}
-
-	// Use suggested directory if empty
-	if targetPath == "" {
-		targetPath = suggestedDir
-	}
-
-	// Now call the generate function with the selected template, target, and collected values
-	return generateProject(selectedTemplate, targetPath, false, false, false, 50, userValues)
+	// Now call the generate function with just the selected template
+	// The target directory will be prompted for after setup
+	return generateProject(selectedTemplate, "", false, false, false, 50, make(map[string]interface{}))
 }
 
 // validateScaffoldTemplate validates that the template being used matches the template specified in .atmos/scaffold.yaml
 func validateScaffoldTemplate(targetPath, templateName string) error {
 	// Check if .atmos/scaffold.yaml exists
-	scaffoldConfigPath := filepath.Join(targetPath, ".atmos", config.ScaffoldConfigFileName)
+	scaffoldConfigPath := filepath.Join(targetPath, config.ScaffoldConfigDir, config.ScaffoldConfigFileName)
 	if _, err := os.Stat(scaffoldConfigPath); os.IsNotExist(err) {
 		// File doesn't exist, no validation needed
 		return nil
@@ -487,23 +407,23 @@ func validateScaffoldTemplate(targetPath, templateName string) error {
 	v.SetConfigFile(scaffoldConfigPath)
 
 	if err := v.ReadInConfig(); err != nil {
-		return fmt.Errorf("failed to read .atmos/%s: %w", config.ScaffoldConfigFileName, err)
+		return fmt.Errorf("failed to read %s/%s: %w", config.ScaffoldConfigDir, config.ScaffoldConfigFileName, err)
 	}
 
 	// Check if template key exists
 	if !v.IsSet("template") {
-		return fmt.Errorf(".atmos/%s exists but missing required 'template' key", config.ScaffoldConfigFileName)
+		return fmt.Errorf("%s/%s exists but missing required 'template' key", config.ScaffoldConfigDir, config.ScaffoldConfigFileName)
 	}
 
 	// Get the template name from the file
 	configuredTemplate := v.GetString("template")
 	if configuredTemplate == "" {
-		return fmt.Errorf(".atmos/%s exists but 'template' key is empty", config.ScaffoldConfigFileName)
+		return fmt.Errorf("%s/%s exists but 'template' key is empty", config.ScaffoldConfigDir, config.ScaffoldConfigFileName)
 	}
 
 	// Validate that the template matches
 	if configuredTemplate != templateName {
-		return fmt.Errorf("template mismatch: trying to use template '%s' but .atmos/%s specifies template '%s'", templateName, config.ScaffoldConfigFileName, configuredTemplate)
+		return fmt.Errorf("template mismatch: trying to use template '%s' but %s/%s specifies template '%s'", templateName, config.ScaffoldConfigDir, config.ScaffoldConfigFileName, configuredTemplate)
 	}
 
 	return nil

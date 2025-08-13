@@ -1,6 +1,6 @@
 # Atmos Scaffold Command
 
-The `atmos scaffold` command manages project scaffolding from templates defined in your `atmos.yaml` configuration.
+The `atmos scaffold` command manages scaffold template scaffolding from templates defined in your `atmos.yaml` configuration.
 
 ## Usage
 
@@ -24,7 +24,7 @@ This command reads the `scaffold.templates` section from your `atmos.yaml` file 
 - Description
 
 ### `generate`
-Generate a project from a template:
+Generate a scaffold template from a template:
 
 ```bash
 atmos scaffold generate [template] [target-directory]
@@ -33,14 +33,14 @@ atmos scaffold generate [template] [target-directory]
 ## Examples
 
 ### Interactive Mode
-Generate a project with an interactive menu to select template and target directory:
+Generate a scaffold template with an interactive menu to select template and target directory:
 
 ```bash
 atmos scaffold generate
 ```
 
 ### Specific Template Generation
-Generate a project from a specific template:
+Generate a scaffold template from a specific template:
 
 ```bash
 # Generate using a template from atmos.yaml config
@@ -138,6 +138,45 @@ scaffold:
 - **target_dir**: Target directory with Go template variables
 - **description**: Human-readable description of the template
 - **values**: Default values for template variables
+- **delimiters**: Custom template delimiters (array of two strings, e.g., `["[[", "]]"]`)
+
+### Template Delimiters
+
+Scaffold templates support custom delimiters to avoid conflicts with Atmos's own Go template syntax. You can specify custom delimiters in both the `atmos.yaml` configuration and the template's `scaffold.yaml`:
+
+**In atmos.yaml:**
+```yaml
+scaffold:
+  templates:
+    my-template:
+      source: "github.com/user/template"
+      ref: "v1.0.0"
+      delimiters: ["[[", "]]"]
+      description: "Template with custom delimiters"
+```
+
+**In scaffold.yaml:**
+```yaml
+name: "My Template"
+description: "A template with custom delimiters"
+template_id: "my-template"
+delimiters: ["[[", "]]"]
+fields:
+  project_name:
+    type: string
+    label: "Project Name"
+    default: "my-project"
+```
+
+This allows you to use different delimiters in your template files:
+
+```markdown
+# [[ .Config.project_name ]]
+
+This project was created by [[ .Config.author ]] in [[ .Config.year ]].
+```
+
+**Note**: If no delimiters are specified, the default `{{` and `}}` delimiters are used. The delimiters specified in the template's `scaffold.yaml` take precedence over those in `atmos.yaml`.
 
 ## Interactive Features
 
@@ -147,7 +186,7 @@ When run without arguments, the `generate` command provides an interactive menu 
 2. **Target Directory**: Specify where the scaffold should be generated with smart defaults
 3. **Template Processing**: Automatically downloads and processes the selected template
 
-The interactive mode makes it easy to scaffold projects without memorizing template names or paths.
+The interactive mode makes it easy to scaffold scaffold templates without memorizing template names or paths.
 
 ## Error Handling
 

@@ -46,6 +46,7 @@ type ScaffoldConfig struct {
 	Version     string                     `yaml:"version"`
 	TemplateID  string                     `yaml:"template_id"`
 	Fields      map[string]FieldDefinition `yaml:"fields"`
+	Delimiters  []string                   `yaml:"delimiters"`
 }
 
 // FieldDefinition represents a single field in the configuration
@@ -61,62 +62,8 @@ type FieldDefinition struct {
 }
 
 // Config represents the user's configuration values
-type Config struct {
-	Author           string   `yaml:"author"`
-	Year             string   `yaml:"year"`
-	License          string   `yaml:"license"`
-	CloudProvider    string   `yaml:"cloud_provider"`
-	AWSRegions       []string `yaml:"aws_regions"`
-	Environment      string   `yaml:"environment"`
-	TerraformVersion string   `yaml:"terraform_version"`
-	Name             string   `yaml:"name"`
-	Description      string   `yaml:"description"`
-	EnableMonitoring bool     `yaml:"enable_monitoring"`
-}
-
-// ProjectType represents the type of project
-type ProjectType string
-
-const (
-	BasicProject    ProjectType = "basic"
-	AdvancedProject ProjectType = "advanced"
-)
-
-func (p ProjectType) String() string {
-	switch p {
-	case BasicProject:
-		return "Basic Project"
-	case AdvancedProject:
-		return "Advanced Project"
-	default:
-		return string(p)
-	}
-}
-
-// DynamicForm represents the dynamic form structure (following working pattern)
-type DynamicForm struct {
-	Type   ProjectType
-	Values map[string]interface{}
-}
-
-// Manager handles configuration loading, saving, and prompting
-type Manager struct {
-	viper *viper.Viper
-	path  string
-}
-
-// NewManager creates a new configuration manager
-func NewManager(configPath string) *Manager {
-	v := viper.New()
-	v.SetConfigName(".config")
-	v.SetConfigType("yaml")
-	v.AddConfigPath(configPath)
-
-	return &Manager{
-		viper: v,
-		path:  configPath,
-	}
-}
+// This is now a generic map to support dynamic fields from scaffold.yaml
+type Config map[string]interface{}
 
 // LoadScaffoldConfigFromContent loads scaffold configuration from YAML content
 func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
@@ -237,78 +184,6 @@ func GetConfigPath() (string, error) {
 	}
 
 	return filepath.Join(homeDir, ".atmos"), nil
-}
-
-// Load loads the configuration from file
-func (m *Manager) Load() (*Config, error) {
-	config := &Config{}
-
-	// Set defaults
-	m.viper.SetDefault("author", "")
-	m.viper.SetDefault("year", "")
-	m.viper.SetDefault("license", "Apache Software License 2.0")
-	m.viper.SetDefault("cloud_provider", "aws")
-	m.viper.SetDefault("aws_regions", []string{"us-east-1"})
-	m.viper.SetDefault("environment", "dev")
-	m.viper.SetDefault("terraform_version", "1.5.0")
-	m.viper.SetDefault("name", "")
-	m.viper.SetDefault("description", "")
-	m.viper.SetDefault("enable_monitoring", false)
-
-	// Read config file
-	if err := m.viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
-		}
-		// Config file doesn't exist, that's okay - we'll use defaults
-	}
-
-	// Unmarshal into struct
-	if err := m.viper.Unmarshal(config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	return config, nil
-}
-
-// Save saves the configuration to file
-func (m *Manager) Save(config *Config) error {
-	// Create directory if it doesn't exist
-	if err := os.MkdirAll(m.path, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	// Marshal to YAML
-	data, err := yaml.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	// Write to file
-	configFile := filepath.Join(m.path, ".config.yaml")
-	if err := os.WriteFile(configFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	return nil
-}
-
-// PromptUser prompts the user for configuration values using a form
-func (m *Manager) PromptUser(config *Config) error {
-	// This should use the same dynamic approach as PromptForProjectConfig
-	// For now, just set some basic defaults
-	config.Author = "Your Name"
-	config.Year = "2024"
-	config.License = "Apache Software License 2.0"
-	config.CloudProvider = "aws"
-	config.AWSRegions = []string{"us-east-1"}
-	config.Environment = "dev"
-	config.TerraformVersion = "1.5.0"
-	config.Name = "my-atmos-project"
-	config.Description = "An Atmos scaffold template for managing infrastructure as code"
-	config.EnableMonitoring = false
-
-	return nil
 }
 
 // PromptForScaffoldConfig prompts the user for scaffold configuration values using a form
@@ -437,7 +312,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 	}
 
 	switch field.Type {
-	case "input", "text":
+	case "input", "text", "string":
 		var value string
 		if str, ok := currentValue.(string); ok {
 			value = str
@@ -523,7 +398,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 
 		return multiSelect, func() interface{} { return value }
 
-	case "confirm":
+	case "confirm", "bool", "boolean":
 		var value bool
 		if b, ok := currentValue.(bool); ok {
 			value = b
@@ -539,18 +414,10 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 		return confirm, func() interface{} { return value }
 
 	default:
-		// Default to input
-		var value string
-		if str, ok := currentValue.(string); ok {
-			value = str
-		}
-		input := huh.NewInput().
-			Title(field.Label).
-			Description(field.Description).
-			Placeholder(field.Placeholder).
-			Value(&value)
-
-		return input, func() interface{} { return value }
+		// Panic for unsupported field types with a helpful message
+		supportedTypes := []string{"input", "text", "string", "select", "multiselect", "confirm", "bool", "boolean"}
+		panic(fmt.Sprintf("unsupported field type '%s' for field '%s'. Supported types: %s",
+			field.Type, key, strings.Join(supportedTypes, ", ")))
 	}
 }
 
@@ -665,36 +532,9 @@ func HasUserConfig(scaffoldPath string) bool {
 }
 
 // LoadUserConfiguration loads user configuration and prompts if needed
+// This function is deprecated in favor of dynamic scaffold configuration
 func LoadUserConfiguration() (*Config, error) {
-	configPath, err := GetConfigPath()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get config path: %w", err)
-	}
-
-	manager := NewManager(configPath)
-	userConfig, err := manager.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %w", err)
-	}
-
-	// If we don't have user configuration, prompt for it
-	if userConfig.Author == "" || userConfig.Year == "" {
-		fmt.Println("Please provide some configuration details:")
-		fmt.Println()
-
-		if err := manager.PromptUser(userConfig); err != nil {
-			return nil, fmt.Errorf("failed to prompt user: %w", err)
-		}
-
-		// Save the configuration for future use
-		if err := manager.Save(userConfig); err != nil {
-			return nil, fmt.Errorf("failed to save configuration: %w", err)
-		}
-
-		fmt.Println()
-	}
-
-	return userConfig, nil
+	return nil, fmt.Errorf("LoadUserConfiguration is deprecated, use dynamic scaffold configuration instead")
 }
 
 // ValidateTargetDirectory checks if the target directory exists and validates the operation

@@ -51,6 +51,11 @@ func (p *Processor) SetMaxChanges(thresholdPercent int) {
 
 // ProcessTemplate processes Go templates in file content
 func (p *Processor) ProcessTemplate(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}) (string, error) {
+	return p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, []string{"{{", "}}"})
+}
+
+// ProcessTemplateWithDelimiters processes Go templates in file content with custom delimiters
+func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) (string, error) {
 	// Create template data with rich configuration
 	templateData := map[string]interface{}{
 		"TemplateName":        filepath.Base(targetPath),
@@ -83,8 +88,8 @@ func (p *Processor) ProcessTemplate(content string, targetPath string, scaffoldC
 		return userValues[key]
 	}
 
-	// Parse and execute template with gomplate
-	tmpl, err := template.New("init").Funcs(funcs).Parse(content)
+	// Parse and execute template with custom delimiters
+	tmpl, err := template.New("init").Delims(delimiters[0], delimiters[1]).Funcs(funcs).Parse(content)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -106,11 +111,23 @@ func (p *Processor) Merge(existingContent, newContent, fileName string) (string,
 
 // ProcessFile handles the creation of a single file with full templating support
 func (p *Processor) ProcessFile(file File, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}) error {
+	// Get delimiters from scaffold config or use defaults
+	delimiters := []string{"{{", "}}"}
+	if scaffoldConfig != nil {
+		if scaffoldConfigMap, ok := scaffoldConfig.(map[string]interface{}); ok {
+			if delims, exists := scaffoldConfigMap["delimiters"]; exists {
+				if delimsSlice, ok := delims.([]interface{}); ok && len(delimsSlice) == 2 {
+					delimiters = []string{delimsSlice[0].(string), delimsSlice[1].(string)}
+				}
+			}
+		}
+	}
+
 	// Process the file path as a template if user values are provided
 	renderedPath := file.Path
 	if userValues != nil {
 		var err error
-		renderedPath, err = p.ProcessTemplate(file.Path, targetPath, scaffoldConfig, userValues)
+		renderedPath, err = p.ProcessTemplateWithDelimiters(file.Path, targetPath, scaffoldConfig, userValues, delimiters)
 		if err != nil {
 			return fmt.Errorf("failed to process file path template %s: %w", file.Path, err)
 		}
@@ -139,7 +156,7 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 
 		if update {
 			// Process template first, then attempt 3-way merge
-			processedContent, err := p.ProcessTemplate(file.Content, targetPath, scaffoldConfig, userValues)
+			processedContent, err := p.ProcessTemplateWithDelimiters(file.Content, targetPath, scaffoldConfig, userValues, delimiters)
 			if err != nil {
 				return fmt.Errorf("failed to process template for file %s: %w", file.Path, err)
 			}
@@ -159,7 +176,7 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 	// Process content as template if user values are provided or if file is marked as template
 	content := file.Content
 	if userValues != nil || file.IsTemplate {
-		processedContent, err := p.ProcessTemplate(content, targetPath, scaffoldConfig, userValues)
+		processedContent, err := p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, delimiters)
 		if err != nil {
 			// Add detailed debugging information
 			return fmt.Errorf("failed to process template for file %s: %w\nTemplate content preview: %s\nUser values: %+v",
@@ -170,7 +187,7 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 		content = processedContent
 
 		// Validate that the processed content contains no unprocessed templates
-		if err := p.ValidateNoUnprocessedTemplates(content); err != nil {
+		if err := p.ValidateNoUnprocessedTemplatesWithDelimiters(content, delimiters); err != nil {
 			return fmt.Errorf("generated file %s contains unprocessed template syntax: %w", file.Path, err)
 		}
 	}
@@ -191,10 +208,10 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 		return fmt.Errorf("failed to read existing file: %w", err)
 	}
 
-	// Process new content
+	// Process new content with default delimiters
 	newContent := file.Content
 	if file.IsTemplate {
-		processedContent, err := p.ProcessTemplate(newContent, targetPath, nil, nil)
+		processedContent, err := p.ProcessTemplateWithDelimiters(newContent, targetPath, nil, nil, []string{"{{", "}}"})
 		if err != nil {
 			return fmt.Errorf("failed to process template: %w", err)
 		}
@@ -249,10 +266,27 @@ func (p *Processor) ContainsUnprocessedTemplates(content string) bool {
 	return strings.Contains(content, "{{") && strings.Contains(content, "}}")
 }
 
+// ContainsUnprocessedTemplatesWithDelimiters checks if the given content contains unprocessed template syntax with custom delimiters
+func (p *Processor) ContainsUnprocessedTemplatesWithDelimiters(content string, delimiters []string) bool {
+	if len(delimiters) != 2 {
+		// Fall back to default delimiters if invalid
+		return p.ContainsUnprocessedTemplates(content)
+	}
+	return strings.Contains(content, delimiters[0]) && strings.Contains(content, delimiters[1])
+}
+
 // ValidateNoUnprocessedTemplates validates that the processed content doesn't contain unprocessed template syntax
 func (p *Processor) ValidateNoUnprocessedTemplates(content string) error {
 	if p.ContainsUnprocessedTemplates(content) {
 		return fmt.Errorf("generated content contains unprocessed template syntax: %s", truncateString(content, 200))
+	}
+	return nil
+}
+
+// ValidateNoUnprocessedTemplatesWithDelimiters validates that the processed content doesn't contain unprocessed template syntax with custom delimiters
+func (p *Processor) ValidateNoUnprocessedTemplatesWithDelimiters(content string, delimiters []string) error {
+	if p.ContainsUnprocessedTemplatesWithDelimiters(content, delimiters) {
+		return fmt.Errorf("generated content contains unprocessed template syntax with delimiters %v: %s", delimiters, truncateString(content, 200))
 	}
 	return nil
 }
