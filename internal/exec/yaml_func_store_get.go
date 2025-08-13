@@ -17,13 +17,15 @@ type getKeyParams struct {
 	defaultValue *string
 }
 
-func processTagStoreGetKey(atmosConfig schema.AtmosConfiguration, input string, currentStack string) any {
+func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
 	log.Debug("Executing Atmos YAML function", function, input)
+	log.Debug("Processing !store.get", "input", input, "tag", u.AtmosYamlFuncStoreGet)
 
-	str, err := getStringAfterTag(input, u.AtmosYamlFuncStoreGetKey)
+	str, err := getStringAfterTag(input, u.AtmosYamlFuncStoreGet)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Debug("After getStringAfterTag", "str", str)
 
 	// Split the input on the pipe symbol to separate the store parameters and default value
 	parts := strings.Split(str, "|")
@@ -72,6 +74,10 @@ func processTagStoreGetKey(atmosConfig schema.AtmosConfiguration, input string, 
 	// Retrieve the store from atmosConfig
 	store := atmosConfig.Stores[retParams.storeName]
 	if store == nil {
+		log.Error("store not found", function, input, "store", retParams.storeName, "available stores", len(atmosConfig.Stores))
+		for k := range atmosConfig.Stores {
+			log.Debug("Available store", "name", k)
+		}
 		log.Fatal("store not found", function, input, "store", retParams.storeName)
 	}
 
@@ -87,7 +93,7 @@ func processTagStoreGetKey(atmosConfig schema.AtmosConfiguration, input string, 
 	// Execute the YQ expression if provided
 	res := value
 	if retParams.query != "" {
-		res, err = u.EvaluateYqExpression(&atmosConfig, value, retParams.query)
+		res, err = u.EvaluateYqExpression(atmosConfig, value, retParams.query)
 		if err != nil {
 			log.Fatal(err)
 		}
