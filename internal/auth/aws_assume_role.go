@@ -38,6 +38,13 @@ func (i *awsAssumeRole) Validate() error {
 	return nil
 }
 
+func (config *awsAssumeRole) getProfile() string {
+	return config.Identity.Profile
+}
+func (config *awsAssumeRole) getRegion() string {
+	return config.Common.Region
+}
+
 // Login verifies AWS credentials are available in the default profile
 func (i *awsAssumeRole) Login() error {
 	log.Debug("Validating AWS credentials")

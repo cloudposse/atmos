@@ -53,8 +53,8 @@ func setDefaults(data *schema.IdentityProviderDefaultConfig, provider string, co
 	}
 }
 
-func GetDefaultIdentity(config schema.AuthConfig) (string, error) {
-	identityConfigs, err := GetIdentityConfigs(config)
+func GetDefaultIdentity(configuration map[string]any) (string, error) {
+	identityConfigs, err := GetIdentityConfigs(configuration)
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +68,7 @@ func GetDefaultIdentity(config schema.AuthConfig) (string, error) {
 	if len(defaultIdentities) == 1 {
 		return defaultIdentities[0], nil
 	} else if len(defaultIdentities) > 1 {
-		l.Warn("multiple default identities found", "identities with default: true", defaultIdentities)
+		l.Warn("multiple default identities found", "defaultIdentities", defaultIdentities)
 		return "", errors.New("multiple default identities found")
 	}
 	return "", errors.New("no default identity found")
@@ -94,10 +94,10 @@ func GetIdentityProviderConfigs(config schema.AuthConfig) (map[string]schema.Ide
 	return identityConfigs, nil
 }
 
-func GetIdentityConfigs(config schema.AuthConfig) (map[string]schema.Identity, error) {
+func GetIdentityConfigs(identityMap map[string]any) (map[string]schema.Identity, error) {
 	identityConfigs := make(map[string]schema.Identity)
-	for k, _ := range config.Identities {
-		rawBytes, err := yaml.Marshal(config.Identities[k])
+	for k, v := range identityMap {
+		rawBytes, err := yaml.Marshal(v)
 		if err != nil {
 			l.Errorf("failed to marshal identity %q: %w", k, err)
 			return nil, err
@@ -126,7 +126,7 @@ func GetType(identityProviderName string, config schema.AuthConfig) (string, err
 }
 
 func GetIdp(identity string, config schema.AuthConfig) (string, error) {
-	identityConfigs, err := GetIdentityConfigs(config)
+	identityConfigs, err := GetIdentityConfigs(config.Identities)
 	if err != nil {
 		return "", err
 	}

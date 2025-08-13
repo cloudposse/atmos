@@ -5,4 +5,6 @@ type LoginMethod interface {
 	Login() error
 	AssumeRole() error
 	Logout() error
+	getProfile() string
+	getRegion() string
 }

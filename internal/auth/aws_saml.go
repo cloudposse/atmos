@@ -191,6 +191,13 @@ func (i *awsSaml) Validate() error {
 	return nil
 }
 
+func (config *awsSaml) getProfile() string {
+	return config.Identity.Profile
+}
+func (config *awsSaml) getRegion() string {
+	return config.Common.Region
+}
+
 // Login authenticates with the IdP and gets the SAML assertion
 func (i *awsSaml) Login() error {
 	if IsInDocker() {

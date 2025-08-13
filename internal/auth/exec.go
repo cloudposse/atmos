@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/tui/picker"
-
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-
 	"github.com/spf13/cobra"
 )
 
@@ -35,29 +33,22 @@ func ValidateLoginAssumeRole(IdentityInstance LoginMethod) error {
 // will do nothing.
 //
 // The function returns an error if the identity is invalid or if the authentication fails.
-func TerraformPreHook(identity string, atmosConfig schema.AuthConfig) error {
+func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	authConfig := atmosConfig.Auth
 	log.SetPrefix("[atmos-auth] ")
 	defer log.SetPrefix("")
-	// If no explicit identity passed, try to use the configured default one (if any)
+
+	identity := info.Identity // Set by CLI Flags
+	// If no explicit identity was passed, try to use the configured default one (if any)
 	if identity == "" {
-		if def, derr := GetDefaultIdentity(atmosConfig); derr == nil && def != "" {
+		if def, derr := GetDefaultIdentity(info.ComponentIdentitiesSection); derr == nil && def != "" {
 			log.Info("Using default identity", "identity", def)
 			identity = def
 		}
 	}
 	if identity != "" {
-		identityInstance, err := GetIdentityInstance(identity, atmosConfig)
+		identityInstance, err := GetIdentityInstance(identity, authConfig)
 		if err != nil {
-			/* <<<<<<<<<<<<<<  ✨ Windsurf Command ⭐ >>>>>>>>>>>>>>>> */
-			// ExecuteAuthLoginCommand executes the authentication login command for the Atmos CLI.
-			// It sets up the logging prefix, retrieves the Atmos authentication configuration,
-			// and attempts to obtain the identity from the command flags. If no identity is
-			// specified, it defaults to the configured default identity or prompts the user
-			// to pick one. Once the identity is determined, it retrieves the corresponding
-			// identity instance and performs validation and login. If any step encounters an
-			// error, it returns the error.
-
-			/* <<<<<<<<<<  c007e2ac-4fae-472e-8a00-33aa3c0b3a1c  >>>>>>>>>>> */
 			return err
 		}
 		return ValidateLoginAssumeRole(identityInstance)
@@ -96,7 +87,7 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if identity == "" {
-		identity, _ = GetDefaultIdentity(atmosConfig.Auth)
+		identity, _ = GetDefaultIdentity(atmosConfig.Auth.Identities)
 		if identity != "" {
 			log.Info("Using default identity", "identity", identity)
 		} else {

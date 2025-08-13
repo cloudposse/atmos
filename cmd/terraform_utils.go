@@ -3,12 +3,10 @@ package cmd
 import (
 	"errors"
 	"fmt"
-
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	auth "github.com/cloudposse/atmos/internal/auth"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
@@ -69,15 +67,11 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Components = components
 	info.DryRun = dryRun
 
-	identity, err := flags.GetString("identity")
+	identityFlag, err := flags.GetString("identity")
 	if err != nil {
 		return err
 	}
-
-	err = auth.TerraformPreHook(identity, atmosConfig.Auth)
-	if err != nil {
-		return err
-	}
+	info.Identity = identityFlag
 
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)

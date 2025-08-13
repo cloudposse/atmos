@@ -6,18 +6,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/sso"
-	"github.com/aws/aws-sdk-go-v2/service/sso/types"
-	"github.com/cloudposse/atmos/internal/auth/authstore"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/zalando/go-keyring"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
+	"github.com/aws/aws-sdk-go-v2/service/sso"
+	"github.com/aws/aws-sdk-go-v2/service/sso/types"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	ssooidctypes "github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/internal/auth/authstore"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ssoAuthStore is the structure we persist in the keyring as JSON
@@ -193,6 +191,13 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 	return nil
 }
 
+func (config *awsIamIdentityCenter) getProfile() string {
+	return config.Identity.Profile
+}
+func (config *awsIamIdentityCenter) getRegion() string {
+	return config.Common.Region
+}
+
 func getAccountsInfo(ctx context.Context, client *sso.Client, token string) ([]types.AccountInfo, error) {
 	var accounts []types.AccountInfo
 	input := &sso.ListAccountsInput{AccessToken: aws.String(token)}
@@ -224,22 +229,6 @@ func getAccountRoles(ctx context.Context, client *sso.Client, token, accountID s
 	return roles, nil
 }
 
-const (
-	service = "atmos-auth"
-)
-
-func StoreSSOToken(profile string, token string) error {
-	return keyring.Set(service, profile, token)
-}
-
-func GetSSOToken(profile string) (string, error) {
-	return keyring.Get(service, profile)
-}
-
-func DeleteSSOToken(profile string) error {
-	return keyring.Delete(service, profile)
-}
-
 func (i *awsIamIdentityCenter) Logout() error {
 	return RemoveAwsCredentials(i.Identity.Profile)
 }
@@ -250,14 +239,6 @@ func RoleToAccountId(role string) string {
 		log.Fatal(err)
 	}
 	return roleArn.AccountID
-}
-
-func SsoSync(startUrl, region string) *ssooidc.CreateTokenOutput {
-	tokenOut, err := SsoSyncE(startUrl, region)
-	if err != nil {
-		log.Error(err)
-	}
-	return tokenOut
 }
 
 func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {

@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"github.com/cloudposse/atmos/internal/auth"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -225,6 +226,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			ErrComponentNotValid,
 			info.ComponentFromArg,
 		)
+	}
+
+	err = auth.TerraformPreHook(atmosConfig, &info)
+	if err != nil {
+		return err
 	}
 
 	// Component working directory

@@ -1095,6 +1095,7 @@ func ProcessStackConfig(
 						baseComponentEnv = baseComponentConfig.BaseComponentEnv
 						baseComponentProviders = baseComponentConfig.BaseComponentProviders
 						baseComponentHooks = baseComponentConfig.BaseComponentHooks
+						baseComponentName = baseComponentConfig.FinalBaseComponentName
 						baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 						baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 						baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
@@ -1343,6 +1344,11 @@ func ProcessStackConfig(
 					return nil, err
 				}
 
+				mergedIdentities, err := processIdentities(atmosConfig, componentIdentities)
+				if err != nil {
+					return nil, err
+				}
+
 				comp := map[string]any{}
 				comp[cfg.VarsSectionName] = finalComponentVars
 				comp[cfg.SettingsSectionName] = finalSettings
@@ -1354,7 +1360,7 @@ func ProcessStackConfig(
 				comp[cfg.CommandSectionName] = finalComponentTerraformCommand
 				comp[cfg.InheritanceSectionName] = componentInheritanceChain
 				comp[cfg.MetadataSectionName] = componentMetadata
-				comp[cfg.IdentitiesSectionName] = componentIdentities
+				comp[cfg.IdentitiesSectionName] = mergedIdentities
 				comp[cfg.OverridesSectionName] = componentOverrides
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
 				comp[cfg.HooksSectionName] = finalComponentHooks
@@ -1702,6 +1708,34 @@ func processSettingsIntegrationsGithub(atmosConfig schema.AtmosConfiguration, se
 	}
 
 	return settings, nil
+}
+
+// processIdentities deep-merges the `identities` section from stack manifests with
+// the `auth.identities` section from `atmos.yaml`
+func processIdentities(atmosConfig schema.AtmosConfiguration, componentIdentities map[string]any) (map[string]any, error) {
+	// If no component identities, just return the empty map
+	if len(componentIdentities) == 0 {
+		return componentIdentities, nil
+	}
+
+	// Check if atmos config has Auth.Identities
+	if atmosConfig.Auth.Identities == nil {
+		return componentIdentities, nil
+	}
+
+	// Deep-merge component identities with global identities from atmos.yaml
+	// Component identities take precedence over global identities
+	mergedIdentities, err := m.Merge(
+		atmosConfig,
+		[]map[string]any{
+			atmosConfig.Auth.Identities,
+			componentIdentities,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return mergedIdentities, nil
 }
 
 // FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined
