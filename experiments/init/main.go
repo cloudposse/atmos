@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/experiments/init/internal/initcmd"
+	"github.com/cloudposse/atmos/experiments/init/internal/scaffoldcmd"
 )
 
 var (
@@ -18,7 +19,7 @@ var (
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "poc",
-		Short: "Atmos Init Experiment - Initialize project configurations and examples",
+		Short: "Atmos Init Experiment - Initialize scaffold template configurations and examples",
 		Long: `Atmos Init Experiment
 
 The atmos init command initializes configurations and examples for Atmos projects.
@@ -67,6 +68,9 @@ that match the version of Atmos in use.`,
 	// Add init command
 	initCmd := initcmd.NewInitCmd()
 	rootCmd.AddCommand(initCmd)
+
+	// Add scaffold command
+	rootCmd.AddCommand(scaffoldcmd.ScaffoldCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

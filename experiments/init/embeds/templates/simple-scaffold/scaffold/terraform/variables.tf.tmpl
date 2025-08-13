@@ -1,0 +1,19 @@
+# Variables for {{ .Config.project_name }}
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+  default     = "{{ .Config.environment }}"
+}
+
+variable "project_name" {
+  description = "Project name"
+  type        = string
+  default     = "{{ .Config.project_name }}"
+}
+
+variable "author" {
+  description = "Author name"
+  type        = string
+  default     = "{{ .Config.author }}"
+}
