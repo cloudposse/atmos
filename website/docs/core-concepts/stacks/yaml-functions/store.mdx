@@ -206,28 +206,48 @@ tenant `net` (instead of `plat`):
 - Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not
   yet be available and the `!store` function call will fail unless you provide a default value with `| default`.
 
-## !store.get YAML Function
+## !store.get Function
 
 <Intro>
-The `!store.get` YAML function allows you to retrieve an arbitrary key from any supported store, using the exact key name or path as it exists in the store. Unlike the `!store` function, `!store.get` does not expect the key to follow the Atmos stack/component/key naming pattern. This is useful for retrieving values that were stored outside of Atmos or do not conform to the standard naming convention.
+The `!store.get` YAML function allows retrieving arbitrary keys directly from a [store](/core-concepts/projects/configuration/stores)
+without following the Atmos stack/component/key naming convention. This is useful for accessing values stored by external systems
+or for retrieving global configuration that doesn't belong to a specific component.
 </Intro>
 
 ### Usage
 
-The `!store.get` function can be called with two parameters, and optionally a default value and a [YQ](https://mikefarah.gitbook.io/yq) query expression:
+The `!store.get` function is called with two parameters, and optionally a default value and
+a [YQ](https://mikefarah.gitbook.io/yq) query expression:
 
 ```yaml
   !store.get <store_name> <key> | default <default-value> | query <yq-expression>
 ```
 
-#### Arguments
+Usage examples:
+
+```yaml
+  # Get an arbitrary key from the store
+  !store.get <store_name> <key>
+
+  # Get a key and provide a default value if it doesn't exist
+  !store.get <store_name> <key> | default <default-value>
+
+  # Get a key and extract a value using a YQ expression
+  !store.get <store_name> <key> | query <yq-expression>
+
+  # Combine default value and query expression
+  !store.get <store_name> <key> | default "{}" | query .field
+```
+
+### Arguments
 
 <dl>
   <dt>`store_name`</dt>
   <dd>The name of the store to read from (as defined in the `atmos.yaml` file)</dd>
 
   <dt>`key`</dt>
-  <dd>The exact key name or path to retrieve from the store. <b>This is not constructed from stack/component/key, but is the literal key as it exists in the store.</b></dd>
+  <dd>The exact key name or path to retrieve from the store. This is the literal key as it exists in the store, 
+  not constructed from stack/component/key patterns</dd>
 
   <dt>`default-value`</dt>
   <dd>(optional) The default value to return if the key is not found in the store</dd>
@@ -236,34 +256,93 @@ The `!store.get` function can be called with two parameters, and optionally a de
   <dd>(optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the result</dd>
 </dl>
 
+:::tip
+You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `!store.get` YAML function expressions.
+Atmos processes the templates first, and then executes the `!store.get` function, allowing you to provide the key name
+dynamically.
+:::
+
 ### Key Differences from `!store`
 
-- `!store.get` retrieves the value for the exact key or path you provide, without constructing it from stack/component/key.
-- Use this function when you need to fetch a value that does not follow the Atmos naming pattern, or was written to the store by an external process.
-- All supported stores are compatible (SSM, Redis, Artifactory, Azure Key Vault, Google Secret Manager, etc.).
+| Feature | `!store` | `!store.get` |
+|---------|----------|--------------|
+| **Key Format** | Constructs key from stack/component/key pattern | Uses exact key as provided |
+| **Use Case** | Retrieve Atmos-managed component outputs | Retrieve arbitrary values from external systems |
+| **Key Pattern** | `prefix/stack/component/key` | Any format the store supports |
+| **Typical Usage** | Cross-component dependencies | Global configs, external secrets |
+
+### Using YQ Expressions
+
+Similar to the `!store` function, you can use [YQ](https://mikefarah.gitbook.io/yq) expressions to extract specific values
+from complex data structures:
+
+```yaml
+# Extract a field from a JSON object
+database_host: !store.get redis app-config | query .database.host
+
+# Get the first item from an array
+primary_zone: !store.get azure-keyvault availability-zones | query .[0]
+
+# Extract nested values with a default
+api_key: !store.get ssm /external/config | default "{}" | query .api.key
+```
 
 ### Examples
 
+#### Redis Store
 ```yaml
 vars:
-  # Retrieve a global config object from Redis by its literal key
+  # Retrieve a global configuration object
   global_config: !store.get redis global-config
+  
+  # Get a specific field from the configuration
+  api_version: !store.get redis global-config | query .version
+  
+  # Use templating to construct the key dynamically
+  regional_config: !store.get redis "config-{{ .vars.region }}"
+```
 
-  # Retrieve a shared secret from SSM Parameter Store by its full path
-  shared_secret: !store.get prod/ssm /myapp/shared/secret
+#### AWS SSM Parameter Store
+```yaml
+vars:
+  # Retrieve a parameter by its full path
+  database_password: !store.get ssm /myapp/prod/db/password
+  
+  # Get a parameter with a default value
+  feature_flag: !store.get ssm /features/new-feature | default "disabled"
+```
 
-  # Use a default value if the key does not exist
-  region: !store.get redis non-existent-key | default us-west-2
+#### Azure Key Vault
+```yaml
+vars:
+  # Retrieve a secret by its exact name
+  api_secret: !store.get azure-keyvault external-api-key
+  
+  # Get a certificate with error handling
+  ssl_cert: !store.get azure-keyvault ssl-certificate | default ""
+```
 
-  # Query a field from a complex object
-  api_version: !store.get redis global-config | query .api_version
-
-  # Retrieve a value from Azure Key Vault by its exact secret name
-  azure_secret: !store.get azure-keyvault my-flat-secret-name
+#### Google Secret Manager
+```yaml
+vars:
+  # Retrieve a secret by its resource ID
+  service_account: !store.get gsm projects/my-project/secrets/service-account/versions/latest
+  
+  # Parse JSON secret and extract a field
+  client_id: !store.get gsm oauth-config | query .client_id
 ```
 
 ### Considerations
 
-- The key you provide must match exactly how it is stored in the backend (including any required prefix, path, or normalization for that store).
-- This function is ideal for interoperability with values written outside of Atmos, or for advanced use cases where the naming pattern is not followed.
-- If you want to retrieve a value using the Atmos stack/component/key pattern, use the regular [`!store`](/core-concepts/stacks/yaml-functions/store) function instead.
+- **Exact Key Matching**: The key you provide must match exactly how it is stored in the backend, including any required 
+  prefix, path, or normalization specific to that store
+- **External Systems**: This function is ideal for interoperability with values written by external systems that don't 
+  follow Atmos naming conventions
+- **Performance**: Direct key access is typically faster than pattern-based retrieval since no key construction is needed
+- **Security**: Like `!store`, using `!store.get` with secrets will expose them to stdout in describe commands
+- **Access Control**: Ensure your store credentials have permission to access the keys you're trying to retrieve
+
+:::caution
+If you need to retrieve values that follow the Atmos stack/component/key pattern, use the regular 
+[`!store`](#usage) function instead, as it provides better integration with Atmos component dependencies.
+:::
