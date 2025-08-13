@@ -61,7 +61,6 @@ func TestProcessTagStoreGet(t *testing.T) {
 		input        string
 		currentStack string
 		expected     any
-		expectedErr  string
 	}{
 		{
 			name:         "Test !store.get redis global-config",
@@ -90,41 +89,30 @@ func TestProcessTagStoreGet(t *testing.T) {
 			currentStack: "dev",
 			expected:     "default-value",
 		},
-		// Error test cases commented out because log.Fatal terminates the test
-		// TODO: Refactor error handling to return errors instead of calling log.Fatal
-		// {
-		// 	name:         "Test invalid store",
-		// 	input:        "!store.get invalid-store some-key",
-		// 	currentStack: "dev",
-		// 	expectedErr:  "store not found",
-		// },
-		// {
-		// 	name:         "Test invalid number of parameters",
-		// 	input:        "!store.get redis",
-		// 	currentStack: "dev",
-		// 	expectedErr:  "invalid number of parameters",
-		// },
-		// {
-		// 	name:         "Test invalid number of parameters (too many)",
-		// 	input:        "!store.get redis key1 key2",
-		// 	currentStack: "dev",
-		// 	expectedErr:  "invalid number of parameters",
-		// },
+		{
+			name:         "Test invalid number of parameters",
+			input:        "!store.get redis",
+			currentStack: "dev",
+			expected:     "invalid YAML function: !store.get redis",
+		},
+		{
+			name:         "Test invalid number of parameters (too many)",
+			input:        "!store.get redis key1 key2",
+			currentStack: "dev",
+			expected:     "invalid YAML function: !store.get redis key1 key2",
+		},
+		{
+			name:         "Test invalid default format",
+			input:        "!store.get redis some-key | default",
+			currentStack: "dev",
+			expected:     "invalid YAML function: !store.get redis some-key | default",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.expectedErr != "" {
-				// For error cases, we expect the function to call log.Fatal
-				// In a real test environment, this would cause the test to fail
-				// For now, we'll just verify the function exists and can be called
-				assert.NotPanics(t, func() {
-					processTagStoreGet(&atmosConfig, tt.input, tt.currentStack)
-				})
-			} else {
-				result := processTagStoreGet(&atmosConfig, tt.input, tt.currentStack)
-				assert.Equal(t, tt.expected, result)
-			}
+			result := processTagStoreGet(&atmosConfig, tt.input, tt.currentStack)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
