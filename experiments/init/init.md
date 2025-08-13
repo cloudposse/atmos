@@ -1,6 +1,6 @@
 # Atmos Init Command
 
-The `atmos init` command initializes configurations and examples for Atmos projects.
+The `atmos init` command initializes configurations and examples for Atmos scaffold templates.
 
 ## Usage
 
@@ -11,7 +11,7 @@ atmos init [configuration] [target path]
 ## Examples
 
 ### Interactive Mode
-Initialize a project with an interactive menu to select configuration and target path:
+Initialize a scaffold template with an interactive menu to select configuration and target path:
 
 ```bash
 atmos init
@@ -21,7 +21,7 @@ atmos init
 Initialize specific configuration types:
 
 ```bash
-# Initialize a typical project for atmos
+# Initialize a typical scaffold template for atmos
 atmos init default
 
 # Initialize an 'atmos.yaml' CLI configuration file
@@ -34,8 +34,8 @@ atmos init atmos.yaml
 atmos init atmos.yaml /tmp/atmos.yaml
 ```
 
-### Demo and Example Projects
-Initialize demo projects and examples:
+### Demo and Example Scaffold Templates
+Initialize demo scaffold templates and examples:
 
 ```bash
 # Initialize the Localstack demo
@@ -77,7 +77,7 @@ atmos init rich-project --values author=John --values year=2024 --values license
 
 ### Set Template Values and Skip Prompts
 ```bash
-atmos init rich-project --values project_name=my-project --values cloud_provider=aws --values enable_monitoring=true
+atmos init rich-project --values name=my-project --values cloud_provider=aws --values enable_monitoring=true
 ```
 
 ### Use Default Values Without Prompting
@@ -94,19 +94,45 @@ atmos init default --update --threshold 75
 
 The `init` command supports various configuration types:
 
-- **default**: Basic Atmos project setup
-- **rich-project**: Comprehensive project with monitoring, CI/CD, etc.
+- **default**: Basic Atmos scaffold template setup
+- **rich-project**: Comprehensive scaffold template with monitoring, CI/CD, etc.
 - **atmos.yaml**: Atmos CLI configuration file
 - **.editorconfig**: Editor configuration file
 - **.gitignore**: Git ignore file
-- **examples/demo-***: Various demo projects (LocalStack, Helmfile, etc.)
+- **examples/demo-***: Various demo scaffold templates (LocalStack, Helmfile, etc.)
+
+## Template Delimiters
+
+Scaffold templates support custom delimiters to avoid conflicts with Atmos's own Go template syntax. By default, templates use `{{` and `}}` delimiters, but you can specify custom delimiters in the `scaffold.yaml` configuration:
+
+```yaml
+name: "My Template"
+description: "A template with custom delimiters"
+template_id: "my-template"
+delimiters: ["[[", "]]"]
+fields:
+  project_name:
+    type: string
+    label: "Project Name"
+    default: "my-project"
+```
+
+This allows you to use different delimiters in your template files:
+
+```markdown
+# [[ .Config.project_name ]]
+
+This project was created by [[ .Config.author ]] in [[ .Config.year ]].
+```
+
+**Note**: If no delimiters are specified, the default `{{` and `}}` delimiters are used.
 
 ## Interactive Features
 
 When run without arguments, the command provides an interactive menu that:
 
-1. **Configuration Selection**: Choose from available project templates and configurations
+1. **Configuration Selection**: Choose from available scaffold templates and configurations
 2. **Target Path**: Specify where files should be created with smart defaults
-3. **Template Values**: Prompt for project-specific values (author, project name, etc.)
+3. **Template Values**: Prompt for scaffold template-specific values (author, project name, etc.)
 
 The interactive mode makes it easy to get started with Atmos without memorizing configuration names or paths.
