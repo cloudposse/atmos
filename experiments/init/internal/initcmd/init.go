@@ -289,10 +289,10 @@ func executeInit(cmd *cobra.Command, args []string, force, update, useDefaults b
 		return fmt.Errorf("failed to parse template values: %w", err)
 	}
 
-	// Initialize the UI with custom threshold if specified
+	// Initialize the UI
 	initUI := ui.NewInitUI()
 	if threshold > 0 {
-		initUI.SetThresholdPercent(threshold)
+		initUI.SetThreshold(threshold)
 	}
 
 	// Execute the initialization
