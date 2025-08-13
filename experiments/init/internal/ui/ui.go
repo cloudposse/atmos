@@ -3,12 +3,15 @@ package ui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
 
@@ -111,6 +114,18 @@ func (ui *InitUI) writeOutput(format string, args ...interface{}) {
 	ui.output.WriteString(fmt.Sprintf(format, args...))
 }
 
+// colorSource returns a colored string for the given source value
+func (ui *InitUI) colorSource(source string) string {
+	switch source {
+	case "scaffold":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#0000FF")).Render("scaffold") // Blue
+	case "flag":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render("flag") // Red
+	default:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#808080")).Render("default") // Grey
+	}
+}
+
 // flushOutput writes the accumulated output to stdout and clears the buffer
 func (ui *InitUI) flushOutput() {
 	fmt.Print(ui.output.String())
@@ -119,6 +134,11 @@ func (ui *InitUI) flushOutput() {
 
 // Execute runs the initialization process with UI
 func (ui *InitUI) Execute(embedsConfig embeds.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}) error {
+	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, cmdTemplateValues, []string{"{{", "}}"})
+}
+
+// ExecuteWithDelimiters runs the initialization process with UI and custom delimiters
+func (ui *InitUI) ExecuteWithDelimiters(embedsConfig embeds.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Early validation: check if target directory exists and handle appropriately
 	if err := filesystem.ValidateTargetDirectory(targetPath, force, update); err != nil {
 		return err
@@ -128,7 +148,7 @@ func (ui *InitUI) Execute(embedsConfig embeds.Configuration, targetPath string, 
 
 	// Check if this configuration has a scaffold.yaml file (project schema)
 	if embeds.HasScaffoldConfig(embedsConfig.Files) {
-		return ui.executeWithSetup(embedsConfig, targetPath, force, update, useDefaults, cmdTemplateValues)
+		return ui.executeWithSetup(embedsConfig, targetPath, force, update, useDefaults, cmdTemplateValues, delimiters)
 	}
 
 	// For templates without scaffold.yaml, use command-line values if provided
@@ -143,6 +163,122 @@ func (ui *InitUI) Execute(embedsConfig embeds.Configuration, targetPath string, 
 	}
 
 	return ui.executeWithUserConfig(embedsConfig, targetPath, force, update, userConfig)
+}
+
+// ExecuteWithInteractiveFlow provides a unified flow for both init and scaffold commands
+// This ensures both commands have identical behavior - the only difference is the source of templates
+func (ui *InitUI) ExecuteWithInteractiveFlow(
+	embedsConfig embeds.Configuration,
+	targetPath string,
+	force, update, useDefaults bool,
+	cmdTemplateValues map[string]interface{},
+) error {
+	// If no target path was provided (interactive mode), prompt for it after setup
+	if targetPath == "" {
+		// For templates with scaffold configuration, we need to run setup first to get proper values
+		if embeds.HasScaffoldConfig(embedsConfig.Files) {
+			// Create a temporary directory for setup
+			tempDir, err := os.MkdirTemp("", "atmos-setup-*")
+			if err != nil {
+				return fmt.Errorf("failed to create temporary directory: %w", err)
+			}
+			defer os.RemoveAll(tempDir)
+
+			// Load the scaffold configuration
+			var scaffoldConfigFile *embeds.File
+			for i := range embedsConfig.Files {
+				if embedsConfig.Files[i].Path == config.ScaffoldConfigFileName {
+					scaffoldConfigFile = &embedsConfig.Files[i]
+					break
+				}
+			}
+
+			if scaffoldConfigFile == nil {
+				return fmt.Errorf("%s not found in configuration", config.ScaffoldConfigFileName)
+			}
+
+			// Load the scaffold configuration from content
+			scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
+			if err != nil {
+				return fmt.Errorf("failed to load scaffold configuration: %w", err)
+			}
+
+			// Run setup to get configuration values
+			mergedValues, _, err := ui.RunSetupForm(scaffoldConfig, tempDir, useDefaults, cmdTemplateValues)
+			if err != nil {
+				return fmt.Errorf("failed to run setup form: %w", err)
+			}
+
+			// Now prompt for target directory with evaluated template
+			var err2 error
+			targetPath, err2 = ui.PromptForTargetDirectory(embedsConfig, mergedValues)
+			if err2 != nil {
+				return fmt.Errorf("failed to prompt for target directory: %w", err2)
+			}
+		} else {
+			// For simple templates, prompt directly
+			var err2 error
+			targetPath, err2 = ui.PromptForTargetDirectory(embedsConfig, nil)
+			if err2 != nil {
+				return fmt.Errorf("failed to prompt for target directory: %w", err2)
+			}
+		}
+	}
+
+	// Now execute with the determined target path
+	return ui.Execute(embedsConfig, targetPath, force, update, useDefaults, cmdTemplateValues)
+}
+
+// promptForTargetDirectoryWithValues prompts for target directory with evaluated template values
+func (ui *InitUI) promptForTargetDirectoryWithValues(config embeds.Configuration, mergedValues map[string]interface{}) (string, error) {
+	// Generate suggested directory name based on template and values
+	suggestedDir := ui.generateSuggestedDirectoryWithValues(config, mergedValues)
+	targetPath := suggestedDir
+
+	// Form to get target directory with smart default
+	pathForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Target directory").
+				Description(fmt.Sprintf("Where should the files be created? (suggested: %s)", suggestedDir)).
+				Placeholder(suggestedDir).
+				Value(&targetPath).
+				Validate(func(s string) error {
+					if s == "" {
+						return nil // Empty is OK, will use suggested default
+					}
+					return nil
+				}),
+		),
+	)
+
+	err := pathForm.Run()
+	if err != nil {
+		return "", err
+	}
+
+	// Use suggested directory if empty
+	if targetPath == "" {
+		targetPath = suggestedDir
+	}
+
+	return targetPath, nil
+}
+
+// generateSuggestedDirectoryWithValues generates a suggested directory name using template values
+func (ui *InitUI) generateSuggestedDirectoryWithValues(config embeds.Configuration, mergedValues map[string]interface{}) string {
+	// If we have merged values, try to use them for a better suggestion
+	if mergedValues != nil {
+		if name, ok := mergedValues["name"].(string); ok && name != "" {
+			return "./" + name
+		}
+		if projectName, ok := mergedValues["project_name"].(string); ok && projectName != "" {
+			return "./" + projectName
+		}
+	}
+
+	// Fallback to the original logic
+	return "./" + filepath.Base(config.Name)
 }
 
 // executeWithCommandValues processes files using command-line template values
@@ -347,7 +483,7 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 }
 
 // executeWithSetup handles any scaffold configuration with interactive prompts
-func (ui *InitUI) executeWithSetup(embedsConfig embeds.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}) error {
+func (ui *InitUI) executeWithSetup(embedsConfig embeds.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Find the scaffold.yaml file in the configuration
 	var scaffoldConfigFile *embeds.File
 	for i := range embedsConfig.Files {
@@ -392,8 +528,19 @@ func (ui *InitUI) executeWithSetup(embedsConfig embeds.Configuration, targetPath
 			continue
 		}
 
+		// Use the delimiters passed in, or get from scaffold config as fallback
+		if len(delimiters) == 0 {
+			delimiters = []string{"{{", "}}"}
+			if scaffoldConfig != nil {
+				// scaffoldConfig is of type *config.ScaffoldConfig, access Delimiters field directly
+				if len(scaffoldConfig.Delimiters) == 2 {
+					delimiters = scaffoldConfig.Delimiters
+				}
+			}
+		}
+
 		// Process the file path as a template first to check if it should be skipped
-		renderedPath, pathErr := ui.processor.ProcessTemplate(file.Path, targetPath, scaffoldConfig, mergedValues)
+		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(file.Path, targetPath, scaffoldConfig, mergedValues, delimiters)
 		if pathErr != nil {
 			// If path processing fails, use original path
 			renderedPath = file.Path
@@ -461,8 +608,19 @@ func (ui *InitUI) executeWithSetup(embedsConfig embeds.Configuration, targetPath
 
 	// Only render README if all files were successful
 	if embedsConfig.README != "" {
+		// Use the delimiters passed in, or get from scaffold config as fallback
+		if len(delimiters) == 0 {
+			delimiters = []string{"{{", "}}"}
+			if scaffoldConfig != nil {
+				// scaffoldConfig is of type *config.ScaffoldConfig, access Delimiters field directly
+				if len(scaffoldConfig.Delimiters) == 2 {
+					delimiters = scaffoldConfig.Delimiters
+				}
+			}
+		}
+
 		// Process README template with rich configuration
-		processedContent, err := ui.processor.ProcessTemplate(embedsConfig.README, targetPath, scaffoldConfig, mergedValues)
+		processedContent, err := ui.processor.ProcessTemplateWithDelimiters(embedsConfig.README, targetPath, scaffoldConfig, mergedValues, delimiters)
 		if err != nil {
 			return fmt.Errorf("failed to process README template: %w", err)
 		}
@@ -502,8 +660,8 @@ func (ui *InitUI) renderMarkdown(markdownContent string) error {
 
 // renderREADME renders the README content using glamour
 func (ui *InitUI) renderREADME(readmeContent string, targetPath string) error {
-	// Process README template
-	processedContent, err := ui.processor.ProcessTemplate(readmeContent, targetPath, nil, nil)
+	// Process README template with default delimiters
+	processedContent, err := ui.processor.ProcessTemplateWithDelimiters(readmeContent, targetPath, nil, nil, []string{"{{", "}}"})
 	if err != nil {
 		return fmt.Errorf("failed to process README template: %w", err)
 	}
@@ -528,15 +686,7 @@ func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 	for _, row := range rows {
 		// Apply color to source column based on the source value
 		source := row[2]
-		var coloredSource string
-		switch source {
-		case "scaffold":
-			coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color("#0000FF")).Render("scaffold") // Blue
-		case "flag":
-			coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render("flag") // Red
-		default:
-			coloredSource = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080")).Render("default") // Grey
-		}
+		coloredSource := ui.colorSource(source)
 
 		// Create new row with colored source
 		coloredRow := []string{row[0], row[1], coloredSource}
@@ -556,8 +706,12 @@ func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 		if len(row[1]) > valueWidth {
 			valueWidth = len(row[1])
 		}
-		if len(row[2]) > sourceWidth {
-			sourceWidth = len(row[2])
+		// For source column, we need to account for the colored strings
+		source := row[2]
+		coloredSource := ui.colorSource(source)
+		// Use the length of the colored string (including ANSI codes) for width calculation
+		if len(coloredSource) > sourceWidth {
+			sourceWidth = len(coloredSource)
 		}
 	}
 
@@ -706,4 +860,189 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 	fmt.Println()
 	fmt.Println(t.View())
 	fmt.Println()
+}
+
+// PromptForTemplate prompts the user to select a template from available options
+// This works for both init (embeds) and scaffold (local/remote) templates
+func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) (string, error) {
+	var options []huh.Option[string]
+	var templateNames []string
+
+	switch templateType {
+	case "embeds":
+		// Handle embeds.Configuration map
+		if configs, ok := templates.(map[string]embeds.Configuration); ok {
+			// Build config keys for consistent ordering
+			for key := range configs {
+				templateNames = append(templateNames, key)
+			}
+			sort.Strings(templateNames)
+
+			for _, key := range templateNames {
+				config := configs[key]
+				displayText := fmt.Sprintf("%-15s   %-35s   %s", key, config.Name, config.Description)
+				options = append(options, huh.NewOption(displayText, key))
+			}
+		}
+
+	case "scaffold":
+		// Handle scaffold templates from atmos.yaml
+		if templatesMap, ok := templates.(map[string]interface{}); ok {
+			for templateName, templateConfig := range templatesMap {
+				templateMap, ok := templateConfig.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				description := ""
+				if desc, ok := templateMap["description"].(string); ok {
+					description = desc
+				}
+
+				source := ""
+				if src, ok := templateMap["source"].(string); ok {
+					source = src
+				}
+
+				displayText := fmt.Sprintf("%-20s   %s", templateName, description)
+				if source != "" {
+					displayText += fmt.Sprintf(" (from %s)", source)
+				}
+
+				options = append(options, huh.NewOption(displayText, templateName))
+				templateNames = append(templateNames, templateName)
+			}
+		}
+	}
+
+	if len(options) == 0 {
+		return "", fmt.Errorf("no templates available")
+	}
+
+	var selectedTemplate string
+
+	// Create the selection form
+	selectionForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(fmt.Sprintf("Select a %s template", templateType)).
+				Description(fmt.Sprintf("Choose from the available %s templates (press 'q' to quit)", templateType)).
+				Options(options...).
+				Value(&selectedTemplate),
+		),
+	)
+
+	err := selectionForm.Run()
+	if err != nil {
+		return "", err
+	}
+
+	// Display selected template details
+	fmt.Println()
+	descStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Padding(0, 1)
+
+	fmt.Println(descStyle.Render(fmt.Sprintf("Selected template: %s", selectedTemplate)))
+	fmt.Println()
+
+	return selectedTemplate, nil
+}
+
+// PromptForTargetDirectory prompts the user for the target directory with evaluated template values
+// This works for both init and scaffold commands
+func (ui *InitUI) PromptForTargetDirectory(templateInfo interface{}, mergedValues map[string]interface{}) (string, error) {
+	// Generate suggested directory name based on template and values
+	suggestedDir := ui.generateSuggestedDirectoryWithTemplateInfo(templateInfo, mergedValues)
+	targetPath := suggestedDir
+
+	// Form to get target directory with smart default
+	pathForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Target directory").
+				Description(fmt.Sprintf("Where should the files be created? (suggested: %s)", suggestedDir)).
+				Placeholder(suggestedDir).
+				Value(&targetPath).
+				Validate(func(s string) error {
+					if s == "" {
+						return nil // Empty is OK, will use suggested default
+					}
+					return nil
+				}),
+		),
+	)
+
+	err := pathForm.Run()
+	if err != nil {
+		return "", err
+	}
+
+	// Use suggested directory if empty
+	if targetPath == "" {
+		targetPath = suggestedDir
+	}
+
+	return targetPath, nil
+}
+
+// generateSuggestedDirectoryWithTemplateInfo generates a suggested directory name using template info and values
+func (ui *InitUI) generateSuggestedDirectoryWithTemplateInfo(templateInfo interface{}, mergedValues map[string]interface{}) string {
+	// If we have merged values, try to use them for a better suggestion
+	if mergedValues != nil {
+		if name, ok := mergedValues["name"].(string); ok && name != "" {
+			return "./" + name
+		}
+		if projectName, ok := mergedValues["project_name"].(string); ok && projectName != "" {
+			return "./" + projectName
+		}
+	}
+
+	// Try to extract name from template info
+	switch info := templateInfo.(type) {
+	case embeds.Configuration:
+		return "./" + filepath.Base(info.Name)
+	case map[string]interface{}:
+		if name, ok := info["name"].(string); ok && name != "" {
+			return "./" + name
+		}
+	}
+
+	// Fallback
+	return "./new-project"
+}
+
+// DisplayScaffoldTemplateTable displays scaffold templates in a table format
+func (ui *InitUI) DisplayScaffoldTemplateTable(templatesMap map[string]interface{}) {
+	// Extract template data for table display
+	var rows [][]string
+	for templateName, templateConfig := range templatesMap {
+		templateMap, ok := templateConfig.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Get template source
+		source, _ := templateMap["source"].(string)
+		if source == "" {
+			source = "unknown"
+		}
+
+		// Get template description (if available)
+		description := ""
+		if desc, ok := templateMap["description"].(string); ok {
+			description = desc
+		}
+
+		// Get template ref (if available)
+		ref := ""
+		if r, ok := templateMap["ref"].(string); ok {
+			ref = r
+		}
+
+		rows = append(rows, []string{templateName, source, ref, description})
+	}
+
+	header := []string{"Template", "Source", "Version", "Description"}
+	ui.DisplayTemplateTable(header, rows)
 }

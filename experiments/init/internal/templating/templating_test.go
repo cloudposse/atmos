@@ -549,3 +549,121 @@ func TestProcessFile_ExistingFile_NoFlags(t *testing.T) {
 		t.Errorf("Expected content to remain 'existing content', got '%s'", string(content))
 	}
 }
+
+func TestProcessTemplateWithCustomDelimiters(t *testing.T) {
+	processor := NewProcessor()
+
+	// Test template with custom delimiters
+	template := `# [[ .Config.name | title ]]
+
+This project was created by [[ .Config.author ]] in [[ .Config.year ]].
+
+[[ if .Config.enable_monitoring ]]
+## Monitoring
+This project includes monitoring.
+[[ end ]]`
+
+	userValues := map[string]interface{}{
+		"name":              "my-project",
+		"author":            "John Doe",
+		"year":              "2024",
+		"enable_monitoring": true,
+	}
+
+	// Use custom delimiters
+	delimiters := []string{"[[", "]]"}
+
+	result, err := processor.ProcessTemplateWithDelimiters(template, "/tmp/test", nil, userValues, delimiters)
+	if err != nil {
+		t.Fatalf("Failed to process template with custom delimiters: %v", err)
+	}
+
+	expected := `# My-Project
+
+This project was created by John Doe in 2024.
+
+
+## Monitoring
+This project includes monitoring.
+`
+
+	if result != expected {
+		t.Errorf("Expected:\n%s\n\nGot:\n%s", expected, result)
+	}
+}
+
+func TestProcessTemplateWithDefaultDelimiters(t *testing.T) {
+	processor := NewProcessor()
+
+	// Test template with default delimiters
+	template := `# {{ .Config.name | title }}
+
+This project was created by {{ .Config.author }} in {{ .Config.year }}.
+
+{{ if .Config.enable_monitoring }}
+## Monitoring
+This project includes monitoring.
+{{ end }}`
+
+	userValues := map[string]interface{}{
+		"name":              "my-project",
+		"author":            "John Doe",
+		"year":              "2024",
+		"enable_monitoring": true,
+	}
+
+	// Use default delimiters
+	delimiters := []string{"{{", "}}"}
+
+	result, err := processor.ProcessTemplateWithDelimiters(template, "/tmp/test", nil, userValues, delimiters)
+	if err != nil {
+		t.Fatalf("Failed to process template with default delimiters: %v", err)
+	}
+
+	expected := `# My-Project
+
+This project was created by John Doe in 2024.
+
+
+## Monitoring
+This project includes monitoring.
+`
+
+	if result != expected {
+		t.Errorf("Expected:\n%s\n\nGot:\n%s", expected, result)
+	}
+}
+
+func TestValidateNoUnprocessedTemplatesWithDelimiters(t *testing.T) {
+	processor := NewProcessor()
+
+	// Test with custom delimiters
+	delimiters := []string{"[[", "]]"}
+
+	// Content with unprocessed custom delimiters
+	contentWithUnprocessed := `# My Project
+This is [[ .Config.name ]] but it wasn't processed.`
+
+	err := processor.ValidateNoUnprocessedTemplatesWithDelimiters(contentWithUnprocessed, delimiters)
+	if err == nil {
+		t.Error("Expected error for unprocessed custom delimiters")
+	}
+
+	// Content with processed custom delimiters (should pass)
+	contentProcessed := `# My Project
+This is my-project and it was processed.`
+
+	err = processor.ValidateNoUnprocessedTemplatesWithDelimiters(contentProcessed, delimiters)
+	if err != nil {
+		t.Errorf("Expected no error for processed content: %v", err)
+	}
+
+	// Content with default delimiters (should pass with custom delimiters)
+	contentWithDefault := `# My Project
+This is {{ .Config.name }} but we're using custom delimiters.`
+
+	err = processor.ValidateNoUnprocessedTemplatesWithDelimiters(contentWithDefault, delimiters)
+	if err != nil {
+		t.Errorf("Expected no error for default delimiters when using custom delimiters: %v", err)
+	}
+}
