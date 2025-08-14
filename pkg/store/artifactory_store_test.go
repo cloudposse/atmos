@@ -414,6 +414,47 @@ func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
 	}
 }
 
+// Custom mock client for GetKey tests that can return different file contents
+type MockArtifactoryClientForGetKey struct {
+	mock.Mock
+	fileContent []byte
+}
+
+func (m *MockArtifactoryClientForGetKey) DownloadFiles(params ...services.DownloadParams) (int, int, error) {
+	args := m.Called(params[0])
+	totalDownloaded := args.Int(0)
+	totalFailed := args.Int(1)
+	err := args.Error(2)
+	
+	if err != nil {
+		return totalDownloaded, totalFailed, err
+	}
+
+	if totalFailed > 0 || totalDownloaded == 0 {
+		return totalDownloaded, totalFailed, nil
+	}
+
+	// Create file with test-specific content
+	targetDir := params[0].Target
+	filename := filepath.Base(params[0].Pattern)
+
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return 0, 0, err
+	}
+
+	fullPath := filepath.Join(targetDir, filename)
+	if err := os.WriteFile(fullPath, m.fileContent, 0o600); err != nil {
+		return 0, 0, err
+	}
+
+	return totalDownloaded, totalFailed, nil
+}
+
+func (m *MockArtifactoryClientForGetKey) UploadFiles(options artifactory.UploadServiceOptions, params ...services.UploadParams) (int, int, error) {
+	args := m.Called(options, params[0])
+	return args.Int(0), args.Int(1), args.Error(2)
+}
+
 func TestArtifactoryStore_GetKeyDirect(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -510,8 +551,10 @@ func TestArtifactoryStore_GetKeyDirect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock client that returns custom file content
-			mockClient := &MockArtifactoryClient{}
+			// Create a mock client with test-specific file content
+			mockClient := &MockArtifactoryClientForGetKey{
+				fileContent: tt.fileContent,
+			}
 			delimiter := "/"
 			store := &ArtifactoryStore{
 				prefix:         tt.prefix,
@@ -523,24 +566,10 @@ func TestArtifactoryStore_GetKeyDirect(t *testing.T) {
 			// Determine expected pattern
 			expectedPattern := fmt.Sprintf("test-repo/%s/%s.json", tt.prefix, tt.key)
 
-			// Setup mock with custom file content
+			// Setup mock expectations
 			mockClient.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
 				return params.Pattern == expectedPattern
-			})).Return(tt.mockDownloads, tt.mockFails, tt.mockError).Run(func(args mock.Arguments) {
-				// Only create files if successful
-				if tt.mockError == nil && tt.mockDownloads > 0 && tt.mockFails == 0 {
-					params := args.Get(0).(services.DownloadParams)
-					targetDir := params.Target
-					filename := filepath.Base(params.Pattern)
-
-					if err := os.MkdirAll(targetDir, 0o755); err != nil {
-						return
-					}
-
-					fullPath := filepath.Join(targetDir, filename)
-					os.WriteFile(fullPath, tt.fileContent, 0o600)
-				}
-			})
+			})).Return(tt.mockDownloads, tt.mockFails, tt.mockError)
 
 			// Act
 			result, err := store.GetKey(tt.key)
