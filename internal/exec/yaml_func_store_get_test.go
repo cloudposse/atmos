@@ -105,7 +105,7 @@ func TestProcessTagStoreGet(t *testing.T) {
 			name:         "Test invalid default format",
 			input:        "!store.get redis some-key | default",
 			currentStack: "dev",
-			expected:     "invalid YAML function: !store.get redis some-key | default",
+			expected:     "invalid parameters after pipe: !store.get redis some-key | default",
 		},
 	}
 
