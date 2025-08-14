@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -10,14 +9,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-)
-
-// Define static errors.
-var (
-	ErrStoreNotFound         = errors.New("store not found")
-	ErrGetKeyFailed          = errors.New("failed to get key from store")
-	ErrInvalidPipeParams     = errors.New("invalid parameters after pipe")
-	ErrInvalidPipeIdentifier = errors.New("invalid identifier after pipe")
 )
 
 type getKeyParams struct {

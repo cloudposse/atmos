@@ -677,3 +677,120 @@ func TestSSMStore_getKey(t *testing.T) {
 		})
 	}
 }
+
+func TestSSMStore_GetKey(t *testing.T) {
+	tests := []struct {
+		name          string
+		key           string
+		mockReturn    *types.Parameter
+		mockError     error
+		expectedValue interface{}
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name: "successful string retrieval",
+			key:  "/config/app-settings",
+			mockReturn: &types.Parameter{
+				Value: aws.String("production"),
+			},
+			mockError:     nil,
+			expectedValue: "production",
+			expectError:   false,
+		},
+		{
+			name: "successful JSON object retrieval",
+			key:  "/config/database",
+			mockReturn: &types.Parameter{
+				Value: aws.String(`{"host":"localhost","port":5432}`),
+			},
+			mockError:     nil,
+			expectedValue: map[string]interface{}{"host": "localhost", "port": float64(5432)},
+			expectError:   false,
+		},
+		{
+			name: "successful JSON array retrieval",
+			key:  "/config/servers",
+			mockReturn: &types.Parameter{
+				Value: aws.String(`["server1","server2","server3"]`),
+			},
+			mockError:     nil,
+			expectedValue: []interface{}{"server1", "server2", "server3"},
+			expectError:   false,
+		},
+		{
+			name:          "parameter not found",
+			key:           "/nonexistent",
+			mockReturn:    nil,
+			mockError:     &types.ParameterNotFound{Message: aws.String("Parameter not found")},
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "resource not found",
+		},
+		{
+			name: "nil parameter value",
+			key:  "/empty-param",
+			mockReturn: &types.Parameter{
+				Value: nil,
+			},
+			mockError:     nil,
+			expectedValue: "",
+			expectError:   false,
+		},
+		{
+			name: "malformed JSON returns as string",
+			key:  "/config/invalid",
+			mockReturn: &types.Parameter{
+				Value: aws.String(`{"invalid": json`),
+			},
+			mockError:     nil,
+			expectedValue: `{"invalid": json`,
+			expectError:   false,
+		},
+		{
+			name:          "AWS error",
+			key:           "/config/test",
+			mockReturn:    nil,
+			mockError:     fmt.Errorf("AWS error"),
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "failed to get parameter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockClient := new(MockSSMClient)
+			store := &SSMStore{
+				client:         mockClient,
+				prefix:         "",
+				stackDelimiter: aws.String("/"),
+			}
+
+			// Set up mock expectations
+			mockClient.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				Name:           aws.String(tt.key),
+				WithDecryption: aws.Bool(true),
+			}).Return(&ssm.GetParameterOutput{
+				Parameter: tt.mockReturn,
+			}, tt.mockError)
+
+			// Act
+			result, err := store.GetKey(tt.key)
+
+			// Assert
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				assert.Equal(t, tt.expectedValue, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedValue, result)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}

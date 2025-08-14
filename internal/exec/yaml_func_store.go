@@ -20,11 +20,6 @@ type params struct {
 	defaultValue *string
 }
 
-const (
-	invalidYamlFuncMsg = "invalid YAML function"
-	function           = "function"
-)
-
 func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
 	log.Debug("Executing Atmos YAML function", function, input)
 
