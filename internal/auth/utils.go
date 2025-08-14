@@ -40,6 +40,14 @@ func pickKeyFromMap(Map map[string]any) (string, error) {
 
 // Todo, would be cool to have huh model that shows info of the identity
 func pickIdentity(identities map[string]schema.Identity) (string, error) {
+	if len(identities) == 0 {
+		return "", nil
+	} else if len(identities) == 1 {
+		for k, _ := range identities {
+			return k, nil
+		}
+	}
+
 	items := []string{}
 	for k, _ := range identities {
 		items = append(items, k)

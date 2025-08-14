@@ -27,14 +27,13 @@ type ssoAuthStore struct {
 }
 
 type awsIamIdentityCenter struct {
-	Common   schema.ProviderDefaultConfig `yaml:",inline"`
-	Identity schema.Identity              `yaml:",inline"`
+	Common          schema.ProviderDefaultConfig `yaml:",inline"`
+	schema.Identity `yaml:",inline"`
 
 	// SSO
-	Role        string `yaml:"role,omitempty" json:"role,omitempty" mapstructure:"role,omitempty"`
+	RoleName    string `yaml:"role_name,omitempty" json:"role_name,omitempty" mapstructure:"role_name,omitempty"`
 	AccountId   string `yaml:"account_id,omitempty" json:"account_id,omitempty" mapstructure:"account_id,omitempty"`
 	AccountName string `yaml:"account_name,omitempty" json:"account_name,omitempty" mapstructure:"account_name,omitempty"`
-	RoleName    string `yaml:"role_name,omitempty" json:"role_name,omitempty" mapstructure:"role_name,omitempty"`
 
 	// Store token info for AssumeRole step
 	token     string
@@ -53,12 +52,12 @@ func (config *awsIamIdentityCenter) Validate() error {
 	}
 
 	// Validate we have enough information to determine the role
-	if config.Role == "" && config.RoleName == "" {
+	if config.RoleArn == "" && config.RoleName == "" {
 		return fmt.Errorf("either role or role_name must be specified for AWS IAM Identity Center")
 	}
 
 	// Validate we have enough information to determine the account
-	if config.Role == "" && config.AccountId == "" && config.AccountName == "" {
+	if config.RoleArn == "" && config.AccountId == "" && config.AccountName == "" {
 		return fmt.Errorf("either role, account_id, or account_name must be specified for AWS IAM Identity Center")
 	}
 
@@ -67,11 +66,6 @@ func (config *awsIamIdentityCenter) Validate() error {
 
 // Login authenticates with SSO and gets the token
 func (config *awsIamIdentityCenter) Login() error {
-	if IsInDocker() {
-		log.Info("Skipping SSO login command in docker", "reason", "Unsupported")
-		return nil
-	}
-
 	log.Debug("Identity Config", "config", config)
 	store := authstore.NewKeyringAuthStore()
 	keyringKey := config.Common.Provider
@@ -129,10 +123,10 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 	var accountId, roleName string
 
 	// Support passing in a role
-	if config.Role != "" {
-		Arn, _ := arn.Parse(config.Role)
+	if config.RoleArn != "" {
+		Arn, _ := arn.Parse(config.RoleArn)
 		roleName = Arn.Resource
-		accountId = RoleToAccountId(config.Role)
+		accountId = RoleToAccountId(config.RoleArn)
 	}
 
 	// Support passing in a role_name
@@ -161,7 +155,7 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 		AccountId:   aws.String(accountId),
 		RoleName:    aws.String(roleName),
 	})
-	log.Debug("Role Credentials", "role_name", roleName, "accountid", accountId, "role", config.Role)
+	log.Debug("Role Credentials", "role_name", roleName, "accountid", accountId, "role", config.RoleArn)
 	if err != nil {
 		var roles []string
 		r, _ := getAccountRoles(ctx, ssoClient, config.token, accountId)
@@ -250,8 +244,8 @@ func SsoSyncE(startUrl, region string) (*ssooidc.CreateTokenOutput, error) {
 	}
 	err = utils.OpenUrl(*authOut.VerificationUriComplete)
 	if err != nil {
-		log.Warn(err)
-		log.Infof("🔐 Please visit %s and enter code: %s", *authOut.VerificationUriComplete, *authOut.UserCode)
+		log.Debug(err)
+		utils.PrintfMarkdown("🔐 Please visit %s and enter code: %s", *authOut.VerificationUriComplete, *authOut.UserCode)
 	}
 	// 4. Poll for token
 	var tokenOut *ssooidc.CreateTokenOutput

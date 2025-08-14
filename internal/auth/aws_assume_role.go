@@ -13,11 +13,10 @@ import (
 )
 
 type awsAssumeRole struct {
-	Common   schema.ProviderDefaultConfig `yaml:",inline"`
-	Identity schema.Identity              `yaml:",inline"`
+	Common          schema.ProviderDefaultConfig `yaml:",inline"`
+	schema.Identity `yaml:",inline"`
 
-	RoleArn         string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
-	SessionDuration int32  `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
+	SessionDuration int32 `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
 }
 
 // Validate checks if the required fields are set

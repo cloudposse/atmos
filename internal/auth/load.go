@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 
 	l "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -54,10 +55,7 @@ func setDefaults(data *schema.ProviderDefaultConfig, provider string, config sch
 }
 
 func GetDefaultIdentity(configuration map[string]any) (string, error) {
-	identityConfigs, err := GetEnabledIdentitiesE(configuration)
-	if err != nil {
-		return "", err
-	}
+	identityConfigs := GetEnabledIdentities(configuration)
 
 	var defaultIdentities []string
 	for k, _ := range identityConfigs {
@@ -68,8 +66,11 @@ func GetDefaultIdentity(configuration map[string]any) (string, error) {
 	if len(defaultIdentities) == 1 {
 		return defaultIdentities[0], nil
 	} else if len(defaultIdentities) > 1 {
-		l.Warn("multiple default identities found", "defaultIdentities", defaultIdentities)
-		return "", errors.New("multiple default identities found")
+		if telemetry.IsCI() {
+			l.Warn("multiple default identities found", "defaultIdentities", defaultIdentities)
+			return "", errors.New("multiple default identities found")
+		}
+
 	}
 	return "", errors.New("no default identity found")
 }
@@ -132,7 +133,8 @@ func GetEnabledIdentitiesE(identityMap map[string]any) (map[string]schema.Identi
 	}
 	filteredIdentities := make(map[string]schema.Identity)
 	for k, v := range identityConfigs {
-		if v.Enabled {
+		// TODO move this to a validate method
+		if v.Enabled && (v.Idp != "" || v.RoleArn != "") {
 			filteredIdentities[k] = v
 		}
 	}
