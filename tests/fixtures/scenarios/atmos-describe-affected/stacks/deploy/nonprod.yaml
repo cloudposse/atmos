@@ -9,7 +9,7 @@ components:
       metadata:
         component: mock
       settings:
-        a: 1
+        a: 1a
         b: 2
       vars:
         foo: "foo"
