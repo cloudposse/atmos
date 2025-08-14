@@ -354,11 +354,11 @@ func TestAzureKeyVaultStore_GetKey(t *testing.T) {
 				getSecretFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
 					normalizedKey := (&AzureKeyVaultStore{}).normalizeSecretName(tt.key)
 					assert.Equal(t, normalizedKey, name)
-					
+
 					if tt.mockError != nil {
 						return azsecrets.GetSecretResponse{}, tt.mockError
 					}
-					
+
 					return azsecrets.GetSecretResponse{
 						Secret: azsecrets.Secret{
 							Value: tt.mockValue,

@@ -416,16 +416,16 @@ func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
 
 func TestArtifactoryStore_GetKeyDirect(t *testing.T) {
 	tests := []struct {
-		name           string
-		key            string
-		prefix         string
-		mockDownloads  int
-		mockFails      int
-		mockError      error
-		fileContent    []byte
-		expectedValue  interface{}
-		expectError    bool
-		errorContains  string
+		name          string
+		key           string
+		prefix        string
+		mockDownloads int
+		mockFails     int
+		mockError     error
+		fileContent   []byte
+		expectedValue interface{}
+		expectError   bool
+		errorContains string
 	}{
 		{
 			name:          "successful string retrieval",
@@ -532,11 +532,11 @@ func TestArtifactoryStore_GetKeyDirect(t *testing.T) {
 					params := args.Get(0).(services.DownloadParams)
 					targetDir := params.Target
 					filename := filepath.Base(params.Pattern)
-					
+
 					if err := os.MkdirAll(targetDir, 0o755); err != nil {
 						return
 					}
-					
+
 					fullPath := filepath.Join(targetDir, filename)
 					os.WriteFile(fullPath, tt.fileContent, 0o600)
 				}
