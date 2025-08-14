@@ -105,11 +105,11 @@ func TestNewArtifactoryStore(t *testing.T) {
 			originalArtToken := os.Getenv("ARTIFACTORY_ACCESS_TOKEN")
 			originalJfrogToken := os.Getenv("JFROG_ACCESS_TOKEN")
 			defer func() {
-				os.Setenv("ARTIFACTORY_ACCESS_TOKEN", originalArtToken)
-				os.Setenv("JFROG_ACCESS_TOKEN", originalJfrogToken)
+				_ = os.Setenv("ARTIFACTORY_ACCESS_TOKEN", originalArtToken)
+				_ = os.Setenv("JFROG_ACCESS_TOKEN", originalJfrogToken)
 			}()
-			os.Unsetenv("ARTIFACTORY_ACCESS_TOKEN")
-			os.Unsetenv("JFROG_ACCESS_TOKEN")
+			_ = os.Unsetenv("ARTIFACTORY_ACCESS_TOKEN")
+			_ = os.Unsetenv("JFROG_ACCESS_TOKEN")
 
 			store, err := NewArtifactoryStore(tt.options)
 			if tt.expectError {

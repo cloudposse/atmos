@@ -442,9 +442,10 @@ func TestGSMStore_Get(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Error(t, err)
-				if tt.name == "permission denied" {
+				switch tt.name {
+				case "permission denied":
 					assert.Contains(t, err.Error(), "permission denied for secret")
-				} else if tt.name == "secret not found" {
+				case "secret not found":
 					assert.Contains(t, err.Error(), "resource not found")
 				}
 			} else {

@@ -191,7 +191,9 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 	if err != nil {
 		return nil, fmt.Errorf(errFormatWithCause, ErrCreateTempDir, err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
 
 	tempDir = filepath.Clean(tempDir)
 	if !strings.HasSuffix(tempDir, string(os.PathSeparator)) {
@@ -244,8 +246,12 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 	if err != nil {
 		return fmt.Errorf(errFormatWithCause, ErrCreateTempFile, err)
 	}
-	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
+	defer func() {
+		_ = os.Remove(tempFile.Name())
+	}()
+	defer func() {
+		_ = tempFile.Close()
+	}()
 
 	var dataToWrite []byte
 	if byteData, ok := value.([]byte); ok {
@@ -305,7 +311,9 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf(errFormatWithCause, ErrCreateTempDir, err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
 
 	// Download the file from Artifactory
 	downloadParams := services.NewDownloadParams()

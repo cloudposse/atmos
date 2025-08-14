@@ -66,7 +66,7 @@ func NewGSMStore(options GSMStoreOptions) (Store, error) {
 	if err != nil {
 		// Close the client to prevent resource leaks
 		if client != nil {
-			client.Close()
+			_ = client.Close()
 		}
 		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
