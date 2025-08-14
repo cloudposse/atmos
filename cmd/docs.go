@@ -118,14 +118,9 @@ var docsCmd = &cobra.Command{
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
-
-		if os.Getenv("GO_TEST") == "1" {
-			log.Debug("Skipping browser launch in test environment")
-		} else {
-			err := utils.OpenUrl(atmosDocsURL)
-			if err != nil {
-				return err
-			}
+		err := utils.OpenUrl(atmosDocsURL)
+		if err != nil {
+			return err
 		}
 
 		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)

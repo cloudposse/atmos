@@ -2,11 +2,18 @@ package utils
 
 import (
 	"fmt"
+	"github.com/charmbracelet/log"
+	"os"
 	"os/exec"
 	"runtime"
 )
 
 func OpenUrl(URL string) error {
+	if os.Getenv("GO_TEST") == "1" {
+		log.Debug("Skipping browser launch in test environment")
+		return nil
+	}
+
 	var err error
 
 	switch runtime.GOOS {
