@@ -157,28 +157,60 @@ func GetIdp(identity string, config schema.AuthConfig) (string, error) {
 	return identityConfigs[identity].Idp, nil
 }
 
-func GetIdentityInstance(identity string, config schema.AuthConfig) (LoginMethod, error) {
-	idpName, err := GetIdp(identity, config)
-	typeVal, err := GetType(idpName, config)
+// GetIdentityInstance retrieves an identity instance based on the specified identity and configuration.
+// If info is provided, component-level identities will be considered and can override global ones.
+func GetIdentityInstance(identity string, config schema.AuthConfig, info *schema.ConfigAndStacksInfo) (LoginMethod, error) {
+	// Merge component identities with global identities if info is provided
+	identityMap := config.Identities
+	if info != nil && info.ComponentIdentitiesSection != nil {
+		// Use component identities if they exist, otherwise fall back to global identities
+		componentIdentities := info.ComponentIdentitiesSection
+		if len(componentIdentities) > 0 {
+			// Only override the specific identity if it exists in component identities
+			if componentIdentity, exists := componentIdentities[identity]; exists {
+				// Clone the global identities map
+				mergedIdentities := make(map[string]any)
+				for k, v := range config.Identities {
+					mergedIdentities[k] = v
+				}
+
+				// Override with component identity
+				mergedIdentities[identity] = componentIdentity
+				identityMap = mergedIdentities
+			}
+		}
+	}
+
+	// Create a temporary config with the merged identities
+	mergedConfig := schema.AuthConfig{
+		Identities:    identityMap,
+		Providers:     config.Providers,
+		DefaultRegion: config.DefaultRegion,
+	}
+
+	idpName, err := GetIdp(identity, mergedConfig)
+	typeVal, err := GetType(idpName, mergedConfig)
 	l.Debug("GetIdentityInstance", "identity", identity, "idp", idpName, "type", typeVal)
 	if err != nil {
 		return nil, err
 	}
 
 	if providerFunc, ok := identityRegistry[typeVal]; ok {
-		Lm, err := providerFunc(idpName, identity, config)
+		// providerFunc is a function based on the provider type from identityRegistry.
+		// This essentially returns a LoginMethod of the correct type
+		Lm, err := providerFunc(idpName, identity, mergedConfig)
 		if err != nil {
 			return nil, err
 		}
 
-		b, err := yaml.Marshal(config.Identities[identity])
+		b, err := yaml.Marshal(mergedConfig.Identities[identity])
 		if err != nil {
 			return nil, err
 		}
 		err = yaml.Unmarshal(b, Lm)
 		return Lm, nil
-
 	}
+
 	var supportedTypes []string
 	for k, _ := range identityRegistry {
 		supportedTypes = append(supportedTypes, k)

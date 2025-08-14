@@ -59,7 +59,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 	}
 
 	if identity != "" {
-		identityInstance, err := GetIdentityInstance(identity, authConfig)
+		identityInstance, err := GetIdentityInstance(identity, authConfig, info)
 		if err != nil {
 			return err
 		}
@@ -111,7 +111,7 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		}
 
 	}
-	IdentityInstance, err := GetIdentityInstance(identity, atmosConfig.Auth)
+	IdentityInstance, err := GetIdentityInstance(identity, atmosConfig.Auth, nil)
 	if err != nil {
 		return err
 	}
