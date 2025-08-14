@@ -425,7 +425,6 @@ func (m *MockArtifactoryClientForGetKey) DownloadFiles(params ...services.Downlo
 	totalDownloaded := args.Int(0)
 	totalFailed := args.Int(1)
 	err := args.Error(2)
-	
 	if err != nil {
 		return totalDownloaded, totalFailed, err
 	}
