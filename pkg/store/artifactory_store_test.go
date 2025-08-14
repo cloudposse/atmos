@@ -413,3 +413,150 @@ func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestArtifactoryStore_GetKeyDirect(t *testing.T) {
+	tests := []struct {
+		name           string
+		key            string
+		prefix         string
+		mockDownloads  int
+		mockFails      int
+		mockError      error
+		fileContent    []byte
+		expectedValue  interface{}
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:          "successful string retrieval",
+			key:           "app-config",
+			prefix:        "configs",
+			mockDownloads: 1,
+			mockFails:     0,
+			mockError:     nil,
+			fileContent:   []byte("production"),
+			expectedValue: "production",
+			expectError:   false,
+		},
+		{
+			name:          "successful JSON object retrieval",
+			key:           "database-config",
+			prefix:        "configs",
+			mockDownloads: 1,
+			mockFails:     0,
+			mockError:     nil,
+			fileContent:   []byte(`{"host":"localhost","port":5432}`),
+			expectedValue: map[string]interface{}{"host": "localhost", "port": float64(5432)},
+			expectError:   false,
+		},
+		{
+			name:          "successful JSON array retrieval",
+			key:           "server-list",
+			prefix:        "configs",
+			mockDownloads: 1,
+			mockFails:     0,
+			mockError:     nil,
+			fileContent:   []byte(`["server1","server2","server3"]`),
+			expectedValue: []interface{}{"server1", "server2", "server3"},
+			expectError:   false,
+		},
+		{
+			name:          "file not found",
+			key:           "nonexistent",
+			prefix:        "configs",
+			mockDownloads: 0,
+			mockFails:     0,
+			mockError:     fmt.Errorf("file not found"),
+			fileContent:   nil,
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "failed to download file",
+		},
+		{
+			name:          "empty file content",
+			key:           "empty-config",
+			prefix:        "configs",
+			mockDownloads: 1,
+			mockFails:     0,
+			mockError:     nil,
+			fileContent:   []byte(""),
+			expectedValue: "",
+			expectError:   false,
+		},
+		{
+			name:          "malformed JSON returns as string",
+			key:           "invalid-json",
+			prefix:        "configs",
+			mockDownloads: 1,
+			mockFails:     0,
+			mockError:     nil,
+			fileContent:   []byte(`{"invalid": json`),
+			expectedValue: `{"invalid": json`,
+			expectError:   false,
+		},
+		{
+			name:          "download error",
+			key:           "error-config",
+			prefix:        "configs",
+			mockDownloads: 0,
+			mockFails:     1,
+			mockError:     fmt.Errorf("network error"),
+			fileContent:   nil,
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "failed to download file",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock client that returns custom file content
+			mockClient := &MockArtifactoryClient{}
+			delimiter := "/"
+			store := &ArtifactoryStore{
+				prefix:         tt.prefix,
+				repoName:       "test-repo",
+				rtManager:      mockClient,
+				stackDelimiter: &delimiter,
+			}
+
+			// Determine expected pattern
+			expectedPattern := fmt.Sprintf("test-repo/%s/%s.json", tt.prefix, tt.key)
+
+			// Setup mock with custom file content
+			mockClient.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
+				return params.Pattern == expectedPattern
+			})).Return(tt.mockDownloads, tt.mockFails, tt.mockError).Run(func(args mock.Arguments) {
+				// Only create files if successful
+				if tt.mockError == nil && tt.mockDownloads > 0 && tt.mockFails == 0 {
+					params := args.Get(0).(services.DownloadParams)
+					targetDir := params.Target
+					filename := filepath.Base(params.Pattern)
+					
+					if err := os.MkdirAll(targetDir, 0o755); err != nil {
+						return
+					}
+					
+					fullPath := filepath.Join(targetDir, filename)
+					os.WriteFile(fullPath, tt.fileContent, 0o600)
+				}
+			})
+
+			// Act
+			result, err := store.GetKey(tt.key)
+
+			// Assert
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				assert.Equal(t, tt.expectedValue, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedValue, result)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
