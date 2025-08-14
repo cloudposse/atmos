@@ -3,6 +3,8 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"io"
 	"os"
 
@@ -76,4 +78,14 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	}
 
 	return out, nil
+}
+
+func NewAtmosHuhTheme() *huh.Theme {
+	t := huh.ThemeCharm()
+	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
+	purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
+	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
+	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
+	t.Blurred.Title = t.Blurred.Title.Foreground(purple)
+	return t
 }

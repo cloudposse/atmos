@@ -937,12 +937,14 @@ type ListColumnConfig struct {
 }
 
 type AuthConfig struct {
-	IdentityProviders map[string]interface{} `yaml:"identity_providers" json:"identity_providers" mapstructure:"identity_providers"`
-	Identities        map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
-	DefaultRegion     string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
+	Providers     map[string]interface{} `yaml:"providers" json:"providers" mapstructure:"providers"`
+	Identities    map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
+	DefaultRegion string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
 }
 
-type IdentityProviderDefaultConfig struct {
+// ProviderDefaultConfig defines the default configuration for an identity provider, this is shared amongst all providers
+
+type ProviderDefaultConfig struct {
 	Provider string
 
 	Type   string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`

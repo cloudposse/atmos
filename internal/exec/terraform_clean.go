@@ -2,12 +2,12 @@ package exec
 
 import (
 	"fmt"
+	"github.com/cloudposse/atmos/internal/tui/utils"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -253,12 +253,7 @@ func getRelativePath(basePath, componentPath string) (string, error) {
 
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
-	t := huh.ThemeCharm()
-	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
-	purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
-	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
-	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
-	t.Blurred.Title = t.Blurred.Title.Foreground(purple)
+	t := utils.NewAtmosHuhTheme()
 	confirmPrompt := huh.NewConfirm().
 		Title(message).
 		Affirmative("Yes!").

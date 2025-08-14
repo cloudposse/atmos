@@ -3,10 +3,14 @@ package auth
 import (
 	"fmt"
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/internal/tui/picker"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/spf13/cobra"
+)
+
+const (
+	LogPrefix = "[atmos-auth]"
 )
 
 // ValidateLoginAssumeRole runs the Validate() method on the given LoginMethod and, if
@@ -35,7 +39,7 @@ func ValidateLoginAssumeRole(IdentityInstance LoginMethod) error {
 // The function returns an error if the identity is invalid or if the authentication fails.
 func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	authConfig := atmosConfig.Auth
-	log.SetPrefix("[atmos-auth] ")
+	log.SetPrefix(LogPrefix)
 	defer log.SetPrefix("")
 
 	identity := info.Identity // Set by CLI Flags
@@ -46,11 +50,20 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 			identity = def
 		}
 	}
+	// If we don't have a default, but several are enabled, prompt the user, if not in CI
+	if telemetry.IsCI() {
+		return nil
+	}
+	if identity == "" {
+		identity, _ = pickIdentity(GetEnabledIdentities(info.ComponentIdentitiesSection))
+	}
+
 	if identity != "" {
 		identityInstance, err := GetIdentityInstance(identity, authConfig)
 		if err != nil {
 			return err
 		}
+		//info.ComponentEnvSection["AWS_PROFILE"] = identityInstance.getProfile()
 		return ValidateLoginAssumeRole(identityInstance)
 	}
 
@@ -66,7 +79,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 // identity instance and performs validation and login. If any step encounters an
 // error, it returns the error.
 func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
-	log.SetPrefix("[atmos-auth] ")
+	log.SetPrefix(LogPrefix)
 	defer log.SetPrefix("")
 
 	flags := cmd.Flags()
@@ -91,7 +104,7 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		if identity != "" {
 			log.Info("Using default identity", "identity", identity)
 		} else {
-			identity, err = pickIdentity(atmosConfig.Auth)
+			identity, err = pickKeyFromMap(atmosConfig.Auth.Identities)
 			if err != nil {
 				return err
 			}
@@ -103,23 +116,4 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	return ValidateLoginAssumeRole(IdentityInstance)
-}
-
-// pickIdentity presents a simple picker to the user, listing all the
-// identities found in the `Identities` map. The user is asked to choose
-// an identity, and the chosen identity is returned.
-//
-// If the user cancels the picker, an error is returned.
-func pickIdentity(AuthConfig schema.AuthConfig) (string, error) {
-	// Simple Picker
-	items := []string{}
-	for k, _ := range AuthConfig.Identities {
-		items = append(items, k)
-	}
-	choose, err := picker.NewSimplePicker("Choose an Identities Config", items).Choose()
-
-	if err != nil {
-		return "", err
-	}
-	return choose, nil
 }

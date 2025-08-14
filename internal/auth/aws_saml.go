@@ -20,8 +20,8 @@ import (
 )
 
 type awsSaml struct {
-	Common   schema.IdentityProviderDefaultConfig `yaml:",inline"`
-	Identity schema.Identity                      `yaml:",inline"`
+	Common   schema.ProviderDefaultConfig `yaml:",inline"`
+	Identity schema.Identity              `yaml:",inline"`
 
 	RoleArn         string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
 	SessionDuration int32  `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
@@ -189,13 +189,6 @@ func (i *awsSaml) Validate() error {
 	}
 
 	return nil
-}
-
-func (config *awsSaml) getProfile() string {
-	return config.Identity.Profile
-}
-func (config *awsSaml) getRegion() string {
-	return config.Common.Region
 }
 
 // Login authenticates with the IdP and gets the SAML assertion

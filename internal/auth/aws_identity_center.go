@@ -27,8 +27,8 @@ type ssoAuthStore struct {
 }
 
 type awsIamIdentityCenter struct {
-	Common   schema.IdentityProviderDefaultConfig `yaml:",inline"`
-	Identity schema.Identity                      `yaml:",inline"`
+	Common   schema.ProviderDefaultConfig `yaml:",inline"`
+	Identity schema.Identity              `yaml:",inline"`
 
 	// SSO
 	Role        string `yaml:"role,omitempty" json:"role,omitempty" mapstructure:"role,omitempty"`
@@ -73,7 +73,6 @@ func (config *awsIamIdentityCenter) Login() error {
 	}
 
 	log.Debug("Identity Config", "config", config)
-	//ctx := context.Background()
 	store := authstore.NewKeyringAuthStore()
 	keyringKey := config.Common.Provider
 	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "Provider", config.Common.Provider, "Identity", config.Identity.Identity, "Profile", config.Identity.Profile)
@@ -189,13 +188,6 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 	)
 
 	return nil
-}
-
-func (config *awsIamIdentityCenter) getProfile() string {
-	return config.Identity.Profile
-}
-func (config *awsIamIdentityCenter) getRegion() string {
-	return config.Common.Region
 }
 
 func getAccountsInfo(ctx context.Context, client *sso.Client, token string) ([]types.AccountInfo, error) {

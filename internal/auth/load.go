@@ -11,7 +11,7 @@ import (
 var identityRegistry = map[string]func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error){
 	"aws/iam-identity-center": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
 		var data = &awsIamIdentityCenter{}
-		b, err := yaml.Marshal(config.IdentityProviders[provider])
+		b, err := yaml.Marshal(config.Providers[provider])
 		if err != nil {
 			return nil, err
 		}
@@ -22,7 +22,7 @@ var identityRegistry = map[string]func(provider string, identity string, config 
 	},
 	"aws/saml": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
 		var data = &awsSaml{}
-		b, err := yaml.Marshal(config.IdentityProviders[provider])
+		b, err := yaml.Marshal(config.Providers[provider])
 		if err != nil {
 			return nil, err
 		}
@@ -34,7 +34,7 @@ var identityRegistry = map[string]func(provider string, identity string, config 
 	// Empty - used for AssumeRole - no Provider
 	"": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
 		var data = &awsAssumeRole{}
-		b, err := yaml.Marshal(config.IdentityProviders[provider])
+		b, err := yaml.Marshal(config.Providers[provider])
 		if err != nil {
 			return nil, err
 		}
@@ -46,7 +46,7 @@ var identityRegistry = map[string]func(provider string, identity string, config 
 	//"oidc":                    func() LoginMethod { return &awsSaml{} },
 }
 
-func setDefaults(data *schema.IdentityProviderDefaultConfig, provider string, config schema.AuthConfig) {
+func setDefaults(data *schema.ProviderDefaultConfig, provider string, config schema.AuthConfig) {
 	data.Provider = provider
 	if data.Region == "" {
 		data.Region = config.DefaultRegion
@@ -54,7 +54,7 @@ func setDefaults(data *schema.IdentityProviderDefaultConfig, provider string, co
 }
 
 func GetDefaultIdentity(configuration map[string]any) (string, error) {
-	identityConfigs, err := GetIdentityConfigs(configuration)
+	identityConfigs, err := GetEnabledIdentitiesE(configuration)
 	if err != nil {
 		return "", err
 	}
@@ -74,16 +74,16 @@ func GetDefaultIdentity(configuration map[string]any) (string, error) {
 	return "", errors.New("no default identity found")
 }
 
-func GetIdentityProviderConfigs(config schema.AuthConfig) (map[string]schema.IdentityProviderDefaultConfig, error) {
-	identityConfigs := make(map[string]schema.IdentityProviderDefaultConfig)
-	for k, _ := range config.IdentityProviders {
-		rawBytes, err := yaml.Marshal(config.IdentityProviders[k])
+func GetProviderConfigs(config schema.AuthConfig) (map[string]schema.ProviderDefaultConfig, error) {
+	identityConfigs := make(map[string]schema.ProviderDefaultConfig)
+	for k, _ := range config.Providers {
+		rawBytes, err := yaml.Marshal(config.Providers[k])
 		if err != nil {
 			l.Errorf("failed to marshal identity %q: %w", k, err)
 			return nil, err
 		}
 
-		identityConfig := &schema.IdentityProviderDefaultConfig{}
+		identityConfig := &schema.ProviderDefaultConfig{}
 		if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
 			l.Errorf("failed to unmarshal identity %q: %w", k, err)
 			return nil, err
@@ -94,7 +94,7 @@ func GetIdentityProviderConfigs(config schema.AuthConfig) (map[string]schema.Ide
 	return identityConfigs, nil
 }
 
-func GetIdentityConfigs(identityMap map[string]any) (map[string]schema.Identity, error) {
+func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identity, error) {
 	identityConfigs := make(map[string]schema.Identity)
 	for k, v := range identityMap {
 		rawBytes, err := yaml.Marshal(v)
@@ -116,9 +116,31 @@ func GetIdentityConfigs(identityMap map[string]any) (map[string]schema.Identity,
 
 	return identityConfigs, nil
 }
+func GetEnabledIdentities(identityMap map[string]any) map[string]schema.Identity {
+	identityConfigs, err := GetEnabledIdentitiesE(identityMap)
+	if err != nil {
+		l.Errorf("failed to get enabled identities: %w", err)
+		return nil
+	}
+	return identityConfigs
+}
+
+func GetEnabledIdentitiesE(identityMap map[string]any) (map[string]schema.Identity, error) {
+	identityConfigs, err := GetAllIdentityConfigs(identityMap)
+	if err != nil {
+		return nil, err
+	}
+	filteredIdentities := make(map[string]schema.Identity)
+	for k, v := range identityConfigs {
+		if v.Enabled {
+			filteredIdentities[k] = v
+		}
+	}
+	return filteredIdentities, nil
+}
 
 func GetType(identityProviderName string, config schema.AuthConfig) (string, error) {
-	identityConfigs, err := GetIdentityProviderConfigs(config)
+	identityConfigs, err := GetProviderConfigs(config)
 	if err != nil {
 		return "", err
 	}
@@ -126,7 +148,7 @@ func GetType(identityProviderName string, config schema.AuthConfig) (string, err
 }
 
 func GetIdp(identity string, config schema.AuthConfig) (string, error) {
-	identityConfigs, err := GetIdentityConfigs(config.Identities)
+	identityConfigs, err := GetAllIdentityConfigs(config.Identities)
 	if err != nil {
 		return "", err
 	}

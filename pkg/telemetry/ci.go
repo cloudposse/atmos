@@ -66,9 +66,9 @@ func isEnvVarTrue(key string) bool {
 	return isEnvVarEquals(key, "true")
 }
 
-// isCI determines if the current environment is a CI/CD environment.
+// IsCI determines if the current environment is a CI/CD environment.
 // Returns true if CI=true or if a specific CI provider is detected.
-func isCI() bool {
+func IsCI() bool {
 	return isEnvVarTrue(ciEnvVar) || ciProvider() != ""
 }
 

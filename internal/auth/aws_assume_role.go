@@ -13,8 +13,8 @@ import (
 )
 
 type awsAssumeRole struct {
-	Common   schema.IdentityProviderDefaultConfig `yaml:",inline"`
-	Identity schema.Identity                      `yaml:",inline"`
+	Common   schema.ProviderDefaultConfig `yaml:",inline"`
+	Identity schema.Identity              `yaml:",inline"`
 
 	RoleArn         string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
 	SessionDuration int32  `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
@@ -36,13 +36,6 @@ func (i *awsAssumeRole) Validate() error {
 	}
 
 	return nil
-}
-
-func (config *awsAssumeRole) getProfile() string {
-	return config.Identity.Profile
-}
-func (config *awsAssumeRole) getRegion() string {
-	return config.Common.Region
 }
 
 // Login verifies AWS credentials are available in the default profile
