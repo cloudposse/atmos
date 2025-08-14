@@ -71,6 +71,10 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	planInfo := *info
 	planInfo.SubCommand = "plan"
 
+	// Process templates and Atmos YAML functions in the plan command.
+	planInfo.ProcessTemplates = true
+	planInfo.ProcessFunctions = true
+
 	// Filter out --orig and --new flags from AdditionalArgsAndFlags
 	planArgs := filterPlanDiffFlags(info.AdditionalArgsAndFlags)
 
