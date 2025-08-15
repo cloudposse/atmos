@@ -1,15 +1,30 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 
+	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/git"
+	git "github.com/cloudposse/atmos/pkg/git"
 	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
+)
+
+// Error variables for pro package.
+var (
+	ErrComponentAndStackRequired = errors.New("both '--component' and '--stack' flag must be provided")
+	ErrFailedToGetLocalRepo      = errors.New("failed to get local repository")
+	ErrFailedToGetRepoInfo       = errors.New("failed to get repository info")
+	ErrFailedToCreateAPIClient   = errors.New("failed to create API client")
+	ErrFailedToProcessArgs       = errors.New("failed to process command line arguments")
+	ErrFailedToInitConfig        = errors.New("failed to initialize CLI config")
+	ErrFailedToCreateLogger      = errors.New("failed to create logger")
+	ErrFailedToGetComponentFlag  = errors.New("failed to get component flag")
+	ErrFailedToGetStackFlag      = errors.New("failed to get stack flag")
 )
 
 type ProLockUnlockCmdArgs struct {
@@ -32,35 +47,35 @@ type ProUnlockCmdArgs struct {
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToProcessArgs, err)
 	}
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToInitConfig, err)
 	}
 
 	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateLogger, err)
 	}
 
 	flags := cmd.Flags()
 
 	component, err := flags.GetString("component")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetComponentFlag, err)
 	}
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetStackFlag, err)
 	}
 
 	if component == "" || stack == "" {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf("both '--component' and '--stack' flag must be provided")
+		return ProLockUnlockCmdArgs{}, ErrComponentAndStackRequired
 	}
 
 	result := ProLockUnlockCmdArgs{
@@ -121,7 +136,7 @@ func parseUnlockCliArgs(cmd *cobra.Command, args []string) (ProUnlockCmdArgs, er
 	return result, nil
 }
 
-// ExecuteProLockCommand executes `atmos pro lock` command
+// ExecuteProLockCommand executes `atmos pro lock` command.
 func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 	a, err := parseLockCliArgs(cmd, args)
 	if err != nil {
@@ -130,12 +145,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return err
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return err
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -148,14 +163,14 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		Properties:  nil,
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAPIClient, err)
 	}
 
 	lock, err := apiClient.LockStack(dto)
 	if err != nil {
-		return err
+		return fmt.Errorf(cfg.ErrFormatString, pro.ErrFailedToLockStack, err)
 	}
 
 	a.Logger.Info("Stack successfully locked.\n")
@@ -175,12 +190,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return err
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return err
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -190,17 +205,69 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		Key: fmt.Sprintf("%s/%s/%s/%s", owner, repoName, a.Stack, a.Component),
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAPIClient, err)
 	}
 
 	_, err = apiClient.UnlockStack(dto)
 	if err != nil {
-		return err
+		return fmt.Errorf(cfg.ErrFormatString, pro.ErrFailedToUnlockStack, err)
 	}
 
 	a.Logger.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
 
 	return nil
+}
+
+// uploadDeploymentStatus uploads the terraform results to the pro API.
+func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+	// Only upload if exit code is 0 (no changes) or 2 (changes)
+	if exitCode != 0 && exitCode != 2 {
+		return nil
+	}
+
+	// Get the git repository info
+	repoInfo, err := gitRepo.GetLocalRepo()
+	if err != nil {
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetLocalRepo, err)
+	}
+
+	// Create the DTO
+	dto := dtos.DeploymentStatusUploadRequest{
+		RepoURL:   repoInfo.RepoUrl,
+		RepoName:  repoInfo.RepoName,
+		RepoOwner: repoInfo.RepoOwner,
+		RepoHost:  repoInfo.RepoHost,
+		Stack:     info.Stack,
+		Component: info.Component,
+		HasDrift:  exitCode == 2,
+	}
+
+	// Upload the deployment status
+	if err := client.UploadDeploymentStatus(&dto); err != nil {
+		return fmt.Errorf(cfg.ErrFormatString, pro.ErrFailedToUploadDeploymentStatus, err)
+	}
+
+	return nil
+}
+
+// shouldUploadDeploymentStatus determines if deployment status should be uploaded.
+func shouldUploadDeploymentStatus(info *schema.ConfigAndStacksInfo) bool {
+	// Only upload for plan command
+	if info.SubCommand != "plan" {
+		return false
+	}
+
+	// Check if pro is enabled in component settings
+	if proSettings, ok := info.ComponentSettingsSection["pro"].(map[string]interface{}); ok {
+		if enabled, ok := proSettings["enabled"].(bool); ok && enabled {
+			return true
+		}
+	}
+
+	// Log warning if pro is not enabled
+	log.Warn("Pro is not enabled. Skipping upload of Terraform result.")
+
+	return false
 }
