@@ -47,7 +47,7 @@ func (config *awsIamIdentityCenter) Validate() error {
 		return fmt.Errorf("url is required for AWS IAM Identity Center")
 	}
 
-	if config.Identity.Profile == "" {
+	if config.Common.Profile == "" {
 		return fmt.Errorf("profile is required for AWS IAM Identity Center")
 	}
 
@@ -69,7 +69,7 @@ func (config *awsIamIdentityCenter) Login() error {
 	log.Debug("Identity Config", "config", config)
 	store := authstore.NewKeyringAuthStore()
 	keyringKey := config.Common.Provider
-	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "Provider", config.Common.Provider, "Identity", config.Identity.Identity, "Profile", config.Identity.Profile)
+	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "Provider", config.Common.Provider, "Identity", config.Identity.Identity, "Profile", config.Common.Profile)
 
 	var credentials ssoAuthStore
 	// Check if we already have a valid token
@@ -168,7 +168,7 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 
 	// Write credentials to AWS credentials file
 	WriteAwsCredentials(
-		config.Identity.Profile,
+		config.Common.Profile,
 		*roleCredentials.RoleCredentials.AccessKeyId,
 		*roleCredentials.RoleCredentials.SecretAccessKey,
 		*roleCredentials.RoleCredentials.SessionToken,
@@ -176,7 +176,7 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 	)
 
 	log.Info("✅ Successfully assumed role! Credentials written to ~/.aws/credentials",
-		"profile", config.Identity.Profile,
+		"profile", config.Common.Profile,
 		"account", accountId,
 		"role", roleName,
 	)
@@ -216,7 +216,7 @@ func getAccountRoles(ctx context.Context, client *sso.Client, token, accountID s
 }
 
 func (i *awsIamIdentityCenter) Logout() error {
-	return RemoveAwsCredentials(i.Identity.Profile)
+	return RemoveAwsCredentials(i.Common.Profile)
 }
 
 func RoleToAccountId(role string) string {

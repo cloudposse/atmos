@@ -947,9 +947,11 @@ type AuthConfig struct {
 type ProviderDefaultConfig struct {
 	Provider string
 
-	Type   string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
-	Url    string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
-	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
+	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
+	Url  string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
+	// AWS Specific
+	Region  string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
+	Profile string `yaml:"profile,omitempty" json:"profile,omitempty" mapstructure:"profile,omitempty"`
 }
 
 type Identity struct {
@@ -960,6 +962,5 @@ type Identity struct {
 	Idp     string `yaml:"idp,omitempty" json:"idp,omitempty" mapstructure:"idp,omitempty"`
 
 	// AWS Specific
-	Profile string `yaml:"profile,omitempty" json:"profile,omitempty" mapstructure:"profile,omitempty"`
 	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
 }

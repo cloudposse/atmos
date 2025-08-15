@@ -63,7 +63,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 		if err != nil {
 			return err
 		}
-		//info.ComponentEnvSection["AWS_PROFILE"] = identityInstance.getProfile()
+		//info.ComponentEnvSection["AWS_PROFILE"] = identityInstance.Profile()
 		return ValidateLoginAssumeRole(identityInstance)
 	}
 

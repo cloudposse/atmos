@@ -183,7 +183,7 @@ func (i *awsSaml) Validate() error {
 		return fmt.Errorf("url is required for AWS SAML")
 	}
 
-	if i.Identity.Profile == "" {
+	if i.Common.Profile == "" {
 		return fmt.Errorf("profile is required for AWS SAML")
 	}
 
@@ -311,7 +311,7 @@ func (i *awsSaml) AssumeRole() error {
 	}
 
 	WriteAwsCredentials(
-		i.Identity.Profile,
+		i.Common.Profile,
 		aws.ToString(credsOut.AccessKeyId),
 		aws.ToString(credsOut.SecretAccessKey),
 		aws.ToString(credsOut.SessionToken),
@@ -320,14 +320,14 @@ func (i *awsSaml) AssumeRole() error {
 
 	log.Info("✅ Assumed role with SAML",
 		"role", targetRole.RoleARN,
-		"profile", i.Identity.Profile,
+		"profile", i.Common.Profile,
 		"expires", aws.ToTime(credsOut.Expiration))
 
 	return nil
 }
 
 func (i *awsSaml) Logout() error {
-	return RemoveAwsCredentials(i.Identity.Profile)
+	return RemoveAwsCredentials(i.Common.Profile)
 }
 
 // ensure saml2aws browser storage dir exists so storageState.json can be saved

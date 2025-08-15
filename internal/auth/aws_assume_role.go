@@ -25,9 +25,9 @@ func (i *awsAssumeRole) Validate() error {
 		return fmt.Errorf("role_arn is required for AWS assume role")
 	}
 
-	if i.Identity.Profile == "" {
-		return fmt.Errorf("profile is required for AWS assume role")
-	}
+	//if i.Common.Profile == "" {
+	//	return fmt.Errorf("profile is required for AWS assume role")
+	//}
 
 	// Set default region if not specified
 	if i.Common.Region == "" {
@@ -62,8 +62,8 @@ func (i *awsAssumeRole) Login() error {
 
 	// If we're assuming a role, we need to make sure we're properly loading the source profile
 	// The source profile comes from the identity's profile
-	if i.Identity.Profile != "" {
-		opts = append(opts, config.WithSharedConfigProfile(i.Identity.Profile))
+	if i.Common.Profile != "" {
+		opts = append(opts, config.WithSharedConfigProfile(i.Common.Profile))
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, opts...)
@@ -103,8 +103,8 @@ func (i *awsAssumeRole) AssumeRole() error {
 	opts = append(opts, config.WithRegion(i.Common.Region))
 
 	// If we're assuming a role, we need to make sure we're properly loading the source profile
-	if i.Identity.Profile != "" {
-		opts = append(opts, config.WithSharedConfigProfile(i.Identity.Profile))
+	if i.Common.Profile != "" {
+		opts = append(opts, config.WithSharedConfigProfile(i.Common.Profile))
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, opts...)
@@ -143,7 +143,7 @@ func (i *awsAssumeRole) AssumeRole() error {
 	// Write credentials to the AWS credentials file
 	if result.Credentials != nil {
 		WriteAwsCredentials(
-			i.Identity.Profile,
+			i.Common.Profile,
 			aws.ToString(result.Credentials.AccessKeyId),
 			aws.ToString(result.Credentials.SecretAccessKey),
 			aws.ToString(result.Credentials.SessionToken),
@@ -151,7 +151,7 @@ func (i *awsAssumeRole) AssumeRole() error {
 		)
 		log.Info("✅ Successfully assumed role",
 			"role", i.RoleArn,
-			"profile", i.Identity.Profile,
+			"profile", i.Common.Profile,
 			"expires", result.Credentials.Expiration.Local().Format(time.RFC1123),
 		)
 		return nil
@@ -162,5 +162,5 @@ func (i *awsAssumeRole) AssumeRole() error {
 
 func (i *awsAssumeRole) Logout() error {
 	// Remove the credentials from the AWS credentials file
-	return RemoveAwsCredentials(i.Identity.Profile)
+	return RemoveAwsCredentials(i.Common.Profile)
 }
