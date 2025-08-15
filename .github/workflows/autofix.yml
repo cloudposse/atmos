@@ -30,7 +30,7 @@ jobs:
       # gofumpt
       - name: Get changed Go files
         id: changed-files
-        uses: tj-actions/changed-files@e7b157b1c4ad44acfc8d9be14b8cd8f5058636e3 # v45.0.6
+        uses: tj-actions/changed-files@f963b3f3562b00b6d2dd25efc390eb04e51ef6c6 # v45.0.6
         with:
           use_rest_api: "true"
           files: |
@@ -43,4 +43,4 @@ jobs:
           gofumpt -l -w $ALL_CHANGED_FILES
         
 
-      - uses: autofix-ci/action@2891949f3779a1cafafae1523058501de3d4e944 # v1.3.1
+      - uses: autofix-ci/action@635ffb0c9798bd160680f18fd73371e355b85f27 # v1.3.2
