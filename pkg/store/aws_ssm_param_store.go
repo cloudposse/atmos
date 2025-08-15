@@ -15,12 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-// Error format constants.
-const (
-	errWrapFormat       = "%w: %w"
-	errWrapFormatWithID = "%w '%s': %w"
-)
-
 // SSMStore is an implementation of the Store interface for AWS SSM Parameter Store.
 type SSMStore struct {
 	client         SSMClient

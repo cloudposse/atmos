@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// Define custom log levels for testing
+// Define custom log levels for testing.
 // Using charmbracelet/log package level constants.
 var (
 	// Standard levels from the charmbracelet/log package.
@@ -123,7 +123,7 @@ func TestNewArtifactoryStore(t *testing.T) {
 	}
 }
 
-func TestArtifactoryStore_GetKey(t *testing.T) {
+func TestArtifactoryStore_getKey(t *testing.T) {
 	delimiter := "/"
 	store := &ArtifactoryStore{
 		prefix:         "prefix",
@@ -414,7 +414,7 @@ func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
 	}
 }
 
-// Custom mock client for GetKey tests that can return different file contents
+// Custom mock client for GetKey tests that can return different file contents.
 type MockArtifactoryClientForGetKey struct {
 	mock.Mock
 	fileContent []byte
@@ -454,7 +454,7 @@ func (m *MockArtifactoryClientForGetKey) UploadFiles(options artifactory.UploadS
 	return args.Int(0), args.Int(1), args.Error(2)
 }
 
-func TestArtifactoryStore_GetKeyDirect(t *testing.T) {
+func TestArtifactoryStore_GetKey(t *testing.T) {
 	tests := []struct {
 		name          string
 		key           string

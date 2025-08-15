@@ -11,9 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// errFormat is the format string used for wrapping errors with additional context.
-const errFormat = "%w: %v"
-
 type RedisStore struct {
 	prefix         string
 	redisClient    RedisClient
@@ -26,8 +23,7 @@ type RedisStoreOptions struct {
 	URL            *string `mapstructure:"url"`
 }
 
-// RedisClient interface allows us to mock the Redis Client in test with only the methods we are using in the
-// RedisStore.
+// RedisClient interface allows us to mock the Redis Client in test with only the methods we are using in the RedisStore.
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
