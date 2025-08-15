@@ -191,7 +191,7 @@ func TestArtifactoryStore_getKey(t *testing.T) {
 	}
 }
 
-func TestArtifactoryStore_SetKey(t *testing.T) {
+func TestArtifactoryStore_Set(t *testing.T) {
 	tests := []struct {
 		name      string
 		stack     string
