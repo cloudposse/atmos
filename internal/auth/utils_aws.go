@@ -3,6 +3,8 @@ package auth
 import (
 	"bytes"
 	"fmt"
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,19 +14,32 @@ import (
 	"gopkg.in/ini.v1"
 )
 
+const (
+	AwsConfigFilePerm = 0644
+)
+
+func SetAwsEnvVars(info *schema.ConfigAndStacksInfo, profile, provider string) error {
+	if profile == "" {
+		return fmt.Errorf("profile is required")
+	}
+	info.ComponentEnvSection["AWS_PROFILE"] = profile
+	configFilePath, err := GetAwsAtmosConfigFilepath(provider)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvSection["AWS_CONFIG_FILE"] = configFilePath //GetAwsAtmosConfigFilepath
+
+	return nil
+}
+
 func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken, identity string) error {
 	if profile == "" {
 		return fmt.Errorf("profile is required")
 	}
 
-	// Figure out where to write ~/.aws/credentials
-	targetPath := os.Getenv("AWS_SHARED_CREDENTIALS_FILE")
-	if targetPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("resolve home dir: %w", err)
-		}
-		targetPath = filepath.Join(home, ".aws", "credentials")
+	targetPath, err := GetAwsCredentialsFilepath()
+	if err != nil {
+		return err
 	}
 
 	// Ensure parent dir exists
@@ -38,7 +53,7 @@ func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken, id
 		Loose:               true, // don't error if file doesn't exist
 	}
 	var f *ini.File
-	var err error
+	err = nil
 	if _, statErr := os.Stat(targetPath); statErr == nil {
 		f, err = ini.LoadSources(loadOpts, targetPath)
 		if err != nil {
@@ -81,6 +96,34 @@ func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken, id
 
 	log.Debug("Updated AWS credentials", "profile", profile, "path", targetPath)
 	return nil
+}
+
+func GetAwsCredentialsFilepath() (string, error) {
+	// Figure out where to write ~/.aws/credentials
+	targetPath := os.Getenv("AWS_SHARED_CREDENTIALS_FILE")
+	if targetPath == "" {
+		homeDir, err := homedir.Dir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home dir: %w", err)
+		}
+		targetPath = filepath.Join(homeDir, ".aws", "credentials")
+	}
+	return targetPath, nil
+}
+
+func GetAwsAtmosConfigFilepath(provider string) (string, error) {
+	// Figure out where to write ~/.aws/credentials
+	targetPath := os.Getenv("ATMOS_AWS_CONFIG_FILE")
+	if targetPath == "" {
+		homeDir, err := homedir.Dir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home dir: %w", err)
+		}
+		targetPath = filepath.Join(homeDir, ".aws", "atmos", provider, "config")
+		_ = os.MkdirAll(targetPath, AwsConfigFilePerm)
+
+	}
+	return targetPath, nil
 }
 
 // RemoveAwsCredentials removes a specific AWS profile from the credentials file.

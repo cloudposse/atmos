@@ -215,6 +215,11 @@ func getAccountRoles(ctx context.Context, client *sso.Client, token, accountID s
 	return roles, nil
 }
 
+func (i *awsIamIdentityCenter) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
+	log.Info("Setting AWS environment variables")
+	return SetAwsEnvVars(info, i.Common.Profile, i.Common.Provider)
+}
+
 func (i *awsIamIdentityCenter) Logout() error {
 	return RemoveAwsCredentials(i.Common.Profile)
 }

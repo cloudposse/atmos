@@ -160,6 +160,10 @@ func (i *awsAssumeRole) AssumeRole() error {
 	return fmt.Errorf("no credentials returned when assuming role %s", i.RoleArn)
 }
 
+func (i *awsAssumeRole) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
+	return SetAwsEnvVars(info, i.Common.Profile, i.Common.Provider)
+}
+
 func (i *awsAssumeRole) Logout() error {
 	// Remove the credentials from the AWS credentials file
 	return RemoveAwsCredentials(i.Common.Profile)

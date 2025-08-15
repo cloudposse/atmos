@@ -326,6 +326,10 @@ func (i *awsSaml) AssumeRole() error {
 	return nil
 }
 
+func (i *awsSaml) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
+	return SetAwsEnvVars(info, i.Common.Profile, i.Common.Provider)
+}
+
 func (i *awsSaml) Logout() error {
 	return RemoveAwsCredentials(i.Common.Profile)
 }

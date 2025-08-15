@@ -80,13 +80,13 @@ func GetProviderConfigs(config schema.AuthConfig) (map[string]schema.ProviderDef
 	for k, _ := range config.Providers {
 		rawBytes, err := yaml.Marshal(config.Providers[k])
 		if err != nil {
-			l.Errorf("failed to marshal identity %q: %w", k, err)
+			l.Errorf("failed to marshal identity %q: %v", k, err)
 			return nil, err
 		}
 
 		identityConfig := &schema.ProviderDefaultConfig{}
 		if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
-			l.Errorf("failed to unmarshal identity %q: %w", k, err)
+			l.Errorf("failed to unmarshal identity %q: %v", k, err)
 			return nil, err
 		}
 		identityConfigs[k] = *identityConfig
@@ -100,7 +100,7 @@ func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identi
 	for k, v := range identityMap {
 		rawBytes, err := yaml.Marshal(v)
 		if err != nil {
-			l.Errorf("failed to marshal identity %q: %w", k, err)
+			l.Errorf("failed to marshal identity %q: %v", k, err)
 			return nil, err
 		}
 
@@ -109,7 +109,7 @@ func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identi
 			Enabled: true,
 		}
 		if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
-			l.Errorf("failed to unmarshal identity %q: %w", k, err)
+			l.Errorf("failed to unmarshal identity %q: %v", k, err)
 			return nil, err
 		}
 		identityConfigs[k] = *identityConfig
@@ -120,7 +120,7 @@ func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identi
 func GetEnabledIdentities(identityMap map[string]any) map[string]schema.Identity {
 	identityConfigs, err := GetEnabledIdentitiesE(identityMap)
 	if err != nil {
-		l.Errorf("failed to get enabled identities: %w", err)
+		l.Errorf("failed to get enabled identities: %v", err)
 		return nil
 	}
 	return identityConfigs

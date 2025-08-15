@@ -18,7 +18,7 @@ const (
 // error, this function will return that error wrapped in a error with a
 // descriptive message.
 // Furthermore, this is used as a "Shared Pre-Run" function for the Login Interface
-func ValidateLoginAssumeRole(IdentityInstance LoginMethod) error {
+func ValidateLoginAssumeRole(IdentityInstance LoginMethod, atmosConfig schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	if err := IdentityInstance.Validate(); err != nil {
 		return fmt.Errorf("identity validation error: %w", err)
 	}
@@ -27,6 +27,9 @@ func ValidateLoginAssumeRole(IdentityInstance LoginMethod) error {
 	}
 	if err := IdentityInstance.AssumeRole(); err != nil {
 		return fmt.Errorf("identity assume role failed: %w", err)
+	}
+	if err := IdentityInstance.SetEnvVars(info); err != nil {
+		return fmt.Errorf("identity set env vars failed: %w", err)
 	}
 	return nil
 }
@@ -63,8 +66,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 		if err != nil {
 			return err
 		}
-		//info.ComponentEnvSection["AWS_PROFILE"] = identityInstance.Profile()
-		return ValidateLoginAssumeRole(identityInstance)
+		return ValidateLoginAssumeRole(identityInstance, atmosConfig, info)
 	}
 
 	return nil
@@ -115,5 +117,5 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return ValidateLoginAssumeRole(IdentityInstance)
+	return ValidateLoginAssumeRole(IdentityInstance, atmosConfig, nil)
 }
