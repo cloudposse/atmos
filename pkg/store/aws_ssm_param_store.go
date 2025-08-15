@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -11,12 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-)
-
-// Error format constants.
-const (
-	errWrapFormat       = "%w: %w"
-	errWrapFormatWithID = "%w '%s': %w"
 )
 
 // SSMStore is an implementation of the Store interface for AWS SSM Parameter Store.
@@ -143,7 +138,7 @@ func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config
 }
 
 // Set stores a key-value pair in AWS SSM Parameter Store.
-func (s *SSMStore) Set(stack string, component string, key string, value interface{}) error {
+func (s *SSMStore) Set(stack string, component string, key string, value any) error {
 	if stack == "" {
 		return ErrEmptyStack
 	}
@@ -200,8 +195,8 @@ func (s *SSMStore) Set(stack string, component string, key string, value interfa
 	return nil
 }
 
-// Get retrieves a value by key from AWS SSM Parameter Store.
-func (s *SSMStore) Get(stack string, component string, key string) (interface{}, error) {
+// Get retrieves a value by key for an Atmos component in a stack from AWS SSM Parameter Store.
+func (s *SSMStore) Get(stack string, component string, key string) (any, error) {
 	if stack == "" {
 		return nil, ErrEmptyStack
 	}
@@ -220,7 +215,7 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
-	// Assume read role if specified
+	// Assume the read role if specified
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assume read role: %w", err)
@@ -229,7 +224,7 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 	// Use the same client if no role was assumed
 	client := s.client
 	if s.readRoleArn != nil {
-		// Create SSM client with assumed role if applicable
+		// Create SSM client with the assumed role if applicable
 		if s.newSSMClient != nil {
 			client = s.newSSMClient(*cfg)
 		} else {
@@ -246,7 +241,64 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 	}
 
 	// Try to unmarshal the value as JSON
-	var result interface{}
+	var result any
+	//nolint:nilerr // Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party parameters that might not be JSON-encoded
+	if err := json.Unmarshal([]byte(*output.Parameter.Value), &result); err != nil {
+		// If it's not valid JSON, return the raw string value
+		return *output.Parameter.Value, nil
+	}
+
+	return result, nil
+}
+
+// GetKey retrieves a value by key from AWS SSM Parameter Store.
+func (s *SSMStore) GetKey(key string) (any, error) {
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
+	ctx := context.TODO()
+
+	// Use the key directly as the parameter name
+	paramName := key
+
+	// If the prefix is set, prepend it to the key
+	if s.prefix != "" {
+		paramName = s.prefix + "/" + key
+	}
+
+	// Ensure the parameter name starts with "/" for SSM
+	if !strings.HasPrefix(paramName, "/") {
+		paramName = "/" + paramName
+	}
+
+	// Assume the read role if specified
+	cfg, err := s.assumeRole(ctx, s.readRoleArn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to assume read role: %w", err)
+	}
+
+	// Use the same client if no role was assumed
+	client := s.client
+	if s.readRoleArn != nil {
+		// Create an SSM client with the assumed role if applicable
+		if s.newSSMClient != nil {
+			client = s.newSSMClient(*cfg)
+		} else {
+			client = ssm.NewFromConfig(*cfg)
+		}
+	}
+
+	// Get the parameter from SSM Parameter Store
+	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
+		Name: aws.String(paramName),
+	})
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
+	}
+
+	// Try to unmarshal the value as JSON
+	var result any
 	//nolint:nilerr // Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party parameters that might not be JSON-encoded
 	if err := json.Unmarshal([]byte(*output.Parameter.Value), &result); err != nil {
 		// If it's not valid JSON, return the raw string value

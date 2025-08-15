@@ -11,9 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// errFormat is the format string used for wrapping errors with additional context.
-const errFormat = "%w: %v"
-
 type RedisStore struct {
 	prefix         string
 	redisClient    RedisClient
@@ -26,8 +23,7 @@ type RedisStoreOptions struct {
 	URL            *string `mapstructure:"url"`
 }
 
-// RedisClient interface allows us to mock the Redis Client in test with only the methods we are using in the
-// RedisStore.
+// RedisClient interface allows us to mock the Redis Client in test with only the methods we are using in the RedisStore.
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
@@ -151,4 +147,47 @@ func (s *RedisStore) Set(stack string, component string, key string, value inter
 	err = s.redisClient.Set(ctx, paramName, jsonData, 0).Err()
 
 	return err
+}
+
+func (s *RedisStore) GetKey(key string) (interface{}, error) {
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
+	// Use the key directly as the Redis key
+	redisKey := key
+
+	// If prefix is set, prepend it to the key
+	if s.prefix != "" {
+		redisKey = s.prefix + ":" + key
+	}
+
+	// Get the value from Redis
+	resp := s.redisClient.Get(context.Background(), redisKey)
+	if resp.Err() != nil {
+		if resp.Err().Error() == "redis: nil" {
+			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, redisKey, resp.Err())
+		}
+		return nil, fmt.Errorf(errFormat, ErrGetParameter, resp.Err())
+	}
+
+	value := resp.Val()
+	if value == "" {
+		return "", nil
+	}
+
+	// Try to unmarshal as JSON first, fallback to string if it fails.
+	var result interface{}
+	if unmarshalErr := json.Unmarshal([]byte(value), &result); unmarshalErr != nil {
+		// If JSON unmarshaling fails, return as string.
+		// Intentionally ignoring JSON unmarshal error to fall back to string
+		//nolint:nilerr
+		return value, nil
+	}
+	return result, nil
+}
+
+// RedisClient returns the underlying Redis client for testing purposes.
+func (s *RedisStore) RedisClient() RedisClient {
+	return s.redisClient
 }
