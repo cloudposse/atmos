@@ -42,7 +42,7 @@ func extractPipeParams(parts []string, input string) (defaultValue *string, quer
 }
 
 func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
-	log.Debug("Executing Atmos YAML function", function, input)
+	log.Debug("Executing Atmos YAML function", "function", input)
 	log.Debug("Processing !store.get", "input", input, "tag", u.AtmosYamlFuncStoreGet)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStoreGet)

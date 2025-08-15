@@ -21,7 +21,7 @@ type params struct {
 }
 
 func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
-	log.Debug("Executing Atmos YAML function", function, input)
+	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
