@@ -5,11 +5,11 @@ import (
 	"os"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -286,72 +286,105 @@ func TestDescribeDependentsExec_Execute_DifferentFormatsAndFiles(t *testing.T) {
 }
 
 func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
+	// Environment isolation
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
-
-	log.SetLevel(log.InfoLevel)
-	log.SetOutput(os.Stdout)
-
-	// Capture the starting working directory
+	// Working directory isolation
 	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
+	require.NoError(t, err, "getwd failed")
+	t.Cleanup(func() {
+		_ = os.Chdir(startingDir)
+	})
 
-	defer func() {
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
-	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/depends-on-with-stacks-name-template"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	require.NoErrorf(t, os.Chdir(workDir), "chdir to %q failed", workDir)
 
+	// Init Atmos config
 	configInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
-	assert.NoError(t, err)
+	require.NoError(t, err, "InitCliConfig failed")
 
-	res, err := ExecuteDescribeDependents(
-		&atmosConfig,
-		"vpc",
-		"ue1-network",
-		false,
-	)
-	assert.NoError(t, err)
-
-	expected := []schema.Dependent{
+	// Matrix-driven cases
+	cases := []struct {
+		name      string
+		component string
+		stack     string
+		expected  []schema.Dependent
+	}{
 		{
-			Component:            "tgw/attachment",
-			ComponentType:        "terraform",
-			ComponentPath:        "../../components/terraform/mock",
-			Stack:                "ue1-network",
-			StackSlug:            "ue1-network-tgw-attachment",
-			Dependents:           nil,
-			IncludedInDependents: false,
-			Settings:             nil,
+			name:      "ue1-network-vpc",
+			component: "vpc",
+			stack:     "ue1-network",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-network",
+					StackSlug:     "ue1-network-tgw-attachment",
+				},
+				{
+					Component:     "tgw/hub",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-network",
+					StackSlug:     "ue1-network-tgw-hub",
+				},
+			},
 		},
 		{
-			Component:            "tgw/hub",
-			ComponentType:        "terraform",
-			ComponentPath:        "../../components/terraform/mock",
-			Stack:                "ue1-network",
-			StackSlug:            "ue1-network-tgw-hub",
-			Dependents:           nil,
-			IncludedInDependents: false,
-			Settings:             nil,
+			name:      "uw2-network-vpc",
+			component: "vpc",
+			stack:     "uw2-network",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-network",
+					StackSlug:     "uw2-network-tgw-attachment",
+				},
+			},
+		},
+		{
+			name:      "ue1-prod-vpc",
+			component: "vpc",
+			stack:     "ue1-prod",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-prod",
+					StackSlug:     "ue1-prod-tgw-attachment",
+				},
+			},
+		},
+		{
+			name:      "uw2-prod-vpc",
+			component: "vpc",
+			stack:     "uw2-prod",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-prod",
+					StackSlug:     "uw2-prod-tgw-attachment",
+				},
+			},
 		},
 	}
-	// Order-agnostic assertion
-	assert.ElementsMatch(t, expected, res)
+
+	for _, tc := range cases {
+		tc := tc // capture
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false)
+			require.NoError(t, err)
+
+			// Order-agnostic equality on struct slices
+			assert.ElementsMatch(t, tc.expected, res)
+		})
+	}
 }
