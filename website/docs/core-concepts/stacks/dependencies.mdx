@@ -213,17 +213,13 @@ components:
       settings:
         depends_on:
           1:
-            # `tgw/cross-region-hub-connector` depends on the `vpc` component
-            # from the same Atmos stack (same tenant, account and region)
-            component: vpc
-          2:
             # `tgw/cross-region-hub-connector` depends on `tgw/hub` components
             # in the same tenant and account, but in `us-east-1` region (`ue1` environment)
             component: tgw/hub
             stack: "{{ .settings.context.tenant }}-ue1-{{ .settings.context.stage }}"
 ```
 
-Execute the following Atmos command to see the component dependencies:
+Execute the following Atmos commands to see the component dependencies:
 
 ```shell
 atmos describe dependents vpc -s tenant1-uw2-dev --pager off
@@ -234,14 +230,29 @@ atmos describe dependents vpc -s tenant1-uw2-dev --pager off
   {
     "component": "tgw/attachment",
     "component_type": "terraform",
-    "stack": "ue1-network",
-    "stack_slug": "ue1-network-tgw-attachment",
+    "stack": "tenant1-uw2-dev",
+    "stack_slug": "tenant1-uw2-dev-tgw-attachment"
+  }
+]
+```
+
+```shell
+atmos describe dependents tgw/hub -s tenant1-ue1-dev --pager off
+```
+
+```json
+[
+  {
+    "component": "tgw/attachment",
+    "component_type": "terraform",
+    "stack": "tenant1-uw2-dev",
+    "stack_slug": "tenant1-uw2-dev-tgw-attachment"
   },
   {
     "component": "tgw/cross-region-hub-connector",
     "component_type": "terraform",
-    "stack": "ue1-network",
-    "stack_slug": "ue1-network-tgw-cross-region-hub-connector",
+    "stack": "tenant1-uw2-dev",
+    "stack_slug": "tenant1-uw2-dev-tgw-cross-region-hub-connector"
   }
 ]
 ```
