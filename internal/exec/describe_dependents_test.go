@@ -460,3 +460,199 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 		})
 	}
 }
+
+func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
+	// Environment isolation
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	// Working directory isolation
+	startingDir, err := os.Getwd()
+	require.NoError(t, err, "getwd failed")
+	t.Cleanup(func() {
+		_ = os.Chdir(startingDir)
+	})
+
+	workDir := "../../tests/fixtures/scenarios/depends-on-with-stacks-name-pattern"
+	require.NoErrorf(t, os.Chdir(workDir), "chdir to %q failed", workDir)
+
+	// Init Atmos config
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
+	require.NoError(t, err, "InitCliConfig failed")
+
+	// Matrix-driven cases
+	cases := []struct {
+		name      string
+		component string
+		stack     string
+		expected  []schema.Dependent
+	}{
+		{
+			name:      "ue1-network-vpc",
+			component: "vpc",
+			stack:     "ue1-network",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-network",
+					StackSlug:     "ue1-network-tgw-attachment",
+					Environment:   "ue1",
+					Stage:         "network",
+				},
+				{
+					Component:     "tgw/hub",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-network",
+					StackSlug:     "ue1-network-tgw-hub",
+					Environment:   "ue1",
+					Stage:         "network",
+				},
+			},
+		},
+		{
+			name:      "uw2-network-vpc",
+			component: "vpc",
+			stack:     "uw2-network",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-network",
+					StackSlug:     "uw2-network-tgw-attachment",
+					Environment:   "uw2",
+					Stage:         "network",
+				},
+			},
+		},
+		{
+			name:      "ue1-prod-vpc",
+			component: "vpc",
+			stack:     "ue1-prod",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-prod",
+					StackSlug:     "ue1-prod-tgw-attachment",
+					Environment:   "ue1",
+					Stage:         "prod",
+				},
+			},
+		},
+		{
+			name:      "uw2-prod-vpc",
+			component: "vpc",
+			stack:     "uw2-prod",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-prod",
+					StackSlug:     "uw2-prod-tgw-attachment",
+					Environment:   "uw2",
+					Stage:         "prod",
+				},
+			},
+		},
+		{
+			name:      "ue1-network-tgw-hub",
+			component: "tgw/hub",
+			stack:     "ue1-network",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-network",
+					StackSlug:     "ue1-network-tgw-attachment",
+					Environment:   "ue1",
+					Stage:         "network",
+				},
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-network",
+					StackSlug:     "uw2-network-tgw-attachment",
+					Environment:   "uw2",
+					Stage:         "network",
+				},
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-prod",
+					StackSlug:     "ue1-prod-tgw-attachment",
+					Environment:   "ue1",
+					Stage:         "prod",
+				},
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-prod",
+					StackSlug:     "uw2-prod-tgw-attachment",
+					Environment:   "uw2",
+					Stage:         "prod",
+				},
+				{
+					Component:     "tgw/cross-region-hub-connector",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-network",
+					StackSlug:     "uw2-network-tgw-cross-region-hub-connector",
+					Environment:   "uw2",
+					Stage:         "network",
+				},
+			},
+		},
+		{
+			name:      "uw2-network-tgw-cross-region-hub-connector",
+			component: "tgw/cross-region-hub-connector",
+			stack:     "uw2-network",
+			expected:  []schema.Dependent{},
+		},
+		{
+			name:      "ue1-network-tgw-attachment",
+			component: "tgw/attachment",
+			stack:     "ue1-network",
+			expected:  []schema.Dependent{},
+		},
+		{
+			name:      "uw2-network-tgw-attachment",
+			component: "tgw/attachment",
+			stack:     "uw2-network",
+			expected:  []schema.Dependent{},
+		},
+		{
+			name:      "ue1-prod-tgw-attachment",
+			component: "tgw/attachment",
+			stack:     "ue1-prod",
+			expected:  []schema.Dependent{},
+		},
+		{
+			name:      "uw2-prod-tgw-attachment",
+			component: "tgw/attachment",
+			stack:     "uw2-prod",
+			expected:  []schema.Dependent{},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc // capture
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false)
+			require.NoError(t, err)
+
+			// Order-agnostic equality on struct slices
+			assert.ElementsMatch(t, tc.expected, res)
+		})
+	}
+}

@@ -223,7 +223,11 @@ func ExecuteDescribeDependents(
 						if stack != dependsOn.Stack {
 							continue
 						}
-					} else if stack != stackName {
+					} else if stack != stackName &&
+						dependsOn.Namespace == "" &&
+						dependsOn.Tenant == "" &&
+						dependsOn.Environment == "" &&
+						dependsOn.Stage == "" {
 						continue
 					}
 
