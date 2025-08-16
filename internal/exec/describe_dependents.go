@@ -7,6 +7,7 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -96,6 +97,10 @@ func ExecuteDescribeDependents(
 	stack string,
 	includeSettings bool,
 ) ([]schema.Dependent, error) {
+	if atmosConfig == nil {
+		return nil, errUtils.ErrAtmosConfigIsNil
+	}
+
 	dependents := []schema.Dependent{}
 	var ok bool
 
