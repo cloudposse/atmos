@@ -6,6 +6,8 @@ id: dependencies
 ---
 
 
+
+
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -46,6 +48,9 @@ Each object in the `settings.depends_on` section has the following schema:
     <dt>component <em>(required if `file` or `folder` is not specified)</em></dt>
     <dd>an Atmos component that the current component depends on</dd>
 
+    <dt>stack <em>(optional)</em></dt>
+    <dd>The Atmos stack where the `component` is provisioned</dd>
+
     <dt>namespace <em>(optional)</em></dt>
     <dd>The `namespace` where the `component` is provisioned</dd>
 
@@ -61,48 +66,62 @@ Each object in the `settings.depends_on` section has the following schema:
 
 One of `component`, `file` or `folder` is required.
 
-The `component` attribute is required. The rest are the context variables and are used to define Atmos stacks other than the current stack.
+If `component` is specified, you can provide the other context variables to define an Atmos stack other than the current stack.
+
 For example, you can specify:
 
+- `stack` if the `component` is from a different Atmos stack
 - `namespace` if the `component` is from a different Organization
 - `tenant` if the `component` is from a different Organizational Unit
 - `environment` if the `component` is from a different region
 - `stage` if the `component` is from a different account
 - `tenant`, `environment` and `stage` if the component is from a different Atmos stack (e.g. `tenant1-ue2-dev`)
 
+:::info
+If `stack` is specified, it's processed first and the `namespace`, `tenant`, `environment` and `stage` attributes are ignored.
+:::
+
 ## Examples
 
-In the following example, we specify that the `top-level-component1` component depends on the following:
+In the following example, we specify that the `component1` component depends on the following:
 
-- The `test/test-component-override` component in the same Atmos stack
-- The `test/test-component` component in Atmos stacks in the `dev` stage
-- The `my-component` component from the `tenant1-ue2-staging` Atmos stack
+- The `component2` component in the same Atmos stack
+- The `component3` component from the `dev` stage
+- The `component4` component from the `tenant1` tenant, `ue2` environment and `staging` stage (`tenant1-ue2-staging` Atmos stack)
+- The `component5` component from the `tenant1-ue2-prod` Atmos stack
 
 ```yaml
 components:
   terraform:
-    top-level-component1:
+    component1:
       settings:
         depends_on:
           1:
-            # If the `context` (namespace, tenant, environment, stage) is not provided,
-            # the `component` is from the same Atmos stack as this component
-            component: "test/test-component-override"
+            # If the context (`stack`, `namespace`, `tenant`, `environment`, `stage`) is not
+            # provided, the `component` is from the same Atmos stack as `component1`
+            component: "component2"
           2:
-            # This component (in any stage) depends on `test/test-component`
+            # `component1` (in any stage) depends on `component3`
             # from the `dev` stage (in any `environment` and any `tenant`)
-            component: "test/test-component"
+            component: "component3"
             stage: "dev"
           3:
-            # This component depends on `my-component`
+            # `component1` depends on `component4`
             # from the `tenant1-ue2-staging` Atmos stack
-            component: "my-component"
+            component: "component4"
             tenant: "tenant1"
             environment: "ue2"
             stage: "staging"
+          4:
+            # `component1` depends on `component5`
+            # from the `tenant1-ue2-prod` Atmos stack
+            component: "component5"
+            stack: "tenant1-ue2-prod"
       vars:
         enabled: true
 ```
+
+## Specifying `stack`
 
 :::tip
 
