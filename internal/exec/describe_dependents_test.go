@@ -2,12 +2,17 @@ package exec
 
 import (
 	"errors"
+	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/pager"
-	"github.com/cloudposse/atmos/pkg/schema"
+	log "github.com/charmbracelet/log"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestNewDescribeDependentsExec(t *testing.T) {
@@ -279,4 +284,54 @@ func TestDescribeDependentsExec_Execute_DifferentFormatsAndFiles(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
+}
+
+func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	}
+
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
+
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err = os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "../../tests/fixtures/scenarios/depends-on-with-stacks-name-template"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
+	assert.NoError(t, err)
+
+	res, err := ExecuteDescribeDependents(
+		&atmosConfig,
+		"vpc",
+		"ue1-network",
+		true,
+	)
+	assert.NoError(t, err)
+
+	val, err := u.EvaluateYqExpression(&atmosConfig, res, ".vars.ami_tags.SourceAMI")
+	assert.Nil(t, err)
+	assert.Equal(t, "ami-0013ceeff668b979b", val)
 }

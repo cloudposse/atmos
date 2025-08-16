@@ -221,7 +221,7 @@ func ExecuteDescribeDependents(
 								continue
 							}
 						} else {
-							// Find the stack from the `stacks.name_template` in `atmos.yaml`
+							// Calculate the stack name from the `stacks.name_template` in `atmos.yaml`
 							stackNameTemplate := GetStackNameTemplate(atmosConfig)
 							dependsOnStack, err := ProcessTmpl("depends-on-stack-name-template", stackNameTemplate, providedComponentSection, false)
 							if err != nil {
