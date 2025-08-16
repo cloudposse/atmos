@@ -30,6 +30,6 @@ components:
       settings:
         depends_on:
           1:
-            # `tgw/attachment` depends on the `tgw/hub` components in the same account in `us-east-1` region
+            # `tgw/cross-region-hub-connector` depends on the `tgw/hub` components in the same account in `us-east-1` region
             component: tgw/hub
             environment: ue1

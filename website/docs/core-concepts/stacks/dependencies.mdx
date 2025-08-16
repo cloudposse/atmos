@@ -8,6 +8,10 @@ id: dependencies
 
 
 
+
+
+
+
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -81,16 +85,29 @@ For example, you can specify:
 If `stack` is specified, it's processed first and the `namespace`, `tenant`, `environment` and `stage` attributes are ignored.
 :::
 
+:::tip
+You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in `depends_on`.
+Atmos processes the templates first, and then detects all the dependencies, allowing you to provide the parameters to
+`depends_on` dynamically.
+:::
+
 ## Examples
 
 In the following example, we specify that the `component1` component depends on the following:
 
-- The `component2` component in the same Atmos stack
-- The `component3` component from the `dev` stage
+- The `component2` component in the same Atmos stack as `component1`
+- The `component3` component from the `prod` stage
 - The `component4` component from the `tenant1` tenant, `ue2` environment and `staging` stage (`tenant1-ue2-staging` Atmos stack)
 - The `component5` component from the `tenant1-ue2-prod` Atmos stack
+- The `component6` component from the same Atmos stack as `component1`
+- The `component7` component from the same tenant and stage as `component1`, but `uw2` environment
 
 ```yaml
+vars:
+  tenant: "tenant1"
+  environment: "ue1"
+  stage: "dev"
+
 components:
   terraform:
     component1:
@@ -102,12 +119,13 @@ components:
             component: "component2"
           2:
             # `component1` (in any stage) depends on `component3`
-            # from the `dev` stage (in any `environment` and any `tenant`)
+            # from the `prod` stage (in any `environment` and any `tenant`)
             component: "component3"
-            stage: "dev"
+            stage: "prod"
           3:
             # `component1` depends on `component4`
-            # from the `tenant1-ue2-staging` Atmos stack
+            # from the the `tenant1` tenant, `ue2` environment and `staging` stage
+            # (`tenant1-ue2-staging` Atmos stack)
             component: "component4"
             tenant: "tenant1"
             environment: "ue2"
@@ -117,11 +135,116 @@ components:
             # from the `tenant1-ue2-prod` Atmos stack
             component: "component5"
             stack: "tenant1-ue2-prod"
+          5:
+            # `component1` depends on `component6`
+            # from the same Atmos stack
+            component: "component6"
+            stack: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+          6:
+            # `component1` depends on `component7`
+            # from the same tenant and stage as `component1`, but `uw2` environment
+            component: "component7"
+            stack: "{{ .vars.tenant }}-uw2-{{ .vars.stage }}"
       vars:
         enabled: true
 ```
 
 ## Specifying `stack`
+
+The `stack` attribute has higher precedence than the other context variables.
+If `stack` is specified, the `namespace`, `tenant`, `environment` and `stage` attributes are ignored.
+
+As you can see in the examples above, we can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `stack` attribute to dynamically specify the stack.
+
+This is useful when configuring
+[`stacks.name_template` in `atmos.yaml`](/core-concepts/projects/configuration/#stack-names-slugs) to define and refer to stacks.
+In this case, you can't use the context variables `namespace`, `tenant`, `environment` and `stage` in `depends_on`.
+
+For example, in `atmos.yaml`, we specify `stacks.name_template` to define Atmos stacks, and enable templating:
+
+```yaml
+stacks:
+  base_path: "stacks"
+  name_template: "{{ .settings.context.tenant }}-{{ .settings.context.environment }}-{{ .settings.context.stage }}"
+
+# `Go` templates in Atmos manifests
+templates:
+  settings:
+    enabled: true
+```
+
+:::note
+In this example, stacks are defined by the `settings.context` section, not `vars`.
+:::
+
+In the `tenant1-uw2-dev` Atmos stack, we can use the following `depends_on` configuration to define the component dependencies:
+
+```yaml
+settings:
+  context:
+    tenant: "tenant1"
+    environment: "uw2"
+    stage: "dev"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        enabled: true
+
+    tgw/attachment:
+      settings:
+        depends_on:
+          1:
+            # `tgw/attachment` depends on the `vpc` component
+            # from the same Atmos stack (same tenant, account and region)
+            component: vpc
+            # NOTE: The same stack can be specified by using exactly the same template as in
+            # `stacks.name_template` in `atmos.yaml`, but it's not required and not recommended.
+            # If the dependent component is from the same stack, just omit the `stack` attribute completely.
+            # stack: "{{ .settings.context.tenant }}-{{ .settings.context.environment }}-{{ .settings.context.stage }}"
+          2:
+            # `tgw/attachment` depends on the `tgw/hub` components
+            # from the same tenant and account, but in `us-east-1` region (`ue1` environment)
+            component: tgw/hub
+            stack: "{{ .settings.context.tenant }}-ue1-{{ .settings.context.stage }}"
+
+    tgw/cross-region-hub-connector:
+      settings:
+        depends_on:
+          1:
+            # `tgw/cross-region-hub-connector` depends on the `vpc` component
+            # from the same Atmos stack (same tenant, account and region)
+            component: vpc
+          2:
+            # `tgw/cross-region-hub-connector` depends on `tgw/hub` components
+            # in the same tenant and account, but in `us-east-1` region (`ue1` environment)
+            component: tgw/hub
+            stack: "{{ .settings.context.tenant }}-ue1-{{ .settings.context.stage }}"
+```
+
+Execute the following Atmos command to see the component dependencies:
+
+```shell
+atmos describe dependents vpc -s tenant1-uw2-dev --pager off
+```
+
+```json
+[
+  {
+    "component": "tgw/attachment",
+    "component_type": "terraform",
+    "stack": "ue1-network",
+    "stack_slug": "ue1-network-tgw-attachment",
+  },
+  {
+    "component": "tgw/cross-region-hub-connector",
+    "component_type": "terraform",
+    "stack": "ue1-network",
+    "stack_slug": "ue1-network-tgw-cross-region-hub-connector",
+  }
+]
+```
 
 :::tip
 
