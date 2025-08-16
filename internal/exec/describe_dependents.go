@@ -210,59 +210,65 @@ func ExecuteDescribeDependents(
 						continue
 					}
 
-					// Include the component if any of the following is true:
-					// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`
-					// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`
-					if dependsOn.Stack != "" {
-						if stack != dependsOn.Stack {
-							continue
-						}
-					} else if stack != stackComponentVars.Stack {
-						continue
+					// Handle the case when `name_template` is specified in `atmos.yaml`.
+					if atmosConfig.Stacks.NameTemplate != "" {
+						// Include the component if any of the following is true:
+						// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`
+						// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`
+						//if dependsOn.Stack != "" {
+						//	if stack != dependsOn.Stack {
+						//		continue
+						//	}
+						//} else if stack != stackComponentVars.Stack {
+						//	continue
+						//}
 					}
 
-					// Include the component from the stack if any of the following is true:
-					// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`
-					// - `namespace` is not specified in `depends_on` and the provided component is from the same namespace as the component in `depends_on`
-					if dependsOn.Namespace != "" {
-						if providedComponentVars.Namespace != dependsOn.Namespace {
+					// Handle the case when  `name_pattern` is specified in `atmos.yaml`.
+					if atmosConfig.Stacks.NameTemplate == "" && atmosConfig.Stacks.NamePattern != "" {
+						// Include the component from the stack if any of the following is true:
+						// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`
+						// - `namespace` is not specified in `depends_on` and the provided component is from the same namespace as the component in `depends_on`
+						if dependsOn.Namespace != "" {
+							if providedComponentVars.Namespace != dependsOn.Namespace {
+								continue
+							}
+						} else if providedComponentVars.Namespace != stackComponentVars.Namespace {
 							continue
 						}
-					} else if providedComponentVars.Namespace != stackComponentVars.Namespace {
-						continue
-					}
 
-					// Include the component from the stack if any of the following is true:
-					// - `tenant` is specified in `depends_on` and the provided component's tenant is equal to the tenant in `depends_on`
-					// - `tenant` is not specified in `depends_on` and the provided component is from the same tenant as the component in `depends_on`
-					if dependsOn.Tenant != "" {
-						if providedComponentVars.Tenant != dependsOn.Tenant {
+						// Include the component from the stack if any of the following is true:
+						// - `tenant` is specified in `depends_on` and the provided component's tenant is equal to the tenant in `depends_on`
+						// - `tenant` is not specified in `depends_on` and the provided component is from the same tenant as the component in `depends_on`
+						if dependsOn.Tenant != "" {
+							if providedComponentVars.Tenant != dependsOn.Tenant {
+								continue
+							}
+						} else if providedComponentVars.Tenant != stackComponentVars.Tenant {
 							continue
 						}
-					} else if providedComponentVars.Tenant != stackComponentVars.Tenant {
-						continue
-					}
 
-					// Include the component from the stack if any of the following is true:
-					// - `environment` is specified in `depends_on` and the component's environment is equal to the environment in `depends_on`
-					// - `environment` is not specified in `depends_on` and the provided component is from the same environment as the component in `depends_on`
-					if dependsOn.Environment != "" {
-						if providedComponentVars.Environment != dependsOn.Environment {
+						// Include the component from the stack if any of the following is true:
+						// - `environment` is specified in `depends_on` and the component's environment is equal to the environment in `depends_on`
+						// - `environment` is not specified in `depends_on` and the provided component is from the same environment as the component in `depends_on`
+						if dependsOn.Environment != "" {
+							if providedComponentVars.Environment != dependsOn.Environment {
+								continue
+							}
+						} else if providedComponentVars.Environment != stackComponentVars.Environment {
 							continue
 						}
-					} else if providedComponentVars.Environment != stackComponentVars.Environment {
-						continue
-					}
 
-					// Include the component from the stack if any of the following is true:
-					// - `stage` is specified in `depends_on` and the provided component's stage is equal to the stage in `depends_on`
-					// - `stage` is not specified in `depends_on` and the provided component is from the same stage as the component in `depends_on`
-					if dependsOn.Stage != "" {
-						if providedComponentVars.Stage != dependsOn.Stage {
+						// Include the component from the stack if any of the following is true:
+						// - `stage` is specified in `depends_on` and the provided component's stage is equal to the stage in `depends_on`
+						// - `stage` is not specified in `depends_on` and the provided component is from the same stage as the component in `depends_on`
+						if dependsOn.Stage != "" {
+							if providedComponentVars.Stage != dependsOn.Stage {
+								continue
+							}
+						} else if providedComponentVars.Stage != stackComponentVars.Stage {
 							continue
 						}
-					} else if providedComponentVars.Stage != stackComponentVars.Stage {
-						continue
 					}
 
 					dependent := schema.Dependent{
