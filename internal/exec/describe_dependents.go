@@ -216,13 +216,21 @@ func ExecuteDescribeDependents(
 						// Include the component if any of the following is true:
 						// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`
 						// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`
-						//if dependsOn.Stack != "" {
-						//	if stack != dependsOn.Stack {
-						//		continue
-						//	}
-						//} else if stack != stackComponentVars.Stack {
-						//	continue
-						//}
+						if dependsOn.Stack != "" {
+							if stack != dependsOn.Stack {
+								continue
+							}
+						} else {
+							// Find the stack from the `stacks.name_template` in `atmos.yaml`
+							stackNameTemplate := GetStackNameTemplate(atmosConfig)
+							dependsOnStack, err := ProcessTmpl("depends-on-stack-name-template", stackNameTemplate, providedComponentSection, false)
+							if err != nil {
+								return nil, err
+							}
+							if stack != dependsOnStack {
+								continue
+							}
+						}
 					}
 
 					// Handle the case when `stacks.name_pattern` is specified in `atmos.yaml`.
