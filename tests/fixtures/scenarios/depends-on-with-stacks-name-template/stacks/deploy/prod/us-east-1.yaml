@@ -15,20 +15,13 @@ components:
       metadata:
         component: mock
       settings:
-        # `tgw/attachment` depends on the `vpc` and `tgw/hub` components
         depends_on:
           1:
+            # `tgw/attachment` depends on the `vpc` component in the same stack (same account, same region)
             component: vpc
+            # `stack` is optional if it's the same as `stacks.name_template` in `atmos.yaml`
+            # stack: "{{ .settings.context.environment }}-{{ .settings.context.stage }}"
           2:
+            # `tgw/attachment` depends on the `tgw/hub` component in the same region in the `network` account
             component: tgw/hub
-
-    tgw/cross-region-hub-connector:
-      metadata:
-        component: mock
-      settings:
-        # `tgw/cross-region-hub-connector` depends on the `vpc` and `tgw/hub` components
-        depends_on:
-          1:
-            component: vpc
-          2:
-            component: tgw/hub
+            stack: "{{ .settings.context.environment }}-network"
