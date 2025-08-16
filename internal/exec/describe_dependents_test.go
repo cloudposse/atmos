@@ -3,13 +3,14 @@ package exec
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -305,6 +306,9 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
 	require.NoError(t, err, "InitCliConfig failed")
 
+	// Build an OS-specific expected path once
+	componentPath := filepath.Join("..", "..", "components", "terraform", "mock")
+
 	// Matrix-driven cases
 	cases := []struct {
 		name      string
@@ -320,14 +324,14 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-network",
 					StackSlug:     "ue1-network-tgw-attachment",
 				},
 				{
 					Component:     "tgw/hub",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-network",
 					StackSlug:     "ue1-network-tgw-hub",
 				},
@@ -341,7 +345,7 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-network",
 					StackSlug:     "uw2-network-tgw-attachment",
 				},
@@ -355,7 +359,7 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-prod",
 					StackSlug:     "ue1-prod-tgw-attachment",
 				},
@@ -369,7 +373,7 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-prod",
 					StackSlug:     "uw2-prod-tgw-attachment",
 				},
@@ -383,35 +387,35 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-network",
 					StackSlug:     "ue1-network-tgw-attachment",
 				},
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-network",
 					StackSlug:     "uw2-network-tgw-attachment",
 				},
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-prod",
 					StackSlug:     "ue1-prod-tgw-attachment",
 				},
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-prod",
 					StackSlug:     "uw2-prod-tgw-attachment",
 				},
 				{
 					Component:     "tgw/cross-region-hub-connector",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-network",
 					StackSlug:     "uw2-network-tgw-cross-region-hub-connector",
 				},
@@ -481,6 +485,9 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
 	require.NoError(t, err, "InitCliConfig failed")
 
+	// Build an OS-specific expected path once
+	componentPath := filepath.Join("..", "..", "components", "terraform", "mock")
+
 	// Matrix-driven cases
 	cases := []struct {
 		name      string
@@ -496,7 +503,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-network",
 					StackSlug:     "ue1-network-tgw-attachment",
 					Environment:   "ue1",
@@ -505,7 +512,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/hub",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-network",
 					StackSlug:     "ue1-network-tgw-hub",
 					Environment:   "ue1",
@@ -521,7 +528,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-network",
 					StackSlug:     "uw2-network-tgw-attachment",
 					Environment:   "uw2",
@@ -537,7 +544,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-prod",
 					StackSlug:     "ue1-prod-tgw-attachment",
 					Environment:   "ue1",
@@ -553,7 +560,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-prod",
 					StackSlug:     "uw2-prod-tgw-attachment",
 					Environment:   "uw2",
@@ -569,7 +576,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-network",
 					StackSlug:     "ue1-network-tgw-attachment",
 					Environment:   "ue1",
@@ -578,7 +585,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-network",
 					StackSlug:     "uw2-network-tgw-attachment",
 					Environment:   "uw2",
@@ -587,7 +594,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "ue1-prod",
 					StackSlug:     "ue1-prod-tgw-attachment",
 					Environment:   "ue1",
@@ -596,7 +603,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/attachment",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-prod",
 					StackSlug:     "uw2-prod-tgw-attachment",
 					Environment:   "uw2",
@@ -605,7 +612,7 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 				{
 					Component:     "tgw/cross-region-hub-connector",
 					ComponentType: "terraform",
-					ComponentPath: "../../components/terraform/mock",
+					ComponentPath: componentPath,
 					Stack:         "uw2-network",
 					StackSlug:     "uw2-network-tgw-cross-region-hub-connector",
 					Environment:   "uw2",
