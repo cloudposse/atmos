@@ -9,17 +9,9 @@ components:
     vpc:
       metadata:
         component: mock
-      vars:
-        tags:
-          # Team `network` manages the `vpc` component
-          team: network
     eks/cluster:
       metadata:
         component: mock
-      vars:
-        tags:
-          # Team `eks` manages the `eks/cluster` component
-          team: eks
       settings:
         depends_on:
           # `eks/cluster` depends on the `vpc` component
@@ -28,10 +20,6 @@ components:
     eks/external-dns:
       metadata:
         component: mock
-      vars:
-        tags:
-          # Team `eks` manages the `eks/external-dns` component
-          team: eks
       settings:
         depends_on:
           # `eks/external-dns` depends on the `eks/cluster` component
@@ -40,10 +28,6 @@ components:
     eks/karpenter:
       metadata:
         component: mock
-      vars:
-        tags:
-          # Team `eks` manages the `eks/karpenter` component
-          team: eks
       settings:
         depends_on:
           # `eks/karpenter` depends on the `eks/cluster` component
@@ -52,10 +36,6 @@ components:
     eks/karpenter-node-pool:
       metadata:
         component: mock
-      vars:
-        tags:
-          # Team `eks` manages the `eks/karpenter-node-pool` component
-          team: eks
       settings:
         # `eks/karpenter-node-pool` depends on the `eks/cluster` and `eks/karpenter` components
         depends_on:
@@ -63,45 +43,3 @@ components:
             component: eks/cluster
           2:
             component: eks/karpenter
-    eks/istio/base:
-      metadata:
-        component: mock
-      vars:
-        tags:
-          # Team `istio` manages the `eks/istio/base` component
-          team: istio
-      settings:
-        # `eks/istio/base` depends on the `eks/cluster` component
-        depends_on:
-          1:
-            component: eks/cluster
-    eks/istio/istiod:
-      metadata:
-        component: mock
-      vars:
-        tags:
-          # Team `istio` manages the `eks/istio/istiod` component
-          team: istio
-      settings:
-        # `eks/istio/istiod` depends on the `eks/cluster` and `eks/istio/base` components
-        depends_on:
-          1:
-            component: eks/cluster
-          2:
-            component: eks/istio/base
-    eks/istio/test-app:
-      metadata:
-        component: mock
-      vars:
-        tags:
-          # Team `istio` manages the `eks/istio/test-app` component
-          team: istio
-      settings:
-        # `eks/istio/test-app` depends on the `eks/cluster`, `eks/istio/istiod` and `eks/istio/base` components
-        depends_on:
-          1:
-            component: eks/cluster
-          2:
-            component: eks/istio/istiod
-          3:
-            component: eks/istio/base
