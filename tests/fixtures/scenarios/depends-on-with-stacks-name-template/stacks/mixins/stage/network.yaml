@@ -2,4 +2,4 @@
 
 settings:
   context:
-    stage: nonprod
+    stage: network

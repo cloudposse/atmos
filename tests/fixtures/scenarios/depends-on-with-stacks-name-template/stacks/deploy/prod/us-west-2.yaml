@@ -6,40 +6,27 @@ import:
 
 components:
   terraform:
+
     vpc:
       metadata:
         component: mock
-    eks/cluster:
+
+    tgw/hub:
       metadata:
         component: mock
       settings:
         depends_on:
-          # `eks/cluster` depends on the `vpc` component
+          # `tgw/hub` depends on the `vpc` component in the same stack (same account, same region)
           1:
             component: vpc
-    eks/external-dns:
+
+    tgw/attachment:
       metadata:
         component: mock
       settings:
-        depends_on:
-          # `eks/external-dns` depends on the `eks/cluster` component
-          1:
-            component: eks/cluster
-    eks/karpenter:
-      metadata:
-        component: mock
-      settings:
-        depends_on:
-          # `eks/karpenter` depends on the `eks/cluster` component
-          1:
-            component: eks/cluster
-    eks/karpenter-node-pool:
-      metadata:
-        component: mock
-      settings:
-        # `eks/karpenter-node-pool` depends on the `eks/cluster` and `eks/karpenter` components
+        # `tgw/attachment` depends on the `vpc` and `tgw/hub` components in the same stack (same account, same region)
         depends_on:
           1:
-            component: eks/cluster
+            component: vpc
           2:
-            component: eks/karpenter
+            component: tgw/hub

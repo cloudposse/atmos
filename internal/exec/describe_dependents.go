@@ -44,6 +44,7 @@ type describeDependentsExec struct {
 	) (any, error)
 }
 
+// NewDescribeDependentsExec creates a new `describe dependents` executor.
 func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeDependentsExec {
 	return &describeDependentsExec{
 		executeDescribeDependents: ExecuteDescribeDependents,
@@ -88,7 +89,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 	})
 }
 
-// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
+// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 func ExecuteDescribeDependents(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
@@ -210,7 +211,7 @@ func ExecuteDescribeDependents(
 						continue
 					}
 
-					// Handle the case when `name_template` is specified in `atmos.yaml`.
+					// Handle the case when `stacks.name_template` is specified in `atmos.yaml`.
 					if atmosConfig.Stacks.NameTemplate != "" {
 						// Include the component if any of the following is true:
 						// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`
@@ -224,7 +225,7 @@ func ExecuteDescribeDependents(
 						//}
 					}
 
-					// Handle the case when  `name_pattern` is specified in `atmos.yaml`.
+					// Handle the case when `stacks.name_pattern` is specified in `atmos.yaml`.
 					if atmosConfig.Stacks.NameTemplate == "" && atmosConfig.Stacks.NamePattern != "" {
 						// Include the component from the stack if any of the following is true:
 						// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`

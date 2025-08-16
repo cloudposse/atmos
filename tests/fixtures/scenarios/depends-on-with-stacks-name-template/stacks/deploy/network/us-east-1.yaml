@@ -2,7 +2,7 @@
 
 import:
   - mixins/region/us-east-1
-  - mixins/stage/prod
+  - mixins/stage/network
 
 components:
   terraform:
@@ -11,22 +11,22 @@ components:
       metadata:
         component: mock
 
+    tgw/hub:
+      metadata:
+        component: mock
+      settings:
+        depends_on:
+          # `tgw/hub` depends on the `vpc` component in the same stack (same account, same region)
+          1:
+            component: vpc
+            # `stack` template is optional if it's the same as `stacks.name_template` in `atmos.yaml`
+            stack: "{{ .settings.context.environment }}-{{ .settings.context.stage }}"
+
     tgw/attachment:
       metadata:
         component: mock
       settings:
-        # `tgw/attachment` depends on the `vpc` and `tgw/hub` components
-        depends_on:
-          1:
-            component: vpc
-          2:
-            component: tgw/hub
-
-    tgw/cross-region-hub-connector:
-      metadata:
-        component: mock
-      settings:
-        # `tgw/cross-region-hub-connector` depends on the `vpc` and `tgw/hub` components
+        # `tgw/attachment` depends on the `vpc` and `tgw/hub` components in the same stack (same account, same region)
         depends_on:
           1:
             component: vpc
