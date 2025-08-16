@@ -227,7 +227,7 @@ func ExecuteDescribeDependents(
 							if err != nil {
 								return nil, err
 							}
-							if stack != dependsOnStack {
+							if stackName != dependsOnStack {
 								continue
 							}
 						}

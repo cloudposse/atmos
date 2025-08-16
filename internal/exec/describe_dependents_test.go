@@ -12,7 +12,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestNewDescribeDependentsExec(t *testing.T) {
@@ -327,11 +326,32 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 		&atmosConfig,
 		"vpc",
 		"ue1-network",
-		true,
+		false,
 	)
 	assert.NoError(t, err)
 
-	val, err := u.EvaluateYqExpression(&atmosConfig, res, ".vars.ami_tags.SourceAMI")
-	assert.Nil(t, err)
-	assert.Equal(t, "ami-0013ceeff668b979b", val)
+	expected := []schema.Dependent{
+		{
+			Component:            "tgw/attachment",
+			ComponentType:        "terraform",
+			ComponentPath:        "../../components/terraform/mock",
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-tgw-attachment",
+			Dependents:           nil,
+			IncludedInDependents: false,
+			Settings:             nil,
+		},
+		{
+			Component:            "tgw/hub",
+			ComponentType:        "terraform",
+			ComponentPath:        "../../components/terraform/mock",
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-tgw-hub",
+			Dependents:           nil,
+			IncludedInDependents: false,
+			Settings:             nil,
+		},
+	}
+	// Order-agnostic assertion
+	assert.ElementsMatch(t, expected, res)
 }
