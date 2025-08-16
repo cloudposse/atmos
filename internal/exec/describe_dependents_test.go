@@ -375,6 +375,78 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:      "ue1-network-tgw-hub",
+			component: "tgw/hub",
+			stack:     "ue1-network",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-network",
+					StackSlug:     "ue1-network-tgw-attachment",
+				},
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-network",
+					StackSlug:     "uw2-network-tgw-attachment",
+				},
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "ue1-prod",
+					StackSlug:     "ue1-prod-tgw-attachment",
+				},
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-prod",
+					StackSlug:     "uw2-prod-tgw-attachment",
+				},
+				{
+					Component:     "tgw/cross-region-hub-connector",
+					ComponentType: "terraform",
+					ComponentPath: "../../components/terraform/mock",
+					Stack:         "uw2-network",
+					StackSlug:     "uw2-network-tgw-cross-region-hub-connector",
+				},
+			},
+		},
+		{
+			name:      "uw2-network-tgw-cross-region-hub-connector",
+			component: "tgw/cross-region-hub-connector",
+			stack:     "uw2-network",
+			expected:  []schema.Dependent{},
+		},
+		{
+			name:      "ue1-network-tgw-attachment",
+			component: "tgw/attachment",
+			stack:     "ue1-network",
+			expected:  []schema.Dependent{},
+		},
+		{
+			name:      "uw2-network-tgw-attachment",
+			component: "tgw/attachment",
+			stack:     "uw2-network",
+			expected:  []schema.Dependent{},
+		},
+		{
+			name:      "ue1-prod-tgw-attachment",
+			component: "tgw/attachment",
+			stack:     "ue1-prod",
+			expected:  []schema.Dependent{},
+		},
+		{
+			name:      "uw2-prod-tgw-attachment",
+			component: "tgw/attachment",
+			stack:     "uw2-prod",
+			expected:  []schema.Dependent{},
+		},
 	}
 
 	for _, tc := range cases {
