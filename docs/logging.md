@@ -1,7 +1,41 @@
 
-# Go Log Levels
+# Logging Guidelines
 
-This rubric provides guidance on how to use log levels (`LogWarn`, `LogError`, `LogTrace`, `LogDebug`, `LogFatal`) consistently.
+This document explains how we log events in Atmos. It covers the
+difference between writing to the terminal (TextUI) and writing logs,
+outlines our log levels, and introduces structured and semantic
+logging.
+
+## TextUI vs. Logging
+
+The terminal window is effectively a text-based user interface (TextUI)
+for our CLI. Anything intended for user interaction—menus, prompts,
+animations—should be rendered to the terminal as UI output.
+
+Logging is different: logs are structured records of what the program is
+doing. They help developers debug issues and feed into telemetry or
+monitoring systems. Treat logging like sending messages to the developer
+console in a browser, not to the UI seen by the user.
+
+Keeping TextUI output and logging separate ensures we don't mix user
+interface concerns with operational telemetry.
+
+Atmos provides `utils.PrintfMessageToTUI` for writing TextUI messages.
+It always writes to `stderr` so that `stdout` can remain a clean data
+stream (for example, JSON output that may be piped to another command).
+Avoid using `fmt.Println` or `fmt.Printf` for UI output because they
+default to `stdout` and can corrupt piped data. Log functions such as
+`log.Info` or `log.Error` are not meant for TextUI and may be silenced
+via log level configuration. See
+[structured-logging.md](structured-logging.md) for guidance on composing
+well-structured log messages.
+
+---
+
+## Go Log Levels
+
+This rubric provides guidance on how to use log levels (`LogWarn`,
+`LogError`, `LogTrace`, `LogDebug`, `LogFatal`) consistently.
 
 ---
 
@@ -122,6 +156,19 @@ This rubric provides guidance on how to use log levels (`LogWarn`, `LogError`, `
 - ```console
   "Fatal error: Database connection failed. Application shutting down."
   ```
+
+---
+
+## Structured and Semantic Logging
+
+Structured logs record events as key/value pairs so machines and humans
+can parse them. Semantic logging standardizes those keys so logs can be
+understood across tools and teams. Atmos uses the
+[Charm Logger](https://charm.sh/blog/the-charm-logger/) for this
+purpose.
+
+See [structured-logging.md](structured-logging.md) for detailed guidance
+and examples.
 
 ---
 
