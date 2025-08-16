@@ -4,10 +4,13 @@ sidebar_position: 3
 sidebar_label: Define Dependencies
 id: dependencies
 ---
+
+
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos supports configuring the relationships between components in the same or different stacks. You can define dependencies between components to ensure that components are deployed in the correct order.
+    Atmos supports configuring the relationships between components in the same or different stacks. You can define
+    dependencies between components to ensure that components are deployed in the correct order.
 </Intro>
 
 Before deploying components, it's important to consider the dependencies between components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component.
@@ -24,34 +27,36 @@ the same or different stacks) that the current component depends on.
 The `settings.depends_on` section is a map of objects. The map keys are just the descriptions of dependencies and can be strings or numbers. Provide meaningful descriptions or numbering so that people can understand what the dependencies are about.
 
 <details>
-<summary>Why is `settings.depends_on` a map instead of a list?</summary>
+    <summary>Why is `settings.depends_on` a map instead of a list?</summary>
 
-We originally implemented `settings.depends_on` as a list. However, since it’s not clear how lists should be deep-merged, so we decided to convert it to a map instead. In this map, the keys are lexicographically ordered, and based on that order, the dependencies are managed.
+    We originally implemented `settings.depends_on` as a list. However, since it’s not clear how lists should be
+    deep-merged, so we decided to convert it to a map instead. In this map, the keys are lexicographically ordered, and
+    based on that order, the dependencies are managed.
 </details>
 
 Each object in the `settings.depends_on` section has the following schema:
 
 <dl>
-  <dt>file <em>(optional)</em></dt>
-  <dd>A file on the local filesystem that the current component depends on</dd>
+    <dt>file <em>(optional)</em></dt>
+    <dd>A file on the local filesystem that the current component depends on</dd>
 
-  <dt>folder <em>(optional)</em></dt>
-  <dd>A folder on the local filesystem that the current component depends on</dd>
+    <dt>folder <em>(optional)</em></dt>
+    <dd>A folder on the local filesystem that the current component depends on</dd>
 
-  <dt>component <em>(required if `file` or `folder` is not specified)</em></dt>
-  <dd>an Atmos component that the current component depends on</dd>
+    <dt>component <em>(required if `file` or `folder` is not specified)</em></dt>
+    <dd>an Atmos component that the current component depends on</dd>
 
-  <dt>namespace <em>(optional)</em></dt>
-  <dd>The `namespace` where the `component` is provisioned</dd>
+    <dt>namespace <em>(optional)</em></dt>
+    <dd>The `namespace` where the `component` is provisioned</dd>
 
-  <dt>tenant <em>(optional)</em></dt>
-  <dd>The `tenant` where the `component` is provisioned</dd>
+    <dt>tenant <em>(optional)</em></dt>
+    <dd>The `tenant` where the `component` is provisioned</dd>
 
-  <dt>environment <em>(optional)</em></dt>
-  <dd>The `environment` where the `component` is provisioned</dd>
+    <dt>environment <em>(optional)</em></dt>
+    <dd>The `environment` where the `component` is provisioned</dd>
 
-  <dt>stage <em>(optional)</em></dt>
-  <dd>The `stage` where the `component` is provisioned</dd>
+    <dt>stage <em>(optional)</em></dt>
+    <dd>The `stage` where the `component` is provisioned</dd>
 </dl>
 
 One of `component`, `file` or `folder` is required.
@@ -64,6 +69,8 @@ For example, you can specify:
 - `environment` if the `component` is from a different region
 - `stage` if the `component` is from a different account
 - `tenant`, `environment` and `stage` if the component is from a different Atmos stack (e.g. `tenant1-ue2-dev`)
+
+## Examples
 
 In the following example, we specify that the `top-level-component1` component depends on the following:
 
