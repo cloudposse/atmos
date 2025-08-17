@@ -141,11 +141,11 @@ func ExecuteWorkflow(
 			if finalStack != "" {
     			if idx := slices.Index(args, "--"); idx != -1 {
         			// Insert before the "--"
-                    // Take everything up to idx, then add "-s", stack, then tack on the rest
-        			args = append(args[:idx], append([]string{"-s", stack}, args[idx:]...)...)
+                    // Take everything up to idx, then add "-s", finalStack, then tack on the rest
+        			args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
     			} else {
         			// just append at the end
-        			args = append(args, "-s", stack)
+        			args = append(args, []string{"-s", finalStack}...)
    				}
 
 				log.Debug("Using stack", "stack", finalStack)
