@@ -38,13 +38,14 @@ Terraform remote state is incompatible with the `local` backend type. This is be
 </Note>
 
 
-:::tip New & Improved Way to Share Data
-Atmos now supports a new way to share data between components using the template function `atmos.Component`
-and the Atmos YAML function `!terraform.output`
-in your Stack configurations:
+:::tip New & Improved Ways to Share Data
+Atmos now supports new ways to share data between components using the template function `atmos.Component`
+and the Atmos YAML functions `!terraform.state` and `!terraform.output` in your Stack configurations:
 
-```
+```shell
 {{ (atmos.Component <component> <stack>).outputs.<output_name> }}
+
+!terraform.state <component> <stack> <output_name>
 
 !terraform.output <component> <stack> <output_name>
 ```
@@ -54,7 +55,9 @@ of an Atmos component in a stack.
 
 For more details on `atmos.Component` function, refer to [`atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component).
 
-The `!terraform.output` Atmos YAML function allows reading any output (remote state) of an Atmos component in a stack.
+The `!terraform.state` and `!terraform.output` Atmos YAML functions allow reading any output (remote state) of an Atmos component in a stack.
+
+For more details on `!terraform.state` YAML function, refer to [`!terraform.state`](/core-concepts/stacks/yaml-functions/terraform.state).
 
 For more details on `!terraform.output` YAML function, refer to [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output).
 :::

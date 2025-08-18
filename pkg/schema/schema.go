@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/store"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 type AtmosSectionMapType = map[string]any
@@ -42,6 +43,7 @@ type AtmosConfiguration struct {
 	ExcludeStackAbsolutePaths     []string               `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
 	TerraformDirAbsolutePath      string                 `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
 	HelmfileDirAbsolutePath       string                 `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
+	PackerDirAbsolutePath         string                 `yaml:"packerDirAbsolutePath,omitempty" json:"packerDirAbsolutePath,omitempty" mapstructure:"packerDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string               `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string               `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string                 `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
@@ -336,9 +338,15 @@ type Helmfile struct {
 	Command               string `yaml:"command" json:"command" mapstructure:"command"`
 }
 
+type Packer struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+}
+
 type Components struct {
 	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
 }
 
 type Stacks struct {
@@ -373,6 +381,7 @@ type Context struct {
 	File               string `yaml:"file" json:"file" mapstructure:"file"`
 	Folder             string `yaml:"folder" json:"folder" mapstructure:"folder"`
 	TerraformWorkspace string `yaml:"terraform_workspace" json:"terraform_workspace" mapstructure:"terraform_workspace"`
+	Stack              string `yaml:"stack" json:"stack" mapstructure:"stack"`
 }
 
 type VersionCheck struct {
@@ -415,6 +424,8 @@ type ArgsAndFlagsInfo struct {
 	TerraformDir              string
 	HelmfileCommand           string
 	HelmfileDir               string
+	PackerCommand             string
+	PackerDir                 string
 	ConfigDir                 string
 	StacksDir                 string
 	WorkflowsDir              string
@@ -477,6 +488,8 @@ type ConfigAndStacksInfo struct {
 	TerraformDir                  string
 	HelmfileCommand               string
 	HelmfileDir                   string
+	PackerCommand                 string
+	PackerDir                     string
 	ConfigDir                     string
 	StacksDir                     string
 	WorkflowsDir                  string

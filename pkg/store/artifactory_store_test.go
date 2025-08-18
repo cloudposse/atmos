@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// Define custom log levels for testing
+// Define custom log levels for testing.
 // Using charmbracelet/log package level constants.
 var (
 	// Standard levels from the charmbracelet/log package.
@@ -105,11 +105,11 @@ func TestNewArtifactoryStore(t *testing.T) {
 			originalArtToken := os.Getenv("ARTIFACTORY_ACCESS_TOKEN")
 			originalJfrogToken := os.Getenv("JFROG_ACCESS_TOKEN")
 			defer func() {
-				os.Setenv("ARTIFACTORY_ACCESS_TOKEN", originalArtToken)
-				os.Setenv("JFROG_ACCESS_TOKEN", originalJfrogToken)
+				_ = os.Setenv("ARTIFACTORY_ACCESS_TOKEN", originalArtToken)
+				_ = os.Setenv("JFROG_ACCESS_TOKEN", originalJfrogToken)
 			}()
-			os.Unsetenv("ARTIFACTORY_ACCESS_TOKEN")
-			os.Unsetenv("JFROG_ACCESS_TOKEN")
+			_ = os.Unsetenv("ARTIFACTORY_ACCESS_TOKEN")
+			_ = os.Unsetenv("JFROG_ACCESS_TOKEN")
 
 			store, err := NewArtifactoryStore(tt.options)
 			if tt.expectError {
@@ -123,7 +123,7 @@ func TestNewArtifactoryStore(t *testing.T) {
 	}
 }
 
-func TestArtifactoryStore_GetKey(t *testing.T) {
+func TestArtifactoryStore_getKey(t *testing.T) {
 	delimiter := "/"
 	store := &ArtifactoryStore{
 		prefix:         "prefix",
@@ -191,7 +191,7 @@ func TestArtifactoryStore_GetKey(t *testing.T) {
 	}
 }
 
-func TestArtifactoryStore_SetKey(t *testing.T) {
+func TestArtifactoryStore_Set(t *testing.T) {
 	tests := []struct {
 		name      string
 		stack     string

@@ -5,7 +5,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components
+// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
 func ExecuteDescribeStacks(
 	atmosConfig schema.AtmosConfiguration,
 	filterByStack string,
@@ -15,5 +15,16 @@ func ExecuteDescribeStacks(
 	ignoreMissingFiles bool,
 	includeEmptyStacks bool,
 ) (map[string]any, error) {
-	return e.ExecuteDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, true, true, includeEmptyStacks, nil)
+	return e.ExecuteDescribeStacks(
+		&atmosConfig,
+		filterByStack,
+		components,
+		componentTypes,
+		sections,
+		ignoreMissingFiles,
+		true,
+		true,
+		includeEmptyStacks,
+		nil,
+	)
 }

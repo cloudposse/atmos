@@ -66,12 +66,12 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		format = "json"
 	}
 
-	return ExecuteTerraformGenerateVarfiles(atmosConfig, fileTemplate, format, stacks, components)
+	return ExecuteTerraformGenerateVarfiles(&atmosConfig, fileTemplate, format, stacks, components)
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
 func ExecuteTerraformGenerateVarfiles(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	fileTemplate string,
 	format string,
 	stacks []string,
@@ -250,7 +250,7 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
-					&atmosConfig,
+					atmosConfig,
 					&configAndStacksInfo,
 					settingsSectionStruct,
 					"terraform-generate-varfiles",
@@ -274,7 +274,7 @@ func ExecuteTerraformGenerateVarfiles(
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(&atmosConfig, componentSectionConverted, stackName, nil)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)
 				if err != nil {
 					return err
 				}
@@ -320,7 +320,7 @@ func ExecuteTerraformGenerateVarfiles(
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(atmosConfig, fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0o644)
 						if err != nil {
 							return err
 						}

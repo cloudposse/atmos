@@ -46,7 +46,7 @@ func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
 	assert.Nil(t, err)
 
 	err = e.ExecuteAtlantisGenerateRepoConfig(
-		atmosConfig,
+		&atmosConfig,
 		"/dev/stdout",
 		"config-1",
 		"project-1",
@@ -62,7 +62,7 @@ func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
 	assert.Nil(t, err)
 
 	err = e.ExecuteAtlantisGenerateRepoConfig(
-		atmosConfig,
+		&atmosConfig,
 		"/dev/stdout",
 		"",
 		"",
@@ -83,7 +83,7 @@ func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
 	atmosConfig.BasePath = "./tests/fixtures/scenarios/complete"
 
 	err = e.ExecuteAtlantisGenerateRepoConfigAffectedOnly(
-		atmosConfig,
+		&atmosConfig,
 		"/dev/stdout",
 		"",
 		"",

@@ -21,6 +21,9 @@ components:
     helm_aws_profile_pattern: ""
     cluster_name_pattern: ""
     command: ""
+  packer:
+    base_path: ""
+    command: ""
 stacks:
   base_path: stacks
   included_paths:
@@ -61,6 +64,7 @@ includeStackAbsolutePaths:
   - /absolute/path/to/repo/tests/fixtures/scenarios/indentation/stacks/deploy/**/*
 terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
+packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 default: false
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 import: []

@@ -130,6 +130,8 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
 	configAndStacksInfo.All = argsAndFlagsInfo.All
+	configAndStacksInfo.PackerDir = argsAndFlagsInfo.PackerDir
+	configAndStacksInfo.PackerCommand = argsAndFlagsInfo.PackerCommand
 
 	flags := cmd.Flags()
 

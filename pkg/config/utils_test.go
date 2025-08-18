@@ -165,17 +165,127 @@ func Test_processEnvVars(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "test boolean env vars",
+			name: "test stack name and template env vars",
 			envVars: map[string]string{
-				"ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE": "true",
-				"ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT":    "false",
-				"ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE": "true",
+				"ATMOS_STACKS_NAME_PATTERN":  "pattern-{tenant}-{environment}-{stage}",
+				"ATMOS_STACKS_NAME_TEMPLATE": "template-{tenant}-{environment}-{stage}",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				Stacks: schema.Stacks{
+					NamePattern:  "pattern-{tenant}-{environment}-{stage}",
+					NameTemplate: "template-{tenant}-{environment}-{stage}",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "test terraform config env vars",
+			envVars: map[string]string{
+				"ATMOS_COMPONENTS_TERRAFORM_COMMAND":                    "/path/to/terraform",
+				"ATMOS_COMPONENTS_TERRAFORM_BASE_PATH":                  "/terraform/base/path",
+				"ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT":          "true",
+				"ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE": "true",
 			},
 			expectedConfig: schema.AtmosConfiguration{
 				Components: schema.Components{
 					Terraform: schema.Terraform{
-						ApplyAutoApprove: true,
-						DeployRunInit:    false,
+						Command:                 "/path/to/terraform",
+						BasePath:                "/terraform/base/path",
+						AppendUserAgent:         "true",
+						AutoGenerateBackendFile: true,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "test helmfile config env vars",
+			envVars: map[string]string{
+				"ATMOS_COMPONENTS_HELMFILE_COMMAND":                  "/path/to/helmfile",
+				"ATMOS_COMPONENTS_HELMFILE_BASE_PATH":                "/helmfile/base/path",
+				"ATMOS_COMPONENTS_HELMFILE_USE_EKS":                  "true",
+				"ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH":          "/path/to/kubeconfig",
+				"ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN": "{namespace}-{tenant}-{environment}-{stage}-helm-aws-profile",
+				"ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN":     "{namespace}-{tenant}-{environment}-{stage}-cluster",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						Command:               "/path/to/helmfile",
+						BasePath:              "/helmfile/base/path",
+						UseEKS:                true,
+						KubeconfigPath:        "/path/to/kubeconfig",
+						HelmAwsProfilePattern: "{namespace}-{tenant}-{environment}-{stage}-helm-aws-profile",
+						ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-cluster",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "test packer config env vars",
+			envVars: map[string]string{
+				"ATMOS_COMPONENTS_PACKER_COMMAND":   "/path/to/packer",
+				"ATMOS_COMPONENTS_PACKER_BASE_PATH": "/packer/base/path",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Packer: schema.Packer{
+						Command:  "/path/to/packer",
+						BasePath: "/packer/base/path",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "test workflows config env var",
+			envVars: map[string]string{
+				"ATMOS_WORKFLOWS_BASE_PATH": "/workflows/base/path",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				Workflows: schema.Workflows{
+					BasePath: "/workflows/base/path",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "test schema config env vars",
+			envVars: map[string]string{
+				"ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH": "/schemas/jsonschema",
+				"ATMOS_SCHEMAS_OPA_BASE_PATH":        "/schemas/opa",
+				"ATMOS_SCHEMAS_CUE_BASE_PATH":        "/schemas/cue",
+				"ATMOS_SCHEMAS_ATMOS_MANIFEST":       "/schemas/atmos-manifest.json",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				Schemas: map[string]interface{}{
+					"jsonschema": schema.ResourcePath{BasePath: "/schemas/jsonschema"},
+					"opa":        schema.ResourcePath{BasePath: "/schemas/opa"},
+					"cue":        schema.ResourcePath{BasePath: "/schemas/cue"},
+					"atmos":      schema.SchemaRegistry{Manifest: "/schemas/atmos-manifest.json"},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "test boolean env vars",
+			envVars: map[string]string{
+				"ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE":   "true",
+				"ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT":      "false",
+				"ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE": "true",
+				"ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS":       "true",
+				"ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE":   "true",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						ApplyAutoApprove:   true,
+						DeployRunInit:      false,
+						InitRunReconfigure: true,
+						Init: schema.TerraformInit{
+							PassVars: true,
+						},
 						Plan: schema.TerraformPlan{
 							SkipPlanfile: true,
 						},
@@ -278,7 +388,7 @@ func TestFindAllStackConfigsInPaths(t *testing.T) {
 	assert.NoError(t, err)
 
 	_, relativePaths, err := FindAllStackConfigsInPaths(
-		atmosConfig,
+		&atmosConfig,
 		atmosConfig.IncludeStackAbsolutePaths,
 		atmosConfig.ExcludeStackAbsolutePaths,
 	)

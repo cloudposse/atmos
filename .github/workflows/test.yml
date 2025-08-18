@@ -21,6 +21,7 @@ env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
   HELMFILE_VERSION: "v1.1.0"
+  PACKER_VERSION: "1.13.1"
 
 jobs:
   # ensure the code builds...
@@ -139,6 +140,13 @@ jobs:
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
+
+      # https://github.com/hashicorp/setup-packer
+      - name: Install Packer
+        uses: hashicorp/setup-packer@main
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        with:
+          version: ${{ env.PACKER_VERSION }}
 
       # https://github.com/helmfile/helmfile-action
       - name: Install Helmfile
@@ -286,6 +294,12 @@ jobs:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
+      # https://github.com/hashicorp/setup-packer
+      - name: Install Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
@@ -425,6 +439,12 @@ jobs:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
+      # https://github.com/hashicorp/setup-packer
+      - name: Install Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
@@ -497,6 +517,12 @@ jobs:
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
+
+      # https://github.com/hashicorp/setup-packer
+      - name: Install Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@v1

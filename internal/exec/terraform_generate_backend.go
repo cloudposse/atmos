@@ -57,7 +57,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
+	info, err = ProcessStacks(&atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		return err
 	}

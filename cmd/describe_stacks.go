@@ -37,7 +37,7 @@ type getRunnableDescribeStacksCmdProps struct {
 		additionalArgsAndFlags []string,
 	) (schema.ConfigAndStacksInfo, error)
 	initCliConfig                 func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
-	validateStacks                func(atmosConfig schema.AtmosConfiguration) error
+	validateStacks                func(atmosConfig *schema.AtmosConfiguration) error
 	setCliArgsForDescribeStackCli func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error
 	newDescribeStacksExec         exec.DescribeStacksExec
 }
@@ -59,7 +59,7 @@ func getRunnableDescribeStacksCmd(
 			return err
 		}
 
-		err = g.validateStacks(atmosConfig)
+		err = g.validateStacks(&atmosConfig)
 		if err != nil {
 			return err
 		}

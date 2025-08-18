@@ -18,6 +18,7 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 		"",
 		"",
 		"",
+		"",
 		nil,
 		processStackDeps,
 		processComponentDeps,
@@ -69,19 +70,19 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	assert.Equal(t, "orgs/cp/tenant1/_defaults", tenant1Ue2DevTestTestComponentOverrideComponentDeps[8])
 	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", tenant1Ue2DevTestTestComponentOverrideComponentDeps[9])
 
-	assert.Equal(t, 38, len(tenant1Ue2DevTestTestComponentOverrideComponentLabels))
-	assert.Equal(t, "deps:stacks/catalog/terraform/services/service-1-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[26])
-	assert.Equal(t, "deps:stacks/catalog/terraform/services/service-2-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[27])
-	assert.Equal(t, "deps:stacks/catalog/terraform/spacelift-and-backend-override-1.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[28])
-	assert.Equal(t, "deps:stacks/catalog/terraform/test-component.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[29])
-	assert.Equal(t, "deps:stacks/catalog/terraform/test-component-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[30])
-	assert.Equal(t, "deps:stacks/mixins/region/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[31])
-	assert.Equal(t, "deps:stacks/mixins/stage/dev.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[32])
-	assert.Equal(t, "deps:stacks/orgs/cp/_defaults.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[33])
-	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/_defaults.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[34])
-	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/dev/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[35])
-	assert.Equal(t, "folder:component/test/test-component-override", tenant1Ue2DevTestTestComponentOverrideComponentLabels[36])
-	assert.Equal(t, "folder:tenant1/ue2/dev", tenant1Ue2DevTestTestComponentOverrideComponentLabels[37])
+	assert.Equal(t, 39, len(tenant1Ue2DevTestTestComponentOverrideComponentLabels))
+	assert.Equal(t, "deps:stacks/catalog/terraform/services/service-1-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[27])
+	assert.Equal(t, "deps:stacks/catalog/terraform/services/service-2-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[28])
+	assert.Equal(t, "deps:stacks/catalog/terraform/spacelift-and-backend-override-1.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[29])
+	assert.Equal(t, "deps:stacks/catalog/terraform/test-component.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[30])
+	assert.Equal(t, "deps:stacks/catalog/terraform/test-component-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[31])
+	assert.Equal(t, "deps:stacks/mixins/region/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[32])
+	assert.Equal(t, "deps:stacks/mixins/stage/dev.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[33])
+	assert.Equal(t, "deps:stacks/orgs/cp/_defaults.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[34])
+	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/_defaults.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[35])
+	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/dev/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[36])
+	assert.Equal(t, "folder:component/test/test-component-override", tenant1Ue2DevTestTestComponentOverrideComponentLabels[37])
+	assert.Equal(t, "folder:tenant1/ue2/dev", tenant1Ue2DevTestTestComponentOverrideComponentLabels[38])
 
 	newTenant1Ue2DevTestTestComponentOverrideComponent2 := spaceliftStacks["tenant1-ue2-dev-new-component"].(map[string]any)
 	newTenant1Ue2DevTestTestComponentOverrideComponent2InfrastructureStackName := newTenant1Ue2DevTestTestComponentOverrideComponent2["stack"].(string)
@@ -127,6 +128,7 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
+		"",
 		filePaths,
 		processStackDeps,
 		processComponentDeps,
@@ -166,18 +168,18 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 	assert.Equal(t, "orgs/cp/tenant1/_defaults", tenant1Ue2DevTestTestComponentOverrideComponentDeps[8])
 	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", tenant1Ue2DevTestTestComponentOverrideComponentDeps[9])
 
-	assert.Equal(t, 38, len(tenant1Ue2DevTestTestComponentOverrideComponentLabels))
-	assert.Equal(t, "deps:stacks/catalog/terraform/services/service-1-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[26])
-	assert.Equal(t, "deps:stacks/catalog/terraform/services/service-2-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[27])
-	assert.Equal(t, "deps:stacks/catalog/terraform/spacelift-and-backend-override-1.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[28])
-	assert.Equal(t, "deps:stacks/catalog/terraform/test-component.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[29])
-	assert.Equal(t, "deps:stacks/catalog/terraform/test-component-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[30])
-	assert.Equal(t, "deps:stacks/mixins/region/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[31])
-	assert.Equal(t, "deps:stacks/mixins/stage/dev.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[32])
-	assert.Equal(t, "deps:stacks/orgs/cp/_defaults.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[33])
-	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/_defaults.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[34])
-	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/dev/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[35])
-	assert.Equal(t, "folder:component/test/test-component-override", tenant1Ue2DevTestTestComponentOverrideComponentLabels[36])
+	assert.Equal(t, 39, len(tenant1Ue2DevTestTestComponentOverrideComponentLabels))
+	assert.Equal(t, "deps:stacks/catalog/terraform/services/service-1-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[27])
+	assert.Equal(t, "deps:stacks/catalog/terraform/services/service-2-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[28])
+	assert.Equal(t, "deps:stacks/catalog/terraform/spacelift-and-backend-override-1.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[29])
+	assert.Equal(t, "deps:stacks/catalog/terraform/test-component.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[30])
+	assert.Equal(t, "deps:stacks/catalog/terraform/test-component-override.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[31])
+	assert.Equal(t, "deps:stacks/mixins/region/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[32])
+	assert.Equal(t, "deps:stacks/mixins/stage/dev.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[33])
+	assert.Equal(t, "deps:stacks/orgs/cp/_defaults.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[34])
+	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/_defaults.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[35])
+	assert.Equal(t, "deps:stacks/orgs/cp/tenant1/dev/us-east-2.yaml", tenant1Ue2DevTestTestComponentOverrideComponentLabels[36])
+	assert.Equal(t, "folder:component/test/test-component-override", tenant1Ue2DevTestTestComponentOverrideComponentLabels[37])
 
 	yamlSpaceliftStacks, err := u.ConvertToYAML(spaceliftStacks)
 	assert.Nil(t, err)

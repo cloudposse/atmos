@@ -2,6 +2,7 @@ atmos --help
 atmos version
 atmos terraform --help
 atmos helmfile --help
+atmos packer --help
 atmos vendor --help
 atmos workflow --help
 atmos aws --help

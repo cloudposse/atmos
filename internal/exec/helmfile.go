@@ -43,7 +43,8 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "version" {
-		return ExecuteShellCommand(atmosConfig,
+		return ExecuteShellCommand(
+			atmosConfig,
 			info.Command,
 			[]string{info.SubCommand},
 			"",
@@ -53,7 +54,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil)
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 	// Check if component 'settings.validation' section is specified and validate the component
 	valid, err := ValidateComponent(
-		atmosConfig,
+		&atmosConfig,
 		info.ComponentFromArg,
 		info.ComponentSection,
 		"",
@@ -120,8 +121,8 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Write variables to a file
-	varFile := constructHelmfileComponentVarfileName(info)
-	varFilePath := constructHelmfileComponentVarfilePath(atmosConfig, info)
+	varFile := constructHelmfileComponentVarfileName(&info)
+	varFilePath := constructHelmfileComponentVarfilePath(&atmosConfig, &info)
 
 	log.Debug("Writing the variables to file:", "file", varFilePath)
 
@@ -204,7 +205,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		log.Debug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
 	}
 
-	workingDir := constructHelmfileComponentWorkingDir(atmosConfig, info)
+	workingDir := constructHelmfileComponentWorkingDir(&atmosConfig, &info)
 	log.Debug("Using", "working dir", workingDir)
 
 	// Prepare arguments and flags

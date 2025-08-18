@@ -109,7 +109,7 @@ func mergeInputs(cfg *schema.AtmosConfiguration, dir string, dg *schema.DocsGene
 	if len(allMaps) == 0 {
 		return map[string]any{}, nil
 	}
-	return merge.Merge(*cfg, allMaps)
+	return merge.Merge(cfg, allMaps)
 }
 
 // getTerraformSource returns the directory to use for generating Terraform docs.

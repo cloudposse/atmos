@@ -69,14 +69,14 @@ func appendToAffected(
 		}
 
 		// Affected Spacelift stack
-		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(*atmosConfig, configAndStacksInfo)
+		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
 		if err != nil {
 			return err
 		}
 		affected.SpaceliftStack = spaceliftStackName
 
 		// Affected Atlantis project
-		atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(*atmosConfig, configAndStacksInfo)
+		atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
 		if err != nil {
 			return err
 		}
@@ -100,7 +100,7 @@ func appendToAffected(
 	}
 
 	// Check the `component` section and add `ComponentPath` to the output.
-	affected.ComponentPath = BuildComponentPath(*atmosConfig, *componentSection, affected.ComponentType)
+	affected.ComponentPath = BuildComponentPath(atmosConfig, componentSection, affected.ComponentType)
 	affected.StackSlug = fmt.Sprintf("%s-%s", stackName, strings.Replace(componentName, "/", "-", -1))
 
 	*affectedList = append(*affectedList, *affected)
@@ -204,6 +204,8 @@ func isComponentFolderChanged(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
 	case cfg.HelmfileComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
+	case cfg.PackerComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
 	default:
 		return false, fmt.Errorf("%s: %w", componentType, ErrUnsupportedComponentType)
 	}
@@ -335,7 +337,7 @@ func addAffectedSpaceliftAdminStack(
 			return nil, err
 		}
 	} else {
-		adminStackContextPrefix, err = cfg.GetContextPrefix(currentStackName, adminStackContext, GetStackNamePattern(*atmosConfig), currentStackName)
+		adminStackContextPrefix, err = cfg.GetContextPrefix(currentStackName, adminStackContext, GetStackNamePattern(atmosConfig), currentStackName)
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +373,7 @@ func addAffectedSpaceliftAdminStack(
 									return nil, err
 								}
 							} else {
-								contextPrefix, err = cfg.GetContextPrefix(stackName, context, GetStackNamePattern(*atmosConfig), stackName)
+								contextPrefix, err = cfg.GetContextPrefix(stackName, context, GetStackNamePattern(atmosConfig), stackName)
 								if err != nil {
 									return nil, err
 								}
@@ -441,7 +443,7 @@ func addDependentsToAffected(
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
 
-		deps, err := ExecuteDescribeDependents(*atmosConfig, a.Component, a.Stack, includeSettings)
+		deps, err := ExecuteDescribeDependents(atmosConfig, a.Component, a.Stack, includeSettings)
 		if err != nil {
 			return err
 		}
@@ -470,7 +472,7 @@ func addDependentsToDependents(
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
 
-		deps, err := ExecuteDescribeDependents(*atmosConfig, d.Component, d.Stack, includeSettings)
+		deps, err := ExecuteDescribeDependents(atmosConfig, d.Component, d.Stack, includeSettings)
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,13 @@
 #
 # List of commands to be run in the `demo-stacks` example
 #
+atmos packer --help
+atmos packer version --help
+atmos packer validate--help
+atmos packer inspect --help
+atmos packer init --help
+atmos packer build --help
+atmos packer output --help
 atmos helmfile --help
 atmos helmfile generate --help
 atmos helmfile generate varfile --help

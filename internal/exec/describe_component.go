@@ -158,15 +158,20 @@ func ExecuteDescribeComponent(
 	}
 
 	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
-	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
+	configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
 	configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = cfg.TerraformComponentType
 	if err != nil {
 		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
-		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
+		configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
 		configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = cfg.HelmfileComponentType
 		if err != nil {
-			configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = ""
-			return nil, err
+			configAndStacksInfo.ComponentType = cfg.PackerComponentType
+			configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
+			configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = cfg.PackerComponentType
+			if err != nil {
+				configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = ""
+				return nil, err
+			}
 		}
 	}
 

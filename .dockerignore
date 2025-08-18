@@ -8,9 +8,13 @@
 *.tfstate
 *.tfstate.*
 **/terraform.tfvars.json
+**/helmfile.vars.yaml
+**/packer.vars.json
 **/*.terraform.tfvars.json
 **/*.helmfile.vars.yaml
+**/*.packer.vars.json
 **/.terraform.lock.hcl
+**/*.planfile.json
 
 # Module directory
 .terraform

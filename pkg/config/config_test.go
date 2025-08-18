@@ -487,3 +487,44 @@ func TestSetLogConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestAtmosConfigAbsolutePaths(t *testing.T) {
+	t.Run("should handle empty base paths", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{},
+				Helmfile:  schema.Helmfile{},
+			},
+			Stacks: schema.Stacks{},
+		}
+
+		err := atmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+	})
+
+	t.Run("should handle absolute paths", func(t *testing.T) {
+		absPath := filepath.Join(os.TempDir(), "atmos-test")
+		config := &schema.AtmosConfiguration{
+			BasePath: absPath,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: absPath,
+				},
+				Helmfile: schema.Helmfile{
+					BasePath: absPath,
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath: absPath,
+			},
+		}
+
+		err := atmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		// Check if absolute paths remain unchanged
+		assert.Equal(t, absPath, config.Components.Terraform.BasePath)
+		assert.Equal(t, absPath, config.Components.Helmfile.BasePath)
+		assert.Equal(t, absPath, config.Stacks.BasePath)
+	})
+}

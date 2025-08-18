@@ -14,3 +14,14 @@ func isComponentEnabled(metadataSection map[string]any, componentName string) bo
 	}
 	return true
 }
+
+// isComponentLocked checks if a component is locked based on its metadata.
+// https://atmos.tools/core-concepts/stacks/define-components/#locking-components-with-metadatalocked.
+func isComponentLocked(metadataSection map[string]any) bool {
+	if locked, ok := metadataSection["locked"].(bool); ok {
+		if locked {
+			return true
+		}
+	}
+	return false
+}

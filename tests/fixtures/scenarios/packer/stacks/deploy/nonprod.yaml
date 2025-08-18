@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: nonprod
+
+import:
+  - catalog/aws/bastion/defaults
+
+components:
+  packer:
+    aws/bastion:
+      vars:
+        # Define the variables specific to the `nonprod` account
+        instance_type: "t4g.small"
+        volume_size: 8
+        assume_role_arn: null
+        # assume_role_arn: "arn:aws:iam::NONPROD_ACCOUNT_ID:role/ROLE_NAME"
+        ami_tags:
+          Stage: nonprod

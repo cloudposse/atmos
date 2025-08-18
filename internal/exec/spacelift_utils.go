@@ -83,7 +83,7 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 
 // BuildSpaceliftStackNameFromComponentConfig builds Spacelift stack name from the component config
 func BuildSpaceliftStackNameFromComponentConfig(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
 	var spaceliftStackName string

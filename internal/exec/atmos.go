@@ -40,7 +40,7 @@ func ExecuteAtmosCmd() error {
 
 	// Get a map of stacks and components in the stacks
 	// Don't process `Go` templates and YAML functions in Atmos stack manifests since we just need to display the stack and component names in the TUI
-	stacksMap, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "describe dependents" {
-		data, err := ExecuteDescribeDependents(atmosConfig, selectedComponent, selectedStack, false)
+		data, err := ExecuteDescribeDependents(&atmosConfig, selectedComponent, selectedStack, false)
 		if err != nil {
 			return err
 		}
@@ -123,7 +123,7 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "validate component" {
-		_, err = ExecuteValidateComponent(atmosConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
+		_, err = ExecuteValidateComponent(&atmosConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
 		if err != nil {
 			return err
 		}

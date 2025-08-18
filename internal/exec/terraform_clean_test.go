@@ -107,7 +107,7 @@ func TestFindFoldersNamesWithPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := findFoldersNamesWithPrefix(tt.root, tt.prefix, schema.AtmosConfiguration{})
+			_, err := findFoldersNamesWithPrefix(tt.root, tt.prefix)
 			if tt.expectedError != nil {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.expectedError.Error())
@@ -169,7 +169,7 @@ func TestGetStackTerraformStateFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := getStackTerraformStateFolder(tt.componentPath, tt.stack, schema.AtmosConfiguration{})
+			_, err := getStackTerraformStateFolder(tt.componentPath, tt.stack)
 			if tt.expectedError != nil {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.expectedError.Error())

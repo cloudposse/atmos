@@ -25,7 +25,7 @@ func TestExecuteAtlantisGenerateRepoConfigWithStackNameTemplate(t *testing.T) {
 	assert.Nil(t, err)
 
 	err = ExecuteAtlantisGenerateRepoConfig(
-		atmosConfig,
+		&atmosConfig,
 		"/dev/stdout",
 		"config-1",
 		"project-1",
@@ -51,7 +51,7 @@ func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
 	assert.Nil(t, err)
 
 	err = ExecuteAtlantisGenerateRepoConfigAffectedOnly(
-		atmosConfig,
+		&atmosConfig,
 		"/dev/stdout",
 		"config-1",
 		"project-1",

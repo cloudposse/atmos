@@ -228,3 +228,37 @@ func TestComponentProcessor_StackNameTemplate_Errors(t *testing.T) {
 	_, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
 	assert.ErrorContains(t, err, "map has no entry for key \"invalid\"")
 }
+
+func TestComponentProcessor_Helmfile(t *testing.T) {
+	var err error
+	var component string
+	var stack string
+
+	var componentMap map[string]any
+	component = "echo-server"
+	stack = "tenant1-ue2-dev"
+
+	componentMap, err = ProcessComponentInStack(component, stack, "", "")
+	assert.Nil(t, err)
+	componentVars := componentMap["vars"].(map[string]any)
+	installed := componentVars["installed"].(bool)
+	assert.Equal(t, true, installed)
+}
+
+func TestComponentProcessor_Packer(t *testing.T) {
+	var err error
+	var component string
+	var stack string
+
+	var componentMap map[string]any
+	component = "aws/bastion"
+	stack = "tenant1-ue2-dev"
+
+	componentMap, err = ProcessComponentInStack(component, stack, "", "")
+	assert.Nil(t, err)
+	componentVars := componentMap["vars"].(map[string]any)
+	sourceAmi := componentVars["source_ami"].(string)
+	assert.Equal(t, "ami-0013ceeff668b979b", sourceAmi)
+	region := componentVars["region"].(string)
+	assert.Equal(t, "us-east-2", region)
+}

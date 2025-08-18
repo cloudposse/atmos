@@ -101,3 +101,59 @@ func TestIsComponentEnabled_CaseSensitivity(t *testing.T) {
 		})
 	}
 }
+
+func TestIsComponentLocked(t *testing.T) {
+	tests := []struct {
+		name           string
+		componentAttrs map[string]any
+		want           bool
+	}{
+		{
+			name: "explicitly locked component",
+			componentAttrs: map[string]any{
+				"locked": true,
+			},
+			want: true,
+		},
+		{
+			name: "explicitly unlocked component",
+			componentAttrs: map[string]any{
+				"locked": false,
+			},
+			want: false,
+		},
+		{
+			name: "component with string true",
+			componentAttrs: map[string]any{
+				"locked": "true",
+			},
+			want: false,
+		},
+		{
+			name: "component with number 1",
+			componentAttrs: map[string]any{
+				"locked": 1,
+			},
+			want: false,
+		},
+		{
+			name:           "component with nil attributes",
+			componentAttrs: nil,
+			want:           false,
+		},
+		{
+			name:           "component with empty attributes",
+			componentAttrs: map[string]any{},
+			want:           false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isComponentLocked(tt.componentAttrs)
+			if got != tt.want {
+				t.Errorf("isComponentEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

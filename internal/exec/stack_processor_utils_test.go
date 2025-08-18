@@ -6,10 +6,165 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+func TestProcessBaseComponentConfig(t *testing.T) {
+	tests := []struct {
+		name                string
+		baseComponentConfig *schema.BaseComponentConfig
+		allComponentsMap    map[string]any
+		component           string
+		stack               string
+		baseComponent       string
+		expectedError       string
+		expectedVars        map[string]any
+		expectedSettings    map[string]any
+		expectedEnv         map[string]any
+		expectedBackendType string
+		expectBaseComponent string
+	}{
+		{
+			name: "basic-base-component",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"vars": map[string]any{
+						"environment": "dev",
+						"region":      "us-east-1",
+					},
+					"settings": map[string]any{
+						"enabled": true,
+					},
+					"backend_type": "s3",
+				},
+			},
+			component:     "test",
+			stack:         "test-stack",
+			baseComponent: "base",
+			expectedVars: map[string]any{
+				"environment": "dev",
+				"region":      "us-east-1",
+			},
+			expectedSettings: map[string]any{
+				"enabled": true,
+			},
+			expectedBackendType: "s3",
+			expectBaseComponent: "base",
+		},
+		{
+			name: "inheritance-chain",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"component": "base2",
+					"vars": map[string]any{
+						"environment": "dev",
+					},
+				},
+				"base2": map[string]any{
+					"vars": map[string]any{
+						"region": "us-east-1",
+					},
+					"settings": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			component:     "test",
+			stack:         "test-stack",
+			baseComponent: "base",
+			expectedVars: map[string]any{
+				"environment": "dev",
+				"region":      "us-east-1",
+			},
+			expectedSettings: map[string]any{
+				"enabled": true,
+			},
+			expectBaseComponent: "base2",
+		},
+		{
+			name: "invalid-base-component",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": "invalid-type",
+			},
+			component:     "test",
+			stack:         "test-stack",
+			baseComponent: "base",
+			expectedError: "invalid config for the base component",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			baseComponents := []string{}
+
+			err := ProcessBaseComponentConfig(
+				atmosConfig,
+				tt.baseComponentConfig,
+				tt.allComponentsMap,
+				tt.component,
+				tt.stack,
+				tt.baseComponent,
+				"/dummy/path",
+				true,
+				&baseComponents,
+			)
+
+			if tt.expectedError != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tt.expectedVars != nil {
+				assert.Equal(t, tt.expectedVars, tt.baseComponentConfig.BaseComponentVars)
+			}
+
+			if tt.expectedSettings != nil {
+				assert.Equal(t, tt.expectedSettings, tt.baseComponentConfig.BaseComponentSettings)
+			}
+
+			if tt.expectedEnv != nil {
+				assert.Equal(t, tt.expectedEnv, tt.baseComponentConfig.BaseComponentEnv)
+			}
+
+			if tt.expectedBackendType != "" {
+				assert.Equal(t, tt.expectedBackendType, tt.baseComponentConfig.BaseComponentBackendType)
+			}
+
+			if tt.expectBaseComponent != "" {
+				assert.Equal(t, tt.expectBaseComponent, tt.baseComponentConfig.FinalBaseComponentName)
+			}
+
+			// Verify baseComponents slice contains the expected components
+			expectedComponents := []string{tt.baseComponent}
+			if tt.expectBaseComponent != tt.baseComponent && tt.expectBaseComponent != "" {
+				expectedComponents = append(expectedComponents, tt.expectBaseComponent)
+			}
+			assert.ElementsMatch(t, expectedComponents, baseComponents)
+		})
+	}
+}
 
 func TestProcessYAMLConfigFile(t *testing.T) {
 	stacksBasePath := "../../tests/fixtures/scenarios/relative-paths/stacks"
@@ -30,7 +185,7 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 	}
 
 	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -78,7 +233,7 @@ func TestProcessYAMLConfigFileIgnoreMissingFiles(t *testing.T) {
 	}
 
 	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -117,7 +272,7 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -155,7 +310,7 @@ func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {
 	}
 
 	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -194,7 +349,7 @@ func TestProcessYAMLConfigFileInvalidManifest(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -232,7 +387,7 @@ func TestProcessYAMLConfigFileInvalidImportTemplate(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -271,7 +426,7 @@ func TestProcessYAMLConfigFileInvalidValidationSchemaPath(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -310,7 +465,7 @@ func TestProcessYAMLConfigFileInvalidManifestSchema(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -348,7 +503,7 @@ func TestProcessYAMLConfigFileInvalidGlobalOverridesSection(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -386,7 +541,7 @@ func TestProcessYAMLConfigFileInvalidTerraformOverridesSection(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -424,7 +579,7 @@ func TestProcessYAMLConfigFileInvalidHelmfileOverridesSection(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filePath,
 		map[string]map[string]any{},
@@ -455,7 +610,7 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 	}
 
 	deepMergedStackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		manifest,
 		map[string]map[string]any{},
@@ -473,10 +628,11 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 	assert.Nil(t, err)
 
 	config, err := ProcessStackConfig(
-		atmosConfig,
+		&atmosConfig,
 		stacksBasePath,
 		filepath.Join(basePath, "components", "terraform"),
 		filepath.Join(basePath, "components", "helmfile"),
+		filepath.Join(basePath, "components", "packer"),
 		"nonprod",
 		deepMergedStackConfig,
 		false,
@@ -504,4 +660,204 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 	contextProviderPropertyOrder0, err := u.EvaluateYqExpression(&atmosConfig, contextProvider, ".property_order[0]")
 	assert.Nil(t, err)
 	assert.Equal(t, "product", contextProviderPropertyOrder0)
+}
+
+func TestProcessSettingsIntegrationsGithub(t *testing.T) {
+	tests := []struct {
+		name           string
+		inputSettings  map[string]any
+		expectedOutput map[string]any
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name: "Valid GitHub integration settings",
+			inputSettings: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"branch":     "main",
+				},
+			},
+			expectedOutput: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"branch":     "main",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Additional valid fields",
+			inputSettings: map[string]any{
+				"github": map[string]any{
+					"token":          "test-token",
+					"owner":          "test-owner",
+					"repository":     "test-repo",
+					"branch":         "develop",
+					"base_branch":    "main",
+					"webhook_secret": "secret123",
+				},
+			},
+			expectedOutput: map[string]any{
+				"github": map[string]any{
+					"token":          "test-token",
+					"owner":          "test-owner",
+					"repository":     "test-repo",
+					"branch":         "develop",
+					"base_branch":    "main",
+					"webhook_secret": "secret123",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "With workspace configuration",
+			inputSettings: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"workspaces": map[string]any{
+						"prefix": "test-",
+						"suffix": "-prod",
+					},
+				},
+			},
+			expectedOutput: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"workspaces": map[string]any{
+						"prefix": "test-",
+						"suffix": "-prod",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "With path configuration",
+			inputSettings: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"paths": []any{
+						"terraform/**",
+						"modules/**",
+					},
+				},
+			},
+			expectedOutput: map[string]any{
+				"github": map[string]any{
+					"token":      "test-token",
+					"owner":      "test-owner",
+					"repository": "test-repo",
+					"paths": []any{
+						"terraform/**",
+						"modules/**",
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processSettingsIntegrationsGithub(&schema.AtmosConfiguration{}, tt.inputSettings)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedOutput, result)
+
+				// Additional validation for required fields
+				githubConfig := result["github"].(map[string]any)
+				assert.Contains(t, githubConfig, "token")
+				assert.Contains(t, githubConfig, "owner")
+				assert.Contains(t, githubConfig, "repository")
+
+				// Type assertions for key fields
+				assert.IsType(t, "", githubConfig["token"])
+				assert.IsType(t, "", githubConfig["owner"])
+				assert.IsType(t, "", githubConfig["repository"])
+
+				// Optional field type assertions
+				if branch, ok := githubConfig["branch"]; ok {
+					assert.IsType(t, "", branch)
+				}
+				if workspaces, ok := githubConfig["workspaces"]; ok {
+					assert.IsType(t, map[string]any{}, workspaces)
+				}
+				if paths, ok := githubConfig["paths"]; ok {
+					assert.IsType(t, []any{}, paths)
+				}
+			}
+		})
+	}
+}
+
+func TestProcessSettingsIntegrationsGithub_MissingGithubConfig(t *testing.T) {
+	settings := map[string]any{}
+
+	result, err := processSettingsIntegrationsGithub(&schema.AtmosConfiguration{}, settings)
+
+	assert.Nil(t, err)
+	assert.Equal(t, settings, result)
+}
+
+func TestProcessYAMLConfigFiles(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/relative-paths/stacks"
+	filePaths := []string{
+		"../../tests/fixtures/scenarios/relative-paths/stacks/orgs/acme/platform/dev.yaml",
+		"../../tests/fixtures/scenarios/relative-paths/stacks/orgs/acme/platform/prod.yaml",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	listResult, mapResult, rawStackConfigs, err := ProcessYAMLConfigFiles(
+		&atmosConfig,
+		stacksBasePath,
+		"", // terraformComponentsBasePath
+		"", // helmfileComponentsBasePath
+		"", // packerComponentsBasePath
+		filePaths,
+		true,  // processStackDeps
+		true,  // processComponentDeps
+		false, // ignoreMissingFiles
+	)
+
+	// Verify no error occurred
+	assert.Nil(t, err)
+
+	// Verify listResult contains the expected number of results
+	assert.Equal(t, len(filePaths), len(listResult))
+
+	// Verify mapResult contains the expected stack names
+	assert.Equal(t, len(filePaths), len(mapResult))
+
+	// Verify rawStackConfigs contains the expected stack names
+	assert.Equal(t, len(filePaths), len(rawStackConfigs))
 }

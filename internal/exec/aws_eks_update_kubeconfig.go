@@ -134,7 +134,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 				return err
 			}
 
-			if len(GetStackNamePattern(atmosConfig)) < 1 {
+			if len(GetStackNamePattern(&atmosConfig)) < 1 {
 				return errors.New("stack name pattern must be provided in `stacks.name_pattern` CLI config or `ATMOS_STACKS_NAME_PATTERN` ENV variable")
 			}
 
@@ -143,7 +143,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 				kubeconfigContext.Tenant,
 				kubeconfigContext.Environment,
 				kubeconfigContext.Stage,
-				GetStackNamePattern(atmosConfig),
+				GetStackNamePattern(&atmosConfig),
 			)
 			if err != nil {
 				return err
@@ -157,11 +157,11 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		configAndStacksInfo.Stack = kubeconfigContext.Stack
 
 		configAndStacksInfo.ComponentType = "terraform"
-		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+		configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
 		shellCommandWorkingDir = filepath.Join(atmosConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
-			configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+			configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
 			shellCommandWorkingDir = filepath.Join(atmosConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 			if err != nil {
 				return err

@@ -113,12 +113,16 @@ func ExecuteTerraformGeneratePlanfile(
 	info.ComponentType = "terraform"
 	info.NeedHelp = false
 
+	// Process templates and Atmos YAML functions.
+	info.ProcessTemplates = options.ProcessTemplates
+	info.ProcessFunctions = options.ProcessYamlFunctions
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
 
-	*info, err = ProcessStacks(atmosConfig, *info, true, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip)
+	*info, err = ProcessStacks(&atmosConfig, *info, true, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip)
 	if err != nil {
 		return err
 	}
@@ -197,7 +201,7 @@ func resolvePlanfilePath(componentPath, format string, customFile string, info *
 			planFilePath = filepath.Join(componentPath, customFile)
 		}
 	} else {
-		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(*atmosConfig, *info), format)
+		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
 	}
 
 	err := u.EnsureDir(planFilePath)

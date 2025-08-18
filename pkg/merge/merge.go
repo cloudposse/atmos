@@ -75,7 +75,7 @@ func MergeWithOptions(
 
 // Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents
 func Merge(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
 	if atmosConfig.Settings.ListMergeStrategy == "" {

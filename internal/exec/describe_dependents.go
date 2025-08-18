@@ -5,14 +5,14 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	"github.com/cloudposse/atmos/pkg/pager"
-	u "github.com/cloudposse/atmos/pkg/utils"
-
 	"github.com/mitchellh/mapstructure"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type DescribeDependentsExecProps struct {
@@ -31,7 +31,7 @@ type DescribeDependentsExec interface {
 type describeDependentsExec struct {
 	atmosConfig               *schema.AtmosConfiguration
 	executeDescribeDependents func(
-		atmosConfig schema.AtmosConfiguration,
+		atmosConfig *schema.AtmosConfiguration,
 		component string,
 		stack string,
 		includeSettings bool,
@@ -45,6 +45,7 @@ type describeDependentsExec struct {
 	) (any, error)
 }
 
+// NewDescribeDependentsExec creates a new `describe dependents` executor.
 func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeDependentsExec {
 	return &describeDependentsExec{
 		executeDescribeDependents: ExecuteDescribeDependents,
@@ -57,7 +58,7 @@ func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeD
 
 func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDependentsExecProps) error {
 	dependents, err := d.executeDescribeDependents(
-		*d.atmosConfig,
+		d.atmosConfig,
 		describeDependentsExecProps.Component,
 		describeDependentsExecProps.Stack,
 		false,
@@ -89,18 +90,33 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 	})
 }
 
-// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
+// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 func ExecuteDescribeDependents(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	includeSettings bool,
 ) ([]schema.Dependent, error) {
+	if atmosConfig == nil {
+		return nil, errUtils.ErrAtmosConfigIsNil
+	}
+
 	dependents := []schema.Dependent{}
 	var ok bool
 
 	// Get all stacks with all components
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
+	stacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		true,
+		true,
+		false,
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +216,21 @@ func ExecuteDescribeDependents(
 						continue
 					}
 
+					// Include the component if any of the following is true:
+					// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`
+					// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`
+					if dependsOn.Stack != "" {
+						if stack != dependsOn.Stack {
+							continue
+						}
+					} else if stack != stackName &&
+						dependsOn.Namespace == "" &&
+						dependsOn.Tenant == "" &&
+						dependsOn.Environment == "" &&
+						dependsOn.Stage == "" {
+						continue
+					}
+
 					// Include the component from the stack if any of the following is true:
 					// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`
 					// - `namespace` is not specified in `depends_on` and the provided component is from the same namespace as the component in `depends_on`
@@ -246,7 +277,7 @@ func ExecuteDescribeDependents(
 
 					dependent := schema.Dependent{
 						Component:     stackComponentName,
-						ComponentPath: BuildComponentPath(atmosConfig, stackComponentMap, stackComponentType),
+						ComponentPath: BuildComponentPath(atmosConfig, &stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
 						Stack:         stackName,
 						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.Replace(stackComponentName, "/", "-", -1)),

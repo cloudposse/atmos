@@ -34,7 +34,10 @@ Each object in the `settings.depends_on` section has the following schema:
   <dt>component <em>(required if `file` or `folder` is not specified)</em></dt>
   <dd>an Atmos component that the current component depends on</dd>
 
-  <dt>namespace <em>(optional)</em></dt>
+  <dt>stack <em>(optional)</em></dt>
+  <dd>Atmos stack where the `component` is provisioned</dd>
+
+    <dt>namespace <em>(optional)</em></dt>
   <dd>The `namespace` where the `component` is provisioned</dd>
 
   <dt>tenant <em>(optional)</em></dt>

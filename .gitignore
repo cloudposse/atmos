@@ -7,12 +7,16 @@
 **/*.planfile
 **/*.kubeconfig
 **/terraform.tfvars.json
+**/helmfile.vars.yaml
+**/packer.vars.json
 **/*.terraform.tfvars.json
 **/*.helmfile.vars.yaml
+**/*.packer.vars.json
 **/.terraform.lock.hcl
 .vscode/
 **/nohup.out
 **/kubeconfig.yaml
+**/*.planfile.json
 
 # Module directory
 .terraform
