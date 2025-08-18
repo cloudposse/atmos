@@ -192,3 +192,38 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 	}
 	return result, nil
 }
+
+func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
+	// Normalize the key to comply with Azure Key Vault naming restrictions.
+	secretName := s.normalizeSecretName(key)
+
+	resp, err := s.client.GetSecret(context.Background(), secretName, "", nil)
+	if err != nil {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			switch respErr.StatusCode {
+			case statusCodeNotFound:
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
+			case statusCodeForbidden:
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+			}
+		}
+		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+	}
+
+	if resp.Value == nil {
+		return "", nil
+	}
+
+	// Try to unmarshal as JSON first, fallback to string if it fails.
+	var result interface{}
+	if jsonErr := json.Unmarshal([]byte(*resp.Value), &result); jsonErr != nil {
+		// If JSON unmarshaling fails, return as string.
+		return *resp.Value, nil
+	}
+	return result, nil
+}
