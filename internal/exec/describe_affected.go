@@ -45,6 +45,7 @@ type DescribeAffectedCmdArgs struct {
 	ProcessTemplates            bool
 	ProcessYamlFunctions        bool
 	Skip                        []string
+	ExcludeLocked               bool
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -63,6 +64,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
+		excludeLocked bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -76,6 +78,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
+		excludeLocked bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -87,6 +90,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
+		excludeLocked bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -170,6 +174,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"file":                           &describe.OutputFile,
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
+		"exclude-locked":                 &describe.ExcludeLocked,
 	}
 
 	var err error
@@ -218,6 +223,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
 			a.Skip,
+			a.ExcludeLocked,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -232,6 +238,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
 			a.Skip,
+			a.ExcludeLocked,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
@@ -244,6 +251,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
 			a.Skip,
+			a.ExcludeLocked,
 		)
 	}
 	if err != nil {

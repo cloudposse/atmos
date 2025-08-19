@@ -113,6 +113,7 @@ atmos describe affected --process-functions=false
 atmos describe affected --skip=terraform.output
 atmos describe affected --skip=terraform.output --skip=include
 atmos describe affected --skip=include,eval
+atmos describe affected --exclude-locked
 ```
 
 # Example Output
@@ -310,6 +311,15 @@ Affected components and stacks:
         `atmos describe affected --skip=terraform.output --skip=include`
 
         `atmos describe affected --skip=terraform.output,include`
+    </dd>
+
+    <dt>`--exclude-locked`</dt>
+    <dd>
+        Exclude the locked components (`metadata.locked: true`) from the output.
+
+        Refer to [Locking Components with `metadata.locked`](/core-concepts/stacks/define-components/#locking-components-with-metadatalocked)
+
+        `atmos describe affected --exclude-locked`
     </dd>
 
     <dt>`--upload`</dt>

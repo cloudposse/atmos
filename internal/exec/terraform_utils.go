@@ -188,6 +188,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessTemplates,
 			args.ProcessYamlFunctions,
 			args.Skip,
+			args.ExcludeLocked,
 		)
 	case args.CloneTargetRef:
 		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
@@ -202,6 +203,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessTemplates,
 			args.ProcessYamlFunctions,
 			args.Skip,
+			args.ExcludeLocked,
 		)
 	default:
 		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
@@ -214,6 +216,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessTemplates,
 			args.ProcessYamlFunctions,
 			args.Skip,
+			args.ExcludeLocked,
 		)
 	}
 	if err != nil {
