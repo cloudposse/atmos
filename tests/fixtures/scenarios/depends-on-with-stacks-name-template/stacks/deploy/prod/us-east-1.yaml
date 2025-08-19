@@ -15,6 +15,7 @@ components:
       metadata:
         component: mock
       settings:
+        test: !env PATH
         depends_on:
           1:
             # `tgw/attachment` depends on the `vpc` component in the same stack (same account, same region)
