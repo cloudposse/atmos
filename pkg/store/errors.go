@@ -2,6 +2,13 @@ package store
 
 import "errors"
 
+// Error format constants.
+const (
+	errFormat           = "%w: %v"
+	errWrapFormat       = "%w: %w"
+	errWrapFormatWithID = "%w '%s': %w"
+)
+
 // Common errors shared across store implementations.
 var (
 	// Common validation errors.
@@ -55,10 +62,4 @@ var (
 	// Shared errors.
 	ErrSerializeJSON = errors.New("failed to serialize value to JSON")
 	ErrMarshalValue  = errors.New("failed to marshal value")
-
-	// ErrDeleteParameter is returned when a parameter deletion fails.
-	ErrDeleteParameter = errors.New("failed to delete parameter")
-
-	// ErrListParameters is returned when listing parameters fails.
-	ErrListParameters = errors.New("failed to list parameters")
 )

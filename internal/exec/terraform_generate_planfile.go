@@ -113,6 +113,10 @@ func ExecuteTerraformGeneratePlanfile(
 	info.ComponentType = "terraform"
 	info.NeedHelp = false
 
+	// Process templates and Atmos YAML functions.
+	info.ProcessTemplates = options.ProcessTemplates
+	info.ProcessFunctions = options.ProcessYamlFunctions
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err

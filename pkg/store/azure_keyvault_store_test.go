@@ -276,3 +276,117 @@ func TestAzureKeyVaultStore_normalizeSecretName(t *testing.T) {
 func stringPtr(s string) *string {
 	return &s
 }
+
+func TestAzureKeyVaultStore_GetKey(t *testing.T) {
+	tests := []struct {
+		name          string
+		key           string
+		mockValue     *string
+		mockError     error
+		expectedValue interface{}
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:          "successful string retrieval",
+			key:           "app-settings",
+			mockValue:     stringPtr("production"),
+			mockError:     nil,
+			expectedValue: "production",
+			expectError:   false,
+		},
+		{
+			name:          "successful JSON object retrieval",
+			key:           "database-config",
+			mockValue:     stringPtr(`{"host":"localhost","port":5432}`),
+			mockError:     nil,
+			expectedValue: map[string]interface{}{"host": "localhost", "port": float64(5432)},
+			expectError:   false,
+		},
+		{
+			name:          "successful JSON array retrieval",
+			key:           "server-list",
+			mockValue:     stringPtr(`["server1","server2","server3"]`),
+			mockError:     nil,
+			expectedValue: []interface{}{"server1", "server2", "server3"},
+			expectError:   false,
+		},
+		{
+			name:          "secret not found",
+			key:           "nonexistent",
+			mockValue:     nil,
+			mockError:     &azcore.ResponseError{StatusCode: 404},
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "resource not found",
+		},
+		{
+			name:          "empty secret value",
+			key:           "empty-secret",
+			mockValue:     stringPtr(""),
+			mockError:     nil,
+			expectedValue: "",
+			expectError:   false,
+		},
+		{
+			name:          "malformed JSON returns as string",
+			key:           "invalid-json",
+			mockValue:     stringPtr(`{"invalid": json`),
+			mockError:     nil,
+			expectedValue: `{"invalid": json`,
+			expectError:   false,
+		},
+		{
+			name:          "permission denied error",
+			key:           "restricted-secret",
+			mockValue:     nil,
+			mockError:     &azcore.ResponseError{StatusCode: 403},
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "permission denied",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockClient := &mockClient{
+				getSecretFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+					normalizedKey := (&AzureKeyVaultStore{}).normalizeSecretName(tt.key)
+					assert.Equal(t, normalizedKey, name)
+
+					if tt.mockError != nil {
+						return azsecrets.GetSecretResponse{}, tt.mockError
+					}
+
+					return azsecrets.GetSecretResponse{
+						Secret: azsecrets.Secret{
+							Value: tt.mockValue,
+						},
+					}, nil
+				},
+			}
+
+			store := &AzureKeyVaultStore{
+				client:         mockClient,
+				prefix:         "myapp",
+				stackDelimiter: stringPtr("/"),
+			}
+
+			// Act
+			result, err := store.GetKey(tt.key)
+
+			// Assert
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				assert.Equal(t, tt.expectedValue, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedValue, result)
+			}
+		})
+	}
+}
