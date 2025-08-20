@@ -1,0 +1,26 @@
+plan-wf-config: &plan-wf-config
+  atmos-pro-terraform-plan.yaml:
+    inputs:
+      component: "{{ .atmos_component }}"
+      stack: "{{ .atmos_stack }}"
+ 
+apply-wf-config: &apply-wf-config
+  atmos-pro-terraform-apply.yaml:
+    inputs:
+      component: "{{ .atmos_component }}"
+      stack: "{{ .atmos_stack }}"
+      github_environment: "{{ .vars.tenant }}-{{ .vars.stage }}"
+
+settings:
+  pro:
+    enabled: false # enabled on a stack-by-stack basis
+    pull_request:
+      opened:
+        workflows: *plan-wf-config
+      synchronize:
+        workflows: *plan-wf-config
+      reopened:
+        workflows: *plan-wf-config
+      # merged is a custom event for Atmos Pro that is triggered when a PR is closed and merged.
+      merged:
+        workflows: *apply-wf-config

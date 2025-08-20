@@ -16,6 +16,17 @@ stacks:
     - "**/_defaults.yaml"
   name_pattern: "{stage}"
 
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+      timeout: 10
+      datasources: {}
+
 logs:
   file: "/dev/stderr"
   level: Info

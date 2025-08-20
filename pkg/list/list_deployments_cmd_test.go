@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // --- Mocks
@@ -132,4 +133,60 @@ func TestListDeploymentsCommandLogic(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreateDeploymentWithTemplateRendering(t *testing.T) {
+	// Test that createDeployment properly handles pre-rendered template data
+	componentConfigMap := map[string]any{
+		"settings": map[string]any{
+			"pro": map[string]any{
+				"enabled": true,
+				"pull_request": map[string]any{
+					"merged": map[string]any{
+						"workflows": map[string]any{
+							"atmos-pro-terraform-apply.yaml": map[string]any{
+								"inputs": map[string]any{
+									"component":          "vpc",             // Rendered value
+									"github_environment": "tenant1-dev",     // Rendered value
+									"stack":              "tenant1-ue2-dev", // Rendered value
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"vars": map[string]any{
+			"tenant": "tenant1",
+			"stage":  "dev",
+			"region": "ue2",
+		},
+		"metadata": map[string]any{
+			"type": "real",
+		},
+	}
+
+	deployment := createDeployment("tenant1-ue2-dev", "vpc", "terraform", componentConfigMap)
+	assert.NotNil(t, deployment)
+	assert.Equal(t, "vpc", deployment.Component)
+	assert.Equal(t, "tenant1-ue2-dev", deployment.Stack)
+	assert.Equal(t, "terraform", deployment.ComponentType)
+
+	// Verify that the template variables in settings are properly rendered
+	proSettings := deployment.Settings["pro"].(map[string]any)
+	pullRequest := proSettings["pull_request"].(map[string]any)
+	merged := pullRequest["merged"].(map[string]any)
+	workflows := merged["workflows"].(map[string]any)
+	workflow := workflows["atmos-pro-terraform-apply.yaml"].(map[string]any)
+	inputs := workflow["inputs"].(map[string]any)
+
+	// These should be the actual rendered values, not template strings
+	assert.Equal(t, "vpc", inputs["component"])
+	assert.Equal(t, "tenant1-dev", inputs["github_environment"])
+	assert.Equal(t, "tenant1-ue2-dev", inputs["stack"])
+
+	// Verify that the deployment would be included in pro-enabled deployments
+	proDeployments := filterProEnabledDeployments([]schema.Deployment{*deployment})
+	assert.Len(t, proDeployments, 1)
+	assert.Equal(t, "vpc", proDeployments[0].Component)
 }

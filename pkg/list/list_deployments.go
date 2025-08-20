@@ -232,8 +232,8 @@ func uploadDeployments(deployments []schema.Deployment) error {
 
 // processDeployments collects, filters, and sorts deployments.
 func processDeployments(atmosConfig *schema.AtmosConfiguration) ([]schema.Deployment, error) {
-	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	// Get all stacks with template processing enabled to render template variables
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
 		return nil, err
 	}
