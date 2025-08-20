@@ -225,6 +225,10 @@ func findAffected(
 								if !isComponentEnabled(metadataSection, componentName) {
 									continue
 								}
+								// Skip locked components (if `--exclude-locked` is provided on the command line)
+								if excludeLocked && isComponentLocked(metadataSection) {
+									continue
+								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, metadataSection, "metadata") {
 									affected := schema.Affected{
@@ -461,6 +465,10 @@ func findAffected(
 								if !isComponentEnabled(metadataSection, componentName) {
 									continue
 								}
+								// Skip locked components (if `--exclude-locked` is provided on the command line)
+								if excludeLocked && isComponentLocked(metadataSection) {
+									continue
+								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, metadataSection, "metadata") {
 									affected := schema.Affected{
@@ -666,6 +674,10 @@ func findAffected(
 								}
 								// Skip disabled components
 								if !isComponentEnabled(metadataSection, componentName) {
+									continue
+								}
+								// Skip locked components (if `--exclude-locked` is provided on the command line)
+								if excludeLocked && isComponentLocked(metadataSection) {
 									continue
 								}
 								// Check `metadata` section

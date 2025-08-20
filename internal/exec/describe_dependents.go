@@ -25,7 +25,6 @@ type DescribeDependentsExecProps struct {
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
-	ExcludeLocked        bool
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE

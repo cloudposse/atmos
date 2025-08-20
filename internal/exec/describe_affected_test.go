@@ -35,7 +35,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {

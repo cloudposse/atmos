@@ -348,6 +348,9 @@ func addAffectedSpaceliftAdminStack(
 	var componentSettingsSpaceliftSection map[string]any
 
 	// Find the Spacelift admin stack that manages the current stack
+	if stacks == nil {
+		return affectedList, nil
+	}
 	for stackName, stackSection := range *stacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
@@ -442,7 +445,6 @@ func addDependentsToAffected(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
-	excludeLocked bool,
 ) error {
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
@@ -469,7 +471,7 @@ func addDependentsToAffected(
 				processTemplates,
 				processYamlFunctions,
 				skip,
-				excludeLocked)
+			)
 			if err != nil {
 				return err
 			}
@@ -490,7 +492,6 @@ func addDependentsToDependents(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
-	excludeLocked bool,
 ) error {
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
@@ -517,7 +518,7 @@ func addDependentsToDependents(
 				processTemplates,
 				processYamlFunctions,
 				skip,
-				excludeLocked)
+			)
 			if err != nil {
 				return err
 			}
