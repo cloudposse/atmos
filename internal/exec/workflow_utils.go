@@ -159,7 +159,7 @@ func ExecuteWorkflow(
 			log.Debug("Workflow failed", "error", err)
 
 			// Remove the workflow base path, stacks/workflows
-			workflowFileName := strings.TrimPrefix(workflowPath, atmosConfig.Workflows.BasePath)
+			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
 			// Remove the leading slash
 			workflowFileName = strings.TrimPrefix(workflowFileName, "/")
 			// Remove the file extension
