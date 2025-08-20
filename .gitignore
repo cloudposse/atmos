@@ -16,6 +16,7 @@
 .vscode/
 **/nohup.out
 **/kubeconfig.yaml
+**/*.planfile.json
 
 # Module directory
 .terraform

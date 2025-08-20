@@ -66,7 +66,7 @@ func NewGSMStore(options GSMStoreOptions) (Store, error) {
 	if err != nil {
 		// Close the client to prevent resource leaks
 		if client != nil {
-			client.Close()
+			_ = client.Close()
 		}
 		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
@@ -278,4 +278,47 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 		return string(result.Payload.Data), nil
 	}
 	return unmarshalled, nil
+}
+
+func (s *GSMStore) GetKey(key string) (interface{}, error) {
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
+	// Use the key directly as the secret name
+	secretName := key
+
+	// If prefix is set, prepend it to the key
+	if s.prefix != "" {
+		secretName = s.prefix + "_" + key
+	}
+
+	// Construct the full secret name
+	fullSecretName := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretName)
+
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
+
+	// Access the secret version
+	resp, err := s.client.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
+		Name: fullSecretName,
+	})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
+		}
+		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+	}
+
+	if resp.Payload == nil || resp.Payload.Data == nil {
+		return "", nil
+	}
+
+	// Try to unmarshal as JSON first, fallback to string if it fails.
+	var result interface{}
+	if jsonErr := json.Unmarshal(resp.Payload.Data, &result); jsonErr != nil {
+		// If JSON unmarshaling fails, return as string.
+		return string(resp.Payload.Data), nil
+	}
+	return result, nil
 }
