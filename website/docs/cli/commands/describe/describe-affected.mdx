@@ -202,52 +202,52 @@ Affected components and stacks:
 ## Flags
 
 <dl>
-    <dt>`--ref`</dt>
+    <dt>`--ref` <em>(optional)</em></dt>
     <dd>
         [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch
     </dd>
 
-    <dt>`--sha`</dt>
+    <dt>`--sha` <em>(optional)</em></dt>
     <dd>
         Git commit SHA with which to compare the current working branch
     </dd>
 
-    <dt>`--file`</dt>
+    <dt>`--file` <em>(optional)</em></dt>
     <dd>
         If specified, write the result to the file
     </dd>
 
-    <dt>`--format`</dt>
+    <dt>`--format` <em>(optional)</em></dt>
     <dd>
         Specify the output format: `json` or `yaml` (`json` is default)
     </dd>
 
-    <dt>`--ssh-key`</dt>
+    <dt>`--ssh-key` <em>(optional)</em></dt>
     <dd>
         Path to PEM-encoded private key to clone private repos using SSH
     </dd>
 
-    <dt>`--ssh-key-password`</dt>
+    <dt>`--ssh-key-password` <em>(optional)</em></dt>
     <dd>
         Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
     </dd>
 
-    <dt>`--repo-path`</dt>
+    <dt>`--repo-path` <em>(optional)</em></dt>
     <dd>
         Path to the already cloned target repository with which to compare the current branch. Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`
     </dd>
 
-    <dt>`--verbose`</dt>
+    <dt>`--verbose` <em>(optional)</em></dt>
     <dd>
         Print more detailed output when cloning and checking out the target Git repository and processing the result
     </dd>
 
-    <dt>`--include-spacelift-admin-stacks`</dt>
+    <dt>`--include-spacelift-admin-stacks` <em>(optional)</em></dt>
     <dd>
         Include the Spacelift admin stack of any stack that is affected by config changes
     </dd>
 
-    <dt>`--clone-target-ref`</dt>
+    <dt>`--clone-target-ref` <em>(optional)</em></dt>
     <dd>
         Clone the target reference with which to compare the current branch.
 
@@ -257,28 +257,28 @@ Affected components and stacks:
         This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory
     </dd>
 
-    <dt>`--stack`</dt>
+    <dt>`--stack` <em>(optional)</em></dt>
     <dd>
         Only show results for the specific stack.
 
         `atmos describe affected --stack=plat-ue2-prod`
     </dd>
 
-    <dt>`--include-dependents`</dt>
+    <dt>`--include-dependents` <em>(optional)</em></dt>
     <dd>
         Include the dependent components and stacks.
 
         `atmos describe affected --include-dependents=true`
     </dd>
 
-    <dt>`--include-settings`</dt>
+    <dt>`--include-settings` <em>(optional)</em></dt>
     <dd>
         Include the `settings` section for each affected component.
 
         `atmos describe affected --include-settings=true`
     </dd>
 
-    <dt>`--query`</dt>
+    <dt>`--query` <em>(optional)</em></dt>
     <dd>
         Query the results of the command using `yq` expressions.
 
@@ -287,23 +287,23 @@ Affected components and stacks:
         For more details, refer to [YQ - a lightweight and portable command-line YAML processor](https://mikefarah.gitbook.io/yq)
     </dd>
 
-    <dt>`--process-templates`</dt>
+    <dt>`--process-templates` <em>(optional)</em></dt>
     <dd>
-        Enable/disable processing of all `Go` templates in Atmos stacks manifests when executing the command.
-        If the flag is not provided, it's set to `true` by default.
+        Enable/disable processing of `Go` templates in Atmos stacks manifests when executing the command.
+        If the flag is not provided, it's set to `false` by default.
 
-        `atmos describe affected --process-templates=false`
+        `atmos describe affected --process-templates`
     </dd>
 
-    <dt>`--process-functions`</dt>
+    <dt>`--process-functions` <em>(optional)</em></dt>
     <dd>
-        Enable/disable processing of all Atmos YAML functions in Atmos stacks manifests when executing the command.
-        If the flag is not provided, it's set to `true` by default.
+        Enable/disable processing of Atmos YAML functions in Atmos stacks manifests when executing the command.
+        If the flag is not provided, it's set to `false` by default.
 
-        `atmos describe affected --process-functions=false`
+        `atmos describe affected --process-functions`
     </dd>
 
-    <dt>`--skip`</dt>
+    <dt>`--skip` <em>(optional)</em></dt>
     <dd>
         Skip processing a specific Atmos YAML function in Atmos stacks manifests when executing the command.
         To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma:
@@ -313,7 +313,7 @@ Affected components and stacks:
         `atmos describe affected --skip=terraform.output,include`
     </dd>
 
-    <dt>`--exclude-locked`</dt>
+    <dt>`--exclude-locked` <em>(optional)</em></dt>
     <dd>
         Exclude the locked components (`metadata.locked: true`) from the output.
 
@@ -322,7 +322,7 @@ Affected components and stacks:
         `atmos describe affected --exclude-locked`
     </dd>
 
-    <dt>`--upload`</dt>
+    <dt>`--upload` <em>(optional)</em></dt>
     <dd>
         Upload the affected components and stacks to a specified HTTP endpoint.
 
