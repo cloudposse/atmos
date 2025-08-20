@@ -439,18 +439,37 @@ func addDependentsToAffected(
 	atmosConfig *schema.AtmosConfiguration,
 	affected *[]schema.Affected,
 	includeSettings bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	excludeLocked bool,
 ) error {
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
 
-		deps, err := ExecuteDescribeDependents(atmosConfig, a.Component, a.Stack, includeSettings)
+		deps, err := ExecuteDescribeDependents(
+			atmosConfig,
+			a.Component,
+			a.Stack,
+			includeSettings,
+			processTemplates,
+			processYamlFunctions,
+			skip,
+		)
 		if err != nil {
 			return err
 		}
 
 		if len(deps) > 0 {
 			a.Dependents = deps
-			err = addDependentsToDependents(atmosConfig, &deps, includeSettings)
+			err = addDependentsToDependents(
+				atmosConfig,
+				&deps,
+				includeSettings,
+				processTemplates,
+				processYamlFunctions,
+				skip,
+				excludeLocked)
 			if err != nil {
 				return err
 			}
@@ -468,18 +487,37 @@ func addDependentsToDependents(
 	atmosConfig *schema.AtmosConfiguration,
 	dependents *[]schema.Dependent,
 	includeSettings bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	excludeLocked bool,
 ) error {
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
 
-		deps, err := ExecuteDescribeDependents(atmosConfig, d.Component, d.Stack, includeSettings)
+		deps, err := ExecuteDescribeDependents(
+			atmosConfig,
+			d.Component,
+			d.Stack,
+			includeSettings,
+			processTemplates,
+			processYamlFunctions,
+			skip,
+		)
 		if err != nil {
 			return err
 		}
 
 		if len(deps) > 0 {
 			d.Dependents = deps
-			err = addDependentsToDependents(atmosConfig, &deps, includeSettings)
+			err = addDependentsToDependents(
+				atmosConfig,
+				&deps,
+				includeSettings,
+				processTemplates,
+				processYamlFunctions,
+				skip,
+				excludeLocked)
 			if err != nil {
 				return err
 			}

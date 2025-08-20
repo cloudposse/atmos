@@ -225,7 +225,15 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 
 	// Add dependent components for each directly affected component.
 	if len(affectedList) > 0 {
-		err = addDependentsToAffected(args.CLIConfig, &affectedList, args.IncludeSettings)
+		err = addDependentsToAffected(
+			args.CLIConfig,
+			&affectedList,
+			args.IncludeSettings,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.ExcludeLocked,
+		)
 		if err != nil {
 			return err
 		}

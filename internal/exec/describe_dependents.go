@@ -16,11 +16,16 @@ import (
 )
 
 type DescribeDependentsExecProps struct {
-	File      string
-	Format    string
-	Query     string
-	Stack     string
-	Component string
+	File                 string
+	Format               string
+	Query                string
+	Stack                string
+	Component            string
+	IncludeSettings      bool
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+	ExcludeLocked        bool
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -35,6 +40,9 @@ type describeDependentsExec struct {
 		component string,
 		stack string,
 		includeSettings bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		skip []string,
 	) ([]schema.Dependent, error)
 	newPageCreator        pager.PageCreator
 	isTTYSupportForStdout func() bool
@@ -61,7 +69,10 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		d.atmosConfig,
 		describeDependentsExecProps.Component,
 		describeDependentsExecProps.Stack,
-		false,
+		describeDependentsExecProps.IncludeSettings,
+		describeDependentsExecProps.ProcessTemplates,
+		describeDependentsExecProps.ProcessYamlFunctions,
+		describeDependentsExecProps.Skip,
 	)
 	if err != nil {
 		return err
@@ -96,6 +107,9 @@ func ExecuteDescribeDependents(
 	component string,
 	stack string,
 	includeSettings bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Dependent, error) {
 	if atmosConfig == nil {
 		return nil, errUtils.ErrAtmosConfigIsNil
@@ -112,16 +126,22 @@ func ExecuteDescribeDependents(
 		nil,
 		nil,
 		false,
-		true,
-		true,
+		processTemplates,
+		processYamlFunctions,
 		false,
-		nil,
+		skip,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	providedComponentSection, err := ExecuteDescribeComponent(
+		component,
+		stack,
+		processTemplates,
+		processYamlFunctions,
+		skip,
+	)
 	if err != nil {
 		return nil, err
 	}
