@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -47,7 +48,7 @@ func (ar *AquaRegistry) LoadLocalConfig(configPath string) error {
 func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 	// Check local configuration first
 	if localTool, exists := ar.local.GetTool(owner, repo); exists {
-		Logger.Debug("Using local configuration", "owner", owner, "repo", repo)
+		log.Debug("Using local configuration", "owner", owner, "repo", repo)
 		return ar.convertLocalToolToTool(localTool, owner, repo), nil
 	}
 
@@ -61,13 +62,13 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 	}
 
 	for _, registry := range registries {
-		Logger.Debug("Trying registry", "registry", registry)
+		log.Debug("Trying registry", "registry", registry)
 		tool, err := ar.fetchFromRegistry(registry, owner, repo)
 		if err == nil {
-			Logger.Debug("Found tool in registry", "registry", registry)
+			log.Debug("Found tool in registry", "registry", registry)
 			return tool, nil
 		}
-		Logger.Debug("Not found in registry", "registry", registry, "error", err)
+		log.Debug("Not found in registry", "registry", registry, "error", err)
 	}
 
 	return nil, fmt.Errorf("tool %s/%s not found in any registry", owner, repo)
@@ -235,7 +236,7 @@ func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Tool, error
 	// Cache the response
 	if err := os.WriteFile(cacheFile, data, 0o644); err != nil {
 		// Log but don't fail
-		Logger.Debug("Failed to cache registry file", "error", err)
+		log.Debug("Failed to cache registry file", "error", err)
 	}
 
 	return ar.parseRegistryFile(data, owner, repo)

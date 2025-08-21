@@ -23,9 +23,7 @@ func TestRemoveCommand_ValidTool(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test removing terraform
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "terraform", "")
 	require.NoError(t, err, "Should successfully remove valid tool")
 
 	// Verify terraform was removed but kubectl remains
@@ -50,9 +48,7 @@ func TestRemoveCommand_NonExistentTool(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test removing non-existent tool
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "nonexistent"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "nonexistent", "")
 	require.Error(t, err, "Should error when removing non-existent tool")
 	assert.Contains(t, err.Error(), "not found")
 
@@ -75,9 +71,7 @@ func TestRemoveCommand_EmptyFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test removing from empty file
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "terraform", "")
 	require.Error(t, err, "Should error when removing from empty file")
 	assert.Contains(t, err.Error(), "not found")
 
@@ -102,9 +96,7 @@ func TestRemoveCommand_CustomFilePath(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test removing with custom file path
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", customFile, "terraform"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(customFile, "terraform", "")
 	require.NoError(t, err, "Should successfully remove tool from custom file")
 
 	// Verify terraform was removed from custom file
@@ -128,9 +120,7 @@ func TestRemoveCommand_CanonicalName(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test removing with canonical name
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "hashicorp/terraform"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "hashicorp/terraform", "")
 	require.NoError(t, err, "Should successfully remove tool with canonical name")
 
 	// Verify canonical name was removed
@@ -154,9 +144,7 @@ func TestRemoveCommand_MultipleVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test removing tool with multiple versions
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "terraform", "")
 	require.NoError(t, err, "Should successfully remove tool with multiple versions")
 
 	// Verify all versions were removed
@@ -167,17 +155,8 @@ func TestRemoveCommand_MultipleVersions(t *testing.T) {
 }
 
 func TestRemoveCommand_NoArgs(t *testing.T) {
-	cmd := removeCmd
-	cmd.SetArgs([]string{})
-	err := cmd.Execute()
+	err := RemoveToolVersion("", "", "")
 	require.Error(t, err, "Should fail with no arguments")
-}
-
-func TestRemoveCommand_TooManyArgs(t *testing.T) {
-	cmd := removeCmd
-	cmd.SetArgs([]string{"terraform", "extra"})
-	err := cmd.Execute()
-	require.Error(t, err, "Should fail with too many arguments")
 }
 
 func TestRemoveCommand_EmptyToolName(t *testing.T) {
@@ -194,9 +173,7 @@ func TestRemoveCommand_EmptyToolName(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test removing empty tool name
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, ""})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "", "")
 	require.Error(t, err, "Should error when removing empty tool name")
 	assert.Contains(t, err.Error(), "empty tool argument")
 
@@ -210,20 +187,9 @@ func TestRemoveCommand_FileDoesNotExist(t *testing.T) {
 	tempDir := t.TempDir()
 	nonExistentFile := filepath.Join(tempDir, "non-existent")
 
-	// Test removing from non-existent file
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", nonExistentFile, "terraform"})
-	err := cmd.Execute()
+	err := RemoveToolVersion(nonExistentFile, "terraform", "")
 	require.Error(t, err, "Should fail when file does not exist")
 	assert.Contains(t, err.Error(), "no such file or directory")
-}
-
-func TestRemoveCommand_InvalidFilePath(t *testing.T) {
-	// Test removing with invalid file path
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", "/invalid/path/.tool-versions", "terraform"})
-	err := cmd.Execute()
-	require.Error(t, err, "Should fail with invalid file path")
 }
 
 func TestRemoveCommand_PreservesOtherTools(t *testing.T) {
@@ -242,9 +208,7 @@ func TestRemoveCommand_PreservesOtherTools(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test removing terraform
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "terraform", "")
 	require.NoError(t, err, "Should successfully remove terraform")
 
 	// Verify only terraform was removed, others remain
@@ -269,9 +233,7 @@ func TestRemoveCommand_RemoveSpecificVersion(t *testing.T) {
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
 
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform@1.9.8"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "terraform", "1.9.8")
 	require.NoError(t, err, "Should remove specific version")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
@@ -286,16 +248,14 @@ func TestRemoveCommand_RemoveLastVersion_RemovesTool(t *testing.T) {
 
 	toolVersions := &ToolVersions{
 		Tools: map[string][]string{
-			"terraform": {"1.11.4"},
+			"terraform": {"1.9.8"},
 		},
 	}
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
 
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform@1.11.4"})
-	err = cmd.Execute()
-	require.NoError(t, err, "Should remove last version and tool entry")
+	err = RemoveToolVersion(toolVersionsFile, "terraform", "1.9.8")
+	require.NoError(t, err, "Should remove specific version")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
 	require.NoError(t, err)
@@ -314,9 +274,7 @@ func TestRemoveCommand_RemoveNonExistentVersion(t *testing.T) {
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
 
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform@2.0.0"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "terraform", "2.0.0")
 	require.Error(t, err, "Should error when removing non-existent version")
 	assert.Contains(t, err.Error(), "not found")
 
@@ -337,10 +295,7 @@ func TestRemoveCommand_RemoveAllVersions(t *testing.T) {
 	}
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
-
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "terraform", "")
 	require.NoError(t, err, "Should remove all versions of tool")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
@@ -361,9 +316,7 @@ func TestRemoveCommand_CanonicalNameWithVersion(t *testing.T) {
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
 
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "hashicorp/terraform@1.9.8"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "hashicorp/terraform", "1.9.8")
 	require.NoError(t, err, "Should remove specific version for canonical name")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
@@ -383,9 +336,7 @@ func TestRemoveCommand_CanonicalNameAllVersions(t *testing.T) {
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
 
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "hashicorp/terraform"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "hashicorp/terraform", "")
 	require.NoError(t, err, "Should remove all versions for canonical name")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
@@ -405,9 +356,7 @@ func TestRemoveCommand_RemoveVersionFromToolWithOneVersion(t *testing.T) {
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
 
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "terraform@1.11.4"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "terraform", "1.11.4")
 	require.NoError(t, err, "Should remove the only version and tool entry")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
@@ -427,9 +376,7 @@ func TestRemoveCommand_RemoveNonExistentTool(t *testing.T) {
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
 
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "nonexistent"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "nonexistent", "")
 	require.Error(t, err, "Should error when removing non-existent tool")
 
 	updated, err := LoadToolVersions(toolVersionsFile)
@@ -449,9 +396,7 @@ func TestRemoveCommand_RemoveNonExistentToolWithVersion(t *testing.T) {
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
 
-	cmd := removeCmd
-	cmd.SetArgs([]string{"--file", toolVersionsFile, "nonexistent@1.0.0"})
-	err = cmd.Execute()
+	err = RemoveToolVersion(toolVersionsFile, "nonexistent", "1.0.0")
 	require.Error(t, err, "Should error when removing non-existent tool with version")
 	assert.Contains(t, err.Error(), "not found")
 

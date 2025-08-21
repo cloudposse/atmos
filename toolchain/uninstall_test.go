@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -227,9 +228,11 @@ func TestRunUninstallWithNoArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Temporarily set the global toolVersionsFile variable
-	originalToolVersionsFile := toolVersionsFile
-	toolVersionsFile = toolVersionsPath
-	defer func() { toolVersionsFile = originalToolVersionsFile }()
+	originalToolVersionsFile := GetToolsConfigFilePath()
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	defer func() {
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: originalToolVersionsFile}})
+	}()
 
 	// Test that runUninstall with no arguments doesn't error
 	// This prevents regression where the function might error when no specific tool is provided

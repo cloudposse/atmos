@@ -5,62 +5,51 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/cobra"
 )
 
-var infoCmd = &cobra.Command{
-	Use:   "info <tool>",
-	Short: "Display tool configuration from registry",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		outputFormat, _ := cmd.Flags().GetString("output")
-		if outputFormat != "table" && outputFormat != "yaml" {
-			return fmt.Errorf("invalid output format: %s. Must be 'table' or 'yaml'", outputFormat)
+// InfoExec handles the core logic for retrieving and formatting tool information
+func InfoExec(toolName, outputFormat string) error {
+	// Create installer inside the function
+	installer := NewInstaller()
+
+	// Parse tool name to get owner/repo
+	owner, repo, err := installer.parseToolSpec(toolName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve tool '%s': %w", toolName, err)
+	}
+
+	// Get a real version from tool-versions file or use a default
+	version := "1.11.4" // Use a real version instead of "latest"
+
+	// Try to get the latest installed version from tool-versions file
+	if toolVersions, err := LoadToolVersions(GetToolVersionsFilePath()); err == nil {
+		if versions, exists := toolVersions.Tools[toolName]; exists && len(versions) > 0 {
+			version = versions[len(versions)-1] // Use the most recent version
 		}
-		toolName := args[0]
+	}
 
-		// Create installer to access tool resolution
-		installer := NewInstaller()
+	// Find the tool configuration
+	tool, err := installer.findTool(owner, repo, version)
+	if err != nil {
+		return fmt.Errorf("failed to find tool %s: %w", toolName, err)
+	}
 
-		// Parse tool name to get owner/repo
-		owner, repo, err := installer.parseToolSpec(toolName)
-		if err != nil {
-			return fmt.Errorf("failed to resolve tool '%s': %w", toolName, err)
-		}
+	// Get evaluated YAML with templates processed
+	evaluatedYAML, err := getEvaluatedToolYAML(tool, version, installer)
+	if err != nil {
+		return fmt.Errorf("failed to get evaluated YAML: %w", err)
+	}
 
-		// Get a real version from tool-versions file or use a default
-		version := "1.11.4" // Use a real version instead of "latest"
+	// Display output based on format
+	if outputFormat == "yaml" {
+		fmt.Print(evaluatedYAML)
+	} else {
+		// Table format (default)
+		table := formatToolInfoAsTable(toolName, owner, repo, tool, version, installer)
+		fmt.Print(table)
+	}
 
-		// Try to get the latest installed version from tool-versions file
-		if toolVersions, err := LoadToolVersions(GetToolVersionsFilePath()); err == nil {
-			if versions, exists := toolVersions.Tools[toolName]; exists && len(versions) > 0 {
-				version = versions[len(versions)-1] // Use the most recent version
-			}
-		}
-
-		// Find the tool configuration
-		tool, err := installer.findTool(owner, repo, version)
-		if err != nil {
-			return fmt.Errorf("failed to find tool %s: %w", toolName, err)
-		}
-
-		// Get evaluated YAML with templates processed
-		evaluatedYAML, err := getEvaluatedToolYAML(tool, version, installer)
-		if err != nil {
-			return fmt.Errorf("failed to get evaluated YAML: %w", err)
-		}
-
-		// Display output based on format
-		if outputFormat == "yaml" {
-			cmd.Print(evaluatedYAML)
-		} else {
-			// Table format (default)
-			table := formatToolInfoAsTable(toolName, owner, repo, tool, version, installer)
-			cmd.Print(table)
-		}
-
-		return nil
-	},
+	return nil
 }
 
 // formatToolInfoAsTable formats tool information as a proper table using lipgloss

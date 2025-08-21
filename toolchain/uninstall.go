@@ -64,7 +64,7 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 
 	if version == "latest" {
 		// Resolve actual version from latest file
-		actualVersion, err := installer.readLatestFile(owner, repo)
+		actualVersion, err := installer.ReadLatestFile(owner, repo)
 		if err != nil {
 			// If the latest file does not exist, return error (test expects this)
 			return fmt.Errorf("tool %s/%s@latest is not installed (no latest file found)", owner, repo)
@@ -97,6 +97,72 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 	return err
 }
 
+func RunUninstall(toolSpec string) error {
+	installer := NewInstaller()
+	// If no arguments, uninstall from tool-versions file
+	if len(toolSpec) == 0 {
+		return uninstallFromToolVersions(GetToolVersionsFilePath(), installer)
+	}
+	tool, version, err := ParseToolVersionArg(toolSpec)
+	if err != nil {
+		return err
+	}
+	if tool == "" {
+		return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version", toolSpec)
+	}
+
+	if installer == nil {
+		installer = NewInstaller()
+	}
+	owner, repo, err := installer.parseToolSpec(tool)
+	if err != nil {
+		// For uninstall operations, be more lenient with tool names
+		// If the tool resolver fails, assume the tool name is the repo name
+		// and use a default owner (the tool name itself)
+		owner = tool
+		repo = tool
+	}
+
+	// If no version specified, uninstall all versions of this tool
+	if version == "" {
+		return uninstallAllVersionsOfTool(installer, owner, repo)
+	}
+
+	if version == "latest" {
+		// Resolve actual version from latest file
+		actualVersion, err := installer.ReadLatestFile(owner, repo)
+		if err != nil {
+			// If the latest file does not exist, return error (test expects this)
+			return fmt.Errorf("tool %s/%s@latest is not installed (no latest file found)", owner, repo)
+		}
+		version = actualVersion
+		// Check if the versioned binary exists
+		binaryPath := installer.getBinaryPath(owner, repo, version)
+		if _, statErr := os.Stat(binaryPath); os.IsNotExist(statErr) {
+			// Binary does not exist, but latest file does: delete latest file and return success
+			_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
+			_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
+			return nil
+		} else {
+			// Both binary and latest file exist: uninstall binary, delete latest file, return nil
+			err = uninstallSingleTool(installer, owner, repo, version, true)
+			_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
+			_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
+			return err
+		}
+	}
+
+	err = uninstallSingleTool(installer, owner, repo, version, true)
+
+	// Always attempt to remove the latest file and parent directory after uninstalling @latest
+	if strings.HasSuffix(toolSpec, "@latest") {
+		_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
+		_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
+	}
+
+	return err
+}
+
 // Keep the original runUninstall for CLI usage
 func runUninstall(cmd *cobra.Command, args []string) error {
 	return runUninstallWithInstaller(cmd, args, nil)
@@ -105,7 +171,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 // Change uninstallSingleTool to accept showProgressBar
 func uninstallSingleTool(installer *Installer, owner, repo, version string, showProgressBar bool) error {
 	// Check if the tool is actually installed first
-	_, err := installer.findBinaryPath(owner, repo, version)
+	_, err := installer.FindBinaryPath(owner, repo, version)
 	if err != nil {
 		// If the binary is not found, treat as success (idempotent delete)
 		if strings.Contains(err.Error(), "not installed") || os.IsNotExist(err) {
@@ -116,10 +182,6 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 		}
 		return err
 	}
-
-	// Suppress logger immediately to prevent interference with progress bar
-	restoreLogger := SuppressLogger()
-	defer restoreLogger()
 
 	if showProgressBar {
 		spinner := bspinner.New()
@@ -194,10 +256,6 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 		return nil
 	}
 
-	// Suppress logger immediately to prevent interference with progress bar
-	restoreLogger := SuppressLogger()
-	defer restoreLogger()
-
 	spinner := bspinner.New()
 	spinner.Spinner = bspinner.Dot
 	spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -217,7 +275,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 				fmt.Fprintf(os.Stderr, "⚠️  Skipping invalid tool specification: %s\n", tool)
 				continue
 			}
-			_, err = installer.findBinaryPath(owner, repo, version)
+			_, err = installer.FindBinaryPath(owner, repo, version)
 			if err == nil {
 				installedTools = append(installedTools, struct {
 					tool    string
@@ -244,7 +302,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 		version := tool.version
 		var msg string
 		// Check if tool is installed
-		_, err := installer.findBinaryPath(tool.owner, tool.repo, version)
+		_, err := installer.FindBinaryPath(tool.owner, tool.repo, version)
 		if err != nil {
 			msg = fmt.Sprintf("%s %s/%s@%s not installed", checkMark.Render(), tool.owner, tool.repo, version)
 			alreadyRemovedCount++

@@ -6,19 +6,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 )
-
-var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List configured tools and their installation status",
-	Long:  `List all tools configured in .tool-versions file, showing their installation status, install date, and file size.`,
-	RunE:  runList,
-}
 
 // Table row data structure
 type toolRow struct {
@@ -33,17 +26,18 @@ type toolRow struct {
 	isInstalled bool
 }
 
-func runList(cmd *cobra.Command, args []string) error {
+func RunList() error {
 	installer := NewInstaller()
+	toolVersionsFile := GetToolVersionsFilePath()
 
 	// Load tool versions from file
-	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
+	toolVersions, err := LoadToolVersions(toolVersionsFile)
 	if err != nil {
 		return fmt.Errorf("failed to load .tool-versions: %w", err)
 	}
 
 	if len(toolVersions.Tools) == 0 {
-		cmd.Println("No tools configured in .tool-versions file")
+		log.Error("No tools configured in .tool-versions file")
 		return nil
 	}
 
@@ -51,7 +45,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	lcm := NewLocalConfigManager()
 	if err := lcm.Load(GetToolsConfigFilePath()); err != nil {
 		// Log warning but continue - local config is optional
-		Logger.Warn("Failed to load local config", "error", err)
+		log.Warn("Failed to load local config", "error", err)
 	}
 
 	var rows []toolRow
@@ -65,14 +59,14 @@ func runList(cmd *cobra.Command, args []string) error {
 		// Use existing infrastructure to resolve tool
 		resolvedKey, version, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
 		if !found {
-			Logger.Warn("Could not resolve tool", "tool", toolName)
+			log.Warn("Could not resolve tool", "tool", toolName)
 			continue
 		}
 
 		// Get owner/repo from resolved key
 		owner, repo, err := installer.resolver.Resolve(resolvedKey)
 		if err != nil {
-			Logger.Warn("Could not resolve owner/repo", "tool", resolvedKey, "error", err)
+			log.Warn("Could not resolve owner/repo", "tool", resolvedKey, "error", err)
 			continue
 		}
 
@@ -102,12 +96,12 @@ func runList(cmd *cobra.Command, args []string) error {
 		}
 
 		// Check installation status
-		binaryPath, err := installer.findBinaryPath(owner, repo, version)
+		binaryPath, err := installer.FindBinaryPath(owner, repo, version)
 		isInstalled := err == nil
 
 		// Debug: log the binary path
 		if isInstalled {
-			Logger.Debug("Found binary path", "path", binaryPath, "tool", toolName, "version", version)
+			log.Debug("Found binary path", "path", binaryPath, "tool", toolName, "version", version)
 		}
 
 		// Build row data
@@ -121,11 +115,10 @@ func runList(cmd *cobra.Command, args []string) error {
 				size = formatFileSize(fileInfo.Size())
 				installDate = fileInfo.ModTime().Format("2006-01-02 15:04")
 				// Debug: log the file size
-				Logger.Debug("File size calculated", "path", binaryPath, "size", size, "raw_size", fileInfo.Size())
-
+				log.Debug("File size calculated", "path", binaryPath, "size", size, "raw_size", fileInfo.Size())
 			} else {
 				// Debug: log the error
-				Logger.Debug("Failed to get file info", "path", binaryPath, "error", err)
+				log.Debug("Failed to get file info", "path", binaryPath, "error", err)
 				size = "N/A"
 				installDate = "N/A"
 			}
@@ -146,12 +139,12 @@ func runList(cmd *cobra.Command, args []string) error {
 		// Add additional versions if they exist
 		for i := 1; i < len(versions); i++ {
 			version := versions[i]
-			binaryPath, err := installer.findBinaryPath(owner, repo, version)
+			binaryPath, err := installer.FindBinaryPath(owner, repo, version)
 			isInstalled := err == nil
 
 			// Debug: log the binary path
 			if isInstalled {
-				Logger.Debug("Found binary path", "path", binaryPath, "tool", toolName, "version", version)
+				log.Debug("Found binary path", "path", binaryPath, "tool", toolName, "version", version)
 			}
 
 			status := "✗"
@@ -164,10 +157,10 @@ func runList(cmd *cobra.Command, args []string) error {
 					size = formatFileSize(fileInfo.Size())
 					installDate = fileInfo.ModTime().Format("2006-01-02 15:04")
 					// Debug: log the file size
-					Logger.Debug("File size calculated", "path", binaryPath, "size", size, "raw_size", fileInfo.Size())
+					log.Debug("File size calculated", "path", binaryPath, "size", size, "raw_size", fileInfo.Size())
 				} else {
 					// Debug: log the error
-					Logger.Debug("Failed to get file info", "path", binaryPath, "error", err)
+					log.Debug("Failed to get file info", "path", binaryPath, "error", err)
 					size = "N/A"
 					installDate = "N/A"
 				}
@@ -232,7 +225,7 @@ func runList(cmd *cobra.Command, args []string) error {
 			sizeWidth = len(row.size)
 		}
 		// Debug: log the size width calculation
-		Logger.Debug("Size width calculation", "row_size", row.size, "row_size_len", len(row.size), "current_size_width", sizeWidth)
+		log.Debug("Size width calculation", "row_size", row.size, "row_size_len", len(row.size), "current_size_width", sizeWidth)
 	}
 
 	// Ensure columns are never narrower than their headers
@@ -278,7 +271,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	totalNeededWidth := aliasWidth + registryWidth + binaryWidth + versionWidth + statusWidth + installDateWidth + sizeWidth
 
 	// Debug: log the width calculation
-	Logger.Debug("Width calculation", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, "version", versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total", totalNeededWidth, "terminal", width)
+	log.Debug("Width calculation", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, "version", versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total", totalNeededWidth, "terminal", width)
 
 	// If screen is narrow, truncate columns proportionally
 	if totalNeededWidth > width {
@@ -312,17 +305,17 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Debug: log the final column widths
-	Logger.Debug("Final column widths", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, "version", versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total_width", totalNeededWidth, "terminal_width", width)
+	log.Debug("Final column widths", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, "version", versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total_width", totalNeededWidth, "terminal_width", width)
 
 	// Convert rows to table format - use plain text for proper sizing
 	var tableRows []table.Row
 	for i, row := range rows {
 		// Debug: log the row data
-		Logger.Debug("Creating table row", "index", i, "alias", row.alias, "registry", row.registry, "binary", row.binary, "version", row.version, "status", row.status, "installDate", row.installDate, "size", row.size, "size_len", len(row.size))
+		log.Debug("Creating table row", "index", i, "alias", row.alias, "registry", row.registry, "binary", row.binary, "version", row.version, "status", row.status, "installDate", row.installDate, "size", row.size, "size_len", len(row.size))
 
 		// Check if size is empty or nil
 		if row.size == "" {
-			Logger.Debug("WARNING: Empty size for row", "index", i, "tool", row.alias)
+			log.Debug("WARNING: Empty size for row", "index", i, "tool", row.alias)
 		}
 
 		tableRows = append(tableRows, table.Row{
@@ -345,13 +338,13 @@ func runList(cmd *cobra.Command, args []string) error {
 	)
 
 	// Debug: log table configuration
-	Logger.Debug("Table configuration", "num_columns", len(columns), "num_rows", len(tableRows), "height", len(tableRows))
+	log.Debug("Table configuration", "num_columns", len(columns), "num_rows", len(tableRows), "height", len(tableRows))
 
 	// Set table width to use the calculated width
 	// t.SetWidth(totalNeededWidth) // Comment out to see if this is causing the issue
 
 	// Debug: log the table width
-	Logger.Debug("Table width set", "width", totalNeededWidth)
+	log.Debug("Table width set", "width", totalNeededWidth)
 
 	// Create custom styles for different states
 	defaultStyle := table.DefaultStyles()

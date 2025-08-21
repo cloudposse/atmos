@@ -140,7 +140,7 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-
+	toolchain.SetAtmosConfig(&atmosConfig)
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
 
@@ -211,7 +211,7 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 
-	RootCmd.AddCommand(toolchain.ToolChainCmd)
+	RootCmd.AddCommand(ToolChainCmd)
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

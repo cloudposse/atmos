@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -217,136 +216,94 @@ func (m versionListModel) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, title, content, hint)
 }
 
-var setCmd = &cobra.Command{
-	Use:   "set <tool> [version]",
-	Short: "Set a specific version for a tool in .tool-versions",
-	Long: `Set a specific version for a tool in the .tool-versions file.
+// SetToolVersion handles the core logic of setting a tool version.
+// If version is empty, it will prompt the user interactively (for GitHub release type tools).
+func SetToolVersion(toolName, version string, scrollSpeed int) error {
 
-If no version is provided, this command will fetch available versions from GitHub releases
-and present them in an interactive selection (only works for github_release type tools).
+	// Resolve the tool name to handle aliases
+	installer := NewInstaller()
+	owner, repo, err := installer.parseToolSpec(toolName)
+	if err != nil {
+		return fmt.Errorf("invalid tool name: %w", err)
+	}
+	resolvedKey := owner + "/" + repo
 
-Examples:
-  toolchain set terraform 1.11.4
-  toolchain set hashicorp/terraform 1.11.4
-  toolchain set terraform  # Interactive version selection
-  toolchain set --file /path/to/.tool-versions kubectl 1.28.0`,
-	Args: cobra.RangeArgs(1, 2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		filePath, _ := cmd.Flags().GetString("file")
-		if filePath == "" {
-			filePath = GetToolVersionsFilePath()
-		}
-
-		toolName := args[0]
-		var version string
-		if len(args) > 1 {
-			version = args[1]
-		}
-
-		// Resolve the tool name to handle aliases
-		installer := NewInstaller()
-		owner, repo, err := installer.parseToolSpec(toolName)
+	// If no version provided, fetch available versions and show interactive selection
+	if version == "" {
+		tool, err := installer.findTool(owner, repo, "")
 		if err != nil {
-			return fmt.Errorf("invalid tool name: %w", err)
-		}
-		resolvedKey := owner + "/" + repo
-
-		// If no version provided, fetch available versions and show interactive selection
-		if version == "" {
-			// Get tool configuration to check if it's a github_release type
-			tool, err := installer.findTool(owner, repo, "")
-			if err != nil {
-				return fmt.Errorf("failed to find tool configuration: %w", err)
-			}
-
-			// Check if this is a GitHub release type tool
-			if tool.Type != "github_release" {
-				return fmt.Errorf("interactive version selection is only available for GitHub release type tools")
-			}
-
-			// Fetch available versions with titles
-			items, err := fetchGitHubVersions(owner, repo)
-			if err != nil {
-				return fmt.Errorf("failed to fetch versions from GitHub: %w", err)
-			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("no versions found for %s/%s", owner, repo)
-			}
-
-			// Convert versionItem slice to list.Item slice
-			listItems := make([]list.Item, len(items))
-			for i, item := range items {
-				listItems[i] = item
-			}
-
-			l := list.New(listItems, newCustomDelegate(), 0, 0)
-			l.Title = "Select Version" // Add back the list title
-			l.SetShowHelp(false)       // Disable default help to show custom footer
-			l.SetShowStatusBar(true)   // Show status bar with custom footer
-			l.InfiniteScrolling = true // Enable infinite scrolling to show all items
-
-			// Initialize viewport
-			vp := viewport.New(0, 0)
-			vp.Style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("62")).
-				Padding(0, 0) // Remove padding to use full width
-
-			// Get scroll speed from flags
-			scrollSpeed, _ := cmd.Flags().GetInt("scroll-speed")
-			if scrollSpeed < 1 {
-				scrollSpeed = 3 // Default to fast speed
-			}
-
-			m := versionListModel{
-				list:        l,
-				viewport:    vp,
-				owner:       owner,
-				repo:        repo,
-				items:       items,
-				title:       fmt.Sprintf("Select version for %s/%s", owner, repo),
-				focused:     "list", // Start with list focused
-				scrollSpeed: scrollSpeed,
-			}
-
-			// Set initial release notes with markdown rendering
-			if len(items) > 0 {
-				renderedNotes := renderMarkdown(items[0].releaseNotes, m.viewport.Width)
-				// Set content without width styling to use full available width
-				m.viewport.SetContent(renderedNotes)
-				m.currentItemIndex = 0 // Initialize to first item
-			}
-
-			p := tea.NewProgram(m)
-
-			finalModel, err := p.Run()
-			if err != nil {
-				return fmt.Errorf("failed to run interactive selection: %w", err)
-			}
-
-			// Cast the final model back to our type to get the selected version
-			finalVersionModel := finalModel.(versionListModel)
-			if finalVersionModel.selected == "" {
-				return fmt.Errorf("no version selected")
-			}
-
-			version = finalVersionModel.selected
+			return fmt.Errorf("failed to find tool configuration: %w", err)
 		}
 
-		// Add the tool with the selected version
-		err = AddToolToVersions(filePath, resolvedKey, version)
+		if tool.Type != "github_release" {
+			return fmt.Errorf("interactive version selection is only available for GitHub release type tools")
+		}
+
+		items, err := fetchGitHubVersions(owner, repo)
 		if err != nil {
-			return fmt.Errorf("failed to set version: %w", err)
+			return fmt.Errorf("failed to fetch versions from GitHub: %w", err)
+		}
+		if len(items) == 0 {
+			return fmt.Errorf("no versions found for %s/%s", owner, repo)
 		}
 
-		cmd.Printf("✓ Set %s@%s in %s\n", resolvedKey, version, filePath)
-		return nil
-	},
-}
+		listItems := make([]list.Item, len(items))
+		for i, item := range items {
+			listItems[i] = item
+		}
 
-func init() {
-	setCmd.Flags().String("file", "", "Path to tool-versions file (defaults to global --tool-versions-file)")
-	setCmd.Flags().Int("scroll-speed", 3, "Scroll speed multiplier for viewport (1=normal, 2=fast, 3=very fast, etc.)")
+		l := list.New(listItems, newCustomDelegate(), 0, 0)
+		l.Title = "Select Version"
+		l.SetShowHelp(false)
+		l.SetShowStatusBar(true)
+		l.InfiniteScrolling = true
+
+		vp := viewport.New(0, 0)
+		vp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("62"))
+
+		if scrollSpeed < 1 {
+			scrollSpeed = 3
+		}
+
+		m := versionListModel{
+			list:        l,
+			viewport:    vp,
+			owner:       owner,
+			repo:        repo,
+			items:       items,
+			title:       fmt.Sprintf("Select version for %s/%s", owner, repo),
+			focused:     "list",
+			scrollSpeed: scrollSpeed,
+		}
+
+		if len(items) > 0 {
+			renderedNotes := renderMarkdown(items[0].releaseNotes, m.viewport.Width)
+			m.viewport.SetContent(renderedNotes)
+			m.currentItemIndex = 0
+		}
+
+		p := tea.NewProgram(m)
+		finalModel, err := p.Run()
+		if err != nil {
+			return fmt.Errorf("failed to run interactive selection: %w", err)
+		}
+
+		finalVersionModel := finalModel.(versionListModel)
+		if finalVersionModel.selected == "" {
+			return fmt.Errorf("no version selected")
+		}
+
+		version = finalVersionModel.selected
+	}
+
+	// Add the tool with the selected version
+	err = AddToolToVersions(atmosConfig.Toolchain.FilePath, resolvedKey, version)
+	if err != nil {
+		return fmt.Errorf("failed to set version: %w", err)
+	}
+
+	fmt.Printf("✓ Set %s@%s in %s\n", resolvedKey, version, atmosConfig.Toolchain.FilePath)
+	return nil
 }
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases

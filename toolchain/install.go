@@ -9,7 +9,6 @@ import (
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
@@ -68,36 +67,10 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 	return p
 }
 
-var installCmd = &cobra.Command{
-	Use:   "install [tool]",
-	Short: "Install a CLI binary from the registry",
-	Long: `Install a CLI binary using metadata from the registry.
-
-The tool should be specified in the format: owner/repo@version
-Examples:
-  toolchain install suzuki-shunsuke/github-comment@v3.5.0
-  toolchain install hashicorp/terraform@v1.5.0
-  toolchain install                    # Install from .tool-versions file`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runInstall,
-}
-
-var reinstallFlag bool
-
-func init() {
-	installCmd.Flags().Bool("default", false, "Set installed version as default (front of .tool-versions)")
-	installCmd.Flags().BoolVar(&reinstallFlag, "reinstall", false, "Reinstall even if already installed")
-}
-
-func runInstall(cmd *cobra.Command, args []string) error {
-	// If no arguments, install from tool-versions file
-	if len(args) == 0 {
-		return installFromToolVersions(GetToolVersionsFilePath())
+func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
+	if toolSpec == "" {
+		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag)
 	}
-
-	setDefault, _ := cmd.Flags().GetBool("default")
-
-	toolSpec := args[0]
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
@@ -146,7 +119,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update .tool-versions: add version, set as default if requested
-	if setDefault {
+	if setAsDefault {
 		if err := AddToolToVersionsAsDefault(".tool-versions", tool, version); err != nil {
 			return fmt.Errorf("failed to update .tool-versions: %w", err)
 		}
@@ -160,8 +133,6 @@ func runInstall(cmd *cobra.Command, args []string) error {
 }
 
 func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressBar bool) error {
-	restoreLogger := SuppressLogger()
-	defer restoreLogger()
 	installer := NewInstaller()
 
 	var p *tea.Program
@@ -183,7 +154,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		return err
 	}
 	if isLatest {
-		if err := installer.createLatestFile(owner, repo, version); err != nil {
+		if err := installer.CreateLatestFile(owner, repo, version); err != nil {
 			if showProgressBar {
 				fmt.Fprintf(os.Stderr, "%s Failed to create latest file for %s/%s: %v\n", xMark.Render(), owner, repo, err)
 			}
@@ -203,9 +174,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 	return nil
 }
 
-func installFromToolVersions(toolVersionsPath string) error {
-	restoreLogger := SuppressLogger()
-	defer restoreLogger()
+func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error {
 
 	installer := NewInstaller()
 
@@ -251,7 +220,7 @@ func installFromToolVersions(toolVersionsPath string) error {
 	progressBar := progress.New(progress.WithDefaultGradient())
 
 	for i, tool := range toolList {
-		_, err := installer.findBinaryPath(tool.owner, tool.repo, tool.version)
+		_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
 		if err == nil && !reinstallFlag {
 			msg := fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", checkMark.Render(), tool.owner, tool.repo, tool.version)
 			percent := float64(i+1) / float64(len(toolList))

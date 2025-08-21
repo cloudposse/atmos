@@ -22,6 +22,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var (
+	logLevel        string
+	githubToken     string
+	toolsConfigFile string
+)
+
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
 // This allows for mocking in tests and flexible resolution in production
 type ToolResolver interface {
@@ -137,13 +143,13 @@ func (i *Installer) InstallFromToolVersions(toolVersionsPath string) error {
 		// Parse tool specification (owner/repo@version or just repo@version)
 		owner, repo, err := i.parseToolSpec(tool)
 		if err != nil {
-			Logger.Warn("Skipping invalid tool specification", "tool", tool)
+			log.Warn("Skipping invalid tool specification", "tool", tool)
 			continue
 		}
 
 		// If no version is specified, try to get the latest non-prerelease version
 		if len(versions) == 0 {
-			Logger.Warn("No version specified for tool, skipping", "tool", tool)
+			log.Warn("No version specified for tool, skipping", "tool", tool)
 			continue
 		}
 		version := versions[0]
@@ -355,7 +361,7 @@ func (i *Installer) parseToolSpec(tool string) (string, string, error) {
 func (i *Installer) getLocalConfigManager() *LocalConfigManager {
 	lcm := NewLocalConfigManager()
 	if err := lcm.Load(GetToolsConfigFilePath()); err != nil {
-		Logger.Warn("Failed to load local config", "error", err)
+		log.Warn("Failed to load local config", "error", err)
 		return nil
 	}
 	return lcm
@@ -561,7 +567,7 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *Tool, version, assetU
 	if buildErr != nil {
 		return "", fmt.Errorf("failed to build fallback asset URL: %w", buildErr)
 	}
-	Logger.Warn("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
+	log.Warn("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
 	assetPath, err = i.downloadAsset(fallbackURL)
 	if err == nil {
 		return assetPath, nil
@@ -836,7 +842,7 @@ func (i *Installer) executeBinary(binaryPath string, args []string) error {
 // Uninstall removes a previously installed tool
 func (i *Installer) Uninstall(owner, repo, version string) error {
 	// Try to find the binary by searching
-	binaryPath, err := i.findBinaryPath(owner, repo, version)
+	binaryPath, err := i.FindBinaryPath(owner, repo, version)
 	if err != nil {
 		return fmt.Errorf("tool %s/%s@%s is not installed", owner, repo, version)
 	}
@@ -874,11 +880,11 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 	return nil
 }
 
-// findBinaryPath searches for a binary with the given owner, repo, and version
-func (i *Installer) findBinaryPath(owner, repo, version string) (string, error) {
+// FindBinaryPath searches for a binary with the given owner, repo, and version
+func (i *Installer) FindBinaryPath(owner, repo, version string) (string, error) {
 	// Handle "latest" keyword
 	if version == "latest" {
-		actualVersion, err := i.readLatestFile(owner, repo)
+		actualVersion, err := i.ReadLatestFile(owner, repo)
 		if err != nil {
 			return "", fmt.Errorf("failed to read latest version for %s/%s: %w", owner, repo, err)
 		}
@@ -913,8 +919,8 @@ func (i *Installer) findBinaryPath(owner, repo, version string) (string, error) 
 	return "", fmt.Errorf("binary not found at expected paths: %s or %s", expectedPath, alternativePath)
 }
 
-// createLatestFile creates a "latest" file that contains a pointer to the actual version
-func (i *Installer) createLatestFile(owner, repo, version string) error {
+// CreateLatestFile creates a "latest" file that contains a pointer to the actual version
+func (i *Installer) CreateLatestFile(owner, repo, version string) error {
 	// Create the latest file path
 	latestDir := filepath.Join(i.binDir, owner, repo)
 	if err := os.MkdirAll(latestDir, 0o755); err != nil {
@@ -932,8 +938,8 @@ func (i *Installer) createLatestFile(owner, repo, version string) error {
 	return nil
 }
 
-// readLatestFile reads the version from a "latest" file
-func (i *Installer) readLatestFile(owner, repo string) (string, error) {
+// ReadLatestFile reads the version from a "latest" file
+func (i *Installer) ReadLatestFile(owner, repo string) (string, error) {
 	latestFilePath := filepath.Join(i.binDir, owner, repo, "latest")
 
 	data, err := os.ReadFile(latestFilePath)
@@ -961,6 +967,7 @@ func searchRegistryForTool(toolName string) (string, string, error) {
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/hashicorp/%s/registry.yaml", toolName),
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/helm/%s/registry.yaml", toolName),
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/opentofu/%s/registry.yaml", toolName),
+		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/registry.yaml", toolName),
 	}
 
 	client := NewDefaultHTTPClient()
