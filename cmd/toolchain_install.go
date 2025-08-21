@@ -27,8 +27,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	return toolchain.RunInstall(toolSpec, defaultFlag, reinstallFlag)
 }
 
-var reinstallFlag bool
-var defaultFlag bool
+var (
+	reinstallFlag bool
+	defaultFlag   bool
+)
 
 func init() {
 	toolchainInstallCmd.Flags().BoolVar(&defaultFlag, "default", false, "Set installed version as default (front of .tool-versions)")

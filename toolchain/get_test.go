@@ -19,7 +19,7 @@ func createTempToolVersionsFile(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, ".tool-versions")
-	err := os.WriteFile(filePath, []byte(content), 0644)
+	err := os.WriteFile(filePath, []byte(content), 0o644)
 	if err != nil {
 		t.Fatalf("failed to create temp .tool-versions file: %v", err)
 	}
@@ -31,11 +31,11 @@ func createTempBinary(t *testing.T, owner, repo, version string) string {
 	t.Helper()
 	dir := t.TempDir()
 	binaryPath := filepath.Join(dir, owner, repo, version, "bin", "tool")
-	err := os.MkdirAll(filepath.Dir(binaryPath), 0755)
+	err := os.MkdirAll(filepath.Dir(binaryPath), 0o755)
 	if err != nil {
 		t.Fatalf("failed to create temp binary path: %v", err)
 	}
-	err = os.WriteFile(binaryPath, []byte("fake binary"), 0755)
+	err = os.WriteFile(binaryPath, []byte("fake binary"), 0o755)
 	if err != nil {
 		t.Fatalf("failed to create temp binary: %v", err)
 	}
