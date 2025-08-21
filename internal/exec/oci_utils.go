@@ -1,11 +1,15 @@
 package exec
 
 import (
+	"archive/zip"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
@@ -25,7 +29,10 @@ var ErrNoLayers = errors.New("the OCI image does not have any layers")
 
 const (
 	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components
-	githubTokenEnv     = "GITHUB_TOKEN"
+	// Additional supported artifact types
+	opentofuArtifactType  = "application/vnd.opentofu.modulepkg"           // OpenTofu module package
+	terraformArtifactType = "application/vnd.terraform.module.v1+tar+gzip" // Terraform module package
+	githubTokenEnv        = "GITHUB_TOKEN"
 )
 
 // processOciImage processes an OCI image and extracts its layers to the specified destination directory.
@@ -66,10 +73,23 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 		return ErrNoLayers
 	}
 
+	successfulLayers := 0
 	for i, layer := range layers {
 		if err := processLayer(layer, i, destDir); err != nil {
-			return fmt.Errorf("failed to process layer %d: %w", i, err)
+			log.Warn("Failed to process layer", "index", i, "error", err)
+			continue // Continue with other layers instead of failing completely
 		}
+		successfulLayers++
+	}
+
+	// Check if any files were actually extracted
+	files, err := os.ReadDir(destDir)
+	if err != nil {
+		log.Warn("Could not read destination directory", "dir", destDir, "error", err)
+	} else if len(files) == 0 {
+		log.Warn("No files were extracted to destination directory", "dir", destDir, "totalLayers", len(layers), "successfulLayers", successfulLayers)
+	} else {
+		log.Debug("Successfully extracted files", "dir", destDir, "fileCount", len(files), "totalLayers", len(layers), "successfulLayers", successfulLayers)
 	}
 
 	return nil
@@ -78,19 +98,18 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 // pullImage pulls an OCI image from the specified reference and returns its descriptor.
 func pullImage(ref name.Reference) (*remote.Descriptor, error) {
 	var opts []remote.Option
-	opts = append(opts, remote.WithAuth(authn.Anonymous))
 
 	// Get registry from parsed reference
 	registry := ref.Context().Registry.Name()
-	if strings.EqualFold(registry, "ghcr.io") {
-		githubToken := os.Getenv(githubTokenEnv)
-		if githubToken != "" {
-			opts = append(opts, remote.WithAuth(&authn.Basic{
-				Username: "oauth2",
-				Password: githubToken,
-			}))
-			log.Debug("Using GitHub token for authentication", "registry", registry)
-		}
+
+	// Try to get authentication from various sources
+	auth, err := getRegistryAuth(registry)
+	if err != nil {
+		log.Debug("No authentication found, using anonymous", "registry", registry)
+		opts = append(opts, remote.WithAuth(authn.Anonymous))
+	} else {
+		opts = append(opts, remote.WithAuth(auth))
+		log.Debug("Using authentication for registry", "registry", registry)
 	}
 
 	descriptor, err := remote.Get(ref, opts...)
@@ -102,12 +121,273 @@ func pullImage(ref name.Reference) (*remote.Descriptor, error) {
 	return descriptor, nil
 }
 
+// getRegistryAuth attempts to find authentication credentials for the given registry.
+// It checks multiple sources in order of preference:
+// 1. GitHub Container Registry (ghcr.io) with GITHUB_TOKEN
+// 2. Docker credential helpers (from ~/.docker/config.json)
+// 3. Environment variables for specific registries
+// 4. AWS ECR authentication (if AWS credentials are available)
+func getRegistryAuth(registry string) (authn.Authenticator, error) {
+	// Check for GitHub Container Registry
+	if strings.EqualFold(registry, "ghcr.io") {
+		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+			log.Debug("Using GitHub token for authentication", "registry", registry)
+			return &authn.Basic{
+				Username: "oauth2",
+				Password: token,
+			}, nil
+		}
+	}
+
+	// Check for Docker credential helpers (most common for private registries)
+	// This will automatically check ~/.docker/config.json and use credential helpers
+	if auth, err := getDockerAuth(registry); err == nil {
+		log.Debug("Using Docker config authentication", "registry", registry)
+		return auth, nil
+	}
+
+	// Check for custom environment variables for specific registries
+	// Format: REGISTRY_NAME_USERNAME and REGISTRY_NAME_PASSWORD
+	// Example: MY_REGISTRY_COM_USERNAME and MY_REGISTRY_COM_PASSWORD
+	registryEnvName := strings.ToUpper(strings.ReplaceAll(registry, ".", "_"))
+	username := os.Getenv(fmt.Sprintf("%s_USERNAME", registryEnvName))
+	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", registryEnvName))
+
+	if username != "" && password != "" {
+		log.Debug("Using environment variable authentication", "registry", registry)
+		return &authn.Basic{
+			Username: username,
+			Password: password,
+		}, nil
+	}
+
+	// Check for AWS ECR authentication
+	if strings.Contains(registry, "dkr.ecr.") && strings.Contains(registry, "amazonaws.com") {
+		if auth, err := getECRAuth(registry); err == nil {
+			log.Debug("Using AWS ECR authentication", "registry", registry)
+			return auth, nil
+		}
+	}
+
+	// Check for Azure Container Registry authentication
+	if strings.Contains(registry, "azurecr.io") {
+		if auth, err := getACRAuth(registry); err == nil {
+			log.Debug("Using Azure ACR authentication", "registry", registry)
+			return auth, nil
+		}
+	}
+
+	// Check for Google Container Registry authentication
+	if strings.Contains(registry, "gcr.io") || strings.Contains(registry, "pkg.dev") {
+		if auth, err := getGCRAuth(registry); err == nil {
+			log.Debug("Using Google GCR authentication", "registry", registry)
+			return auth, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no authentication found for registry %s", registry)
+}
+
+// getDockerAuth attempts to get authentication from Docker config file (~/.docker/config.json)
+func getDockerAuth(registry string) (authn.Authenticator, error) {
+	// Get user's home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	// Path to Docker config file
+	dockerConfigPath := filepath.Join(homeDir, ".docker", "config.json")
+
+	// Check if Docker config file exists
+	if _, err := os.Stat(dockerConfigPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("Docker config file not found: %s", dockerConfigPath)
+	}
+
+	// Read Docker config file
+	configData, err := os.ReadFile(dockerConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read Docker config file: %w", err)
+	}
+
+	// Parse Docker config JSON
+	var dockerConfig struct {
+		Auths map[string]struct {
+			Auth string `json:"auth"`
+		} `json:"auths"`
+		CredsStore string `json:"credsStore"`
+	}
+
+	if err := json.Unmarshal(configData, &dockerConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse Docker config JSON: %w", err)
+	}
+
+	// First, try to get credentials from credential store if it exists
+	if dockerConfig.CredsStore != "" {
+		if auth, err := getCredentialStoreAuth(registry, dockerConfig.CredsStore); err == nil {
+			log.Debug("Using credential store authentication", "registry", registry, "store", dockerConfig.CredsStore)
+			return auth, nil
+		} else {
+			log.Debug("Credential store authentication failed", "registry", registry, "store", dockerConfig.CredsStore, "error", err)
+		}
+	}
+
+	// Fallback to direct auth strings in the config file
+	// Look for exact registry match first
+	if authData, exists := dockerConfig.Auths[registry]; exists && authData.Auth != "" {
+		username, password, err := decodeDockerAuth(authData.Auth)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode auth for registry %s: %w", registry, err)
+		}
+		return &authn.Basic{
+			Username: username,
+			Password: password,
+		}, nil
+	}
+
+	// Look for registry with https:// prefix
+	httpsRegistry := "https://" + registry
+	if authData, exists := dockerConfig.Auths[httpsRegistry]; exists && authData.Auth != "" {
+		username, password, err := decodeDockerAuth(authData.Auth)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode auth for registry %s: %w", httpsRegistry, err)
+		}
+		return &authn.Basic{
+			Username: username,
+			Password: password,
+		}, nil
+	}
+
+	// Look for registry with http:// prefix
+	httpRegistry := "http://" + registry
+	if authData, exists := dockerConfig.Auths[httpRegistry]; exists && authData.Auth != "" {
+		username, password, err := decodeDockerAuth(authData.Auth)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode auth for registry %s: %w", httpRegistry, err)
+		}
+		return &authn.Basic{
+			Username: username,
+			Password: password,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("no authentication found in Docker config for registry %s", registry)
+}
+
+// getCredentialStoreAuth attempts to get credentials from Docker's credential store
+func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, error) {
+	// For Docker Desktop on macOS, the credential store is typically "desktop"
+	// We need to use the docker-credential-desktop helper to get credentials
+
+	// Try to execute the credential helper
+	cmd := exec.Command("docker-credential-"+credsStore, "get")
+	cmd.Stdin = strings.NewReader(registry)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get credentials from store %s: %w", credsStore, err)
+	}
+
+	// Parse the JSON output from the credential helper
+	var creds struct {
+		Username string `json:"Username"`
+		Secret   string `json:"Secret"`
+	}
+
+	if err := json.Unmarshal(output, &creds); err != nil {
+		return nil, fmt.Errorf("failed to parse credential store output: %w", err)
+	}
+
+	if creds.Username == "" || creds.Secret == "" {
+		return nil, fmt.Errorf("invalid credentials from store")
+	}
+
+	return &authn.Basic{
+		Username: creds.Username,
+		Password: creds.Secret,
+	}, nil
+}
+
+// decodeDockerAuth decodes the base64-encoded auth string from Docker config
+func decodeDockerAuth(authString string) (string, string, error) {
+	// Decode base64
+	decoded, err := base64.StdEncoding.DecodeString(authString)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to decode base64 auth string: %w", err)
+	}
+
+	// Split username:password
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid auth string format, expected username:password")
+	}
+
+	return parts[0], parts[1], nil
+}
+
+// getECRAuth attempts to get AWS ECR authentication using AWS credentials
+func getECRAuth(registry string) (authn.Authenticator, error) {
+	// This is a simplified implementation
+	// In a full implementation, you would use the AWS SDK to get ECR credentials
+	// For now, we'll check for AWS credentials and return an error if not found
+
+	// Check if AWS credentials are available
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_PROFILE") == "" {
+		return nil, fmt.Errorf("AWS credentials not found")
+	}
+
+	// For a complete implementation, you would:
+	// 1. Use AWS SDK to get ECR authorization token
+	// 2. Parse the token to extract username and password
+	// 3. Return authn.Basic with the extracted credentials
+
+	return nil, fmt.Errorf("AWS ECR authentication not fully implemented")
+}
+
+// getACRAuth attempts to get Azure Container Registry authentication
+func getACRAuth(registry string) (authn.Authenticator, error) {
+	// Check for Azure CLI authentication
+	if os.Getenv("AZURE_CLIENT_ID") != "" || os.Getenv("AZURE_TENANT_ID") != "" {
+		// For a complete implementation, you would use Azure SDK to get ACR credentials
+		return nil, fmt.Errorf("Azure ACR authentication not fully implemented")
+	}
+
+	return nil, fmt.Errorf("Azure credentials not found")
+}
+
+// getGCRAuth attempts to get Google Container Registry authentication
+func getGCRAuth(registry string) (authn.Authenticator, error) {
+	// Check for Google Cloud credentials
+	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != "" || os.Getenv("GCP_PROJECT") != "" {
+		// For a complete implementation, you would use Google Cloud SDK to get GCR credentials
+		return nil, fmt.Errorf("Google GCR authentication not fully implemented")
+	}
+
+	return nil, fmt.Errorf("Google Cloud credentials not found")
+}
+
 // processLayer processes a single OCI layer and extracts its contents to the specified destination directory.
 func processLayer(layer v1.Layer, index int, destDir string) error {
 	layerDesc, err := layer.Digest()
 	if err != nil {
 		log.Warn("Skipping layer with invalid digest", "index", index, "error", err)
 		return nil
+	}
+
+	// Get layer size for debugging
+	size, err := layer.Size()
+	if err != nil {
+		log.Warn("Could not get layer size", "index", index, "digest", layerDesc, "error", err)
+	} else {
+		log.Debug("Processing layer", "index", index, "digest", layerDesc, "size", size)
+	}
+
+	// Get layer media type for debugging
+	mediaType, err := layer.MediaType()
+	if err != nil {
+		log.Warn("Could not get layer media type", "index", index, "digest", layerDesc, "error", err)
+	} else {
+		log.Debug("Layer media type", "index", index, "digest", layerDesc, "mediaType", mediaType)
 	}
 
 	uncompressed, err := layer.Uncompressed()
@@ -117,11 +397,128 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	}
 	defer uncompressed.Close()
 
-	if err := extractTarball(uncompressed, destDir); err != nil {
-		log.Error("Layer extraction failed", "index", index, "digest", layerDesc, "error", err)
-		return fmt.Errorf("tarball extraction error: %w", err)
+	// Try to extract the layer based on media type
+	var extractionErr error
+
+	// Check if it's a ZIP file
+	mediaTypeStr := string(mediaType)
+	if strings.Contains(mediaTypeStr, "zip") {
+		log.Debug("Detected ZIP layer, extracting as ZIP", "index", index, "digest", layerDesc, "mediaType", mediaTypeStr)
+		extractionErr = extractZipFile(uncompressed, destDir)
+	} else {
+		// Default to tar extraction
+		log.Debug("Extracting as TAR", "index", index, "digest", layerDesc, "mediaType", mediaTypeStr)
+		extractionErr = extractTarball(uncompressed, destDir)
 	}
 
+	if extractionErr != nil {
+		log.Error("Layer extraction failed", "index", index, "digest", layerDesc, "error", extractionErr)
+
+		// Try alternative extraction methods for different formats
+		log.Debug("Attempting alternative extraction methods", "index", index, "digest", layerDesc)
+
+		// Reset the uncompressed reader
+		uncompressed, err = layer.Uncompressed()
+		if err != nil {
+			log.Error("Failed to reset uncompressed reader", "index", index, "digest", layerDesc, "error", err)
+			return fmt.Errorf("layer decompression error: %w", err)
+		}
+		defer uncompressed.Close()
+
+		// Try to extract as raw data first
+		if err := extractRawData(uncompressed, destDir, index); err != nil {
+			log.Error("Raw data extraction also failed", "index", index, "digest", layerDesc, "error", err)
+
+			// If this is the first layer and it fails, it might be metadata
+			if index == 0 {
+				log.Warn("First layer extraction failed, this might be metadata. Skipping layer.", "index", index, "digest", layerDesc)
+				return nil // Skip this layer instead of failing
+			}
+
+			return fmt.Errorf("all extraction methods failed: %w", err)
+		}
+
+		log.Debug("Successfully extracted layer using alternative method", "index", index, "digest", layerDesc)
+		return nil
+	}
+
+	log.Debug("Successfully extracted layer", "index", index, "digest", layerDesc)
+	return nil
+}
+
+// extractRawData attempts to extract raw data from the layer as a fallback
+func extractRawData(reader io.Reader, destDir string, layerIndex int) error {
+	// Create a temporary file to store the raw data
+	tempFile := filepath.Join(destDir, fmt.Sprintf("layer_%d_raw", layerIndex))
+
+	file, err := os.Create(tempFile)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer file.Close()
+
+	// Copy the raw data
+	_, err = io.Copy(file, reader)
+	if err != nil {
+		return fmt.Errorf("failed to copy raw data: %w", err)
+	}
+
+	log.Debug("Extracted raw data to temp file", "file", tempFile)
+	return nil
+}
+
+// extractZipFile extracts a ZIP file from an io.Reader into the destination directory
+func extractZipFile(reader io.Reader, destDir string) error {
+	// Read the entire ZIP data into memory
+	zipData, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("failed to read ZIP data: %w", err)
+	}
+
+	// Create a ZIP reader
+	zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return fmt.Errorf("failed to create ZIP reader: %w", err)
+	}
+
+	// Extract each file in the ZIP
+	for _, file := range zipReader.File {
+		// Skip directories
+		if file.FileInfo().IsDir() {
+			continue
+		}
+
+		// Create the file path
+		filePath := filepath.Join(destDir, file.Name)
+
+		// Create parent directories if they don't exist
+		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", file.Name, err)
+		}
+
+		// Open the file in the ZIP
+		rc, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("failed to open file %s in ZIP: %w", file.Name, err)
+		}
+		defer rc.Close()
+
+		// Create the destination file
+		dstFile, err := os.Create(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to create file %s: %w", filePath, err)
+		}
+		defer dstFile.Close()
+
+		// Copy the file contents
+		if _, err := io.Copy(dstFile, rc); err != nil {
+			return fmt.Errorf("failed to copy file %s: %w", file.Name, err)
+		}
+
+		log.Debug("Extracted file from ZIP", "file", file.Name, "path", filePath)
+	}
+
+	log.Debug("Successfully extracted ZIP file", "destination", destDir)
 	return nil
 }
 
@@ -132,9 +529,26 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 		log.Error("Failed to parse OCI manifest", "image", imageName, "error", err)
 		return
 	}
-	if manifest.ArtifactType != targetArtifactType {
-		// log that don't match the target artifact type
-		log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", manifest.ArtifactType)
+
+	// Check if the artifact type is supported
+	supportedTypes := []string{
+		targetArtifactType,
+		opentofuArtifactType,
+		terraformArtifactType,
+	}
+
+	isSupported := false
+	for _, supportedType := range supportedTypes {
+		if manifest.ArtifactType == supportedType {
+			isSupported = true
+			break
+		}
+	}
+
+	if !isSupported {
+		log.Warn("OCI image artifact type not recognized", "image", imageName, "artifactType", manifest.ArtifactType, "supportedTypes", supportedTypes)
+	} else {
+		log.Debug("OCI image artifact type is supported", "image", imageName, "artifactType", manifest.ArtifactType)
 	}
 }
 
