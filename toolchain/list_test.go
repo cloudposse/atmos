@@ -6,14 +6,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestListCommand_WithInstalledTools(t *testing.T) {
 	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	t.Log(tempDir)
 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
 	toolsDir := filepath.Join(tempDir, ".tools")
+	atmosConfig := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: toolVersionsFile,
+			ToolsDir: toolsDir,
+		},
+	}
 
 	// Create a .tool-versions file with some tools
 	toolVersions := &ToolVersions{
@@ -22,9 +31,8 @@ func TestListCommand_WithInstalledTools(t *testing.T) {
 			"kubectl":   {"1.28.0"},
 		},
 	}
-	err := SaveToolVersions(toolVersionsFile, toolVersions)
+	err := SaveToolVersions(atmosConfig.Toolchain.FilePath, toolVersions)
 	require.NoError(t, err)
-
 	// Create mock installed binaries
 	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
 	err = os.MkdirAll(terraformPath, 0o755)
@@ -48,17 +56,14 @@ func TestListCommand_WithInstalledTools(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test listing tools
-	cmd := listCmd
-	cmd.SetArgs([]string{})
-	// Set the global flags
-	ToolChainCmd.PersistentFlags().Set("tool-versions", toolVersionsFile)
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
+	SetAtmosConfig(atmosConfig)
+	err = RunList()
 	require.NoError(t, err, "Should successfully list installed tools")
 }
 
 func TestListCommand_EmptyToolVersionsFile(t *testing.T) {
 	tempDir := t.TempDir()
+	t.Chdir(tempDir)
 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
 
 	// Create an empty .tool-versions file
@@ -68,27 +73,28 @@ func TestListCommand_EmptyToolVersionsFile(t *testing.T) {
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
 
-	// Test listing with empty file
-	cmd := listCmd
-	cmd.SetArgs([]string{})
-	// Set the global flag
-	ToolChainCmd.PersistentFlags().Set("tool-versions", toolVersionsFile)
-	err = cmd.Execute()
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: toolVersionsFile,
+		},
+	})
+	err = RunList()
+
 	require.NoError(t, err, "Should handle empty tool-versions file gracefully")
 }
 
 func TestListCommand_NonExistentToolVersionsFile(t *testing.T) {
 	tempDir := t.TempDir()
-	toolVersionsFile := filepath.Join(tempDir, "non-existent")
-
+	t.Chdir(tempDir)
 	// Test listing with non-existent file
-	cmd := listCmd
-	cmd.SetArgs([]string{})
-	// Set the global flag
-	ToolChainCmd.PersistentFlags().Set("tool-versions", toolVersionsFile)
-	err := cmd.Execute()
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: filepath.Join(tempDir, "non-existent"),
+		},
+	})
+	err := RunList()
 	require.Error(t, err, "Should error when tool-versions file doesn't exist")
-	assert.Contains(t, err.Error(), "no tool-versions file found")
+	assert.Contains(t, err.Error(), "failed to load .tool-versions")
 }
 
 func TestListCommand_ToolsNotInstalled(t *testing.T) {
@@ -104,13 +110,12 @@ func TestListCommand_ToolsNotInstalled(t *testing.T) {
 	}
 	err := SaveToolVersions(toolVersionsFile, toolVersions)
 	require.NoError(t, err)
-
-	// Test listing tools that aren't installed
-	cmd := listCmd
-	cmd.SetArgs([]string{})
-	// Set the global flag
-	ToolChainCmd.PersistentFlags().Set("tool-versions", toolVersionsFile)
-	err = cmd.Execute()
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: toolVersionsFile,
+		},
+	})
+	err = RunList()
 	require.NoError(t, err, "Should handle tools that aren't installed gracefully")
 }
 
@@ -138,18 +143,19 @@ func TestListCommand_MixedInstalledAndNotInstalled(t *testing.T) {
 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
 	require.NoError(t, err)
 
-	// Test listing mixed tools
-	cmd := listCmd
-	cmd.SetArgs([]string{})
-	// Set the global flags
-	ToolChainCmd.PersistentFlags().Set("tool-versions", toolVersionsFile)
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: toolVersionsFile,
+			ToolsDir: toolsDir,
+		},
+	})
+	err = RunList()
 	require.NoError(t, err, "Should list only installed tools")
 }
 
 func TestListCommand_WithLatestVersion(t *testing.T) {
 	tempDir := t.TempDir()
+	t.Chdir(tempDir)
 	toolVersionsFile := filepath.Join(tempDir, ".tool-versions")
 	toolsDir := filepath.Join(tempDir, ".tools")
 
@@ -175,32 +181,25 @@ func TestListCommand_WithLatestVersion(t *testing.T) {
 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
 	require.NoError(t, err)
 
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: toolVersionsFile,
+			ToolsDir: toolsDir,
+		},
+	})
 	// Test listing with latest version
-	cmd := listCmd
-	cmd.SetArgs([]string{})
-	// Set the global flags
-	ToolChainCmd.PersistentFlags().Set("tool-versions", toolVersionsFile)
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
+	err = RunList()
 	require.NoError(t, err, "Should handle latest version correctly")
 }
 
 func TestListCommand_NoArgs(t *testing.T) {
-	cmd := listCmd
-	cmd.SetArgs([]string{})
-	err := cmd.Execute()
+	dir := t.TempDir()
+	t.Chdir(dir)
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+	err := RunList()
 	// This should fail when no .tool-versions file exists
 	require.Error(t, err, "Should fail when no .tool-versions file exists")
-	assert.Contains(t, err.Error(), "no tool-versions file found in current directory")
-}
-
-func TestListCommand_WithArgs(t *testing.T) {
-	cmd := listCmd
-	cmd.SetArgs([]string{"extra", "args"})
-	err := cmd.Execute()
-	// The list command should fail when no .tool-versions file exists
-	require.Error(t, err, "Should fail when no .tool-versions file exists")
-	assert.Contains(t, err.Error(), "no tool-versions file found in current directory")
+	assert.Contains(t, err.Error(), "failed to load .tool-versions")
 }
 
 func TestFormatFileSize(t *testing.T) {
@@ -246,14 +245,14 @@ func TestListCommand_WithCanonicalNames(t *testing.T) {
 	terraformBinary := filepath.Join(terraformPath, "terraform")
 	err = os.WriteFile(terraformBinary, []byte("mock terraform binary"), 0o755)
 	require.NoError(t, err)
-
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: toolVersionsFile,
+			ToolsDir: toolsDir,
+		},
+	})
 	// Test listing with canonical names
-	cmd := listCmd
-	cmd.SetArgs([]string{})
-	// Set the global flags
-	ToolChainCmd.PersistentFlags().Set("tool-versions", toolVersionsFile)
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
+	err = RunList()
 	require.NoError(t, err, "Should handle canonical names correctly")
 }
 
@@ -288,12 +287,12 @@ func TestListCommand_WithMultipleVersions(t *testing.T) {
 	err = os.WriteFile(terraformBinary2, []byte("mock terraform binary"), 0o755)
 	require.NoError(t, err)
 
-	// Test listing with multiple versions
-	cmd := listCmd
-	cmd.SetArgs([]string{})
-	// Set the global flags
-	ToolChainCmd.PersistentFlags().Set("tool-versions", toolVersionsFile)
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: toolVersionsFile,
+			ToolsDir: toolsDir,
+		},
+	})
+	err = RunList()
 	require.NoError(t, err, "Should handle multiple versions correctly")
 }

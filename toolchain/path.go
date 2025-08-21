@@ -6,39 +6,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
-var pathCmd = &cobra.Command{
-	Use:   "path",
-	Short: "Emit the complete PATH environment variable for configured tool versions",
-	Long: `Emit the complete PATH environment variable for configured tool versions.
-
-This command reads the .tool-versions file and constructs a PATH that includes
-all installed tool versions in the correct order for execution.
-
-Examples:
-  toolchain path                    # Print PATH for all tools in .tool-versions (absolute paths)
-  toolchain path --relative         # Print PATH with relative paths
-  toolchain path --export           # Print export PATH=... for shell sourcing
-  toolchain path --json             # Print PATH as JSON object`,
-	RunE: emitPath,
-}
-
-var (
-	exportFlag   bool
-	jsonFlag     bool
-	relativeFlag bool
-)
-
-func init() {
-	pathCmd.Flags().BoolVar(&exportFlag, "export", false, "Print export PATH=... for shell sourcing")
-	pathCmd.Flags().BoolVar(&jsonFlag, "json", false, "Print PATH as JSON object")
-	pathCmd.Flags().BoolVar(&relativeFlag, "relative", false, "Use relative paths instead of absolute paths")
-}
-
-func emitPath(cmd *cobra.Command, args []string) error {
+func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	installer := NewInstaller()
 
 	// Read tool-versions file
@@ -71,7 +41,7 @@ func emitPath(cmd *cobra.Command, args []string) error {
 		}
 
 		// Find the actual binary path (handles path inconsistencies)
-		binaryPath, err := installer.findBinaryPath(owner, repo, version)
+		binaryPath, err := installer.FindBinaryPath(owner, repo, version)
 		if err != nil {
 			// Tool not installed, skip it
 			continue

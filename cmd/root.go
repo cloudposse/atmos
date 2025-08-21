@@ -446,7 +446,7 @@ func Execute() error {
 	// Here we need the custom commands from the config.
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-
+	toolchain.SetAtmosConfig(&atmosConfig)
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
 
@@ -625,7 +625,7 @@ func init() {
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
 	// Set custom usage template.
 
-	RootCmd.AddCommand(toolchain.ToolChainCmd)
+	RootCmd.AddCommand(ToolChainCmd)
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

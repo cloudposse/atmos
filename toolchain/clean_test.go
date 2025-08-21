@@ -1,260 +1,253 @@
 package toolchain
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestCleanCommand_ExistingToolsDirectory(t *testing.T) {
-	tempDir := t.TempDir()
-	toolsDir := filepath.Join(tempDir, ".tools")
-
-	// Create a mock tools directory with some files
-	err := os.MkdirAll(filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4"), 0o755)
-	require.NoError(t, err)
-
-	// Create some mock binary files
-	err = os.WriteFile(filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4", "terraform"), []byte("mock binary"), 0o755)
-	require.NoError(t, err)
-
-	err = os.MkdirAll(filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0"), 0o755)
-	require.NoError(t, err)
-
-	err = os.WriteFile(filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0", "kubectl"), []byte("mock binary"), 0o755)
-	require.NoError(t, err)
-
-	// Verify the directory exists and has content
-	_, err = os.Stat(toolsDir)
-	require.NoError(t, err)
-
-	// Test cleaning the tools directory
-	cmd := cleanCmd
-	cmd.SetArgs([]string{})
-	// Set the global tools-dir flag on the root command
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
-	require.NoError(t, err, "Should successfully clean existing tools directory")
-
-	// Verify the directory was deleted
-	_, err = os.Stat(toolsDir)
-	assert.True(t, os.IsNotExist(err), "Tools directory should be deleted")
-}
-
-func TestCleanCommand_NonExistentToolsDirectory(t *testing.T) {
-	tempDir := t.TempDir()
-	toolsDir := filepath.Join(tempDir, ".tools")
-
-	// Verify the directory doesn't exist
-	_, err := os.Stat(toolsDir)
-	assert.True(t, os.IsNotExist(err))
-
-	// Test cleaning non-existent tools directory
-	cmd := cleanCmd
-	cmd.SetArgs([]string{})
-	err = cmd.Execute()
-	require.NoError(t, err, "Should not error when cleaning non-existent directory")
-
-	// Verify the directory still doesn't exist
-	_, err = os.Stat(toolsDir)
-	assert.True(t, os.IsNotExist(err))
-}
-
-func TestCleanCommand_EmptyToolsDirectory(t *testing.T) {
-	tempDir := t.TempDir()
-	toolsDir := filepath.Join(tempDir, ".tools")
-
-	// Create an empty tools directory
-	err := os.MkdirAll(toolsDir, 0o755)
-	require.NoError(t, err)
-
-	// Verify the directory exists
-	_, err = os.Stat(toolsDir)
-	require.NoError(t, err)
-
-	// Test cleaning empty tools directory
-	cmd := cleanCmd
-	cmd.SetArgs([]string{})
-	// Set the global tools-dir flag on the root command
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
-	require.NoError(t, err, "Should successfully clean empty tools directory")
-
-	// Verify the directory was deleted
-	_, err = os.Stat(toolsDir)
-	assert.True(t, os.IsNotExist(err), "Empty tools directory should be deleted")
-}
-
-func TestCleanCommand_ComplexDirectoryStructure(t *testing.T) {
-	tempDir := t.TempDir()
-	toolsDir := filepath.Join(tempDir, ".tools")
-
-	// Create a complex directory structure
-	dirs := []string{
-		filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4"),
-		filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.9.8"),
-		filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0"),
-		filepath.Join(toolsDir, "bin", "helm", "3.12.0"),
-		filepath.Join(toolsDir, "cache", "downloads"),
-		filepath.Join(toolsDir, "temp", "extract"),
+func TestCleanToolsAndCaches(t *testing.T) {
+	// Helper to create a test directory with files and subdirectories
+	createTestDir := func(t *testing.T, baseDir string, files, dirs []string) {
+		t.Helper()
+		if err := os.MkdirAll(baseDir, 0755); err != nil {
+			t.Fatalf("failed to create test dir %s: %v", baseDir, err)
+		}
+		for _, file := range files {
+			if err := os.WriteFile(filepath.Join(baseDir, file), []byte("test"), 0644); err != nil {
+				t.Fatalf("failed to create file %s: %v", file, err)
+			}
+		}
+		for _, dir := range dirs {
+			if err := os.Mkdir(filepath.Join(baseDir, dir), 0755); err != nil {
+				t.Fatalf("failed to create dir %s: %v", dir, err)
+			}
+		}
 	}
 
-	for _, dir := range dirs {
-		err := os.MkdirAll(dir, 0o755)
-		require.NoError(t, err)
-	}
-
-	// Create some mock files
-	files := []string{
-		filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4", "terraform"),
-		filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.9.8", "terraform"),
-		filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.28.0", "kubectl"),
-		filepath.Join(toolsDir, "bin", "helm", "3.12.0", "helm"),
-		filepath.Join(toolsDir, "cache", "downloads", "terraform.zip"),
-		filepath.Join(toolsDir, "temp", "extract", "temp_file"),
-	}
-
-	for _, file := range files {
-		err := os.WriteFile(file, []byte("mock content"), 0o644)
-		require.NoError(t, err)
-	}
-
-	// Verify the directory exists and has content
-	_, err := os.Stat(toolsDir)
-	require.NoError(t, err)
-
-	// Test cleaning the complex tools directory
-	cmd := cleanCmd
-	cmd.SetArgs([]string{})
-	// Set the global tools-dir flag on the root command
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
-	require.NoError(t, err, "Should successfully clean complex tools directory")
-
-	// Verify the directory was deleted
-	_, err = os.Stat(toolsDir)
-	assert.True(t, os.IsNotExist(err), "Complex tools directory should be deleted")
-}
-
-func TestCleanCommand_WithSymlinks(t *testing.T) {
-	tempDir := t.TempDir()
-	toolsDir := filepath.Join(tempDir, ".tools")
-
-	// Create a tools directory with symlinks
-	err := os.MkdirAll(filepath.Join(toolsDir, "bin"), 0o755)
-	require.NoError(t, err)
-
-	// Create a target file
-	targetFile := filepath.Join(toolsDir, "bin", "target")
-	err = os.WriteFile(targetFile, []byte("target content"), 0o644)
-	require.NoError(t, err)
-
-	// Create a symlink
-	symlinkFile := filepath.Join(toolsDir, "bin", "symlink")
-	err = os.Symlink(targetFile, symlinkFile)
-	require.NoError(t, err)
-
-	// Verify the directory exists
-	_, err = os.Stat(toolsDir)
-	require.NoError(t, err)
-
-	// Test cleaning the tools directory with symlinks
-	cmd := cleanCmd
-	cmd.SetArgs([]string{})
-	// Set the global tools-dir flag on the root command
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
-	require.NoError(t, err, "Should successfully clean tools directory with symlinks")
-
-	// Verify the directory was deleted
-	_, err = os.Stat(toolsDir)
-	assert.True(t, os.IsNotExist(err), "Tools directory with symlinks should be deleted")
-}
-
-func TestCleanCommand_WithReadOnlyFiles(t *testing.T) {
-	tempDir := t.TempDir()
-	toolsDir := filepath.Join(tempDir, ".tools")
-
-	// Create a tools directory with read-only files
-	err := os.MkdirAll(filepath.Join(toolsDir, "bin"), 0o755)
-	require.NoError(t, err)
-
-	// Create a read-only file
-	readOnlyFile := filepath.Join(toolsDir, "bin", "readonly")
-	err = os.WriteFile(readOnlyFile, []byte("readonly content"), 0o444)
-	require.NoError(t, err)
-
-	// Verify the directory exists
-	_, err = os.Stat(toolsDir)
-	require.NoError(t, err)
-
-	// Test cleaning the tools directory with read-only files
-	cmd := cleanCmd
-	cmd.SetArgs([]string{})
-	// Set the global tools-dir flag on the root command
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
-	require.NoError(t, err, "Should successfully clean tools directory with read-only files")
-
-	// Verify the directory was deleted
-	_, err = os.Stat(toolsDir)
-	assert.True(t, os.IsNotExist(err), "Tools directory with read-only files should be deleted")
-}
-
-func TestCleanCommand_NoArgs(t *testing.T) {
-	cmd := cleanCmd
-	cmd.SetArgs([]string{})
-	err := cmd.Execute()
-	// This should not error even if the tools directory doesn't exist
-	// The command handles non-existent directories gracefully
-	require.NoError(t, err, "Should not error when cleaning with no args")
-}
-
-func TestCleanCommand_WithArgs(t *testing.T) {
-	cmd := cleanCmd
-	cmd.SetArgs([]string{"extra", "args"})
-	err := cmd.Execute()
-	// The clean command doesn't take arguments, but it should still work
-	// as it ignores extra arguments
-	require.NoError(t, err, "Should not error when cleaning with extra args")
-}
-
-func TestCleanCommand_CountsCorrectly(t *testing.T) {
-	tempDir := t.TempDir()
-	toolsDir := filepath.Join(tempDir, ".tools")
-
-	// Create a simple structure to test counting
-	err := os.MkdirAll(filepath.Join(toolsDir, "bin", "test"), 0o755)
-	require.NoError(t, err)
-
-	err = os.WriteFile(filepath.Join(toolsDir, "bin", "test", "binary"), []byte("test"), 0o755)
-	require.NoError(t, err)
-
-	// Count manually to verify
-	expectedCount := 0
-	err = filepath.Walk(toolsDir, func(path string, info os.FileInfo, err error) error {
+	// Helper to reset permissions for cleanup
+	resetPermissions := func(t *testing.T, dir string) {
+		t.Helper()
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			return
+		}
+		// First, set dir to 0700 to allow traversal and modification for owner
+		if err := os.Chmod(dir, 0700); err != nil {
+			t.Logf("failed to set dir writable for reset: %v", err)
+			return
+		}
+		// Then recursively reset permissions
+		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			return os.Chmod(path, 0755)
+		})
 		if err != nil {
-			return err
+			t.Logf("failed to reset permissions for %s: %v", dir, err)
 		}
-		if path != toolsDir {
-			expectedCount++
-		}
-		return nil
-	})
-	require.NoError(t, err)
+	}
 
-	// Test cleaning and verify the count
-	cmd := cleanCmd
-	cmd.SetArgs([]string{})
-	// Set the global tools-dir flag on the root command
-	ToolChainCmd.PersistentFlags().Set("tools-dir", toolsDir)
-	err = cmd.Execute()
-	require.NoError(t, err, "Should successfully clean and count files")
+	// Helper to capture stdout
+	captureOutput := func(f func()) string {
+		originalStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+		f()
+		w.Close()
+		os.Stdout = originalStdout
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(r)
+		return buf.String()
+	}
 
-	// Verify the directory was deleted
-	_, err = os.Stat(toolsDir)
-	assert.True(t, os.IsNotExist(err), "Tools directory should be deleted")
+	// Test cases
+	tests := []struct {
+		name           string
+		setup          func(t *testing.T) (toolsDir, cacheDir, tempCacheDir string)
+		expectedError  bool
+		expectedOutput string
+	}{
+		{
+			name: "HappyPath_AllDirectoriesWithContent",
+			setup: func(t *testing.T) (string, string, string) {
+				base := t.TempDir()
+				toolsDir := filepath.Join(base, "tools")
+				cacheDir := filepath.Join(base, "cache")
+				tempCacheDir := filepath.Join(base, "temp-cache")
+				createTestDir(t, toolsDir, []string{"file1", "file2"}, []string{"dir1"})
+				createTestDir(t, cacheDir, []string{"cache1"}, []string{"cachedir1"})
+				createTestDir(t, tempCacheDir, []string{"temp1"}, []string{})
+				return toolsDir, cacheDir, tempCacheDir
+			},
+			expectedError: false,
+			expectedOutput: `✓ Deleted 3 files/directories from %s
+✓ Deleted 2 files from %s cache
+✓ Deleted 1 files from %s cache
+`,
+		},
+		{
+			name: "NonExistentDirectories",
+			setup: func(t *testing.T) (string, string, string) {
+				base := t.TempDir()
+				return filepath.Join(base, "nonexistent-tools"),
+					filepath.Join(base, "nonexistent-cache"),
+					filepath.Join(base, "nonexistent-temp-cache")
+			},
+			expectedError: false,
+			expectedOutput: `✓ Deleted 0 files/directories from %s
+`,
+		},
+		{
+			name: "EmptyDirectories",
+			setup: func(t *testing.T) (string, string, string) {
+				base := t.TempDir()
+				toolsDir := filepath.Join(base, "tools")
+				cacheDir := filepath.Join(base, "cache")
+				tempCacheDir := filepath.Join(base, "temp-cache")
+				if err := os.MkdirAll(toolsDir, 0755); err != nil {
+					t.Fatalf("failed to create toolsDir: %v", err)
+				}
+				if err := os.MkdirAll(cacheDir, 0755); err != nil {
+					t.Fatalf("failed to create cacheDir: %v", err)
+				}
+				if err := os.MkdirAll(tempCacheDir, 0755); err != nil {
+					t.Fatalf("failed to create tempCacheDir: %v", err)
+				}
+				return toolsDir, cacheDir, tempCacheDir
+			},
+			expectedError: false,
+			expectedOutput: `✓ Deleted 0 files/directories from %s
+`,
+		},
+		{
+			name: "PermissionError_ToolsDir",
+			setup: func(t *testing.T) (string, string, string) {
+				base := t.TempDir()
+				toolsDir := filepath.Join(base, "tools")
+				cacheDir := filepath.Join(base, "cache")
+				tempCacheDir := filepath.Join(base, "temp-cache")
+				createTestDir(t, toolsDir, []string{"file1"}, []string{})
+				// Set file read-only FIRST
+				if err := os.Chmod(filepath.Join(toolsDir, "file1"), 0400); err != nil {
+					t.Fatalf("failed to set file permissions: %v", err)
+				}
+				// Then set directory read-only (no execute)
+				if err := os.Chmod(toolsDir, 0400); err != nil {
+					t.Fatalf("failed to set directory permissions: %v", err)
+				}
+				createTestDir(t, cacheDir, []string{"cache1"}, []string{})
+				createTestDir(t, tempCacheDir, []string{"temp1"}, []string{})
+				// Defer permission reset for cleanup
+				t.Cleanup(func() {
+					resetPermissions(t, toolsDir)
+				})
+				return toolsDir, cacheDir, tempCacheDir
+			},
+			expectedError:  true,
+			expectedOutput: "",
+		},
+		{
+			name: "PermissionError_CacheDir",
+			setup: func(t *testing.T) (string, string, string) {
+				base := t.TempDir()
+				toolsDir := filepath.Join(base, "tools")
+				cacheDir := filepath.Join(base, "cache")
+				tempCacheDir := filepath.Join(base, "temp-cache")
+				createTestDir(t, toolsDir, []string{"file1"}, []string{})
+				createTestDir(t, cacheDir, []string{"cache1"}, []string{})
+				// Set file read-only FIRST
+				if err := os.Chmod(filepath.Join(cacheDir, "cache1"), 0400); err != nil {
+					t.Fatalf("failed to set file permissions: %v", err)
+				}
+				// Then set directory read-only (no execute)
+				if err := os.Chmod(cacheDir, 0400); err != nil {
+					t.Fatalf("failed to set directory permissions: %v", err)
+				}
+				createTestDir(t, tempCacheDir, []string{"temp1"}, []string{})
+				// Defer permission reset for cleanup
+				t.Cleanup(func() {
+					resetPermissions(t, cacheDir)
+				})
+				return toolsDir, cacheDir, tempCacheDir
+			},
+			expectedError: false,
+			expectedOutput: `Warning: failed to count files in %s: permission denied
+Warning: failed to delete %s: permission denied
+✓ Deleted 1 files/directories from %s
+✓ Deleted 1 files from %s cache
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toolsDir, cacheDir, tempCacheDir := tt.setup(t)
+
+			// Capture output
+			output := captureOutput(func() {
+				err := CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir)
+				if (err != nil) != tt.expectedError {
+					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
+				}
+			})
+
+			// Format expected output based on the number of placeholders
+			var expectedOutput string
+			if tt.expectedOutput != "" {
+				if strings.Contains(tt.expectedOutput, "Warning") {
+					// For permission errors, use simplified placeholder (flexible comparison handles details)
+					expectedOutput = fmt.Sprintf(tt.expectedOutput, cacheDir, cacheDir, toolsDir, tempCacheDir)
+				} else if strings.Count(tt.expectedOutput, "%s") == 1 {
+					expectedOutput = fmt.Sprintf(tt.expectedOutput, toolsDir)
+				} else {
+					expectedOutput = fmt.Sprintf(tt.expectedOutput, toolsDir, cacheDir, tempCacheDir)
+				}
+			}
+
+			// Normalize line endings for cross-platform compatibility
+			output = strings.ReplaceAll(output, "\r\n", "\n")
+			expectedOutput = strings.ReplaceAll(expectedOutput, "\r\n", "\n")
+
+			// Verify output
+			if strings.Contains(tt.name, "PermissionError_CacheDir") {
+				outputLines := strings.Split(output, "\n")
+				expectedLines := strings.Split(expectedOutput, "\n")
+				if len(outputLines) != len(expectedLines) {
+					t.Errorf("unexpected number of output lines:\nGot: %d\nWant: %d\nGot:\n%s\nWant:\n%s", len(outputLines), len(expectedLines), output, expectedOutput)
+				}
+				for i, expectedLine := range expectedLines {
+					if i >= len(outputLines) {
+						continue
+					}
+					if strings.Contains(expectedLine, "Warning") {
+						// Flexible check for warnings: must contain directory and "permission denied"
+						if !strings.Contains(outputLines[i], cacheDir) || !strings.Contains(outputLines[i], "permission denied") {
+							t.Errorf("unexpected warning line:\nGot: %s\nWant containing: %s", outputLines[i], expectedLine)
+						}
+					} else if outputLines[i] != expectedLine {
+						t.Errorf("unexpected output line:\nGot: %s\nWant: %s", outputLines[i], expectedLine)
+					}
+				}
+			} else if output != expectedOutput {
+				t.Errorf("unexpected output:\nGot:\n%s\nWant:\n%s", output, expectedOutput)
+			}
+
+			// Verify directories were deleted (or not, in case of errors)
+			if !tt.expectedError {
+				if _, err := os.Stat(toolsDir); !os.IsNotExist(err) {
+					t.Errorf("toolsDir %s should be deleted", toolsDir)
+				}
+				if _, err := os.Stat(cacheDir); !os.IsNotExist(err) && !strings.Contains(tt.name, "PermissionError_CacheDir") {
+					t.Errorf("cacheDir %s should be deleted", cacheDir)
+				}
+				if _, err := os.Stat(tempCacheDir); !os.IsNotExist(err) {
+					t.Errorf("tempCacheDir %s should be deleted", tempCacheDir)
+				}
+			}
+		})
+	}
 }

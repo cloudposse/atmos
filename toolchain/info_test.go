@@ -3,10 +3,12 @@ package toolchain
 import (
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestInfoCommand_AliasResolution(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{})
 	// Test that alias resolution works correctly
 	installer := NewInstaller()
 

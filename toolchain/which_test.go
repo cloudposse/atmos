@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/cobra"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,22 +21,9 @@ func TestWhichCommand_ToolNotConfigured(t *testing.T) {
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
 	require.NoError(t, err)
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	err = WhichExec("kubectl")
 
-	// Create a new command instance to avoid interference
-	cmd := &cobra.Command{
-		Use:   "which",
-		Short: "Display the path to an executable",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Override the tool versions file path for this test
-			originalPath := GetToolVersionsFilePath()
-			defer func() { toolVersionsFile = originalPath }()
-			toolVersionsFile = toolVersionsPath
-			return whichCmd.RunE(cmd, args)
-		},
-	}
-	cmd.SetArgs([]string{"kubectl"})
-
-	err = cmd.Execute()
 	require.Error(t, err, "Should fail when tool is not configured in .tool-versions")
 	assert.Contains(t, err.Error(), "not configured in .tool-versions")
 }
@@ -53,21 +40,9 @@ func TestWhichCommand_InvalidTool(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
 	require.NoError(t, err)
 
-	// Create a new command instance to avoid interference
-	cmd := &cobra.Command{
-		Use:   "which",
-		Short: "Display the path to an executable",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Override the tool versions file path for this test
-			originalPath := GetToolVersionsFilePath()
-			defer func() { toolVersionsFile = originalPath }()
-			toolVersionsFile = toolVersionsPath
-			return whichCmd.RunE(cmd, args)
-		},
-	}
-	cmd.SetArgs([]string{"nonexistent-tool-12345"})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	err = WhichExec("nonexistent-tool-12345")
 
-	err = cmd.Execute()
 	require.Error(t, err, "Should fail when tool doesn't exist in .tool-versions")
 	assert.Contains(t, err.Error(), "not configured in .tool-versions")
 }
@@ -86,21 +61,8 @@ func TestWhichCommand_InvalidToolName(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Create a new command instance to avoid interference
-	cmd := &cobra.Command{
-		Use:   "which",
-		Short: "Display the path to an executable",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Override the tool versions file path for this test
-			originalPath := GetToolVersionsFilePath()
-			defer func() { toolVersionsFile = originalPath }()
-			toolVersionsFile = toolVersionsPath
-			return whichCmd.RunE(cmd, args)
-		},
-	}
-	cmd.SetArgs([]string{"invalid/tool/name"})
-
-	err = cmd.Execute()
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	err = WhichExec("invalid/tool/name")
 	require.Error(t, err, "Should fail when tool name is invalid")
 	assert.Contains(t, err.Error(), "failed to resolve tool")
 }
@@ -117,21 +79,9 @@ func TestWhichCommand_EmptyToolName(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, emptyToolVersions)
 	require.NoError(t, err)
 
-	// Create a new command instance to avoid interference
-	cmd := &cobra.Command{
-		Use:   "which",
-		Short: "Display the path to an executable",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Override the tool versions file path for this test
-			originalPath := GetToolVersionsFilePath()
-			defer func() { toolVersionsFile = originalPath }()
-			toolVersionsFile = toolVersionsPath
-			return whichCmd.RunE(cmd, args)
-		},
-	}
-	cmd.SetArgs([]string{""})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	err = WhichExec("")
 
-	err = cmd.Execute()
 	require.Error(t, err, "Should fail when tool name is empty")
 	assert.Contains(t, err.Error(), "not configured in .tool-versions")
 }
@@ -150,21 +100,9 @@ func TestWhichCommand_ToolConfiguredButNotInstalled(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Create a new command instance to avoid interference
-	cmd := &cobra.Command{
-		Use:   "which",
-		Short: "Display the path to an executable",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Override the tool versions file path for this test
-			originalPath := GetToolVersionsFilePath()
-			defer func() { toolVersionsFile = originalPath }()
-			toolVersionsFile = toolVersionsPath
-			return whichCmd.RunE(cmd, args)
-		},
-	}
-	cmd.SetArgs([]string{"terraform"})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	err = WhichExec("terraform")
 
-	err = cmd.Execute()
 	require.Error(t, err, "Should fail when tool is configured but not installed")
 	assert.Contains(t, err.Error(), "is configured but not installed")
 }
@@ -180,6 +118,7 @@ func TestWhichCommand_ToolConfiguredAndInstalled(t *testing.T) {
 		},
 	}
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
@@ -192,22 +131,7 @@ func TestWhichCommand_ToolConfiguredAndInstalled(t *testing.T) {
 	require.NoError(t, err)
 	err = os.WriteFile(binaryPath, []byte("mock terraform"), 0o755)
 	require.NoError(t, err)
-
-	// Create a new command instance to avoid interference
-	cmd := &cobra.Command{
-		Use:   "which",
-		Short: "Display the path to an executable",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Override the tool versions file path for this test
-			originalPath := GetToolVersionsFilePath()
-			defer func() { toolVersionsFile = originalPath }()
-			toolVersionsFile = toolVersionsPath
-			return whichCmd.RunE(cmd, args)
-		},
-	}
-	cmd.SetArgs([]string{"terraform"})
-
-	err = cmd.Execute()
+	err = WhichExec("terraform")
 	require.NoError(t, err, "Should succeed when tool is configured and installed")
 }
 
@@ -218,61 +142,18 @@ func TestWhichCommand_NoToolVersionsFile(t *testing.T) {
 	// Don't create a .tool-versions file
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 
-	// Create a new command instance to avoid interference
-	cmd := &cobra.Command{
-		Use:   "which",
-		Short: "Display the path to an executable",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Override the tool versions file path for this test
-			originalPath := GetToolVersionsFilePath()
-			defer func() { toolVersionsFile = originalPath }()
-			toolVersionsFile = toolVersionsPath
-			return whichCmd.RunE(cmd, args)
-		},
-	}
-	cmd.SetArgs([]string{"terraform"})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir, FilePath: toolVersionsPath}})
+	err := WhichExec("terraform")
 
-	err := cmd.Execute()
 	require.Error(t, err, "Should fail when .tool-versions file doesn't exist")
 	assert.Contains(t, err.Error(), "failed to load .tool-versions file")
 }
 
-func TestWhichCommand_HelpFlag(t *testing.T) {
-	// Test that help flag works
-	cmd := whichCmd
-	cmd.SetArgs([]string{"--help"})
-
-	err := cmd.Execute()
-	// Help should not return an error
-	require.NoError(t, err, "Help flag should not cause an error")
-}
-
-// Note: Argument validation tests are not included here because Cobra handles
-// argument validation differently in test context vs command line execution.
-// The core functionality is tested in other test cases.
-
-func TestWhichCommand_ResolvesAlias(t *testing.T) {
-	// Test that the command can resolve aliases
-	// This test will pass if terraform is configured in .tool-versions and installed
-	cmd := whichCmd
-	cmd.SetArgs([]string{"terraform"})
-
-	err := cmd.Execute()
-	// This might succeed if terraform is configured and installed, or fail if not
-	// We don't assert either way since it depends on the current .tool-versions state
-	if err != nil {
-		t.Logf("terraform not found or not installed: %v", err)
-	} else {
-		t.Logf("terraform found and installed via toolchain")
-	}
-}
-
 func TestWhichCommand_CanonicalName(t *testing.T) {
 	// Test with canonical name
-	cmd := whichCmd
-	cmd.SetArgs([]string{"hashicorp/terraform"})
 
-	err := cmd.Execute()
+	err := WhichExec("hashicorp/terraform")
+
 	// This might succeed if hashicorp/terraform is configured and installed, or fail if not
 	// We don't assert either way since it depends on the current .tool-versions state
 	if err != nil {

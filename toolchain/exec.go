@@ -4,38 +4,17 @@ import (
 	"fmt"
 	"os"
 	"syscall"
-
-	"github.com/spf13/cobra"
 )
-
-var execCmd = &cobra.Command{
-	Use:   "exec [tool[@version]] [flags...]",
-	Short: "Exec a specific version of a tool (replaces current process)",
-	Long: `Exec a specific version of a tool with arguments, replacing the current process.
-
-If no version is specified, the latest version will be used.
-
-Examples:
-  toolchain exec terraform --version          # Uses latest version
-  toolchain exec terraform@1.9.8 --version   # Uses specific version
-  toolchain exec opentofu@1.10.1 init
-  toolchain exec terraform@1.5.7 plan -var-file=prod.tfvars`,
-	Args:               cobra.MinimumNArgs(1),
-	RunE:               execTool,
-	DisableFlagParsing: true,
-}
 
 var execFunc = syscall.Exec
 
-func execTool(cmd *cobra.Command, args []string) error {
-	installer := NewInstaller()
-	return execToolWithInstaller(installer, cmd, args)
-}
-
-func execToolWithInstaller(installer ToolRunner, cmd *cobra.Command, args []string) error {
+// RunExecCommand contains business logic for executing tools.
+// It does not depend on cobra.Command, only raw args.
+func RunExecCommand(installer ToolRunner, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no arguments provided. Expected format: tool@version")
 	}
+
 	toolSpec := args[0]
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
@@ -51,33 +30,29 @@ func execToolWithInstaller(installer ToolRunner, cmd *cobra.Command, args []stri
 		return fmt.Errorf("invalid tool name: %w", err)
 	}
 
-	binaryPath, err := installer.findBinaryPath(owner, repo, version)
+	binaryPath, err := ensureToolInstalled(installer, owner, repo, tool, version)
 	if err != nil {
-		fmt.Printf("🔧 Tool %s@%s is not installed. Installing automatically...\n", tool, version)
-		installErr := InstallSingleTool(owner, repo, version, false, true)
-		if installErr != nil {
-			return fmt.Errorf("failed to auto-install %s@%s: %w. Run 'toolchain install %s/%s@%s' manually",
-				tool, version, installErr, owner, repo, version)
-		}
-		binaryPath, err = installer.findBinaryPath(owner, repo, version)
-		if err != nil {
-			return fmt.Errorf("failed to find binary path after installation: %w", err)
-		}
-	} else {
-		if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
-			fmt.Printf("🔧 Tool %s@%s is not installed. Installing automatically...\n", tool, version)
-			installErr := InstallSingleTool(owner, repo, version, false, true)
-			if installErr != nil {
-				return fmt.Errorf("failed to auto-install %s@%s: %w. Run 'toolchain install %s/%s@%s' manually",
-					tool, version, installErr, owner, repo, version)
-			}
-			binaryPath, err = installer.findBinaryPath(owner, repo, version)
-			if err != nil {
-				return fmt.Errorf("failed to find binary path after installation: %w", err)
-			}
-		}
+		return err
 	}
 
 	// Replace the current process with the tool binary
 	return execFunc(binaryPath, append([]string{binaryPath}, remainingArgs...), os.Environ())
+}
+
+// ensureToolInstalled checks if the binary exists, otherwise installs it.
+func ensureToolInstalled(installer ToolRunner, owner, repo, tool, version string) (string, error) {
+	binaryPath, err := installer.FindBinaryPath(owner, repo, version)
+	if err == nil && binaryPath != "" {
+		if _, statErr := os.Stat(binaryPath); !os.IsNotExist(statErr) {
+			return binaryPath, nil
+		}
+	}
+
+	fmt.Printf("🔧 Tool %s@%s is not installed. Installing automatically...\n", tool, version)
+	if installErr := InstallSingleTool(owner, repo, version, false, true); installErr != nil {
+		return "", fmt.Errorf("failed to auto-install %s@%s: %w. Run 'toolchain install %s/%s@%s' manually",
+			tool, version, installErr, owner, repo, version)
+	}
+
+	return installer.FindBinaryPath(owner, repo, version)
 }

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/cobra"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,6 +41,11 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 			"helmfile":  {"helmfile", "helmfile"},
 		},
 	}
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			FilePath: toolVersionsPath,
+		},
+	})
 	installer := NewInstallerWithResolver(mockResolver)
 	owner, repo, err := installer.parseToolSpec("opentofu")
 	assert.NoError(t, err)
@@ -73,13 +78,14 @@ func TestRunInstallWithNoArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Temporarily set the global toolVersionsFile variable
-	originalToolVersionsFile := toolVersionsFile
-	toolVersionsFile = toolVersionsPath
-	defer func() { toolVersionsFile = originalToolVersionsFile }()
+	originalToolVersionsFile := GetToolVersionsFilePath()
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: toolVersionsPath}})
+	defer func() {
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{FilePath: originalToolVersionsFile}})
+	}()
 
 	// Test that runInstall with no arguments doesn't error
 	// This prevents regression where the function might error when no specific tool is provided
-	cmd := &cobra.Command{}
-	err = runInstall(cmd, []string{})
+	err = RunInstall("", false, false)
 	assert.NoError(t, err)
 }

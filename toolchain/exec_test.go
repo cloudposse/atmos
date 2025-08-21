@@ -1,70 +1,127 @@
 package toolchain
 
 import (
-	"os"
-	"reflect"
+	"errors"
 	"testing"
 )
 
-type mockToolRunner struct {
+// --- Fake Installer for testing ---
+type fakeInstaller struct {
+	resolveOwner string
+	resolveRepo  string
+	resolveErr   error
+
 	binaryPath string
+	binaryErr  error
 }
 
-type mockResolver struct{}
-
-func (m *mockResolver) Resolve(toolName string) (string, string, error) {
-	return "test-owner", "test-repo", nil
+func (f *fakeInstaller) GetResolver() ToolResolver {
+	return f
 }
 
-func (m *mockToolRunner) findBinaryPath(owner, repo, version string) (string, error) {
-	return m.binaryPath, nil
+func (f *fakeInstaller) Resolve(tool string) (string, string, error) {
+	return f.resolveOwner, f.resolveRepo, f.resolveErr
 }
-func (m *mockToolRunner) GetResolver() ToolResolver                          { return &mockResolver{} }
-func (m *mockToolRunner) createLatestFile(owner, repo, version string) error { return nil }
-func (m *mockToolRunner) readLatestFile(owner, repo string) (string, error)  { return "", nil }
 
-func TestExecToolWithInstaller_CallsExecFunc(t *testing.T) {
-	// Create a temporary file that actually exists
-	tmpFile, err := os.CreateTemp("", "fake-tool-*")
+func (f *fakeInstaller) FindBinaryPath(owner, repo, version string) (string, error) {
+	return f.binaryPath, f.binaryErr
+}
+
+func (f *fakeInstaller) CreateLatestFile(owner, repo, version string) error {
+	return nil
+}
+
+func (f *fakeInstaller) ReadLatestFile(owner, repo string) (string, error) {
+	return "", nil
+}
+
+// Resolver interface must match your actual implementation.
+type Resolver interface {
+	Resolve(tool string) (string, string, error)
+}
+
+// --- Mock syscall.Exec ---
+var (
+	calledExecPath string
+	calledExecArgs []string
+	calledExecEnv  []string
+)
+
+func mockExec(path string, args []string, env []string) error {
+	calledExecPath = path
+	calledExecArgs = args
+	calledExecEnv = env
+	return nil
+}
+
+func resetExecMock() {
+	calledExecPath = ""
+	calledExecArgs = nil
+	calledExecEnv = nil
+}
+
+// --- Tests ---
+func TestRunExecCommand_Success(t *testing.T) {
+	resetExecMock()
+	execFunc = mockExec // swap syscall.Exec with mock
+
+	fake := &fakeInstaller{
+		resolveOwner: "hashicorp",
+		resolveRepo:  "terraform",
+		binaryPath:   "/fake/path/terraform",
+		binaryErr:    nil,
+	}
+
+	args := []string{"terraform@1.9.8", "--version"}
+
+	err := RunExecCommand(fake, args)
 	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	// Save and restore execFunc
-	origExecFunc := execFunc
-	defer func() { execFunc = origExecFunc }()
-
-	called := false
-	var gotPath string
-	var gotArgs []string
-	var gotEnv []string
-	execFunc = func(path string, args []string, env []string) error {
-		called = true
-		gotPath = path
-		gotArgs = args
-		gotEnv = env
-		return nil
+		t.Fatalf("expected no error, got %v", err)
 	}
 
-	mockBin := tmpFile.Name()
-	installer := &mockToolRunner{binaryPath: mockBin}
-	args := []string{"fake-tool@1.2.3", "--foo", "bar"}
-	err = execToolWithInstaller(installer, nil, args)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if calledExecPath != "/fake/path/terraform" {
+		t.Errorf("expected exec path '/fake/path/terraform', got %s", calledExecPath)
 	}
-	if !called {
-		t.Error("execFunc was not called")
+
+	if calledExecArgs[1] != "--version" {
+		t.Errorf("expected '--version' arg, got %v", calledExecArgs)
 	}
-	if gotPath != mockBin {
-		t.Errorf("execFunc called with wrong path: got %q, want %q", gotPath, mockBin)
+}
+
+func TestRunExecCommand_InvalidTool(t *testing.T) {
+	fake := &fakeInstaller{
+		resolveErr: errors.New("tool not found"),
 	}
-	wantArgs := []string{mockBin, "--foo", "bar"}
-	if !reflect.DeepEqual(gotArgs, wantArgs) {
-		t.Errorf("execFunc called with wrong args: got %v, want %v", gotArgs, wantArgs)
+
+	args := []string{"unknown@1.0.0"}
+	err := RunExecCommand(fake, args)
+	if err == nil || err.Error() != "invalid tool name: tool not found" {
+		t.Fatalf("expected invalid tool error, got %v", err)
 	}
-	if len(gotEnv) == 0 || os.Getenv("PATH") == "" {
-		t.Error("execFunc called with empty or missing environment")
+}
+
+func TestRunExecCommand_NoArgs(t *testing.T) {
+	fake := &fakeInstaller{}
+	err := RunExecCommand(fake, []string{})
+	if err == nil || err.Error() != "no arguments provided. Expected format: tool@version" {
+		t.Fatalf("expected missing args error, got %v", err)
+	}
+}
+
+func TestRunExecCommand_BinaryNotFound(t *testing.T) {
+	resetExecMock()
+	execFunc = mockExec
+
+	fake := &fakeInstaller{
+		resolveOwner: "hashicorp",
+		resolveRepo:  "terraform",
+		binaryErr:    errors.New("binary not found"),
+	}
+
+	args := []string{"terraform@1.9.8"}
+
+	err := RunExecCommand(fake, args)
+	if err == nil {
+		t.Fatalf("expected error when binary not found, got nil")
 	}
 }
