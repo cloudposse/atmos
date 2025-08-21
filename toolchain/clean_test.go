@@ -13,16 +13,16 @@ func TestCleanToolsAndCaches(t *testing.T) {
 	// Helper to create a test directory with files and subdirectories
 	createTestDir := func(t *testing.T, baseDir string, files, dirs []string) {
 		t.Helper()
-		if err := os.MkdirAll(baseDir, 0755); err != nil {
+		if err := os.MkdirAll(baseDir, 0o755); err != nil {
 			t.Fatalf("failed to create test dir %s: %v", baseDir, err)
 		}
 		for _, file := range files {
-			if err := os.WriteFile(filepath.Join(baseDir, file), []byte("test"), 0644); err != nil {
+			if err := os.WriteFile(filepath.Join(baseDir, file), []byte("test"), 0o644); err != nil {
 				t.Fatalf("failed to create file %s: %v", file, err)
 			}
 		}
 		for _, dir := range dirs {
-			if err := os.Mkdir(filepath.Join(baseDir, dir), 0755); err != nil {
+			if err := os.Mkdir(filepath.Join(baseDir, dir), 0o755); err != nil {
 				t.Fatalf("failed to create dir %s: %v", dir, err)
 			}
 		}
@@ -35,7 +35,7 @@ func TestCleanToolsAndCaches(t *testing.T) {
 			return
 		}
 		// First, set dir to 0700 to allow traversal and modification for owner
-		if err := os.Chmod(dir, 0700); err != nil {
+		if err := os.Chmod(dir, 0o700); err != nil {
 			t.Logf("failed to set dir writable for reset: %v", err)
 			return
 		}
@@ -44,7 +44,7 @@ func TestCleanToolsAndCaches(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			return os.Chmod(path, 0755)
+			return os.Chmod(path, 0o755)
 		})
 		if err != nil {
 			t.Logf("failed to reset permissions for %s: %v", dir, err)
@@ -108,13 +108,13 @@ func TestCleanToolsAndCaches(t *testing.T) {
 				toolsDir := filepath.Join(base, "tools")
 				cacheDir := filepath.Join(base, "cache")
 				tempCacheDir := filepath.Join(base, "temp-cache")
-				if err := os.MkdirAll(toolsDir, 0755); err != nil {
+				if err := os.MkdirAll(toolsDir, 0o755); err != nil {
 					t.Fatalf("failed to create toolsDir: %v", err)
 				}
-				if err := os.MkdirAll(cacheDir, 0755); err != nil {
+				if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 					t.Fatalf("failed to create cacheDir: %v", err)
 				}
-				if err := os.MkdirAll(tempCacheDir, 0755); err != nil {
+				if err := os.MkdirAll(tempCacheDir, 0o755); err != nil {
 					t.Fatalf("failed to create tempCacheDir: %v", err)
 				}
 				return toolsDir, cacheDir, tempCacheDir
@@ -132,11 +132,11 @@ func TestCleanToolsAndCaches(t *testing.T) {
 				tempCacheDir := filepath.Join(base, "temp-cache")
 				createTestDir(t, toolsDir, []string{"file1"}, []string{})
 				// Set file read-only FIRST
-				if err := os.Chmod(filepath.Join(toolsDir, "file1"), 0400); err != nil {
+				if err := os.Chmod(filepath.Join(toolsDir, "file1"), 0o400); err != nil {
 					t.Fatalf("failed to set file permissions: %v", err)
 				}
 				// Then set directory read-only (no execute)
-				if err := os.Chmod(toolsDir, 0400); err != nil {
+				if err := os.Chmod(toolsDir, 0o400); err != nil {
 					t.Fatalf("failed to set directory permissions: %v", err)
 				}
 				createTestDir(t, cacheDir, []string{"cache1"}, []string{})
@@ -160,11 +160,11 @@ func TestCleanToolsAndCaches(t *testing.T) {
 				createTestDir(t, toolsDir, []string{"file1"}, []string{})
 				createTestDir(t, cacheDir, []string{"cache1"}, []string{})
 				// Set file read-only FIRST
-				if err := os.Chmod(filepath.Join(cacheDir, "cache1"), 0400); err != nil {
+				if err := os.Chmod(filepath.Join(cacheDir, "cache1"), 0o400); err != nil {
 					t.Fatalf("failed to set file permissions: %v", err)
 				}
 				// Then set directory read-only (no execute)
-				if err := os.Chmod(cacheDir, 0400); err != nil {
+				if err := os.Chmod(cacheDir, 0o400); err != nil {
 					t.Fatalf("failed to set directory permissions: %v", err)
 				}
 				createTestDir(t, tempCacheDir, []string{"temp1"}, []string{})

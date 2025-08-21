@@ -219,7 +219,6 @@ func (m versionListModel) View() string {
 // SetToolVersion handles the core logic of setting a tool version.
 // If version is empty, it will prompt the user interactively (for GitHub release type tools).
 func SetToolVersion(toolName, version string, scrollSpeed int) error {
-
 	// Resolve the tool name to handle aliases
 	installer := NewInstaller()
 	owner, repo, err := installer.parseToolSpec(toolName)

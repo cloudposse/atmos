@@ -175,7 +175,6 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 }
 
 func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error {
-
 	installer := NewInstaller()
 
 	toolVersions, err := LoadToolVersions(toolVersionsPath)
