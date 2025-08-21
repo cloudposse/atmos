@@ -167,7 +167,11 @@ func ExecuteWorkflow(
 		if err != nil {
 			log.Debug("Workflow failed", "error", err)
 
-			workflowFileName := filepath.Base(workflowPath)
+			// Remove the workflow base path, stacks/workflows
+			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
+			// Remove the leading slash
+			workflowFileName = strings.TrimPrefix(workflowFileName, "/")
+			// Remove the file extension
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
 			resumeCommand := fmt.Sprintf(
