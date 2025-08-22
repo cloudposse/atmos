@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	cloud.google.com/go/secretmanager v1.15.0
 	dario.cat/mergo v1.0.2
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.2
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.19.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.11.0
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets v1.4.0
 	github.com/Masterminds/sprig/v3 v3.3.0
@@ -48,7 +48,7 @@ require (
 	github.com/hashicorp/go-getter v1.7.9
 	github.com/hashicorp/hcl v1.0.1-vault-7
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20250815164439-e06743db9cd8
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20250822072239-d9a8f4395430
 	github.com/hashicorp/terraform-exec v0.23.0
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/jfrog/jfrog-client-go v1.54.5
