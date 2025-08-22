@@ -201,5 +201,11 @@
     "host": "",
     "file": "",
     "profile_type": ""
+  },
+  "toolchain": {
+    "install_path": "",
+    "file_path": "",
+    "tools_dir": "",
+    "tools_config_file": ""
   }
 }

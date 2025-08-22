@@ -55,10 +55,7 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 	// Fall back to remote registry
 	// Try multiple registry sources
 	registries := []string{
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/terraform",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/opentofu",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/helm",
+		"https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs",
 	}
 
 	for _, registry := range registries {
@@ -257,6 +254,9 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte, owner, repo string) (*Too
 			Format:     pkg.Format,
 			Type:       pkg.Type,
 			BinaryName: pkg.BinaryName,
+		}
+		if pkg.BinaryName == "" {
+			tool.Name = pkg.RepoName
 		}
 		return tool, nil
 	}
