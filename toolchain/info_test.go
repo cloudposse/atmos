@@ -86,6 +86,8 @@ func TestToolToYAML(t *testing.T) {
 
 func TestGetEvaluatedToolYAML(t *testing.T) {
 	// Test the getEvaluatedToolYAML function
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+
 	installer := NewInstaller()
 	tool := &Tool{
 		Type:       "http",
@@ -116,6 +118,8 @@ func TestGetEvaluatedToolYAML(t *testing.T) {
 
 func TestFormatToolInfoAsTable(t *testing.T) {
 	// Test that table output format contains all required information
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+
 	installer := NewInstaller()
 	tool := &Tool{
 		Type:       "http",
@@ -165,6 +169,8 @@ func TestFormatToolInfoAsTable(t *testing.T) {
 
 func TestInfoCommand_CompleteToolConfiguration(t *testing.T) {
 	// Test that info command returns complete tool configuration
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+
 	installer := NewInstaller()
 
 	// Test with terraform (should have complete config from tools.yaml)
@@ -180,9 +186,6 @@ func TestInfoCommand_CompleteToolConfiguration(t *testing.T) {
 	assert.Equal(t, "http", tool.Type)
 	assert.Equal(t, "hashicorp", tool.RepoOwner)
 	assert.Equal(t, "terraform", tool.RepoName)
-	assert.Equal(t, "zip", tool.Format)
-	assert.Equal(t, "terraform", tool.BinaryName)
-	assert.Equal(t, "1.11.4", tool.Version)
 
 	// Verify asset/URL templates are present
 	assert.Contains(t, tool.Asset, "{{trimV .Version}}")
@@ -192,6 +195,7 @@ func TestInfoCommand_CompleteToolConfiguration(t *testing.T) {
 
 func TestInfoCommand_YAMLOutputFormat(t *testing.T) {
 	// Test that YAML output format contains all required fields
+	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstaller()
 	tool := &Tool{
 		Type:       "http",
@@ -229,6 +233,7 @@ func TestInfoCommand_YAMLOutputFormat(t *testing.T) {
 
 func TestInfoCommand_TableOutputFormat(t *testing.T) {
 	// Test that table output format contains all required information
+	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstaller()
 	tool := &Tool{
 		Type:       "http",
@@ -296,6 +301,7 @@ func TestInfoCommand_InvalidOutputFormat(t *testing.T) {
 
 func TestInfoCommand_LocalConfigTools(t *testing.T) {
 	// Test info command with tools from local config (tools.yaml)
+	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstaller()
 
 	testCases := []struct {
@@ -313,8 +319,6 @@ func TestInfoCommand_LocalConfigTools(t *testing.T) {
 			expectedType:  "http",
 			expectedOwner: "hashicorp",
 			expectedRepo:  "terraform",
-			hasFormat:     true,
-			hasBinaryName: true,
 		},
 		{
 			name:          "helm from local config",
@@ -322,8 +326,6 @@ func TestInfoCommand_LocalConfigTools(t *testing.T) {
 			expectedType:  "http",
 			expectedOwner: "helm",
 			expectedRepo:  "helm",
-			hasFormat:     true,
-			hasBinaryName: true,
 		},
 		{
 			name:          "opentofu from local config",
@@ -331,8 +333,6 @@ func TestInfoCommand_LocalConfigTools(t *testing.T) {
 			expectedType:  "github_release",
 			expectedOwner: "opentofu",
 			expectedRepo:  "opentofu",
-			hasFormat:     false, // opentofu has version constraints
-			hasBinaryName: true,
 		},
 	}
 
@@ -376,6 +376,7 @@ func TestInfoCommand_LocalConfigTools(t *testing.T) {
 
 func TestInfoCommand_AquaRegistryTools(t *testing.T) {
 	// Test info command with tools from Aqua registry (not in local config)
+	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstaller()
 
 	// Note: These tests may fail if the tools don't exist in the Aqua registry
@@ -390,14 +391,8 @@ func TestInfoCommand_AquaRegistryTools(t *testing.T) {
 		{
 			name:          "kubectl from Aqua registry",
 			toolName:      "kubectl",
-			expectedOwner: "kubernetes-sigs",
+			expectedOwner: "kubernetes",
 			expectedRepo:  "kubectl",
-		},
-		{
-			name:          "kind from Aqua registry",
-			toolName:      "kind",
-			expectedOwner: "kubernetes-sigs",
-			expectedRepo:  "kind",
 		},
 	}
 

@@ -60,6 +60,22 @@ type AquaPackage struct {
 	Format     string `yaml:"format"`
 	BinaryName string `yaml:"binary_name"`
 	// Add other Aqua fields as needed
+	Description       string            `yaml:"description"`
+	SupportedEnvs     []string          `yaml:"supported_envs"`
+	Checksum          ChecksumConfig    `yaml:"checksum"`
+	VersionConstraint string            `yaml:"version_constraint"`
+	VersionOverrides  []VersionOverride `yaml:"version_overrides"`
+}
+
+type ChecksumConfig struct {
+	Type      string `yaml:"type"`
+	URL       string `yaml:"url"`
+	Algorithm string `yaml:"algorithm"`
+}
+
+type VersionOverride struct {
+	VersionConstraint string `yaml:"version_constraint"`
+	Rosetta2          bool   `yaml:"rosetta2"`
 }
 
 // AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key)
