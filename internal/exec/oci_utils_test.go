@@ -410,15 +410,26 @@ func TestCloudProviderAuth(t *testing.T) {
 			registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com",
 			setupEnv: func() {
 				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+				os.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+				os.Setenv("AWS_REGION", "us-west-2")
 			},
 			testFunction:  getECRAuth,
-			expectedError: true, // Not fully implemented
+			expectedError: true, // Will fail in test environment without real AWS credentials
 		},
 		{
 			name:     "AWS ECR without credentials",
 			registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com",
 			setupEnv: func() {
 				os.Unsetenv("AWS_ACCESS_KEY_ID")
+			},
+			testFunction:  getECRAuth,
+			expectedError: true,
+		},
+		{
+			name:     "AWS ECR invalid registry format",
+			registry: "invalid-ecr-registry.com",
+			setupEnv: func() {
+				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
 			},
 			testFunction:  getECRAuth,
 			expectedError: true,

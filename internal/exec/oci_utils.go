@@ -3,6 +3,7 @@ package exec
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,8 @@ import (
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 	"github.com/pkg/errors"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -337,21 +340,73 @@ func decodeDockerAuth(authString string) (string, string, error) {
 
 // getECRAuth attempts to get AWS ECR authentication using AWS credentials
 func getECRAuth(registry string) (authn.Authenticator, error) {
-	// This is a simplified implementation
-	// In a full implementation, you would use the AWS SDK to get ECR credentials
-	// For now, we'll check for AWS credentials and return an error if not found
-
 	// Check if AWS credentials are available
 	if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_PROFILE") == "" {
 		return nil, fmt.Errorf("AWS credentials not found")
 	}
 
-	// For a complete implementation, you would:
-	// 1. Use AWS SDK to get ECR authorization token
-	// 2. Parse the token to extract username and password
-	// 3. Return authn.Basic with the extracted credentials
+	// Load AWS configuration
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+	}
 
-	return nil, fmt.Errorf("AWS ECR authentication not fully implemented")
+	// Create ECR client
+	ecrClient := ecr.NewFromConfig(cfg)
+
+	// Extract region from registry URL
+	// ECR registry format: <account-id>.dkr.ecr.<region>.amazonaws.com
+	parts := strings.Split(registry, ".")
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("invalid ECR registry format: %s", registry)
+	}
+
+	// Find the region part (should be after "ecr")
+	region := ""
+	for i, part := range parts {
+		if part == "ecr" && i+1 < len(parts) {
+			region = parts[i+1]
+			break
+		}
+	}
+
+	if region == "" {
+		return nil, fmt.Errorf("could not extract region from ECR registry: %s", registry)
+	}
+
+	// Get ECR authorization token
+	authTokenInput := &ecr.GetAuthorizationTokenInput{}
+	authTokenOutput, err := ecrClient.GetAuthorizationToken(context.Background(), authTokenInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ECR authorization token: %w", err)
+	}
+
+	if len(authTokenOutput.AuthorizationData) == 0 {
+		return nil, fmt.Errorf("no authorization data returned from ECR")
+	}
+
+	// Decode the authorization token
+	authData := authTokenOutput.AuthorizationData[0]
+	token, err := base64.StdEncoding.DecodeString(*authData.AuthorizationToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode ECR authorization token: %w", err)
+	}
+
+	// Parse username:password from token
+	parts = strings.SplitN(string(token), ":", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid ECR authorization token format")
+	}
+
+	username := parts[0]
+	password := parts[1]
+
+	log.Debug("Successfully obtained ECR credentials", "registry", registry, "region", region)
+
+	return &authn.Basic{
+		Username: username,
+		Password: password,
+	}, nil
 }
 
 // getACRAuth attempts to get Azure Container Registry authentication
@@ -428,6 +483,9 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 		log.Debug("Attempting alternative extraction methods", "index", index, "digest", layerDesc)
 
 		// Reset the uncompressed reader
+		if uncompressed != nil {
+			uncompressed.Close()
+		}
 		uncompressed, err = layer.Uncompressed()
 		if err != nil {
 			log.Error("Failed to reset uncompressed reader", "index", index, "digest", layerDesc, "error", err)
@@ -511,19 +569,24 @@ func extractZipFile(reader io.Reader, destDir string) error {
 		if err != nil {
 			return fmt.Errorf("failed to open file %s in ZIP: %w", file.Name, err)
 		}
-		defer rc.Close()
 
 		// Create the destination file
 		dstFile, err := os.Create(filePath)
 		if err != nil {
+			rc.Close()
 			return fmt.Errorf("failed to create file %s: %w", filePath, err)
 		}
-		defer dstFile.Close()
 
 		// Copy the file contents
 		if _, err := io.Copy(dstFile, rc); err != nil {
+			rc.Close()
+			dstFile.Close()
 			return fmt.Errorf("failed to copy file %s: %w", file.Name, err)
 		}
+
+		// Close both files explicitly
+		rc.Close()
+		dstFile.Close()
 
 		log.Debug("Extracted file from ZIP", "file", file.Name, "path", filePath)
 	}
