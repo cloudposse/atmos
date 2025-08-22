@@ -14,7 +14,7 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_template: "{{ .vars.stage }}"
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
 
 logs:
   file: "/dev/stderr"
