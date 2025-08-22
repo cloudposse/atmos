@@ -361,6 +361,24 @@ func TestGetCredentialStoreAuth(t *testing.T) {
 			credsStore:    "",
 			expectedError: true,
 		},
+		{
+			name:          "Registry with command injection attempt",
+			registry:      "test-registry.com; rm -rf /",
+			credsStore:    "desktop",
+			expectedError: true,
+		},
+		{
+			name:          "Credential store with command injection attempt",
+			registry:      "test-registry.com",
+			credsStore:    "desktop; rm -rf /",
+			expectedError: true,
+		},
+		{
+			name:          "Registry with shell metacharacters",
+			registry:      "test-registry.com`whoami`",
+			credsStore:    "desktop",
+			expectedError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -510,7 +528,7 @@ func BenchmarkExtractZipFile(b *testing.B) {
 
 func BenchmarkGetRegistryAuth(b *testing.B) {
 	// Setup test environment
-	os.Setenv("GITHUB_TOKEN", "test-token")
+	b.Setenv("GITHUB_TOKEN", "test-token")
 
 	b.ResetTimer()
 

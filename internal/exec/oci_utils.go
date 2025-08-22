@@ -276,6 +276,16 @@ func getDockerAuth(registry string) (authn.Authenticator, error) {
 
 // getCredentialStoreAuth attempts to get credentials from Docker's credential store
 func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, error) {
+	// Validate registry to prevent command injection
+	if strings.ContainsAny(registry, ";&|`$(){}[]<>'\"\n\r") {
+		return nil, fmt.Errorf("invalid registry name: %s", registry)
+	}
+
+	// Validate credsStore to prevent command injection
+	if strings.ContainsAny(credsStore, ";&|`$(){}[]<>/\\") {
+		return nil, fmt.Errorf("invalid credential store name: %s", credsStore)
+	}
+
 	// For Docker Desktop on macOS, the credential store is typically "desktop"
 	// We need to use the docker-credential-desktop helper to get credentials
 
