@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -344,5 +345,35 @@ func ExecuteDescribeDependents(
 		}
 	}
 
+	sortDependentsByStackSlugRecursive(dependents)
 	return dependents, nil
+}
+
+// sortDependentsByStackSlug sorts the dependents by stack slug.
+func sortDependentsByStackSlug(deps []schema.Dependent) {
+	if len(deps) == 0 {
+		return
+	}
+	sort.SliceStable(deps, func(i, j int) bool {
+		// primary key
+		if deps[i].StackSlug != deps[j].StackSlug {
+			return deps[i].StackSlug < deps[j].StackSlug
+		}
+		// tie-breakers to keep order stable across runs
+		if deps[i].Component != deps[j].Component {
+			return deps[i].Component < deps[j].Component
+		}
+		return deps[i].Stack < deps[j].Stack
+	})
+}
+
+// sortDependentsByStackSlugRecursive sorts the dependents by stack slug recursively.
+func sortDependentsByStackSlugRecursive(deps []schema.Dependent) {
+	if len(deps) == 0 {
+		return
+	}
+	for i := range deps {
+		sortDependentsByStackSlugRecursive(deps[i].Dependents)
+	}
+	sortDependentsByStackSlug(deps)
 }
