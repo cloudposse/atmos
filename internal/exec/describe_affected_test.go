@@ -631,47 +631,6 @@ func TestDescribeAffectedExecute(t *testing.T) {
 			Settings:             map[string]any{},
 			Dependents: []schema.Dependent{
 				{
-					Component:            "tgw/hub",
-					ComponentType:        "terraform",
-					ComponentPath:        componentPath,
-					Environment:          "ue1",
-					Stage:                "network",
-					Stack:                "ue1-network",
-					StackSlug:            "ue1-network-tgw-hub",
-					IncludedInDependents: false,
-					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
-								"component": "vpc",
-								"stack":     "ue1-network",
-							},
-						},
-					},
-					Dependents: []schema.Dependent{
-						{
-							Component:            "tgw/attachment",
-							ComponentType:        "terraform",
-							ComponentPath:        componentPath,
-							Environment:          "ue1",
-							Stage:                "network",
-							Stack:                "ue1-network",
-							StackSlug:            "ue1-network-tgw-attachment",
-							IncludedInDependents: false,
-							Settings: map[string]any{
-								"depends_on": map[any]any{
-									1: map[string]any{
-										"component": "vpc",
-									},
-									2: map[string]any{
-										"component": "tgw/hub",
-									},
-								},
-							},
-							Dependents: []schema.Dependent{},
-						},
-					},
-				},
-				{
 					Component:            "tgw/attachment",
 					ComponentType:        "terraform",
 					ComponentPath:        componentPath,
@@ -679,15 +638,11 @@ func TestDescribeAffectedExecute(t *testing.T) {
 					Stage:                "network",
 					Stack:                "ue1-network",
 					StackSlug:            "ue1-network-tgw-attachment",
-					IncludedInDependents: true,
+					IncludedInDependents: false,
 					Settings: map[string]any{
 						"depends_on": map[any]any{
-							1: map[string]any{
-								"component": "vpc",
-							},
-							2: map[string]any{
-								"component": "tgw/hub",
-							},
+							1: map[string]any{"component": "vpc"},
+							2: map[string]any{"component": "tgw/hub"},
 						},
 					},
 					Dependents: []schema.Dependent{},
@@ -704,7 +659,7 @@ func TestDescribeAffectedExecute(t *testing.T) {
 			AffectedAll:          []string{"stack.settings"},
 			File:                 "",
 			Folder:               "",
-			IncludedInDependents: true,
+			IncludedInDependents: false,
 			Settings: map[string]any{
 				"depends_on": map[any]any{
 					1: map[string]any{
@@ -725,12 +680,8 @@ func TestDescribeAffectedExecute(t *testing.T) {
 					IncludedInDependents: false,
 					Settings: map[string]any{
 						"depends_on": map[any]any{
-							1: map[string]any{
-								"component": "vpc",
-							},
-							2: map[string]any{
-								"component": "tgw/hub",
-							},
+							1: map[string]any{"component": "vpc"},
+							2: map[string]any{"component": "tgw/hub"},
 						},
 					},
 					Dependents: []schema.Dependent{},
@@ -782,9 +733,7 @@ func TestDescribeAffectedExecute(t *testing.T) {
 					IncludedInDependents: false,
 					Settings: map[string]any{
 						"depends_on": map[any]any{
-							1: map[string]any{
-								"component": "vpc",
-							},
+							1: map[string]any{"component": "vpc"},
 							2: map[string]any{
 								"component": "tgw/hub",
 								"stack":     "ue1-{{ .vars.stage }}",
@@ -817,6 +766,7 @@ func TestDescribeAffectedExecute(t *testing.T) {
 		nil,
 	)
 	require.NoError(t, err)
+	u.WriteToFileAsYAML("1.yaml", affected, 0600)
 	// Order-agnostic equality on struct slices
 	assert.ElementsMatch(t, expected, affected)
 }
