@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing"
@@ -121,7 +122,10 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 }
 
 func TestDescribeAffectedExecute(t *testing.T) {
-	stacksPath := "../../tests/fixtures/scenarios/atmos-describe-affected-with-dependents-and-locked"
+	basePath := "tests/fixtures/scenarios/atmos-describe-affected-with-dependents-and-locked"
+	pathPrefix := "../../"
+
+	stacksPath := filepath.Join(pathPrefix, basePath)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
@@ -131,11 +135,11 @@ func TestDescribeAffectedExecute(t *testing.T) {
 	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "./",
 	// which will be wrong for the remote repo which is cloned into a temp dir.
 	// Set the correct base path for the cloned remote repo
-	atmosConfig.BasePath = "./tests/fixtures/scenarios/atmos-describe-affected-with-dependents-and-locked"
+	atmosConfig.BasePath = basePath
 
 	// Point to the same local repository
 	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
-	repoPath := "../../"
+	repoPath := pathPrefix
 
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
