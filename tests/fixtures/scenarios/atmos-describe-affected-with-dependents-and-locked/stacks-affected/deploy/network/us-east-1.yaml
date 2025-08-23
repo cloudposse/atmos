@@ -10,6 +10,8 @@ components:
     vpc:
       metadata:
         component: mock
+      vars:
+        name: "vpc-with-new-name"
 
     tgw/hub:
       metadata:
