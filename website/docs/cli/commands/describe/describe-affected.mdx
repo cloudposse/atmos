@@ -280,7 +280,7 @@ Affected components and stacks:
 
     <dt>`--query` <em>(optional)</em></dt>
     <dd>
-        Query the results of the command using `yq` expressions.
+        Query the results of the command using YQ expressions.
 
         `atmos describe affected --query=<yq-expression>`
 
@@ -292,7 +292,7 @@ Affected components and stacks:
         Enable/disable processing of `Go` templates in Atmos stacks manifests when executing the command.
         If the flag is not provided, it's set to `true` by default.
 
-        `atmos describe affected --process-templates`
+        `atmos describe affected --process-templates=false`
     </dd>
 
     <dt>`--process-functions` <em>(optional)</em></dt>
@@ -300,7 +300,7 @@ Affected components and stacks:
         Enable/disable processing of Atmos YAML functions in Atmos stacks manifests when executing the command.
         If the flag is not provided, it's set to `true` by default.
 
-        `atmos describe affected --process-functions`
+        `atmos describe affected --process-functions=false`
     </dd>
 
     <dt>`--skip` <em>(optional)</em></dt>

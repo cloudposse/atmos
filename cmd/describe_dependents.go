@@ -88,12 +88,14 @@ func setFlagsForDescribeDependentsCmd(flags *pflag.FlagSet, describe *exec.Descr
 		return err
 	}
 
+	// `true` by default
 	describe.ProcessTemplates = true
 	err = setBoolFlagIfChanged(flags, "process-templates", &describe.ProcessTemplates)
 	if err != nil {
 		return err
 	}
 
+	// `true` by default
 	describe.ProcessYamlFunctions = true
 	err = setBoolFlagIfChanged(flags, "process-functions", &describe.ProcessYamlFunctions)
 	if err != nil {
@@ -122,7 +124,7 @@ func init() {
 	AddStackCompletion(describeDependentsCmd)
 	describeDependentsCmd.PersistentFlags().StringP("format", "f", "json", "The output format (`json` is default)")
 	describeDependentsCmd.PersistentFlags().String("file", "", "Write the result to the file")
-	describeDependentsCmd.PersistentFlags().String("query", "", "Filter the output using a JMESPath query")
+	describeDependentsCmd.PersistentFlags().StringP("query", "q", "", "Filter the output using a YQ expression")
 	describeDependentsCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeDependentsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeDependentsCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
