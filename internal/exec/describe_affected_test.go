@@ -1,12 +1,17 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/golang/mock/gomock"
+	cp "github.com/otiai10/copy"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -130,16 +135,43 @@ func TestDescribeAffectedExecute(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "./",
 	// which will be wrong for the remote repo which is cloned into a temp dir.
 	// Set the correct base path for the cloned remote repo
 	atmosConfig.BasePath = basePath
 
-	// Point to the same local repository
-	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
-	repoPath := pathPrefix
+	tempDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+
+	defer removeTempDir(tempDir)
+
+	copyOptions := cp.Options{
+		PreserveTimes: false,
+		PreserveOwner: false,
+		// Skip specifies which files should be skipped
+		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+			if strings.Contains(src, "node_modules") {
+				return true, nil
+			}
+			// Check if the file is a socket and skip it
+			isSocket, err := u.IsSocket(src)
+			if err != nil {
+				return true, err
+			}
+			if isSocket {
+				return true, nil
+			}
+			return false, nil
+		},
+	}
+
+	err = cp.Copy(pathPrefix, tempDir, copyOptions)
+	require.NoError(t, err)
+
+	// Point to the copy of the local repository
+	repoPath := tempDir
 
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
@@ -152,7 +184,7 @@ func TestDescribeAffectedExecute(t *testing.T) {
 		nil,
 		false,
 	)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	// The `affected` list should be empty, since the local repo is compared with itself.
 	assert.Equal(t, 0, len(affected))
