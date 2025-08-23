@@ -88,11 +88,13 @@ func setFlagsForDescribeDependentsCmd(flags *pflag.FlagSet, describe *exec.Descr
 		return err
 	}
 
+	describe.ProcessTemplates = true
 	err = setBoolFlagIfChanged(flags, "process-templates", &describe.ProcessTemplates)
 	if err != nil {
 		return err
 	}
 
+	describe.ProcessYamlFunctions = true
 	err = setBoolFlagIfChanged(flags, "process-functions", &describe.ProcessYamlFunctions)
 	if err != nil {
 		return err

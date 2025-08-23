@@ -180,6 +180,10 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"exclude-locked":                 &describe.ExcludeLocked,
 	}
 
+	// By default, process templates and YAML functions
+	describe.ProcessTemplates = true
+	describe.ProcessYamlFunctions = true
+
 	var err error
 	for k := range flagsKeyValue {
 		if !flags.Changed(k) {
