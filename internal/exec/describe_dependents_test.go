@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -662,4 +663,46 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 			assert.ElementsMatch(t, tc.expected, res)
 		})
 	}
+}
+
+// mk is a helper that builds a Dependent and derives StackSlug = Stack + "-" + Component.
+func mk(stack, component, path string) schema.Dependent {
+	return schema.Dependent{
+		Stack:         stack,
+		Component:     component,
+		StackSlug:     stack + "-" + strings.ReplaceAll(component, "/", "-"),
+		ComponentPath: path,
+	}
+}
+
+func TestSortDependentsByStackSlug_BasicOrder(t *testing.T) {
+	deps := []schema.Dependent{
+		mk("uw2-network", "vpc", "p4"),
+		mk("ue1-network", "tgw/hub", "p2"),
+		mk("ue1-network", "tgw/attachment", "p1"),
+		mk("uw2-network", "tgw/attachment", "p3"),
+	}
+
+	// Expected order by StackSlug (i.e., by (Stack, Component))
+	expected := []schema.Dependent{
+		mk("ue1-network", "tgw/attachment", "p1"),
+		mk("ue1-network", "tgw/hub", "p2"),
+		mk("uw2-network", "tgw/attachment", "p3"),
+		mk("uw2-network", "vpc", "p4"),
+	}
+
+	sortDependentsByStackSlug(deps)
+	require.Equal(t, expected, deps)
+}
+
+func TestSortDependentsByStackSlugRecursive_EmptyAndNil(t *testing.T) {
+	// nil slice
+	var nilDeps []schema.Dependent
+	sortDependentsByStackSlugRecursive(nilDeps) // should not panic
+	require.Nil(t, nilDeps)
+
+	// empty slice
+	empty := []schema.Dependent{}
+	sortDependentsByStackSlugRecursive(empty) // should not panic
+	require.Empty(t, empty)
 }
