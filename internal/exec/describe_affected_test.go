@@ -119,3 +119,37 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	// The `affected` list should be empty, since the local repo is compared with itself.
 	assert.Equal(t, 0, len(affected))
 }
+
+func TestDescribeAffectedExecute(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/atmos-describe-affected-with-dependents-and-locked"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	assert.Nil(t, err)
+
+	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "./",
+	// which will be wrong for the remote repo which is cloned into a temp dir.
+	// Set the correct base path for the cloned remote repo
+	atmosConfig.BasePath = "./tests/fixtures/scenarios/atmos-describe-affected-with-dependents-and-locked"
+
+	// Point to the same local repository
+	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
+	repoPath := "../../"
+
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,
+		true,
+		nil,
+		false,
+	)
+	assert.Nil(t, err)
+
+	// The `affected` list should be empty, since the local repo is compared with itself.
+	assert.Equal(t, 0, len(affected))
+}
