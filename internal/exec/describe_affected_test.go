@@ -231,6 +231,7 @@ func TestDescribeAffectedExecute(t *testing.T) {
 		},
 	}
 
+	// Test affected with `excludeLocked: false`
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,

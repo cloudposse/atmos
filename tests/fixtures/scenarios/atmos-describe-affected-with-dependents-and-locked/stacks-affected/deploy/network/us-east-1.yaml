@@ -20,6 +20,8 @@ components:
       metadata:
         component: mock
       settings:
+        # AFFECTED
+        team: network
         depends_on:
           # `tgw/hub` depends on the `vpc` component in the same stack (same account, same region)
           1:
