@@ -675,6 +675,12 @@ func mk(stack, component, path string) schema.Dependent {
 	}
 }
 
+// withKids attaches children explicitly.
+func withKids(d schema.Dependent, kids []schema.Dependent) schema.Dependent {
+	d.Dependents = kids
+	return d
+}
+
 func TestSortDependentsByStackSlug_BasicOrder(t *testing.T) {
 	deps := []schema.Dependent{
 		mk("uw2-network", "vpc", "p4"),
@@ -683,7 +689,7 @@ func TestSortDependentsByStackSlug_BasicOrder(t *testing.T) {
 		mk("uw2-network", "tgw/attachment", "p3"),
 	}
 
-	// Expected order by StackSlug (i.e., by (Stack, Component))
+	// Expected order by StackSlug
 	expected := []schema.Dependent{
 		mk("ue1-network", "tgw/attachment", "p1"),
 		mk("ue1-network", "tgw/hub", "p2"),
@@ -705,4 +711,55 @@ func TestSortDependentsByStackSlugRecursive_EmptyAndNil(t *testing.T) {
 	empty := []schema.Dependent{}
 	sortDependentsByStackSlugRecursive(empty) // should not panic
 	require.Empty(t, empty)
+}
+
+func TestSortDependentsByStackSlugRecursive_BasicAndNested(t *testing.T) {
+	// Unsorted tree
+	deps := []schema.Dependent{
+		withKids(mk("uw2-network", "vpc", "p3"), []schema.Dependent{
+			mk("uw2-network", "tgw/hub", "c2"),
+			mk("uw2-network", "tgw/attachment", "c1"),
+		}),
+		withKids(mk("ue1-network", "vpc", "p1"), []schema.Dependent{
+			mk("ue1-network", "tgw/attachment", "a1"),
+		}),
+		withKids(mk("ue1-network", "tgw/hub", "p2"), []schema.Dependent{
+			mk("ue1-network", "z-comp", "g2"),
+			mk("ue1-network", "a-comp", "g1"),
+		}),
+	}
+
+	// Expected (sorted recursively)
+	expected := []schema.Dependent{
+		withKids(mk("ue1-network", "tgw/hub", "p2"), []schema.Dependent{
+			mk("ue1-network", "a-comp", "g1"),
+			mk("ue1-network", "z-comp", "g2"),
+		}),
+		withKids(mk("ue1-network", "vpc", "p1"), []schema.Dependent{
+			mk("ue1-network", "tgw/attachment", "a1"),
+		}),
+		withKids(mk("uw2-network", "vpc", "p3"), []schema.Dependent{
+			mk("uw2-network", "tgw/attachment", "c1"),
+			mk("uw2-network", "tgw/hub", "c2"),
+		}),
+	}
+
+	sortDependentsByStackSlugRecursive(deps)
+	require.Equal(t, expected, deps)
+}
+
+func TestSortDependentsByStackSlugRecursive_TieStabilityAtNestedLevel(t *testing.T) {
+	// Children have identical (Stack, Component) → identical StackSlug; order should be stable.
+	parent := withKids(mk("ue1-network", "vpc", "parent"), []schema.Dependent{
+		mk("ue1-network", "tgw/attachment", "first"),
+		mk("ue1-network", "tgw/attachment", "second"),
+	})
+
+	deps := []schema.Dependent{parent}
+	sortDependentsByStackSlugRecursive(deps)
+
+	require.Len(t, deps, 1)
+	require.Len(t, deps[0].Dependents, 2)
+	require.Equal(t, "first", deps[0].Dependents[0].ComponentPath)
+	require.Equal(t, "second", deps[0].Dependents[1].ComponentPath)
 }

@@ -126,7 +126,7 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	assert.Equal(t, 0, len(affected))
 }
 
-func TestDescribeAffectedExecute(t *testing.T) {
+func TestDescribeAffectedScenarios(t *testing.T) {
 	basePath := "tests/fixtures/scenarios/atmos-describe-affected-with-dependents-and-locked"
 	pathPrefix := "../../"
 
