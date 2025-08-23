@@ -10,8 +10,8 @@ components:
     vpc:
       metadata:
         component: mock
-      vars:
-        name: "vpc-with-new-name"
+        # Lock the component so it doesn't get included in the affected list
+        locked: true
 
     tgw/hub:
       metadata:

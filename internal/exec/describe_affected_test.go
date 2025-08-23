@@ -166,8 +166,8 @@ func TestDescribeAffectedExecute(t *testing.T) {
 	err = cp.Copy(pathPrefix, tempDir, copyOptions)
 	require.NoError(t, err)
 
-	// Copy the affected stacks into the temp dir
-	err = cp.Copy(filepath.Join(stacksPath, "stacks"), filepath.Join(tempDir, basePath, "stacks-affected"), copyOptions)
+	// Copy the affected stacks into the `stacks` folder in the temp dir
+	err = cp.Copy(filepath.Join(stacksPath, "stacks-affected"), filepath.Join(tempDir, basePath, "stacks"), copyOptions)
 	require.NoError(t, err)
 
 	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "./",

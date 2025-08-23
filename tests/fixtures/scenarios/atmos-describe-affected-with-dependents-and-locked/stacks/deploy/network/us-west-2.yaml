@@ -27,6 +27,8 @@ components:
     tgw/cross-region-hub-connector:
       metadata:
         component: mock
+        # Lock the component so it doesn't get included in the affected list
+        locked: true
       settings:
         depends_on:
           1:

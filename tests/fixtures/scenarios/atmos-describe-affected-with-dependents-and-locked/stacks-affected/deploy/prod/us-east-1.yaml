@@ -10,6 +10,8 @@ components:
     vpc:
       metadata:
         component: mock
+        # Lock the component so it doesn't get included in the affected list
+        locked: true
 
     tgw/attachment:
       metadata:
