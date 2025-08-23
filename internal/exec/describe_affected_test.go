@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/golang/mock/gomock"
 	cp "github.com/otiai10/copy"
@@ -16,6 +15,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestDescribeAffected(t *testing.T) {
@@ -137,11 +137,6 @@ func TestDescribeAffectedExecute(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "./",
-	// which will be wrong for the remote repo which is cloned into a temp dir.
-	// Set the correct base path for the cloned remote repo
-	atmosConfig.BasePath = basePath
-
 	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 
@@ -167,8 +162,18 @@ func TestDescribeAffectedExecute(t *testing.T) {
 		},
 	}
 
+	// Copy the local repository into a temp dir
 	err = cp.Copy(pathPrefix, tempDir, copyOptions)
 	require.NoError(t, err)
+
+	// Copy the affected stacks into the temp dir
+	err = cp.Copy(filepath.Join(stacksPath, "stacks"), filepath.Join(tempDir, basePath, "stacks-affected"), copyOptions)
+	require.NoError(t, err)
+
+	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "./",
+	// which will be wrong for the cloned repo in the temp dir.
+	// Set the correct base path for the cloned remote repo
+	atmosConfig.BasePath = basePath
 
 	// Point to the copy of the local repository
 	repoPath := tempDir
