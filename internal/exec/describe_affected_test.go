@@ -145,12 +145,10 @@ func TestDescribeAffectedExecute(t *testing.T) {
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
-		// Skip specifies which files should be skipped
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 			if strings.Contains(src, "node_modules") {
 				return true, nil
 			}
-			// Check if the file is a socket and skip it
 			isSocket, err := u.IsSocket(src)
 			if err != nil {
 				return true, err
@@ -178,6 +176,61 @@ func TestDescribeAffectedExecute(t *testing.T) {
 	// Point to the copy of the local repository
 	repoPath := tempDir
 
+	// OS-specific expected component path
+	componentPath := filepath.Join("tests", "fixtures", "components", "terraform", "mock")
+
+	expected := []schema.Affected{
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+		},
+		{
+			Component:            "tgw/cross-region-hub-connector",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-tgw-cross-region-hub-connector",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{ // note: any keys
+					1: map[string]any{
+						"component": "tgw/hub",
+						"stack":     "ue1-network",
+					},
+				},
+			},
+		},
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+		},
+	}
+
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
@@ -191,6 +244,6 @@ func TestDescribeAffectedExecute(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// The `affected` list should be empty, since the local repo is compared with itself.
-	assert.Equal(t, 0, len(affected))
+	// Order-agnostic equality on struct slices
+	assert.ElementsMatch(t, expected, affected)
 }
