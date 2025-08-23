@@ -12,6 +12,9 @@ components:
         component: mock
         # Lock the component so it doesn't get included in the affected list
         locked: true
+      vars:
+        # AFFECTED
+        name: new-name
 
     tgw/hub:
       metadata:

@@ -10,6 +10,9 @@ components:
     vpc:
       metadata:
         component: mock
+      vars:
+        # AFFECTED
+        name: new-name
 
     tgw/attachment:
       metadata:
@@ -30,6 +33,7 @@ components:
         # Lock the component so it doesn't get included in the affected list
         locked: true
       settings:
+        team: network
         depends_on:
           1:
             # `tgw/cross-region-hub-connector` depends on the `tgw/hub` components in the same account in `us-east-1` region
