@@ -179,6 +179,7 @@ func TestDescribeAffectedExecute(t *testing.T) {
 	// OS-specific expected component path
 	componentPath := filepath.Join("tests", "fixtures", "components", "terraform", "mock")
 
+	// Test affected with `processTemplates: true`, `processFunctions: true` and `excludeLocked: false`
 	expected := []schema.Affected{
 		{
 			Component:            "vpc",
@@ -229,9 +230,28 @@ func TestDescribeAffectedExecute(t *testing.T) {
 			IncludedInDependents: false,
 			Settings:             map[string]any{},
 		},
+		{
+			Component:            "tgw/hub",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-tgw-hub",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{ // note: any keys
+					1: map[string]any{
+						"component": "vpc",
+						"stack":     "ue1-network",
+					},
+				},
+			},
+		},
 	}
-
-	// Test affected with `excludeLocked: false`
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
