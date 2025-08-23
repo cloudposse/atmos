@@ -264,7 +264,147 @@ func TestDescribeAffectedExecute(t *testing.T) {
 		false,
 	)
 	require.NoError(t, err)
+	// Order-agnostic equality on struct slices
+	assert.ElementsMatch(t, expected, affected)
 
+	// Test affected with `processTemplates: false`, `processFunctions: false` and `excludeLocked: false`
+	expected = []schema.Affected{
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+		},
+		{
+			Component:            "tgw/cross-region-hub-connector",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-tgw-cross-region-hub-connector",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{ // note: any keys
+					1: map[string]any{
+						"component": "tgw/hub",
+						"stack":     "ue1-{{ .vars.stage }}",
+					},
+				},
+			},
+		},
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+		},
+		{
+			Component:            "tgw/hub",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-tgw-hub",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{ // note: any keys
+					1: map[string]any{
+						"component": "vpc",
+						"stack":     "{{ .vars.environment }}-{{ .vars.stage }}",
+					},
+				},
+			},
+		},
+	}
+	affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		false,
+		false,
+		nil,
+		false,
+	)
+	require.NoError(t, err)
+	// Order-agnostic equality on struct slices
+	assert.ElementsMatch(t, expected, affected)
+
+	// Test affected with `processTemplates: true`, `processFunctions: true` and `excludeLocked: true`
+	expected = []schema.Affected{
+		{
+			Component:            "vpc",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "uw2-network",
+			StackSlug:            "uw2-network-vpc",
+			Affected:             "stack.vars",
+			AffectedAll:          []string{"stack.vars"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings:             map[string]any{},
+		},
+		{
+			Component:            "tgw/hub",
+			ComponentType:        "terraform",
+			ComponentPath:        componentPath,
+			Stack:                "ue1-network",
+			StackSlug:            "ue1-network-tgw-hub",
+			Affected:             "stack.settings",
+			AffectedAll:          []string{"stack.settings"},
+			File:                 "",
+			Folder:               "",
+			Dependents:           nil, // must be nil to match actual
+			IncludedInDependents: false,
+			Settings: map[string]any{
+				"depends_on": map[any]any{ // note: any keys
+					1: map[string]any{
+						"component": "vpc",
+						"stack":     "ue1-network",
+					},
+				},
+			},
+		},
+	}
+	affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,
+		true,
+		nil,
+		true,
+	)
+	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
 	assert.ElementsMatch(t, expected, affected)
 }
