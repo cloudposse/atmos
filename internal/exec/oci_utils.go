@@ -560,7 +560,7 @@ func extractZipFile(reader io.Reader, destDir string) error {
 		filePath := filepath.Join(destDir, file.Name)
 
 		// Create parent directories if they don't exist
-		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
 			return fmt.Errorf("failed to create directory for %s: %w", file.Name, err)
 		}
 

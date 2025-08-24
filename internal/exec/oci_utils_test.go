@@ -136,10 +136,10 @@ func TestGetRegistryAuth(t *testing.T) {
 				tempDir := t.TempDir()
 				dockerConfigPath := filepath.Join(tempDir, ".docker", "config.json")
 
-				err := os.MkdirAll(filepath.Dir(dockerConfigPath), 0755)
+				err := os.MkdirAll(filepath.Dir(dockerConfigPath), 0o755)
 				require.NoError(t, err)
 
-				err = os.WriteFile(dockerConfigPath, []byte(configData), 0644)
+				err = os.WriteFile(dockerConfigPath, []byte(configData), 0o644)
 				require.NoError(t, err)
 
 				// Mock the home directory to point to our temp dir
