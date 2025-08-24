@@ -78,7 +78,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/terraform-docs/terraform-docs v0.20.0
 	github.com/xeipuuv/gojsonschema v1.2.0
-	github.com/zclconf/go-cty v1.16.3
+	github.com/zclconf/go-cty v1.16.4
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/term v0.34.0
 	golang.org/x/text v0.28.0
