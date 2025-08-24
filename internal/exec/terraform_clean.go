@@ -523,7 +523,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 		}
 		err := DeletePaths(userFiles)
 		if err != nil {
-			return fmt.Errorf("deleting user-specified clean paths: %w", err)
+			return err
 		}
 		deleteFolders(folders, relativePath, atmosConfig)
 		if len(tfDataDirFolders) > 0 {
