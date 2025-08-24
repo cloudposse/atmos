@@ -46,6 +46,7 @@
 examples/demo-vendoring/components/**
 tests/fixtures/scenarios/vendor-globs/components/**
 tests/fixtures/scenarios/vendor/components/**
+internal/exec/output.*
 
 # Coverage files
 coverage.out

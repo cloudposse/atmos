@@ -1,0 +1,6 @@
+workflows:
+  fail:
+    description: |
+      Run a command that will fail.
+    steps:
+      - command: terraform plan mock -s idontexist

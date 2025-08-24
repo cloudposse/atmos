@@ -261,3 +261,26 @@ tests:
         - "To resume the workflow from this step, run:"
         - "atmos workflow fail-with-stack -f test --from-step step1 -s prod"
       exit_code: 1
+
+  - name: atmos workflow failure with filepath
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns command with filepath on failure"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "fail"
+      - "--file"
+      - "subdir/test"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "workflow step execution failed"
+        - "## Explanation"
+        - "The following command failed to execute:"
+        - "atmos terraform plan mock -s idontexist"
+        - "To resume the workflow from this step, run:"
+        - "atmos workflow fail -f subdir/test --from-step step1"
+      exit_code: 1
