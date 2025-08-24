@@ -55,7 +55,7 @@ func TestRunToolWithInstaller(t *testing.T) {
 		{
 			name:             "Successful execution with valid binary path",
 			tool:             "hashicorp/terraform",
-			version:          "v1.0.0",
+			version:          "v1.12.2",
 			args:             []string{"--flag"},
 			resolveResult:    [3]interface{}{"hashicorp", "terraform", nil},
 			binaryPathResult: [2]interface{}{"true", nil}, // Use "true" command for testing
