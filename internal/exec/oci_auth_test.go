@@ -1,7 +1,9 @@
 package exec
 
 import (
+	"context"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"testing"
 
@@ -596,4 +598,168 @@ func TestGetCredentialStoreAuth(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExchangeAADForACRRefreshToken tests the ACR token exchange functionality
+func TestExchangeAADForACRRefreshToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		registry    string
+		tenantID    string
+		aadToken    string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "Valid token exchange parameters",
+			registry:    "test.azurecr.io",
+			tenantID:    "test-tenant-id",
+			aadToken:    "valid-aad-token",
+			expectError: true, // Will fail due to network call, but should not panic
+			errorMsg:    "failed to execute token exchange request",
+		},
+		{
+			name:        "Empty registry",
+			registry:    "",
+			tenantID:    "test-tenant-id",
+			aadToken:    "valid-aad-token",
+			expectError: true,
+			errorMsg:    "no Host in request URL",
+		},
+		{
+			name:        "Empty tenant ID",
+			registry:    "test.azurecr.io",
+			tenantID:    "",
+			aadToken:    "valid-aad-token",
+			expectError: true,
+			errorMsg:    "failed to execute token exchange request",
+		},
+		{
+			name:        "Empty AAD token",
+			registry:    "test.azurecr.io",
+			tenantID:    "test-tenant-id",
+			aadToken:    "",
+			expectError: true,
+			errorMsg:    "failed to execute token exchange request",
+		},
+		{
+			name:        "Invalid registry format",
+			registry:    "invalid-registry-format",
+			tenantID:    "test-tenant-id",
+			aadToken:    "valid-aad-token",
+			expectError: true,
+			errorMsg:    "failed to execute token exchange request",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			refreshToken, err := exchangeAADForACRRefreshToken(ctx, tt.registry, tt.tenantID, tt.aadToken)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Empty(t, refreshToken)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotEmpty(t, refreshToken)
+			}
+		})
+	}
+}
+
+// TestExtractTenantIDFromToken tests JWT token parsing functionality
+func TestExtractTenantIDFromToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		tokenString string
+		expectError bool
+		errorMsg    string
+		expectedTID string
+	}{
+		{
+			name:        "Valid JWT with tenant ID",
+			tokenString: createValidJWT("test-tenant-id"),
+			expectError: false,
+			expectedTID: "test-tenant-id",
+		},
+		{
+			name:        "JWT without tenant ID",
+			tokenString: createJWTWithoutTenantID(),
+			expectError: true,
+			errorMsg:    "tenant ID not found in JWT token",
+		},
+		{
+			name:        "Invalid JWT format - missing parts",
+			tokenString: "invalid.jwt",
+			expectError: true,
+			errorMsg:    "invalid JWT token format",
+		},
+		{
+			name:        "Invalid JWT format - too many parts",
+			tokenString: "part1.part2.part3.part4",
+			expectError: true,
+			errorMsg:    "invalid JWT token format",
+		},
+		{
+			name:        "Invalid base64 in payload",
+			tokenString: "header.invalid-base64.signature",
+			expectError: true,
+			errorMsg:    "failed to decode JWT payload",
+		},
+		{
+			name:        "Invalid JSON in payload",
+			tokenString: createJWTWithInvalidJSON(),
+			expectError: true,
+			errorMsg:    "failed to parse JWT payload",
+		},
+		{
+			name:        "Empty token string",
+			tokenString: "",
+			expectError: true,
+			errorMsg:    "invalid JWT token format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tenantID, err := extractTenantIDFromToken(tt.tokenString)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Empty(t, tenantID)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedTID, tenantID)
+			}
+		})
+	}
+}
+
+// Helper functions for creating test JWT tokens
+func createValidJWT(tenantID string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf(`{"tid":"%s","sub":"test","iss":"test","aud":"test","exp":9999999999}`, tenantID)))
+	signature := base64.RawURLEncoding.EncodeToString([]byte("signature"))
+	return fmt.Sprintf("%s.%s.%s", header, payload, signature)
+}
+
+func createJWTWithoutTenantID() string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"test","iss":"test","aud":"test","exp":9999999999}`))
+	signature := base64.RawURLEncoding.EncodeToString([]byte("signature"))
+	return fmt.Sprintf("%s.%s.%s", header, payload, signature)
+}
+
+func createJWTWithInvalidJSON() string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"invalid json`))
+	signature := base64.RawURLEncoding.EncodeToString([]byte("signature"))
+	return fmt.Sprintf("%s.%s.%s", header, payload, signature)
 }

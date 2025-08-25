@@ -2,8 +2,11 @@ package exec
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 	"time"
@@ -86,6 +89,96 @@ func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.
 	return nil, fmt.Errorf("no valid Azure authentication found for %s", registry)
 }
 
+// exchangeAADForACRRefreshToken exchanges an AAD token for an ACR refresh token
+func exchangeAADForACRRefreshToken(ctx context.Context, registry, tenantID, aadToken string) (string, error) {
+	// ACR OAuth2 endpoint for token exchange
+	oauthURL := fmt.Sprintf("https://%s/oauth2/exchange", registry)
+
+	// Prepare the form data for the token exchange
+	formData := url.Values{}
+	formData.Set("grant_type", "access_token")
+	formData.Set("service", registry)
+	formData.Set("tenant", tenantID)
+	formData.Set("access_token", aadToken)
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", oauthURL, strings.NewReader(formData.Encode()))
+	if err != nil {
+		return "", fmt.Errorf("failed to create token exchange request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	// Execute the request
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute token exchange request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("token exchange failed with status %d", resp.StatusCode)
+	}
+
+	// Parse the response
+	var tokenResponse struct {
+		RefreshToken string `json:"refresh_token"`
+		AccessToken  string `json:"access_token"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
+		return "", fmt.Errorf("failed to decode token exchange response: %w", err)
+	}
+
+	// Return the refresh token (preferred) or access token as fallback
+	if tokenResponse.RefreshToken != "" {
+		return tokenResponse.RefreshToken, nil
+	}
+	if tokenResponse.AccessToken != "" {
+		return tokenResponse.AccessToken, nil
+	}
+
+	return "", fmt.Errorf("no token received from ACR OAuth2 exchange")
+}
+
+// extractTenantIDFromToken extracts the tenant ID from a JWT token
+func extractTenantIDFromToken(tokenString string) (string, error) {
+	// JWT tokens have 3 parts separated by dots
+	parts := strings.Split(tokenString, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("invalid JWT token format")
+	}
+
+	// Decode the payload (second part)
+	payload := parts[1]
+	// Add padding if needed
+	if len(payload)%4 != 0 {
+		payload += strings.Repeat("=", 4-len(payload)%4)
+	}
+
+	// Decode base64
+	decoded, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode JWT payload: %w", err)
+	}
+
+	// Parse JSON payload
+	var payloadData struct {
+		TID string `json:"tid"`
+	}
+
+	if err := json.Unmarshal(decoded, &payloadData); err != nil {
+		return "", fmt.Errorf("failed to parse JWT payload: %w", err)
+	}
+
+	if payloadData.TID == "" {
+		return "", fmt.Errorf("tenant ID not found in JWT token")
+	}
+
+	return payloadData.TID, nil
+}
+
 // hasAzureCLI checks if Azure CLI is available
 func hasAzureCLI() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -104,20 +197,22 @@ func getACRAuthViaServicePrincipal(registry, acrName, clientID, clientSecret, te
 
 	// Get AAD token for ACR scope
 	ctx := context.Background()
-	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{
+	aad, err := cred.GetToken(ctx, policy.TokenRequestOptions{
 		Scopes: []string{"https://management.azure.com/.default"},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Azure token: %w", err)
 	}
 
-	// For ACR, we use the token as the password with "00000000-0000-0000-0000-000000000000" as username
-	// This is the standard pattern for ACR authentication with AAD tokens
-	log.Debug("Successfully obtained ACR credentials via Service Principal", "registry", registry, "acrName", acrName)
-
+	// Exchange AAD token for ACR refresh token
+	refresh, err := exchangeAADForACRRefreshToken(ctx, registry, tenantID, aad.Token)
+	if err != nil {
+		return nil, fmt.Errorf("acr token exchange failed: %w", err)
+	}
+	log.Debug("Obtained ACR refresh token via Service Principal", "registry", registry, "acrName", acrName)
 	return &authn.Basic{
 		Username: "00000000-0000-0000-0000-000000000000",
-		Password: token.Token,
+		Password: refresh,
 	}, nil
 }
 
@@ -131,19 +226,29 @@ func getACRAuthViaDefaultCredential(registry, acrName string) (authn.Authenticat
 
 	// Get AAD token for ACR scope
 	ctx := context.Background()
-	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{
+	aad, err := cred.GetToken(ctx, policy.TokenRequestOptions{
 		Scopes: []string{"https://management.azure.com/.default"},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Azure token: %w", err)
 	}
 
-	// For ACR, we use the token as the password with "00000000-0000-0000-0000-000000000000" as username
-	log.Debug("Successfully obtained ACR credentials via Default Credential", "registry", registry, "acrName", acrName)
+	// Extract tenant ID from the token (JWT payload)
+	tenantID, err := extractTenantIDFromToken(aad.Token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract tenant ID from token: %w", err)
+	}
+
+	// Exchange AAD token for ACR refresh token
+	refresh, err := exchangeAADForACRRefreshToken(ctx, registry, tenantID, aad.Token)
+	if err != nil {
+		return nil, fmt.Errorf("acr token exchange failed: %w", err)
+	}
+	log.Debug("Obtained ACR refresh token via Default Credential", "registry", registry, "acrName", acrName)
 
 	return &authn.Basic{
 		Username: "00000000-0000-0000-0000-000000000000",
-		Password: token.Token,
+		Password: refresh,
 	}, nil
 }
 
