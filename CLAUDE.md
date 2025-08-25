@@ -51,11 +51,12 @@ atmos workflow <workflow> -f <file>
 # Validation and schema
 atmos validate stacks
 atmos validate component <component> -s <stack>
-atmos validate schema <schema-type> <schema-path>
+atmos validate schema [<schema-key>]
+atmos validate schema --schemas-atmos-manifest <path-to-schema>
 
 # Vendoring and dependencies  
 atmos vendor pull
-atmos vendor diff
+# atmos vendor diff  # Not currently registered
 ```
 
 ## Architecture Overview
@@ -215,6 +216,7 @@ Atmos provides extensive template functions available in stack configurations:
 ### Store Functions (Runtime Secret Resolution)
 - `store.get(type, key)` - Get value from external store
 - Supports: AWS SSM, Azure Key Vault, Google Secret Manager, Redis, Artifactory
+- **See `pkg/store/registry.go`** for the authoritative list of supported store providers
 
 ## Testing Guidelines
 
