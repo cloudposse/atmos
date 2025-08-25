@@ -503,6 +503,21 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 
 - **Examples in codebase**: `pkg/store/` (AWS SSM, Azure Key Vault, Google Secret Manager)
 
+### Telemetry Integration (MANDATORY)
+- **New commands automatically get telemetry** via `RootCmd.ExecuteC()` in `cmd/root.go:174`
+- **No additional telemetry code needed** for standard Cobra commands added to RootCmd
+- **For non-standard execution paths**, use:
+  ```go
+  import "github.com/cloudposse/atmos/pkg/telemetry"
+  
+  // For cobra commands
+  telemetry.CaptureCmd(cmd, err)
+  
+  // For command strings
+  telemetry.CaptureCmdString("command name", err)
+  ```
+- **Never capture user data** - only command paths and error states (boolean)
+
 ## Development Environment
 
 ### Prerequisites
