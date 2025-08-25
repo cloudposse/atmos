@@ -171,12 +171,31 @@ $ atmos example <component> -s <stack> --file output.yaml
 - Register examples in `cmd/markdown_help.go` `examples` map with suggestion URLs
 - File naming: `atmos_<command>_<subcommand>_usage.md`
 
-### File Organization
-- One command per file in `cmd/`
-- Group related functionality in `pkg/` subpackages
-- Tests alongside implementation files (`_test.go`)
-- Shared test utilities in `tests/` directory
-- Mock files alongside interfaces they mock
+### File Organization (MANDATORY)
+- **Prefer many small files over few large files** - follow Go idiom of focused, single-purpose files
+- **One command per file** in `cmd/`
+- **One implementation per file** for interfaces:
+  ```go
+  // pkg/store/
+  store.go              // Interface definition
+  aws_ssm_store.go     // AWS SSM implementation 
+  azure_keyvault_store.go // Azure implementation
+  google_secretmanager_store.go // Google implementation
+  ```
+- **Test file naming symmetry** - test files mirror implementation structure:
+  ```go
+  // Implementation files
+  aws_ssm_store.go
+  azure_keyvault_store.go
+  
+  // Corresponding test files
+  aws_ssm_store_test.go  
+  azure_keyvault_store_test.go
+  ```
+- **Group related functionality** in `pkg/` subpackages by domain
+- **Co-locate tests** with implementation (`_test.go` alongside `.go` files)
+- **Mock files alongside interfaces** they mock
+- **Shared test utilities** in `tests/` directory for integration tests
 
 ## Template Functions
 
