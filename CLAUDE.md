@@ -232,6 +232,7 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 7. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
 8. Add tests with fixtures
 9. Add integration test in `tests/`
+10. **Create pull request following template format**
 
 ### Documentation Requirements (MANDATORY)
 - **All new commands/flags/parameters MUST have Docusaurus documentation**
@@ -294,6 +295,25 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 - **Link to core concepts** using `/core-concepts/` paths
 - **Include purpose note** and help screengrab
 - **Use consistent section ordering**: Usage → Examples → Arguments → Flags
+
+### Pull Request Requirements (MANDATORY)
+- **Follow the pull request template** in `.github/PULL_REQUEST_TEMPLATE.md`:
+  ```markdown
+  ## what
+  - High-level description of changes in plain English
+  - Use bullet points for clarity
+  
+  ## why  
+  - Business justification for the changes
+  - Explain why these changes solve the problem
+  - Use bullet points for clarity
+  
+  ## references
+  - Link to supporting GitHub issues or documentation
+  - Use `closes #123` if PR closes an issue
+  ```
+- **Use "no release" label** for documentation-only changes
+- **Ensure all CI checks pass** before requesting review
 
 ### Adding Template Function
 1. Implement in `internal/exec/template_funcs.go`
