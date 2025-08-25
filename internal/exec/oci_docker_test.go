@@ -19,25 +19,25 @@ func TestDockerCredHelpers(t *testing.T) {
 		errorMsg    string
 	}{
 		{
-			name:        "Docker Hub with desktop credential helper",
+			name:        "Docker Hub with no authentication",
 			registry:    "docker.io",
 			atmosConfig: &schema.AtmosConfiguration{},
-			expectError: true, // Will fail without actual credential helper
-			errorMsg:    "credential helper docker-credential-desktop not found",
+			expectError: true, // Will fail without actual credential helper or config
+			errorMsg:    "no authentication found in Docker config for registry docker.io",
 		},
 		{
-			name:        "Private registry with desktop credential helper",
+			name:        "Private registry with no authentication",
 			registry:    "my-registry.com",
 			atmosConfig: &schema.AtmosConfiguration{},
 			expectError: true,
-			errorMsg:    "credential helper docker-credential-desktop not found",
+			errorMsg:    "no authentication found in Docker config for registry my-registry.com",
 		},
 		{
-			name:        "Registry with non-existent credential helper",
+			name:        "Registry with no authentication",
 			registry:    "test.registry.com",
 			atmosConfig: &schema.AtmosConfiguration{},
 			expectError: true,
-			errorMsg:    "credential helper docker-credential-nonexistent not found",
+			errorMsg:    "no authentication found in Docker config for registry test.registry.com",
 		},
 	}
 

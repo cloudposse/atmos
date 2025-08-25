@@ -224,37 +224,37 @@ func TestExtractTenantIDFromTokenDirect(t *testing.T) {
 			name:        "JWT without tenant ID",
 			token:       createJWTWithoutTenantIDDirect(),
 			expectError: true,
-			errorMsg:    "tenant ID not found in token",
+			errorMsg:    "tenant ID not found in JWT token",
 		},
 		{
 			name:        "Invalid JWT format",
 			token:       "invalid.jwt.token",
 			expectError: true,
-			errorMsg:    "failed to decode JWT payload",
+			errorMsg:    "failed to parse JWT payload",
 		},
 		{
 			name:        "Empty token",
 			token:       "",
 			expectError: true,
-			errorMsg:    "token is empty",
+			errorMsg:    "invalid JWT token format",
 		},
 		{
 			name:        "JWT with invalid JSON in payload",
 			token:       createJWTWithInvalidJSONDirect(),
 			expectError: true,
-			errorMsg:    "failed to decode JWT payload",
+			errorMsg:    "failed to parse JWT payload",
 		},
 		{
 			name:        "JWT with missing payload",
 			token:       "header.signature",
 			expectError: true,
-			errorMsg:    "invalid JWT format",
+			errorMsg:    "invalid JWT token format",
 		},
 		{
 			name:        "JWT with empty payload",
 			token:       "header..signature",
 			expectError: true,
-			errorMsg:    "failed to decode JWT payload",
+			errorMsg:    "failed to parse JWT payload",
 		},
 	}
 

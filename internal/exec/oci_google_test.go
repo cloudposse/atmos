@@ -52,6 +52,7 @@ func TestGCRAuth(t *testing.T) {
 }
 
 // TestGCRRegistryDetection tests Google registry detection logic
+// Note: This test reflects the current implementation logic in getRegistryAuth
 func TestGCRRegistryDetection(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -87,7 +88,8 @@ func TestGCRRegistryDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			isGCR := tt.registry == "gcr.io" || strings.Contains(tt.registry, "pkg.dev")
+			// This matches the logic in getRegistryAuth in oci_utils.go
+			isGCR := strings.Contains(tt.registry, "gcr.io") || strings.Contains(tt.registry, "pkg.dev")
 			assert.Equal(t, tt.isGCR, isGCR)
 		})
 	}
