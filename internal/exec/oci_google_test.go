@@ -19,19 +19,19 @@ func TestGCRAuth(t *testing.T) {
 			name:        "Google Container Registry",
 			registry:    "gcr.io",
 			expectError: true, // Will fail without Google Cloud credentials
-			errorMsg:    "Google Cloud credentials not found",
+			errorMsg:    "failed to find Google Cloud credentials",
 		},
 		{
 			name:        "Google Artifact Registry",
 			registry:    "us-docker.pkg.dev",
 			expectError: true, // Will fail without Google Cloud credentials
-			errorMsg:    "Google Cloud credentials not found",
+			errorMsg:    "failed to find Google Cloud credentials",
 		},
 		{
 			name:        "Non-Google registry",
 			registry:    "docker.io",
 			expectError: true,
-			errorMsg:    "Google Cloud credentials not found",
+			errorMsg:    "failed to find Google Cloud credentials",
 		},
 	}
 
