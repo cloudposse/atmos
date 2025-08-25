@@ -312,7 +312,7 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   - Link to supporting GitHub issues or documentation
   - Use `closes #123` if PR closes an issue
   ```
-- **Use "no release" label** for documentation-only changes
+- **Use "no-release" label** for documentation-only changes
 - **Ensure all CI checks pass** before requesting review
 
 ### Adding Template Function
