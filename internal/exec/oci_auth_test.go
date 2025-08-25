@@ -401,7 +401,7 @@ func TestDockerCredHelpers(t *testing.T) {
 			registry:    "docker.io",
 			credsStore:  "",
 			expectError: true,
-			errorMsg:    "failed to get credentials from store",
+			errorMsg:    "credential helper docker-credential- not found",
 		},
 	}
 
@@ -564,14 +564,14 @@ func TestGetCredentialStoreAuth(t *testing.T) {
 			registry:    "docker.io",
 			credsStore:  "",
 			expectError: true,
-			errorMsg:    "failed to get credentials from store",
+			errorMsg:    "credential helper docker-credential- not found",
 		},
 		{
 			name:        "Non-existent credential helper",
 			registry:    "docker.io",
 			credsStore:  "nonexistent",
 			expectError: true,
-			errorMsg:    "failed to get credentials from store",
+			errorMsg:    "credential helper docker-credential-nonexistent not found",
 		},
 		{
 			name:        "Invalid registry name - command injection",
@@ -633,35 +633,35 @@ func TestGetCredentialStoreAuth(t *testing.T) {
 			name:        "Valid registry name - standard domain",
 			registry:    "docker.io",
 			credsStore:  "desktop",
-			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			expectError: true, // Will fail due to credential helper execution failure, but validation should pass
 			errorMsg:    "failed to get credentials from store",
 		},
 		{
 			name:        "Valid registry name - with port",
 			registry:    "registry.example.com:5000",
 			credsStore:  "desktop",
-			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			expectError: true, // Will fail due to credential helper execution failure, but validation should pass
 			errorMsg:    "failed to get credentials from store",
 		},
 		{
 			name:        "Valid registry name - with path",
 			registry:    "registry.example.com/v2",
 			credsStore:  "desktop",
-			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			expectError: true, // Will fail due to credential helper execution failure, but validation should pass
 			errorMsg:    "failed to get credentials from store",
 		},
 		{
 			name:        "Valid registry name - with hyphens",
 			registry:    "my-registry.example.com",
 			credsStore:  "desktop",
-			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			expectError: true, // Will fail due to credential helper execution failure, but validation should pass
 			errorMsg:    "failed to get credentials from store",
 		},
 		{
 			name:        "Valid registry name - IP address",
 			registry:    "192.168.1.100:5000",
 			credsStore:  "desktop",
-			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			expectError: true, // Will fail due to credential helper execution failure, but validation should pass
 			errorMsg:    "failed to get credentials from store",
 		},
 	}

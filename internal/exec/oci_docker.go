@@ -160,9 +160,14 @@ func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, e
 	// We need to use the docker-credential-desktop helper to get credentials
 
 	// Try to execute the credential helper
+	helperCmd := "docker-credential-" + credsStore
+	if _, err := exec.LookPath(helperCmd); err != nil {
+		return nil, fmt.Errorf("credential helper %s not found: %w", helperCmd, err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker-credential-"+credsStore, "get")
+	cmd := exec.CommandContext(ctx, helperCmd, "get")
 	cmd.Stdin = strings.NewReader(registry)
 
 	output, err := cmd.Output()
