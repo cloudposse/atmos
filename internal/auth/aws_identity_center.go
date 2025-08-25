@@ -121,21 +121,9 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 	// Determine account ID and role name
 	var accountId, roleName string
 
-	//// Support passing in a role
-	//if config.RoleArn != "" {
-	//	Arn, _ := arn.Parse(config.RoleArn)
-	//	roleName = Arn.Resource
-	//	accountId = RoleToAccountId(config.RoleArn)
-	//}
-
-	// Support passing in a role_name
-	//if roleName == "" {
 	roleName = config.RoleName
-	//}
-
-	// Support passing in an account_id
-	//if accountId == "" {
 	accountId = config.AccountId
+
 	// Support passing in an account_name
 	if accountId == "" {
 		accounts, _ := getAccountsInfo(ctx, ssoClient, config.token)
@@ -146,7 +134,6 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 			}
 		}
 	}
-	//}
 
 	// Get role credentials
 	roleCredentials, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
@@ -215,12 +202,24 @@ func getAccountRoles(ctx context.Context, client *sso.Client, token, accountID s
 }
 
 func (i *awsIamIdentityCenter) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
-	log.Info("Setting AWS environment variables")
-	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
-	if err != nil {
-		return err
+	log.Info("Setting AWS environment variables", "UseProfile", i.UseProfile)
+	if i.UseProfile {
+
+		// If UseProfile is set, we are creating a credentials file with the provider profile,
+		//then updating the config file to use that profile as the source for the new profile which is created by the identity
+		log.Debug("Using profile", "profile", i.Identity.Identity, "provider", i.Provider, "region", i.Common.Region)
+		err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
+		if err != nil {
+			return err
+		}
+
+		_ = UpdateAwsAtmosConfig(info.ComponentEnvSection["AWS_CONFIG_FILE"].(string), i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	} else {
+		err := SetAwsEnvVars(info, i.Common.Profile, i.Provider, i.Common.Region)
+		if err != nil {
+			return err
+		}
 	}
-	_ = UpdateAwsAtmosConfig(info.ComponentEnvSection["AWS_CONFIG_FILE"].(string), i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
 	return nil
 }
 

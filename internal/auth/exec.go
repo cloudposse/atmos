@@ -69,9 +69,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 		if err != nil {
 			return err
 		}
-		log.Info("DEBUG", "ComponentEnvSection", info.ComponentEnvSection)
 		err = ValidateLoginAssumeRole(identityInstance, atmosConfig, info)
-		log.Info("DEBUG", "ComponentEnvSection", info.ComponentEnvSection)
 
 		return err
 	}

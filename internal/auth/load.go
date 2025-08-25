@@ -9,7 +9,12 @@ import (
 
 var identityRegistry = map[string]func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error){
 	"aws/iam-identity-center": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
-		var data = &awsIamIdentityCenter{}
+		var data = &awsIamIdentityCenter{
+			Identity: schema.Identity{
+				Enabled:    true,
+				UseProfile: true,
+			},
+		}
 		b, err := yaml.Marshal(config.Providers[provider])
 		if err != nil {
 			return nil, err
@@ -30,7 +35,7 @@ var identityRegistry = map[string]func(provider string, identity string, config 
 		data.Identity.Identity = identity
 		return data, err
 	},
-	// Empty - used for AssumeRole - no ProviderName
+	// Empty - used for UseProfile - no ProviderName
 	"": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
 		var data = &awsAssumeRole{}
 		b, err := yaml.Marshal(config.Providers[provider])
@@ -100,7 +105,8 @@ func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identi
 
 		identityConfig := &schema.Identity{
 			// Defaults to be overridden by unmarshalling
-			Enabled: true,
+			Enabled:    true,
+			UseProfile: true,
 		}
 		if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
 			l.Errorf("failed to unmarshal identity %q: %v", k, err)

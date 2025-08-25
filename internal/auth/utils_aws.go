@@ -30,7 +30,6 @@ func SetAwsEnvVars(info *schema.ConfigAndStacksInfo, profile, provider, region s
 	info.ComponentEnvSection["AWS_REGION"] = region
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_REGION=%s", region))
 
-	log.Info("Component Env Vars", "envVars", info.ComponentEnvSection)
 	return nil
 }
 

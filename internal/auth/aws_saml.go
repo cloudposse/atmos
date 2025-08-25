@@ -252,7 +252,7 @@ func (i *awsSaml) Login() error {
 		return fmt.Errorf("no AWS roles found in SAML assertion (IDP = Google?). Check that the IdP app is configured to include AWS role attributes (https://aws.amazon.com/SAML/Attributes) and that you're assigned to at least one role")
 	}
 
-	// Store roles for the AssumeRole step
+	// Store roles for the UseProfile step
 	i.samlRoles = roles
 
 	log.Info("✅ Successfully authenticated with IdP", "url", i.Common.Url)
