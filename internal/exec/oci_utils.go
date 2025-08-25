@@ -16,6 +16,7 @@ import (
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -41,6 +42,13 @@ const (
 	githubTokenEnv        = "GITHUB_TOKEN"
 )
 
+// bindEnv binds environment variables to Viper with fallback support
+func bindEnv(v *viper.Viper, key string, envVars ...string) {
+	if err := v.BindEnv(append([]string{key}, envVars...)...); err != nil {
+		log.Debug("Failed to bind environment variable", "key", key, "envVars", envVars, "error", err)
+	}
+}
+
 // processOciImage processes an OCI image and extracts its layers to the specified destination directory.
 func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
 	tempDir, err := os.MkdirTemp("", uuid.New().String())
@@ -55,7 +63,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 		return fmt.Errorf("invalid image reference: %w", err)
 	}
 
-	descriptor, err := pullImage(ref)
+	descriptor, err := pullImage(ref, atmosConfig)
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
@@ -102,14 +110,14 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 }
 
 // pullImage pulls an OCI image from the specified reference and returns its descriptor.
-func pullImage(ref name.Reference) (*remote.Descriptor, error) {
+func pullImage(ref name.Reference, atmosConfig *schema.AtmosConfiguration) (*remote.Descriptor, error) {
 	var opts []remote.Option
 
 	// Get registry from parsed reference
 	registry := ref.Context().Registry.Name()
 
 	// Try to get authentication from various sources
-	auth, err := getRegistryAuth(registry)
+	auth, err := getRegistryAuth(registry, atmosConfig)
 	if err != nil {
 		log.Debug("No authentication found, using anonymous", "registry", registry)
 		opts = append(opts, remote.WithAuth(authn.Anonymous))
@@ -133,10 +141,26 @@ func pullImage(ref name.Reference) (*remote.Descriptor, error) {
 // 2. Docker credential helpers (from ~/.docker/config.json)
 // 3. Environment variables for specific registries
 // 4. AWS ECR authentication (if AWS credentials are available)
-func getRegistryAuth(registry string) (authn.Authenticator, error) {
+func getRegistryAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
+	// Create a Viper instance for environment variable access
+	v := viper.New()
+
+	// Bind OCI-related environment variables
+	bindEnv(v, "github_token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+	bindEnv(v, "azure_client_id", "ATMOS_AZURE_CLIENT_ID", "AZURE_CLIENT_ID")
+	bindEnv(v, "azure_client_secret", "ATMOS_AZURE_CLIENT_SECRET", "AZURE_CLIENT_SECRET")
+	bindEnv(v, "azure_tenant_id", "ATMOS_AZURE_TENANT_ID", "AZURE_TENANT_ID")
+	bindEnv(v, "azure_cli_auth", "ATMOS_AZURE_CLI_AUTH", "AZURE_CLI_AUTH")
+	bindEnv(v, "docker_config", "ATMOS_DOCKER_CONFIG", "DOCKER_CONFIG")
+
 	// Check for GitHub Container Registry
 	if strings.EqualFold(registry, "ghcr.io") {
-		if token := os.Getenv(githubTokenEnv); token != "" {
+		// Try Atmos-specific token first, then fallback to standard GITHUB_TOKEN
+		token := atmosConfig.Settings.OCI.GithubToken
+		if token == "" {
+			token = v.GetString("github_token") // Use Viper instead of os.Getenv
+		}
+		if token != "" {
 			log.Debug("Using GitHub token for authentication", "registry", registry)
 			return &authn.Basic{
 				Username: "oauth2",
@@ -155,7 +179,7 @@ func getRegistryAuth(registry string) (authn.Authenticator, error) {
 
 	// Check for Docker credential helpers (most common for private registries)
 	// This will automatically check ~/.docker/config.json and use credential helpers
-	if auth, err := getDockerAuth(registry); err == nil {
+	if auth, err := getDockerAuth(registry, atmosConfig); err == nil {
 		log.Debug("Using Docker config authentication", "registry", registry)
 		return auth, nil
 	}
@@ -165,8 +189,15 @@ func getRegistryAuth(registry string) (authn.Authenticator, error) {
 	// Example: MY_REGISTRY_COM_USERNAME and MY_REGISTRY_COM_PASSWORD
 	// Normalize registry name by replacing dots and hyphens with underscores for valid env var names
 	registryEnvName := strings.ToUpper(strings.NewReplacer(".", "_", "-", "_").Replace(registry))
-	username := os.Getenv(fmt.Sprintf("%s_USERNAME", registryEnvName))
-	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", registryEnvName))
+	usernameKey := fmt.Sprintf("%s_username", registryEnvName)
+	passwordKey := fmt.Sprintf("%s_password", registryEnvName)
+
+	// Bind the registry-specific environment variables
+	bindEnv(v, usernameKey, fmt.Sprintf("%s_USERNAME", registryEnvName))
+	bindEnv(v, passwordKey, fmt.Sprintf("%s_PASSWORD", registryEnvName))
+
+	username := v.GetString(usernameKey)
+	password := v.GetString(passwordKey)
 
 	if username != "" && password != "" {
 		log.Debug("Using environment variable authentication", "registry", registry)
@@ -186,7 +217,7 @@ func getRegistryAuth(registry string) (authn.Authenticator, error) {
 
 	// Check for Azure Container Registry authentication
 	if strings.Contains(registry, "azurecr.io") {
-		if auth, err := getACRAuth(registry); err == nil {
+		if auth, err := getACRAuth(registry, atmosConfig); err == nil {
 			log.Debug("Using Azure ACR authentication", "registry", registry)
 			return auth, nil
 		}
@@ -206,9 +237,16 @@ func getRegistryAuth(registry string) (authn.Authenticator, error) {
 // getDockerAuth attempts to get authentication from Docker config file
 // Supports DOCKER_CONFIG environment variable to override the default path
 // and per-registry credential helpers (credHelpers)
-func getDockerAuth(registry string) (authn.Authenticator, error) {
+func getDockerAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
+	// Create a Viper instance for environment variable access
+	v := viper.New()
+	bindEnv(v, "docker_config", "ATMOS_DOCKER_CONFIG", "DOCKER_CONFIG")
+
 	// Resolve Docker config path
-	configDir := os.Getenv("DOCKER_CONFIG")
+	configDir := atmosConfig.Settings.OCI.DockerConfig
+	if configDir == "" {
+		configDir = v.GetString("docker_config") // Use Viper instead of os.Getenv
+	}
 	if configDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -456,7 +494,7 @@ func getECRAuth(registry string) (authn.Authenticator, error) {
 }
 
 // getACRAuth attempts to get Azure Container Registry authentication
-func getACRAuth(registry string) (authn.Authenticator, error) {
+func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
 	// Extract ACR name from registry URL first
 	// Expected format: <acr-name>.azurecr.io
 	acrName := ""
@@ -470,10 +508,32 @@ func getACRAuth(registry string) (authn.Authenticator, error) {
 		return nil, fmt.Errorf("could not extract ACR name from registry: %s", registry)
 	}
 
+	// Create a Viper instance for environment variable access
+	v := viper.New()
+	bindEnv(v, "azure_client_id", "ATMOS_AZURE_CLIENT_ID", "AZURE_CLIENT_ID")
+	bindEnv(v, "azure_client_secret", "ATMOS_AZURE_CLIENT_SECRET", "AZURE_CLIENT_SECRET")
+	bindEnv(v, "azure_tenant_id", "ATMOS_AZURE_TENANT_ID", "AZURE_TENANT_ID")
+	bindEnv(v, "azure_cli_auth", "ATMOS_AZURE_CLI_AUTH", "AZURE_CLI_AUTH")
+
 	// Check for Azure Service Principal credentials first
-	clientID := os.Getenv("AZURE_CLIENT_ID")
-	clientSecret := os.Getenv("AZURE_CLIENT_SECRET")
-	tenantID := os.Getenv("AZURE_TENANT_ID")
+	clientID := atmosConfig.Settings.OCI.AzureClientID
+	clientSecret := atmosConfig.Settings.OCI.AzureClientSecret
+	tenantID := atmosConfig.Settings.OCI.AzureTenantID
+	azureCLIAuth := atmosConfig.Settings.OCI.AzureCLIAuth
+
+	// Fallback to environment variables for backward compatibility
+	if clientID == "" {
+		clientID = v.GetString("azure_client_id")
+	}
+	if clientSecret == "" {
+		clientSecret = v.GetString("azure_client_secret")
+	}
+	if tenantID == "" {
+		tenantID = v.GetString("azure_tenant_id")
+	}
+	if azureCLIAuth == "" {
+		azureCLIAuth = v.GetString("azure_cli_auth")
+	}
 
 	// If we have all required Service Principal credentials, use them
 	if clientID != "" && clientSecret != "" && tenantID != "" {
@@ -482,7 +542,7 @@ func getACRAuth(registry string) (authn.Authenticator, error) {
 	}
 
 	// Fallback to Azure CLI if available and enabled
-	if os.Getenv("AZURE_CLI_AUTH") != "" || hasAzureCLI() {
+	if azureCLIAuth != "" || hasAzureCLI() {
 		log.Debug("Using Azure CLI authentication", "registry", registry, "acrName", acrName)
 		return getACRAuthViaCLI(registry)
 	}
@@ -849,8 +909,14 @@ func parseOCIManifest(manifestBytes io.Reader) (*ocispec.Manifest, error) {
 // 1) TF_TOKEN_<HOST> env (normalize dots/hyphens to underscores)
 // 2) ~/.terraform.d/credentials.tfrc.json
 func getTerraformAuth(registry string) (authn.Authenticator, error) {
+	// Create a Viper instance for environment variable access
+	v := viper.New()
+
 	hostKey := strings.NewReplacer(".", "_", "-", "_").Replace(strings.ToLower(registry))
-	if token := os.Getenv("TF_TOKEN_" + hostKey); token != "" {
+	tokenKey := fmt.Sprintf("tf_token_%s", hostKey)
+	bindEnv(v, tokenKey, fmt.Sprintf("TF_TOKEN_%s", strings.ToUpper(hostKey)))
+
+	if token := v.GetString(tokenKey); token != "" {
 		return &authn.Basic{Username: "terraform", Password: token}, nil
 	}
 	home, err := os.UserHomeDir()

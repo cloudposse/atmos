@@ -26,6 +26,7 @@ func TestGetRegistryAuth(t *testing.T) {
 		registry          string
 		setupEnv          func()
 		setupDockerConfig func() string
+		testFunction      func(string, *schema.AtmosConfiguration) (authn.Authenticator, error)
 		expectedAuth      bool
 		expectedError     bool
 	}{
@@ -35,6 +36,7 @@ func TestGetRegistryAuth(t *testing.T) {
 			setupEnv: func() {
 				os.Setenv("GITHUB_TOKEN", "test-token")
 			},
+			testFunction:  getRegistryAuth,
 			expectedAuth:  true,
 			expectedError: false,
 		},
@@ -250,7 +252,7 @@ func TestGetRegistryAuth(t *testing.T) {
 			}
 
 			// Test
-			auth, err := getRegistryAuth(tt.registry)
+			auth, err := getRegistryAuth(tt.registry, &schema.AtmosConfiguration{})
 
 			// Assert
 			if tt.expectedError {
@@ -653,7 +655,7 @@ func TestCloudProviderAuth(t *testing.T) {
 		name          string
 		registry      string
 		setupEnv      func()
-		testFunction  func(string) (authn.Authenticator, error)
+		testFunction  func(string, *schema.AtmosConfiguration) (authn.Authenticator, error)
 		expectedError bool
 	}{
 		{
@@ -662,7 +664,9 @@ func TestCloudProviderAuth(t *testing.T) {
 			setupEnv: func() {
 				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
 			},
-			testFunction:  getECRAuth,
+			testFunction: func(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
+				return getECRAuth(registry)
+			},
 			expectedError: true, // Will fail in test environment without real AWS credentials
 		},
 		{
@@ -671,7 +675,9 @@ func TestCloudProviderAuth(t *testing.T) {
 			setupEnv: func() {
 				os.Unsetenv("AWS_ACCESS_KEY_ID")
 			},
-			testFunction:  getECRAuth,
+			testFunction: func(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
+				return getECRAuth(registry)
+			},
 			expectedError: true,
 		},
 		{
@@ -683,7 +689,9 @@ func TestCloudProviderAuth(t *testing.T) {
 				os.Setenv("AZURE_TENANT_ID", "test-tenant-id")
 				os.Setenv("AZURE_SUBSCRIPTION_ID", "test-subscription-id")
 			},
-			testFunction:  getACRAuth,
+			testFunction: func(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
+				return getACRAuth(registry, atmosConfig)
+			},
 			expectedError: true, // Requires Azure SDK implementation
 		},
 		{
@@ -692,7 +700,9 @@ func TestCloudProviderAuth(t *testing.T) {
 			setupEnv: func() {
 				os.Setenv("AZURE_CLI_AUTH", "true")
 			},
-			testFunction:  getACRAuth,
+			testFunction: func(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
+				return getACRAuth(registry, atmosConfig)
+			},
 			expectedError: true, // Will fail in test environment without Azure CLI
 		},
 		{
@@ -701,7 +711,9 @@ func TestCloudProviderAuth(t *testing.T) {
 			setupEnv: func() {
 				os.Setenv("AZURE_CLIENT_ID", "test-client-id")
 			},
-			testFunction:  getACRAuth,
+			testFunction: func(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
+				return getACRAuth(registry, atmosConfig)
+			},
 			expectedError: true,
 		},
 		{
@@ -710,7 +722,9 @@ func TestCloudProviderAuth(t *testing.T) {
 			setupEnv: func() {
 				os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/path/to/creds.json")
 			},
-			testFunction:  getGCRAuth,
+			testFunction: func(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
+				return getGCRAuth(registry)
+			},
 			expectedError: true, // Not fully implemented
 		},
 	}
@@ -723,7 +737,7 @@ func TestCloudProviderAuth(t *testing.T) {
 			}
 
 			// Test
-			auth, err := tt.testFunction(tt.registry)
+			auth, err := tt.testFunction(tt.registry, &schema.AtmosConfiguration{})
 
 			// Assert
 			if tt.expectedError {
@@ -831,7 +845,7 @@ func TestACRAuth(t *testing.T) {
 			}
 
 			// Test
-			auth, err := getACRAuth(tt.registry)
+			auth, err := getACRAuth(tt.registry, &schema.AtmosConfiguration{})
 
 			// Assert
 			if tt.expectedError {
@@ -1031,7 +1045,7 @@ func TestDockerCredHelpers(t *testing.T) {
 			}
 
 			// Test
-			auth, err := getDockerAuth(tt.registry)
+			auth, err := getDockerAuth(tt.registry, &schema.AtmosConfiguration{})
 
 			// Assert
 			if tt.expectedError {
@@ -1223,6 +1237,6 @@ func BenchmarkGetRegistryAuth(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = getRegistryAuth("ghcr.io")
+		_, _ = getRegistryAuth("ghcr.io", &schema.AtmosConfiguration{})
 	}
 }
