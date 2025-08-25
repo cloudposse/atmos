@@ -68,6 +68,26 @@ func TestGetRegistryAuth(t *testing.T) {
 			expectedError: true,
 		},
 		{
+			name:     "Registry with hyphens in environment variables",
+			registry: "my-registry.com",
+			setupEnv: func() {
+				os.Setenv("MY_REGISTRY_COM_USERNAME", "user")
+				os.Setenv("MY_REGISTRY_COM_PASSWORD", "pass")
+			},
+			expectedAuth:  true,
+			expectedError: false,
+		},
+		{
+			name:     "Registry with dots and hyphens in environment variables",
+			registry: "my-registry.example.com",
+			setupEnv: func() {
+				os.Setenv("MY_REGISTRY_EXAMPLE_COM_USERNAME", "user")
+				os.Setenv("MY_REGISTRY_EXAMPLE_COM_PASSWORD", "pass")
+			},
+			expectedAuth:  true,
+			expectedError: false,
+		},
+		{
 			name:     "Docker config with direct auth",
 			registry: "docker-registry.com",
 			setupDockerConfig: func() string {

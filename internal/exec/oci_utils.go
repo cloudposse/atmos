@@ -160,7 +160,8 @@ func getRegistryAuth(registry string) (authn.Authenticator, error) {
 	// Check for custom environment variables for specific registries
 	// Format: REGISTRY_NAME_USERNAME and REGISTRY_NAME_PASSWORD
 	// Example: MY_REGISTRY_COM_USERNAME and MY_REGISTRY_COM_PASSWORD
-	registryEnvName := strings.ToUpper(strings.ReplaceAll(registry, ".", "_"))
+	// Normalize registry name by replacing dots and hyphens with underscores for valid env var names
+	registryEnvName := strings.ToUpper(strings.NewReplacer(".", "_", "-", "_").Replace(registry))
 	username := os.Getenv(fmt.Sprintf("%s_USERNAME", registryEnvName))
 	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", registryEnvName))
 
