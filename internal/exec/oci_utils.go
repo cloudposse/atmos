@@ -133,7 +133,7 @@ func pullImage(ref name.Reference) (*remote.Descriptor, error) {
 func getRegistryAuth(registry string) (authn.Authenticator, error) {
 	// Check for GitHub Container Registry
 	if strings.EqualFold(registry, "ghcr.io") {
-		if token := os.Getenv("githubTokenEnv"); token != "" {
+		if token := os.Getenv(githubTokenEnv); token != "" {
 			log.Debug("Using GitHub token for authentication", "registry", registry)
 			return &authn.Basic{
 				Username: "oauth2",
@@ -202,23 +202,19 @@ func getRegistryAuth(registry string) (authn.Authenticator, error) {
 
 // getDockerAuth attempts to get authentication from Docker config file
 // Supports DOCKER_CONFIG environment variable to override the default path
+// and per-registry credential helpers (credHelpers)
 func getDockerAuth(registry string) (authn.Authenticator, error) {
-	// Determine Docker config file path
-	var dockerConfigPath string
-
-	// Check if DOCKER_CONFIG environment variable is set
-	if dockerConfigEnv := os.Getenv("DOCKER_CONFIG"); dockerConfigEnv != "" {
-		dockerConfigPath = filepath.Join(dockerConfigEnv, "config.json")
-		log.Debug("Using DOCKER_CONFIG environment variable", "path", dockerConfigPath)
-	} else {
-		// Get user's home directory for default path
+	// Resolve Docker config path
+	configDir := os.Getenv("DOCKER_CONFIG")
+	if configDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get user home directory: %w", err)
 		}
-		dockerConfigPath = filepath.Join(homeDir, ".docker", "config.json")
-		log.Debug("Using default Docker config path", "path", dockerConfigPath)
+		configDir = filepath.Join(homeDir, ".docker")
 	}
+	dockerConfigPath := filepath.Join(configDir, "config.json")
+	log.Debug("Using Docker config path", "path", dockerConfigPath)
 
 	// Check if Docker config file exists
 	if _, err := os.Stat(dockerConfigPath); os.IsNotExist(err) {
@@ -244,19 +240,31 @@ func getDockerAuth(registry string) (authn.Authenticator, error) {
 		return nil, fmt.Errorf("failed to parse Docker config JSON: %w", err)
 	}
 
-	// First, try to get credentials from registry-specific credential helper
+	// Next, try per-registry credHelpers
 	if dockerConfig.CredHelpers != nil {
-		if credHelper, exists := dockerConfig.CredHelpers[registry]; exists && credHelper != "" {
-			if auth, err := getCredentialStoreAuth(registry, credHelper); err == nil {
-				log.Debug("Using registry-specific credential helper", "registry", registry, "helper", credHelper)
+		// Try exact registry match first
+		if helper, ok := dockerConfig.CredHelpers[registry]; ok && helper != "" {
+			if auth, err := getCredentialStoreAuth(registry, helper); err == nil {
+				log.Debug("Using per-registry credential helper", "registry", registry, "helper", helper)
 				return auth, nil
 			} else {
-				log.Debug("Registry-specific credential helper failed", "registry", registry, "helper", credHelper, "error", err)
+				log.Debug("Per-registry credential helper failed", "registry", registry, "helper", helper, "error", err)
+			}
+		}
+
+		// Try with https:// prefix
+		httpsRegistry := "https://" + registry
+		if helper, ok := dockerConfig.CredHelpers[httpsRegistry]; ok && helper != "" {
+			if auth, err := getCredentialStoreAuth(registry, helper); err == nil {
+				log.Debug("Using per-registry credential helper", "registry", httpsRegistry, "helper", helper)
+				return auth, nil
+			} else {
+				log.Debug("Per-registry credential helper failed", "registry", httpsRegistry, "helper", helper, "error", err)
 			}
 		}
 	}
 
-	// Fallback to global credential store if it exists
+	// Fallback to global credential store (credsStore) if it exists
 	if dockerConfig.CredsStore != "" {
 		if auth, err := getCredentialStoreAuth(registry, dockerConfig.CredsStore); err == nil {
 			log.Debug("Using global credential store authentication", "registry", registry, "store", dockerConfig.CredsStore)

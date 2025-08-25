@@ -144,6 +144,38 @@ func TestGetRegistryAuth(t *testing.T) {
 			expectedError: true,
 		},
 		{
+			name:     "Docker config with https:// prefixed credential helper",
+			registry: "https-registry.com",
+			setupDockerConfig: func() string {
+				return `{
+					"auths": {},
+					"credHelpers": {
+						"https://https-registry.com": "desktop"
+					}
+				}`
+			},
+			expectedAuth:  false, // Will fail because docker-credential-desktop doesn't exist in test
+			expectedError: true,
+		},
+		{
+			name:     "Docker config with DOCKER_CONFIG environment variable",
+			registry: "custom-registry.com",
+			setupEnv: func() {
+				// This will be set up in the test to point to a custom directory
+			},
+			setupDockerConfig: func() string {
+				return `{
+					"auths": {
+						"custom-registry.com": {
+							"auth": "` + base64.StdEncoding.EncodeToString([]byte("customuser:custompass")) + `"
+						}
+					}
+				}`
+			},
+			expectedAuth:  true,
+			expectedError: false,
+		},
+		{
 			name:     "AWS ECR registry",
 			registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com",
 			setupEnv: func() {
@@ -183,18 +215,38 @@ func TestGetRegistryAuth(t *testing.T) {
 			if tt.setupDockerConfig != nil {
 				configData := tt.setupDockerConfig()
 				tempDir := t.TempDir()
-				dockerConfigPath := filepath.Join(tempDir, ".docker", "config.json")
 
-				err := os.MkdirAll(filepath.Dir(dockerConfigPath), 0o755)
-				require.NoError(t, err)
+				// Check if this is a DOCKER_CONFIG test
+				if tt.name == "Docker config with DOCKER_CONFIG environment variable" {
+					// For DOCKER_CONFIG test, create config in a custom directory
+					customConfigDir := filepath.Join(tempDir, "custom-docker")
+					dockerConfigPath := filepath.Join(customConfigDir, "config.json")
 
-				err = os.WriteFile(dockerConfigPath, []byte(configData), 0o644)
-				require.NoError(t, err)
+					err := os.MkdirAll(filepath.Dir(dockerConfigPath), 0755)
+					require.NoError(t, err)
 
-				// Mock the home directory to point to our temp dir
-				originalHome := os.Getenv("HOME")
-				os.Setenv("HOME", tempDir)
-				defer os.Setenv("HOME", originalHome)
+					err = os.WriteFile(dockerConfigPath, []byte(configData), 0644)
+					require.NoError(t, err)
+
+					// Set DOCKER_CONFIG environment variable
+					originalDockerConfig := os.Getenv("DOCKER_CONFIG")
+					os.Setenv("DOCKER_CONFIG", customConfigDir)
+					defer os.Setenv("DOCKER_CONFIG", originalDockerConfig)
+				} else {
+					// Standard test - create config in .docker subdirectory
+					dockerConfigPath := filepath.Join(tempDir, ".docker", "config.json")
+
+					err := os.MkdirAll(filepath.Dir(dockerConfigPath), 0755)
+					require.NoError(t, err)
+
+					err = os.WriteFile(dockerConfigPath, []byte(configData), 0644)
+					require.NoError(t, err)
+
+					// Mock the home directory to point to our temp dir
+					originalHome := os.Getenv("HOME")
+					os.Setenv("HOME", tempDir)
+					defer os.Setenv("HOME", originalHome)
+				}
 			}
 
 			// Test
