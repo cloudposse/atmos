@@ -693,8 +693,30 @@ func extractZipFile(reader io.Reader, destDir string) error {
 			continue
 		}
 
-		// Create the file path
-		filePath := filepath.Join(destDir, file.Name)
+		// Skip symlinks for security
+		if file.FileInfo().Mode()&os.ModeSymlink != 0 {
+			log.Warn("Skipping symlink in ZIP", "name", file.Name)
+			continue
+		}
+
+		// Create the file path (guard against Zip Slip)
+		// First, check for absolute paths and path traversal patterns
+		if filepath.IsAbs(file.Name) || strings.Contains(file.Name, "..") {
+			return fmt.Errorf("illegal file path in ZIP: %s", file.Name)
+		}
+
+		// Check for Windows absolute paths (drive letter followed by colon and backslash)
+		if len(file.Name) >= 3 && file.Name[1] == ':' && (file.Name[2] == '\\' || file.Name[2] == '/') {
+			return fmt.Errorf("illegal file path in ZIP: %s", file.Name)
+		}
+
+		// Then use the standard path joining and validation
+		joined := filepath.Join(destDir, file.Name)
+		cleanDest := filepath.Clean(destDir)
+		filePath := filepath.Clean(joined)
+		if !strings.HasPrefix(filePath, cleanDest+string(os.PathSeparator)) && filePath != cleanDest {
+			return fmt.Errorf("illegal file path in ZIP: %s", file.Name)
+		}
 
 		// Create parent directories if they don't exist
 		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
