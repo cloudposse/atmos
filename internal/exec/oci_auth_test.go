@@ -568,29 +568,43 @@ func TestGetCredentialStoreAuth(t *testing.T) {
 	tests := []struct {
 		name        string
 		registry    string
-		configPath  string
+		credsStore  string
 		expectError bool
 		errorMsg    string
 	}{
 		{
-			name:        "Non-existent config file",
+			name:        "Invalid credential store name",
 			registry:    "docker.io",
-			configPath:  "/non/existent/path",
+			credsStore:  "/invalid/store/name",
 			expectError: true,
-			errorMsg:    "failed to read Docker config",
+			errorMsg:    "invalid credential store name",
 		},
 		{
-			name:        "Empty config path",
+			name:        "Empty credential store name",
 			registry:    "docker.io",
-			configPath:  "",
+			credsStore:  "",
 			expectError: true,
-			errorMsg:    "failed to read Docker config",
+			errorMsg:    "failed to get credentials from store",
+		},
+		{
+			name:        "Non-existent credential helper",
+			registry:    "docker.io",
+			credsStore:  "nonexistent",
+			expectError: true,
+			errorMsg:    "failed to get credentials from store",
+		},
+		{
+			name:        "Invalid registry name",
+			registry:    "docker.io;rm -rf /",
+			credsStore:  "desktop",
+			expectError: true,
+			errorMsg:    "invalid registry name",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			auth, err := getCredentialStoreAuth(tt.registry, tt.configPath)
+			auth, err := getCredentialStoreAuth(tt.registry, tt.credsStore)
 
 			if tt.expectError {
 				assert.Error(t, err)
