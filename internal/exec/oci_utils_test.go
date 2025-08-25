@@ -756,7 +756,7 @@ func TestACRAuth(t *testing.T) {
 				os.Setenv("AZURE_SUBSCRIPTION_ID", "test-subscription-id")
 			},
 			expectedError: true,
-			expectedMsg:   "Azure ACR authentication requires Azure SDK implementation",
+			expectedMsg:   "failed to get Azure token",
 		},
 		{
 			name:     "Azure ACR with Azure CLI",
@@ -783,7 +783,7 @@ func TestACRAuth(t *testing.T) {
 				// Don't set any Azure credentials
 			},
 			expectedError: true,
-			expectedMsg:   "Azure credentials not found",
+			expectedMsg:   "failed to get Azure token",
 		},
 		{
 			name:     "Azure ACR missing client ID",
@@ -794,7 +794,7 @@ func TestACRAuth(t *testing.T) {
 				os.Setenv("AZURE_SUBSCRIPTION_ID", "test-sub")
 			},
 			expectedError: true,
-			expectedMsg:   "AZURE_CLIENT_ID environment variable is required",
+			expectedMsg:   "failed to get Azure token",
 		},
 		{
 			name:     "Azure ACR missing client secret",
@@ -805,7 +805,7 @@ func TestACRAuth(t *testing.T) {
 				os.Setenv("AZURE_SUBSCRIPTION_ID", "test-sub")
 			},
 			expectedError: true,
-			expectedMsg:   "AZURE_CLIENT_SECRET environment variable is required",
+			expectedMsg:   "failed to get Azure token",
 		},
 	}
 

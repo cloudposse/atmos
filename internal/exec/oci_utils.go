@@ -17,6 +17,8 @@ import (
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 	"github.com/pkg/errors"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -468,44 +470,26 @@ func getACRAuth(registry string) (authn.Authenticator, error) {
 		return nil, fmt.Errorf("could not extract ACR name from registry: %s", registry)
 	}
 
-	// Check for required Azure environment variables
+	// Check for Azure Service Principal credentials first
 	clientID := os.Getenv("AZURE_CLIENT_ID")
 	clientSecret := os.Getenv("AZURE_CLIENT_SECRET")
 	tenantID := os.Getenv("AZURE_TENANT_ID")
-	subscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
 
-	// Check for Azure CLI authentication as fallback
-	if clientID == "" && clientSecret == "" && tenantID == "" {
-		// Try to use Azure CLI authentication
-		if os.Getenv("AZURE_CLI_AUTH") != "" || hasAzureCLI() {
-			log.Debug("Using Azure CLI authentication for ACR", "registry", registry)
-			return getACRAuthViaCLI(registry)
-		}
-		return nil, fmt.Errorf("Azure credentials not found - set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID or use Azure CLI")
+	// If we have all required Service Principal credentials, use them
+	if clientID != "" && clientSecret != "" && tenantID != "" {
+		log.Debug("Using Azure Service Principal credentials", "registry", registry, "acrName", acrName)
+		return getACRAuthViaServicePrincipal(registry, acrName, clientID, clientSecret, tenantID)
 	}
 
-	// If we have some but not all credentials, validate what's missing
-	if clientID == "" {
-		return nil, fmt.Errorf("AZURE_CLIENT_ID environment variable is required")
-	}
-	if clientSecret == "" {
-		return nil, fmt.Errorf("AZURE_CLIENT_SECRET environment variable is required")
-	}
-	if tenantID == "" {
-		return nil, fmt.Errorf("AZURE_TENANT_ID environment variable is required")
-	}
-	if subscriptionID == "" {
-		return nil, fmt.Errorf("AZURE_SUBSCRIPTION_ID environment variable is required")
+	// Fallback to Azure CLI if available and enabled
+	if os.Getenv("AZURE_CLI_AUTH") != "" || hasAzureCLI() {
+		log.Debug("Using Azure CLI authentication", "registry", registry, "acrName", acrName)
+		return getACRAuthViaCLI(registry)
 	}
 
-	log.Debug("Authenticating with Azure Container Registry", "registry", registry, "acrName", acrName)
-
-	// For now, return an error indicating this needs Azure SDK implementation
-	// In a full implementation, you would:
-	// 1. Create Azure credential using azidentity.NewClientSecretCredential
-	// 2. Create ACR client using armcontainerregistry.NewClient
-	// 3. Call GetCredentials to get username/password
-	return nil, fmt.Errorf("Azure ACR authentication requires Azure SDK implementation - ACR name: %s", acrName)
+	// Try using Azure Default Credential (Managed Identity, Azure CLI, etc.)
+	log.Debug("Using Azure Default Credential", "registry", registry, "acrName", acrName)
+	return getACRAuthViaDefaultCredential(registry, acrName)
 }
 
 // hasAzureCLI checks if Azure CLI is available
@@ -514,6 +498,59 @@ func hasAzureCLI() bool {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "az", "version")
 	return cmd.Run() == nil
+}
+
+// getACRAuthViaServicePrincipal attempts to get ACR credentials using Azure Service Principal
+func getACRAuthViaServicePrincipal(registry, acrName, clientID, clientSecret, tenantID string) (authn.Authenticator, error) {
+	// Create Azure credential using Service Principal
+	cred, err := azidentity.NewClientSecretCredential(tenantID, clientID, clientSecret, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Azure credential: %w", err)
+	}
+
+	// Get AAD token for ACR scope
+	ctx := context.Background()
+	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{
+		Scopes: []string{"https://management.azure.com/.default"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Azure token: %w", err)
+	}
+
+	// For ACR, we use the token as the password with "00000000-0000-0000-0000-000000000000" as username
+	// This is the standard pattern for ACR authentication with AAD tokens
+	log.Debug("Successfully obtained ACR credentials via Service Principal", "registry", registry, "acrName", acrName)
+
+	return &authn.Basic{
+		Username: "00000000-0000-0000-0000-000000000000",
+		Password: token.Token,
+	}, nil
+}
+
+// getACRAuthViaDefaultCredential attempts to get ACR credentials using Azure Default Credential
+func getACRAuthViaDefaultCredential(registry, acrName string) (authn.Authenticator, error) {
+	// Create Azure credential using Default Credential (Managed Identity, Azure CLI, etc.)
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Azure default credential: %w", err)
+	}
+
+	// Get AAD token for ACR scope
+	ctx := context.Background()
+	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{
+		Scopes: []string{"https://management.azure.com/.default"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Azure token: %w", err)
+	}
+
+	// For ACR, we use the token as the password with "00000000-0000-0000-0000-000000000000" as username
+	log.Debug("Successfully obtained ACR credentials via Default Credential", "registry", registry, "acrName", acrName)
+
+	return &authn.Basic{
+		Username: "00000000-0000-0000-0000-000000000000",
+		Password: token.Token,
+	}, nil
 }
 
 // getACRAuthViaCLI attempts to get ACR credentials using Azure CLI
