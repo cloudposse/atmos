@@ -387,14 +387,20 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 ### Output Conventions (MANDATORY)  
 - **Most text UI MUST go to stderr** to enable proper piping
 - **Only data/results go to stdout** for piping compatibility
-- Examples:
+- **Examples**:
   ```go
+  import "github.com/cloudposse/atmos/pkg/utils"
+  
   // WRONG: UI to stdout (breaks piping)
   fmt.Println("Processing component...")
   fmt.Print(componentData)
   
-  // CORRECT: UI to stderr, data to stdout
-  fmt.Fprintln(os.Stderr, "Processing component...")
+  // CORRECT: Use TUI function for UI messages, stdout for data
+  utils.PrintfMessageToTUI("Processing component...\n")
+  fmt.Print(componentData) // Data goes to stdout for piping
+  
+  // ACCEPTABLE: Direct stderr as last resort
+  fmt.Fprintf(os.Stderr, "Processing component...\n")
   fmt.Print(componentData) // Data goes to stdout for piping
   ```
 
