@@ -17,6 +17,7 @@ import (
 	_ "github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
 	"github.com/versent/saml2aws/v2/pkg/creds"
+	"gopkg.in/yaml.v3"
 )
 
 type awsSaml struct {
@@ -28,6 +29,20 @@ type awsSaml struct {
 	// Store SAML assertion and roles between Login and AssumeRole steps
 	samlAssertion string
 	samlRoles     []*saml2aws.AWSRole
+}
+
+func NewAwsSamlFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
+	var data = &awsSaml{
+		Identity: NewIdentity(),
+	}
+	b, err := yaml.Marshal(config.Providers[provider])
+	if err != nil {
+		return nil, err
+	}
+	err = yaml.Unmarshal(b, data)
+	setDefaults(&data.Common, provider, config)
+	data.Identity.Identity = identity
+	return data, err
 }
 
 // Input options for login.

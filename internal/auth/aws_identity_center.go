@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -39,6 +40,20 @@ type awsIamIdentityCenter struct {
 	token     string
 	accountId string
 	roleName  string
+}
+
+func NewAwsIamIdentityCenterFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
+	var data = &awsIamIdentityCenter{
+		Identity: NewIdentity(),
+	}
+	b, err := yaml.Marshal(config.Providers[provider])
+	if err != nil {
+		return nil, err
+	}
+	err = yaml.Unmarshal(b, data)
+	setDefaults(&data.Common, provider, config)
+	data.Identity.Identity = identity
+	return data, err
 }
 
 // Validate checks if the configuration is valid

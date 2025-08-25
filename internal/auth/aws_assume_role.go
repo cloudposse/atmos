@@ -3,13 +3,15 @@ package auth
 import (
 	"context"
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"os"
-	"time"
+	"gopkg.in/yaml.v3"
 )
 
 type awsAssumeRole struct {
@@ -17,6 +19,20 @@ type awsAssumeRole struct {
 	schema.Identity `yaml:",inline"`
 
 	SessionDuration int32 `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
+}
+
+func NewAwsAssumeRoleFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
+	var data = &awsAssumeRole{
+		Identity: NewIdentity(),
+	}
+	b, err := yaml.Marshal(config.Providers[provider])
+	if err != nil {
+		return nil, err
+	}
+	err = yaml.Unmarshal(b, data)
+	setDefaults(&data.Common, provider, config)
+	data.Identity.Identity = identity
+	return data, err
 }
 
 // Validate checks if the required fields are set

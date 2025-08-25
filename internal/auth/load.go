@@ -2,51 +2,23 @@ package auth
 
 import (
 	"errors"
+
 	l "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
 )
 
+func NewIdentity() schema.Identity {
+	return schema.Identity{
+		Enabled:    true,
+		UseProfile: true,
+	}
+}
+
 var identityRegistry = map[string]func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error){
-	"aws/iam-identity-center": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
-		var data = &awsIamIdentityCenter{
-			Identity: schema.Identity{
-				Enabled:    true,
-				UseProfile: true,
-			},
-		}
-		b, err := yaml.Marshal(config.Providers[provider])
-		if err != nil {
-			return nil, err
-		}
-		err = yaml.Unmarshal(b, data)
-		setDefaults(&data.Common, provider, config)
-		data.Identity.Identity = identity
-		return data, err
-	},
-	"aws/saml": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
-		var data = &awsSaml{}
-		b, err := yaml.Marshal(config.Providers[provider])
-		if err != nil {
-			return nil, err
-		}
-		err = yaml.Unmarshal(b, data)
-		setDefaults(&data.Common, provider, config)
-		data.Identity.Identity = identity
-		return data, err
-	},
-	// Empty - used for UseProfile - no ProviderName
-	"": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
-		var data = &awsAssumeRole{}
-		b, err := yaml.Marshal(config.Providers[provider])
-		if err != nil {
-			return nil, err
-		}
-		err = yaml.Unmarshal(b, data)
-		setDefaults(&data.Common, provider, config)
-		data.Identity.Identity = identity
-		return data, err
-	},
+	"aws/iam-identity-center": NewAwsIamIdentityCenterFactory,
+	"aws/saml":                NewAwsSamlFactory,
+	"":                        NewAwsAssumeRoleFactory, // Empty - used for AssumeRole - no ProviderName
 	//"oidc":                    func() LoginMethod { return &awsSaml{} },
 }
 
