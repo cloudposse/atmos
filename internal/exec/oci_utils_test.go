@@ -95,6 +95,35 @@ func TestGetRegistryAuth(t *testing.T) {
 			expectedError: true,
 		},
 		{
+			name:     "Docker config with registry-specific credential helper",
+			registry: "helper-registry.com",
+			setupDockerConfig: func() string {
+				return `{
+					"auths": {},
+					"credHelpers": {
+						"helper-registry.com": "desktop"
+					}
+				}`
+			},
+			expectedAuth:  false, // Will fail because docker-credential-desktop doesn't exist in test
+			expectedError: true,
+		},
+		{
+			name:     "Docker config with multiple credential helpers",
+			registry: "ecr-registry.amazonaws.com",
+			setupDockerConfig: func() string {
+				return `{
+					"auths": {},
+					"credHelpers": {
+						"helper-registry.com": "desktop",
+						"ecr-registry.amazonaws.com": "ecr-login"
+					}
+				}`
+			},
+			expectedAuth:  false, // Will fail because docker-credential-ecr-login doesn't exist in test
+			expectedError: true,
+		},
+		{
 			name:     "AWS ECR registry",
 			registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com",
 			setupEnv: func() {
@@ -412,7 +441,7 @@ func TestCloudProviderAuth(t *testing.T) {
 				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
 			},
 			testFunction:  getECRAuth,
-			expectedError: true, // Not fully implemented
+			expectedError: true, // Will fail in test environment without real AWS credentials
 		},
 		{
 			name:     "AWS ECR without credentials",
@@ -609,6 +638,277 @@ func TestACRAuth(t *testing.T) {
 			}
 			if originalCLIAuth != "" {
 				os.Setenv("AZURE_CLI_AUTH", originalCLIAuth)
+			}
+		})
+	}
+}
+
+// TestDockerCredHelpers tests Docker credential helpers functionality
+func TestDockerCredHelpers(t *testing.T) {
+	tests := []struct {
+		name          string
+		registry      string
+		setupConfig   func() (string, func())
+		expectedError bool
+		expectedMsg   string
+	}{
+		{
+			name:     "Registry-specific credential helper",
+			registry: "my-registry.com",
+			setupConfig: func() (string, func()) {
+				// Create temporary config directory
+				tempDir := t.TempDir()
+				dockerConfigPath := filepath.Join(tempDir, ".docker", "config.json")
+
+				// Create directory and config file
+				err := os.MkdirAll(filepath.Dir(dockerConfigPath), 0755)
+				require.NoError(t, err)
+
+				configData := `{
+					"auths": {},
+					"credHelpers": {
+						"my-registry.com": "desktop"
+					}
+				}`
+
+				err = os.WriteFile(dockerConfigPath, []byte(configData), 0644)
+				require.NoError(t, err)
+
+				// Mock home directory
+				originalHome := os.Getenv("HOME")
+				os.Setenv("HOME", tempDir)
+
+				cleanup := func() {
+					os.Setenv("HOME", originalHome)
+				}
+
+				return dockerConfigPath, cleanup
+			},
+			expectedError: true,
+			expectedMsg:   "no authentication found in Docker config for registry",
+		},
+		{
+			name:     "Multiple credential helpers",
+			registry: "ecr.amazonaws.com",
+			setupConfig: func() (string, func()) {
+				// Create temporary config directory
+				tempDir := t.TempDir()
+				dockerConfigPath := filepath.Join(tempDir, ".docker", "config.json")
+
+				// Create directory and config file
+				err := os.MkdirAll(filepath.Dir(dockerConfigPath), 0755)
+				require.NoError(t, err)
+
+				configData := `{
+					"auths": {},
+					"credHelpers": {
+						"my-registry.com": "desktop",
+						"ecr.amazonaws.com": "ecr-login",
+						"gcr.io": "gcloud"
+					}
+				}`
+
+				err = os.WriteFile(dockerConfigPath, []byte(configData), 0644)
+				require.NoError(t, err)
+
+				// Mock home directory
+				originalHome := os.Getenv("HOME")
+				os.Setenv("HOME", tempDir)
+
+				cleanup := func() {
+					os.Setenv("HOME", originalHome)
+				}
+
+				return dockerConfigPath, cleanup
+			},
+			expectedError: true,
+			expectedMsg:   "no authentication found in Docker config for registry",
+		},
+		{
+			name:     "Credential helper with fallback to auth",
+			registry: "fallback-registry.com",
+			setupConfig: func() (string, func()) {
+				// Create temporary config directory
+				tempDir := t.TempDir()
+				dockerConfigPath := filepath.Join(tempDir, ".docker", "config.json")
+
+				// Create directory and config file
+				err := os.MkdirAll(filepath.Dir(dockerConfigPath), 0755)
+				require.NoError(t, err)
+
+				configData := `{
+					"auths": {
+						"fallback-registry.com": {
+							"auth": "dXNlcjpwYXNz"
+						}
+					},
+					"credHelpers": {
+						"other-registry.com": "desktop"
+					}
+				}`
+
+				err = os.WriteFile(dockerConfigPath, []byte(configData), 0644)
+				require.NoError(t, err)
+
+				// Mock home directory
+				originalHome := os.Getenv("HOME")
+				os.Setenv("HOME", tempDir)
+
+				cleanup := func() {
+					os.Setenv("HOME", originalHome)
+				}
+
+				return dockerConfigPath, cleanup
+			},
+			expectedError: false,
+		},
+		{
+			name:     "Registry not in credential helpers",
+			registry: "unknown-registry.com",
+			setupConfig: func() (string, func()) {
+				// Create temporary config directory
+				tempDir := t.TempDir()
+				dockerConfigPath := filepath.Join(tempDir, ".docker", "config.json")
+
+				// Create directory and config file
+				err := os.MkdirAll(filepath.Dir(dockerConfigPath), 0755)
+				require.NoError(t, err)
+
+				configData := `{
+					"auths": {},
+					"credHelpers": {
+						"known-registry.com": "desktop"
+					}
+				}`
+
+				err = os.WriteFile(dockerConfigPath, []byte(configData), 0644)
+				require.NoError(t, err)
+
+				// Mock home directory
+				originalHome := os.Getenv("HOME")
+				os.Setenv("HOME", tempDir)
+
+				cleanup := func() {
+					os.Setenv("HOME", originalHome)
+				}
+
+				return dockerConfigPath, cleanup
+			},
+			expectedError: true,
+			expectedMsg:   "no authentication found in Docker config for registry",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			var cleanup func()
+			if tt.setupConfig != nil {
+				_, cleanup = tt.setupConfig()
+				defer cleanup()
+			}
+
+			// Test
+			auth, err := getDockerAuth(tt.registry)
+
+			// Assert
+			if tt.expectedError {
+				assert.Error(t, err)
+				assert.Nil(t, auth)
+				if tt.expectedMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, auth)
+
+				// Check that it's a Basic authenticator
+				basicAuth, ok := auth.(*authn.Basic)
+				assert.True(t, ok, "Expected Basic authenticator")
+				assert.Equal(t, "user", basicAuth.Username)
+				assert.Equal(t, "pass", basicAuth.Password)
+			}
+		})
+	}
+}
+
+// TestECRAuth tests AWS ECR authentication functionality
+func TestECRAuth(t *testing.T) {
+	tests := []struct {
+		name          string
+		registry      string
+		setupEnv      func()
+		expectedError bool
+		expectedMsg   string
+	}{
+		{
+			name:     "AWS ECR with valid registry format",
+			registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com",
+			setupEnv: func() {
+				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+			},
+			expectedError: true,
+			expectedMsg:   "failed to get ECR authorization token for account 123456789012 in region us-west-2",
+		},
+		{
+			name:     "AWS ECR with different region",
+			registry: "987654321098.dkr.ecr.eu-west-1.amazonaws.com",
+			setupEnv: func() {
+				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+			},
+			expectedError: true,
+			expectedMsg:   "failed to get ECR authorization token for account 987654321098 in region eu-west-1",
+		},
+		{
+			name:     "AWS ECR invalid registry format",
+			registry: "invalid-ecr-registry.com",
+			setupEnv: func() {
+				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+			},
+			expectedError: true,
+			expectedMsg:   "invalid ECR registry format",
+		},
+		{
+			name:     "AWS ECR missing region",
+			registry: "123456789012.dkr.ecr.amazonaws.com",
+			setupEnv: func() {
+				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+			},
+			expectedError: true,
+			expectedMsg:   "failed to get ECR authorization token for account 123456789012 in region amazonaws",
+		},
+		{
+			name:     "AWS ECR missing credentials",
+			registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com",
+			setupEnv: func() {
+				os.Unsetenv("AWS_ACCESS_KEY_ID")
+				os.Unsetenv("AWS_PROFILE")
+			},
+			expectedError: true,
+			expectedMsg:   "AWS credentials not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			if tt.setupEnv != nil {
+				tt.setupEnv()
+			}
+
+			// Test
+			auth, err := getECRAuth(tt.registry)
+
+			// Assert
+			if tt.expectedError {
+				assert.Error(t, err)
+				assert.Nil(t, auth)
+				if tt.expectedMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, auth)
 			}
 		})
 	}

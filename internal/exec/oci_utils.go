@@ -235,20 +235,33 @@ func getDockerAuth(registry string) (authn.Authenticator, error) {
 		Auths map[string]struct {
 			Auth string `json:"auth"`
 		} `json:"auths"`
-		CredsStore string `json:"credsStore"`
+		CredsStore  string            `json:"credsStore"`
+		CredHelpers map[string]string `json:"credHelpers"`
 	}
 
 	if err := json.Unmarshal(configData, &dockerConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse Docker config JSON: %w", err)
 	}
 
-	// First, try to get credentials from credential store if it exists
+	// First, try to get credentials from registry-specific credential helper
+	if dockerConfig.CredHelpers != nil {
+		if credHelper, exists := dockerConfig.CredHelpers[registry]; exists && credHelper != "" {
+			if auth, err := getCredentialStoreAuth(registry, credHelper); err == nil {
+				log.Debug("Using registry-specific credential helper", "registry", registry, "helper", credHelper)
+				return auth, nil
+			} else {
+				log.Debug("Registry-specific credential helper failed", "registry", registry, "helper", credHelper, "error", err)
+			}
+		}
+	}
+
+	// Fallback to global credential store if it exists
 	if dockerConfig.CredsStore != "" {
 		if auth, err := getCredentialStoreAuth(registry, dockerConfig.CredsStore); err == nil {
-			log.Debug("Using credential store authentication", "registry", registry, "store", dockerConfig.CredsStore)
+			log.Debug("Using global credential store authentication", "registry", registry, "store", dockerConfig.CredsStore)
 			return auth, nil
 		} else {
-			log.Debug("Credential store authentication failed", "registry", registry, "store", dockerConfig.CredsStore, "error", err)
+			log.Debug("Global credential store authentication failed", "registry", registry, "store", dockerConfig.CredsStore, "error", err)
 		}
 	}
 
@@ -362,20 +375,17 @@ func getECRAuth(registry string) (authn.Authenticator, error) {
 		return nil, fmt.Errorf("AWS credentials not found")
 	}
 
-	// Load AWS configuration
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
-	}
-
-	// Create ECR client
-	ecrClient := ecr.NewFromConfig(cfg)
-
-	// Extract region from registry URL
+	// Extract account ID and region from registry URL
 	// ECR registry format: <account-id>.dkr.ecr.<region>.amazonaws.com
 	parts := strings.Split(registry, ".")
 	if len(parts) < 4 {
 		return nil, fmt.Errorf("invalid ECR registry format: %s", registry)
+	}
+
+	// Extract account ID (first part)
+	accountID := parts[0]
+	if accountID == "" {
+		return nil, fmt.Errorf("could not extract account ID from ECR registry: %s", registry)
 	}
 
 	// Find the region part (should be after "ecr")
@@ -391,15 +401,28 @@ func getECRAuth(registry string) (authn.Authenticator, error) {
 		return nil, fmt.Errorf("could not extract region from ECR registry: %s", registry)
 	}
 
-	// Get ECR authorization token
-	authTokenInput := &ecr.GetAuthorizationTokenInput{}
+	log.Debug("Extracted ECR registry info", "registry", registry, "accountID", accountID, "region", region)
+
+	// Load AWS configuration with specific region
+	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config for region %s: %w", region, err)
+	}
+
+	// Create ECR client with region-specific config
+	ecrClient := ecr.NewFromConfig(cfg)
+
+	// Get ECR authorization token with account ID
+	authTokenInput := &ecr.GetAuthorizationTokenInput{
+		RegistryIds: []string{accountID},
+	}
 	authTokenOutput, err := ecrClient.GetAuthorizationToken(context.Background(), authTokenInput)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ECR authorization token: %w", err)
+		return nil, fmt.Errorf("failed to get ECR authorization token for account %s in region %s: %w", accountID, region, err)
 	}
 
 	if len(authTokenOutput.AuthorizationData) == 0 {
-		return nil, fmt.Errorf("no authorization data returned from ECR")
+		return nil, fmt.Errorf("no authorization data returned from ECR for account %s", accountID)
 	}
 
 	// Decode the authorization token
@@ -418,7 +441,7 @@ func getECRAuth(registry string) (authn.Authenticator, error) {
 	username := parts[0]
 	password := parts[1]
 
-	log.Debug("Successfully obtained ECR credentials", "registry", registry, "region", region)
+	log.Debug("Successfully obtained ECR credentials", "registry", registry, "accountID", accountID, "region", region)
 
 	return &authn.Basic{
 		Username: username,
