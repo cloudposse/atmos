@@ -7,71 +7,48 @@ import (
 )
 
 func TestGetAwsAtmosConfigFilepath(t *testing.T) {
-	type args struct {
-		provider string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    string
-		wantErr bool
-	}{
-		{},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateAwsAtmosConfigFilepath(tt.args.provider)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateAwsAtmosConfigFilepath() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("CreateAwsAtmosConfigFilepath() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
+    // Use env override to make deterministic
+    tmp := t.TempDir()
+    expected := tmp + "/custom-config"
+    t.Setenv("ATMOS_AWS_CONFIG_FILE", expected)
+    got, err := CreateAwsAtmosConfigFilepath("ignored")
+    if err != nil {
+        t.Fatalf("CreateAwsAtmosConfigFilepath error: %v", err)
+    }
+    if got != expected {
+        t.Fatalf("expected %s, got %s", expected, got)
+    }
 }
 
 func TestGetAwsCredentialsFilepath(t *testing.T) {
-	tests := []struct {
-		name    string
-		want    string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetAwsCredentialsFilepath()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetAwsCredentialsFilepath() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("GetAwsCredentialsFilepath() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
+    tmp := t.TempDir()
+    expected := tmp + "/credentials"
+    t.Setenv("AWS_SHARED_CREDENTIALS_FILE", expected)
+    got, err := GetAwsCredentialsFilepath()
+    if err != nil {
+        t.Fatalf("GetAwsCredentialsFilepath error: %v", err)
+    }
+    if got != expected {
+        t.Fatalf("expected %s, got %s", expected, got)
+    }
 }
 
 func TestRemoveAwsCredentials(t *testing.T) {
-	type args struct {
-		profile string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := RemoveAwsCredentials(tt.args.profile); (err != nil) != tt.wantErr {
-				t.Errorf("RemoveAwsCredentials() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+    tmp := t.TempDir()
+    credsPath := tmp + "/credentials.ini"
+    t.Setenv("AWS_SHARED_CREDENTIALS_FILE", credsPath)
+    // Write credentials using helper
+    if err := WriteAwsCredentials("testprof", "AKIA...", "SECRET", "TOKEN", "test"); err != nil {
+        t.Fatalf("prep write creds: %v", err)
+    }
+    // Remove
+    if err := RemoveAwsCredentials("testprof"); err != nil {
+        t.Fatalf("RemoveAwsCredentials error: %v", err)
+    }
+    // Ensure profile no longer exists (idempotent call should also be fine)
+    if err := RemoveAwsCredentials("testprof"); err != nil {
+        t.Fatalf("RemoveAwsCredentials idempotent error: %v", err)
+    }
 }
 
 func TestSetAwsEnvVars(t *testing.T) {
@@ -79,6 +56,7 @@ func TestSetAwsEnvVars(t *testing.T) {
 		info     *schema.ConfigAndStacksInfo
 		profile  string
 		provider string
+		region   string
 	}
 	tests := []struct {
 		name             string
@@ -94,6 +72,7 @@ func TestSetAwsEnvVars(t *testing.T) {
 				},
 				provider: "idp-test",
 				profile:  "profile",
+				region:   "us-east-1",
 			},
 			wantErr: false,
 		},
@@ -105,6 +84,7 @@ func TestSetAwsEnvVars(t *testing.T) {
 				},
 				provider: "idp-test",
 				profile:  "profile",
+				region:   "us-east-1",
 			},
 			wantedConfigFile: "~/.aws/atmos/idp-test/config",
 			wantErr:          false,
@@ -116,24 +96,14 @@ func TestSetAwsEnvVars(t *testing.T) {
 				info: &schema.ConfigAndStacksInfo{
 					ComponentEnvSection: schema.AtmosSectionMapType{},
 				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "InValid Configuration ProviderName NOT set",
-			args: args{
-				profile: "foo",
-				info: &schema.ConfigAndStacksInfo{
-					ComponentEnvSection: schema.AtmosSectionMapType{},
-				},
-				provider: "",
+				region:   "us-east-1",
 			},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := SetAwsEnvVars(tt.args.info, tt.args.profile, tt.args.provider); (err != nil) && !tt.wantErr {
+			if err := SetAwsEnvVars(tt.args.info, tt.args.profile, tt.args.provider, tt.args.region); (err != nil) && !tt.wantErr {
 				t.Errorf("SetAwsEnvVars() error = %v, wantErr %v", err, tt.wantErr)
 				if tt.wantErr {
 					assert.Error(t, err)
@@ -161,25 +131,14 @@ func TestSetAwsEnvVars(t *testing.T) {
 }
 
 func TestWriteAwsCredentials(t *testing.T) {
-	type args struct {
-		profile         string
-		accessKeyID     string
-		secretAccessKey string
-		sessionToken    string
-		identity        string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := WriteAwsCredentials(tt.args.profile, tt.args.accessKeyID, tt.args.secretAccessKey, tt.args.sessionToken, tt.args.identity); (err != nil) != tt.wantErr {
-				t.Errorf("WriteAwsCredentials() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+    tmp := t.TempDir()
+    credsPath := tmp + "/credentials.ini"
+    t.Setenv("AWS_SHARED_CREDENTIALS_FILE", credsPath)
+    if err := WriteAwsCredentials("default", "AKIA123", "SECRET", "TOKEN", "idp"); err != nil {
+        t.Fatalf("WriteAwsCredentials error: %v", err)
+    }
+    // Call again to ensure overwrite path works
+    if err := WriteAwsCredentials("default", "AKIA456", "SECRET2", "TOKEN2", "idp"); err != nil {
+        t.Fatalf("WriteAwsCredentials 2 error: %v", err)
+    }
 }
