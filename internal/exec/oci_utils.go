@@ -3,12 +3,10 @@ package exec
 import (
 	"archive/zip"
 	"bytes"
-
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-
 	"path/filepath"
 	"strings"
 
