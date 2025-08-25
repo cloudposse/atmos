@@ -260,6 +260,7 @@ func TestFindAffected(t *testing.T) {
 				tt.includeSpaceliftAdminStacks,
 				tt.includeSettings,
 				tt.stackToFilter,
+				false,
 			)
 
 			if tt.expectedError {
@@ -311,6 +312,7 @@ func TestExecuteDescribeAffected(t *testing.T) {
 				tc.processTemplates,
 				tc.processYamlFunctions,
 				tc.skip,
+				false,
 			)
 
 			if tc.expectedErr != "" {
