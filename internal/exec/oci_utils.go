@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 	"github.com/pkg/errors"
@@ -332,7 +333,9 @@ func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, e
 	// We need to use the docker-credential-desktop helper to get credentials
 
 	// Try to execute the credential helper
-	cmd := exec.Command("docker-credential-"+credsStore, "get")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker-credential-"+credsStore, "get")
 	cmd.Stdin = strings.NewReader(registry)
 
 	output, err := cmd.Output()
@@ -507,7 +510,9 @@ func getACRAuth(registry string) (authn.Authenticator, error) {
 
 // hasAzureCLI checks if Azure CLI is available
 func hasAzureCLI() bool {
-	cmd := exec.Command("az", "version")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "az", "version")
 	return cmd.Run() == nil
 }
 
@@ -526,7 +531,9 @@ func getACRAuthViaCLI(registry string) (authn.Authenticator, error) {
 	}
 
 	// Use Azure CLI to get ACR credentials
-	cmd := exec.Command("az", "acr", "credential", "show", "--name", acrName)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "az", "acr", "credential", "show", "--name", acrName)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ACR credentials via Azure CLI: %w", err)
