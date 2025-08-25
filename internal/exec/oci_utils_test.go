@@ -1110,6 +1110,24 @@ func TestECRAuth(t *testing.T) {
 			expectedError: true,
 			expectedMsg:   "failed to get ECR authorization token", // Will fail due to no real credentials, but won't gate on env vars
 		},
+		{
+			name:     "AWS ECR standard region parsing (us-east-1)",
+			registry: "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+			setupEnv: func() {
+				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+			},
+			expectedError: true,
+			expectedMsg:   "failed to get ECR authorization token",
+		},
+		{
+			name:     "AWS ECR China region parsing (cn-north-1)",
+			registry: "123456789012.dkr.ecr.cn-north-1.amazonaws.com.cn",
+			setupEnv: func() {
+				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+			},
+			expectedError: true,
+			expectedMsg:   "failed to get ECR authorization token",
+		},
 	}
 
 	for _, tt := range tests {

@@ -380,13 +380,20 @@ func decodeDockerAuth(authString string) (string, string, error) {
 // getECRAuth attempts to get AWS ECR authentication using AWS credentials
 // Supports SSO/role providers by not gating on environment variables
 func getECRAuth(registry string) (authn.Authenticator, error) {
-	// Parse <account>.dkr.ecr.<region>.amazonaws.com
+	// Parse <account>.dkr.ecr.<region>.amazonaws.com[.cn]
 	parts := strings.Split(registry, ".")
 	if len(parts) < 6 {
 		return nil, fmt.Errorf("invalid ECR registry format: %s", registry)
 	}
 	accountID := parts[0]
-	region := parts[4]
+	// Region follows the "ecr" label: <acct>.dkr.ecr.<region>.amazonaws.com[.cn]
+	region := ""
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "ecr" {
+			region = parts[i+1]
+			break
+		}
+	}
 	if accountID == "" || region == "" {
 		return nil, fmt.Errorf("could not parse ECR account/region from %s", registry)
 	}
