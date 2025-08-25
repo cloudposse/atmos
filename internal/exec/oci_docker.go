@@ -146,7 +146,7 @@ func getDockerAuth(registry string, atmosConfig *schema.AtmosConfiguration) (aut
 func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, error) {
 	// Validate registry using an allowlist approach
 	// Registry may only include letters, digits, dots, colons, slashes, and hyphens
-	var validRegistry = regexp.MustCompile(`^[A-Za-z0-9./:-]+$`)
+	validRegistry := regexp.MustCompile(`^[A-Za-z0-9./:-]+$`)
 	if !validRegistry.MatchString(registry) {
 		return nil, fmt.Errorf("invalid registry name: %s", registry)
 	}
