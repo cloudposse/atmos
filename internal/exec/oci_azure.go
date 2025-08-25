@@ -233,14 +233,9 @@ func getACRAuthViaDefaultCredential(registry, acrName string) (authn.Authenticat
 		return nil, fmt.Errorf("failed to get Azure token: %w", err)
 	}
 
-	// Extract tenant ID from the token (JWT payload)
-	tenantID, err := extractTenantIDFromToken(aad.Token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract tenant ID from token: %w", err)
-	}
-
 	// Exchange AAD token for ACR refresh token
-	refresh, err := exchangeAADForACRRefreshToken(ctx, registry, tenantID, aad.Token)
+	// Tenant is optional here; if unknown, pass empty and let ACR infer.
+	refresh, err := exchangeAADForACRRefreshToken(ctx, registry, "", aad.Token)
 	if err != nil {
 		return nil, fmt.Errorf("acr token exchange failed: %w", err)
 	}
