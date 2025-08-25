@@ -920,7 +920,7 @@ func TestECRAuth(t *testing.T) {
 				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
 			},
 			expectedError: true,
-			expectedMsg:   "failed to get ECR authorization token for account 123456789012 in region us-west-2",
+			expectedMsg:   "failed to get ECR authorization token",
 		},
 		{
 			name:     "AWS ECR with different region",
@@ -929,10 +929,10 @@ func TestECRAuth(t *testing.T) {
 				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
 			},
 			expectedError: true,
-			expectedMsg:   "failed to get ECR authorization token for account 987654321098 in region eu-west-1",
+			expectedMsg:   "failed to get ECR authorization token",
 		},
 		{
-			name:     "AWS ECR invalid registry format",
+			name:     "AWS ECR invalid registry format - too few parts",
 			registry: "invalid-ecr-registry.com",
 			setupEnv: func() {
 				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
@@ -941,23 +941,24 @@ func TestECRAuth(t *testing.T) {
 			expectedMsg:   "invalid ECR registry format",
 		},
 		{
-			name:     "AWS ECR missing region",
+			name:     "AWS ECR invalid registry format - missing parts",
 			registry: "123456789012.dkr.ecr.amazonaws.com",
 			setupEnv: func() {
 				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
 			},
 			expectedError: true,
-			expectedMsg:   "failed to get ECR authorization token for account 123456789012 in region amazonaws",
+			expectedMsg:   "invalid ECR registry format",
 		},
 		{
-			name:     "AWS ECR missing credentials",
+			name:     "AWS ECR supports SSO/role providers (no env gating)",
 			registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com",
 			setupEnv: func() {
+				// No environment variables set - should still attempt authentication
 				os.Unsetenv("AWS_ACCESS_KEY_ID")
 				os.Unsetenv("AWS_PROFILE")
 			},
 			expectedError: true,
-			expectedMsg:   "AWS credentials not found",
+			expectedMsg:   "failed to get ECR authorization token", // Will fail due to no real credentials, but won't gate on env vars
 		},
 	}
 

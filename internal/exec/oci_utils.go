@@ -378,64 +378,49 @@ func decodeDockerAuth(authString string) (string, string, error) {
 }
 
 // getECRAuth attempts to get AWS ECR authentication using AWS credentials
+// Supports SSO/role providers by not gating on environment variables
 func getECRAuth(registry string) (authn.Authenticator, error) {
-	// Check if AWS credentials are available
-	if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_PROFILE") == "" {
-		return nil, fmt.Errorf("AWS credentials not found")
-	}
-
-	// Extract account ID and region from registry URL
-	// ECR registry format: <account-id>.dkr.ecr.<region>.amazonaws.com
+	// Parse <account>.dkr.ecr.<region>.amazonaws.com
 	parts := strings.Split(registry, ".")
-	if len(parts) < 4 {
+	if len(parts) < 6 {
 		return nil, fmt.Errorf("invalid ECR registry format: %s", registry)
 	}
-
-	// Extract account ID (first part)
 	accountID := parts[0]
-	if accountID == "" {
-		return nil, fmt.Errorf("could not extract account ID from ECR registry: %s", registry)
-	}
-
-	// Find the region part (should be after "ecr")
-	region := ""
-	for i, part := range parts {
-		if part == "ecr" && i+1 < len(parts) {
-			region = parts[i+1]
-			break
-		}
-	}
-
-	if region == "" {
-		return nil, fmt.Errorf("could not extract region from ECR registry: %s", registry)
+	region := parts[4]
+	if accountID == "" || region == "" {
+		return nil, fmt.Errorf("could not parse ECR account/region from %s", registry)
 	}
 
 	log.Debug("Extracted ECR registry info", "registry", registry, "accountID", accountID, "region", region)
 
-	// Load AWS configuration with specific region
+	// Load AWS config for the target region
 	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config for region %s: %w", region, err)
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
-
-	// Create ECR client with region-specific config
 	ecrClient := ecr.NewFromConfig(cfg)
 
-	// Get ECR authorization token with account ID
+	// Get ECR authorization token for the target account
 	authTokenInput := &ecr.GetAuthorizationTokenInput{
 		RegistryIds: []string{accountID},
 	}
 	authTokenOutput, err := ecrClient.GetAuthorizationToken(context.Background(), authTokenInput)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ECR authorization token for account %s in region %s: %w", accountID, region, err)
+		return nil, fmt.Errorf("failed to get ECR authorization token: %w", err)
 	}
-
 	if len(authTokenOutput.AuthorizationData) == 0 {
-		return nil, fmt.Errorf("no authorization data returned from ECR for account %s", accountID)
+		return nil, fmt.Errorf("no authorization data returned from ECR")
 	}
 
-	// Decode the authorization token
+	// Prefer the entry whose ProxyEndpoint matches the target registry
 	authData := authTokenOutput.AuthorizationData[0]
+	for i := range authTokenOutput.AuthorizationData {
+		ad := authTokenOutput.AuthorizationData[i]
+		if ad.ProxyEndpoint != nil && strings.Contains(*ad.ProxyEndpoint, registry) {
+			authData = ad
+			break
+		}
+	}
 	token, err := base64.StdEncoding.DecodeString(*authData.AuthorizationToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode ECR authorization token: %w", err)
