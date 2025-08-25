@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
@@ -14,29 +16,32 @@ import (
 
 // getECRAuth attempts to get AWS ECR authentication using AWS credentials
 // Supports SSO/role providers by not gating on environment variables
+// Supports both standard ECR and FIPS endpoints
 func getECRAuth(registry string) (authn.Authenticator, error) {
-	// Parse <account>.dkr.ecr.<region>.amazonaws.com[.cn]
-	parts := strings.Split(registry, ".")
-	if len(parts) < 6 {
+	// Use regex to match both standard and FIPS ECR endpoints
+	// Supports: <account>.dkr.ecr.<region>.amazonaws.com[.cn]
+	// Supports: <account>.dkr.ecr-fips.<region>.amazonaws.com[.cn]
+	re := regexp.MustCompile(`^(?P<acct>\d{12})\.dkr\.(?P<svc>ecr(?:-fips)?)\.(?P<region>[a-z0-9-]+)\.amazonaws\.com(?:\.cn)?$`)
+	m := re.FindStringSubmatch(registry)
+	if m == nil {
 		return nil, fmt.Errorf("invalid ECR registry format: %s", registry)
 	}
-	accountID := parts[0]
-	// Region follows the "ecr" label: <acct>.dkr.ecr.<region>.amazonaws.com[.cn]
-	region := ""
-	for i := 0; i < len(parts)-1; i++ {
-		if parts[i] == "ecr" {
-			region = parts[i+1]
-			break
-		}
-	}
+
+	accountID := m[re.SubexpIndex("acct")]
+	region := m[re.SubexpIndex("region")]
+
 	if accountID == "" || region == "" {
 		return nil, fmt.Errorf("could not parse ECR account/region from %s", registry)
 	}
 
 	log.Debug("Extracted ECR registry info", "registry", registry, "accountID", accountID, "region", region)
 
+	// Create context with timeout to prevent hanging AWS API calls
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// Load AWS config for the target region
-	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
@@ -46,7 +51,7 @@ func getECRAuth(registry string) (authn.Authenticator, error) {
 	authTokenInput := &ecr.GetAuthorizationTokenInput{
 		RegistryIds: []string{accountID},
 	}
-	authTokenOutput, err := ecrClient.GetAuthorizationToken(context.Background(), authTokenInput)
+	authTokenOutput, err := ecrClient.GetAuthorizationToken(ctx, authTokenInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ECR authorization token: %w", err)
 	}
@@ -63,13 +68,19 @@ func getECRAuth(registry string) (authn.Authenticator, error) {
 			break
 		}
 	}
+
+	// Nil-safe token decoding
+	if authData.AuthorizationToken == nil {
+		return nil, fmt.Errorf("empty ECR authorization token for %s", registry)
+	}
+
 	token, err := base64.StdEncoding.DecodeString(*authData.AuthorizationToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode ECR authorization token: %w", err)
 	}
 
 	// Parse username:password from token
-	parts = strings.SplitN(string(token), ":", 2)
+	parts := strings.SplitN(string(token), ":", 2)
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid ECR authorization token format")
 	}

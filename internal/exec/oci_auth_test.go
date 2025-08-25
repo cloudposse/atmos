@@ -451,14 +451,21 @@ func TestECRAuth(t *testing.T) {
 			registry:    "invalid-ecr-registry",
 			envVars:     map[string]string{},
 			expectError: true,
-			errorMsg:    "invalid ECR registry format",
+			errorMsg:    "no authentication found for registry",
+		},
+		{
+			name:        "ECR FIPS endpoint",
+			registry:    "123456789012.dkr.ecr-fips.us-gov-west-1.amazonaws.com",
+			envVars:     map[string]string{},
+			expectError: true, // Will fail due to no AWS credentials, but should parse correctly
+			errorMsg:    "failed to get ECR authorization token",
 		},
 		{
 			name:        "Non-ECR registry",
 			registry:    "docker.io",
 			envVars:     map[string]string{},
 			expectError: true,
-			errorMsg:    "not an ECR registry",
+			errorMsg:    "no authentication found for registry",
 		},
 	}
 

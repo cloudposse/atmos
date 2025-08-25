@@ -175,11 +175,14 @@ func getRegistryAuth(registry string, atmosConfig *schema.AtmosConfiguration) (a
 		}, nil
 	}
 
-	// Check for AWS ECR authentication
-	if strings.Contains(registry, "dkr.ecr.") && strings.Contains(registry, "amazonaws.com") {
+	// Check for AWS ECR authentication (including FIPS and China endpoints)
+	if strings.Contains(registry, "dkr.ecr") && strings.Contains(registry, "amazonaws.com") {
 		if auth, err := getECRAuth(registry); err == nil {
 			log.Debug("Using AWS ECR authentication", "registry", registry)
 			return auth, nil
+		} else {
+			// Return the specific ECR error for better debugging
+			return nil, err
 		}
 	}
 
