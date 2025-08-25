@@ -169,14 +169,6 @@ func getRegistryAuth(registry string, atmosConfig *schema.AtmosConfiguration) (a
 		}
 	}
 
-	// Terraform credentials (TF_TOKEN_* and credentials.tfrc.json)
-	if auth, err := getTerraformAuth(registry); err == nil {
-		log.Debug("Using Terraform credentials", "registry", registry)
-		return auth, nil
-	} else {
-		log.Debug("Terraform credentials not found", "registry", registry, "error", err)
-	}
-
 	// Check for Docker credential helpers (most common for private registries)
 	// This will automatically check ~/.docker/config.json and use credential helpers
 	if auth, err := getDockerAuth(registry, atmosConfig); err == nil {
@@ -903,44 +895,4 @@ func parseOCIManifest(manifestBytes io.Reader) (*ocispec.Manifest, error) {
 	}
 
 	return &manifest, nil
-}
-
-// getTerraformAuth resolves registry auth from Terraform sources:
-// 1) TF_TOKEN_<HOST> env (normalize dots/hyphens to underscores)
-// 2) ~/.terraform.d/credentials.tfrc.json
-func getTerraformAuth(registry string) (authn.Authenticator, error) {
-	// Create a Viper instance for environment variable access
-	v := viper.New()
-
-	hostKey := strings.NewReplacer(".", "_", "-", "_").Replace(strings.ToLower(registry))
-	tokenKey := fmt.Sprintf("tf_token_%s", hostKey)
-	bindEnv(v, tokenKey, fmt.Sprintf("TF_TOKEN_%s", strings.ToUpper(hostKey)))
-
-	if token := v.GetString(tokenKey); token != "" {
-		return &authn.Basic{Username: "terraform", Password: token}, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("get home dir: %w", err)
-	}
-	path := filepath.Join(home, ".terraform.d", "credentials.tfrc.json")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read tfrc: %w", err)
-	}
-	var creds struct {
-		Credentials map[string]struct {
-			Token string `json:"token"`
-		} `json:"credentials"`
-	}
-	if err := json.Unmarshal(b, &creds); err != nil {
-		return nil, fmt.Errorf("parse tfrc: %w", err)
-	}
-	if c, ok := creds.Credentials[registry]; ok && c.Token != "" {
-		return &authn.Basic{Username: "terraform", Password: c.Token}, nil
-	}
-	if c, ok := creds.Credentials["https://"+registry]; ok && c.Token != "" {
-		return &authn.Basic{Username: "terraform", Password: c.Token}, nil
-	}
-	return nil, fmt.Errorf("terraform credentials not found for %s", registry)
 }
