@@ -38,6 +38,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
@@ -158,6 +159,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		processTemplates,
 		processYamlFunctions,
 		skip,
+		excludeLocked,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -189,6 +191,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
@@ -318,6 +321,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		processTemplates,
 		processYamlFunctions,
 		skip,
+		excludeLocked,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -348,6 +352,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
@@ -390,6 +395,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		processTemplates,
 		processYamlFunctions,
 		skip,
+		excludeLocked,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err

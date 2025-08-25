@@ -111,7 +111,7 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "describe dependents" {
-		data, err := ExecuteDescribeDependents(&atmosConfig, selectedComponent, selectedStack, false)
+		data, err := ExecuteDescribeDependents(&atmosConfig, selectedComponent, selectedStack, false, true, true, nil)
 		if err != nil {
 			return err
 		}

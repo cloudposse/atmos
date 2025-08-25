@@ -91,3 +91,62 @@ For more information, refer to:
 - [`atmos describe dependents` CLI command](/cli/commands/describe/dependents)
 
 :::
+
+### Error: `A change in the backend configuration has been detected, which may require migrating existing state`
+
+```console
+A change in the backend configuration has been detected, which may require migrating existing state
+```
+
+The Terraform/OpenTofu error means Terraform noticed that your backend configuration (the section in your code that
+defines where and how Terraform stores state) has changed compared to what’s currently in use..
+
+#### Why it happens
+
+Terraform keeps its state in a backend (for example, S3, local, remote, Terraform Cloud, etc.).
+If you update the backend configuration in your code — for example:
+
+- Switching from local to s3
+- Changing the bucket, key, or region for an S3 backend
+- Modifying a prefix or workspace config in Terraform Cloud
+- Adjusting encryption or locking settings
+- Terraform detects that the state might need to be migrated from the old backend to the new one.
+
+#### What Terraform expects
+
+When this happens, Terraform doesn’t automatically move state — it prompts you to confirm migration.
+Typically, you’ll see a message like:
+
+```console
+Do you want to copy existing state to the new backend?
+Enter "yes" to copy and "no" to start with an empty state.
+```
+
+If you type `yes`, Terraform migrates the state (so you keep your existing resources).
+If you type `no`, Terraform initializes a fresh, empty state in the new backend (dangerous unless intentional).
+
+#### How to resolve
+
+In `atmos.yaml`, set `components.terraform.init_run_reconfigure` to `true`:
+
+```yaml
+components:
+  terraform:
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
+    init_run_reconfigure: true
+```
+
+This will tell Atmos to run `terraform init -reconfigure` when executing Terraform commands.
+The `-reconfigure` option disregards any existing backend configuration and configures a new backend,
+preventing migration of any existing state.
+
+:::tip
+
+For more information, refer to:
+
+- [`terraform init` command](https://developer.hashicorp.com/terraform/cli/commands/init)
+- [Terraform Backend Initialization](https://developer.hashicorp.com/terraform/cli/commands/init#backend-initialization)
+- [Atmos CLI configuration](/cli/configuration/)
+- [Atmos Terraform/OpenTofu commands](/cli/commands/terraform/usage/)
+
+:::

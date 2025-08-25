@@ -44,7 +44,9 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 				fs.Set("format", "yaml")
 			},
 			expected: &exec.DescribeDependentsExecProps{
-				Format: "yaml",
+				Format:               "yaml",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{
@@ -53,7 +55,9 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 				// No flags set
 			},
 			expected: &exec.DescribeDependentsExecProps{
-				Format: "json",
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{

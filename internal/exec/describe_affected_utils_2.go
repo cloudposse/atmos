@@ -348,6 +348,9 @@ func addAffectedSpaceliftAdminStack(
 	var componentSettingsSpaceliftSection map[string]any
 
 	// Find the Spacelift admin stack that manages the current stack
+	if stacks == nil {
+		return affectedList, nil
+	}
 	for stackName, stackSection := range *stacks {
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
@@ -439,18 +442,36 @@ func addDependentsToAffected(
 	atmosConfig *schema.AtmosConfiguration,
 	affected *[]schema.Affected,
 	includeSettings bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) error {
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
 
-		deps, err := ExecuteDescribeDependents(atmosConfig, a.Component, a.Stack, includeSettings)
+		deps, err := ExecuteDescribeDependents(
+			atmosConfig,
+			a.Component,
+			a.Stack,
+			includeSettings,
+			processTemplates,
+			processYamlFunctions,
+			skip,
+		)
 		if err != nil {
 			return err
 		}
 
 		if len(deps) > 0 {
 			a.Dependents = deps
-			err = addDependentsToDependents(atmosConfig, &deps, includeSettings)
+			err = addDependentsToDependents(
+				atmosConfig,
+				&deps,
+				includeSettings,
+				processTemplates,
+				processYamlFunctions,
+				skip,
+			)
 			if err != nil {
 				return err
 			}
@@ -468,18 +489,36 @@ func addDependentsToDependents(
 	atmosConfig *schema.AtmosConfiguration,
 	dependents *[]schema.Dependent,
 	includeSettings bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) error {
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
 
-		deps, err := ExecuteDescribeDependents(atmosConfig, d.Component, d.Stack, includeSettings)
+		deps, err := ExecuteDescribeDependents(
+			atmosConfig,
+			d.Component,
+			d.Stack,
+			includeSettings,
+			processTemplates,
+			processYamlFunctions,
+			skip,
+		)
 		if err != nil {
 			return err
 		}
 
 		if len(deps) > 0 {
 			d.Dependents = deps
-			err = addDependentsToDependents(atmosConfig, &deps, includeSettings)
+			err = addDependentsToDependents(
+				atmosConfig,
+				&deps,
+				includeSettings,
+				processTemplates,
+				processYamlFunctions,
+				skip,
+			)
 			if err != nil {
 				return err
 			}
