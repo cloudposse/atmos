@@ -2,14 +2,11 @@ package exec
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -381,54 +378,35 @@ func TestGetACRAuthViaDefaultCredential(t *testing.T) {
 }
 
 // TestDockerCredHelpers tests Docker credential helpers functionality
+// This function tests the credential store functionality with proper function signature
 func TestDockerCredHelpers(t *testing.T) {
 	tests := []struct {
 		name        string
 		registry    string
-		configPath  string
+		credsStore  string
 		expectError bool
 		errorMsg    string
 	}{
 		{
-			name:        "Non-existent config file",
+			name:        "Invalid credential store name",
 			registry:    "docker.io",
-			configPath:  "/non/existent/path",
+			credsStore:  "/invalid/store/name",
 			expectError: true,
-			errorMsg:    "failed to read Docker config",
+			errorMsg:    "invalid credential store name",
 		},
 		{
-			name:        "Empty config file",
+			name:        "Empty credential store name",
 			registry:    "docker.io",
-			configPath:  "",
+			credsStore:  "",
 			expectError: true,
-			errorMsg:    "failed to read Docker config",
+			errorMsg:    "failed to get credentials from store",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a temporary config file for testing
-			var configPath string
-			if tt.configPath != "" && tt.configPath != "/non/existent/path" {
-				tempDir := t.TempDir()
-				configPath = filepath.Join(tempDir, "config.json")
-
-				// Create a minimal Docker config
-				config := map[string]interface{}{
-					"auths": map[string]interface{}{},
-				}
-
-				configData, err := json.Marshal(config)
-				require.NoError(t, err)
-
-				err = os.WriteFile(configPath, configData, 0o644)
-				require.NoError(t, err)
-			} else {
-				configPath = tt.configPath
-			}
-
-			// Test the function
-			auth, err := getCredentialStoreAuth(tt.registry, configPath)
+			// Test the function with correct signature
+			auth, err := getCredentialStoreAuth(tt.registry, tt.credsStore)
 
 			if tt.expectError {
 				assert.Error(t, err)
