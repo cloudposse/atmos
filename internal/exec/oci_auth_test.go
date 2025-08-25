@@ -574,11 +574,95 @@ func TestGetCredentialStoreAuth(t *testing.T) {
 			errorMsg:    "failed to get credentials from store",
 		},
 		{
-			name:        "Invalid registry name",
+			name:        "Invalid registry name - command injection",
 			registry:    "docker.io;rm -rf /",
 			credsStore:  "desktop",
 			expectError: true,
 			errorMsg:    "invalid registry name",
+		},
+		{
+			name:        "Invalid registry name - shell metacharacters",
+			registry:    "docker.io&echo hack",
+			credsStore:  "desktop",
+			expectError: true,
+			errorMsg:    "invalid registry name",
+		},
+		{
+			name:        "Invalid registry name - backticks",
+			registry:    "docker.io`whoami`",
+			credsStore:  "desktop",
+			expectError: true,
+			errorMsg:    "invalid registry name",
+		},
+		{
+			name:        "Invalid registry name - dollar expansion",
+			registry:    "docker.io$PATH",
+			credsStore:  "desktop",
+			expectError: true,
+			errorMsg:    "invalid registry name",
+		},
+		{
+			name:        "Invalid registry name - parentheses",
+			registry:    "docker.io(ls)",
+			credsStore:  "desktop",
+			expectError: true,
+			errorMsg:    "invalid registry name",
+		},
+		{
+			name:        "Invalid registry name - brackets",
+			registry:    "docker.io[test]",
+			credsStore:  "desktop",
+			expectError: true,
+			errorMsg:    "invalid registry name",
+		},
+		{
+			name:        "Invalid registry name - quotes",
+			registry:    "docker.io'echo hack'",
+			credsStore:  "desktop",
+			expectError: true,
+			errorMsg:    "invalid registry name",
+		},
+		{
+			name:        "Invalid registry name - newlines",
+			registry:    "docker.io\nrm -rf /",
+			credsStore:  "desktop",
+			expectError: true,
+			errorMsg:    "invalid registry name",
+		},
+		{
+			name:        "Valid registry name - standard domain",
+			registry:    "docker.io",
+			credsStore:  "desktop",
+			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			errorMsg:    "failed to get credentials from store",
+		},
+		{
+			name:        "Valid registry name - with port",
+			registry:    "registry.example.com:5000",
+			credsStore:  "desktop",
+			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			errorMsg:    "failed to get credentials from store",
+		},
+		{
+			name:        "Valid registry name - with path",
+			registry:    "registry.example.com/v2",
+			credsStore:  "desktop",
+			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			errorMsg:    "failed to get credentials from store",
+		},
+		{
+			name:        "Valid registry name - with hyphens",
+			registry:    "my-registry.example.com",
+			credsStore:  "desktop",
+			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			errorMsg:    "failed to get credentials from store",
+		},
+		{
+			name:        "Valid registry name - IP address",
+			registry:    "192.168.1.100:5000",
+			credsStore:  "desktop",
+			expectError: true, // Will fail due to missing credential helper, but validation should pass
+			errorMsg:    "failed to get credentials from store",
 		},
 	}
 

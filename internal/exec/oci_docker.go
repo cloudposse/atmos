@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -143,8 +144,10 @@ func getDockerAuth(registry string, atmosConfig *schema.AtmosConfiguration) (aut
 
 // getCredentialStoreAuth attempts to get credentials from Docker's credential store
 func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, error) {
-	// Validate registry to prevent command injection
-	if strings.ContainsAny(registry, ";&|`$(){}[]<>'\"\n\r") {
+	// Validate registry using an allowlist approach
+	// Registry may only include letters, digits, dots, colons, slashes, and hyphens
+	var validRegistry = regexp.MustCompile(`^[A-Za-z0-9./:-]+$`)
+	if !validRegistry.MatchString(registry) {
 		return nil, fmt.Errorf("invalid registry name: %s", registry)
 	}
 
