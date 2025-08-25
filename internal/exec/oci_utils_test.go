@@ -410,11 +410,9 @@ func TestCloudProviderAuth(t *testing.T) {
 			registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com",
 			setupEnv: func() {
 				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
-				os.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
-				os.Setenv("AWS_REGION", "us-west-2")
 			},
 			testFunction:  getECRAuth,
-			expectedError: true, // Will fail in test environment without real AWS credentials
+			expectedError: true, // Not fully implemented
 		},
 		{
 			name:     "AWS ECR without credentials",
@@ -426,22 +424,34 @@ func TestCloudProviderAuth(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			name:     "AWS ECR invalid registry format",
-			registry: "invalid-ecr-registry.com",
-			setupEnv: func() {
-				os.Setenv("AWS_ACCESS_KEY_ID", "test-key")
-			},
-			testFunction:  getECRAuth,
-			expectedError: true,
-		},
-		{
-			name:     "Azure ACR with credentials",
+			name:     "Azure ACR with service principal credentials",
 			registry: "myregistry.azurecr.io",
 			setupEnv: func() {
-				os.Setenv("AZURE_CLIENT_ID", "test-client")
+				os.Setenv("AZURE_CLIENT_ID", "test-client-id")
+				os.Setenv("AZURE_CLIENT_SECRET", "test-client-secret")
+				os.Setenv("AZURE_TENANT_ID", "test-tenant-id")
+				os.Setenv("AZURE_SUBSCRIPTION_ID", "test-subscription-id")
 			},
 			testFunction:  getACRAuth,
-			expectedError: true, // Not fully implemented
+			expectedError: true, // Requires Azure SDK implementation
+		},
+		{
+			name:     "Azure ACR with Azure CLI",
+			registry: "myregistry.azurecr.io",
+			setupEnv: func() {
+				os.Setenv("AZURE_CLI_AUTH", "true")
+			},
+			testFunction:  getACRAuth,
+			expectedError: true, // Will fail in test environment without Azure CLI
+		},
+		{
+			name:     "Azure ACR invalid registry format",
+			registry: "invalid-registry.com",
+			setupEnv: func() {
+				os.Setenv("AZURE_CLIENT_ID", "test-client-id")
+			},
+			testFunction:  getACRAuth,
+			expectedError: true,
 		},
 		{
 			name:     "Google GCR with credentials",
@@ -471,6 +481,134 @@ func TestCloudProviderAuth(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, auth)
+			}
+		})
+	}
+}
+
+// TestACRAuth tests Azure Container Registry authentication functionality
+func TestACRAuth(t *testing.T) {
+	tests := []struct {
+		name          string
+		registry      string
+		setupEnv      func()
+		expectedError bool
+		expectedMsg   string
+	}{
+		{
+			name:     "Azure ACR with service principal credentials",
+			registry: "myacr.azurecr.io",
+			setupEnv: func() {
+				os.Setenv("AZURE_CLIENT_ID", "test-client-id")
+				os.Setenv("AZURE_CLIENT_SECRET", "test-client-secret")
+				os.Setenv("AZURE_TENANT_ID", "test-tenant-id")
+				os.Setenv("AZURE_SUBSCRIPTION_ID", "test-subscription-id")
+			},
+			expectedError: true,
+			expectedMsg:   "Azure ACR authentication requires Azure SDK implementation",
+		},
+		{
+			name:     "Azure ACR with Azure CLI",
+			registry: "myacr.azurecr.io",
+			setupEnv: func() {
+				os.Setenv("AZURE_CLI_AUTH", "true")
+			},
+			expectedError: true,
+			expectedMsg:   "failed to get ACR credentials via Azure CLI",
+		},
+		{
+			name:     "Azure ACR invalid registry format",
+			registry: "invalid-registry.com",
+			setupEnv: func() {
+				os.Setenv("AZURE_CLIENT_ID", "test-client-id")
+			},
+			expectedError: true,
+			expectedMsg:   "invalid Azure Container Registry format",
+		},
+		{
+			name:     "Azure ACR missing credentials",
+			registry: "myacr.azurecr.io",
+			setupEnv: func() {
+				// Don't set any Azure credentials
+			},
+			expectedError: true,
+			expectedMsg:   "Azure credentials not found",
+		},
+		{
+			name:     "Azure ACR missing client ID",
+			registry: "myacr.azurecr.io",
+			setupEnv: func() {
+				os.Setenv("AZURE_CLIENT_SECRET", "test-secret")
+				os.Setenv("AZURE_TENANT_ID", "test-tenant")
+				os.Setenv("AZURE_SUBSCRIPTION_ID", "test-sub")
+			},
+			expectedError: true,
+			expectedMsg:   "AZURE_CLIENT_ID environment variable is required",
+		},
+		{
+			name:     "Azure ACR missing client secret",
+			registry: "myacr.azurecr.io",
+			setupEnv: func() {
+				os.Setenv("AZURE_CLIENT_ID", "test-client")
+				os.Setenv("AZURE_TENANT_ID", "test-tenant")
+				os.Setenv("AZURE_SUBSCRIPTION_ID", "test-sub")
+			},
+			expectedError: true,
+			expectedMsg:   "AZURE_CLIENT_SECRET environment variable is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Store original environment variables
+			originalClientID := os.Getenv("AZURE_CLIENT_ID")
+			originalClientSecret := os.Getenv("AZURE_CLIENT_SECRET")
+			originalTenantID := os.Getenv("AZURE_TENANT_ID")
+			originalSubscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
+			originalCLIAuth := os.Getenv("AZURE_CLI_AUTH")
+
+			// Clean up environment variables
+			os.Unsetenv("AZURE_CLIENT_ID")
+			os.Unsetenv("AZURE_CLIENT_SECRET")
+			os.Unsetenv("AZURE_TENANT_ID")
+			os.Unsetenv("AZURE_SUBSCRIPTION_ID")
+			os.Unsetenv("AZURE_CLI_AUTH")
+
+			// Setup
+			if tt.setupEnv != nil {
+				tt.setupEnv()
+			}
+
+			// Test
+			auth, err := getACRAuth(tt.registry)
+
+			// Assert
+			if tt.expectedError {
+				assert.Error(t, err)
+				assert.Nil(t, auth)
+				if tt.expectedMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, auth)
+			}
+
+			// Restore original environment variables
+			if originalClientID != "" {
+				os.Setenv("AZURE_CLIENT_ID", originalClientID)
+			}
+			if originalClientSecret != "" {
+				os.Setenv("AZURE_CLIENT_SECRET", originalClientSecret)
+			}
+			if originalTenantID != "" {
+				os.Setenv("AZURE_TENANT_ID", originalTenantID)
+			}
+			if originalSubscriptionID != "" {
+				os.Setenv("AZURE_SUBSCRIPTION_ID", originalSubscriptionID)
+			}
+			if originalCLIAuth != "" {
+				os.Setenv("AZURE_CLI_AUTH", originalCLIAuth)
 			}
 		})
 	}

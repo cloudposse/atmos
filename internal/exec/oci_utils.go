@@ -133,13 +133,21 @@ func pullImage(ref name.Reference) (*remote.Descriptor, error) {
 func getRegistryAuth(registry string) (authn.Authenticator, error) {
 	// Check for GitHub Container Registry
 	if strings.EqualFold(registry, "ghcr.io") {
-		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		if token := os.Getenv("githubTokenEnv"); token != "" {
 			log.Debug("Using GitHub token for authentication", "registry", registry)
 			return &authn.Basic{
 				Username: "oauth2",
 				Password: token,
 			}, nil
 		}
+	}
+
+	// Terraform credentials (TF_TOKEN_* and credentials.tfrc.json)
+	if auth, err := getTerraformAuth(registry); err == nil {
+		log.Debug("Using Terraform credentials", "registry", registry)
+		return auth, nil
+	} else {
+		log.Debug("Terraform credentials not found", "registry", registry, "error", err)
 	}
 
 	// Check for Docker credential helpers (most common for private registries)
@@ -191,16 +199,25 @@ func getRegistryAuth(registry string) (authn.Authenticator, error) {
 	return nil, fmt.Errorf("no authentication found for registry %s", registry)
 }
 
-// getDockerAuth attempts to get authentication from Docker config file (~/.docker/config.json)
+// getDockerAuth attempts to get authentication from Docker config file
+// Supports DOCKER_CONFIG environment variable to override the default path
 func getDockerAuth(registry string) (authn.Authenticator, error) {
-	// Get user's home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user home directory: %w", err)
-	}
+	// Determine Docker config file path
+	var dockerConfigPath string
 
-	// Path to Docker config file
-	dockerConfigPath := filepath.Join(homeDir, ".docker", "config.json")
+	// Check if DOCKER_CONFIG environment variable is set
+	if dockerConfigEnv := os.Getenv("DOCKER_CONFIG"); dockerConfigEnv != "" {
+		dockerConfigPath = filepath.Join(dockerConfigEnv, "config.json")
+		log.Debug("Using DOCKER_CONFIG environment variable", "path", dockerConfigPath)
+	} else {
+		// Get user's home directory for default path
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		dockerConfigPath = filepath.Join(homeDir, ".docker", "config.json")
+		log.Debug("Using default Docker config path", "path", dockerConfigPath)
+	}
 
 	// Check if Docker config file exists
 	if _, err := os.Stat(dockerConfigPath); os.IsNotExist(err) {
@@ -411,13 +428,116 @@ func getECRAuth(registry string) (authn.Authenticator, error) {
 
 // getACRAuth attempts to get Azure Container Registry authentication
 func getACRAuth(registry string) (authn.Authenticator, error) {
-	// Check for Azure CLI authentication
-	if os.Getenv("AZURE_CLIENT_ID") != "" || os.Getenv("AZURE_TENANT_ID") != "" {
-		// For a complete implementation, you would use Azure SDK to get ACR credentials
-		return nil, fmt.Errorf("Azure ACR authentication not fully implemented")
+	// Extract ACR name from registry URL first
+	// Expected format: <acr-name>.azurecr.io
+	acrName := ""
+	if strings.HasSuffix(registry, ".azurecr.io") {
+		acrName = strings.TrimSuffix(registry, ".azurecr.io")
+	} else {
+		return nil, fmt.Errorf("invalid Azure Container Registry format: %s (expected <name>.azurecr.io)", registry)
 	}
 
-	return nil, fmt.Errorf("Azure credentials not found")
+	if acrName == "" {
+		return nil, fmt.Errorf("could not extract ACR name from registry: %s", registry)
+	}
+
+	// Check for required Azure environment variables
+	clientID := os.Getenv("AZURE_CLIENT_ID")
+	clientSecret := os.Getenv("AZURE_CLIENT_SECRET")
+	tenantID := os.Getenv("AZURE_TENANT_ID")
+	subscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
+
+	// Check for Azure CLI authentication as fallback
+	if clientID == "" && clientSecret == "" && tenantID == "" {
+		// Try to use Azure CLI authentication
+		if os.Getenv("AZURE_CLI_AUTH") != "" || hasAzureCLI() {
+			log.Debug("Using Azure CLI authentication for ACR", "registry", registry)
+			return getACRAuthViaCLI(registry)
+		}
+		return nil, fmt.Errorf("Azure credentials not found - set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID or use Azure CLI")
+	}
+
+	// If we have some but not all credentials, validate what's missing
+	if clientID == "" {
+		return nil, fmt.Errorf("AZURE_CLIENT_ID environment variable is required")
+	}
+	if clientSecret == "" {
+		return nil, fmt.Errorf("AZURE_CLIENT_SECRET environment variable is required")
+	}
+	if tenantID == "" {
+		return nil, fmt.Errorf("AZURE_TENANT_ID environment variable is required")
+	}
+	if subscriptionID == "" {
+		return nil, fmt.Errorf("AZURE_SUBSCRIPTION_ID environment variable is required")
+	}
+
+	log.Debug("Authenticating with Azure Container Registry", "registry", registry, "acrName", acrName)
+
+	// For now, return an error indicating this needs Azure SDK implementation
+	// In a full implementation, you would:
+	// 1. Create Azure credential using azidentity.NewClientSecretCredential
+	// 2. Create ACR client using armcontainerregistry.NewClient
+	// 3. Call GetCredentials to get username/password
+	return nil, fmt.Errorf("Azure ACR authentication requires Azure SDK implementation - ACR name: %s", acrName)
+}
+
+// hasAzureCLI checks if Azure CLI is available
+func hasAzureCLI() bool {
+	cmd := exec.Command("az", "version")
+	return cmd.Run() == nil
+}
+
+// getACRAuthViaCLI attempts to get ACR credentials using Azure CLI
+func getACRAuthViaCLI(registry string) (authn.Authenticator, error) {
+	// Extract ACR name from registry URL
+	acrName := ""
+	if strings.HasSuffix(registry, ".azurecr.io") {
+		acrName = strings.TrimSuffix(registry, ".azurecr.io")
+	} else {
+		return nil, fmt.Errorf("invalid Azure Container Registry format: %s (expected <name>.azurecr.io)", registry)
+	}
+
+	if acrName == "" {
+		return nil, fmt.Errorf("could not extract ACR name from registry: %s", registry)
+	}
+
+	// Use Azure CLI to get ACR credentials
+	cmd := exec.Command("az", "acr", "credential", "show", "--name", acrName)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ACR credentials via Azure CLI: %w", err)
+	}
+
+	// Parse the JSON output
+	var result struct {
+		Passwords []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"passwords"`
+		Username string `json:"username"`
+	}
+
+	if err := json.Unmarshal(output, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse Azure CLI output: %w", err)
+	}
+
+	if result.Username == "" {
+		return nil, fmt.Errorf("no username returned from Azure CLI")
+	}
+
+	if len(result.Passwords) == 0 {
+		return nil, fmt.Errorf("no passwords returned from Azure CLI")
+	}
+
+	// Use the first password (usually there are two - one for each credential)
+	password := result.Passwords[0].Value
+
+	log.Debug("Successfully obtained ACR credentials via Azure CLI", "registry", registry, "acrName", acrName)
+
+	return &authn.Basic{
+		Username: result.Username,
+		Password: password,
+	}, nil
 }
 
 // getGCRAuth attempts to get Google Container Registry authentication
@@ -633,4 +753,38 @@ func parseOCIManifest(manifestBytes io.Reader) (*ocispec.Manifest, error) {
 	}
 
 	return &manifest, nil
+}
+
+// getTerraformAuth resolves registry auth from Terraform sources:
+// 1) TF_TOKEN_<HOST> env (normalize dots/hyphens to underscores)
+// 2) ~/.terraform.d/credentials.tfrc.json
+func getTerraformAuth(registry string) (authn.Authenticator, error) {
+	hostKey := strings.NewReplacer(".", "_", "-", "_").Replace(strings.ToLower(registry))
+	if token := os.Getenv("TF_TOKEN_" + hostKey); token != "" {
+		return &authn.Basic{Username: "terraform", Password: token}, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("get home dir: %w", err)
+	}
+	path := filepath.Join(home, ".terraform.d", "credentials.tfrc.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read tfrc: %w", err)
+	}
+	var creds struct {
+		Credentials map[string]struct {
+			Token string `json:"token"`
+		} `json:"credentials"`
+	}
+	if err := json.Unmarshal(b, &creds); err != nil {
+		return nil, fmt.Errorf("parse tfrc: %w", err)
+	}
+	if c, ok := creds.Credentials[registry]; ok && c.Token != "" {
+		return &authn.Basic{Username: "terraform", Password: c.Token}, nil
+	}
+	if c, ok := creds.Credentials["https://"+registry]; ok && c.Token != "" {
+		return &authn.Basic{Username: "terraform", Password: c.Token}, nil
+	}
+	return nil, fmt.Errorf("terraform credentials not found for %s", registry)
 }
