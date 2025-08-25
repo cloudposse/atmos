@@ -321,6 +321,37 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 3. Add comprehensive tests
 4. Document in website if user-facing
 
+### Bug Fixing Workflow (MANDATORY)
+1. **Write a test to reproduce the bug** - create failing test that demonstrates the issue
+2. **Run the test to confirm it fails** - verify the test reproduces the expected behavior
+3. **Fix the bug iteratively** - make changes and re-run test until it passes
+4. **Verify fix doesn't break existing functionality** - run full test suite
+
+```go
+// Example: Test should describe the expected behavior, not that it's a bug fix
+func TestParseConfig_HandlesEmptyStringInput(t *testing.T) {
+    // Setup conditions that reproduce the issue
+    input := ""
+    
+    // Call the function that should handle this case
+    result, err := ParseConfig(input)
+    
+    // Assert the expected behavior (this should initially fail)
+    assert.NoError(t, err)
+    assert.Equal(t, DefaultConfig, result)
+}
+
+// Or for error conditions:
+func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
+    invalidStack := "malformed-stack-config"
+    
+    err := ValidateStack(invalidStack)
+    
+    assert.Error(t, err)
+    assert.Contains(t, err.Error(), "invalid format")
+}
+```
+
 ### Extending Store Integration
 1. Implement interface in `pkg/store/`
 2. Add to store registry
