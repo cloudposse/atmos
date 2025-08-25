@@ -84,6 +84,13 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		}
 	}
 
+	// Check if the `backend` section has `bucket` when `backend_type` is `gcs`
+	if info.ComponentBackendType == "gcs" {
+		if _, ok := info.ComponentBackendSection["bucket"].(string); !ok {
+			return fmt.Errorf("backend config for the '%s' component is missing 'bucket'", component)
+		}
+	}
+
 	// Write the backend config to a file
 	backendFilePath := filepath.Join(
 		atmosConfig.BasePath,
