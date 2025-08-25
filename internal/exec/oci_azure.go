@@ -55,8 +55,13 @@ func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.
 	if tenantID == "" {
 		tenantID = v.GetString("azure_tenant_id")
 	}
-	if azureCLIAuth == "" {
-		azureCLIAuth = v.GetString("azure_cli_auth")
+
+	// Resolve CLI auth flag (treat explicit true/false properly)
+	cliAuth := false
+	if azureCLIAuth != "" {
+		cliAuth = strings.EqualFold(azureCLIAuth, "true")
+	} else {
+		cliAuth = v.GetBool("azure_cli_auth")
 	}
 
 	// If we have all required Service Principal credentials, use them
@@ -65,15 +70,20 @@ func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.
 		return getACRAuthViaServicePrincipal(registry, acrName, clientID, clientSecret, tenantID)
 	}
 
-	// Fallback to Azure CLI if available and enabled
-	if azureCLIAuth != "" || hasAzureCLI() {
+	// Prefer Azure Default Credential (Managed Identity, Workload Identity, etc.)
+	if auth, err := getACRAuthViaDefaultCredential(registry, acrName); err == nil {
+		return auth, nil
+	} else {
+		log.Debug("Azure Default Credential failed; considering CLI as fallback", "registry", registry, "error", err)
+	}
+
+	// CLI only if explicitly enabled and available
+	if cliAuth && hasAzureCLI() {
 		log.Debug("Using Azure CLI authentication", "registry", registry, "acrName", acrName)
 		return getACRAuthViaCLI(registry)
 	}
 
-	// Try using Azure Default Credential (Managed Identity, Azure CLI, etc.)
-	log.Debug("Using Azure Default Credential", "registry", registry, "acrName", acrName)
-	return getACRAuthViaDefaultCredential(registry, acrName)
+	return nil, fmt.Errorf("no valid Azure authentication found for %s", registry)
 }
 
 // hasAzureCLI checks if Azure CLI is available

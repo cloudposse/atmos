@@ -191,6 +191,9 @@ func getRegistryAuth(registry string, atmosConfig *schema.AtmosConfiguration) (a
 		if auth, err := getACRAuth(registry, atmosConfig); err == nil {
 			log.Debug("Using Azure ACR authentication", "registry", registry)
 			return auth, nil
+		} else {
+			// Return the specific Azure error for better debugging
+			return nil, err
 		}
 	}
 

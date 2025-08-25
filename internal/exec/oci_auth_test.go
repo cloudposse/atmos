@@ -185,18 +185,36 @@ func TestACRAuth(t *testing.T) {
 			errorMsg:    "failed to get Azure token",
 		},
 		{
-			name:        "ACR with default credential",
+			name:        "ACR with default credential (preferred)",
 			registry:    "test.azurecr.io",
 			envVars:     map[string]string{},
 			expectError: true, // Will fail due to no Azure credentials, but should handle correctly
-			errorMsg:    "failed to get Azure token",
+			errorMsg:    "no valid Azure authentication found",
+		},
+		{
+			name:     "ACR with CLI disabled",
+			registry: "test.azurecr.io",
+			envVars: map[string]string{
+				"ATMOS_AZURE_CLI_AUTH": "false",
+			},
+			expectError: true, // Will fail due to no Azure credentials, but should not try CLI
+			errorMsg:    "no valid Azure authentication found",
+		},
+		{
+			name:     "ACR with CLI enabled",
+			registry: "test.azurecr.io",
+			envVars: map[string]string{
+				"ATMOS_AZURE_CLI_AUTH": "true",
+			},
+			expectError: true, // Will fail due to no Azure credentials, but should try CLI
+			errorMsg:    "no valid Azure authentication found",
 		},
 		{
 			name:        "Invalid ACR format",
 			registry:    "invalid-registry",
 			envVars:     map[string]string{},
 			expectError: true,
-			errorMsg:    "invalid Azure Container Registry format",
+			errorMsg:    "no authentication found for registry",
 		},
 	}
 
