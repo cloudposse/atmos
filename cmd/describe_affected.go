@@ -41,6 +41,7 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeAffectedCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Deprecated. Alias for `--logs-level=Debug`")
+	describeAffectedCmd.PersistentFlags().Bool("exclude-locked", false, "Exclude the locked components (`metadata.locked: true`) from the output")
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }

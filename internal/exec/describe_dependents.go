@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -16,11 +17,15 @@ import (
 )
 
 type DescribeDependentsExecProps struct {
-	File      string
-	Format    string
-	Query     string
-	Stack     string
-	Component string
+	File                 string
+	Format               string
+	Query                string
+	Stack                string
+	Component            string
+	IncludeSettings      bool
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -35,6 +40,9 @@ type describeDependentsExec struct {
 		component string,
 		stack string,
 		includeSettings bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		skip []string,
 	) ([]schema.Dependent, error)
 	newPageCreator        pager.PageCreator
 	isTTYSupportForStdout func() bool
@@ -61,7 +69,10 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		d.atmosConfig,
 		describeDependentsExecProps.Component,
 		describeDependentsExecProps.Stack,
-		false,
+		describeDependentsExecProps.IncludeSettings,
+		describeDependentsExecProps.ProcessTemplates,
+		describeDependentsExecProps.ProcessYamlFunctions,
+		describeDependentsExecProps.Skip,
 	)
 	if err != nil {
 		return err
@@ -96,6 +107,9 @@ func ExecuteDescribeDependents(
 	component string,
 	stack string,
 	includeSettings bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Dependent, error) {
 	if atmosConfig == nil {
 		return nil, errUtils.ErrAtmosConfigIsNil
@@ -112,16 +126,22 @@ func ExecuteDescribeDependents(
 		nil,
 		nil,
 		false,
-		true,
-		true,
+		processTemplates,
+		processYamlFunctions,
 		false,
-		nil,
+		skip,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	providedComponentSection, err := ExecuteDescribeComponent(
+		component,
+		stack,
+		processTemplates,
+		processYamlFunctions,
+		skip,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -325,5 +345,35 @@ func ExecuteDescribeDependents(
 		}
 	}
 
+	sortDependentsByStackSlugRecursive(dependents)
 	return dependents, nil
+}
+
+// sortDependentsByStackSlug sorts the dependents by stack slug.
+func sortDependentsByStackSlug(deps []schema.Dependent) {
+	if len(deps) == 0 {
+		return
+	}
+	sort.SliceStable(deps, func(i, j int) bool {
+		// primary key
+		if deps[i].StackSlug != deps[j].StackSlug {
+			return deps[i].StackSlug < deps[j].StackSlug
+		}
+		// tie-breakers to keep order stable across runs
+		if deps[i].Component != deps[j].Component {
+			return deps[i].Component < deps[j].Component
+		}
+		return deps[i].Stack < deps[j].Stack
+	})
+}
+
+// sortDependentsByStackSlugRecursive sorts the dependents by stack slug recursively.
+func sortDependentsByStackSlugRecursive(deps []schema.Dependent) {
+	if len(deps) == 0 {
+		return
+	}
+	for i := range deps {
+		sortDependentsByStackSlugRecursive(deps[i].Dependents)
+	}
+	sortDependentsByStackSlug(deps)
 }

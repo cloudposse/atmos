@@ -5,6 +5,7 @@ sidebar_class_name: command
 id: dependents
 description: This command produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 ---
+
 import Terminal from '@site/src/components/Terminal'
 import Screengrab from '@site/src/components/Screengrab'
 
@@ -12,7 +13,7 @@ import Screengrab from '@site/src/components/Screengrab'
 Use this command to show a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 :::
 
-<Screengrab title="atmos describe dependents --help" slug="atmos-describe-dependents--help" />
+<Screengrab title="atmos describe dependents --help" slug="atmos-describe-dependents--help"/>
 
 ## Description
 
@@ -25,29 +26,29 @@ Provide meaningful descriptions so that people can understand what the dependenc
 Each object in the `settings.depends_on` section has the following schema:
 
 <dl>
-  <dt>file <em>(optional)</em></dt>
-  <dd>A file on the local filesystem that the current component depends on</dd>
+    <dt>file <em>(optional)</em></dt>
+    <dd>A file on the local filesystem that the current component depends on</dd>
 
-  <dt>folder <em>(optional)</em></dt>
-  <dd>A folder on the local filesystem that the current component depends on</dd>
+    <dt>folder <em>(optional)</em></dt>
+    <dd>A folder on the local filesystem that the current component depends on</dd>
 
-  <dt>component <em>(required if `file` or `folder` is not specified)</em></dt>
-  <dd>an Atmos component that the current component depends on</dd>
+    <dt>component <em>(required if `file` or `folder` is not specified)</em></dt>
+    <dd>an Atmos component that the current component depends on</dd>
 
-  <dt>stack <em>(optional)</em></dt>
-  <dd>Atmos stack where the `component` is provisioned</dd>
+    <dt>stack <em>(optional)</em></dt>
+    <dd>Atmos stack where the `component` is provisioned</dd>
 
     <dt>namespace <em>(optional)</em></dt>
-  <dd>The `namespace` where the `component` is provisioned</dd>
+    <dd>The `namespace` where the `component` is provisioned</dd>
 
-  <dt>tenant <em>(optional)</em></dt>
-  <dd>The `tenant` where the `component` is provisioned</dd>
+    <dt>tenant <em>(optional)</em></dt>
+    <dd>The `tenant` where the `component` is provisioned</dd>
 
-  <dt>environment <em>(optional)</em></dt>
-  <dd>The `environment` where the `component` is provisioned</dd>
+    <dt>environment <em>(optional)</em></dt>
+    <dd>The `environment` where the `component` is provisioned</dd>
 
-  <dt>stage <em>(optional)</em></dt>
-  <dd>The `stage` where the `component` is provisioned</dd>
+    <dt>stage <em>(optional)</em></dt>
+    <dd>The `stage` where the `component` is provisioned</dd>
 </dl>
 
 One of `component`, `file` or `folder` is required.
@@ -159,23 +160,23 @@ Having the `top-level-component` and `top-level-component2` components configure
 to show all the components that depend on the `test/test-component` component in the `tenant1-ue2-dev` stack:
 
 <Terminal title="atmos describe dependents test/test-component -s tenant1-ue2-dev">
-```json
-[
-  {
-    "component": "top-level-component1",
-    "component_type": "terraform",
-    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
-    "namespace": "cp",
-    "tenant": "tenant1",
-    "environment": "ue2",
-    "stage": "dev",
-    "stack": "tenant1-ue2-dev",
-    "stack_slug": "tenant1-ue2-dev-top-level-component1",
-    "spacelift_stack": "tenant1-ue2-dev-top-level-component1",
-    "atlantis_project": "tenant1-ue2-dev-top-level-component1"
-  }
-]
-```
+    ```json
+    [
+        {
+            "component": "top-level-component1",
+            "component_type": "terraform",
+            "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
+            "namespace": "cp",
+            "tenant": "tenant1",
+            "environment": "ue2",
+            "stage": "dev",
+            "stack": "tenant1-ue2-dev",
+            "stack_slug": "tenant1-ue2-dev-top-level-component1",
+            "spacelift_stack": "tenant1-ue2-dev-top-level-component1",
+            "atlantis_project": "tenant1-ue2-dev-top-level-component1"
+        }
+    ]
+    ```
 </Terminal>
 
 Similarly, the following Atmos command shows all the components that depend on the `test/test-component` component in
@@ -183,46 +184,46 @@ the `tenant1-ue2-test-1` stack:
 
 
 <Terminal command="atmos describe dependents test/test-component -s tenant1-ue2-test-1">
-```json
-[
-  {
-    "component": "top-level-component1",
-    "component_type": "terraform",
-    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
-    "namespace": "cp",
-    "tenant": "tenant1",
-    "environment": "ue2",
-    "stage": "test-1",
-    "stack": "tenant1-ue2-test-1",
-    "stack_slug": "tenant1-ue2-dev-top-level-component1",
-    "spacelift_stack": "tenant1-ue2-test-1-top-level-component1",
-    "atlantis_project": "tenant1-ue2-test-1-top-level-component1"
-  },
-  {
-    "component": "top-level-component2",
-    "component_type": "terraform",
-    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
-    "namespace": "cp",
-    "tenant": "tenant1",
-    "environment": "ue2",
-    "stage": "test-1",
-    "stack": "tenant1-ue2-test-1",
-    "stack_slug": "tenant1-ue2-test-1-top-level-component2",
-    "atlantis_project": "tenant1-ue2-test-1-top-level-component2"
-  }
-]
-```
+    ```json
+    [
+        {
+            "component": "top-level-component1",
+            "component_type": "terraform",
+            "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
+            "namespace": "cp",
+            "tenant": "tenant1",
+            "environment": "ue2",
+            "stage": "test-1",
+            "stack": "tenant1-ue2-test-1",
+            "stack_slug": "tenant1-ue2-dev-top-level-component1",
+            "spacelift_stack": "tenant1-ue2-test-1-top-level-component1",
+            "atlantis_project": "tenant1-ue2-test-1-top-level-component1"
+        },
+        {
+            "component": "top-level-component2",
+            "component_type": "terraform",
+            "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
+            "namespace": "cp",
+            "tenant": "tenant1",
+            "environment": "ue2",
+            "stage": "test-1",
+            "stack": "tenant1-ue2-test-1",
+            "stack_slug": "tenant1-ue2-test-1-top-level-component2",
+            "atlantis_project": "tenant1-ue2-test-1-top-level-component2"
+        }
+    ]
+    ```
 </Terminal>
 
 After the `test/test-component` has been provisioned, you can use the outputs to perform the following actions:
 
 - Provision the dependent components by executing the Atmos commands `atmos terraform apply top-level-component1 -s tenant1-ue2-test-1` and
-  `atmos terraform apply top-level-component2 -s tenant1-ue2-test-1` (on the command line or from a GitHub Action)
+`atmos terraform apply top-level-component2 -s tenant1-ue2-test-1` (on the command line or from a GitHub Action)
 
 - Trigger the dependent Spacelift stack (from a GitHub Action by using the [spacectl](https://github.com/spacelift-io/spacectl) CLI, or by using an
-  OPA [Trigger](https://docs.spacelift.io/concepts/policy/trigger-policy)
-  policy, or by using
-  the [spacelift_stack_dependency](https://registry.terraform.io/providers/spacelift-io/spacelift/latest/docs/resources/stack_dependency) resource)
+OPA [Trigger](https://docs.spacelift.io/concepts/policy/trigger-policy)
+policy, or by using
+the [spacelift_stack_dependency](https://registry.terraform.io/providers/spacelift-io/spacelift/latest/docs/resources/stack_dependency) resource)
 
 - Trigger the dependent Atlantis project
 
@@ -249,18 +250,66 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1 --query <yq-
 
 ## Arguments
 
-| Argument    | Description     | Required |
-| :---------- | :-------------- | :------- |
-| `component` | Atmos component | yes      |
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component.
+    </dd>
+</dl>
 
 ## Flags
 
-| Flag       | Description                                                                                                                                                                                                       | Alias | Required |
-|:-----------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`  | Atmos stack                                                                                                                                                                                                       | `-s`  | yes      |
-| `--format` | Output format: `json` or `yaml` (`json` is default)                                                                                                                                                               | `-f`  | no       |
-| `--file`   | If specified, write the result to the file                                                                                                                                                                        |       | no       |
-| `--query`  | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe dependents <component> -s <stack> --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq | `-q`  | no       |
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em><em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--format` <em>(alias `-f`)</em><em>(optional)</em></dt>
+    <dd>
+        Output format: `json` or `yaml` (`json` is default).
+    </dd>
+
+    <dt>`--file` <em>(optional)</em></dt>
+    <dd>
+        If specified, write the result to the file.
+    </dd>
+
+    <dt>`--query` <em>(alias `-q`)</em><em>(optional)</em></dt>
+    <dd>
+        Query the results of the command using YQ expressions.
+
+        `atmos describe dependents <component> -s <stack> --query <yq-expression>`.
+
+        For more details, refer to https://mikefarah.gitbook.io/yq.
+    </dd>
+
+    <dt>`--process-templates` <em>(optional)</em></dt>
+    <dd>
+        Enable/disable processing of `Go` templates in Atmos stacks manifests when executing the command.
+        If the flag is not provided, it's set to `true` by default.
+
+        `atmos describe dependents <component> -s <stack> --process-templates=false`
+    </dd>
+
+    <dt>`--process-functions` <em>(optional)</em></dt>
+    <dd>
+        Enable/disable processing of Atmos YAML functions in Atmos stacks manifests when executing the command.
+        If the flag is not provided, it's set to `true` by default.
+
+        `atmos describe dependents <component> -s <stack> --process-functions=false`
+    </dd>
+
+    <dt>`--skip` <em>(optional)</em></dt>
+    <dd>
+        Skip processing a specific Atmos YAML function in Atmos stacks manifests when executing the command.
+        To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma:
+
+        `atmos describe dependents <component> -s <stack> --skip=terraform.output --skip=include`
+
+        `atmos describe dependents <component> -s <stack> --skip=terraform.output,include`
+    </dd>
+</dl>
 
 ## Output
 
@@ -305,11 +354,11 @@ where:
 - `stack_slug` - the Atmos stack slug (concatenation of the Atmos stack and Atmos component)
 
 - `spacelift_stack` - the dependent Spacelift stack. It will be included only if the Spacelift workspace is enabled for the dependent Atmos component
-  in the Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled`
-  section or via inheritance)
+in the Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled`
+section or via inheritance)
 
 - `atlantis_project` - the dependent Atlantis project name. It will be included only if the Atlantis integration is configured in
-  the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integration](/integrations/atlantis) for more details
+the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integration](/integrations/atlantis) for more details
 
 :::note
 
@@ -321,33 +370,33 @@ Atmos components and are not meant to be provisioned.
 ## Output Example
 
 <Terminal command="atmos describe dependents test/test-component -s tenant1-ue2-test-1">
-```json
-[
-  {
-    "component": "top-level-component2",
-    "component_type": "terraform",
-    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
-    "namespace": "cp",
-    "tenant": "tenant1",
-    "environment": "ue2",
-    "stage": "test-1",
-    "stack": "tenant1-ue2-test-1",
-    "stack_slug": "tenant1-ue2-dev-top-level-component2",
-    "atlantis_project": "tenant1-ue2-test-1-top-level-component2"
-  },
-  {
-    "component": "top-level-component1",
-    "component_type": "terraform",
-    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
-    "namespace": "cp",
-    "tenant": "tenant1",
-    "environment": "ue2",
-    "stage": "dev",
-    "stack": "tenant1-ue2-dev",
-    "stack_slug": "tenant1-ue2-test-1-top-level-component1",
-    "spacelift_stack": "tenant1-ue2-dev-top-level-component1",
-    "atlantis_project": "tenant1-ue2-dev-top-level-component1"
-  }
-]
-```
+    ```json
+    [
+    {
+        "component": "top-level-component2",
+        "component_type": "terraform",
+        "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
+        "namespace": "cp",
+        "tenant": "tenant1",
+        "environment": "ue2",
+        "stage": "test-1",
+        "stack": "tenant1-ue2-test-1",
+        "stack_slug": "tenant1-ue2-dev-top-level-component2",
+        "atlantis_project": "tenant1-ue2-test-1-top-level-component2"
+    },
+    {
+        "component": "top-level-component1",
+        "component_type": "terraform",
+        "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
+        "namespace": "cp",
+        "tenant": "tenant1",
+        "environment": "ue2",
+        "stage": "dev",
+        "stack": "tenant1-ue2-dev",
+        "stack_slug": "tenant1-ue2-test-1-top-level-component1",
+        "spacelift_stack": "tenant1-ue2-dev-top-level-component1",
+        "atlantis_project": "tenant1-ue2-dev-top-level-component1"
+    }
+    ]
+    ```
 </Terminal>
