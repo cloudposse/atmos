@@ -237,7 +237,11 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 		log.Error("Layer decompression failed", "index", index, "digest", layerDesc, "error", err)
 		return fmt.Errorf("layer decompression error: %w", err)
 	}
-	defer uncompressed.Close()
+	defer func() {
+		if uncompressed != nil {
+			_ = uncompressed.Close()
+		}
+	}()
 
 	// Try to extract the layer based on media type
 	var extractionErr error
@@ -261,14 +265,14 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 
 		// Reset the uncompressed reader
 		if uncompressed != nil {
-			uncompressed.Close()
+			_ = uncompressed.Close()
 		}
 		uncompressed, err = layer.Uncompressed()
 		if err != nil {
 			log.Error("Failed to reset uncompressed reader", "index", index, "digest", layerDesc, "error", err)
 			return fmt.Errorf("layer decompression error: %w", err)
 		}
-		defer uncompressed.Close()
+		// No second defer; the single deferred closer will close the new handle
 
 		// Try to extract as raw data first
 		if err := extractRawData(uncompressed, destDir, index); err != nil {
