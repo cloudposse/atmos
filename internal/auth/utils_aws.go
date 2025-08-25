@@ -3,32 +3,34 @@ package auth
 import (
 	"bytes"
 	"fmt"
-	"github.com/cloudposse/atmos/pkg/config/go-homedir"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+	"github.com/cloudposse/atmos/pkg/schema"
+
 	log "github.com/charmbracelet/log"
 	"gopkg.in/ini.v1"
 )
 
-const (
-	AwsConfigFilePerm = 0644
-)
-
-func SetAwsEnvVars(info *schema.ConfigAndStacksInfo, profile, provider string) error {
+func SetAwsEnvVars(info *schema.ConfigAndStacksInfo, profile, provider, region string) error {
 	if profile == "" {
 		return fmt.Errorf("profile is required")
 	}
 	info.ComponentEnvSection["AWS_PROFILE"] = profile
-	configFilePath, err := GetAwsAtmosConfigFilepath(provider)
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_PROFILE=%s", profile))
+	configFilePath, err := CreateAwsAtmosConfigFilepath(provider)
 	if err != nil {
 		return err
 	}
-	info.ComponentEnvSection["AWS_CONFIG_FILE"] = configFilePath //GetAwsAtmosConfigFilepath
+	info.ComponentEnvSection["AWS_CONFIG_FILE"] = configFilePath //CreateAwsAtmosConfigFilepath
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_CONFIG_FILE=%s", configFilePath))
+	info.ComponentEnvSection["AWS_REGION"] = region
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_REGION=%s", region))
 
+	log.Info("Component Env Vars", "envVars", info.ComponentEnvSection)
 	return nil
 }
 
@@ -111,7 +113,7 @@ func GetAwsCredentialsFilepath() (string, error) {
 	return targetPath, nil
 }
 
-func GetAwsAtmosConfigFilepath(provider string) (string, error) {
+func CreateAwsAtmosConfigFilepath(provider string) (string, error) {
 	// Figure out where to write ~/.aws/credentials
 	targetPath := os.Getenv("ATMOS_AWS_CONFIG_FILE")
 	if targetPath == "" {
@@ -119,11 +121,62 @@ func GetAwsAtmosConfigFilepath(provider string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("resolve home dir: %w", err)
 		}
-		targetPath = filepath.Join(homeDir, ".aws", "atmos", provider, "config")
-		_ = os.MkdirAll(targetPath, AwsConfigFilePerm)
+		targetPath = filepath.Join(homeDir, ".aws", "atmos", provider)
+		_ = os.MkdirAll(targetPath, os.ModePerm)
+		target := filepath.Join(targetPath, "config")
+		_, _ = os.Create(target) // touch targetPath)
 
+		log.Debug("AWS config file path", "path", targetPath+"/config")
+		return target, nil
 	}
 	return targetPath, nil
+}
+
+func UpdateAwsAtmosConfig(awsAtmosConfigPath string, profile string, sourceProfile string, region string, roleArn string) error {
+	log.Debug("Updating AWS config file path", "path", awsAtmosConfigPath)
+	// Load existing config file (or create new one)
+	var f *ini.File
+	if _, err := os.Stat(awsAtmosConfigPath); err == nil {
+		f, err = ini.Load(awsAtmosConfigPath)
+		if err != nil {
+			return fmt.Errorf("load config ini: %w", err)
+		}
+	} else {
+		f = ini.Empty()
+	}
+
+	// Update the profile section for the given profile
+	profileSection := f.Section(fmt.Sprintf("profile %s", profile)) // fmt.Sprintf("profile %s", profile)
+	profileSection.Key("region").SetValue(region)
+	profileSection.Key("source_profile").SetValue(sourceProfile)
+	if roleArn != "" {
+		profileSection.Key("role_arn").SetValue(roleArn)
+	}
+
+	// Write atomically: dump to memory, write temp w/ 0600, then rename
+	var buf bytes.Buffer
+	if _, err := f.WriteTo(&buf); err != nil {
+		return fmt.Errorf("serialize ini: %w", err)
+	}
+
+	tmp := awsAtmosConfigPath + ".tmp"
+	if err := os.WriteFile(tmp, buf.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("write temp credentials: %w", err)
+	}
+	// Best-effort fsync on POSIX (optional)
+	if ftmp, err := os.OpenFile(tmp, os.O_RDWR, 0o600); err == nil {
+		_ = ftmp.Sync()
+		_ = ftmp.Close()
+	}
+
+	if err := os.Rename(tmp, awsAtmosConfigPath); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("atomic rename credentials: %w", err)
+	}
+
+	log.Debug("Updated AWS config", "profile", profile, "path", awsAtmosConfigPath)
+	return nil
+
 }
 
 // RemoveAwsCredentials removes a specific AWS profile from the credentials file.

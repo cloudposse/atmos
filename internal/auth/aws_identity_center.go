@@ -66,17 +66,16 @@ func (config *awsIamIdentityCenter) Validate() error {
 
 // Login authenticates with SSO and gets the token
 func (config *awsIamIdentityCenter) Login() error {
-	log.Debug("Identity Config", "config", config)
 	store := authstore.NewKeyringAuthStore()
-	keyringKey := config.Common.Provider
-	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "Provider", config.Common.Provider, "Identity", config.Identity.Identity, "Profile", config.Common.Profile)
+	keyringKey := config.Provider
+	log.Info("Logging in using IAM Identity Center", "Region", config.Common.Region, "ProviderName", config.Provider, "Identity", config.Identity.Identity, "Profile", config.Common.Profile)
 
 	var credentials ssoAuthStore
 	// Check if we already have a valid token
 	err := store.GetInto(keyringKey, &credentials)
 	if err == nil && time.Until(credentials.ExpiresAt) > 30*time.Minute {
 		// Valid token, proceed
-		log.Debug("Cached token found", "alias", config.Common.Provider)
+		log.Debug("Cached token found", "alias", config.Provider)
 		config.token = credentials.Token
 	} else {
 		// No valid token, log in
@@ -122,32 +121,32 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 	// Determine account ID and role name
 	var accountId, roleName string
 
-	// Support passing in a role
-	if config.RoleArn != "" {
-		Arn, _ := arn.Parse(config.RoleArn)
-		roleName = Arn.Resource
-		accountId = RoleToAccountId(config.RoleArn)
-	}
+	//// Support passing in a role
+	//if config.RoleArn != "" {
+	//	Arn, _ := arn.Parse(config.RoleArn)
+	//	roleName = Arn.Resource
+	//	accountId = RoleToAccountId(config.RoleArn)
+	//}
 
 	// Support passing in a role_name
-	if roleName == "" {
-		roleName = config.RoleName
-	}
+	//if roleName == "" {
+	roleName = config.RoleName
+	//}
 
 	// Support passing in an account_id
+	//if accountId == "" {
+	accountId = config.AccountId
+	// Support passing in an account_name
 	if accountId == "" {
-		accountId = config.AccountId
-		// Support passing in an account_name
-		if accountId == "" {
-			accounts, _ := getAccountsInfo(ctx, ssoClient, config.token)
-			for _, account := range accounts {
-				if *account.AccountName == config.AccountName {
-					accountId = *account.AccountId
-					break
-				}
+		accounts, _ := getAccountsInfo(ctx, ssoClient, config.token)
+		for _, account := range accounts {
+			if *account.AccountName == config.AccountName {
+				accountId = *account.AccountId
+				break
 			}
 		}
 	}
+	//}
 
 	// Get role credentials
 	roleCredentials, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
@@ -172,7 +171,7 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 		*roleCredentials.RoleCredentials.AccessKeyId,
 		*roleCredentials.RoleCredentials.SecretAccessKey,
 		*roleCredentials.RoleCredentials.SessionToken,
-		config.Common.Provider,
+		config.Provider,
 	)
 
 	log.Info("✅ Successfully assumed role! Credentials written to ~/.aws/credentials",
@@ -217,7 +216,12 @@ func getAccountRoles(ctx context.Context, client *sso.Client, token, accountID s
 
 func (i *awsIamIdentityCenter) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	log.Info("Setting AWS environment variables")
-	return SetAwsEnvVars(info, i.Common.Profile, i.Common.Provider)
+	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
+	if err != nil {
+		return err
+	}
+	_ = UpdateAwsAtmosConfig(info.ComponentEnvSection["AWS_CONFIG_FILE"].(string), i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	return nil
 }
 
 func (i *awsIamIdentityCenter) Logout() error {

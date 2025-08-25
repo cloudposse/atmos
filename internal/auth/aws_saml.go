@@ -315,7 +315,7 @@ func (i *awsSaml) AssumeRole() error {
 		aws.ToString(credsOut.AccessKeyId),
 		aws.ToString(credsOut.SecretAccessKey),
 		aws.ToString(credsOut.SessionToken),
-		i.Common.Provider,
+		i.Provider,
 	)
 
 	log.Info("✅ Assumed role with SAML",
@@ -327,7 +327,7 @@ func (i *awsSaml) AssumeRole() error {
 }
 
 func (i *awsSaml) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
-	return SetAwsEnvVars(info, i.Common.Profile, i.Common.Provider)
+	return SetAwsEnvVars(info, i.Common.Profile, i.Provider, i.Common.Region)
 }
 
 func (i *awsSaml) Logout() error {

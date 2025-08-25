@@ -945,8 +945,6 @@ type AuthConfig struct {
 // ProviderDefaultConfig defines the default configuration for an identity provider, this is shared amongst all providers
 
 type ProviderDefaultConfig struct {
-	Provider string
-
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
 	Url  string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
 	// AWS Specific
@@ -957,9 +955,9 @@ type ProviderDefaultConfig struct {
 type Identity struct {
 	Identity string
 
-	Default bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
-	Enabled bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
-	Idp     string `yaml:"idp,omitempty" json:"idp,omitempty" mapstructure:"idp,omitempty"`
+	Default  bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
+	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider,omitempty"`
 
 	// AWS Specific
 	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`

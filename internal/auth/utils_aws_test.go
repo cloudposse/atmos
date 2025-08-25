@@ -20,13 +20,13 @@ func TestGetAwsAtmosConfigFilepath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetAwsAtmosConfigFilepath(tt.args.provider)
+			got, err := CreateAwsAtmosConfigFilepath(tt.args.provider)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("GetAwsAtmosConfigFilepath() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("CreateAwsAtmosConfigFilepath() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("GetAwsAtmosConfigFilepath() got = %v, want %v", got, tt.want)
+				t.Errorf("CreateAwsAtmosConfigFilepath() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -120,7 +120,7 @@ func TestSetAwsEnvVars(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "InValid Configuration Provider NOT set",
+			name: "InValid Configuration ProviderName NOT set",
 			args: args{
 				profile: "foo",
 				info: &schema.ConfigAndStacksInfo{
@@ -147,7 +147,7 @@ func TestSetAwsEnvVars(t *testing.T) {
 
 			// Test Config File Env Var
 			if tt.wantedConfigFile != "" {
-				expected, err := GetAwsAtmosConfigFilepath(tt.args.provider)
+				expected, err := CreateAwsAtmosConfigFilepath(tt.args.provider)
 				if err != nil {
 					t.Errorf("SetAwsEnvVars() error = %v", err)
 				}

@@ -229,6 +229,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	err = auth.TerraformPreHook(atmosConfig, &info)
+	log.Info("DEBUG", "ComponentEnvSection", info.ComponentEnvSection)
 	if err != nil {
 		return err
 	}

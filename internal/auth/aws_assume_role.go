@@ -161,7 +161,7 @@ func (i *awsAssumeRole) AssumeRole() error {
 }
 
 func (i *awsAssumeRole) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
-	return SetAwsEnvVars(info, i.Common.Profile, i.Common.Provider)
+	return SetAwsEnvVars(info, i.Common.Profile, i.Provider, i.Common.Region)
 }
 
 func (i *awsAssumeRole) Logout() error {

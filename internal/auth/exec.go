@@ -48,10 +48,13 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 	identity := info.Identity // Set by CLI Flags
 	// If no explicit identity was passed, try to use the configured default one (if any)
 	if identity == "" {
-		if def, derr := GetDefaultIdentity(info.ComponentIdentitiesSection); derr == nil && def != "" {
+		def, derr := GetDefaultIdentity(info.ComponentIdentitiesSection)
+		if derr == nil && def != "" {
 			log.Info("Using default identity", "identity", def)
 			identity = def
 		}
+		log.Debug("TerraformPreHook[GetDefaultIdentity]", "default", def, "identity", info.Identity, "derr", derr)
+
 	}
 	// If we don't have a default, but several are enabled, prompt the user, if not in CI
 	if telemetry.IsCI() {
@@ -66,7 +69,11 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 		if err != nil {
 			return err
 		}
-		return ValidateLoginAssumeRole(identityInstance, atmosConfig, info)
+		log.Info("DEBUG", "ComponentEnvSection", info.ComponentEnvSection)
+		err = ValidateLoginAssumeRole(identityInstance, atmosConfig, info)
+		log.Info("DEBUG", "ComponentEnvSection", info.ComponentEnvSection)
+
+		return err
 	}
 
 	return nil

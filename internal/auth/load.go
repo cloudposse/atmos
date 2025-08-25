@@ -2,8 +2,6 @@ package auth
 
 import (
 	"errors"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-
 	l "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
@@ -32,7 +30,7 @@ var identityRegistry = map[string]func(provider string, identity string, config 
 		data.Identity.Identity = identity
 		return data, err
 	},
-	// Empty - used for AssumeRole - no Provider
+	// Empty - used for AssumeRole - no ProviderName
 	"": func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
 		var data = &awsAssumeRole{}
 		b, err := yaml.Marshal(config.Providers[provider])
@@ -48,7 +46,6 @@ var identityRegistry = map[string]func(provider string, identity string, config 
 }
 
 func setDefaults(data *schema.ProviderDefaultConfig, provider string, config schema.AuthConfig) {
-	data.Provider = provider
 	if data.Region == "" {
 		data.Region = config.DefaultRegion
 	}
@@ -56,21 +53,18 @@ func setDefaults(data *schema.ProviderDefaultConfig, provider string, config sch
 
 func GetDefaultIdentity(configuration map[string]any) (string, error) {
 	identityConfigs := GetEnabledIdentities(configuration)
-
 	var defaultIdentities []string
 	for k, _ := range identityConfigs {
 		if identityConfigs[k].Default && identityConfigs[k].Enabled {
 			defaultIdentities = append(defaultIdentities, k)
 		}
 	}
+	l.Debug("default identities", "defaultIdentities", defaultIdentities)
 	if len(defaultIdentities) == 1 {
 		return defaultIdentities[0], nil
 	} else if len(defaultIdentities) > 1 {
-		if telemetry.IsCI() {
-			l.Warn("multiple default identities found", "defaultIdentities", defaultIdentities)
-			return "", errors.New("multiple default identities found")
-		}
-
+		l.Warn("multiple default identities found", "defaultIdentities", defaultIdentities)
+		return "", errors.New("multiple default identities found")
 	}
 	return "", errors.New("no default identity found")
 }
@@ -134,7 +128,7 @@ func GetEnabledIdentitiesE(identityMap map[string]any) (map[string]schema.Identi
 	filteredIdentities := make(map[string]schema.Identity)
 	for k, v := range identityConfigs {
 		// TODO move this to a validate method
-		if v.Enabled && (v.Idp != "" || v.RoleArn != "") {
+		if v.Enabled && (v.Provider != "" || v.RoleArn != "") {
 			filteredIdentities[k] = v
 		}
 	}
@@ -154,7 +148,7 @@ func GetIdp(identity string, config schema.AuthConfig) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return identityConfigs[identity].Idp, nil
+	return identityConfigs[identity].Provider, nil
 }
 
 // GetIdentityInstance retrieves an identity instance based on the specified identity and configuration.
