@@ -191,21 +191,10 @@ func TestACRAuth(t *testing.T) {
 			errorMsg:    "no valid Azure authentication found",
 		},
 		{
-			name:     "ACR with CLI disabled",
-			registry: "test.azurecr.io",
-			envVars: map[string]string{
-				"ATMOS_AZURE_CLI_AUTH": "false",
-			},
-			expectError: true, // Will fail due to no Azure credentials, but should not try CLI
-			errorMsg:    "no valid Azure authentication found",
-		},
-		{
-			name:     "ACR with CLI enabled",
-			registry: "test.azurecr.io",
-			envVars: map[string]string{
-				"ATMOS_AZURE_CLI_AUTH": "true",
-			},
-			expectError: true, // Will fail due to no Azure credentials, but should try CLI
+			name:        "ACR with no authentication",
+			registry:    "test.azurecr.io",
+			envVars:     map[string]string{},
+			expectError: true, // Will fail due to no Azure credentials, but should handle correctly
 			errorMsg:    "no valid Azure authentication found",
 		},
 		{
@@ -230,58 +219,6 @@ func TestACRAuth(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				if tt.errorMsg != "" {
-					assert.Contains(t, err.Error(), tt.errorMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, auth)
-			}
-		})
-	}
-}
-
-// TestGetACRAuthViaCLI tests Azure CLI authentication
-func TestGetACRAuthViaCLI(t *testing.T) {
-	tests := []struct {
-		name        string
-		registry    string
-		expectError bool
-		errorMsg    string
-	}{
-		{
-			name:        "Valid ACR registry",
-			registry:    "test.azurecr.io",
-			expectError: true, // Will fail due to no Azure CLI, but should parse correctly
-			errorMsg:    "failed to get ACR credentials via Azure CLI",
-		},
-		{
-			name:        "Invalid registry format",
-			registry:    "invalid-registry",
-			expectError: true,
-			errorMsg:    "invalid Azure Container Registry format",
-		},
-		{
-			name:        "Empty registry",
-			registry:    "",
-			expectError: true,
-			errorMsg:    "invalid Azure Container Registry format",
-		},
-		{
-			name:        "Registry without .azurecr.io suffix",
-			registry:    "test.other.io",
-			expectError: true,
-			errorMsg:    "invalid Azure Container Registry format",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			auth, err := getACRAuthViaCLI(tt.registry)
-
-			if tt.expectError {
-				assert.Error(t, err)
-				assert.Nil(t, auth)
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
 				}

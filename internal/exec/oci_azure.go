@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -46,7 +45,6 @@ func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.
 	clientID := atmosConfig.Settings.OCI.AzureClientID
 	clientSecret := atmosConfig.Settings.OCI.AzureClientSecret
 	tenantID := atmosConfig.Settings.OCI.AzureTenantID
-	azureCLIAuth := atmosConfig.Settings.OCI.AzureCLIAuth
 
 	// Fallback to environment variables for backward compatibility
 	if clientID == "" {
@@ -57,14 +55,6 @@ func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.
 	}
 	if tenantID == "" {
 		tenantID = v.GetString("azure_tenant_id")
-	}
-
-	// Resolve CLI auth flag (treat explicit true/false properly)
-	cliAuth := false
-	if azureCLIAuth != "" {
-		cliAuth = strings.EqualFold(azureCLIAuth, "true")
-	} else {
-		cliAuth = v.GetBool("azure_cli_auth")
 	}
 
 	// If we have all required Service Principal credentials, use them
@@ -78,12 +68,6 @@ func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.
 		return auth, nil
 	} else {
 		log.Debug("Azure Default Credential failed; considering CLI as fallback", "registry", registry, "error", err)
-	}
-
-	// CLI only if explicitly enabled and available
-	if cliAuth && hasAzureCLI() {
-		log.Debug("Using Azure CLI authentication", "registry", registry, "acrName", acrName)
-		return getACRAuthViaCLI(registry)
 	}
 
 	return nil, fmt.Errorf("no valid Azure authentication found for %s", registry)
@@ -179,14 +163,6 @@ func extractTenantIDFromToken(tokenString string) (string, error) {
 	return payloadData.TID, nil
 }
 
-// hasAzureCLI checks if Azure CLI is available
-func hasAzureCLI() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "az", "version")
-	return cmd.Run() == nil
-}
-
 // getACRAuthViaServicePrincipal attempts to get ACR credentials using Azure Service Principal
 func getACRAuthViaServicePrincipal(registry, acrName, clientID, clientSecret, tenantID string) (authn.Authenticator, error) {
 	// Create Azure credential using Service Principal
@@ -244,60 +220,5 @@ func getACRAuthViaDefaultCredential(registry, acrName string) (authn.Authenticat
 	return &authn.Basic{
 		Username: "00000000-0000-0000-0000-000000000000",
 		Password: refresh,
-	}, nil
-}
-
-// getACRAuthViaCLI attempts to get ACR credentials using Azure CLI
-func getACRAuthViaCLI(registry string) (authn.Authenticator, error) {
-	// Extract ACR name from registry URL
-	acrName := ""
-	if strings.HasSuffix(registry, ".azurecr.io") {
-		acrName = strings.TrimSuffix(registry, ".azurecr.io")
-	} else {
-		return nil, fmt.Errorf("invalid Azure Container Registry format: %s (expected <name>.azurecr.io)", registry)
-	}
-
-	if acrName == "" {
-		return nil, fmt.Errorf("could not extract ACR name from registry: %s", registry)
-	}
-
-	// Use Azure CLI to get ACR credentials
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "az", "acr", "credential", "show", "--name", acrName)
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ACR credentials via Azure CLI: %w", err)
-	}
-
-	// Parse the JSON output
-	var result struct {
-		Passwords []struct {
-			Name  string `json:"name"`
-			Value string `json:"value"`
-		} `json:"passwords"`
-		Username string `json:"username"`
-	}
-
-	if err := json.Unmarshal(output, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse Azure CLI output: %w", err)
-	}
-
-	if result.Username == "" {
-		return nil, fmt.Errorf("no username returned from Azure CLI")
-	}
-
-	if len(result.Passwords) == 0 {
-		return nil, fmt.Errorf("no passwords returned from Azure CLI")
-	}
-
-	// Use the first password (usually there are two - one for each credential)
-	password := result.Passwords[0].Value
-
-	log.Debug("Successfully obtained ACR credentials via Azure CLI", "registry", registry, "acrName", acrName)
-
-	return &authn.Basic{
-		Username: result.Username,
-		Password: password,
 	}, nil
 }
