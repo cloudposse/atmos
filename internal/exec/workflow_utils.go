@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -138,7 +139,15 @@ func ExecuteWorkflow(
 			}
 
 			if finalStack != "" {
-				args = append(args, []string{"-s", finalStack}...)
+				if idx := slices.Index(args, "--"); idx != -1 {
+					// Insert before the "--"
+					// Take everything up to idx, then add "-s", finalStack, then tack on the rest
+					args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
+				} else {
+					// just append at the end
+					args = append(args, []string{"-s", finalStack}...)
+				}
+
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
@@ -158,7 +167,11 @@ func ExecuteWorkflow(
 		if err != nil {
 			log.Debug("Workflow failed", "error", err)
 
-			workflowFileName := filepath.Base(workflowPath)
+			// Remove the workflow base path, stacks/workflows
+			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
+			// Remove the leading slash
+			workflowFileName = strings.TrimPrefix(workflowFileName, "/")
+			// Remove the file extension
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
 			resumeCommand := fmt.Sprintf(

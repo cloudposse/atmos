@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -335,4 +336,113 @@ func TestRedisStore_Get_GetKeyError(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "failed to get key")
 	mockClient.AssertExpectations(t)
+}
+
+func TestRedisStore_GetKey(t *testing.T) {
+	tests := []struct {
+		name          string
+		key           string
+		mockReturn    string
+		mockError     error
+		expectedValue interface{}
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:          "successful string retrieval",
+			key:           "config/app-settings",
+			mockReturn:    "production",
+			mockError:     nil,
+			expectedValue: "production",
+			expectError:   false,
+		},
+		{
+			name:          "successful JSON object retrieval",
+			key:           "config/database",
+			mockReturn:    `{"host":"localhost","port":5432}`,
+			mockError:     nil,
+			expectedValue: map[string]interface{}{"host": "localhost", "port": float64(5432)},
+			expectError:   false,
+		},
+		{
+			name:          "successful JSON array retrieval",
+			key:           "config/servers",
+			mockReturn:    `["server1","server2","server3"]`,
+			mockError:     nil,
+			expectedValue: []interface{}{"server1", "server2", "server3"},
+			expectError:   false,
+		},
+		{
+			name:          "key not found",
+			key:           "nonexistent",
+			mockReturn:    "",
+			mockError:     redis.Nil,
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "resource not found",
+		},
+		{
+			name:          "empty key returns empty string",
+			key:           "empty-key",
+			mockReturn:    "",
+			mockError:     nil,
+			expectedValue: "",
+			expectError:   false,
+		},
+		{
+			name:          "malformed JSON returns as string",
+			key:           "config/invalid",
+			mockReturn:    `{"invalid": json`,
+			mockError:     nil,
+			expectedValue: `{"invalid": json`,
+			expectError:   false,
+		},
+		{
+			name:          "redis connection error",
+			key:           "config/test",
+			mockReturn:    "",
+			mockError:     fmt.Errorf("connection refused"),
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "connection refused",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockClient := new(MockRedisClient)
+			store, err := NewRedisStore(RedisStoreOptions{
+				Prefix:         ptr("myapp"),
+				StackDelimiter: ptr("/"),
+				URL:            ptr("redis://localhost:6379"),
+			})
+			assert.NoError(t, err)
+
+			redisStore, ok := store.(*RedisStore)
+			assert.True(t, ok)
+			redisStore.redisClient = mockClient
+
+			// Set up mock expectations
+			// GetKey prepends the prefix with a colon when prefix is set
+			expectedKey := "myapp:" + tt.key
+			mockClient.On("Get", context.Background(), expectedKey).Return(tt.mockReturn, tt.mockError)
+
+			// Act
+			result, err := redisStore.GetKey(tt.key)
+
+			// Assert
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				assert.Equal(t, tt.expectedValue, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedValue, result)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
 }

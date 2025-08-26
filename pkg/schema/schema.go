@@ -389,6 +389,7 @@ type Context struct {
 	File               string `yaml:"file" json:"file" mapstructure:"file"`
 	Folder             string `yaml:"folder" json:"folder" mapstructure:"folder"`
 	TerraformWorkspace string `yaml:"terraform_workspace" json:"terraform_workspace" mapstructure:"terraform_workspace"`
+	Stack              string `yaml:"stack" json:"stack" mapstructure:"stack"`
 }
 
 type VersionCheck struct {
