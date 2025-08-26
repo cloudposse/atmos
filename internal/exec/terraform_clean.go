@@ -2,10 +2,11 @@ package exec
 
 import (
 	"fmt"
-	"github.com/cloudposse/atmos/internal/tui/utils"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cloudposse/atmos/internal/tui/utils"
 
 	"github.com/charmbracelet/huh"
 	log "github.com/charmbracelet/log"

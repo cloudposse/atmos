@@ -1,10 +1,11 @@
 package auth
 
 import (
+	"os"
+
 	"github.com/charmbracelet/huh"
 	"github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"os"
 )
 
 func IsInDocker() bool {
@@ -22,7 +23,7 @@ func IsInDocker() bool {
 // If the user cancels the picker, an error is returned.
 func pickKeyFromMap(Map map[string]any) (string, error) {
 	items := []string{}
-	for k, _ := range Map {
+	for k := range Map {
 		items = append(items, k)
 	}
 	choice := ""
@@ -43,13 +44,13 @@ func pickIdentity(identities map[string]schema.Identity) (string, error) {
 	if len(identities) == 0 {
 		return "", nil
 	} else if len(identities) == 1 {
-		for k, _ := range identities {
+		for k := range identities {
 			return k, nil
 		}
 	}
 
 	items := []string{}
-	for k, _ := range identities {
+	for k := range identities {
 		items = append(items, k)
 	}
 	choice := ""

@@ -2,10 +2,11 @@ package utils
 
 import (
 	"fmt"
-	"github.com/charmbracelet/log"
 	"os"
 	"os/exec"
 	"runtime"
+
+	"github.com/charmbracelet/log"
 )
 
 func OpenUrl(URL string) error {

@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth/authstore"
 	"github.com/cloudposse/atmos/pkg/telemetry"
-	//tuiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	// tuiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
 )
@@ -37,7 +37,7 @@ type awsUser struct {
 }
 
 func NewAwsUserFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
-	var data = &awsUser{
+	data := &awsUser{
 		Identity: NewIdentity(),
 	}
 	b, err := yaml.Marshal(config.Providers[provider])

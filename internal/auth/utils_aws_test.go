@@ -1,9 +1,10 @@
 package auth
 
 import (
+	"testing"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestGetAwsAtmosConfigFilepath(t *testing.T) {

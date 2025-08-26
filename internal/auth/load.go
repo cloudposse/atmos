@@ -34,7 +34,7 @@ func setDefaults(data *schema.ProviderDefaultConfig, provider string, config sch
 func GetDefaultIdentity(configuration map[string]any) (string, error) {
 	identityConfigs := GetEnabledIdentities(configuration)
 	var defaultIdentities []string
-	for k, _ := range identityConfigs {
+	for k := range identityConfigs {
 		if identityConfigs[k].Default && identityConfigs[k].Enabled {
 			defaultIdentities = append(defaultIdentities, k)
 		}
@@ -51,7 +51,7 @@ func GetDefaultIdentity(configuration map[string]any) (string, error) {
 
 func GetProviderConfigs(config schema.AuthConfig) (map[string]schema.ProviderDefaultConfig, error) {
 	identityConfigs := make(map[string]schema.ProviderDefaultConfig)
-	for k, _ := range config.Providers {
+	for k := range config.Providers {
 		rawBytes, err := yaml.Marshal(config.Providers[k])
 		if err != nil {
 			l.Errorf("failed to marshal identity %q: %v", k, err)
@@ -91,6 +91,7 @@ func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identi
 
 	return identityConfigs, nil
 }
+
 func GetEnabledIdentities(identityMap map[string]any) map[string]schema.Identity {
 	identityConfigs, err := GetEnabledIdentitiesE(identityMap)
 	if err != nil {
@@ -190,7 +191,7 @@ func GetIdentityInstance(identity string, config schema.AuthConfig, info *schema
 	}
 
 	var supportedTypes []string
-	for k, _ := range identityRegistry {
+	for k := range identityRegistry {
 		supportedTypes = append(supportedTypes, k)
 	}
 

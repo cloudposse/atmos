@@ -25,7 +25,7 @@ func SetAwsEnvVars(info *schema.ConfigAndStacksInfo, profile, provider, region s
 	if err != nil {
 		return err
 	}
-	info.ComponentEnvSection["AWS_CONFIG_FILE"] = configFilePath //CreateAwsAtmosConfigFilepath
+	info.ComponentEnvSection["AWS_CONFIG_FILE"] = configFilePath // CreateAwsAtmosConfigFilepath
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_CONFIG_FILE=%s", configFilePath))
 	info.ComponentEnvSection["AWS_REGION"] = region
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_REGION=%s", region))
@@ -179,7 +179,6 @@ func UpdateAwsAtmosConfig(provider string, profile string, sourceProfile string,
 
 	log.Debug("Updated AWS config", "profile", profile, "path", configFilePath)
 	return nil
-
 }
 
 // RemoveAwsCredentials removes a specific AWS profile from the credentials file.

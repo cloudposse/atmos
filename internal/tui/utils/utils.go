@@ -3,10 +3,11 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	"io"
 	"os"
+
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/alecthomas/chroma/quick"
 	"github.com/arsham/figurine/figurine"

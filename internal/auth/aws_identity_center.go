@@ -44,7 +44,7 @@ type awsIamIdentityCenter struct {
 }
 
 func NewAwsIamIdentityCenterFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
-	var data = &awsIamIdentityCenter{
+	data := &awsIamIdentityCenter{
 		Identity: NewIdentity(),
 	}
 	b, err := yaml.Marshal(config.Providers[provider])

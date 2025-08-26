@@ -32,7 +32,7 @@ type awsSaml struct {
 }
 
 func NewAwsSamlFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
-	var data = &awsSaml{
+	data := &awsSaml{
 		Identity: NewIdentity(),
 	}
 	b, err := yaml.Marshal(config.Providers[provider])

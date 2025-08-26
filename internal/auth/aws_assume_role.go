@@ -22,7 +22,7 @@ type awsAssumeRole struct {
 }
 
 func NewAwsAssumeRoleFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
-	var data = &awsAssumeRole{
+	data := &awsAssumeRole{
 		Identity: NewIdentity(),
 	}
 	b, err := yaml.Marshal(config.Providers[provider])

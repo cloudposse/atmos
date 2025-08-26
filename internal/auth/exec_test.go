@@ -8,19 +8,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-type mockLogin struct{
+type mockLogin struct {
 	validateErr error
-	loginErr error
-	assumeErr error
-	envErr error
-	calls []string
+	loginErr    error
+	assumeErr   error
+	envErr      error
+	calls       []string
 }
 
-func (m *mockLogin) Validate() error { m.calls = append(m.calls, "Validate"); return m.validateErr }
-func (m *mockLogin) Login() error    { m.calls = append(m.calls, "Login"); return m.loginErr }
+func (m *mockLogin) Validate() error   { m.calls = append(m.calls, "Validate"); return m.validateErr }
+func (m *mockLogin) Login() error      { m.calls = append(m.calls, "Login"); return m.loginErr }
 func (m *mockLogin) AssumeRole() error { m.calls = append(m.calls, "AssumeRole"); return m.assumeErr }
-func (m *mockLogin) Logout() error { m.calls = append(m.calls, "Logout"); return nil }
-func (m *mockLogin) SetEnvVars(info *schema.ConfigAndStacksInfo) error { m.calls = append(m.calls, "SetEnvVars"); return m.envErr }
+func (m *mockLogin) Logout() error     { m.calls = append(m.calls, "Logout"); return nil }
+func (m *mockLogin) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
+	m.calls = append(m.calls, "SetEnvVars")
+	return m.envErr
+}
 
 func TestValidateLoginAssumeRole_Success(t *testing.T) {
 	m := &mockLogin{}
@@ -29,7 +32,7 @@ func TestValidateLoginAssumeRole_Success(t *testing.T) {
 	if err := ValidateLoginAssumeRole(m, cfg, info); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	wantOrder := []string{"Validate","Login","AssumeRole","SetEnvVars"}
+	wantOrder := []string{"Validate", "Login", "AssumeRole", "SetEnvVars"}
 	if len(m.calls) != len(wantOrder) {
 		t.Fatalf("unexpected calls: %v", m.calls)
 	}
@@ -41,9 +44,9 @@ func TestValidateLoginAssumeRole_Success(t *testing.T) {
 }
 
 func TestValidateLoginAssumeRole_ErrorsPropagate(t *testing.T) {
-	cases := []struct{
-		name string
-		m *mockLogin
+	cases := []struct {
+		name       string
+		m          *mockLogin
 		wantSubstr string
 	}{
 		{"validate", &mockLogin{validateErr: errors.New("bad")}, "validation"},
@@ -52,7 +55,7 @@ func TestValidateLoginAssumeRole_ErrorsPropagate(t *testing.T) {
 		{"env", &mockLogin{envErr: errors.New("bad")}, "set env vars failed"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T){
+		t.Run(tc.name, func(t *testing.T) {
 			info := &schema.ConfigAndStacksInfo{ComponentEnvSection: schema.AtmosSectionMapType{}}
 			var cfg schema.AtmosConfiguration
 			err := ValidateLoginAssumeRole(tc.m, cfg, info)
