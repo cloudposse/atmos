@@ -2060,7 +2060,7 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 
 // processIdentities deep-merges the `identities` section from stack manifests with
 // the `auth.identities` section from `atmos.yaml`
-func processIdentities(atmosConfig schema.AtmosConfiguration, componentIdentities map[string]any) (map[string]any, error) {
+func processIdentities(atmosConfig *schema.AtmosConfiguration, componentIdentities map[string]any) (map[string]any, error) {
 	// If no component identities, just return the empty map
 	if len(componentIdentities) == 0 {
 		return componentIdentities, nil
@@ -2074,7 +2074,7 @@ func processIdentities(atmosConfig schema.AtmosConfiguration, componentIdentitie
 	// Deep-merge component identities with global identities from atmos.yaml
 	// Component identities take precedence over global identities
 	mergedIdentities, err := m.Merge(
-		&atmosConfig,
+		atmosConfig,
 		[]map[string]any{
 			atmosConfig.Auth.Identities,
 			componentIdentities,
