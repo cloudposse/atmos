@@ -14,7 +14,6 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -231,7 +230,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.Auth.Identities)
 	err = auth.TerraformPreHook(atmosConfig, &info)
 	if err != nil {
 		return err

@@ -177,7 +177,22 @@ func (i *awsAssumeRole) AssumeRole() error {
 }
 
 func (i *awsAssumeRole) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
-	return SetAwsEnvVars(info, i.Common.Profile, i.Provider, i.Common.Region)
+	log.Info("Setting AWS environment variables")
+
+	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
+	if err != nil {
+		return err
+	}
+
+	// Merge identity-specific env overrides (preserve key casing)
+	MergeIdentityEnvOverrides(info, i.Env)
+
+	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (i *awsAssumeRole) Logout() error {

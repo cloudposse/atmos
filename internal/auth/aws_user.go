@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth/authstore"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+
 	// tuiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
@@ -156,7 +157,22 @@ func (i *awsUser) Login() error {
 func (i *awsUser) AssumeRole() error { return nil }
 
 func (i *awsUser) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
-	return SetAwsEnvVars(info, i.Common.Profile, i.Provider, i.Common.Region)
+	log.Info("Setting AWS environment variables")
+
+	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
+	if err != nil {
+		return err
+	}
+
+	// Merge identity-specific env overrides (preserve key casing)
+	MergeIdentityEnvOverrides(info, i.Env)
+
+	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (i *awsUser) Logout() error {

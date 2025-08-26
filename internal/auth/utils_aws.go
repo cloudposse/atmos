@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 
 	log "github.com/charmbracelet/log"
 	"gopkg.in/ini.v1"
@@ -179,6 +181,26 @@ func UpdateAwsAtmosConfig(provider string, profile string, sourceProfile string,
 
 	log.Debug("Updated AWS config", "profile", profile, "path", configFilePath)
 	return nil
+}
+
+// MergeIdentityEnvOverrides merges identity-defined env variables into info preserving key casing.
+// Accepts the canonical env list format.
+func MergeIdentityEnvOverrides(info *schema.ConfigAndStacksInfo, envList []schema.CommandEnv) {
+	if info == nil {
+		return
+	}
+	if info.ComponentEnvSection == nil {
+		info.ComponentEnvSection = make(schema.AtmosSectionMapType)
+	}
+	envMap := utils.CommandEnvToMap(envList)
+
+	envMapAny := make(map[string]any)
+	for k, v := range envMap {
+		envMapAny[k] = v
+	}
+	info.ComponentEnvSection, _ = m.Merge(&schema.AtmosConfiguration{}, []map[string]any{info.ComponentEnvSection, envMapAny})
+	// Deduplicate ComponentEnvList
+	info.ComponentEnvList = utils.ConvertEnvVars(info.ComponentEnvSection)
 }
 
 // RemoveAwsCredentials removes a specific AWS profile from the credentials file.
