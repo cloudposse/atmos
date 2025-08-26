@@ -3,6 +3,8 @@
 import:
   - mixins/region/us-east-2
   - orgs/cp/tenant1/dev/_defaults
+
+  # Terraform components
   - catalog/terraform/top-level-component1
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
@@ -10,9 +12,14 @@ import:
   - catalog/terraform/test-component-override-3
   - catalog/terraform/vpc
   - catalog/terraform/tenant1-ue2-dev
+
+  # Helmfile components
   - catalog/helmfile/echo-server
   - catalog/helmfile/infra-server
   - catalog/helmfile/infra-server-override
+
+  # Packer components
+  - catalog/packer/aws/bastion/defaults
 
 vars:
   enabled: true
@@ -35,6 +42,16 @@ components:
           - us-east-2a
           - us-east-2b
           - us-east-2c
+
+  packer:
+    aws/bastion:
+      vars:
+        # Define the variables specific to the `nonprod` account
+        instance_type: "t4g.small"
+        volume_size: 8
+        assume_role_arn: null
+        ami_tags:
+          Stage: dev
 
 settings:
   atlantis:

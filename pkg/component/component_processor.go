@@ -3,6 +3,7 @@ package component
 import (
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -27,14 +28,18 @@ func ProcessComponentInStack(
 		return nil, err
 	}
 
-	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
+	configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
 	if err != nil {
-		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
+		configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
 		if err != nil {
-			log.Error(err)
-			return nil, err
+			configAndStacksInfo.ComponentType = cfg.PackerComponentType
+			configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+			if err != nil {
+				log.Error(err)
+				return nil, err
+			}
 		}
 	}
 
@@ -63,7 +68,7 @@ func ProcessComponentFromContext(
 	}
 
 	stackNameTemplate := e.GetStackNameTemplate(&atmosConfig)
-	stackNamePattern := e.GetStackNamePattern(atmosConfig)
+	stackNamePattern := e.GetStackNamePattern(&atmosConfig)
 	var stack string
 
 	switch {
@@ -92,8 +97,8 @@ func ProcessComponentFromContext(
 		}
 
 	default:
-		log.Error(e.ErrMissingStackNameTemplateAndPattern)
-		return nil, e.ErrMissingStackNameTemplateAndPattern
+		log.Error(errUtils.ErrMissingStackNameTemplateAndPattern)
+		return nil, errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
 	return ProcessComponentInStack(component, stack, atmosCliConfigPath, atmosBasePath)

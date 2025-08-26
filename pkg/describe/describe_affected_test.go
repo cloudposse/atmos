@@ -36,11 +36,11 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 		"",
 		true,
 		true,
-		true,
 		"",
 		true,
 		true,
 		nil,
+		false,
 	)
 	assert.Nil(t, err)
 
@@ -70,11 +70,11 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 		repoPath,
 		true,
 		true,
-		true,
 		"",
 		true,
 		true,
 		nil,
+		false,
 	)
 	assert.Nil(t, err)
 

@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	terrerrors "github.com/cloudposse/atmos/pkg/errors"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/pkg/errors"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // prepareNewPlanFile handles the new plan file (generates one if not provided).
@@ -71,6 +72,10 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	planInfo := *info
 	planInfo.SubCommand = "plan"
 
+	// Process templates and Atmos YAML functions in the plan command.
+	planInfo.ProcessTemplates = true
+	planInfo.ProcessFunctions = true
+
 	// Filter out --orig and --new flags from AdditionalArgsAndFlags
 	planArgs := filterPlanDiffFlags(info.AdditionalArgsAndFlags)
 
@@ -84,7 +89,7 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	err := ExecuteTerraform(planInfo)
 	if err != nil {
 		// If the error is ErrPlanHasDiff, we want to propagate that error
-		if errors.Is(err, terrerrors.ErrPlanHasDiff) {
+		if errors.Is(err, errUtils.ErrPlanHasDiff) {
 			return "", err
 		}
 		return "", fmt.Errorf("error running terraform plan: %w", err)

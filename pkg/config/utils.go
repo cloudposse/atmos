@@ -16,7 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack
+// FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack.
 func FindAllStackConfigsInPathsForStack(
 	atmosConfig schema.AtmosConfiguration,
 	stack string,
@@ -110,9 +110,9 @@ func FindAllStackConfigsInPathsForStack(
 	return absolutePaths, relativePaths, false, nil
 }
 
-// FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs
+// FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs.
 func FindAllStackConfigsInPaths(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, error) {
@@ -273,6 +273,16 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 	}
 
+	componentsPlanSkipPlanfile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE")
+	if len(componentsPlanSkipPlanfile) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE", componentsPlanSkipPlanfile)
+		planSkipPlanfileBool, err := strconv.ParseBool(componentsPlanSkipPlanfile)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
+	}
+
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE", componentsTerraformAutoGenerateBackendFile)
@@ -321,6 +331,18 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	if len(componentsHelmfileClusterNamePattern) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN", componentsHelmfileClusterNamePattern)
 		atmosConfig.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
+	}
+
+	componentsPackerCommand := os.Getenv("ATMOS_COMPONENTS_PACKER_COMMAND")
+	if len(componentsPackerCommand) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_PACKER_COMMAND", componentsPackerCommand)
+		atmosConfig.Components.Packer.Command = componentsPackerCommand
+	}
+
+	componentsPackerBasePath := os.Getenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
+	if len(componentsPackerBasePath) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_PACKER_BASE_PATH", componentsPackerBasePath)
+		atmosConfig.Components.Packer.BasePath = componentsPackerBasePath
 	}
 
 	workflowsBasePath := os.Getenv("ATMOS_WORKFLOWS_BASE_PATH")
@@ -417,6 +439,9 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 	if err := setHelmfileConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
+	if err := setPackerConfig(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
 	if err := setStacksConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
@@ -468,6 +493,18 @@ func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 	return nil
 }
 
+func setPackerConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	if len(configAndStacksInfo.PackerCommand) > 0 {
+		atmosConfig.Components.Packer.Command = configAndStacksInfo.PackerCommand
+		log.Debug(cmdLineArg, PackerCommandFlag, configAndStacksInfo.PackerCommand)
+	}
+	if len(configAndStacksInfo.PackerDir) > 0 {
+		atmosConfig.Components.Packer.BasePath = configAndStacksInfo.PackerDir
+		log.Debug(cmdLineArg, PackerDirFlag, configAndStacksInfo.PackerDir)
+	}
+	return nil
+}
+
 func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		atmosConfig.Stacks.BasePath = configAndStacksInfo.StacksDir
@@ -512,6 +549,14 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		}
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 		log.Debug(cmdLineArg, InitPassVars, configAndStacksInfo.InitPassVars)
+	}
+	if len(configAndStacksInfo.PlanSkipPlanfile) > 0 {
+		planSkipPlanfileBool, err := strconv.ParseBool(configAndStacksInfo.PlanSkipPlanfile)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
+		log.Debug(cmdLineArg, PlanSkipPlanfile, configAndStacksInfo.PlanSkipPlanfile)
 	}
 	return nil
 }
@@ -563,9 +608,11 @@ func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 	return nil
 }
 
-// processStoreConfig creates a store registry from the provided stores config and assigns it to the atmosConfig
+// processStoreConfig creates a store registry from the provided stores config and assigns it to the atmosConfig.
 func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
-	log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
+	if len(atmosConfig.StoresConfig) > 0 {
+		log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
+	}
 
 	storeRegistry, err := store.NewStoreRegistry(&atmosConfig.StoresConfig)
 	if err != nil {
@@ -576,7 +623,7 @@ func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-// GetContextFromVars creates a context object from the provided variables
+// GetContextFromVars creates a context object from the provided variables.
 func GetContextFromVars(vars map[string]any) schema.Context {
 	var context schema.Context
 
@@ -607,7 +654,7 @@ func GetContextFromVars(vars map[string]any) schema.Context {
 	return context
 }
 
-// GetContextPrefix calculates context prefix from the context
+// GetContextPrefix calculates context prefix from the context.
 func GetContextPrefix(stack string, context schema.Context, stackNamePattern string, stackFile string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
@@ -680,7 +727,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 	return contextPrefix, nil
 }
 
-// ReplaceContextTokens replaces context tokens in the provided pattern and returns a string with all the tokens replaced
+// ReplaceContextTokens replaces context tokens in the provided pattern and returns a string with all the tokens replaced.
 func ReplaceContextTokens(context schema.Context, pattern string) string {
 	r := strings.NewReplacer(
 		"{base-component}", context.BaseComponent,
@@ -698,7 +745,7 @@ func ReplaceContextTokens(context schema.Context, pattern string) string {
 	return r.Replace(pattern)
 }
 
-// GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern
+// GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern.
 func GetStackNameFromContextAndStackNamePattern(
 	namespace string,
 	tenant string,
@@ -757,7 +804,7 @@ func GetStackNameFromContextAndStackNamePattern(
 	return stack, nil
 }
 
-// getStackFilePatterns returns a slice of possible file patterns for a given base path
+// getStackFilePatterns returns a slice of possible file patterns for a given base path.
 func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 	patterns := []string{
 		basePath + u.YamlFileExtension,
@@ -774,7 +821,7 @@ func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 	return patterns
 }
 
-// matchesStackFilePattern checks if a file path matches any of the valid stack file patterns
+// matchesStackFilePattern checks if a file path matches any of the valid stack file patterns.
 func matchesStackFilePattern(filePath, stackName string) bool {
 	// Always include template files for normal operations (imports, etc.)
 	patterns := getStackFilePatterns(stackName, true)

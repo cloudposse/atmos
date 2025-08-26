@@ -9,17 +9,12 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/charmbracelet/log"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/auth"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
 	"github.com/jfrog/jfrog-client-go/config"
 	al "github.com/jfrog/jfrog-client-go/utils/log"
-
-	log "github.com/charmbracelet/log"
-)
-
-const (
-	errFormatWithCause = "%w: %v"
 )
 
 type ArtifactoryStore struct {
@@ -37,8 +32,7 @@ type ArtifactoryStoreOptions struct {
 	URL            string  `mapstructure:"url"`
 }
 
-// ArtifactoryClient interface allows us to mock the Artifactory Services Manager in test with only the methods
-// we are using in the ArtifactoryStore.
+// ArtifactoryClient interface allows us to mock the Artifactory Services Manager in test with only the methods we are using in the ArtifactoryStore.
 type ArtifactoryClient interface {
 	DownloadFiles(...services.DownloadParams) (int, int, error)
 	UploadFiles(artifactory.UploadServiceOptions, ...services.UploadParams) (int, int, error)
@@ -165,13 +159,13 @@ func (s *ArtifactoryStore) validateGetParams(stack, component, key string) error
 func (s *ArtifactoryStore) processDownloadedFile(tempDir, paramName string) (interface{}, error) {
 	fileData, err := os.ReadFile(filepath.Join(tempDir, filepath.Base(paramName)))
 	if err != nil {
-		return nil, fmt.Errorf(errFormatWithCause, ErrReadFile, err)
+		return nil, fmt.Errorf(errWrapFormat, ErrReadFile, err)
 	}
 
 	// First try to unmarshal as JSON
 	var result interface{}
 	if err := json.Unmarshal(fileData, &result); err != nil {
-		return nil, fmt.Errorf(errFormatWithCause, ErrUnmarshalFile, err)
+		return nil, fmt.Errorf(errWrapFormat, ErrUnmarshalFile, err)
 	}
 
 	return result, nil
@@ -184,14 +178,16 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errFormatWithCause, ErrGetKey, err)
+		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
 	tempDir, err := os.MkdirTemp("", "atmos-artifactory")
 	if err != nil {
-		return nil, fmt.Errorf(errFormatWithCause, ErrCreateTempDir, err)
+		return nil, fmt.Errorf(errWrapFormat, ErrCreateTempDir, err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
 
 	tempDir = filepath.Clean(tempDir)
 	if !strings.HasSuffix(tempDir, string(os.PathSeparator)) {
@@ -206,12 +202,12 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 
 	totalDownloaded, totalExpected, err := s.rtManager.DownloadFiles(downloadParams)
 	if err != nil {
-		return nil, fmt.Errorf(errFormatWithCause, ErrDownloadFile, err)
+		return nil, fmt.Errorf(errWrapFormat, ErrDownloadFile, err)
 	}
 
 	// Only check for mismatch if there was an error
 	if err != nil && totalDownloaded != totalExpected {
-		return nil, fmt.Errorf(errFormatWithCause, ErrDownloadFile, err)
+		return nil, fmt.Errorf(errWrapFormat, ErrDownloadFile, err)
 	}
 
 	if totalDownloaded == 0 {
@@ -237,15 +233,19 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf(errFormatWithCause, ErrGetKey, err)
+		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
 	tempFile, err := os.CreateTemp("", "atmos-artifactory")
 	if err != nil {
-		return fmt.Errorf(errFormatWithCause, ErrCreateTempFile, err)
+		return fmt.Errorf(errWrapFormat, ErrCreateTempFile, err)
 	}
-	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
+	defer func() {
+		_ = os.Remove(tempFile.Name())
+	}()
+	defer func() {
+		_ = tempFile.Close()
+	}()
 
 	var dataToWrite []byte
 	if byteData, ok := value.([]byte); ok {
@@ -255,14 +255,14 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 		// Otherwise, marshal it to JSON
 		jsonData, err := json.Marshal(value)
 		if err != nil {
-			return fmt.Errorf(errFormatWithCause, ErrMarshalValue, err)
+			return fmt.Errorf(errWrapFormat, ErrMarshalValue, err)
 		}
 		dataToWrite = jsonData
 	}
 
 	_, err = tempFile.Write(dataToWrite)
 	if err != nil {
-		return fmt.Errorf(errFormatWithCause, ErrWriteTempFile, err)
+		return fmt.Errorf(errWrapFormat, ErrWriteTempFile, err)
 	}
 
 	uploadParams := services.NewUploadParams()
@@ -273,8 +273,70 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 
 	_, _, err = s.rtManager.UploadFiles(artifactory.UploadServiceOptions{FailFast: true}, uploadParams)
 	if err != nil {
-		return fmt.Errorf(errFormatWithCause, ErrUploadFile, err)
+		return fmt.Errorf(errWrapFormat, ErrUploadFile, err)
 	}
 
 	return nil
+}
+
+func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
+	// Use the key directly as the file path
+	filePath := key
+
+	// If prefix is set, prepend it to the key
+	if s.prefix != "" {
+		filePath = s.prefix + "/" + key
+	}
+
+	// Ensure the file path has the correct extension
+	if !strings.HasSuffix(filePath, ".json") {
+		filePath += ".json"
+	}
+
+	// Construct the full repository path
+	repoPath := filepath.Join(s.repoName, filePath)
+
+	// Create a temporary directory to download the file
+	tempDir, err := os.MkdirTemp("", "atmos-artifactory-*")
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFormat, ErrCreateTempDir, err)
+	}
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
+
+	// Download the file from Artifactory
+	downloadParams := services.NewDownloadParams()
+	downloadParams.Pattern = repoPath
+	downloadParams.Target = tempDir
+	downloadParams.Recursive = false
+	downloadParams.IncludeDirs = false
+
+	_, _, err = s.rtManager.DownloadFiles(downloadParams)
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFormat, ErrDownloadFile, err)
+	}
+
+	// Read the downloaded file
+	localFilePath := filepath.Join(tempDir, filepath.Base(repoPath))
+	data, err := os.ReadFile(localFilePath)
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFormat, ErrReadFile, err)
+	}
+
+	if len(data) == 0 {
+		return "", nil
+	}
+
+	// Try to unmarshal as JSON first, fallback to string if it fails.
+	var result interface{}
+	if jsonErr := json.Unmarshal(data, &result); jsonErr != nil {
+		// If JSON unmarshaling fails, return as string.
+		return string(data), nil
+	}
+	return result, nil
 }

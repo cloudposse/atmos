@@ -2,6 +2,13 @@ package store
 
 import "errors"
 
+// Error format constants.
+const (
+	errFormat           = "%w: %v"
+	errWrapFormat       = "%w: %w"
+	errWrapFormatWithID = "%w '%s': %w"
+)
+
 // Common errors shared across store implementations.
 var (
 	// Common validation errors.
@@ -16,6 +23,13 @@ var (
 	ErrLoadAWSConfig  = errors.New("failed to load AWS configuration")
 	ErrSetParameter   = errors.New("failed to set parameter")
 	ErrGetParameter   = errors.New("failed to get parameter")
+
+	// Azure Key Vault specific errors.
+	ErrVaultURLRequired = errors.New("vault_url is required in azure key vault store configuration")
+	ErrCreateClient     = errors.New("failed to create client")
+	ErrAccessSecret     = errors.New("failed to access secret")
+	ErrResourceNotFound = errors.New("resource not found")
+	ErrPermissionDenied = errors.New("permission denied")
 
 	// Redis specific errors.
 	ErrParseRedisURL   = errors.New("failed to parse redis url")
@@ -36,12 +50,8 @@ var (
 	// Google Secret Manager specific errors.
 	ErrProjectIDRequired = errors.New("project_id is required in Google Secret Manager store configuration")
 	ErrValueMustBeString = errors.New("value must be a string")
-	ErrCreateClient      = errors.New("failed to create Secret Manager client")
 	ErrCreateSecret      = errors.New("failed to create secret")
 	ErrAddSecretVersion  = errors.New("failed to add secret version")
-	ErrAccessSecret      = errors.New("failed to access secret version")
-	ErrResourceNotFound  = errors.New("resource not found")
-	ErrPermissionDenied  = errors.New("permission denied")
 
 	// Registry specific errors.
 	ErrParseArtifactoryOptions = errors.New("failed to parse Artifactory store options")

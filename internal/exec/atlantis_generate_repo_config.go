@@ -11,6 +11,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -93,11 +94,6 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		return err
 	}
 
-	verbose, err := flags.GetBool("verbose")
-	if err != nil {
-		return err
-	}
-
 	// If the flag `--affected-only=true` is passed, find the affected components and stacks
 	if affectedOnly {
 		cloneTargetRef, err := flags.GetBool("clone-target-ref")
@@ -106,7 +102,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		}
 
 		return ExecuteAtlantisGenerateRepoConfigAffectedOnly(
-			atmosConfig,
+			&atmosConfig,
 			outputPath,
 			configTemplateName,
 			projectTemplateName,
@@ -115,14 +111,13 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 			repoPath,
 			sshKeyPath,
 			sshKeyPassword,
-			verbose,
 			cloneTargetRef,
 			"",
 		)
 	}
 
 	return ExecuteAtlantisGenerateRepoConfig(
-		atmosConfig,
+		&atmosConfig,
 		outputPath,
 		configTemplateName,
 		projectTemplateName,
@@ -133,7 +128,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 
 // ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected components and stacks
 func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	outputPath string,
 	configTemplateName string,
 	projectTemplateName string,
@@ -142,7 +137,6 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	repoPath string,
 	sshKeyPath string,
 	sshKeyPassword string,
-	verbose bool,
 	cloneTargetRef bool,
 	stack string,
 ) error {
@@ -155,43 +149,43 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 
 	if repoPath != "" {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
-			&atmosConfig,
+			atmosConfig,
 			repoPath,
-			verbose,
 			false,
 			false,
 			stack,
 			true,
 			true,
 			nil,
+			false,
 		)
 	} else if cloneTargetRef {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
-			&atmosConfig,
+			atmosConfig,
 			ref,
 			sha,
 			sshKeyPath,
 			sshKeyPassword,
-			verbose,
 			false,
 			false,
 			stack,
 			true,
 			true,
 			nil,
+			false,
 		)
 	} else {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
-			&atmosConfig,
+			atmosConfig,
 			ref,
 			sha,
-			verbose,
 			false,
 			false,
 			stack,
 			true,
 			true,
 			nil,
+			false,
 		)
 	}
 
@@ -229,7 +223,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 
 // ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
 func ExecuteAtlantisGenerateRepoConfig(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	outputPath string,
 	configTemplateNameArg string,
 	projectTemplateNameArg string,
@@ -330,7 +324,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				if reflect.ValueOf(projectTemplate).IsZero() {
 					return errors.Errorf(
 						"atlantis project template is not specified for the component '%s'. "+
-							"In needs to be defined in one of these places: 'settings.atlantis.project_template_name' stack config section, "+
+							"It needs to be defined in one of these places: 'settings.atlantis.project_template_name' stack config section, "+
 							"'settings.atlantis.project_template' stack config section, "+
 							"or passed on the command line using the '--project-template' flag to select a project template from the "+
 							"collection of templates defined in the 'integrations.atlantis.project_templates' section in 'atmos.yaml'",
@@ -386,7 +380,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				// Stack slug
 				var stackSlug string
-				stackNameTemplate := GetStackNameTemplate(&atmosConfig)
+				stackNameTemplate := GetStackNameTemplate(atmosConfig)
 				stackNamePattern := GetStackNamePattern(atmosConfig)
 
 				switch {
@@ -401,7 +395,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 						return err
 					}
 				default:
-					return ErrMissingStackNameTemplateAndPattern
+					return errUtils.ErrMissingStackNameTemplateAndPattern
 				}
 
 				// Check if the 'stacks' filter is provided
@@ -540,7 +534,7 @@ specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` se
 			return err
 		}
 	} else {
-		err = u.PrintAsYAML(&atmosConfig, atlantisYaml)
+		err = u.PrintAsYAML(atmosConfig, atlantisYaml)
 		if err != nil {
 			return err
 		}

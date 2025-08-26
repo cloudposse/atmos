@@ -7,19 +7,18 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+	tfdocsFormat "github.com/terraform-docs/terraform-docs/format"
+	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"
+	tfdocsTf "github.com/terraform-docs/terraform-docs/terraform"
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
-
-	tfdocsFormat "github.com/terraform-docs/terraform-docs/format"
-	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"
-	tfdocsTf "github.com/terraform-docs/terraform-docs/terraform"
-
-	log "github.com/charmbracelet/log"
 )
 
 const (
@@ -44,7 +43,7 @@ func (d defaultTemplateRenderer) Render(tmplName, tmplValue string, mergedData m
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate <doc-type>' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		return ErrMissingDocType
+		return errUtils.ErrMissingDocType
 	}
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
@@ -59,7 +58,7 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	// The target directory is taken from docs.generate.<doc-type>.base-dir.
 	docsGenerate, ok := rootConfig.Docs.Generate[args[0]]
 	if !ok {
-		return fmt.Errorf("%w: %q", ErrNoDocsGenerateEntry, args[0])
+		return fmt.Errorf("%w: %q", errUtils.ErrNoDocsGenerateEntry, args[0])
 	}
 
 	basedir := docsGenerate.BaseDir
@@ -103,14 +102,14 @@ func mergeInputs(cfg *schema.AtmosConfiguration, dir string, dg *schema.DocsGene
 			dataMap = v
 
 		default:
-			return nil, fmt.Errorf("%w: %T", ErrUnsupportedInputType, v)
+			return nil, fmt.Errorf("%w: %T", errUtils.ErrUnsupportedInputType, v)
 		}
 		allMaps = append(allMaps, dataMap)
 	}
 	if len(allMaps) == 0 {
 		return map[string]any{}, nil
 	}
-	return merge.Merge(*cfg, allMaps)
+	return merge.Merge(cfg, allMaps)
 }
 
 // getTerraformSource returns the directory to use for generating Terraform docs.
@@ -121,7 +120,7 @@ func getTerraformSource(dir, source string) (string, error) {
 		joinedPath := filepath.Join(dir, source)
 		stat, err := os.Stat(joinedPath)
 		if err != nil || !stat.IsDir() {
-			return "", fmt.Errorf("%w: %s", ErrSourceDirNotExist, joinedPath)
+			return "", fmt.Errorf("%w: %s", errUtils.ErrSourceDirNotExist, joinedPath)
 		}
 		return joinedPath, nil
 	}
@@ -169,11 +168,11 @@ func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.
 		}
 		log.Debug("Error fetching template", "template", docsGenerate.Template, "error", err)
 	}
-	// Return default template if none is provided or on error.
+	// Return the default template if none is provided or on error.
 	return "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
 }
 
-// generateDocument merges docs inputs, optionally runs terraform-docs, renders, and writes the document.
+// generateDocument merges the docs inputs, optionally runs terraform-docs, renders, and writes the document.
 func generateDocument(
 	atmosConfig *schema.AtmosConfiguration,
 	baseDir string,
@@ -299,23 +298,23 @@ func downloadSource(
 	if !isRemoteSource(pathOrURL) {
 		pathOrURL, err = resolvePath(pathOrURL, baseDir)
 		if err != nil {
-			return "", "", fmt.Errorf("%w: %s", ErrPathResolution, err)
+			return "", "", fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
 		}
 	}
 	log.Debug("Downloading source", "source", pathOrURL, "baseDir", baseDir)
 	tempDir, err := os.MkdirTemp("", "atmos-docs-*")
 	if err != nil {
-		return "", "", fmt.Errorf("%w: %v", ErrCreateTempDir, err)
+		return "", "", fmt.Errorf("%w: %v", errUtils.ErrCreateTempDir, err)
 	}
 	// Ensure directory permissions are restricted.
 	if err := os.Chmod(tempDir, defaultDirPermissions); err != nil {
-		return "", "", fmt.Errorf("%w: %v", ErrSetTempDirPermissions, err)
+		return "", "", fmt.Errorf("%w: %v", errUtils.ErrSetTempDirPermissions, err)
 	}
 
 	log.Debug("Downloading source", "source", pathOrURL, "tempDir", tempDir)
 
 	if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(pathOrURL, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
-		return "", tempDir, fmt.Errorf("%w: %s: %v", ErrDownloadPackage, pathOrURL, err)
+		return "", tempDir, fmt.Errorf("%w: %s: %v", errUtils.ErrDownloadPackage, pathOrURL, err)
 	}
 
 	fileName := filepath.Base(pathOrURL)
@@ -339,7 +338,7 @@ func isRemoteSource(s string) bool {
 // - Implicit relative paths first against baseDir, then cwd.
 func resolvePath(path string, baseDir string) (string, error) {
 	if path == "" {
-		return "", ErrEmptyFilePath
+		return "", errUtils.ErrEmptyFilePath
 	}
 
 	if !filepath.IsAbs(path) && !strings.HasPrefix(path, "./") && !strings.HasPrefix(path, "../") {
@@ -350,7 +349,7 @@ func resolvePath(path string, baseDir string) (string, error) {
 	// Finally, resolve against cwd
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", ErrPathResolution, err)
+		return "", fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
 	}
 
 	return absPath, nil

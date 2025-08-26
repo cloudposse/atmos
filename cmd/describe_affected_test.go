@@ -2,13 +2,15 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/golang/mock/gomock"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDescribeAffected(t *testing.T) {
@@ -17,7 +19,7 @@ func TestDescribeAffected(t *testing.T) {
 	describeAffectedMock := exec.NewMockDescribeAffectedExec(ctrl)
 	describeAffectedMock.EXPECT().Execute(gomock.Any()).Return(nil)
 	run := getRunnableDescribeAffectedCmd(func(opts ...AtmosValidateOption) {
-	}, parseDescribeAffectedCliArgs, func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec {
+	}, exec.ParseDescribeAffectedCliArgs, func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec {
 		return describeAffectedMock
 	})
 	run(describeAffectedCmd, []string{})
@@ -41,10 +43,12 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				fs.Set("format", "yaml")
 			},
 			expected: &exec.DescribeAffectedCmdArgs{
-				Ref:               "main",
-				SHA:               "abc123",
-				IncludeDependents: true,
-				Format:            "yaml",
+				Ref:                  "main",
+				SHA:                  "abc123",
+				IncludeDependents:    true,
+				Format:               "yaml",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{
@@ -53,10 +57,12 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				fs.Set("upload", "true")
 			},
 			expected: &exec.DescribeAffectedCmdArgs{
-				Upload:            true,
-				IncludeDependents: true,
-				IncludeSettings:   true,
-				Format:            "json",
+				Upload:               true,
+				IncludeDependents:    true,
+				IncludeSettings:      true,
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{
@@ -65,7 +71,9 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				// No flags set
 			},
 			expected: &exec.DescribeAffectedCmdArgs{
-				Format: "json",
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{
@@ -74,7 +82,9 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				fs.Set("format", "json")
 			},
 			expected: &exec.DescribeAffectedCmdArgs{
-				Format: "json",
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 	}
@@ -122,11 +132,30 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 			gotDescribe := &exec.DescribeAffectedCmdArgs{
 				CLIConfig: &schema.AtmosConfiguration{},
 			}
-			setDescribeAffectedFlagValueInCliArgs(fs, gotDescribe)
+			exec.SetDescribeAffectedFlagValueInCliArgs(fs, gotDescribe)
 			tt.expected.CLIConfig = &schema.AtmosConfiguration{}
 
 			// Assert the describe struct matches the expected values
 			assert.Equal(t, tt.expected, gotDescribe, "Describe struct does not match expected")
 		})
 	}
+}
+
+func TestDescribeAffectedCmd_Error(t *testing.T) {
+	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
+
+	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+
+	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+
+	// Unset ENV variables after testing
+	defer func() {
+		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		os.Unsetenv("ATMOS_BASE_PATH")
+	}()
+
+	err = describeAffectedCmd.RunE(describeAffectedCmd, []string{"--invalid-flag"})
+	assert.Error(t, err, "describe affected command should return an error when called with invalid flags")
 }

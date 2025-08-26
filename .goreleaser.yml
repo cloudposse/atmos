@@ -11,15 +11,15 @@ builds:
       - CGO_ENABLED=0
     mod_timestamp: '{{ .CommitTimestamp }}'
     goos:
-      - darwin
-      - freebsd
-      - windows
-      - linux
-    goarch:
-      - amd64
+      - 'linux'
+      - 'darwin'
+      - 'freebsd'
+      - 'windows'
+    goarch: 
+      - 'amd64'
+      - 'arm64'
       - '386'
-      - arm
-      - arm64
+      - 'arm'
     binary: atmos
     ldflags:
       # Set `atmos` version to the GitHub release tag using Go `ldflags`

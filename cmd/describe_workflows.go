@@ -11,14 +11,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// describeWorkflowsCmd executes 'atmos describe workflows' CLI commands
+var (
+	ErrInvalidOutputType = fmt.Errorf("invalid output type specified. Valid values are 'list', 'map', and 'all'")
+	ErrInvalidFormat     = fmt.Errorf("invalid format specified. Valid values are 'yaml' and 'json'")
+)
+
+// describeWorkflowsCmd executes 'atmos describe workflows' CLI commands.
 var describeWorkflowsCmd = &cobra.Command{
 	Use:                "workflows",
 	Short:              "List Atmos workflows and their associated files",
 	Long:               "List all Atmos workflows, showing their associated files and workflow names for easy reference.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run:                getRunnableDescribeWorkflowsCmd(checkAtmosConfig, exec.ProcessCommandLineArgs, cfg.InitCliConfig, exec.NewDescribeWorkflowsExec()),
+	RunE:               getRunnableDescribeWorkflowsCmd(checkAtmosConfig, exec.ProcessCommandLineArgs, cfg.InitCliConfig, exec.NewDescribeWorkflowsExec()),
 }
 
 func getRunnableDescribeWorkflowsCmd(
@@ -26,22 +31,35 @@ func getRunnableDescribeWorkflowsCmd(
 	processCommandLineArgs func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error),
 	initCliConfig func(info schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error),
 	describeWorkflowsExec exec.DescribeWorkflowsExec,
-) func(cmd *cobra.Command, args []string) {
-	return func(cmd *cobra.Command, args []string) {
+) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
 		info, err := processCommandLineArgs("terraform", cmd, args, nil)
-		checkErrorAndExit(err)
+		if err != nil {
+			return err
+		}
+
 		atmosConfig, err := initCliConfig(info, true)
-		checkErrorAndExit(err)
+		if err != nil {
+			return err
+		}
+
 		describeWorkflowArgs := &exec.DescribeWorkflowsArgs{}
 		err = flagsToDescribeWorkflowsArgs(cmd.Flags(), describeWorkflowArgs)
-		checkErrorAndExit(err)
+		if err != nil {
+			return err
+		}
+
 		pager, err := cmd.Flags().GetString("pager")
-		checkFlagNotPresentError(err)
+		if err != nil {
+			return err
+		}
+
 		atmosConfig.Settings.Terminal.Pager = pager
 		err = describeWorkflowsExec.Execute(&atmosConfig, describeWorkflowArgs)
-		checkErrorAndExit(err)
+		return err
 	}
 }
 
@@ -69,22 +87,6 @@ func flagsToDescribeWorkflowsArgs(flags *pflag.FlagSet, describe *exec.DescribeW
 
 	return nil
 }
-
-func setStringFlagIfChanged(flags *pflag.FlagSet, name string, target *string) error {
-	if flags.Changed(name) {
-		val, err := flags.GetString(name)
-		if err != nil {
-			return err
-		}
-		*target = val
-	}
-	return nil
-}
-
-var (
-	ErrInvalidOutputType = fmt.Errorf("invalid output type specified. Valid values are 'list', 'map', and 'all'")
-	ErrInvalidFormat     = fmt.Errorf("invalid format specified. Valid values are 'yaml' and 'json'")
-)
 
 func validateAndSetDefaults(describe *exec.DescribeWorkflowsArgs) error {
 	if describe.Format == "" {

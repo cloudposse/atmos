@@ -16,6 +16,8 @@ const (
 	TerraformDirFlag            = "--terraform-dir"
 	HelmfileCommandFlag         = "--helmfile-command"
 	HelmfileDirFlag             = "--helmfile-dir"
+	PackerCommandFlag           = "--packer-command"
+	PackerDirFlag               = "--packer-dir"
 	CliConfigDirFlag            = "--config-dir"
 	StackDirFlag                = "--stacks-dir"
 	BasePathFlag                = "--base-path"
@@ -32,6 +34,7 @@ const (
 	AppendUserAgentFlag         = "--append-user-agent"
 	InitRunReconfigure          = "--init-run-reconfigure"
 	InitPassVars                = "--init-pass-vars"
+	PlanSkipPlanfile            = "--skip-planfile"
 
 	FromPlanFlag       = "--from-plan"
 	PlanFileFlag       = "--planfile"
@@ -44,6 +47,7 @@ const (
 
 	TerraformComponentType = "terraform"
 	HelmfileComponentType  = "helmfile"
+	PackerComponentType    = "packer"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"
@@ -65,6 +69,8 @@ const (
 	CommandSectionName                = "command"
 	TerraformSectionName              = "terraform"
 	HelmfileSectionName               = "helmfile"
+	PackerSectionName                 = "packer"
+	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
@@ -73,11 +79,20 @@ const (
 	CliArgsSectionName                = "cli_args"
 	ComponentTypeSectionName          = "component_type"
 	OutputsSectionName                = "outputs"
+	StaticSectionName                 = "static"
+	BackendTypeLocal                  = "local"
+	BackendTypeS3                     = "s3"
+	BackendTypeAzurerm                = "azurerm"
+	BackendTypeGCS                    = "gcs"
+	BackendTypeCloud                  = "cloud"
+	ComponentPathSectionName          = "component_path"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
 
-	QueryFlag = "--query"
+	QueryFlag    = "--query"
+	AffectedFlag = "--affected"
+	AllFlag      = "--all"
 
 	ProcessTemplatesFlag = "--process-templates"
 	ProcessFunctionsFlag = "--process-functions"

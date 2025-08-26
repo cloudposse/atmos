@@ -442,9 +442,10 @@ func TestGSMStore_Get(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Error(t, err)
-				if tt.name == "permission denied" {
+				switch tt.name {
+				case "permission denied":
 					assert.Contains(t, err.Error(), "permission denied for secret")
-				} else if tt.name == "secret not found" {
+				case "secret not found":
 					assert.Contains(t, err.Error(), "resource not found")
 				}
 			} else {
@@ -505,7 +506,7 @@ func TestNewGSMStore(t *testing.T) {
 				case "missing project ID":
 					assert.Contains(t, err.Error(), "project_id is required")
 				default:
-					assert.Contains(t, err.Error(), "failed to create Secret Manager client")
+					assert.Contains(t, err.Error(), "failed to create client")
 				}
 				assert.Nil(t, store)
 			} else {
@@ -597,6 +598,129 @@ func TestGSMStore_GetKey(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestGSMStore_GetKeyDirect(t *testing.T) {
+	tests := []struct {
+		name          string
+		key           string
+		mockPayload   []byte
+		mockError     error
+		expectedValue interface{}
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:          "successful string retrieval",
+			key:           "app-config",
+			mockPayload:   []byte("production"),
+			mockError:     nil,
+			expectedValue: "production",
+			expectError:   false,
+		},
+		{
+			name:          "successful JSON object retrieval",
+			key:           "database-config",
+			mockPayload:   []byte(`{"host":"localhost","port":5432}`),
+			mockError:     nil,
+			expectedValue: map[string]interface{}{"host": "localhost", "port": float64(5432)},
+			expectError:   false,
+		},
+		{
+			name:          "successful JSON array retrieval",
+			key:           "server-list",
+			mockPayload:   []byte(`["server1","server2","server3"]`),
+			mockError:     nil,
+			expectedValue: []interface{}{"server1", "server2", "server3"},
+			expectError:   false,
+		},
+		{
+			name:          "secret not found",
+			key:           "nonexistent",
+			mockPayload:   nil,
+			mockError:     status.Error(codes.NotFound, "secret not found"),
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "resource not found",
+		},
+		{
+			name:          "empty secret value",
+			key:           "empty-secret",
+			mockPayload:   []byte(""),
+			mockError:     nil,
+			expectedValue: "",
+			expectError:   false,
+		},
+		{
+			name:          "malformed JSON returns as string",
+			key:           "invalid-json",
+			mockPayload:   []byte(`{"invalid": json`),
+			mockError:     nil,
+			expectedValue: `{"invalid": json`,
+			expectError:   false,
+		},
+		{
+			name:          "permission denied error",
+			key:           "restricted",
+			mockPayload:   nil,
+			mockError:     status.Error(codes.PermissionDenied, "permission denied"),
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "permission denied",
+		},
+		{
+			name:          "internal server error",
+			key:           "server-error",
+			mockPayload:   nil,
+			mockError:     status.Error(codes.Internal, "internal server error"),
+			expectedValue: nil,
+			expectError:   true,
+			errorContains: "failed to access secret",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockClient := new(MockGSMClient)
+			store := &GSMStore{
+				client:    mockClient,
+				projectID: "test-project",
+			}
+
+			// Set up mock expectations
+			expectedFullPath := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", "test-project", tt.key)
+			if tt.mockError != nil {
+				mockClient.On("AccessSecretVersion", mock.Anything, &secretmanagerpb.AccessSecretVersionRequest{
+					Name: expectedFullPath,
+				}).Return(nil, tt.mockError)
+			} else {
+				mockClient.On("AccessSecretVersion", mock.Anything, &secretmanagerpb.AccessSecretVersionRequest{
+					Name: expectedFullPath,
+				}).Return(&secretmanagerpb.AccessSecretVersionResponse{
+					Payload: &secretmanagerpb.SecretPayload{
+						Data: tt.mockPayload,
+					},
+				}, nil)
+			}
+
+			// Act
+			result, err := store.GetKey(tt.key)
+
+			// Assert
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				assert.Equal(t, tt.expectedValue, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedValue, result)
+			}
+			mockClient.AssertExpectations(t)
 		})
 	}
 }

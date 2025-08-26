@@ -159,13 +159,13 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	output := buf.String()
 
 	// Check the output
-	if !strings.Contains(output, "foo   = \"component-1-a\"") {
+	if !strings.Contains(output, "component-1-a") {
 		t.Errorf("'foo' variable should be 'component-1-a'")
 	}
-	if !strings.Contains(output, "bar   = \"component-1-b\"") {
+	if !strings.Contains(output, "component-1-b") {
 		t.Errorf("'bar' variable should be 'component-1-b'")
 	}
-	if !strings.Contains(output, "baz   = \"component-1-c\"") {
+	if !strings.Contains(output, "component-1-c") {
 		t.Errorf("'baz' variable should be 'component-1-c'")
 	}
 }
@@ -225,13 +225,13 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	t.Log(output)
 
 	// Check the output
-	if !strings.Contains(output, "foo   = \"{{ .settings.config.a }}\"") {
+	if !strings.Contains(output, "{{ .settings.config.a }}") {
 		t.Errorf("'foo' variable should be '{{ .settings.config.a }}'")
 	}
-	if !strings.Contains(output, "bar   = \"{{ .settings.config.b }}\"") {
+	if !strings.Contains(output, "{{ .settings.config.b }}") {
 		t.Errorf("'bar' variable should be '{{ .settings.config.b }}'")
 	}
-	if !strings.Contains(output, "baz   = \"{{ .settings.config.c }}\"") {
+	if !strings.Contains(output, "{{ .settings.config.c }}") {
 		t.Errorf("'baz' variable should be '{{ .settings.config.c }}'")
 	}
 }
@@ -507,6 +507,65 @@ func TestExecuteTerraform_Version(t *testing.T) {
 				t.Errorf("%s not found in the output", tt.expectedOutput)
 			}
 		})
+	}
+}
+
+func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
+	workDir := "../../tests/fixtures/scenarios/terraform-cloud"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	t.Setenv("ATMOS_BASE_PATH", workDir)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+
+	info := schema.ConfigAndStacksInfo{
+		StackFromArg:     "",
+		Stack:            "nonprod",
+		StackFile:        "",
+		ComponentType:    "terraform",
+		ComponentFromArg: "cmp-1",
+		SubCommand:       "plan",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	log.SetLevel(log.DebugLevel)
+
+	// Create a buffer to capture the output
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+
+	err := ExecuteTerraform(info)
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+
+	// Restore stderr
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stderr = oldStderr
+
+	// Read the captured output
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	// Check the output
+	expected := "plan -var-file nonprod-cmp-1.terraform.tfvars.json"
+	notExpected := "-out nonprod-cmp-1.planfile"
+
+	if !strings.Contains(output, expected) {
+		t.Logf("TestExecuteTerraform_TerraformPlanWithSkipPlanfile output:\n%s", output)
+		t.Errorf("Output should contain '%s'", expected)
+	}
+
+	if strings.Contains(output, notExpected) {
+		t.Logf("TestExecuteTerraform_TerraformPlanWithSkipPlanfile output:\n%s", output)
+		t.Errorf("Output should not contain '%s'", notExpected)
 	}
 }
 

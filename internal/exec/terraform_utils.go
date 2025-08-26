@@ -2,14 +2,18 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
-	l "github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+const commandStr = "command"
 
 func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 	if len(atmosConfig.Components.Terraform.BasePath) < 1 {
@@ -45,17 +49,17 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 
 	// Check if the file exists before attempting deletion
 	if _, err := os.Stat(filePath); err == nil {
-		l.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
+		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
 
 		if err := os.Remove(filePath); err != nil {
-			l.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
+			log.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
 		} else {
-			l.Debug("Successfully deleted Terraform environment file.", "file", filePath)
+			log.Debug("Successfully deleted Terraform environment file.", "file", filePath)
 		}
 	} else if os.IsNotExist(err) {
-		l.Debug("Terraform environment file not found. No action needed.", "file", filePath)
+		log.Debug("Terraform environment file not found. No action needed.", "file", filePath)
 	} else {
-		l.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
+		log.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
 	}
 }
 
@@ -79,7 +83,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := filepath.Join(workingDir, "backend.tf.json")
 
-		l.Debug("Writing the backend config to file.", "file", backendFileName)
+		log.Debug("Writing the backend config to file.", "file", backendFileName)
 
 		if !info.DryRun {
 			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
@@ -102,7 +106,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
-		l.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
+		log.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
 
 		if !info.DryRun {
 			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
@@ -113,8 +117,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	return nil
 }
 
-// needProcessTemplatesAndYamlFunctions checks if a Terraform command
-// requires the `Go` templates and Atmos YAML functions to be processed
+// needProcessTemplatesAndYamlFunctions checks if a Terraform command requires the `Go` templates and Atmos YAML functions to be processed.
 func needProcessTemplatesAndYamlFunctions(command string) bool {
 	commandsThatNeedFuncProcessing := []string{
 		"init",
@@ -154,7 +157,7 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	if info.ComponentBackendType == "http" {
 		// If workspaces are explicitly enabled for HTTP backend, log a warning.
 		if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && *atmosConfig.Components.Terraform.WorkspacesEnabled {
-			l.Warn("ignoring unsupported workspaces `enabled` setting for HTTP backend type.",
+			log.Warn("ignoring unsupported workspaces `enabled` setting for HTTP backend type.",
 				"backend", "http",
 				"component", info.Component)
 		}
@@ -167,4 +170,292 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	}
 
 	return true
+}
+
+// ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
+func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
+	var affectedList []schema.Affected
+	var err error
+
+	switch {
+	case args.RepoPath != "":
+		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+			args.CLIConfig,
+			args.RepoPath,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.ExcludeLocked,
+		)
+	case args.CloneTargetRef:
+		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
+			args.CLIConfig,
+			args.Ref,
+			args.SHA,
+			args.SSHKeyPath,
+			args.SSHKeyPassword,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.ExcludeLocked,
+		)
+	default:
+		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
+			args.CLIConfig,
+			args.Ref,
+			args.SHA,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.ExcludeLocked,
+		)
+	}
+	if err != nil {
+		return err
+	}
+
+	// Add dependent components for each directly affected component.
+	if len(affectedList) > 0 {
+		err = addDependentsToAffected(
+			args.CLIConfig,
+			&affectedList,
+			args.IncludeSettings,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	affectedYaml, err := u.ConvertToYAML(affectedList)
+	if err != nil {
+		return err
+	}
+	log.Debug("Affected", "components", affectedYaml)
+
+	for i := 0; i < len(affectedList); i++ {
+		affected := &affectedList[i]
+		// If the affected component is included in the dependencies of any other component, don't process it now;
+		// it will be processed in the dependency order.
+		if !affected.IncludedInDependents {
+			err = executeTerraformAffectedComponentInDepOrder(
+				info,
+				affectedList,
+				affected.Component,
+				affected.Stack,
+				"",
+				"",
+				affected.Dependents,
+				args,
+			)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
+func executeTerraformAffectedComponentInDepOrder(
+	info *schema.ConfigAndStacksInfo,
+	affectedList []schema.Affected,
+	affectedComponent string,
+	affectedStack string,
+	parentComponent string,
+	parentStack string,
+	dependents []schema.Dependent,
+	args *DescribeAffectedCmdArgs,
+) error {
+	var logFunc func(msg any, keyvals ...any)
+	if info.DryRun {
+		logFunc = log.Info
+	} else {
+		logFunc = log.Debug
+	}
+
+	info.Component = affectedComponent
+	info.ComponentFromArg = affectedComponent
+	info.Stack = affectedStack
+
+	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
+
+	if args.IncludeDependents && parentComponent != "" && parentStack != "" {
+		logFunc("Executing", commandStr, command, "dependency of component", parentComponent, "in stack", parentStack)
+	} else {
+		logFunc("Executing", commandStr, command)
+	}
+
+	if !info.DryRun {
+		// Execute the terraform command for the affected component
+		err := ExecuteTerraform(*info)
+		if err != nil {
+			return err
+		}
+	}
+
+	for i := 0; i < len(dependents); i++ {
+		dep := &dependents[i]
+		if args.IncludeDependents || isComponentInStackAffected(affectedList, dep.StackSlug) {
+			if !dep.IncludedInDependents {
+				err := executeTerraformAffectedComponentInDepOrder(
+					info,
+					affectedList,
+					dep.Component,
+					dep.Stack,
+					affectedComponent,
+					affectedStack,
+					dep.Dependents,
+					args,
+				)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// walkTerraformComponents iterates over all Terraform components in the provided stacks map.
+// For each component it calls the provided function, stopping if the function returns an error.
+func walkTerraformComponents(
+	stacks map[string]any,
+	fn func(stackName, componentName string, componentSection map[string]any) error,
+) error {
+	for stackName, stackSection := range stacks {
+		stackSectionMap, ok := stackSection.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		componentsSection, ok := stackSectionMap[cfg.ComponentsSectionName].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		for componentName, compSection := range terraformSection {
+			componentSection, ok := compSection.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			if err := fn(stackName, componentName, componentSection); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// processTerraformComponent performs filtering and execution logic for a single Terraform component.
+func processTerraformComponent(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	stackName, componentName string,
+	componentSection map[string]any,
+	logFunc func(msg any, keyvals ...any),
+) error {
+	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	// Skip abstract components
+	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
+		return nil
+	}
+
+	// Skip disabled components
+	if !isComponentEnabled(metadataSection, componentName) {
+		return nil
+	}
+
+	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, componentName, stackName)
+
+	if info.Query != "" {
+		queryResult, err := u.EvaluateYqExpression(atmosConfig, componentSection, info.Query)
+		if err != nil {
+			return err
+		}
+
+		if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
+			logFunc("Skipping the component because the query criteria not satisfied", commandStr, command, "query", info.Query)
+			return nil
+		}
+	}
+
+	logFunc("Executing", commandStr, command)
+
+	if !info.DryRun {
+		info.Component = componentName
+		info.ComponentFromArg = componentName
+		info.Stack = stackName
+		info.StackFromArg = stackName
+
+		if err := ExecuteTerraform(*info); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
+func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return err
+	}
+
+	var logFunc func(msg any, keyvals ...any)
+	if info.DryRun {
+		logFunc = log.Info
+	} else {
+		logFunc = log.Debug
+	}
+
+	stacks, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		info.Stack,
+		info.Components,
+		[]string{cfg.TerraformComponentType},
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		return processTerraformComponent(&atmosConfig, info, stackName, componentName, componentSection, logFunc)
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

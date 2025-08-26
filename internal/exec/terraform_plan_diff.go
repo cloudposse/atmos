@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,10 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	terrerrors "github.com/cloudposse/atmos/pkg/errors"
+	"github.com/pkg/errors"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 // Static errors.
@@ -63,7 +65,6 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	if err != nil {
 		return err
 	}
-
 	// Compare the plans and generate diff
 	return comparePlansAndGenerateDiff(atmosConfig, info, componentPath, origPlanFile, newPlanFile)
 }
@@ -153,7 +154,7 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		fmt.Fprintln(os.Stdout, diff)
 
 		// Print the error message
-		u.PrintErrorMarkdown("", terrerrors.ErrPlanHasDiff, "")
+		errUtils.CheckErrorAndPrint(errUtils.ErrPlanHasDiff, "", "")
 
 		// Exit with code 2 to indicate that the plans are different
 		u.OsExit(2)
@@ -179,13 +180,11 @@ func getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	if cleanup != nil {
 		defer cleanup()
 	}
-
 	// Run terraform show and capture output
 	output, err := runTerraformShow(info, planFileInComponentDir)
 	if err != nil {
 		return "", err
 	}
-
 	// Extract JSON from output
 	return extractJSONFromOutput(output)
 }
@@ -245,35 +244,40 @@ func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error
 
 // runTerraformShow runs the terraform show command and captures its output.
 func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string, error) {
-	// Create a pipe to capture stdout
 	r, w, err := os.Pipe()
 	if err != nil {
 		return "", fmt.Errorf("error creating pipe: %w", err)
 	}
+	defer r.Close()
+	defer w.Close()
 
-	// Save original stdout and replace it with our pipe
+	// Save original stdout and replace it with the pipe
 	origStdout := os.Stdout
 	os.Stdout = w
+	defer func() { os.Stdout = origStdout }()
 
-	// Create a new info object for the show command
+	// Use a goroutine to read from the pipe
+	var outputBuf bytes.Buffer
+	readDone := make(chan error)
+	go func() {
+		_, err := io.Copy(&outputBuf, r)
+		readDone <- err
+	}()
+
+	// Set up the show command
 	showInfo := *info
 	showInfo.SubCommand = "show"
 	showInfo.AdditionalArgsAndFlags = []string{"-json", planFile}
 
-	// Execute terraform show command
+	// Run the command
 	execErr := ExecuteTerraform(showInfo)
 
-	// Close write end of pipe to flush all output
+	// Close writer to signal EOF to reader
 	w.Close()
 
-	// Restore original stdout
-	os.Stdout = origStdout
+	// Wait for reader to finish
+	readErr := <-readDone
 
-	// Read the captured output
-	output, readErr := io.ReadAll(r)
-	r.Close()
-
-	// Check for errors
 	if execErr != nil {
 		return "", fmt.Errorf("error running terraform show: %w", execErr)
 	}
@@ -281,12 +285,16 @@ func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string
 		return "", fmt.Errorf("error reading output: %w", readErr)
 	}
 
-	return string(output), nil
+	return outputBuf.String(), nil
 }
 
 // runTerraformInit runs a basic terraform init in the specified directory using
 // terraformRun method (ExecuteTerraform).
 func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, info *schema.ConfigAndStacksInfo) error {
+	if info.SkipInit {
+		return nil
+	}
+
 	// Clean terraform workspace to prevent workspace selection prompt
 	cleanTerraformWorkspace(*atmosConfig, dir)
 
