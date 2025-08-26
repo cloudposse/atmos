@@ -35,7 +35,6 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
@@ -46,6 +45,7 @@ var (
 	startingDir         string
 	snapshotBaseDir     string
 )
+
 
 // Define styles using lipgloss.
 var (
@@ -732,6 +732,16 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, s
 
 	// Save and set environment variables
 	oldEnv := make(map[string]string)
+	
+	// For non-TTY tests, force ASCII color profile to disable colors
+	if !tc.Tty {
+		// Set lipgloss to use ASCII profile (no colors)
+		lipgloss.SetColorProfile(termenv.Ascii)
+	} else {
+		// For TTY tests, ensure we use a color profile that supports colors
+		lipgloss.SetColorProfile(termenv.TrueColor)
+	}
+	
 	for k, v := range tc.Env {
 		oldEnv[k] = os.Getenv(k)
 		os.Setenv(k, v)
@@ -752,11 +762,8 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, s
 	exitCode := 0
 	oldExit := utils.OsExit
 	utils.OsExit = func(code int) { exitCode = code }
-	oldPrint := utils.PrintErrorMarkdownAndExitFn
-	utils.PrintErrorMarkdownAndExitFn = func(string, error, string) {}
 	defer func() {
 		utils.OsExit = oldExit
-		utils.PrintErrorMarkdownAndExitFn = oldPrint
 	}()
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -769,13 +776,18 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, s
 		}
 		oldStdout, oldStderr := os.Stdout, os.Stderr
 		os.Stdout, os.Stderr = tty, tty
+		
+		// Create command AFTER setting up TTY
+		rootCmd := cmd.RootCmd
+		rootCmd.SetArgs(tc.Args)
+		
 		wg.Add(1)
 		go func() {
 			io.Copy(&stdoutBuf, ptmx)
 			wg.Done()
 		}()
 		errChan := make(chan error, 1)
-		go func() { errChan <- cmd.Execute() }()
+		go func() { errChan <- rootCmd.Execute() }()
 		select {
 		case <-ctx.Done():
 			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
@@ -788,15 +800,21 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, s
 		return stdoutBuf.String(), "", exitCode
 	}
 
+	// For non-TTY tests, redirect stdout/stderr before creating command
 	outR, outW, _ := os.Pipe()
 	errR, errW, _ := os.Pipe()
 	oldStdout, oldStderr := os.Stdout, os.Stderr
 	os.Stdout, os.Stderr = outW, errW
+	
+	// Create command AFTER setting up non-TTY pipes
+	rootCmd := cmd.RootCmd
+	rootCmd.SetArgs(tc.Args)
+	
 	wg.Add(2)
 	go func() { io.Copy(&stdoutBuf, outR); wg.Done() }()
 	go func() { io.Copy(&stderrBuf, errR); wg.Done() }()
 	errChan := make(chan error, 1)
-	go func() { errChan <- cmd.Execute() }()
+	go func() { errChan <- rootCmd.Execute() }()
 	select {
 	case <-ctx.Done():
 		t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
