@@ -46,7 +46,6 @@ var (
 	snapshotBaseDir     string
 )
 
-
 // Define styles using lipgloss.
 var (
 	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
@@ -732,7 +731,7 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, s
 
 	// Save and set environment variables
 	oldEnv := make(map[string]string)
-	
+
 	// For non-TTY tests, force ASCII color profile to disable colors
 	if !tc.Tty {
 		// Set lipgloss to use ASCII profile (no colors)
@@ -741,7 +740,7 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, s
 		// For TTY tests, ensure we use a color profile that supports colors
 		lipgloss.SetColorProfile(termenv.TrueColor)
 	}
-	
+
 	for k, v := range tc.Env {
 		oldEnv[k] = os.Getenv(k)
 		os.Setenv(k, v)
@@ -776,11 +775,11 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, s
 		}
 		oldStdout, oldStderr := os.Stdout, os.Stderr
 		os.Stdout, os.Stderr = tty, tty
-		
+
 		// Create command AFTER setting up TTY
 		rootCmd := cmd.RootCmd
 		rootCmd.SetArgs(tc.Args)
-		
+
 		wg.Add(1)
 		go func() {
 			io.Copy(&stdoutBuf, ptmx)
@@ -805,11 +804,11 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, s
 	errR, errW, _ := os.Pipe()
 	oldStdout, oldStderr := os.Stdout, os.Stderr
 	os.Stdout, os.Stderr = outW, errW
-	
+
 	// Create command AFTER setting up non-TTY pipes
 	rootCmd := cmd.RootCmd
 	rootCmd.SetArgs(tc.Args)
-	
+
 	wg.Add(2)
 	go func() { io.Copy(&stdoutBuf, outR); wg.Done() }()
 	go func() { io.Copy(&stderrBuf, errR); wg.Done() }()
