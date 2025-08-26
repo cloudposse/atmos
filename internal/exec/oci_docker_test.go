@@ -11,14 +11,34 @@ import (
 )
 
 // TestDockerCredHelpers tests Docker credential helper authentication
+import (
+    "encoding/base64"
+    "path/filepath"
+    "os"
+    "testing"
+)
+
 func TestDockerCredHelpers(t *testing.T) {
-	tests := []struct {
-		name        string
-		registry    string
-		atmosConfig *schema.AtmosConfiguration
-		expectError bool
-		errorMsg    string
-	}{
+    // Hermetic Docker config: empty config.json in a temp dir
+    dir := t.TempDir()
+    cfg := filepath.Join(dir, "config.json")
+    if err := os.WriteFile(cfg, []byte(`{}`), 0o600); err != nil {
+        t.Fatal(err)
+    }
+    t.Setenv("DOCKER_CONFIG", dir)
+    t.Setenv("ATMOS_DOCKER_CONFIG", cfg)
+
+    tests := []struct {
+        name        string
+        registry    string
+        atmosConfig *schema.AtmosConfiguration
+        expectError bool
+        errorMsg    string
+    }{
+        // … existing test cases …
+    }
+    // … rest of the test …
+}
 		{
 			name:        "Docker Hub with no authentication",
 			registry:    "docker.io",
