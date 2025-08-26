@@ -22,6 +22,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/cmd"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
@@ -582,9 +584,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	var exitCode int
 
 	if tc.Command == "atmos" {
-		stdoutStr, stderrStr, exitCode = runAtmosInternal(t, ctx, &tc)
+		stdoutStr, stderrStr, exitCode = runAtmosInternal(ctx, t, &tc)
 	} else {
-		stdoutStr, stderrStr, exitCode = runExternalCommand(t, ctx, &tc)
+		stdoutStr, stderrStr, exitCode = runExternalCommand(ctx, t, &tc)
 	}
 
 	// Validate outputs
@@ -665,13 +667,13 @@ func TestCLICommands(t *testing.T) {
 	}
 }
 
-func runExternalCommand(t *testing.T, ctx context.Context, tc *TestCase) (string, string, int) {
+func runExternalCommand(ctx context.Context, t *testing.T, tc *TestCase) (string, string, int) {
 	binaryPath, err := exec.LookPath(tc.Command)
 	if err != nil {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
 	}
 
-	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
+	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...) //nolint:gosec
 	var envVars []string
 	for k, v := range tc.Env {
 		envVars = append(envVars, fmt.Sprintf("%s=%s", k, v))
@@ -682,43 +684,21 @@ func runExternalCommand(t *testing.T, ctx context.Context, tc *TestCase) (string
 	var exitCode int
 
 	if tc.Tty {
-		exitCode = handleTtyExecution(t, ctx, tc, cmd, &stdout, &stderr)
+		exitCode = handleTtyExecution(ctx, t, tc, cmd, &stdout, &stderr)
 	} else {
-		exitCode = handleNormalExecution(t, ctx, tc, cmd, &stdout, &stderr)
+		exitCode = handleNormalExecution(ctx, t, tc, cmd, &stdout, &stderr)
 	}
 	return stdout.String(), stderr.String(), exitCode
 }
 
-func runAtmosInternal(t *testing.T, ctx context.Context, tc *TestCase) (string, string, int) {
+func runAtmosInternal(ctx context.Context, t *testing.T, tc *TestCase) (string, string, int) {
 	oldArgs := os.Args
 	os.Args = append([]string{"atmos"}, tc.Args...)
 	defer func() { os.Args = oldArgs }()
 
-	// Save and set environment variables
-	oldEnv := make(map[string]string)
-
-	// For non-TTY tests, force ASCII color profile to disable colors
-	if !tc.Tty {
-		// Set lipgloss to use ASCII profile (no colors)
-		lipgloss.SetColorProfile(termenv.Ascii)
-	} else {
-		// For TTY tests, ensure we use a color profile that supports colors
-		lipgloss.SetColorProfile(termenv.TrueColor)
-	}
-
-	for k, v := range tc.Env {
-		oldEnv[k] = os.Getenv(k)
-		os.Setenv(k, v)
-	}
-	defer func() {
-		for k, v := range oldEnv {
-			if v == "" {
-				os.Unsetenv(k)
-			} else {
-				os.Setenv(k, v)
-			}
-		}
-	}()
+	setupColorProfile(tc.Tty)
+	restoreEnv := setupEnvironment(tc.Env)
+	defer restoreEnv()
 
 	// Match behavior of main.go for snapshot compatibility
 	log.Default().SetReportTimestamp(false)
@@ -730,66 +710,8 @@ func runAtmosInternal(t *testing.T, ctx context.Context, tc *TestCase) (string, 
 		utils.OsExit = oldExit
 	}()
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	var wg sync.WaitGroup
-
-	if tc.Tty {
-		ptmx, tty, err := pty.Open()
-		if err != nil {
-			t.Fatalf("failed to start PTY: %v", err)
-		}
-		oldStdout, oldStderr := os.Stdout, os.Stderr
-		os.Stdout, os.Stderr = tty, tty
-
-		// Create command AFTER setting up TTY
-		rootCmd := cmd.RootCmd
-		rootCmd.SetArgs(tc.Args)
-
-		wg.Add(1)
-		go func() {
-			io.Copy(&stdoutBuf, ptmx)
-			wg.Done()
-		}()
-		errChan := make(chan error, 1)
-		go func() { errChan <- rootCmd.Execute() }()
-		select {
-		case <-ctx.Done():
-			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-		case <-errChan:
-		}
-		tty.Close()
-		os.Stdout, os.Stderr = oldStdout, oldStderr
-		ptmx.Close()
-		wg.Wait()
-		return stdoutBuf.String(), "", exitCode
-	}
-
-	// For non-TTY tests, redirect stdout/stderr before creating command
-	outR, outW, _ := os.Pipe()
-	errR, errW, _ := os.Pipe()
-	oldStdout, oldStderr := os.Stdout, os.Stderr
-	os.Stdout, os.Stderr = outW, errW
-
-	// Create command AFTER setting up non-TTY pipes
-	rootCmd := cmd.RootCmd
-	rootCmd.SetArgs(tc.Args)
-
-	wg.Add(2)
-	go func() { io.Copy(&stdoutBuf, outR); wg.Done() }()
-	go func() { io.Copy(&stderrBuf, errR); wg.Done() }()
-	errChan := make(chan error, 1)
-	go func() { errChan <- rootCmd.Execute() }()
-	select {
-	case <-ctx.Done():
-		t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-	case <-errChan:
-	}
-	outW.Close()
-	errW.Close()
-	wg.Wait()
-	os.Stdout, os.Stderr = oldStdout, oldStderr
-
-	return stdoutBuf.String(), stderrBuf.String(), exitCode
+	stdout, stderr := executeAtmosCommand(ctx, t, tc)
+	return stdout, stderr, exitCode
 }
 
 func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
@@ -1201,7 +1123,7 @@ expect:
 	}
 }
 
-func handleTtyExecution(t *testing.T, ctx context.Context, tc *TestCase, cmd *exec.Cmd, stdout, stderr *bytes.Buffer) int {
+func handleTtyExecution(ctx context.Context, t *testing.T, tc *TestCase, cmd *exec.Cmd, stdout, stderr *bytes.Buffer) int {
 	ptyOutput, err := simulateTtyCommand(t, cmd, "")
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		logTimeoutError(t, tc, stdout.String(), stderr.String())
@@ -1213,7 +1135,7 @@ func handleTtyExecution(t *testing.T, ctx context.Context, tc *TestCase, cmd *ex
 	return exitCode
 }
 
-func handleNormalExecution(t *testing.T, ctx context.Context, tc *TestCase, cmd *exec.Cmd, stdout, stderr *bytes.Buffer) int {
+func handleNormalExecution(ctx context.Context, t *testing.T, tc *TestCase, cmd *exec.Cmd, stdout, stderr *bytes.Buffer) int {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	err := cmd.Run()
@@ -1248,3 +1170,183 @@ func processCommandError(t *testing.T, command string, err error, mode string) i
 	}
 	return exitCode
 }
+
+func setupColorProfile(useTty bool) {
+	if !useTty {
+		// Set lipgloss to use ASCII profile (no colors)
+		lipgloss.SetColorProfile(termenv.Ascii)
+	} else {
+		// For TTY tests, ensure we use a color profile that supports colors
+		lipgloss.SetColorProfile(termenv.TrueColor)
+	}
+}
+
+func setupEnvironment(env map[string]string) func() {
+	oldEnv := make(map[string]string)
+	for k, v := range env {
+		oldEnv[k] = os.Getenv(k)
+		_ = os.Setenv(k, v)
+	}
+	
+	return func() {
+		for k, v := range oldEnv {
+			if v == "" {
+				_ = os.Unsetenv(k)
+			} else {
+				_ = os.Setenv(k, v)
+			}
+		}
+	}
+}
+
+func executeAtmosCommand(ctx context.Context, t *testing.T, tc *TestCase) (string, string) {
+	if tc.Tty {
+		return executeAtmosTtyCommand(ctx, t, tc)
+	}
+	return executeAtmosNonTtyCommand(ctx, t, tc)
+}
+
+func executeAtmosTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) (string, string) {
+	var stdoutBuf bytes.Buffer
+	var wg sync.WaitGroup
+
+	ptmx, tty, err := pty.Open()
+	if err != nil {
+		t.Fatalf("failed to start PTY: %v", err)
+	}
+	oldStdout, oldStderr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = tty, tty
+
+	// Initialize logging like the main Execute() function does, but after stderr redirection
+	// This ensures debug logs are captured while avoiding duplicate config initialization
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
+	if err != nil && !errors.Is(err, cfg.NotFound) {
+		// Don't fail on config not found, just use defaults like main Execute() does
+		t.Logf("CLI config init warning: %v", err)
+	}
+
+	// Set up logging to captured stderr (matching cmd/root.go:155 setupLogger call)
+	if err == nil {
+		setupInternalLogger(&atmosConfig)
+	}
+
+	// Create command AFTER setting up TTY and logger
+	rootCmd := cmd.RootCmd
+	rootCmd.SetArgs(tc.Args)
+
+	wg.Add(1)
+	go func() {
+		_, _ = io.Copy(&stdoutBuf, ptmx)
+		wg.Done()
+	}()
+	errChan := make(chan error, 1)
+	go func() { errChan <- rootCmd.Execute() }()
+	select {
+	case <-ctx.Done():
+		t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+	case <-errChan:
+	}
+	_ = tty.Close()
+	os.Stdout, os.Stderr = oldStdout, oldStderr
+	_ = ptmx.Close()
+	wg.Wait()
+	return stdoutBuf.String(), ""
+}
+
+func executeAtmosNonTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) (string, string) {
+	var stdoutBuf, stderrBuf bytes.Buffer
+	var wg sync.WaitGroup
+
+	// For non-TTY tests, redirect stdout/stderr before creating command
+	outR, outW, _ := os.Pipe()
+	errR, errW, _ := os.Pipe()
+	oldStdout, oldStderr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = outW, errW
+
+	// Initialize logging like the main Execute() function does, but after stderr redirection
+	// This ensures debug logs are captured while avoiding duplicate config initialization
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
+	if err != nil && !errors.Is(err, cfg.NotFound) {
+		// Don't fail on config not found, just use defaults like main Execute() does
+		t.Logf("CLI config init warning: %v", err)
+	}
+
+	// Set up logging to captured stderr (matching cmd/root.go:155 setupLogger call)
+	if err == nil {
+		setupInternalLogger(&atmosConfig)
+	}
+
+	// Create command AFTER setting up non-TTY pipes and logger
+	rootCmd := cmd.RootCmd
+	rootCmd.SetArgs(tc.Args)
+
+	wg.Add(2)
+	go func() { _, _ = io.Copy(&stdoutBuf, outR); wg.Done() }()
+	go func() { _, _ = io.Copy(&stderrBuf, errR); wg.Done() }()
+	errChan := make(chan error, 1)
+	go func() { errChan <- rootCmd.Execute() }()
+	select {
+	case <-ctx.Done():
+		t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+	case <-errChan:
+	}
+	_ = outW.Close()
+	_ = errW.Close()
+	wg.Wait()
+	os.Stdout, os.Stderr = oldStdout, oldStderr
+
+	return stdoutBuf.String(), stderrBuf.String()
+}
+
+// setupInternalLogger mimics the setupLogger function from cmd/root.go
+func setupInternalLogger(atmosConfig *schema.AtmosConfiguration) {
+	switch atmosConfig.Logs.Level {
+	case "Trace":
+		log.SetLevel(log.DebugLevel)
+	case "Debug":
+		log.SetLevel(log.DebugLevel)
+	case "Info":
+		log.SetLevel(log.InfoLevel)
+	case "Warning":
+		log.SetLevel(log.WarnLevel)
+	case "Off":
+		log.SetLevel(1000) // High number to disable all logs
+	default:
+		log.SetLevel(log.InfoLevel)
+	}
+
+	if atmosConfig.Settings.Terminal.NoColor {
+		stylesDefault := log.DefaultStyles()
+		styles := &log.Styles{}
+		styles.Levels = make(map[log.Level]lipgloss.Style)
+		for k := range stylesDefault.Levels {
+			styles.Levels[k] = stylesDefault.Levels[k].UnsetForeground().Bold(false)
+		}
+		log.SetStyles(styles)
+	}
+	
+	var output io.Writer
+	switch atmosConfig.Logs.File {
+	case "/dev/stderr":
+		output = os.Stderr
+	case "/dev/stdout":
+		output = os.Stdout
+	case "/dev/null":
+		output = io.Discard
+	default:
+		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to open log file: %v", err))
+		}
+		defer logFile.Close()
+		output = logFile
+	}
+
+	log.SetOutput(output)
+	log.SetReportTimestamp(false) // Match external execution behavior
+	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
+}
+
+

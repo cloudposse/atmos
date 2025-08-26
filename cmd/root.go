@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -30,6 +31,9 @@ import (
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
+
+// builtInCommands stores references to the original built-in commands
+var builtInCommands []*cobra.Command
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -98,7 +102,12 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	if atmosConfig.Settings.Terminal.NoColor {
+	// Check both config setting AND terminal capabilities
+	// This ensures colors are disabled when terminal doesn't support them
+	shouldDisableColor := atmosConfig.Settings.Terminal.NoColor || 
+	                     lipgloss.ColorProfile() == termenv.Ascii
+	
+	if shouldDisableColor {
 		stylesDefault := log.DefaultStyles()
 		// Clear colors for levels
 		styles := &log.Styles{}
@@ -131,9 +140,80 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
 }
 
+// NewRootCommand creates a fresh root command instance with only built-in subcommands
+// This allows for isolated execution without shared state or custom command pollution
+func NewRootCommand() *cobra.Command {
+	// Create a fresh root command with the same base configuration
+	rootCmd := &cobra.Command{
+		Use:                "atmos",
+		Short:              "Universal Tool for DevOps and Cloud Automation",
+		Long:               `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+		FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
+		PersistentPreRun:   RootCmd.PersistentPreRun, // Keep the same pre-run logic
+		RunE:               RootCmd.RunE,             // Keep the same run logic
+	}
+	
+	// Copy persistent flags from the original RootCmd
+	addRootPersistentFlags(rootCmd)
+	
+	// Add only the built-in commands (imported via init functions)
+	// This is clean and doesn't include any custom commands
+	addBuiltInCommands(rootCmd)
+	
+	// Apply the same usage and help function setup as the main command
+	// This ensures that internal execution behaves the same as external execution
+	initCobraConfigForCommand(rootCmd)
+	
+	return rootCmd
+}
+
+// addBuiltInCommands adds all built-in commands to the provided root command
+func addBuiltInCommands(rootCmd *cobra.Command) {
+	// Capture built-in commands from the original RootCmd if not already captured
+	if len(builtInCommands) == 0 {
+		captureBuiltInCommands()
+	}
+	
+	// Add all built-in commands to the new root command
+	for _, cmd := range builtInCommands {
+		rootCmd.AddCommand(cmd)
+	}
+}
+
+// captureBuiltInCommands captures the current commands from RootCmd as the built-in set
+// This should be called before any custom commands are added
+func captureBuiltInCommands() {
+	builtInCommands = make([]*cobra.Command, len(RootCmd.Commands()))
+	copy(builtInCommands, RootCmd.Commands())
+}
+
+// addRootPersistentFlags adds the same persistent flags that are defined on the original RootCmd
+func addRootPersistentFlags(rootCmd *cobra.Command) {
+	rootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
+		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
+	rootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
+	rootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
+	rootCmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
+	rootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
+	rootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
+	rootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
+	return ExecuteWithCommand(RootCmd)
+}
+
+// ExecuteWithCommand executes using the provided command instance
+// This allows tests to provide their own isolated command instances
+func ExecuteWithCommand(rootCmd *cobra.Command) error {
+	// Capture built-in commands from the global RootCmd before any modifications
+	// This ensures we have a clean reference for creating fresh instances
+	if len(builtInCommands) == 0 {
+		captureBuiltInCommands()
+	}
+	
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
@@ -157,20 +237,20 @@ func Execute() error {
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
-		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+		err = processCustomCommands(atmosConfig, atmosConfig.Commands, rootCmd, true)
 		if err != nil {
 			return err
 		}
 
-		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
+		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, rootCmd, true)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
-	RootCmd.SilenceErrors = true
-	cmd, err := RootCmd.ExecuteC()
+	rootCmd.SilenceErrors = true
+	cmd, err := rootCmd.ExecuteC()
 	telemetry.CaptureCmd(cmd, err)
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
@@ -219,21 +299,34 @@ func init() {
 }
 
 func initCobraConfig() {
-	RootCmd.SetOut(os.Stdout)
-	styles := boa.DefaultStyles()
-	b := boa.New(boa.WithStyles(styles))
-	oldUsageFunc := RootCmd.UsageFunc()
-	RootCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+	initCobraConfigForCommand(RootCmd)
+}
+
+// initCobraConfigForCommand applies custom usage and help functions to any cobra command
+func initCobraConfigForCommand(rootCmd *cobra.Command) {
+	rootCmd.SetOut(os.Stdout)
+	
+	oldUsageFunc := rootCmd.UsageFunc()
+	rootCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
 		return showFlagUsageAndExit(c, err)
 	})
-	RootCmd.SetUsageFunc(func(c *cobra.Command) error {
+	rootCmd.SetUsageFunc(func(c *cobra.Command) error {
 		if c.Use == "atmos" {
-			return b.UsageFunc(c)
+			// Check NO_COLOR at runtime, not initialization time
+			if os.Getenv("NO_COLOR") != "" {
+				// For no-color environments, use default cobra usage instead of boa
+				return oldUsageFunc(c)
+			} else {
+				// Use styled boa output for color environments
+				styles := boa.DefaultStyles()
+				b := boa.New(boa.WithStyles(styles))
+				return b.UsageFunc(c)
+			}
 		}
 		showUsageAndExit(c, c.Flags().Args())
 		return nil
 	})
-	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
+	rootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
 		contentName := strings.ReplaceAll(strings.ReplaceAll(command.CommandPath(), " ", "_"), "-", "_")
 		if exampleContent, ok := examples[contentName]; ok {
 			command.Example = exampleContent.Content
@@ -277,7 +370,16 @@ func initCobraConfig() {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			telemetry.PrintTelemetryDisclosure()
 
-			b.HelpFunc(command, args)
+			// Create boa with runtime NO_COLOR checking for help function too
+			if os.Getenv("NO_COLOR") != "" {
+				// Use default cobra help for no-color environments
+				command.Help()
+			} else {
+				// Use styled boa help for color environments
+				styles := boa.DefaultStyles()
+				b := boa.New(boa.WithStyles(styles))
+				b.HelpFunc(command, args)
+			}
 			if err := command.Usage(); err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}

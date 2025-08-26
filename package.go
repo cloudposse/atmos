@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"os"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -71,15 +72,15 @@ func getPackages() []string { //nolint:unused
 
 // PrintSuccess prints a success message with green checkmark styling.
 func PrintSuccess(message string) {
-	fmt.Printf("%s %s\n", successStyle.Render("✅"), message)
+	fmt.Fprintf(os.Stderr, "%s %s\n", successStyle.Render("✅"), message)
 }
 
 // PrintInfo prints an info message with blue styling.
 func PrintInfo(message string) {
-	fmt.Printf("%s %s\n", infoStyle.Render("ℹ️"), message)
+	fmt.Fprintf(os.Stderr, "%s %s\n", infoStyle.Render("ℹ️"), message)
 }
 
 // PrintPackage prints a package name with consistent styling.
 func PrintPackage(pkg string) {
-	fmt.Printf("%s\n", packageStyle.Render(pkg))
+	fmt.Fprintf(os.Stderr, "%s\n", packageStyle.Render(pkg))
 }
