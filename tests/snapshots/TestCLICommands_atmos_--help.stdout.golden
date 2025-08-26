@@ -23,6 +23,7 @@ Available Commands:
   helmfile                       Manage Helmfile-based Kubernetes deployments
   help                           Display help information for Atmos commands
   list                           List available stacks and components
+  packer                         Manage packer-based machine images for multiple platforms
   pro                            Access premium features integrated with atmos-pro.com
   support                        Show Atmos support options
   terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
@@ -34,6 +35,7 @@ Available Commands:
 Subcommand Aliases:
 
   hf                             Alias of "atmos helmfile" command
+  pk                             Alias of "atmos packer" command
   tf                             Alias of "atmos terraform" command
 
 

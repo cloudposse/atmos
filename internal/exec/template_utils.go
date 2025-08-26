@@ -96,7 +96,7 @@ func ProcessTmplWithDatasources(
 		return "", err
 	}
 
-	templateSettingsMerged, err := merge.Merge(*atmosConfig, []map[string]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
+	templateSettingsMerged, err := merge.Merge(atmosConfig, []map[string]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
 	if err != nil {
 		return "", err
 	}

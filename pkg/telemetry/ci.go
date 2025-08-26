@@ -37,6 +37,7 @@ var (
 		"SEMAPHORE":          "SEMAPHORE",
 		"TEAMCITY":           "TEAMCITY_VERSION",
 		"TRAVIS":             "TRAVIS",
+		"SPACELIFT":          "TF_VAR_spacelift_run_id",
 	}
 
 	// Map of CI providers that can be detected by checking if environment variables equal specific values.

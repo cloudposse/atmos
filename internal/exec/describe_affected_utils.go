@@ -26,6 +26,7 @@ func executeDescribeAffected(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
@@ -41,7 +42,7 @@ func executeDescribeAffected(
 	log.Debug("Current", "BASE", remoteRepoHead)
 
 	currentStacks, err := ExecuteDescribeStacks(
-		*atmosConfig,
+		atmosConfig,
 		stack,
 		nil,
 		nil,
@@ -78,11 +79,13 @@ func executeDescribeAffected(
 	currentStacksBaseAbsolutePath := atmosConfig.StacksBaseAbsolutePath
 	currentStacksTerraformDirAbsolutePath := atmosConfig.TerraformDirAbsolutePath
 	currentStacksHelmfileDirAbsolutePath := atmosConfig.HelmfileDirAbsolutePath
+	currentStacksPackerDirAbsolutePath := atmosConfig.PackerDirAbsolutePath
 	currentStacksStackConfigFilesAbsolutePaths := atmosConfig.StackConfigFilesAbsolutePaths
 
 	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath)
 	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Terraform.BasePath)
 	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Helmfile.BasePath)
+	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Packer.BasePath)
 	atmosConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
 		filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath),
 		atmosConfig.StackConfigFilesRelativePaths,
@@ -92,7 +95,7 @@ func executeDescribeAffected(
 	}
 
 	remoteStacks, err := ExecuteDescribeStacks(
-		*atmosConfig,
+		atmosConfig,
 		stack,
 		nil,
 		nil,
@@ -111,6 +114,7 @@ func executeDescribeAffected(
 	atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath
 	atmosConfig.TerraformDirAbsolutePath = currentStacksTerraformDirAbsolutePath
 	atmosConfig.HelmfileDirAbsolutePath = currentStacksHelmfileDirAbsolutePath
+	atmosConfig.PackerDirAbsolutePath = currentStacksPackerDirAbsolutePath
 	atmosConfig.StackConfigFilesAbsolutePaths = currentStacksStackConfigFilesAbsolutePaths
 
 	log.Debug("Getting current working repo commit object")
@@ -174,6 +178,7 @@ func executeDescribeAffected(
 		includeSpaceliftAdminStacks,
 		includeSettings,
 		stack,
+		excludeLocked,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -191,6 +196,7 @@ func findAffected(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stackToFilter string,
+	excludeLocked bool,
 ) ([]schema.Affected, error) {
 	res := []schema.Affected{}
 	var err error
@@ -217,6 +223,10 @@ func findAffected(
 								}
 								// Skip disabled components
 								if !isComponentEnabled(metadataSection, componentName) {
+									continue
+								}
+								// Skip locked components (if `--exclude-locked` is provided on the command line)
+								if excludeLocked && isComponentLocked(metadataSection) {
 									continue
 								}
 								// Check `metadata` section
@@ -441,7 +451,7 @@ func findAffected(
 				}
 
 				// Helmfile
-				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
+				if helmfileSection, ok := componentsSection[cfg.HelmfileComponentType].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
 							if metadataSection, ok := componentSection["metadata"].(map[string]any); ok {
@@ -455,10 +465,14 @@ func findAffected(
 								if !isComponentEnabled(metadataSection, componentName) {
 									continue
 								}
+								// Skip locked components (if `--exclude-locked` is provided on the command line)
+								if excludeLocked && isComponentLocked(metadataSection) {
+									continue
+								}
 								// Check `metadata` section
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, metadataSection, "metadata") {
+								if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, metadataSection, "metadata") {
 									affected := schema.Affected{
-										ComponentType: "helmfile",
+										ComponentType: cfg.HelmfileComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.metadata",
@@ -483,14 +497,14 @@ func findAffected(
 							// Check the Helmfile configuration of the component
 							if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
 								// Check if any files in the component's folder have changed
-								changed, err := isComponentFolderChanged(component, "helmfile", atmosConfig, changedFiles)
+								changed, err := isComponentFolderChanged(component, cfg.HelmfileComponentType, atmosConfig, changedFiles)
 								if err != nil {
 									return nil, err
 								}
 
 								if changed {
 									affected := schema.Affected{
-										ComponentType: "helmfile",
+										ComponentType: cfg.HelmfileComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "component",
@@ -513,9 +527,9 @@ func findAffected(
 							}
 							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
+								if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, varSection, "vars") {
 									affected := schema.Affected{
-										ComponentType: "helmfile",
+										ComponentType: cfg.HelmfileComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.vars",
@@ -538,9 +552,9 @@ func findAffected(
 							}
 							// Check `env` section
 							if envSection, ok := componentSection["env"].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, envSection, "env") {
+								if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, envSection, "env") {
 									affected := schema.Affected{
-										ComponentType: "helmfile",
+										ComponentType: cfg.HelmfileComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.env",
@@ -563,9 +577,9 @@ func findAffected(
 							}
 							// Check `settings` section
 							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, cfg.SettingsSectionName) {
+								if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, settingsSection, cfg.SettingsSectionName) {
 									affected := schema.Affected{
-										ComponentType: "helmfile",
+										ComponentType: cfg.HelmfileComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      "stack.settings",
@@ -620,7 +634,218 @@ func findAffected(
 									}
 
 									affected := schema.Affected{
-										ComponentType: "helmfile",
+										ComponentType: cfg.HelmfileComponentType,
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      changedType,
+										File:          changedFile,
+										Folder:        changedFolder,
+									}
+									err = appendToAffected(
+										atmosConfig,
+										componentName,
+										stackName,
+										&componentSection,
+										&res,
+										&affected,
+										includeSpaceliftAdminStacks,
+										currentStacks,
+										includeSettings,
+									)
+									if err != nil {
+										return nil, err
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// Packer
+				if packerSection, ok := componentsSection[cfg.PackerComponentType].(map[string]any); ok {
+					for componentName, compSection := range packerSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+							if metadataSection, ok := componentSection["metadata"].(map[string]any); ok {
+								// Skip abstract components
+								if metadataType, ok := metadataSection["type"].(string); ok {
+									if metadataType == "abstract" {
+										continue
+									}
+								}
+								// Skip disabled components
+								if !isComponentEnabled(metadataSection, componentName) {
+									continue
+								}
+								// Skip locked components (if `--exclude-locked` is provided on the command line)
+								if excludeLocked && isComponentLocked(metadataSection) {
+									continue
+								}
+								// Check `metadata` section
+								if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, metadataSection, "metadata") {
+									affected := schema.Affected{
+										ComponentType: cfg.PackerComponentType,
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "stack.metadata",
+									}
+									err = appendToAffected(
+										atmosConfig,
+										componentName,
+										stackName,
+										&componentSection,
+										&res,
+										&affected,
+										false,
+										nil,
+										includeSettings,
+									)
+									if err != nil {
+										return nil, err
+									}
+								}
+							}
+
+							// Check the Packer configuration of the component
+							if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
+								// Check if any files in the component's folder have changed
+								changed, err := isComponentFolderChanged(component, cfg.PackerComponentType, atmosConfig, changedFiles)
+								if err != nil {
+									return nil, err
+								}
+
+								if changed {
+									affected := schema.Affected{
+										ComponentType: cfg.PackerComponentType,
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "component",
+									}
+									err = appendToAffected(
+										atmosConfig,
+										componentName,
+										stackName,
+										&componentSection,
+										&res,
+										&affected,
+										false,
+										nil,
+										includeSettings,
+									)
+									if err != nil {
+										return nil, err
+									}
+								}
+							}
+							// Check `vars` section
+							if varSection, ok := componentSection["vars"].(map[string]any); ok {
+								if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, varSection, "vars") {
+									affected := schema.Affected{
+										ComponentType: cfg.PackerComponentType,
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "stack.vars",
+									}
+									err = appendToAffected(
+										atmosConfig,
+										componentName,
+										stackName,
+										&componentSection,
+										&res,
+										&affected,
+										false,
+										nil,
+										includeSettings,
+									)
+									if err != nil {
+										return nil, err
+									}
+								}
+							}
+							// Check `env` section
+							if envSection, ok := componentSection["env"].(map[string]any); ok {
+								if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, envSection, "env") {
+									affected := schema.Affected{
+										ComponentType: cfg.PackerComponentType,
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "stack.env",
+									}
+									err = appendToAffected(
+										atmosConfig,
+										componentName,
+										stackName,
+										&componentSection,
+										&res,
+										&affected,
+										false,
+										nil,
+										includeSettings,
+									)
+									if err != nil {
+										return nil, err
+									}
+								}
+							}
+							// Check `settings` section
+							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
+								if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, settingsSection, cfg.SettingsSectionName) {
+									affected := schema.Affected{
+										ComponentType: cfg.PackerComponentType,
+										Component:     componentName,
+										Stack:         stackName,
+										Affected:      "stack.settings",
+									}
+									err = appendToAffected(
+										atmosConfig,
+										componentName,
+										stackName,
+										&componentSection,
+										&res,
+										&affected,
+										false,
+										nil,
+										includeSettings,
+									)
+									if err != nil {
+										return nil, err
+									}
+								}
+
+								// Check `settings.depends_on.file` and `settings.depends_on.folder`
+								// Convert the `settings` section to the `Settings` structure
+								var stackComponentSettings schema.Settings
+								err = mapstructure.Decode(settingsSection, &stackComponentSettings)
+								if err != nil {
+									return nil, err
+								}
+
+								// Skip if the stack component has an empty `settings.depends_on` section
+								if reflect.ValueOf(stackComponentSettings).IsZero() ||
+									reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+									continue
+								}
+
+								isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChanged(
+									changedFiles,
+									stackComponentSettings.DependsOn,
+								)
+								if err != nil {
+									return nil, err
+								}
+
+								if isFolderOrFileChanged {
+									changedFile := ""
+									if changedType == "file" {
+										changedFile = changedFileOrFolder
+									}
+
+									changedFolder := ""
+									if changedType == "folder" {
+										changedFolder = changedFileOrFolder
+									}
+
+									affected := schema.Affected{
+										ComponentType: cfg.PackerComponentType,
 										Component:     componentName,
 										Stack:         stackName,
 										Affected:      changedType,

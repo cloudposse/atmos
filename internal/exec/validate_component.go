@@ -69,7 +69,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 		return "", "", err
 	}
 
-	_, err = ExecuteValidateComponent(atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
+	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
 		return "", "", err
 	}
@@ -79,7 +79,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema or OPA schema documents.
 func ExecuteValidateComponent(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	componentName string,
 	stack string,
@@ -91,13 +91,17 @@ func ExecuteValidateComponent(
 	configAndStacksInfo.ComponentFromArg = componentName
 	configAndStacksInfo.Stack = stack
 
-	configAndStacksInfo.ComponentType = "terraform"
+	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
 	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 	if err != nil {
-		configAndStacksInfo.ComponentType = "helmfile"
+		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
 		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 		if err != nil {
-			return false, err
+			configAndStacksInfo.ComponentType = cfg.PackerComponentType
+			configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+			if err != nil {
+				return false, err
+			}
 		}
 	}
 
@@ -108,7 +112,7 @@ func ExecuteValidateComponent(
 
 // ValidateComponent validates the component config using JsonSchema or OPA schema documents.
 func ValidateComponent(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	componentName string,
 	componentSection any,
 	schemaPath string,
@@ -187,7 +191,7 @@ func ValidateComponent(
 }
 
 func validateComponentInternal(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	componentSection any,
 	schemaPath string,
 	schemaType string,

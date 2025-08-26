@@ -16,6 +16,8 @@ const (
 	TerraformDirFlag            = "--terraform-dir"
 	HelmfileCommandFlag         = "--helmfile-command"
 	HelmfileDirFlag             = "--helmfile-dir"
+	PackerCommandFlag           = "--packer-command"
+	PackerDirFlag               = "--packer-dir"
 	CliConfigDirFlag            = "--config-dir"
 	StackDirFlag                = "--stacks-dir"
 	BasePathFlag                = "--base-path"
@@ -45,6 +47,7 @@ const (
 
 	TerraformComponentType = "terraform"
 	HelmfileComponentType  = "helmfile"
+	PackerComponentType    = "packer"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"
@@ -66,6 +69,8 @@ const (
 	CommandSectionName                = "command"
 	TerraformSectionName              = "terraform"
 	HelmfileSectionName               = "helmfile"
+	PackerSectionName                 = "packer"
+	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
 	IdentitiesSectionName             = "identities"
 	InheritanceSectionName            = "inheritance"
@@ -81,6 +86,7 @@ const (
 	BackendTypeAzurerm                = "azurerm"
 	BackendTypeGCS                    = "gcs"
 	BackendTypeCloud                  = "cloud"
+	ComponentPathSectionName          = "component_path"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"

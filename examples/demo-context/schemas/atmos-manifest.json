@@ -13,6 +13,9 @@
     "helmfile": {
       "$ref": "#/definitions/helmfile"
     },
+    "packer": {
+      "$ref": "#/definitions/packer"
+    },
     "vars": {
       "$ref": "#/definitions/vars"
     },
@@ -65,6 +68,11 @@
         {
           "required": [
             "helmfile"
+          ]
+        },
+        {
+          "required": [
+            "packer"
           ]
         },
         {
@@ -163,6 +171,9 @@
             },
             "helmfile": {
               "$ref": "#/definitions/helmfile_components"
+            },
+            "packer": {
+              "$ref": "#/definitions/packer_components"
             }
           },
           "required": []
@@ -345,6 +356,92 @@
     "helmfile_component_manifest": {
       "title": "helmfile_component_manifest",
       "description": "Helmfile component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "packer": {
+      "title": "packer",
+      "description": "Packer section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "packer_components": {
+      "title": "packer_components",
+      "description": "Packer components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/packer_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "packer_component_manifest": {
+      "title": "packer_component_manifest",
+      "description": "packer component manifest",
       "oneOf": [
         {
           "type": "string",
@@ -819,6 +916,9 @@
         {
           "type": "object",
           "properties": {
+            "stack": {
+              "type": "string"
+            },
             "namespace": {
               "type": "string"
             },

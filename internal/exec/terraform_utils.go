@@ -188,6 +188,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessTemplates,
 			args.ProcessYamlFunctions,
 			args.Skip,
+			args.ExcludeLocked,
 		)
 	case args.CloneTargetRef:
 		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
@@ -202,6 +203,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessTemplates,
 			args.ProcessYamlFunctions,
 			args.Skip,
+			args.ExcludeLocked,
 		)
 	default:
 		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
@@ -214,6 +216,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessTemplates,
 			args.ProcessYamlFunctions,
 			args.Skip,
+			args.ExcludeLocked,
 		)
 	}
 	if err != nil {
@@ -222,7 +225,14 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 
 	// Add dependent components for each directly affected component.
 	if len(affectedList) > 0 {
-		err = addDependentsToAffected(args.CLIConfig, &affectedList, args.IncludeSettings)
+		err = addDependentsToAffected(
+			args.CLIConfig,
+			&affectedList,
+			args.IncludeSettings,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+		)
 		if err != nil {
 			return err
 		}
@@ -425,7 +435,7 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	}
 
 	stacks, err := ExecuteDescribeStacks(
-		atmosConfig,
+		&atmosConfig,
 		info.Stack,
 		info.Components,
 		[]string{cfg.TerraformComponentType},

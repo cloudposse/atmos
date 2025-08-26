@@ -1,9 +1,11 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -14,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -114,7 +117,7 @@ func ExecuteWorkflow(
 		var err error
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(atmosConfig, command, commandName, ".", []string{}, dryRun)
+			err = ExecuteShell(command, commandName, ".", []string{}, dryRun)
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
@@ -136,12 +139,22 @@ func ExecuteWorkflow(
 			}
 
 			if finalStack != "" {
-				args = append(args, []string{"-s", finalStack}...)
+				if idx := slices.Index(args, "--"); idx != -1 {
+					// Insert before the "--"
+					// Take everything up to idx, then add "-s", finalStack, then tack on the rest
+					args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
+				} else {
+					// just append at the end
+					args = append(args, []string{"-s", finalStack}...)
+				}
+
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
 			u.PrintfMessageToTUI("Executing command: `atmos %s`\n", command)
-			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
+			err = retry.With7Params(context.Background(), step.Retry,
+				ExecuteShellCommand,
+				atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
 			errUtils.CheckErrorAndPrint(
 				ErrInvalidWorkflowStepType,
@@ -154,7 +167,11 @@ func ExecuteWorkflow(
 		if err != nil {
 			log.Debug("Workflow failed", "error", err)
 
-			workflowFileName := filepath.Base(workflowPath)
+			// Remove the workflow base path, stacks/workflows
+			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
+			// Remove the leading slash
+			workflowFileName = strings.TrimPrefix(workflowFileName, "/")
+			// Remove the file extension
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
 			resumeCommand := fmt.Sprintf(
