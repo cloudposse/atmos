@@ -10,21 +10,63 @@ import (
 
 func NewIdentity() schema.Identity {
 	return schema.Identity{
-		Enabled:    true,
-		UseProfile: true,
+		Enabled: true,
 	}
+}
+
+// GetIdentityConfig returns the merged identity configuration (including component-level overrides if provided)
+// as a concrete schema.Identity struct. This can be used to access optional fields like Env.
+func GetIdentityConfig(identity string, config schema.AuthConfig, info *schema.ConfigAndStacksInfo) (schema.Identity, error) {
+	// Reuse the same merge logic as GetIdentityInstance
+	identityMap := config.Identities
+	if info != nil && info.ComponentIdentitiesSection != nil {
+		componentIdentities := info.ComponentIdentitiesSection
+		if len(componentIdentities) > 0 {
+			if componentIdentity, exists := componentIdentities[identity]; exists {
+				mergedIdentities := make(map[string]any)
+				for k, v := range config.Identities {
+					mergedIdentities[k] = v
+				}
+				mergedIdentities[identity] = componentIdentity
+				identityMap = mergedIdentities
+			}
+		}
+	}
+
+	mergedConfig := schema.AuthConfig{
+		Identities:     identityMap,
+		Providers:      config.Providers,
+		DefaultRegion:  config.DefaultRegion,
+		DefaultProfile: config.DefaultProfile,
+	}
+
+	// Unmarshal the selected identity to schema.Identity
+	var ident schema.Identity
+	b, err := yaml.Marshal(mergedConfig.Identities[identity])
+	if err != nil {
+		return ident, err
+	}
+	ident = NewIdentity()
+	if err := yaml.Unmarshal(b, &ident); err != nil {
+		return ident, err
+	}
+	return ident, nil
 }
 
 var identityRegistry = map[string]func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error){
 	"aws/iam-identity-center": NewAwsIamIdentityCenterFactory,
 	"aws/saml":                NewAwsSamlFactory,
 	"":                        NewAwsAssumeRoleFactory, // Empty - used for AssumeRole - no ProviderName
+	"aws/user":                NewAwsUserFactory,
 	//"oidc":                    func() LoginMethod { return &awsSaml{} },
 }
 
 func setDefaults(data *schema.ProviderDefaultConfig, provider string, config schema.AuthConfig) {
 	if data.Region == "" {
 		data.Region = config.DefaultRegion
+	}
+	if data.Profile == "" {
+		data.Profile = config.DefaultProfile
 	}
 }
 
@@ -36,7 +78,7 @@ func GetDefaultIdentity(configuration map[string]any) (string, error) {
 			defaultIdentities = append(defaultIdentities, k)
 		}
 	}
-	l.Debug("default identities", "defaultIdentities", defaultIdentities)
+	l.Debug("Fount default identities", "defaultIdentities", defaultIdentities)
 	if len(defaultIdentities) == 1 {
 		return defaultIdentities[0], nil
 	} else if len(defaultIdentities) > 1 {
@@ -77,8 +119,7 @@ func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identi
 
 		identityConfig := &schema.Identity{
 			// Defaults to be overridden by unmarshalling
-			Enabled:    true,
-			UseProfile: true,
+			Enabled: true,
 		}
 		if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
 			l.Errorf("failed to unmarshal identity %q: %v", k, err)
@@ -155,14 +196,16 @@ func GetIdentityInstance(identity string, config schema.AuthConfig, info *schema
 
 	// Create a temporary config with the merged identities
 	mergedConfig := schema.AuthConfig{
-		Identities:    identityMap,
-		Providers:     config.Providers,
-		DefaultRegion: config.DefaultRegion,
+		Identities:     identityMap,
+		Providers:      config.Providers,
+		DefaultRegion:  config.DefaultRegion,
+		DefaultProfile: config.DefaultProfile,
 	}
 
 	idpName, err := GetIdp(identity, mergedConfig)
 	typeVal, err := GetType(idpName, mergedConfig)
-	l.Debug("GetIdentityInstance", "identity", identity, "idp", idpName, "type", typeVal)
+	l.Info("Using Identity Instance", "identity", identity, "provider", idpName, "type", typeVal)
+
 	if err != nil {
 		return nil, err
 	}

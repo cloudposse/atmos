@@ -12,9 +12,6 @@ func TestNewIdentityDefaults(t *testing.T) {
 	if !id.Enabled {
 		t.Errorf("expected Enabled=true by default")
 	}
-	if !id.UseProfile {
-		t.Errorf("expected UseProfile=true by default")
-	}
 }
 
 func TestGetAllAndEnabledIdentities(t *testing.T) {

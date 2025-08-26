@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
@@ -217,24 +218,18 @@ func getAccountRoles(ctx context.Context, client *sso.Client, token, accountID s
 }
 
 func (i *awsIamIdentityCenter) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
-	log.Info("Setting AWS environment variables", "UseProfile", i.UseProfile)
-	if i.UseProfile {
+	log.Info("Setting AWS environment variables")
 
-		// If UseProfile is set, we are creating a credentials file with the provider profile,
-		//then updating the config file to use that profile as the source for the new profile which is created by the identity
-		log.Debug("Using profile", "profile", i.Identity.Identity, "provider", i.Provider, "region", i.Common.Region)
-		err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
-		if err != nil {
-			return err
-		}
-
-		_ = UpdateAwsAtmosConfig(info.ComponentEnvSection["AWS_CONFIG_FILE"].(string), i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
-	} else {
-		err := SetAwsEnvVars(info, i.Common.Profile, i.Provider, i.Common.Region)
-		if err != nil {
-			return err
-		}
+	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
+	if err != nil {
+		return err
 	}
+
+	err = UpdateAwsAtmosConfig(info.ComponentEnvSection["AWS_CONFIG_FILE"].(string), i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

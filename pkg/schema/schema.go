@@ -937,9 +937,10 @@ type ListColumnConfig struct {
 }
 
 type AuthConfig struct {
-	Providers     map[string]interface{} `yaml:"providers" json:"providers" mapstructure:"providers"`
-	Identities    map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
-	DefaultRegion string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
+	Providers      map[string]interface{} `yaml:"providers" json:"providers" mapstructure:"providers"`
+	Identities     map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
+	DefaultRegion  string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
+	DefaultProfile string                 `yaml:"default_profile" json:"default_profile" mapstructure:"default_profile"`
 }
 
 // ProviderDefaultConfig defines the default configuration for an identity provider, this is shared amongst all providers
@@ -955,11 +956,15 @@ type ProviderDefaultConfig struct {
 type Identity struct {
 	Identity string
 
-	Default    bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
-	Enabled    bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
-	Provider   string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider,omitempty"`
-	UseProfile bool   `yaml:"use_profile,omitempty" json:"use_profile,omitempty" mapstructure:"use_profile,omitempty"`
+	Default  bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
+	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider,omitempty"`
 
 	// AWS Specific
 	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
+	// Env allows specifying environment variables to set when this identity is used.
+	// Example:
+	//   env:
+	//     AWS_PROFILE: "acme-identity"
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env,omitempty"`
 }

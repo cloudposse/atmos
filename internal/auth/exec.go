@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+
 	"github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -50,10 +51,8 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 	if identity == "" {
 		def, derr := GetDefaultIdentity(info.ComponentIdentitiesSection)
 		if derr == nil && def != "" {
-			log.Info("Using default identity", "identity", def)
 			identity = def
 		}
-		log.Debug("TerraformPreHook[GetDefaultIdentity]", "default", def, "identity", info.Identity, "derr", derr)
 
 	}
 	// If we don't have a default, but several are enabled, prompt the user, if not in CI
@@ -69,9 +68,35 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 		if err != nil {
 			return err
 		}
-		err = ValidateLoginAssumeRole(identityInstance, atmosConfig, info)
 
-		return err
+		err = ValidateLoginAssumeRole(identityInstance, atmosConfig, info)
+		if err != nil {
+			return err
+		}
+		// After successful auth, if identity defines env overrides, apply them
+		identCfg, err := GetIdentityConfig(identity, authConfig, info)
+		if err == nil && len(identCfg.Env) > 0 {
+			if info.ComponentEnvSection == nil {
+				info.ComponentEnvSection = make(schema.AtmosSectionMapType)
+			}
+			// Remove existing entries for these keys from the list to ensure overrides
+			for k, v := range identCfg.Env {
+				info.ComponentEnvSection[k] = v
+				// filter out any existing entries for k=
+				filtered := make([]string, 0, len(info.ComponentEnvList))
+				prefix := k + "="
+				for _, e := range info.ComponentEnvList {
+					if len(e) >= len(prefix) && e[:len(prefix)] == prefix {
+						continue
+					}
+					filtered = append(filtered, e)
+				}
+				info.ComponentEnvList = filtered
+				info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%s", k, v))
+			}
+		}
+
+		return nil
 	}
 
 	return nil
@@ -108,9 +133,7 @@ func ExecuteAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 	if identity == "" {
 		identity, _ = GetDefaultIdentity(atmosConfig.Auth.Identities)
-		if identity != "" {
-			log.Info("Using default identity", "identity", identity)
-		} else {
+		if identity == "" {
 			identity, err = pickKeyFromMap(atmosConfig.Auth.Identities)
 			if err != nil {
 				return err
