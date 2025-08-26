@@ -1,5 +1,6 @@
 # Configuration for golangci-lint
 # Documentation: https://golangci-lint.run/usage/configuration/
+version: 2
 
 run:
   timeout: 5m # Set a time limit for the linter run
@@ -18,8 +19,6 @@ linters:
     - gocognit # Check cognitive complexity
     - gocritic # Enable additional checks for code issues
     - godot # Enforce comment formatting
-    - gofumpt # Enforce consistent formatting
-    - goimports # Enforce import formatting
     - gosec # Inspect source code for security problems
     - govet # Report likely mistakes in code
     - importas # Check for aliasing imports
@@ -171,20 +170,6 @@ linters-settings:
     # Minimal complexity of if statements to report.
     min-complexity: 4
 
-severity:
-  default-severity: error
-  case-sensitive: true
-  rules:
-    # Downgrade severity for specific linters until we increase the code quality
-    # to avoid overwhelming PRs with too many required changes.
-    - linters:
-        - function-length
-        - function-result-limit
-        - nestif
-        - cognitive-complexity
-        - cyclomatic
-        - nolintlint
-      severity: warning
 
 issues:
   max-issues-per-linter: 0
@@ -204,7 +189,6 @@ issues:
         - forbidigo
 
 output:
+  format: colored-line-number
+  path: stderr
   sort-results: true
-  formats:
-    - format: colored-line-number
-      path: stderr
