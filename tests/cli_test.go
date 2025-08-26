@@ -1187,7 +1187,7 @@ func setupEnvironment(env map[string]string) func() {
 		oldEnv[k] = os.Getenv(k)
 		_ = os.Setenv(k, v)
 	}
-	
+
 	return func() {
 		for k, v := range oldEnv {
 			if v == "" {
@@ -1326,7 +1326,7 @@ func setupInternalLogger(atmosConfig *schema.AtmosConfiguration) {
 		}
 		log.SetStyles(styles)
 	}
-	
+
 	var output io.Writer
 	switch atmosConfig.Logs.File {
 	case "/dev/stderr":
@@ -1348,5 +1348,3 @@ func setupInternalLogger(atmosConfig *schema.AtmosConfiguration) {
 	log.SetReportTimestamp(false) // Match external execution behavior
 	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
 }
-
-

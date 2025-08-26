@@ -104,9 +104,9 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 	// Check both config setting AND terminal capabilities
 	// This ensures colors are disabled when terminal doesn't support them
-	shouldDisableColor := atmosConfig.Settings.Terminal.NoColor || 
-	                     lipgloss.ColorProfile() == termenv.Ascii
-	
+	shouldDisableColor := atmosConfig.Settings.Terminal.NoColor ||
+		lipgloss.ColorProfile() == termenv.Ascii
+
 	if shouldDisableColor {
 		stylesDefault := log.DefaultStyles()
 		// Clear colors for levels
@@ -152,18 +152,18 @@ func NewRootCommand() *cobra.Command {
 		PersistentPreRun:   RootCmd.PersistentPreRun, // Keep the same pre-run logic
 		RunE:               RootCmd.RunE,             // Keep the same run logic
 	}
-	
+
 	// Copy persistent flags from the original RootCmd
 	addRootPersistentFlags(rootCmd)
-	
+
 	// Add only the built-in commands (imported via init functions)
 	// This is clean and doesn't include any custom commands
 	addBuiltInCommands(rootCmd)
-	
+
 	// Apply the same usage and help function setup as the main command
 	// This ensures that internal execution behaves the same as external execution
 	initCobraConfigForCommand(rootCmd)
-	
+
 	return rootCmd
 }
 
@@ -173,7 +173,7 @@ func addBuiltInCommands(rootCmd *cobra.Command) {
 	if len(builtInCommands) == 0 {
 		captureBuiltInCommands()
 	}
-	
+
 	// Add all built-in commands to the new root command
 	for _, cmd := range builtInCommands {
 		rootCmd.AddCommand(cmd)
@@ -213,7 +213,7 @@ func ExecuteWithCommand(rootCmd *cobra.Command) error {
 	if len(builtInCommands) == 0 {
 		captureBuiltInCommands()
 	}
-	
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
@@ -305,7 +305,7 @@ func initCobraConfig() {
 // initCobraConfigForCommand applies custom usage and help functions to any cobra command
 func initCobraConfigForCommand(rootCmd *cobra.Command) {
 	rootCmd.SetOut(os.Stdout)
-	
+
 	oldUsageFunc := rootCmd.UsageFunc()
 	rootCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
 		return showFlagUsageAndExit(c, err)
