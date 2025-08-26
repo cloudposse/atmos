@@ -35,7 +35,7 @@ func getGCRAuth(registry string) (authn.Authenticator, error) {
 	// This is the standard pattern for GCR authentication
 	log.Debug("Successfully obtained Google Cloud credentials", "registry", registry)
 	return &authn.Basic{
-		Username: "_dcg",
+		Username: "oauth2accesstoken",
 		Password: token.AccessToken,
 	}, nil
 }

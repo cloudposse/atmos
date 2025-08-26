@@ -21,8 +21,15 @@ func TestACRAuthDirect(t *testing.T) {
 		errorMsg    string
 	}{
 		{
-			name:        "ACR with no authentication",
+			name:        "ACR .io with no authentication",
 			registry:    "test.azurecr.io",
+			atmosConfig: &schema.AtmosConfiguration{},
+			expectError: true,
+			errorMsg:    "no valid Azure authentication found",
+		},
+		{
+			name:        "ACR .us with no authentication",
+			registry:    "test.azurecr.us",
 			atmosConfig: &schema.AtmosConfiguration{},
 			expectError: true,
 			errorMsg:    "no valid Azure authentication found",
@@ -30,6 +37,13 @@ func TestACRAuthDirect(t *testing.T) {
 		{
 			name:        "Non-ACR registry",
 			registry:    "docker.io",
+			atmosConfig: &schema.AtmosConfiguration{},
+			expectError: true,
+			errorMsg:    "invalid Azure Container Registry format",
+		},
+		{
+			name:        "Invalid ACR format",
+			registry:    "test.azurecr.invalid",
 			atmosConfig: &schema.AtmosConfiguration{},
 			expectError: true,
 			errorMsg:    "invalid Azure Container Registry format",
@@ -65,8 +79,18 @@ func TestGetACRAuthViaServicePrincipalDirect(t *testing.T) {
 		errorMsg     string
 	}{
 		{
-			name:         "Valid Service Principal credentials",
+			name:         "Valid Service Principal credentials (.io)",
 			registry:     "test.azurecr.io",
+			acrName:      "test",
+			clientID:     "test-client-id",
+			clientSecret: "test-client-secret",
+			tenantID:     "test-tenant-id",
+			expectError:  true, // Will fail due to invalid credentials
+			errorMsg:     "failed to get Azure token",
+		},
+		{
+			name:         "Valid Service Principal credentials (.us)",
+			registry:     "test.azurecr.us",
 			acrName:      "test",
 			clientID:     "test-client-id",
 			clientSecret: "test-client-secret",
@@ -112,8 +136,15 @@ func TestGetACRAuthViaDefaultCredentialDirect(t *testing.T) {
 		errorMsg    string
 	}{
 		{
-			name:        "Default credential without Azure environment",
+			name:        "Default credential without Azure environment (.io)",
 			registry:    "test.azurecr.io",
+			acrName:     "test",
+			expectError: true,
+			errorMsg:    "failed to get Azure token",
+		},
+		{
+			name:        "Default credential without Azure environment (.us)",
+			registry:    "test.azurecr.us",
 			acrName:     "test",
 			expectError: true,
 			errorMsg:    "failed to get Azure token",
@@ -171,8 +202,16 @@ func TestExchangeAADForACRRefreshTokenDirect(t *testing.T) {
 			errorMsg:    "failed to execute token exchange request",
 		},
 		{
-			name:        "Valid parameters but network failure",
+			name:        "Valid parameters but network failure (.io)",
 			registry:    "test.azurecr.io",
+			tenantID:    "test-tenant",
+			aadToken:    "test-token",
+			expectError: true,
+			errorMsg:    "failed to execute token exchange request",
+		},
+		{
+			name:        "Valid parameters but network failure (.us)",
+			registry:    "test.azurecr.us",
 			tenantID:    "test-tenant",
 			aadToken:    "test-token",
 			expectError: true,

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -22,16 +23,16 @@ import (
 // getACRAuth attempts to get Azure Container Registry authentication
 func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
 	// Extract ACR name from registry URL first
-	// Expected format: <acr-name>.azurecr.io
+	// Expected formats: <acr-name>.azurecr.{io|cn|us}
 	acrName := ""
-	if strings.HasSuffix(registry, ".azurecr.io") {
-		acrName = strings.TrimSuffix(registry, ".azurecr.io")
-	} else {
-		return nil, fmt.Errorf("invalid Azure Container Registry format: %s (expected <name>.azurecr.io)", registry)
+	for _, suf := range []string{".azurecr.io", ".azurecr.us"} {
+		if strings.HasSuffix(registry, suf) {
+			acrName = strings.TrimSuffix(registry, suf)
+			break
+		}
 	}
-
 	if acrName == "" {
-		return nil, fmt.Errorf("could not extract ACR name from registry: %s", registry)
+		return nil, fmt.Errorf("invalid Azure Container Registry format: %s (expected <name>.azurecr.{io|us})", registry)
 	}
 
 	// Create a Viper instance for environment variable access
@@ -39,7 +40,6 @@ func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.
 	bindEnv(v, "azure_client_id", "ATMOS_AZURE_CLIENT_ID", "AZURE_CLIENT_ID")
 	bindEnv(v, "azure_client_secret", "ATMOS_AZURE_CLIENT_SECRET", "AZURE_CLIENT_SECRET")
 	bindEnv(v, "azure_tenant_id", "ATMOS_AZURE_TENANT_ID", "AZURE_TENANT_ID")
-	bindEnv(v, "azure_cli_auth", "ATMOS_AZURE_CLI_AUTH", "AZURE_CLI_AUTH")
 
 	// Check for Azure Service Principal credentials first
 	clientID := atmosConfig.Settings.OCI.AzureClientID
@@ -82,7 +82,9 @@ func exchangeAADForACRRefreshToken(ctx context.Context, registry, tenantID, aadT
 	formData := url.Values{}
 	formData.Set("grant_type", "access_token")
 	formData.Set("service", registry)
-	formData.Set("tenant", tenantID)
+	if tenantID != "" {
+		formData.Set("tenant", tenantID)
+	}
 	formData.Set("access_token", aadToken)
 
 	// Create HTTP request
@@ -102,7 +104,8 @@ func exchangeAADForACRRefreshToken(ctx context.Context, registry, tenantID, aadT
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token exchange failed with status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<10)) // 2KB
+		return "", fmt.Errorf("token exchange failed: status=%d body=%q", resp.StatusCode, string(body))
 	}
 
 	// Parse the response
@@ -136,13 +139,8 @@ func extractTenantIDFromToken(tokenString string) (string, error) {
 
 	// Decode the payload (second part)
 	payload := parts[1]
-	// Add padding if needed
-	if len(payload)%4 != 0 {
-		payload += strings.Repeat("=", 4-len(payload)%4)
-	}
-
-	// Decode base64
-	decoded, err := base64.StdEncoding.DecodeString(payload)
+	// Decode Base64URL (no padding)
+	decoded, err := base64.RawURLEncoding.DecodeString(payload)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode JWT payload: %w", err)
 	}
