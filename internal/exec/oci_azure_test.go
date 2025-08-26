@@ -192,20 +192,20 @@ func TestGetACRAuthViaDefaultCredentialDirect(t *testing.T) {
 		},
 	}
 
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            _, err := getACRAuthViaDefaultCredential(tt.registry, tt.acrName)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := getACRAuthViaDefaultCredential(tt.registry, tt.acrName)
 
-            if tt.expectError {
-                assert.Error(t, err)
-                if tt.errorMsg != "" {
-                    assert.Contains(t, err.Error(), tt.errorMsg)
-                }
-            } else {
-                assert.NoError(t, err)
-            }
-        })
-    }
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 // TestExchangeAADForACRRefreshTokenDirect tests AAD to ACR token exchange directly

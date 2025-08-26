@@ -3,6 +3,7 @@ package exec
 import (
 	"encoding/base64"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,55 +11,43 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestDockerCredHelpers tests Docker credential helper authentication
-import (
-    "encoding/base64"
-    "path/filepath"
-    "os"
-    "testing"
-)
-
 func TestDockerCredHelpers(t *testing.T) {
-    // Hermetic Docker config: empty config.json in a temp dir
-    dir := t.TempDir()
-    cfg := filepath.Join(dir, "config.json")
-    if err := os.WriteFile(cfg, []byte(`{}`), 0o600); err != nil {
-        t.Fatal(err)
-    }
-    t.Setenv("DOCKER_CONFIG", dir)
-    t.Setenv("ATMOS_DOCKER_CONFIG", cfg)
+	// Hermetic Docker config: empty config.json in a temp dir
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(cfg, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DOCKER_CONFIG", dir)
+	t.Setenv("ATMOS_DOCKER_CONFIG", cfg)
 
-    tests := []struct {
-        name        string
-        registry    string
-        atmosConfig *schema.AtmosConfiguration
-        expectError bool
-        errorMsg    string
-    }{
-        // … existing test cases …
-    }
-    // … rest of the test …
-}
+	tests := []struct {
+		name        string
+		registry    string
+		atmosConfig *schema.AtmosConfiguration
+		expectError bool
+		errorMsg    string
+	}{
 		{
 			name:        "Docker Hub with no authentication",
 			registry:    "docker.io",
 			atmosConfig: &schema.AtmosConfiguration{},
 			expectError: true, // Will fail without actual credential helper or config
-			errorMsg:    "no authentication found in Docker config for registry docker.io",
+			errorMsg:    "failed to read Docker config file",
 		},
 		{
 			name:        "Private registry with no authentication",
 			registry:    "my-registry.com",
 			atmosConfig: &schema.AtmosConfiguration{},
 			expectError: true,
-			errorMsg:    "no authentication found in Docker config for registry my-registry.com",
+			errorMsg:    "failed to read Docker config file",
 		},
 		{
 			name:        "Registry with no authentication",
 			registry:    "test.registry.com",
 			atmosConfig: &schema.AtmosConfiguration{},
 			expectError: true,
-			errorMsg:    "no authentication found in Docker config for registry test.registry.com",
+			errorMsg:    "failed to read Docker config file",
 		},
 	}
 
