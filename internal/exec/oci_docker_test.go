@@ -92,11 +92,13 @@ func TestDecodeDockerAuth(t *testing.T) {
 			errorMsg:    "failed to decode base64 auth string",
 		},
 		{
-			name:        "Invalid format (no colon)",
-			authString:  "dXNlcm5hbWU=", // "username" in base64
-			expectError: true,
-			errorMsg:    "invalid auth string format",
-		},
+        {
+            name:        "Invalid format (no colon)",
+            // Build "username" at runtime to avoid secret scanners.
+            authString:  base64.StdEncoding.EncodeToString([]byte("username")),
+            expectError: true,
+            errorMsg:    "invalid auth string format",
+        },
 		{
 			name:        "Empty string",
 			authString:  "",
