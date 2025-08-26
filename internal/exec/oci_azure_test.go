@@ -68,6 +68,10 @@ func TestACRAuthDirect(t *testing.T) {
 
 // TestGetACRAuthViaServicePrincipalDirect tests Azure Service Principal authentication directly
 func TestGetACRAuthViaServicePrincipalDirect(t *testing.T) {
+	if os.Getenv("ATMOS_AZURE_E2E") == "" {
+		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
+	}
+
 	tests := []struct {
 		name         string
 		registry     string
