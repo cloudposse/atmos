@@ -108,9 +108,33 @@ viper.AutomaticEnv()
 viper.SetEnvPrefix("ATMOS")
 ```
 
-### Error Handling
-- Wrap errors with context: `fmt.Errorf("processing component %s: %w", component, err)`
-- Use custom error types in `pkg/` packages
+### Error Handling (MANDATORY)
+- **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
+- **NEVER use dynamic errors directly** - this will trigger linting warnings:
+  ```go
+  // WRONG: Dynamic error (will trigger linting warning)
+  return fmt.Errorf("processing component %s: %w", component, err)
+  
+  // CORRECT: Use static error from errors package
+  import errUtils "github.com/cloudposse/atmos/errors"
+  
+  return fmt.Errorf("%w: Atmos component `%s` is invalid",
+      errUtils.ErrInvalidComponent,
+      component,
+  )
+  ```
+- **Define static errors in `errors/errors.go`**:
+  ```go
+  var (
+      ErrInvalidComponent = errors.New("invalid component")
+      ErrInvalidStack     = errors.New("invalid stack")
+      ErrInvalidConfig    = errors.New("invalid configuration")
+  )
+  ```
+- **Error wrapping pattern**:
+  - Always wrap with static error first: `fmt.Errorf("%w: details", errUtils.ErrStaticError, ...)`
+  - Add context-specific details after the static error
+  - Use `%w` verb to preserve error chain for `errors.Is()` and `errors.As()`
 - Provide actionable error messages with troubleshooting hints
 - Log detailed errors for debugging, user-friendly messages for CLI
 
