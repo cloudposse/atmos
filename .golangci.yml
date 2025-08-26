@@ -1,10 +1,12 @@
 # Configuration for golangci-lint
 # Documentation: https://golangci-lint.run/usage/configuration/
-version: 2
+version: "2"
 
 run:
   timeout: 5m # Set a time limit for the linter run
   tests: true # Include test files in the analysis
+  build-tags:
+    - linting
 
 linters:
   enable:
@@ -170,12 +172,11 @@ linters-settings:
     # Minimal complexity of if statements to report.
     min-complexity: 4
 
-
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-dirs:
-    - experiments/.*
+    - experiments
   exclude-rules:
     - path: _test\.go$ # Ignore test files for specific linters
       linters:
@@ -189,6 +190,6 @@ issues:
         - forbidigo
 
 output:
-  format: colored-line-number
-  path: stderr
+  formats:
+    colored-line-number: stdout
   sort-results: true

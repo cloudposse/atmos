@@ -582,9 +582,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	var exitCode int
 
 	if tc.Command == "atmos" {
-		stdoutStr, stderrStr, exitCode = runAtmosInternal(t, ctx, tc)
+		stdoutStr, stderrStr, exitCode = runAtmosInternal(t, ctx, &tc)
 	} else {
-		stdoutStr, stderrStr, exitCode = runExternalCommand(t, ctx, tc)
+		stdoutStr, stderrStr, exitCode = runExternalCommand(t, ctx, &tc)
 	}
 
 	// Validate outputs
@@ -665,7 +665,7 @@ func TestCLICommands(t *testing.T) {
 	}
 }
 
-func runExternalCommand(t *testing.T, ctx context.Context, tc TestCase) (string, string, int) {
+func runExternalCommand(t *testing.T, ctx context.Context, tc *TestCase) (string, string, int) {
 	binaryPath, err := exec.LookPath(tc.Command)
 	if err != nil {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
@@ -682,49 +682,14 @@ func runExternalCommand(t *testing.T, ctx context.Context, tc TestCase) (string,
 	var exitCode int
 
 	if tc.Tty {
-		ptyOutput, err := simulateTtyCommand(t, cmd, "")
-		if ctx.Err() == context.DeadlineExceeded {
-			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
-			return stdout.String(), stderr.String(), exitCode
-		}
-		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				exitCode = exitErr.ExitCode()
-				if exitCode < 0 {
-					t.Errorf("TTY Command interrupted by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
-				}
-			} else {
-				t.Fatalf("Failed to simulate TTY command: %v", err)
-			}
-		}
-		stdout.WriteString(ptyOutput)
+		exitCode = handleTtyExecution(t, ctx, tc, cmd, &stdout, &stderr)
 	} else {
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
-		if ctx.Err() == context.DeadlineExceeded {
-			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
-			return stdout.String(), stderr.String(), exitCode
-		}
-		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				exitCode = exitErr.ExitCode()
-				if exitCode < 0 {
-					t.Errorf("Non-TTY Command terminated by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
-				}
-			} else {
-				t.Fatalf("Failed to run command; Error: %v", err)
-			}
-		}
+		exitCode = handleNormalExecution(t, ctx, tc, cmd, &stdout, &stderr)
 	}
 	return stdout.String(), stderr.String(), exitCode
 }
 
-func runAtmosInternal(t *testing.T, ctx context.Context, tc TestCase) (string, string, int) {
+func runAtmosInternal(t *testing.T, ctx context.Context, tc *TestCase) (string, string, int) {
 	oldArgs := os.Args
 	os.Args = append([]string{"atmos"}, tc.Args...)
 	defer func() { os.Args = oldArgs }()
@@ -1234,4 +1199,52 @@ expect:
 	for i, pattern := range testCase.Expect.Stdout {
 		t.Logf("Pattern %d: %+v", i, pattern)
 	}
+}
+
+func handleTtyExecution(t *testing.T, ctx context.Context, tc *TestCase, cmd *exec.Cmd, stdout, stderr *bytes.Buffer) int {
+	ptyOutput, err := simulateTtyCommand(t, cmd, "")
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		logTimeoutError(t, tc, stdout.String(), stderr.String())
+		return 0
+	}
+	
+	exitCode := processCommandError(t, tc.Command, err, "TTY")
+	stdout.WriteString(ptyOutput)
+	return exitCode
+}
+
+func handleNormalExecution(t *testing.T, ctx context.Context, tc *TestCase, cmd *exec.Cmd, stdout, stderr *bytes.Buffer) int {
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err := cmd.Run()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		logTimeoutError(t, tc, stdout.String(), stderr.String())
+		return 0
+	}
+	
+	return processCommandError(t, tc.Command, err, "Non-TTY")
+}
+
+func logTimeoutError(t *testing.T, tc *TestCase, stdout, stderr string) {
+	t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+	t.Errorf("Captured stdout:\n%s", stdout)
+	t.Errorf("Captured stderr:\n%s", stderr)
+}
+
+func processCommandError(t *testing.T, command string, err error, mode string) int {
+	if err == nil {
+		return 0
+	}
+	
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("Failed to simulate %s command: %v", mode, err)
+		return 1
+	}
+	
+	exitCode := exitErr.ExitCode()
+	if exitCode < 0 {
+		t.Errorf("%s Command interrupted by signal: %s, Signal: %d, Error: %v", mode, command, -exitCode, err)
+	}
+	return exitCode
 }

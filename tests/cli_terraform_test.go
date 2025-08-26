@@ -75,7 +75,7 @@ func runTerraformApply(t *testing.T, environment string) {
 			"ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE": "true",
 		},
 	}
-	stdout, stderr, exitCode := runAtmosInternal(t, context.Background(), tc)
+	stdout, stderr, exitCode := runAtmosInternal(t, context.Background(), &tc)
 	t.Log(stdout)
 	if exitCode != 0 {
 		t.Fatalf("Failed to run terraform apply mycomponent -s %s: %s", environment, stderr)
@@ -101,7 +101,7 @@ func runTerraformClean(t *testing.T, args ...string) {
 		Command: "atmos",
 		Args:    append([]string{"terraform", "clean"}, append(args, "--force")...),
 	}
-	stdout, stderr, exitCode := runAtmosInternal(t, context.Background(), tc)
+	stdout, stderr, exitCode := runAtmosInternal(t, context.Background(), &tc)
 	t.Logf("Clean command output:\n%s", stdout)
 	if exitCode != 0 {
 		t.Fatalf("Failed to run terraform clean: %s", stderr)
@@ -129,7 +129,7 @@ func runCLITerraformCleanComponent(t *testing.T, environment string) {
 		Command: "atmos",
 		Args:    []string{"terraform", "clean", "mycomponent", "-s", environment, "--force"},
 	}
-	stdout, stderr, exitCode := runAtmosInternal(t, context.Background(), tc)
+	stdout, stderr, exitCode := runAtmosInternal(t, context.Background(), &tc)
 	t.Logf("Clean command output:\n%s", stdout)
 	if exitCode != 0 {
 		t.Fatalf("Failed to run terraform clean: %s", stderr)
@@ -141,7 +141,7 @@ func runTerraformCleanCommand(t *testing.T, args ...string) {
 		Command: "atmos",
 		Args:    append([]string{"terraform", "clean"}, args...),
 	}
-	stdout, stderr, exitCode := runAtmosInternal(t, context.Background(), tc)
+	stdout, stderr, exitCode := runAtmosInternal(t, context.Background(), &tc)
 	t.Logf("Clean command output:\n%s", stdout)
 	if exitCode != 0 {
 		t.Fatalf("Failed to run terraform clean: %s", stderr)
