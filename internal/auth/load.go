@@ -181,7 +181,6 @@ func GetIdentityInstance(identity string, config schema.AuthConfig, info *schema
 		}
 
 		b, err := yaml.Marshal(mergedConfig.Identities[identity])
-
 		if err != nil {
 			return nil, err
 		}

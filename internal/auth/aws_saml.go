@@ -342,7 +342,6 @@ func (i *awsSaml) AssumeRole() error {
 }
 
 func (i *awsSaml) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
-
 	log.Info("Setting AWS environment variables")
 
 	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
