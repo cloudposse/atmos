@@ -177,6 +177,10 @@ func TestGetACRAuthViaDefaultCredentialDirect(t *testing.T) {
 
 // TestExchangeAADForACRRefreshTokenDirect tests AAD to ACR token exchange directly
 func TestExchangeAADForACRRefreshTokenDirect(t *testing.T) {
+	if os.Getenv("ATMOS_AZURE_E2E") == "" {
+		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
+	}
+
 	tests := []struct {
 		name        string
 		registry    string
