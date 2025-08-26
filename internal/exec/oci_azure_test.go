@@ -132,43 +132,47 @@ func TestGetACRAuthViaServicePrincipalDirect(t *testing.T) {
 
 // TestGetACRAuthViaDefaultCredentialDirect tests Azure Default Credential authentication directly
 func TestGetACRAuthViaDefaultCredentialDirect(t *testing.T) {
-	tests := []struct {
-		name        string
-		registry    string
-		acrName     string
-		expectError bool
-		errorMsg    string
-	}{
-		{
-			name:        "Default credential without Azure environment (.io)",
-			registry:    "test.azurecr.io",
-			acrName:     "test",
-			expectError: true,
-			errorMsg:    "failed to get Azure token",
-		},
-		{
-			name:        "Default credential without Azure environment (.us)",
-			registry:    "test.azurecr.us",
-			acrName:     "test",
-			expectError: true,
-			errorMsg:    "failed to get Azure token",
-		},
-	}
+    if os.Getenv("ATMOS_AZURE_E2E") == "" {
+        t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
+    }
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := getACRAuthViaDefaultCredential(tt.registry, tt.acrName)
+    tests := []struct {
+        name        string
+        registry    string
+        acrName     string
+        expectError bool
+        errorMsg    string
+    }{
+        {
+            name:        "Default credential without Azure environment (.io)",
+            registry:    "test.azurecr.io",
+            acrName:     "test",
+            expectError: true,
+            errorMsg:    "failed to get Azure token",
+        },
+        {
+            name:        "Default credential without Azure environment (.us)",
+            registry:    "test.azurecr.us",
+            acrName:     "test",
+            expectError: true,
+            errorMsg:    "failed to get Azure token",
+        },
+    }
 
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.errorMsg != "" {
-					assert.Contains(t, err.Error(), tt.errorMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            _, err := getACRAuthViaDefaultCredential(tt.registry, tt.acrName)
+
+            if tt.expectError {
+                assert.Error(t, err)
+                if tt.errorMsg != "" {
+                    assert.Contains(t, err.Error(), tt.errorMsg)
+                }
+            } else {
+                assert.NoError(t, err)
+            }
+        })
+    }
 }
 
 // TestExchangeAADForACRRefreshTokenDirect tests AAD to ACR token exchange directly
