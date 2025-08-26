@@ -308,7 +308,7 @@ func writeMergedDataToFile(tempDir string, mergedData map[string]interface{}) (*
 func writeOuterTopLevelFile(tempDir string, fileURL string) (*url.URL, error) {
 	// Write the 'outer' top-level file.
 	topLevel := map[string]interface{}{
-		"Env": map[string]interface{}{
+		"E": map[string]interface{}{
 			"README_YAML": fileURL,
 		},
 	}

@@ -69,34 +69,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 			return err
 		}
 
-		err = ValidateLoginAssumeRole(identityInstance, atmosConfig, info)
-		if err != nil {
-			return err
-		}
-		// After successful auth, if identity defines env overrides, apply them
-		identCfg, err := GetIdentityConfig(identity, authConfig, info)
-		if err == nil && len(identCfg.Env) > 0 {
-			if info.ComponentEnvSection == nil {
-				info.ComponentEnvSection = make(schema.AtmosSectionMapType)
-			}
-			// Remove existing entries for these keys from the list to ensure overrides
-			for k, v := range identCfg.Env {
-				info.ComponentEnvSection[k] = v
-				// filter out any existing entries for k=
-				filtered := make([]string, 0, len(info.ComponentEnvList))
-				prefix := k + "="
-				for _, e := range info.ComponentEnvList {
-					if len(e) >= len(prefix) && e[:len(prefix)] == prefix {
-						continue
-					}
-					filtered = append(filtered, e)
-				}
-				info.ComponentEnvList = filtered
-				info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%s", k, v))
-			}
-		}
-
-		return nil
+		return ValidateLoginAssumeRole(identityInstance, atmosConfig, info)
 	}
 
 	return nil

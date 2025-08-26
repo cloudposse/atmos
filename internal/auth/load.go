@@ -14,45 +14,6 @@ func NewIdentity() schema.Identity {
 	}
 }
 
-// GetIdentityConfig returns the merged identity configuration (including component-level overrides if provided)
-// as a concrete schema.Identity struct. This can be used to access optional fields like Env.
-func GetIdentityConfig(identity string, config schema.AuthConfig, info *schema.ConfigAndStacksInfo) (schema.Identity, error) {
-	// Reuse the same merge logic as GetIdentityInstance
-	identityMap := config.Identities
-	if info != nil && info.ComponentIdentitiesSection != nil {
-		componentIdentities := info.ComponentIdentitiesSection
-		if len(componentIdentities) > 0 {
-			if componentIdentity, exists := componentIdentities[identity]; exists {
-				mergedIdentities := make(map[string]any)
-				for k, v := range config.Identities {
-					mergedIdentities[k] = v
-				}
-				mergedIdentities[identity] = componentIdentity
-				identityMap = mergedIdentities
-			}
-		}
-	}
-
-	mergedConfig := schema.AuthConfig{
-		Identities:     identityMap,
-		Providers:      config.Providers,
-		DefaultRegion:  config.DefaultRegion,
-		DefaultProfile: config.DefaultProfile,
-	}
-
-	// Unmarshal the selected identity to schema.Identity
-	var ident schema.Identity
-	b, err := yaml.Marshal(mergedConfig.Identities[identity])
-	if err != nil {
-		return ident, err
-	}
-	ident = NewIdentity()
-	if err := yaml.Unmarshal(b, &ident); err != nil {
-		return ident, err
-	}
-	return ident, nil
-}
-
 var identityRegistry = map[string]func(provider string, identity string, config schema.AuthConfig) (LoginMethod, error){
 	"aws/iam-identity-center": NewAwsIamIdentityCenterFactory,
 	"aws/saml":                NewAwsSamlFactory,
@@ -219,6 +180,8 @@ func GetIdentityInstance(identity string, config schema.AuthConfig, info *schema
 		}
 
 		b, err := yaml.Marshal(mergedConfig.Identities[identity])
+		l.Info("Identities:", "b", string(b))
+
 		if err != nil {
 			return nil, err
 		}

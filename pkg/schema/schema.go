@@ -962,9 +962,9 @@ type Identity struct {
 
 	// AWS Specific
 	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
-	// Env allows specifying environment variables to set when this identity is used.
+	// E allows specifying environment variables to set when this identity is used.
 	// Example:
 	//   env:
 	//     AWS_PROFILE: "acme-identity"
-	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env,omitempty"`
+	E map[string]string `yaml:"e" json:"e" mapstructure:"e"`
 }

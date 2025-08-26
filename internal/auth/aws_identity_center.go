@@ -48,6 +48,7 @@ func NewAwsIamIdentityCenterFactory(provider string, identity string, config sch
 		Identity: NewIdentity(),
 	}
 	b, err := yaml.Marshal(config.Providers[provider])
+	log.Info("Provider:", "b", string(b))
 	if err != nil {
 		return nil, err
 	}
@@ -59,6 +60,8 @@ func NewAwsIamIdentityCenterFactory(provider string, identity string, config sch
 
 // Validate checks if the configuration is valid
 func (config *awsIamIdentityCenter) Validate() error {
+	_ = utils.PrintAsYAMLToFileDescriptor(&schema.AtmosConfiguration{}, config.E)
+
 	if config.Common.Url == "" {
 		return fmt.Errorf("url is required for AWS IAM Identity Center")
 	}
@@ -177,7 +180,8 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 		config.Provider,
 	)
 
-	log.Info("✅ Successfully assumed role! Credentials written to ~/.aws/credentials",
+	log.Info("✅ Successfully assumed role!",
+		"credentials", "~/.aws/credentials",
 		"profile", config.Common.Profile,
 		"account", accountId,
 		"role", roleName,
@@ -225,7 +229,32 @@ func (i *awsIamIdentityCenter) SetEnvVars(info *schema.ConfigAndStacksInfo) erro
 		return err
 	}
 
-	err = UpdateAwsAtmosConfig(info.ComponentEnvSection["AWS_CONFIG_FILE"].(string), i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	// After successful auth, if identity defines env overrides, apply them
+	err = utils.PrintAsYAMLToFileDescriptor(&schema.AtmosConfiguration{}, i.E)
+
+	if len(i.E) > 0 {
+		if info.ComponentEnvSection == nil {
+			info.ComponentEnvSection = make(schema.AtmosSectionMapType)
+		}
+		// Remove existing entries for these keys from the list to ensure overrides
+		for k, v := range i.E {
+			log.Debug("E Debug", k, v)
+			info.ComponentEnvSection[k] = v
+			// filter out any existing entries for k=
+			filtered := make([]string, 0, len(info.ComponentEnvList))
+			prefix := k + "="
+			for _, e := range info.ComponentEnvList {
+				if len(e) >= len(prefix) && e[:len(prefix)] == prefix {
+					continue
+				}
+				filtered = append(filtered, e)
+			}
+			info.ComponentEnvList = filtered
+			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+
+	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
 	if err != nil {
 		return err
 	}

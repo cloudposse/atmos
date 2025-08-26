@@ -131,12 +131,16 @@ func CreateAwsAtmosConfigFilepath(provider string) (string, error) {
 	return targetPath, nil
 }
 
-func UpdateAwsAtmosConfig(awsAtmosConfigPath string, profile string, sourceProfile string, region string, roleArn string) error {
-	log.Debug("Updating AWS config file path", "path", awsAtmosConfigPath)
+func UpdateAwsAtmosConfig(provider string, profile string, sourceProfile string, region string, roleArn string) error {
+	configFilePath, err := CreateAwsAtmosConfigFilepath(provider)
+	if err != nil {
+		return err
+	}
+	log.Debug("Updating AWS config file path", "path", configFilePath)
 	// Load existing config file (or create new one)
 	var f *ini.File
-	if _, err := os.Stat(awsAtmosConfigPath); err == nil {
-		f, err = ini.Load(awsAtmosConfigPath)
+	if _, err := os.Stat(configFilePath); err == nil {
+		f, err = ini.Load(configFilePath)
 		if err != nil {
 			return fmt.Errorf("load config ini: %w", err)
 		}
@@ -158,7 +162,7 @@ func UpdateAwsAtmosConfig(awsAtmosConfigPath string, profile string, sourceProfi
 		return fmt.Errorf("serialize ini: %w", err)
 	}
 
-	tmp := awsAtmosConfigPath + ".tmp"
+	tmp := configFilePath + ".tmp"
 	if err := os.WriteFile(tmp, buf.Bytes(), 0o600); err != nil {
 		return fmt.Errorf("write temp credentials: %w", err)
 	}
@@ -168,12 +172,12 @@ func UpdateAwsAtmosConfig(awsAtmosConfigPath string, profile string, sourceProfi
 		_ = ftmp.Close()
 	}
 
-	if err := os.Rename(tmp, awsAtmosConfigPath); err != nil {
+	if err := os.Rename(tmp, configFilePath); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("atomic rename credentials: %w", err)
 	}
 
-	log.Debug("Updated AWS config", "profile", profile, "path", awsAtmosConfigPath)
+	log.Debug("Updated AWS config", "profile", profile, "path", configFilePath)
 	return nil
 
 }
