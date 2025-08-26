@@ -29,31 +29,31 @@ func TestScaffoldIntegration_FileSkipping(t *testing.T) {
 				Path:        "README.md",
 				Content:     "Test README",
 				IsTemplate:  false,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 			{
 				Path:        "{{.Config.namespace}}/config.yaml",
 				Content:     "namespace: {{.Config.namespace}}",
 				IsTemplate:  true,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 			{
 				Path:        "{{.Config.namespace}}/{{.Config.subdirectory}}/deep.yaml",
 				Content:     "deep config",
 				IsTemplate:  true,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 			{
 				Path:        "{{if .Config.enable_monitoring}}{{.Config.namespace}}/monitoring.yaml{{end}}",
 				Content:     "monitoring config",
 				IsTemplate:  true,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 			{
 				Path:        "static/file.txt",
 				Content:     "static content",
 				IsTemplate:  false,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 		},
 		README: "Test README content",
@@ -62,7 +62,7 @@ func TestScaffoldIntegration_FileSkipping(t *testing.T) {
 	// Test case 1: Empty subdirectory and disabled monitoring (should skip files)
 	t.Run("empty_subdirectory_and_disabled_monitoring", func(t *testing.T) {
 		targetDir := filepath.Join(tempDir, "test1")
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			t.Fatalf("Failed to create target directory: %v", err)
 		}
 
@@ -109,7 +109,7 @@ func TestScaffoldIntegration_FileSkipping(t *testing.T) {
 	// Test case 2: Valid subdirectory and enabled monitoring (should create all files)
 	t.Run("valid_subdirectory_and_enabled_monitoring", func(t *testing.T) {
 		targetDir := filepath.Join(tempDir, "test2")
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			t.Fatalf("Failed to create target directory: %v", err)
 		}
 
@@ -144,7 +144,7 @@ func TestScaffoldIntegration_FileSkipping(t *testing.T) {
 	// Test case 3: Empty namespace (should skip files with empty namespace)
 	t.Run("empty_namespace", func(t *testing.T) {
 		targetDir := filepath.Join(tempDir, "test3")
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			t.Fatalf("Failed to create target directory: %v", err)
 		}
 
@@ -205,38 +205,38 @@ func TestScaffoldIntegration_EdgeCases(t *testing.T) {
 				Path:        "{{.Config.empty_field}}/empty_file.yaml",
 				Content:     "empty field file",
 				IsTemplate:  true,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 			{
 				Path:        "{{.Config.nonexistent_field}}/nonexistent_file.yaml",
 				Content:     "nonexistent field file",
 				IsTemplate:  true,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 			{
 				Path:        "{{.Config.false_field}}/false_file.yaml",
 				Content:     "false field file",
 				IsTemplate:  true,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 			{
 				Path:        "{{.Config.null_field}}/null_file.yaml",
 				Content:     "null field file",
 				IsTemplate:  true,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 			{
 				Path:        "valid/file.yaml",
 				Content:     "valid file",
 				IsTemplate:  false,
-				Permissions: 0644,
+				Permissions: 0o644,
 			},
 		},
 		README: "Edge case test README",
 	}
 
 	targetDir := filepath.Join(tempDir, "edge-cases")
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		t.Fatalf("Failed to create target directory: %v", err)
 	}
 

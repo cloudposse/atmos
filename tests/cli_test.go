@@ -1207,7 +1207,7 @@ func handleTtyExecution(t *testing.T, ctx context.Context, tc *TestCase, cmd *ex
 		logTimeoutError(t, tc, stdout.String(), stderr.String())
 		return 0
 	}
-	
+
 	exitCode := processCommandError(t, tc.Command, err, "TTY")
 	stdout.WriteString(ptyOutput)
 	return exitCode
@@ -1221,7 +1221,7 @@ func handleNormalExecution(t *testing.T, ctx context.Context, tc *TestCase, cmd 
 		logTimeoutError(t, tc, stdout.String(), stderr.String())
 		return 0
 	}
-	
+
 	return processCommandError(t, tc.Command, err, "Non-TTY")
 }
 
@@ -1235,13 +1235,13 @@ func processCommandError(t *testing.T, command string, err error, mode string) i
 	if err == nil {
 		return 0
 	}
-	
+
 	exitErr, ok := err.(*exec.ExitError)
 	if !ok {
 		t.Fatalf("Failed to simulate %s command: %v", mode, err)
 		return 1
 	}
-	
+
 	exitCode := exitErr.ExitCode()
 	if exitCode < 0 {
 		t.Errorf("%s Command interrupted by signal: %s, Signal: %d, Error: %v", mode, command, -exitCode, err)
