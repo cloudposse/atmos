@@ -20,19 +20,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// httpClient is used for outbound HTTP in this package; override in tests.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 // getACRAuth attempts to get Azure Container Registry authentication
 func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
 	// Extract ACR name from registry URL first
 	// Expected formats: <acr-name>.azurecr.{io|cn|us}
 	acrName := ""
-	for _, suf := range []string{".azurecr.io", ".azurecr.us"} {
+	for _, suf := range []string{".azurecr.io", ".azurecr.us", ".azurecr.cn"} {
 		if strings.HasSuffix(registry, suf) {
 			acrName = strings.TrimSuffix(registry, suf)
 			break
 		}
 	}
 	if acrName == "" {
-		return nil, fmt.Errorf("invalid Azure Container Registry format: %s (expected <name>.azurecr.{io|us})", registry)
+		return nil, fmt.Errorf("invalid Azure Container Registry format: %s (expected <name>.azurecr.{io|us|cn})", registry)
 	}
 
 	// Create a Viper instance for environment variable access
@@ -96,8 +99,7 @@ func exchangeAADForACRRefreshToken(ctx context.Context, registry, tenantID, aadT
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// Execute the request
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute token exchange request: %w", err)
 	}

@@ -4,7 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -13,6 +18,10 @@ import (
 
 // TestACRAuthDirect tests Azure Container Registry authentication directly
 func TestACRAuthDirect(t *testing.T) {
+	if os.Getenv("ATMOS_AZURE_E2E") == "" {
+		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
+	}
+
 	tests := []struct {
 		name        string
 		registry    string
@@ -30,6 +39,13 @@ func TestACRAuthDirect(t *testing.T) {
 		{
 			name:        "ACR .us with no authentication",
 			registry:    "test.azurecr.us",
+			atmosConfig: &schema.AtmosConfiguration{},
+			expectError: true,
+			errorMsg:    "no valid Azure authentication found",
+		},
+		{
+			name:        "ACR .cn with no authentication",
+			registry:    "test.azurecr.cn",
 			atmosConfig: &schema.AtmosConfiguration{},
 			expectError: true,
 			errorMsg:    "no valid Azure authentication found",
@@ -103,6 +119,16 @@ func TestGetACRAuthViaServicePrincipalDirect(t *testing.T) {
 			errorMsg:     "failed to get Azure token",
 		},
 		{
+			name:         "Valid Service Principal credentials (.cn)",
+			registry:     "test.azurecr.cn",
+			acrName:      "test",
+			clientID:     "test-client-id",
+			clientSecret: "test-client-secret",
+			tenantID:     "test-tenant-id",
+			expectError:  true, // Will fail due to invalid credentials
+			errorMsg:     "failed to get Azure token",
+		},
+		{
 			name:         "Missing client ID",
 			registry:     "test.azurecr.io",
 			acrName:      "test",
@@ -132,32 +158,39 @@ func TestGetACRAuthViaServicePrincipalDirect(t *testing.T) {
 
 // TestGetACRAuthViaDefaultCredentialDirect tests Azure Default Credential authentication directly
 func TestGetACRAuthViaDefaultCredentialDirect(t *testing.T) {
-    if os.Getenv("ATMOS_AZURE_E2E") == "" {
-        t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
-    }
+	if os.Getenv("ATMOS_AZURE_E2E") == "" {
+		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
+	}
 
-    tests := []struct {
-        name        string
-        registry    string
-        acrName     string
-        expectError bool
-        errorMsg    string
-    }{
-        {
-            name:        "Default credential without Azure environment (.io)",
-            registry:    "test.azurecr.io",
-            acrName:     "test",
-            expectError: true,
-            errorMsg:    "failed to get Azure token",
-        },
-        {
-            name:        "Default credential without Azure environment (.us)",
-            registry:    "test.azurecr.us",
-            acrName:     "test",
-            expectError: true,
-            errorMsg:    "failed to get Azure token",
-        },
-    }
+	tests := []struct {
+		name        string
+		registry    string
+		acrName     string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "Default credential without Azure environment (.io)",
+			registry:    "test.azurecr.io",
+			acrName:     "test",
+			expectError: true,
+			errorMsg:    "failed to get Azure token",
+		},
+		{
+			name:        "Default credential without Azure environment (.us)",
+			registry:    "test.azurecr.us",
+			acrName:     "test",
+			expectError: true,
+			errorMsg:    "failed to get Azure token",
+		},
+		{
+			name:        "Default credential without Azure environment (.cn)",
+			registry:    "test.azurecr.cn",
+			acrName:     "test",
+			expectError: true,
+			errorMsg:    "failed to get Azure token",
+		},
+	}
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
@@ -230,6 +263,14 @@ func TestExchangeAADForACRRefreshTokenDirect(t *testing.T) {
 			errorMsg:    "failed to execute token exchange request",
 		},
 		{
+			name:        "Valid parameters but network failure (.cn)",
+			registry:    "test.azurecr.cn",
+			tenantID:    "test-tenant",
+			aadToken:    "test-token",
+			expectError: true,
+			errorMsg:    "failed to execute token exchange request",
+		},
+		{
 			name:        "Empty tenant ID",
 			registry:    "test.azurecr.io",
 			tenantID:    "",
@@ -241,8 +282,7 @@ func TestExchangeAADForACRRefreshTokenDirect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			_, err := exchangeAADForACRRefreshToken(ctx, tt.registry, tt.tenantID, tt.aadToken)
+			_, err := exchangeAADForACRRefreshToken(context.Background(), tt.registry, tt.tenantID, tt.aadToken)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -254,6 +294,51 @@ func TestExchangeAADForACRRefreshTokenDirect(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExchangeAADForACRRefreshTokenWithStubbedHTTP demonstrates how to stub HTTP client for testing
+func TestExchangeAADForACRRefreshTokenWithStubbedHTTP(t *testing.T) {
+	// Save original HTTP client
+	originalClient := httpClient
+	defer func() {
+		httpClient = originalClient
+	}()
+
+	// Create a mock HTTP client that returns a predefined response
+	mockClient := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &mockTransport{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"refresh_token": "mock-refresh-token", "access_token": "mock-access-token"}`)),
+			},
+		},
+	}
+
+	// Override the HTTP client
+	httpClient = mockClient
+
+	// Test the token exchange with stubbed HTTP
+	refreshToken, err := exchangeAADForACRRefreshToken(
+		context.Background(),
+		"test.azurecr.io",
+		"test-tenant",
+		"test-token",
+	)
+
+	// Verify the result
+	assert.NoError(t, err)
+	assert.Equal(t, "mock-refresh-token", refreshToken)
+}
+
+// mockTransport is a simple mock transport for testing
+type mockTransport struct {
+	response *http.Response
+}
+
+func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return m.response, nil
 }
 
 // TestExtractTenantIDFromTokenDirect tests JWT token parsing for tenant ID directly
