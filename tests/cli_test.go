@@ -22,6 +22,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/cmd"
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
@@ -705,9 +706,31 @@ func runAtmosInternal(ctx context.Context, t *testing.T, tc *TestCase) (string, 
 
 	exitCode := 0
 	oldExit := utils.OsExit
-	utils.OsExit = func(code int) { exitCode = code }
+	oldErrExit := errUtils.Exit
+	utils.OsExit = func(code int) { 
+		exitCode = code 
+		// Give a brief moment for any pending output to be flushed
+		time.Sleep(10 * time.Millisecond)
+		panic("exit:" + strconv.Itoa(code)) // Use established exit convention
+	}
+	errUtils.Exit = func(code int) { 
+		exitCode = code 
+		// Give a brief moment for any pending output to be flushed
+		time.Sleep(10 * time.Millisecond)
+		panic("exit:" + strconv.Itoa(code)) // Use established exit convention  
+	}
 	defer func() {
+		if r := recover(); r != nil {
+			// Check if it's our test exit panic
+			if str, ok := r.(string); ok && strings.HasPrefix(str, "exit:") {
+				// Expected exit, continue normally
+				return
+			}
+			// Re-panic if it's a different panic
+			panic(r)
+		}
 		utils.OsExit = oldExit
+		errUtils.Exit = oldErrExit
 	}()
 
 	stdout, stderr := executeAtmosCommand(ctx, t, tc)
@@ -1226,9 +1249,16 @@ func executeAtmosTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) (st
 		t.Logf("CLI config init warning: %v", err)
 	}
 
-	// Set up logging to captured stderr (matching cmd/root.go:155 setupLogger call)
+	// Set up logging to captured stderr using production SetupLogger
 	if err == nil {
-		setupInternalLogger(&atmosConfig)
+		// Set a reasonable maxWidth to prevent excessive padding in tests
+		if atmosConfig.Settings.Docs.MaxWidth == 0 {
+			atmosConfig.Settings.Docs.MaxWidth = 80
+		}
+		// Initialize markdown renderer like production does (cmd/root.go:233)
+		// but DON'T call SetupLogger here - let the actual command execution handle validation
+		errUtils.InitializeMarkdown(atmosConfig)
+		utils.InitializeMarkdown(atmosConfig)
 	}
 
 	// Create command AFTER setting up TTY and logger
@@ -1273,9 +1303,16 @@ func executeAtmosNonTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) 
 		t.Logf("CLI config init warning: %v", err)
 	}
 
-	// Set up logging to captured stderr (matching cmd/root.go:155 setupLogger call)
+	// Set up logging to captured stderr using production SetupLogger
 	if err == nil {
-		setupInternalLogger(&atmosConfig)
+		// Set a reasonable maxWidth to prevent excessive padding in tests
+		if atmosConfig.Settings.Docs.MaxWidth == 0 {
+			atmosConfig.Settings.Docs.MaxWidth = 80
+		}
+		// Initialize markdown renderer like production does (cmd/root.go:233)
+		// but DON'T call SetupLogger here - let the actual command execution handle validation
+		errUtils.InitializeMarkdown(atmosConfig)
+		utils.InitializeMarkdown(atmosConfig)
 	}
 
 	// Create command AFTER setting up non-TTY pipes and logger
@@ -1300,53 +1337,5 @@ func executeAtmosNonTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) 
 	return stdoutBuf.String(), stderrBuf.String()
 }
 
-// setupInternalLogger mimics the setupLogger function from cmd/root.go
-func setupInternalLogger(atmosConfig *schema.AtmosConfiguration) {
-	switch atmosConfig.Logs.Level {
-	case "Trace":
-		log.SetLevel(log.DebugLevel)
-	case "Debug":
-		log.SetLevel(log.DebugLevel)
-	case "Info":
-		log.SetLevel(log.InfoLevel)
-	case "Warning":
-		log.SetLevel(log.WarnLevel)
-	case "Off":
-		log.SetLevel(1000) // High number to disable all logs
-	default:
-		log.SetLevel(log.InfoLevel)
-	}
-
-	if atmosConfig.Settings.Terminal.NoColor {
-		stylesDefault := log.DefaultStyles()
-		styles := &log.Styles{}
-		styles.Levels = make(map[log.Level]lipgloss.Style)
-		for k := range stylesDefault.Levels {
-			styles.Levels[k] = stylesDefault.Levels[k].UnsetForeground().Bold(false)
-		}
-		log.SetStyles(styles)
-	}
-	
-	var output io.Writer
-	switch atmosConfig.Logs.File {
-	case "/dev/stderr":
-		output = os.Stderr
-	case "/dev/stdout":
-		output = os.Stdout
-	case "/dev/null":
-		output = io.Discard
-	default:
-		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to open log file: %v", err))
-		}
-		defer logFile.Close()
-		output = logFile
-	}
-
-	log.SetOutput(output)
-	log.SetReportTimestamp(false) // Match external execution behavior
-	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
-}
 
 

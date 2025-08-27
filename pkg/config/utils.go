@@ -10,7 +10,6 @@ import (
 
 	log "github.com/charmbracelet/log"
 
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -418,11 +417,8 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 	}
 
-	if len(atmosConfig.Logs.Level) > 0 {
-		if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-			return err
-		}
-	}
+	// Log level validation is deferred to setupLogger to allow proper error handling and reporting
+	// This prevents early config initialization failures for invalid log levels
 
 	return nil
 }
@@ -585,10 +581,8 @@ func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *
 
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.LogsLevel) > 0 {
-		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
-			return err
-		}
-		// Only set the log level if validation passes
+		// Set the log level without validation - validation is deferred to setupLogger
+		// This allows the command to run and produce proper error output for invalid levels
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
 		log.Debug(cmdLineArg, LogsLevelFlag, configAndStacksInfo.LogsLevel)
 	}

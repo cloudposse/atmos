@@ -19,6 +19,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -492,6 +493,15 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
+
+	// Validate log level early to catch invalid configuration before other validations
+	if len(atmosConfig.Logs.Level) > 0 {
+		if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+			// Use the same error reporting as other parts of atmos
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return
+		}
+	}
 
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)

@@ -71,8 +71,8 @@ var RootCmd = &cobra.Command{
 		}
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration
-		checkAtmosConfig()
+		// Check Atmos configuration but don't require stacks directory for basic operations
+		checkAtmosConfig(WithStackValidation(false))
 
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
@@ -86,7 +86,16 @@ var RootCmd = &cobra.Command{
 	},
 }
 
-func setupLogger(atmosConfig *schema.AtmosConfiguration) {
+func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
+	// Validate log level and report error if invalid
+	if len(atmosConfig.Logs.Level) > 0 {
+		if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+			// Use the same error reporting as other parts of atmos
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return
+		}
+	}
+
 	switch atmosConfig.Logs.Level {
 	case "Trace":
 		log.SetLevel(log.DebugLevel)
@@ -97,7 +106,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	case "Warning":
 		log.SetLevel(log.WarnLevel)
 	case "Off":
-		log.SetLevel(math.MaxInt32)
+		log.SetLevel(math.MaxInt32) // Use high number to disable all logs
 	default:
 		log.SetLevel(log.InfoLevel)
 	}
@@ -214,14 +223,23 @@ func ExecuteWithCommand(rootCmd *cobra.Command) error {
 		captureBuiltInCommands()
 	}
 	
+	// Initialize markdown renderers with default config first, so error messages can be properly formatted
+	// even if config loading fails
+	defaultConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Docs: schema.Docs{
+				MaxWidth: 80, // Reasonable default width
+			},
+		},
+	}
+	utils.InitializeMarkdown(defaultConfig)
+	errUtils.InitializeMarkdown(defaultConfig)
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-
-	utils.InitializeMarkdown(atmosConfig)
-	errUtils.InitializeMarkdown(atmosConfig)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
@@ -232,7 +250,7 @@ func ExecuteWithCommand(rootCmd *cobra.Command) error {
 	}
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig
-	setupLogger(&atmosConfig)
+	SetupLogger(&atmosConfig)
 
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases

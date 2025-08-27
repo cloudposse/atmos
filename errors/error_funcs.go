@@ -16,6 +16,9 @@ import (
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
+// Exit is a variable for testing, so we can mock os.Exit in error handling.
+var Exit = os.Exit
+
 // InitializeMarkdown initializes a new Markdown renderer.
 func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error
@@ -69,9 +72,4 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 	// Exiting here makes it difficult to test.
 	// revive:disable-next-line:deep-exit
 	Exit(1)
-}
-
-// Exit exits the program with the specified exit code.
-func Exit(exitCode int) {
-	os.Exit(exitCode)
 }
