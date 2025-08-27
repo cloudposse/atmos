@@ -32,8 +32,8 @@ commands:
   - atmos validate stacks
   # Test dev stack
   - atmos terraform plan whoami -s dev --identity oidc
-  - atmos terraform apply whoami -s dev -auto-approve -i oidc
-  - atmos terraform destroy whoami -s dev -auto-approve -i oidc
+  - atmos terraform apply whoami -s dev -auto-approve --identity oidc
+  - atmos terraform destroy whoami -s dev -auto-approve --identity oidc
 
 # Auth configuration demo (stub values)
 auth:
