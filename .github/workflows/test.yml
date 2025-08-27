@@ -197,7 +197,7 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKER_GITHUB_API_TOKEN: ${github.token}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-cover
 
       - name: Upload coverage report to Codecov
