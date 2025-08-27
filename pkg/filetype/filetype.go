@@ -26,7 +26,7 @@ func IsYAML(data string) bool {
 		return false
 	}
 
-	// Ensure that the parsed result is not nil and has some meaningful content
+	// Ensure that the parsed result is not nil and has some meaningful content.
 	_, isMap := yml.(map[string]any)
 	_, isSlice := yml.([]any)
 
@@ -84,17 +84,17 @@ func parseJSON(data []byte) (any, error) {
 }
 
 func parseYAML(data []byte) (any, error) {
-	// First, unmarshal into a yaml.Node to preserve the original structure
+	// First, unmarshal into a yaml.Node to preserve the original structure.
 	var node yaml.Node
 	err := yaml.Unmarshal(data, &node)
 	if err != nil {
 		return nil, err
 	}
 
-	// Process the node to ensure strings starting with '#' are properly handled
+	// Process the node to ensure strings starting with '#' are properly handled.
 	processYAMLNode(&node)
 
-	// Decode the processed node into a Go value
+	// Decode the processed node into a Go value.
 	var v any
 	err = node.Decode(&v)
 	if err != nil {
