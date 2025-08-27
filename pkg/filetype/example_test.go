@@ -7,7 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filetype"
 )
 
-// ExampleIsYAML demonstrates how to check if a string is valid YAML
+// ExampleIsYAML demonstrates how to check if a string is valid YAML.
 func ExampleIsYAML() {
 	input := `
 name: example
@@ -25,7 +25,7 @@ metadata:
 	// Output: Valid YAML
 }
 
-// ExampleIsJSON demonstrates how to check if a string is valid JSON
+// ExampleIsJSON demonstrates how to check if a string is valid JSON.
 func ExampleIsJSON() {
 	input := `{
   "name": "example",
@@ -42,7 +42,7 @@ func ExampleIsJSON() {
 	// Output: Valid JSON
 }
 
-// ExampleIsHCL demonstrates how to check if a string is valid HCL
+// ExampleIsHCL demonstrates how to check if a string is valid HCL.
 func ExampleIsHCL() {
 	input := `
 name = "example"
@@ -59,25 +59,25 @@ metadata = {
 	// Output: Valid HCL
 }
 
-// ExampleDetectFormatAndParseFile demonstrates automatic format detection and parsing
+// ExampleDetectFormatAndParseFile demonstrates automatic format detection and parsing.
 func ExampleDetectFormatAndParseFile() {
-	// Create a mock file reader for demonstration
+	// Create a mock file reader for demonstration.
 	mockFileReader := func(filename string) ([]byte, error) {
-		// In a real scenario, this would read from the file system
+		// In a real scenario, this would read from the file system.
 		if filename == "config.json" {
 			return []byte(`{"setting": "value", "enabled": true}`), nil
 		}
 		return nil, os.ErrNotExist
 	}
 
-	// Parse the file with automatic format detection
+	// Parse the file with automatic format detection.
 	result, err := filetype.DetectFormatAndParseFile(mockFileReader, "config.json")
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return
 	}
 
-	// The result is parsed into appropriate Go types
+	// The result is parsed into appropriate Go types.
 	if config, ok := result.(map[string]any); ok {
 		fmt.Printf("Setting: %v\n", config["setting"])
 		fmt.Printf("Enabled: %v\n", config["enabled"])
@@ -87,7 +87,7 @@ func ExampleDetectFormatAndParseFile() {
 	// Enabled: true
 }
 
-// Example_formatDetection shows how to detect and handle different file formats
+// Example_formatDetection shows how to detect and handle different file formats.
 func Example_formatDetection() {
 	inputs := []struct {
 		name    string

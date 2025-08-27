@@ -205,6 +205,6 @@ issues:
 
 output:
   sort-results: true
-  formats:
-    - format: colored-line-number
-      path: stderr
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

@@ -16,15 +16,15 @@ func TestParseYAML(t *testing.T) {
 		assert.Nil(t, result)
 	})
 
-	// Test error case for node.Decode (covers lines 100-101)
+	// Test error case for node.Decode (covers lines 100-101).
 	t.Run("decode error", func(t *testing.T) {
-		// Create YAML with anchor/alias that might fail on decode
+		// Create YAML with anchor/alias that might fail on decode.
 		yamlWithComplexAnchors := []byte(`
 x: &anchor
   <<: *anchor
 `)
 		result, err := parseYAML(yamlWithComplexAnchors)
-		// This may or may not error, but it exercises the decode path
+		// This may or may not error, but it exercises the decode path.
 		if err != nil {
 			assert.Nil(t, result)
 		}
@@ -45,8 +45,8 @@ x: &anchor
 			input:    "key: '#value'",
 			expected: map[string]any{"key": "#value"},
 		},
-		// Note: In YAML, unquoted strings starting with # are comments
-		// This test is removed as it's not valid YAML
+		// Note: In YAML, unquoted strings starting with # are comments.
+		// This test is removed as it's not valid YAML.
 		{
 			name: "nested map with hash values",
 			input: `
@@ -110,23 +110,23 @@ func TestProcessYAMLNode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a node with the test input
+			// Create a node with the test input.
 			node := &yaml.Node{
 				Kind:  yaml.ScalarNode,
 				Tag:   "!!str",
 				Value: tt.input,
 			}
 
-			// Process the node
+			// Process the node.
 			processYAMLNode(node)
 
-			// Check if the style was set correctly
+			// Check if the style was set correctly.
 			assert.Equal(t, tt.expected, node.Style)
 		})
 	}
 
 	t.Run("nested nodes", func(t *testing.T) {
-		// Create a document node with nested content
+		// Create a document node with nested content.
 		doc := &yaml.Node{
 			Kind: yaml.DocumentNode,
 			Content: []*yaml.Node{
@@ -158,17 +158,17 @@ func TestProcessYAMLNode(t *testing.T) {
 			},
 		}
 
-		// Process the document
+		// Process the document.
 		processYAMLNode(doc)
 
-		// Check if the style was set correctly for the hash value
+		// Check if the style was set correctly for the hash value.
 		assert.Equal(t, yaml.SingleQuotedStyle, doc.Content[0].Content[1].Style)
-		// Check that regular value style was not changed
+		// Check that regular value style was not changed.
 		assert.Equal(t, yaml.Style(0), doc.Content[0].Content[3].Style)
 	})
 
 	t.Run("nil node", func(t *testing.T) {
-		// This should not panic
+		// This should not panic.
 		processYAMLNode(nil)
 	})
 }

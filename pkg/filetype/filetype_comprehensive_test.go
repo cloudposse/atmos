@@ -10,14 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestIsYAML tests the IsYAML function with various inputs
+// TestIsYAML tests the IsYAML function with various inputs.
 func TestIsYAML(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected bool
 	}{
-		// Valid YAML cases
+		// Valid YAML cases.
 		{
 			name:     "simple key-value",
 			input:    "key: value",
@@ -64,7 +64,7 @@ func TestIsYAML(t *testing.T) {
 			expected: true,
 		},
 
-		// Invalid YAML cases
+		// Invalid YAML cases.
 		{
 			name:     "empty string",
 			input:    "",
@@ -85,8 +85,8 @@ func TestIsYAML(t *testing.T) {
 			input:    "This is just plain text",
 			expected: false,
 		},
-		// Note: This is actually valid YAML
-		// Removed invalid test case
+		// Note: This is actually valid YAML.
+		// Removed invalid test case.
 		{
 			name:     "binary data",
 			input:    string([]byte{0x00, 0x01, 0x02, 0xff}),
@@ -112,14 +112,14 @@ func TestIsYAML(t *testing.T) {
 	}
 }
 
-// TestIsHCL tests the IsHCL function with various inputs
+// TestIsHCL tests the IsHCL function with various inputs.
 func TestIsHCL(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected bool
 	}{
-		// Valid HCL cases
+		// Valid HCL cases.
 		{
 			name:     "simple assignment",
 			input:    `key = "value"`,
@@ -130,8 +130,8 @@ func TestIsHCL(t *testing.T) {
 			input:    `resource "type" "name" { key = "value" }`,
 			expected: true,
 		},
-		// This test is removed because HCL parsing is sensitive to line breaks
-		// Removed comment test - HCL parsing is sensitive to line break representation
+		// This test is removed because HCL parsing is sensitive to line breaks.
+		// Removed comment test - HCL parsing is sensitive to line break representation.
 		{
 			name:     "hcl with nested blocks",
 			input:    `block { nested { value = true } }`,
@@ -148,7 +148,7 @@ func TestIsHCL(t *testing.T) {
 			expected: true,
 		},
 
-		// Invalid HCL cases
+		// Invalid HCL cases.
 		{
 			name:     "empty string",
 			input:    "",
@@ -164,8 +164,8 @@ func TestIsHCL(t *testing.T) {
 			input:    "key: value",
 			expected: false,
 		},
-		// Note: JSON is valid HCL1 syntax
-		// Removed to avoid confusion
+		// Note: JSON is valid HCL1 syntax.
+		// Removed to avoid confusion.
 		{
 			name:     "plain text",
 			input:    "This is plain text",
@@ -191,14 +191,14 @@ func TestIsHCL(t *testing.T) {
 	}
 }
 
-// TestIsJSON tests the IsJSON function with various inputs
+// TestIsJSON tests the IsJSON function with various inputs.
 func TestIsJSON(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected bool
 	}{
-		// Valid JSON cases
+		// Valid JSON cases.
 		{
 			name:     "simple object",
 			input:    `{"key": "value"}`,
@@ -250,7 +250,7 @@ func TestIsJSON(t *testing.T) {
 			expected: true,
 		},
 
-		// Invalid JSON cases
+		// Invalid JSON cases.
 		{
 			name:     "empty string",
 			input:    "",
@@ -311,7 +311,7 @@ func TestIsJSON(t *testing.T) {
 	}
 }
 
-// TestDetectFormatAndParseFile tests the DetectFormatAndParseFile function
+// TestDetectFormatAndParseFile tests the DetectFormatAndParseFile function.
 func TestDetectFormatAndParseFile(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -436,7 +436,7 @@ func TestDetectFormatAndParseFile(t *testing.T) {
 	}
 }
 
-// TestParseJSON tests the parseJSON function
+// TestParseJSON tests the parseJSON function.
 func TestParseJSON(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -501,7 +501,7 @@ func TestParseJSON(t *testing.T) {
 	}
 }
 
-// TestParseHCL tests the parseHCL function
+// TestParseHCL tests the parseHCL function.
 func TestParseHCL(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -598,9 +598,9 @@ func TestParseHCL(t *testing.T) {
 	}
 }
 
-// TestCtyToGo tests the ctyToGo function indirectly through parseHCL
+// TestCtyToGo tests the ctyToGo function indirectly through parseHCL.
 func TestCtyToGo(t *testing.T) {
-	// Test various HCL types to exercise ctyToGo paths
+	// Test various HCL types to exercise ctyToGo paths.
 	tests := []struct {
 		name     string
 		input    []byte
@@ -668,9 +668,9 @@ func TestCtyToGo(t *testing.T) {
 	}
 }
 
-// TestLargeInputs tests the functions with large inputs
+// TestLargeInputs tests the functions with large inputs.
 func TestLargeInputs(t *testing.T) {
-	// Create large YAML input - build as map to ensure it's valid
+	// Create large YAML input - build as map to ensure it's valid.
 	var yamlParts []string
 	for i := 0; i < 100; i++ {
 		yamlParts = append(yamlParts, fmt.Sprintf("key%d: value%d", i, i))
@@ -678,7 +678,7 @@ func TestLargeInputs(t *testing.T) {
 	largeYAML := strings.Join(yamlParts, "\n")
 	assert.True(t, IsYAML(largeYAML))
 
-	// Create large JSON input - use smaller count to avoid timeout
+	// Create large JSON input - use smaller count to avoid timeout.
 	items := make([]string, 100)
 	for i := range items {
 		items[i] = fmt.Sprintf(`"item%d"`, i)
@@ -686,33 +686,33 @@ func TestLargeInputs(t *testing.T) {
 	largeJSON := "[" + strings.Join(items, ",") + "]"
 	assert.True(t, IsJSON(largeJSON))
 
-	// Create large HCL input - single assignment to ensure parsing works
+	// Create large HCL input - single assignment to ensure parsing works.
 	largeHCL := `key = "value"`
 	assert.True(t, IsHCL(largeHCL))
 }
 
-// TestSpecialCharactersAndBinary tests handling of special characters and binary data
+// TestSpecialCharactersAndBinary tests handling of special characters and binary data.
 func TestSpecialCharactersAndBinary(t *testing.T) {
-	// Test with null bytes
+	// Test with null bytes.
 	nullBytes := "key: value" + string([]byte{0x00}) + "more"
 	assert.False(t, IsYAML(nullBytes))
 	assert.False(t, IsJSON(nullBytes))
 	assert.False(t, IsHCL(nullBytes))
 
-	// Test with control characters
+	// Test with control characters.
 	controlChars := string([]byte{0x01, 0x02, 0x03, 0x04, 0x05})
 	assert.False(t, IsYAML(controlChars))
 	assert.False(t, IsJSON(controlChars))
 	assert.False(t, IsHCL(controlChars))
 
-	// Test with mixed valid and invalid UTF-8
+	// Test with mixed valid and invalid UTF-8.
 	mixedUTF8 := "valid: text" + string([]byte{0xff, 0xfe})
 	assert.False(t, IsYAML(mixedUTF8))
 	assert.False(t, IsJSON(mixedUTF8))
 	assert.False(t, IsHCL(mixedUTF8))
 }
 
-// Benchmarks
+// Benchmarks.
 
 func BenchmarkIsYAML(b *testing.B) {
 	input := "key: value\nnested:\n  child: value"
@@ -744,7 +744,7 @@ func BenchmarkDetectFormatAndParseFile(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		DetectFormatAndParseFile(readFunc, "test.json")
+		_, _ = DetectFormatAndParseFile(readFunc, "test.json")
 	}
 }
 
@@ -752,7 +752,7 @@ func BenchmarkParseYAML(b *testing.B) {
 	input := []byte("key: value\nnested:\n  child: value")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		parseYAML(input)
+		_, _ = parseYAML(input)
 	}
 }
 
@@ -760,7 +760,7 @@ func BenchmarkParseJSON(b *testing.B) {
 	input := []byte(`{"key": "value", "nested": {"child": "value"}}`)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		parseJSON(input)
+		_, _ = parseJSON(input)
 	}
 }
 
@@ -768,6 +768,6 @@ func BenchmarkParseHCL(b *testing.B) {
 	input := []byte(`key = "value"` + "\n" + `nested = { child = "value" }`)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		parseHCL(input, "test.hcl")
+		_, _ = parseHCL(input, "test.hcl")
 	}
 }
