@@ -98,6 +98,15 @@ atmos vendor pull
 
 ## Code Patterns & Conventions
 
+### Comment Style (MANDATORY)
+- **All comments must end with periods** - Comments should be complete sentences
+- This is enforced by golangci-lint's `godot` linter
+- Examples:
+  ```go
+  // CORRECT: This function processes the input data.
+  // WRONG: This function processes the input data
+  ```
+
 ### Configuration Loading
 Configuration follows strict precedence: CLI flags → ENV vars → config files → defaults
 ```go
@@ -143,6 +152,7 @@ viper.SetEnvPrefix("ATMOS")
 - **Integration tests**: Test command flows end-to-end using `tests/` fixtures
 - **Mock interfaces**: Use generated mocks for external dependencies
 - Target >80% coverage, especially for `pkg/` and `internal/exec/`
+- **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
 ### CLI Command Structure & Examples
 Atmos uses **embedded markdown files** for maintainable examples:
