@@ -607,6 +607,6 @@ func TestPrintTelemetryDisclosureOutputsToStderr(t *testing.T) {
 	assert.Empty(t, stdoutOutput, "Telemetry disclosure should not write to stdout")
 
 	// Verify stderr contains the disclosure message
-	assert.True(t, strings.Contains(stderrOutput, "Notice: Atmos now collects"), 
+	assert.True(t, strings.Contains(stderrOutput, "Notice: Atmos now collects"),
 		"Telemetry disclosure should write to stderr")
 }
