@@ -74,7 +74,7 @@ func (i *awsOidc) Login() error {
 	// 1) Fetch a GitHub OIDC JWT
 	jwt, err := i.loadOIDCJWT()
 	if err != nil {
-		return err
+		return fmt.Errorf("load OIDC JWT: %w", err)
 	}
 	baseCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(i.Common.Region),
