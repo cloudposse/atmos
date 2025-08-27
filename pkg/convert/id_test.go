@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestMakeId tests basic functionality of MakeId function
+// TestMakeId tests basic functionality of MakeId function.
 func TestMakeId(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -19,7 +19,7 @@ func TestMakeId(t *testing.T) {
 		{
 			name:     "simple string",
 			input:    []byte("hello"),
-			wantLen:  40, // SHA1 produces 40 hex characters
+			wantLen:  40, // SHA1 produces 40 hex characters.
 			checkHex: true,
 		},
 		{
@@ -46,19 +46,19 @@ func TestMakeId(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := MakeId(tt.input)
 
-			// Check length
+			// Check length.
 			if len(got) != tt.wantLen {
 				t.Errorf("MakeId() length = %v, want %v", len(got), tt.wantLen)
 			}
 
-			// Check if it's valid hexadecimal
+			// Check if it's valid hexadecimal.
 			if tt.checkHex {
 				if _, err := hex.DecodeString(got); err != nil {
 					t.Errorf("MakeId() returned invalid hex: %v", err)
 				}
 			}
 
-			// Check if it's lowercase
+			// Check if it's lowercase.
 			if got != strings.ToLower(got) {
 				t.Errorf("MakeId() should return lowercase hex, got %v", got)
 			}
@@ -66,22 +66,22 @@ func TestMakeId(t *testing.T) {
 	}
 }
 
-// TestMakeId_EdgeCases tests edge cases
+// TestMakeId_EdgeCases tests edge cases.
 func TestMakeId_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name  string
 		input []byte
-		want  string // Known SHA1 values for edge cases
+		want  string // Known SHA1 values for edge cases.
 	}{
 		{
 			name:  "empty input",
 			input: []byte{},
-			want:  "da39a3ee5e6b4b0d3255bfef95601890afd80709", // SHA1 of empty string
+			want:  "da39a3ee5e6b4b0d3255bfef95601890afd80709", // SHA1 of empty string.
 		},
 		{
 			name:  "nil input",
 			input: nil,
-			want:  "da39a3ee5e6b4b0d3255bfef95601890afd80709", // SHA1 of nil is same as empty
+			want:  "da39a3ee5e6b4b0d3255bfef95601890afd80709", // SHA1 of nil is same as empty.
 		},
 		{
 			name:  "single byte zero",
@@ -105,7 +105,7 @@ func TestMakeId_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestMakeId_SpecialCharacters tests special characters and binary data
+// TestMakeId_SpecialCharacters tests special characters and binary data.
 func TestMakeId_SpecialCharacters(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -141,7 +141,7 @@ func TestMakeId_SpecialCharacters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := MakeId(tt.input)
 
-			// Verify it produces a valid SHA1 hash
+			// Verify it produces a valid SHA1 hash.
 			if len(got) != 40 {
 				t.Errorf("MakeId() length = %v, want 40", len(got))
 			}
@@ -153,21 +153,21 @@ func TestMakeId_SpecialCharacters(t *testing.T) {
 	}
 }
 
-// TestMakeId_Consistency tests that the function is deterministic
+// TestMakeId_Consistency tests that the function is deterministic.
 func TestMakeId_Consistency(t *testing.T) {
 	input := []byte("test consistency")
 
-	// Generate hash multiple times
+	// Generate hash multiple times.
 	hash1 := MakeId(input)
 	hash2 := MakeId(input)
 	hash3 := MakeId(input)
 
-	// All should be identical
+	// All should be identical.
 	if hash1 != hash2 || hash2 != hash3 {
 		t.Errorf("MakeId() is not consistent: got %v, %v, %v", hash1, hash2, hash3)
 	}
 
-	// Different input should produce different hash
+	// Different input should produce different hash.
 	differentInput := []byte("different input")
 	hash4 := MakeId(differentInput)
 
@@ -176,7 +176,7 @@ func TestMakeId_Consistency(t *testing.T) {
 	}
 }
 
-// TestMakeId_KnownValues tests against known SHA1 values
+// TestMakeId_KnownValues tests against known SHA1 values.
 func TestMakeId_KnownValues(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -220,7 +220,7 @@ func TestMakeId_KnownValues(t *testing.T) {
 	}
 }
 
-// TestMakeId_LargeInputs tests with large inputs
+// TestMakeId_LargeInputs tests with large inputs.
 func TestMakeId_LargeInputs(t *testing.T) {
 	sizes := []struct {
 		name string
@@ -234,7 +234,7 @@ func TestMakeId_LargeInputs(t *testing.T) {
 
 	for _, sz := range sizes {
 		t.Run(sz.name, func(t *testing.T) {
-			// Create input of specified size
+			// Create input of specified size.
 			input := make([]byte, sz.size)
 			for i := range input {
 				input[i] = byte(i % 256)
@@ -242,12 +242,12 @@ func TestMakeId_LargeInputs(t *testing.T) {
 
 			got := MakeId(input)
 
-			// Verify it produces valid output
+			// Verify it produces valid output.
 			if len(got) != 40 {
 				t.Errorf("MakeId() with %v input: length = %v, want 40", sz.name, len(got))
 			}
 
-			// Verify consistency with large input
+			// Verify consistency with large input.
 			got2 := MakeId(input)
 			if got != got2 {
 				t.Errorf("MakeId() not consistent with %v input", sz.name)
@@ -256,9 +256,9 @@ func TestMakeId_LargeInputs(t *testing.T) {
 	}
 }
 
-// TestMakeId_Parallel tests thread safety
+// TestMakeId_Parallel tests thread safety.
 func TestMakeId_Parallel(t *testing.T) {
-	// Run parallel tests to ensure thread safety
+	// Run parallel tests to ensure thread safety.
 	inputs := [][]byte{
 		[]byte("test1"),
 		[]byte("test2"),
@@ -269,20 +269,20 @@ func TestMakeId_Parallel(t *testing.T) {
 
 	results := make(map[string]string)
 
-	// First, get expected results
+	// First, get expected results.
 	for _, input := range inputs {
 		key := string(input)
 		results[key] = MakeId(input)
 	}
 
-	// Now run in parallel and verify
+	// Now run in parallel and verify.
 	t.Run("parallel execution", func(t *testing.T) {
 		for _, input := range inputs {
-			input := input // capture range variable
+			input := input // capture range variable.
 			t.Run(string(input), func(t *testing.T) {
 				t.Parallel()
 
-				// Run multiple times in parallel
+				// Run multiple times in parallel.
 				for i := 0; i < 100; i++ {
 					got := MakeId(input)
 					expected := results[string(input)]
@@ -295,9 +295,9 @@ func TestMakeId_Parallel(t *testing.T) {
 	})
 }
 
-// ExampleMakeId demonstrates how to use MakeId function
+// ExampleMakeId demonstrates how to use MakeId function.
 func ExampleMakeId() {
-	// Generate a stable ID from a resource identifier
+	// Generate a stable ID from a resource identifier.
 	resourceID := []byte("user:12345:session:67890")
 	id := MakeId(resourceID)
 
@@ -305,7 +305,7 @@ func ExampleMakeId() {
 	// Output: Stable ID: c41212f6... (length: 40)
 }
 
-// BenchmarkMakeId benchmarks the MakeId function with various input sizes
+// BenchmarkMakeId benchmarks the MakeId function with various input sizes.
 func BenchmarkMakeId(b *testing.B) {
 	benchmarks := []struct {
 		name string
@@ -334,7 +334,7 @@ func BenchmarkMakeId(b *testing.B) {
 	}
 }
 
-// BenchmarkMakeId_Parallel benchmarks parallel execution
+// BenchmarkMakeId_Parallel benchmarks parallel execution.
 func BenchmarkMakeId_Parallel(b *testing.B) {
 	input := []byte("benchmark parallel test input")
 
@@ -345,17 +345,17 @@ func BenchmarkMakeId_Parallel(b *testing.B) {
 	})
 }
 
-// TestMakeId_Properties tests various properties of the hash function
+// TestMakeId_Properties tests various properties of the hash function.
 func TestMakeId_Properties(t *testing.T) {
 	t.Run("output format", func(t *testing.T) {
 		result := MakeId([]byte("test"))
 
-		// Should be exactly 40 characters (SHA1 in hex)
+		// Should be exactly 40 characters (SHA1 in hex).
 		if len(result) != 40 {
 			t.Errorf("Expected length 40, got %d", len(result))
 		}
 
-		// Should only contain valid hex characters
+		// Should only contain valid hex characters.
 		for _, c := range result {
 			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
 				t.Errorf("Invalid hex character: %c", c)
@@ -371,7 +371,7 @@ func TestMakeId_Properties(t *testing.T) {
 			results[i] = MakeId(input)
 		}
 
-		// All results should be identical
+		// All results should be identical.
 		for i := 1; i < 10; i++ {
 			if results[i] != results[0] {
 				t.Errorf("Non-deterministic output detected")
@@ -381,7 +381,7 @@ func TestMakeId_Properties(t *testing.T) {
 
 	t.Run("collision resistance", func(t *testing.T) {
 		// While SHA1 has known collision vulnerabilities,
-		// for our test inputs they should all produce unique hashes
+		// for our test inputs they should all produce unique hashes.
 		hashes := make(map[string][]byte)
 
 		testInputs := [][]byte{
