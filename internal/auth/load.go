@@ -19,7 +19,7 @@ var identityRegistry = map[string]func(provider string, identity string, config 
 	"aws/saml":                NewAwsSamlFactory,
 	"":                        NewAwsAssumeRoleFactory, // Empty - used for AssumeRole - no ProviderName
 	"aws/user":                NewAwsUserFactory,
-	//"oidc":                    func() LoginMethod { return &awsSaml{} },
+	"aws/oidc":               NewAwsOidcFactory,
 }
 
 func setDefaults(data *schema.ProviderDefaultConfig, provider string, config schema.AuthConfig) {
