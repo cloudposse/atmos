@@ -12,7 +12,7 @@ import (
 
 func TestTerraformRun1(t *testing.T) {
 	skipIfTerraformNotInstalled(t)
-	
+
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
@@ -51,7 +51,7 @@ func TestTerraformRun1(t *testing.T) {
 
 func TestTerraformRun2(t *testing.T) {
 	skipIfTerraformNotInstalled(t)
-	
+
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
@@ -92,7 +92,7 @@ func TestTerraformRun2(t *testing.T) {
 
 func TestTerraformRun3(t *testing.T) {
 	skipIfTerraformNotInstalled(t)
-	
+
 	if os.Getenv("TEST_EXIT") == "1" {
 		stacksPath := "../tests/fixtures/scenarios/stack-templates-2"
 
