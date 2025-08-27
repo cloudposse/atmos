@@ -45,19 +45,19 @@ func TestMakeId(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := MakeId(tt.input)
-			
+
 			// Check length
 			if len(got) != tt.wantLen {
 				t.Errorf("MakeId() length = %v, want %v", len(got), tt.wantLen)
 			}
-			
+
 			// Check if it's valid hexadecimal
 			if tt.checkHex {
 				if _, err := hex.DecodeString(got); err != nil {
 					t.Errorf("MakeId() returned invalid hex: %v", err)
 				}
 			}
-			
+
 			// Check if it's lowercase
 			if got != strings.ToLower(got) {
 				t.Errorf("MakeId() should return lowercase hex, got %v", got)
@@ -140,12 +140,12 @@ func TestMakeId_SpecialCharacters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := MakeId(tt.input)
-			
+
 			// Verify it produces a valid SHA1 hash
 			if len(got) != 40 {
 				t.Errorf("MakeId() length = %v, want 40", len(got))
 			}
-			
+
 			if _, err := hex.DecodeString(got); err != nil {
 				t.Errorf("MakeId() produced invalid hex: %v", err)
 			}
@@ -156,21 +156,21 @@ func TestMakeId_SpecialCharacters(t *testing.T) {
 // TestMakeId_Consistency tests that the function is deterministic
 func TestMakeId_Consistency(t *testing.T) {
 	input := []byte("test consistency")
-	
+
 	// Generate hash multiple times
 	hash1 := MakeId(input)
 	hash2 := MakeId(input)
 	hash3 := MakeId(input)
-	
+
 	// All should be identical
 	if hash1 != hash2 || hash2 != hash3 {
 		t.Errorf("MakeId() is not consistent: got %v, %v, %v", hash1, hash2, hash3)
 	}
-	
+
 	// Different input should produce different hash
 	differentInput := []byte("different input")
 	hash4 := MakeId(differentInput)
-	
+
 	if hash1 == hash4 {
 		t.Errorf("MakeId() produced same hash for different inputs")
 	}
@@ -239,14 +239,14 @@ func TestMakeId_LargeInputs(t *testing.T) {
 			for i := range input {
 				input[i] = byte(i % 256)
 			}
-			
+
 			got := MakeId(input)
-			
+
 			// Verify it produces valid output
 			if len(got) != 40 {
 				t.Errorf("MakeId() with %v input: length = %v, want 40", sz.name, len(got))
 			}
-			
+
 			// Verify consistency with large input
 			got2 := MakeId(input)
 			if got != got2 {
@@ -266,22 +266,22 @@ func TestMakeId_Parallel(t *testing.T) {
 		[]byte("test4"),
 		[]byte("test5"),
 	}
-	
+
 	results := make(map[string]string)
-	
+
 	// First, get expected results
 	for _, input := range inputs {
 		key := string(input)
 		results[key] = MakeId(input)
 	}
-	
+
 	// Now run in parallel and verify
 	t.Run("parallel execution", func(t *testing.T) {
 		for _, input := range inputs {
 			input := input // capture range variable
 			t.Run(string(input), func(t *testing.T) {
 				t.Parallel()
-				
+
 				// Run multiple times in parallel
 				for i := 0; i < 100; i++ {
 					got := MakeId(input)
@@ -300,7 +300,7 @@ func ExampleMakeId() {
 	// Generate a stable ID from a resource identifier
 	resourceID := []byte("user:12345:session:67890")
 	id := MakeId(resourceID)
-	
+
 	fmt.Printf("Stable ID: %s (length: %d)\n", id[:8]+"...", len(id))
 	// Output: Stable ID: c41212f6... (length: 40)
 }
@@ -322,11 +322,11 @@ func BenchmarkMakeId(b *testing.B) {
 		for i := range input {
 			input[i] = byte(i % 256)
 		}
-		
+
 		b.Run(bm.name, func(b *testing.B) {
 			b.SetBytes(int64(bm.size))
 			b.ResetTimer()
-			
+
 			for i := 0; i < b.N; i++ {
 				_ = MakeId(input)
 			}
@@ -337,7 +337,7 @@ func BenchmarkMakeId(b *testing.B) {
 // BenchmarkMakeId_Parallel benchmarks parallel execution
 func BenchmarkMakeId_Parallel(b *testing.B) {
 	input := []byte("benchmark parallel test input")
-	
+
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			_ = MakeId(input)
@@ -349,12 +349,12 @@ func BenchmarkMakeId_Parallel(b *testing.B) {
 func TestMakeId_Properties(t *testing.T) {
 	t.Run("output format", func(t *testing.T) {
 		result := MakeId([]byte("test"))
-		
+
 		// Should be exactly 40 characters (SHA1 in hex)
 		if len(result) != 40 {
 			t.Errorf("Expected length 40, got %d", len(result))
 		}
-		
+
 		// Should only contain valid hex characters
 		for _, c := range result {
 			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
@@ -362,15 +362,15 @@ func TestMakeId_Properties(t *testing.T) {
 			}
 		}
 	})
-	
+
 	t.Run("deterministic output", func(t *testing.T) {
 		input := []byte("deterministic test")
 		results := make([]string, 10)
-		
+
 		for i := 0; i < 10; i++ {
 			results[i] = MakeId(input)
 		}
-		
+
 		// All results should be identical
 		for i := 1; i < 10; i++ {
 			if results[i] != results[0] {
@@ -378,12 +378,12 @@ func TestMakeId_Properties(t *testing.T) {
 			}
 		}
 	})
-	
+
 	t.Run("collision resistance", func(t *testing.T) {
 		// While SHA1 has known collision vulnerabilities,
 		// for our test inputs they should all produce unique hashes
 		hashes := make(map[string][]byte)
-		
+
 		testInputs := [][]byte{
 			[]byte("test1"),
 			[]byte("test2"),
@@ -396,7 +396,7 @@ func TestMakeId_Properties(t *testing.T) {
 			bytes.Repeat([]byte("a"), 100),
 			bytes.Repeat([]byte("b"), 100),
 		}
-		
+
 		for _, input := range testInputs {
 			hash := MakeId(input)
 			if existing, found := hashes[hash]; found {
