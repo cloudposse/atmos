@@ -1,210 +1,183 @@
-# Configuration for golangci-lint
-# Documentation: https://golangci-lint.run/usage/configuration/
-
+version: "2"
 run:
-  timeout: 5m # Set a time limit for the linter run
-  tests: true # Include test files in the analysis
-
+  tests: true
 linters:
   enable:
-    - bodyclose # Check that HTTP response body is closed
-    - cyclop # Check cyclomatic complexity
-    - dogsled # Check for assignments with too many blank identifiers
-    - dupl # Check for duplicated code
-    - err113 # Enforces best practices for error handling, specifically around comparing errors.
-    - errcheck # Check that errors are handled
-    - forbidigo # Forbid specific function calls
-    - funlen # Enforce function length limits
-    - gocognit # Check cognitive complexity
-    - gocritic # Enable additional checks for code issues
-    - godot # Enforce comment formatting
-    - gofumpt # Enforce consistent formatting
-    - goimports # Enforce import formatting
-    - gosec # Inspect source code for security problems
-    - govet # Report likely mistakes in code
-    - importas # Check for aliasing imports
-    - loggercheck # Enforce structured logging best practices
-    - misspell # Detect spelling mistakes
-    - nestif # Detect deeply nested if statements
-    - nilerr # Finds the code that returns nil even if it checks that the error is not nil.
-    - nolintlint # Check for nolint comments
-    - revive # Fast, configurable linter
-    - rowserrcheck # Check that rows are closed
-    - staticcheck # Perform static analysis
-    - tparallel # Check for parallel test execution
-    - unconvert # Detect redundant type conversions
-    - unparam # Detect unused function parameters
-    - unused # Detect unused variables
-    - whitespace # Check for leading whitespace
-
-linters-settings:
-  dogsled:
-    # Checks assignments with too many blank identifiers.
-    # Default: 2
-    max-blank-identifiers: 3
-
-  dupl:
-    threshold: 150 # Tokens count to trigger issue.
-
-  forbidigo:
-    # Forbid specific function calls
-    forbid:
-      - p: "os\\.Getenv"
-        msg: "Use `viper.BindEnv` for new environment variables instead of `os.Getenv`"
-
-  funlen:
-    lines: 60 # Maximum number of lines per function
-    statements: 40 # Maximum number of statements per function
-    ignore-comments: true # Ignore comments when counting lines.
-
-  lll:
-    # Max line length
-    line-length: 120
-    # Tab width in spaces when converting tabs
-    tab-width: 4
-
-  gosec:
-    excludes:
-      - G101 # Look for hard coded credentials
-
-  cyclop:
-    # Maximum function complexity
-    max-complexity: 15
-    # Skip tests
-    skip-tests: true
-
-  gocognit:
-    # Maximum cognitive complexity
-    min-complexity: 20
-
-  godot:
-    # Check if comments end in a period
-    period: true
-    # Capital at start of comment
-    capital: true
-
-  importas:
-    no-unaliased: true # Prevents using `github.com/charmbracelet/log` without an alias
-    no-extra-aliases: false # Disallows unnecessary aliasing
-    alias:
-      - pkg: github.com/charmbracelet/log
-        alias: log # Enforce 'log' as the only allowed alias
-
-  revive:
+    - bodyclose
+    - cyclop
+    - dogsled
+    - dupl
+    - err113
+    - forbidigo
+    - funlen
+    - gocognit
+    - gocritic
+    - godot
+    - gosec
+    - importas
+    - loggercheck
+    - misspell
+    - nestif
+    - nilerr
+    - nolintlint
+    - revive
+    - rowserrcheck
+    - tparallel
+    - unconvert
+    - unparam
+    - whitespace
+  settings:
+    cyclop:
+      max-complexity: 15
+    dogsled:
+      max-blank-identifiers: 3
+    dupl:
+      threshold: 150
+    forbidigo:
+      forbid:
+        - pattern: os\.Getenv
+          msg: Use `viper.BindEnv` for new environment variables instead of `os.Getenv`
+    funlen:
+      lines: 60
+      statements: 40
+      ignore-comments: true
+    gocognit:
+      min-complexity: 20
+    gocritic:
+      enabled-checks:
+        - rangeValCopy
+        - hugeParam
+        - commentedOutCode
+        - emptyDecl
+        - filepathJoin
+        - commentedOutImport
+        - initClause
+        - nestingReduce
+        - preferFilepathJoin
+    godot:
+      capital: true
+      period: true
+    gosec:
+      excludes:
+        - G101
+    importas:
+      alias:
+        - pkg: github.com/charmbracelet/log
+          alias: log
+      no-unaliased: true
+      no-extra-aliases: false
+    lll:
+      line-length: 120
+      tab-width: 4
+    loggercheck:
+      kitlog: false
+      klog: false
+      logr: false
+      slog: false
+      zap: false
+      require-string-key: true
+      no-printf-like: true
+      rules:
+        - (github.com/charmbracelet/log.Logger).Info
+        - (github.com/charmbracelet/log.Logger).Error
+        - (github.com/charmbracelet/log.Logger).Warn
+        - (github.com/charmbracelet/log.Logger).Debug
+        - (github.com/charmbracelet/log.Logger).Fatal
+    nestif:
+      min-complexity: 4
+    revive:
+      rules:
+        - name: banned-characters
+          arguments:
+            - goto
+        - name: error-strings
+          arguments:
+            - disallow-newlines: true
+        - name: file-length-limit
+          arguments:
+            - max: 500
+              skipBlankLines: true
+              skipComments: true
+        - name: function-length
+          arguments:
+            - 50
+            - 60
+        - name: function-result-limit
+          arguments:
+            - 3
+          severity: warning
+        - name: cognitive-complexity
+          arguments:
+            - 25
+        - name: cyclomatic
+          arguments:
+            - 10
+        - name: add-constant
+          arguments:
+            - allowFloats: 0.0,0.,1.0,1.,2.0,2.
+              allowInts: 0,1,2,3,4
+              allowStrs: '"","image","error","path","import","path","%w","%s","file","/"'
+              maxLitCount: "3"
+        - name: argument-limit
+          arguments:
+            - 5
+        - name: deep-exit
+        - name: early-return
+        - name: comment-spacings
+          arguments:
+            - mypragma
+            - otherpragma
+          severity: warning
+          disabled: false
+        - name: var-declaration
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: banned-characters
-        arguments:
-          - "goto"
-      - name: error-strings
-        arguments:
-          - disallow-newlines: true
-      - name: file-length-limit
-        arguments:
-          - max: 500 # Max lines per file
-            skipComments: true
-            skipBlankLines: true
-      - name: function-length
-        arguments: [50, 60] # Max lines per function
-      - name: function-result-limit
-        severity: warning
-        arguments: [3] # Functions should return at most 2 values; use objects for better readability and maintainability
-      - name: cognitive-complexity
-        arguments: [25] # Max cognitive complexity
-      - name: cyclomatic
-        arguments: [10] # Max cyclomatic complexity
-      - name: add-constant
-        arguments:
-          - maxLitCount: "3"
-            allowStrs: '"","image","error","path","import","path","%w","%s","file","/"'
-            allowInts: "0,1,2,3,4"
-            allowFloats: "0.0,0.,1.0,1.,2.0,2."
-      - name: argument-limit
-        arguments: [5] # Max arguments per function
-      - name: deep-exit
-      - name: early-return
-      - name: comment-spacings
-        severity: warning
-        disabled: false
-        exclude: []
-        arguments:
-          - mypragma
-          - otherpragma
-      - name: var-declaration
-
-  # https://go-critic.com/overview.html
-  gocritic:
-    # Enable specific checks by their exact names
-    enabled-checks:
-      - rangeValCopy # detects copies of large objects in range loops
-      - hugeParam # detects large parameters that could be passed by pointer
-      - commentedOutCode # Detects commented-out code
-      - emptyDecl # Detects empty declarations
-      - filepathJoin # Detects problems in filepath.Join() function calls
-      - commentedOutImport # Detects commented-out imports
-      - initClause # Detects non-assignment statements inside if/switch init clause
-      - nestingReduce # Finds where nesting level could be reduced
-      - preferFilepathJoin # Detects concatenation with os.PathSeparator which can be replaced with filepath.Join
-
-  loggercheck:
-    # Disable built-in checks for other logging libraries
-    kitlog: false
-    klog: false
-    logr: false
-    slog: false
-    zap: false
-
-    # Enforce structured logging best practices, by requiring all logging keys to be inlined constant strings.
-    require-string-key: true
-
-    # Require printf-like format specifier (%s, %d for example) not present.
-    no-printf-like: true
-
-    # Add custom rules for `charmbracelet/log`
-    rules:
-      - (github.com/charmbracelet/log.Logger).Info
-      - (github.com/charmbracelet/log.Logger).Error
-      - (github.com/charmbracelet/log.Logger).Warn
-      - (github.com/charmbracelet/log.Logger).Debug
-      - (github.com/charmbracelet/log.Logger).Fatal
-
-  nestif:
-    # Minimal complexity of if statements to report.
-    min-complexity: 4
-
-severity:
-  default-severity: error
-  case-sensitive: true
-  rules:
-    # Downgrade severity for specific linters until we increase the code quality
-    # to avoid overwhelming PRs with too many required changes.
-    - linters:
-        - function-length
-        - function-result-limit
-        - nestif
-        - cognitive-complexity
-        - cyclomatic
-        - nolintlint
-      severity: warning
-
+      - linters:
+          - err113
+          - errcheck
+          - forbidigo
+          - funlen
+          - gocognit
+          - gosec
+          - revive
+        path: _test\.go$
+      - linters:
+          - cyclop
+        path: (.+)_test\.go
+    paths:
+      - experiments/.*
+      - third_party$
+      - builtin$
+      - examples$
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-dirs:
-    - experiments/.*
-  exclude-rules:
-    - path: _test\.go$ # Ignore test files for specific linters
-      linters:
-        - err113
-        - errcheck
-        - funlen
-        - gci
-        - gocognit
-        - gosec
-        - revive
-        - forbidigo
-
-output:
-  sort-results: true
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
+severity:
+  default: error
+  rules:
+    - linters:
+        - cognitive-complexity
+        - cyclomatic
+        - function-length
+        - function-result-limit
+        - nestif
+        - nolintlint
+      severity: warning
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - experiments/.*
+      - third_party$
+      - builtin$
+      - examples$
+      - _test\.go$
