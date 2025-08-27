@@ -38,7 +38,7 @@ func createInitialCommit(t *testing.T, repo *git.Repository, tempDir string) {
 // Helper function to create a repository with a remote.
 func createRepoWithRemote(t *testing.T, remoteURL string) *git.Repository {
 	t.Helper()
-	
+
 	tempDir := t.TempDir()
 	repo, err := git.PlainInit(tempDir, false)
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func createRepoWithRemote(t *testing.T, remoteURL string) *git.Repository {
 // Helper function to validate repo info for GitHub remotes.
 func validateGitHubRepoInfo(t *testing.T, info *RepoInfo, expectedURL string) {
 	t.Helper()
-	
+
 	assert.NotEmpty(t, info.LocalRepoPath)
 	assert.NotNil(t, info.LocalWorktree)
 	assert.NotEmpty(t, info.LocalWorktreePath)
