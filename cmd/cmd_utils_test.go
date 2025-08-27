@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -189,5 +190,13 @@ func TestIsVersionCommand(t *testing.T) {
 			result := isVersionCommand()
 			assert.Equal(t, tt.expected, result)
 		})
+	}
+}
+
+// skipIfPackerNotInstalled skips the test if packer is not available in PATH.
+func skipIfPackerNotInstalled(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("packer"); err != nil {
+		t.Skip("Skipping test: packer is not installed or not in PATH")
 	}
 }
