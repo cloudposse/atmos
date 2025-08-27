@@ -239,7 +239,12 @@ func WithWidth(width uint) Option {
 }
 
 func NewTerminalMarkdownRenderer(atmosConfig *schema.AtmosConfiguration) (*Renderer, error) {
-	maxWidth := atmosConfig.Settings.Docs.MaxWidth
+	// Use Terminal.MaxWidth instead of deprecated Docs.MaxWidth
+	maxWidth := atmosConfig.Settings.Terminal.MaxWidth
+	if maxWidth == 0 && atmosConfig.Settings.Docs.MaxWidth > 0 {
+		// Fall back to deprecated field for backward compatibility
+		maxWidth = atmosConfig.Settings.Docs.MaxWidth
+	}
 	// Create a terminal writer to get the optimal width
 	termWriter := term.NewResponsiveWriter(os.Stdout)
 	var wr *term.TerminalWriter
