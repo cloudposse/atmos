@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -88,6 +89,10 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 }
 
 func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
+	// Skip if terraform is not installed
+	if _, err := exec.LookPath("terraform"); err != nil {
+		t.Skip("Skipping test: terraform is not installed or not in PATH")
+	}
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
@@ -146,6 +151,10 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 }
 
 func TestExecuteTerraformQuery(t *testing.T) {
+	// Skip if terraform is not installed
+	if _, err := exec.LookPath("terraform"); err != nil {
+		t.Skip("Skipping test: terraform is not installed or not in PATH")
+	}
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
