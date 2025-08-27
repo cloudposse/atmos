@@ -565,7 +565,7 @@ func TestMarginAndPaddingStyles(t *testing.T) {
 	// Verify the H1 margin was set
 	assert.NotNil(t, style.H1.Margin)
 	assert.Equal(t, uint(2), *style.H1.Margin)
-	
+
 	// Verify the CodeBlock margin was set
 	assert.NotNil(t, style.CodeBlock.Margin)
 	assert.Equal(t, uint(3), *style.CodeBlock.Margin)
