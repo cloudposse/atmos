@@ -306,6 +306,55 @@ jobs:
           cd examples/${{ matrix.demo-folder }}
           atmos test
 
+  # run auth demo tests
+  auth:
+    name: "[auth] ${{ matrix.demo-folder }}"
+    needs: build
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        demo-folder:
+          - demo-auth
+
+    timeout-minutes: 20
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
+          tofu_wrapper: false
+
+      # https://github.com/hashicorp/setup-packer
+      - name: Install Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Run tests for ${{ matrix.demo-folder }}
+        run: |
+          cd examples/${{ matrix.demo-folder }}
+          atmos test
+
   # run k3s demo tests
   k3s:
     name: "[k3s] ${{ matrix.demo-folder }}"

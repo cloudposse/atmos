@@ -1,0 +1,79 @@
+base_path: "./"
+
+schemas:
+  atmos:
+    manifest: "schemas/atmos-manifest.json"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+  
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Custom CLI commands
+commands:
+- name: "test"
+  description: "Run all tests"
+  steps:
+  - atmos validate stacks
+  # Test dev stack
+  - atmos terraform plan whoami -s dev
+  - atmos terraform apply whoami -s dev -auto-approve
+  - atmos terraform destroy whoami -s dev -auto-approve
+
+# Auth configuration demo (stub values)
+auth:
+  default_profile: "acme-identity"
+  default_region: "us-east-2"
+  session_length: 15 minutes
+  providers:
+    oidc:
+      type: aws/oidc
+      region: us-east-1
+      profile: oidc
+    idp-acme-saml:
+      type: aws/saml
+      url: https://mock
+      idp_arn: arn:aws:iam::000000000000:saml-provider/mock
+      profile: "acme-identity"
+    idp-acme-sso:
+      type: aws/iam-identity-center
+      url: https://mock
+      profile: "acme-identity"
+      role_name: "IdentityManagersTeamAccess"
+      account_name: "core-identity"
+    idp-superuser:
+      type: aws/user
+
+  identities:
+    # Used in tests
+    oidc:
+      provider: oidc
+      role_arn: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
+
+    # Example identities mapping to providers (stubbed examples)
+    saml:
+      provider: idp-acme-saml
+      role_arn: arn:aws:iam::111111111111:role/ExampleRole
+    sso:
+      provider: idp-acme-sso
+      account_id: "111111111111"
+      role_name: "ExampleRole"
+    superuser:
+      provider: idp-superuser
+      profile: default
+
