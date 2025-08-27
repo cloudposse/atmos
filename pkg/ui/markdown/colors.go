@@ -2,7 +2,7 @@ package markdown
 
 import "github.com/charmbracelet/lipgloss"
 
-// Base colors used throughout the application
+// Base colors used throughout the application.
 var (
 	White       = "#FFFFFF"
 	Purple      = "#9B51E0"
@@ -24,7 +24,7 @@ var (
 	RedLight    = "#FC8181"
 )
 
-// Colors defines the color scheme for markdown rendering
+// Colors defines the color scheme for markdown rendering.
 var Colors = struct {
 	Primary    lipgloss.AdaptiveColor
 	Secondary  lipgloss.AdaptiveColor

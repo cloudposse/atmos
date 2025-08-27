@@ -15,7 +15,7 @@ import (
 
 const defaultWidth = 80
 
-// Renderer is a markdown renderer using Glamour
+// Renderer is a markdown renderer using Glamour.
 type Renderer struct {
 	renderer              *glamour.TermRenderer
 	width                 uint
@@ -26,13 +26,13 @@ type Renderer struct {
 }
 
 // NewRenderer creates a new Markdown renderer with the given options.
-func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+func NewRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	r := &Renderer{
 		width:                 defaultWidth,           // default width
 		profile:               termenv.ColorProfile(), // default color profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
-		atmosConfig:           &atmosConfig,
+		atmosConfig:           atmosConfig,
 	}
 
 	// Apply options
@@ -56,7 +56,7 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 	}
 
 	// Get default style
-	style, err := GetDefaultStyle(atmosConfig)
+	style, err := GetDefaultStyle(*atmosConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	}
 
 	if details != "" {
-		content += fmt.Sprintf("%s", details)
+		content += details
 	}
 
 	if suggestion != "" {
@@ -238,7 +238,7 @@ func WithWidth(width uint) Option {
 	}
 }
 
-func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
+func NewTerminalMarkdownRenderer(atmosConfig *schema.AtmosConfiguration) (*Renderer, error) {
 	maxWidth := atmosConfig.Settings.Docs.MaxWidth
 	// Create a terminal writer to get the optimal width
 	termWriter := term.NewResponsiveWriter(os.Stdout)

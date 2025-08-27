@@ -45,7 +45,7 @@ func TestRenderer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, _ := NewRenderer(tt.atmosConfig)
+			r, _ := NewRenderer(&tt.atmosConfig)
 			r.isTTYSupportForStdout = func() bool {
 				return true
 			}
@@ -84,7 +84,7 @@ func TestRenderErrorf(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, _ := NewRenderer(schema.AtmosConfiguration{})
+			r, _ := NewRenderer(&schema.AtmosConfiguration{})
 			r.isTTYSupportForStderr = func() bool {
 				return tt.isColor
 			}
@@ -127,7 +127,7 @@ func TestRenderAsciiWithoutWordWrap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(schema.AtmosConfiguration{})
+			r, err := NewRenderer(&schema.AtmosConfiguration{})
 			require.NoError(t, err)
 
 			result, err := r.RenderAsciiWithoutWordWrap(tt.input)
@@ -157,7 +157,7 @@ func TestRenderAscii(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(schema.AtmosConfiguration{})
+			r, err := NewRenderer(&schema.AtmosConfiguration{})
 			require.NoError(t, err)
 
 			result, err := r.RenderAscii(tt.input)
@@ -187,7 +187,7 @@ func TestRenderWorkflow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(schema.AtmosConfiguration{})
+			r, err := NewRenderer(&schema.AtmosConfiguration{})
 			require.NoError(t, err)
 			r.isTTYSupportForStdout = func() bool {
 				return false // Force ASCII rendering for predictable output
@@ -240,7 +240,7 @@ func TestRenderError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(schema.AtmosConfiguration{})
+			r, err := NewRenderer(&schema.AtmosConfiguration{})
 			require.NoError(t, err)
 			r.isTTYSupportForStderr = func() bool {
 				return false // Force ASCII rendering
@@ -281,7 +281,7 @@ func TestRenderSuccess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(schema.AtmosConfiguration{})
+			r, err := NewRenderer(&schema.AtmosConfiguration{})
 			require.NoError(t, err)
 			r.isTTYSupportForStdout = func() bool {
 				return false // Force ASCII rendering
@@ -300,7 +300,7 @@ func TestWithWidth(t *testing.T) {
 	t.Run("WithWidth option sets renderer width", func(t *testing.T) {
 		expectedWidth := uint(120)
 		r, err := NewRenderer(
-			schema.AtmosConfiguration{},
+			&schema.AtmosConfiguration{},
 			WithWidth(expectedWidth),
 		)
 		require.NoError(t, err)
@@ -308,7 +308,7 @@ func TestWithWidth(t *testing.T) {
 	})
 
 	t.Run("Default width when no option provided", func(t *testing.T) {
-		r, err := NewRenderer(schema.AtmosConfiguration{})
+		r, err := NewRenderer(&schema.AtmosConfiguration{})
 		require.NoError(t, err)
 		assert.Equal(t, uint(80), r.width)
 	})
@@ -358,7 +358,7 @@ func TestNewTerminalMarkdownRenderer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewTerminalMarkdownRenderer(tt.atmosConfig)
+			r, err := NewTerminalMarkdownRenderer(&tt.atmosConfig)
 			assert.NoError(t, err)
 			assert.NotNil(t, r)
 			// Width should be set based on terminal or max width
@@ -369,7 +369,7 @@ func TestNewTerminalMarkdownRenderer(t *testing.T) {
 
 func TestRender_NonTTY(t *testing.T) {
 	t.Run("Render falls back to ASCII for non-TTY stdout", func(t *testing.T) {
-		r, err := NewRenderer(schema.AtmosConfiguration{})
+		r, err := NewRenderer(&schema.AtmosConfiguration{})
 		require.NoError(t, err)
 		r.isTTYSupportForStdout = func() bool {
 			return false
@@ -385,7 +385,7 @@ func TestRender_NonTTY(t *testing.T) {
 
 func TestRenderWithoutWordWrap_NonTTY(t *testing.T) {
 	t.Run("RenderWithoutWordWrap falls back to ASCII for non-TTY stdout", func(t *testing.T) {
-		r, err := NewRenderer(schema.AtmosConfiguration{})
+		r, err := NewRenderer(&schema.AtmosConfiguration{})
 		require.NoError(t, err)
 		r.isTTYSupportForStdout = func() bool {
 			return false
