@@ -12,6 +12,7 @@ acme-platform-dev:
         component: mock
         env: {}
         hooks: {}
+        identities: {}
         inheritance: []
         metadata: {}
         overrides: {}
@@ -42,6 +43,7 @@ acme-platform-prod:
         component: mock
         env: {}
         hooks: {}
+        identities: {}
         inheritance: []
         metadata: {}
         overrides: {}
@@ -72,6 +74,7 @@ acme-platform-staging:
         component: mock
         env: {}
         hooks: {}
+        identities: {}
         inheritance: []
         metadata: {}
         overrides: {}

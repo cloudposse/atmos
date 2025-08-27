@@ -63,6 +63,9 @@ Global Flags:
         --dry-run                     Simulate the command without making any
                                       changes (default false)
 
+    -i, --identity string             Specify the identity to authenticate to
+                                      before running Terraform commands
+
         --include-dependents          For each affected component, detect the
                                       dependent components and process them in
                                       the dependency order, recursively: atmos

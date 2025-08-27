@@ -82,6 +82,9 @@ Flags:
 
     -h, --help                        help for terraform
 
+    -i, --identity string             Specify the identity to authenticate to
+                                      before running Terraform commands
+
         --include-dependents          For each affected component, detect the
                                       dependent components and process them in
                                       the dependency order, recursively: atmos

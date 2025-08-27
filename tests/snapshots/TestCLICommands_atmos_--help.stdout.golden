@@ -16,6 +16,7 @@ Available Commands:
 
   about                          Learn about Atmos
   atlantis                       Generate and manage Atlantis configurations
+  auth                           
   aws                            Run AWS-specific commands for interacting with cloud resources
   completion                     Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
   describe                       Show details about Atmos configurations and components
