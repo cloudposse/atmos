@@ -51,3 +51,7 @@ internal/exec/output.*
 # Coverage files
 coverage.out
 coverage.html
+
+# Temporary test helper scripts
+regenerate_affected.sh
+regenerate_all_affected.sh
