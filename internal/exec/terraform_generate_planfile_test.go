@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -14,6 +15,10 @@ import (
 )
 
 func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
+	// Skip if terraform is not installed
+	if _, err := exec.LookPath("terraform"); err != nil {
+		t.Skip("Skipping test: terraform is not installed or not in PATH")
+	}
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
 	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
 	component := "component-1"
@@ -83,6 +88,10 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 }
 
 func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
+	// Skip if terraform is not installed
+	if _, err := exec.LookPath("terraform"); err != nil {
+		t.Skip("Skipping test: terraform is not installed or not in PATH")
+	}
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
 	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
 	component := "component-1"
@@ -193,6 +202,10 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 }
 
 func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
+	// Skip if terraform is not installed
+	if _, err := exec.LookPath("terraform"); err != nil {
+		t.Skip("Skipping test: terraform is not installed or not in PATH")
+	}
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
 	component := "component-1"
 	stack := "nonprod"
