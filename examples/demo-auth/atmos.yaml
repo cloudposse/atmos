@@ -22,18 +22,18 @@ stacks:
 
 logs:
   file: "/dev/stderr"
-  level: Info
+  level: Debug
 
 # Custom CLI commands
 commands:
 - name: "test"
   description: "Run all tests"
   steps:
-  - atmos validate stacks
+  - /usr/local/bin/atmos validate stacks
   # Test dev stack
-  - atmos terraform plan whoami -s dev --identity oidc
-  - atmos terraform apply whoami -s dev -auto-approve -i oidc
-  - atmos terraform destroy whoami -s dev -auto-approve -i oidc
+  - /usr/local/bin/atmos terraform plan whoami -s dev --identity oidc
+  - /usr/local/bin/atmos terraform apply whoami -s dev -auto-approve -i oidc
+  - /usr/local/bin/atmos terraform destroy whoami -s dev -auto-approve -i oidc
 
 # Auth configuration demo (stub values)
 auth:
