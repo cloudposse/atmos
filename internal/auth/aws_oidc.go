@@ -57,7 +57,6 @@ func (i *awsOidc) Validate() error {
 		i.Common.Region = "us-east-1"
 	}
 	if i.SessionName == "" {
-		// Derive a nice session name for auditing
 		if rn := os.Getenv("GITHUB_RUN_ID"); rn != "" {
 			i.SessionName = fmt.Sprintf("gh-%s", rn)
 		} else {
