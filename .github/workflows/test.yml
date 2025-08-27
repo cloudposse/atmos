@@ -370,6 +370,8 @@ jobs:
     name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ${{ matrix.flavor.os }}
+    permissions:
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
