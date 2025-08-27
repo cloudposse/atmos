@@ -1,12 +1,15 @@
 package telemetry
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -533,4 +536,77 @@ func TestTelemetryDisclosureMessageHideIfTelemetryDisabled(t *testing.T) {
 	message := disclosureMessage()
 	assert.Empty(t, message)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+}
+
+// TestPrintTelemetryDisclosureOutputsToStderr tests that the telemetry disclosure
+// message is printed to stderr and not stdout
+func TestPrintTelemetryDisclosureOutputsToStderr(t *testing.T) {
+	// Preserve and restore CI environment variables to avoid interference.
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Helper function to capture stdout
+	captureStdout := func(f func()) string {
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		f()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		return buf.String()
+	}
+
+	// Helper function to capture stderr
+	captureStderr := func(f func()) string {
+		old := os.Stderr
+		r, w, _ := os.Pipe()
+		os.Stderr = w
+
+		f()
+
+		w.Close()
+		os.Stderr = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		return buf.String()
+	}
+
+	// Set up cache to show disclosure
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryDisclosureShown = false
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	// Enable telemetry
+	os.Setenv("ATMOS_TELEMETRY_ENABLED", "true")
+	defer os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+
+	// Capture stdout - should be empty
+	stdoutOutput := captureStdout(func() {
+		PrintTelemetryDisclosure()
+	})
+
+	// Reset cache for stderr test
+	cacheCfg.TelemetryDisclosureShown = false
+	cfg.SaveCache(cacheCfg)
+
+	// Capture stderr - should contain the disclosure message
+	stderrOutput := captureStderr(func() {
+		PrintTelemetryDisclosure()
+	})
+
+	// Verify stdout is empty (no output to stdout)
+	assert.Empty(t, stdoutOutput, "Telemetry disclosure should not write to stdout")
+
+	// Verify stderr contains the disclosure message
+	assert.True(t, strings.Contains(stderrOutput, "Notice: Atmos now collects"), 
+		"Telemetry disclosure should write to stderr")
 }
