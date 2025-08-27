@@ -40,8 +40,8 @@ func TestAwsOidc_Validate_Login_AssumeRole_SetEnv(t *testing.T) {
 
 	i := &awsOidc{}
 	i.Common.Region = "us-east-1"
-	i.Common.Profile = "src-prof"        // source profile name used for credentials file section
-	i.Identity.Identity = "ci-identity"  // identity name -> becomes AWS_PROFILE in env
+	i.Common.Profile = "src-prof"       // source profile name used for credentials file section
+	i.Identity.Identity = "ci-identity" // identity name -> becomes AWS_PROFILE in env
 	i.Provider = "aws/oidc"
 	i.RoleArn = "arn:aws:iam::111111111111:role/Test"
 	i.SessionDuration = 900

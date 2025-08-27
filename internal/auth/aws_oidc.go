@@ -32,7 +32,7 @@ type awsOidc struct {
 
 // stsAPI is the minimal interface we use from the STS client (for testing/DI)
 type stsAPI interface {
-    AssumeRoleWithWebIdentity(ctx context.Context, params *sts.AssumeRoleWithWebIdentityInput, optFns ...func(*sts.Options)) (*sts.AssumeRoleWithWebIdentityOutput, error)
+	AssumeRoleWithWebIdentity(ctx context.Context, params *sts.AssumeRoleWithWebIdentityInput, optFns ...func(*sts.Options)) (*sts.AssumeRoleWithWebIdentityOutput, error)
 }
 
 func NewAwsOidcFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
@@ -109,12 +109,12 @@ func (i *awsOidc) AssumeRole() error {
 			Region:      i.Common.Region,
 			Credentials: aws.AnonymousCredentials{},
 		}
-		        if ep := os.Getenv("AWS_STS_ENDPOINT_URL"); ep != "" {
-            resolver := sts.EndpointResolverFunc(func(region string, _ sts.EndpointResolverOptions) (aws.Endpoint, error) {
-                return aws.Endpoint{URL: ep, HostnameImmutable: true}, nil
-            })
-            opts.EndpointResolver = resolver
-        }
+		if ep := os.Getenv("AWS_STS_ENDPOINT_URL"); ep != "" {
+			resolver := sts.EndpointResolverFunc(func(region string, _ sts.EndpointResolverOptions) (aws.Endpoint, error) {
+				return aws.Endpoint{URL: ep, HostnameImmutable: true}, nil
+			})
+			opts.EndpointResolver = resolver
+		}
 		stsClient = sts.New(opts)
 	}
 
