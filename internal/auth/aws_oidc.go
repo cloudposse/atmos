@@ -25,6 +25,14 @@ type awsOidc struct {
 	WebIdentityTokenFile string `yaml:"web_identity_token_file,omitempty" json:"web_identity_token_file,omitempty" mapstructure:"web_identity_token_file,omitempty"`
 	WebIdentityToken     string `yaml:"web_identity_token,omitempty" json:"web_identity_token,omitempty" mapstructure:"web_identity_token,omitempty"`
 	RoleSessionName      string `yaml:"role_session_name,omitempty" json:"role_session_name,omitempty" mapstructure:"role_session_name,omitempty"`
+
+	// Internal/testing: allow injecting a custom STS client (not marshaled)
+	stsClient stsAPI `yaml:"-" json:"-"`
+}
+
+// stsAPI is the minimal interface we use from the STS client (for testing/DI)
+type stsAPI interface {
+    AssumeRoleWithWebIdentity(ctx context.Context, params *sts.AssumeRoleWithWebIdentityInput, optFns ...func(*sts.Options)) (*sts.AssumeRoleWithWebIdentityOutput, error)
 }
 
 func NewAwsOidcFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
@@ -93,10 +101,22 @@ func (i *awsOidc) AssumeRole() error {
 	ctx := context.Background()
 
 	// Create STS client with anonymous credentials (AssumeRoleWithWebIdentity is unsigned)
-	stsClient := sts.New(sts.Options{
-		Region:      i.Common.Region,
-		Credentials: aws.AnonymousCredentials{},
-	})
+	var stsClient stsAPI
+	if i.stsClient != nil {
+		stsClient = i.stsClient
+	} else {
+		opts := sts.Options{
+			Region:      i.Common.Region,
+			Credentials: aws.AnonymousCredentials{},
+		}
+		        if ep := os.Getenv("AWS_STS_ENDPOINT_URL"); ep != "" {
+            resolver := sts.EndpointResolverFunc(func(region string, _ sts.EndpointResolverOptions) (aws.Endpoint, error) {
+                return aws.Endpoint{URL: ep, HostnameImmutable: true}, nil
+            })
+            opts.EndpointResolver = resolver
+        }
+		stsClient = sts.New(opts)
+	}
 
 	sessionName := i.RoleSessionName
 	if sessionName == "" {
