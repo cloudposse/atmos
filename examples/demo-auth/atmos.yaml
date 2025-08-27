@@ -29,11 +29,11 @@ commands:
 - name: "test"
   description: "Run all tests"
   steps:
-  - /usr/local/bin/atmos validate stacks
+  - atmos validate stacks
   # Test dev stack
-  - /usr/local/bin/atmos terraform plan whoami -s dev --identity oidc
-  - /usr/local/bin/atmos terraform apply whoami -s dev -auto-approve -i oidc
-  - /usr/local/bin/atmos terraform destroy whoami -s dev -auto-approve -i oidc
+  - atmos terraform plan whoami -s dev --identity oidc
+  - atmos terraform apply whoami -s dev -auto-approve -i oidc
+  - atmos terraform destroy whoami -s dev -auto-approve -i oidc
 
 # Auth configuration demo (stub values)
 auth:
