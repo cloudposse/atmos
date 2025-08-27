@@ -12,6 +12,63 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Helper function to create an initial commit in a repository.
+func createInitialCommit(t *testing.T, repo *git.Repository, tempDir string) {
+	t.Helper()
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.txt")
+	err = os.WriteFile(testFile, []byte("test content"), 0o644)
+	require.NoError(t, err)
+
+	_, err = worktree.Add("test.txt")
+	require.NoError(t, err)
+
+	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test User",
+			Email: "test@example.com",
+		},
+	})
+	require.NoError(t, err)
+}
+
+// Helper function to create a repository with a remote.
+func createRepoWithRemote(t *testing.T, remoteURL string) *git.Repository {
+	t.Helper()
+	
+	tempDir := t.TempDir()
+	repo, err := git.PlainInit(tempDir, false)
+	require.NoError(t, err)
+
+	// Add a remote.
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{remoteURL},
+	})
+	require.NoError(t, err)
+
+	// Create an initial commit.
+	createInitialCommit(t, repo, tempDir)
+
+	return repo
+}
+
+// Helper function to validate repo info for GitHub remotes.
+func validateGitHubRepoInfo(t *testing.T, info *RepoInfo, expectedURL string) {
+	t.Helper()
+	
+	assert.NotEmpty(t, info.LocalRepoPath)
+	assert.NotNil(t, info.LocalWorktree)
+	assert.NotEmpty(t, info.LocalWorktreePath)
+	assert.Equal(t, expectedURL, info.RepoUrl)
+	assert.Equal(t, "cloudposse", info.RepoOwner)
+	assert.Equal(t, "atmos", info.RepoName)
+	assert.Equal(t, "github.com", info.RepoHost)
+}
+
 func TestGetLocalRepo(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -216,95 +273,23 @@ func TestGetRepoInfo(t *testing.T) {
 		validate    func(t *testing.T, info RepoInfo)
 	}{
 		{
-			name: "repository with remote",
+			name: "repository with HTTPS remote",
 			setup: func(t *testing.T) *git.Repository {
-				tempDir := t.TempDir()
-				repo, err := git.PlainInit(tempDir, false)
-				require.NoError(t, err)
-
-				// Add a remote.
-				_, err = repo.CreateRemote(&config.RemoteConfig{
-					Name: "origin",
-					URLs: []string{"https://github.com/cloudposse/atmos.git"},
-				})
-				require.NoError(t, err)
-
-				// Create an initial commit to have a valid worktree.
-				worktree, err := repo.Worktree()
-				require.NoError(t, err)
-
-				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0o644)
-				require.NoError(t, err)
-
-				_, err = worktree.Add("test.txt")
-				require.NoError(t, err)
-
-				_, err = worktree.Commit("Initial commit", &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  "Test User",
-						Email: "test@example.com",
-					},
-				})
-				require.NoError(t, err)
-
-				return repo
+				return createRepoWithRemote(t, "https://github.com/cloudposse/atmos.git")
 			},
 			expectError: false,
 			validate: func(t *testing.T, info RepoInfo) {
-				assert.NotEmpty(t, info.LocalRepoPath)
-				assert.NotNil(t, info.LocalWorktree)
-				assert.NotEmpty(t, info.LocalWorktreePath)
-				assert.Equal(t, "https://github.com/cloudposse/atmos.git", info.RepoUrl)
-				assert.Equal(t, "cloudposse", info.RepoOwner)
-				assert.Equal(t, "atmos", info.RepoName)
-				assert.Equal(t, "github.com", info.RepoHost)
+				validateGitHubRepoInfo(t, &info, "https://github.com/cloudposse/atmos.git")
 			},
 		},
 		{
 			name: "repository with SSH remote",
 			setup: func(t *testing.T) *git.Repository {
-				tempDir := t.TempDir()
-				repo, err := git.PlainInit(tempDir, false)
-				require.NoError(t, err)
-
-				// Add an SSH remote.
-				_, err = repo.CreateRemote(&config.RemoteConfig{
-					Name: "origin",
-					URLs: []string{"git@github.com:cloudposse/atmos.git"},
-				})
-				require.NoError(t, err)
-
-				// Create an initial commit.
-				worktree, err := repo.Worktree()
-				require.NoError(t, err)
-
-				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0o644)
-				require.NoError(t, err)
-
-				_, err = worktree.Add("test.txt")
-				require.NoError(t, err)
-
-				_, err = worktree.Commit("Initial commit", &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  "Test User",
-						Email: "test@example.com",
-					},
-				})
-				require.NoError(t, err)
-
-				return repo
+				return createRepoWithRemote(t, "git@github.com:cloudposse/atmos.git")
 			},
 			expectError: false,
 			validate: func(t *testing.T, info RepoInfo) {
-				assert.NotEmpty(t, info.LocalRepoPath)
-				assert.NotNil(t, info.LocalWorktree)
-				assert.NotEmpty(t, info.LocalWorktreePath)
-				assert.Equal(t, "git@github.com:cloudposse/atmos.git", info.RepoUrl)
-				assert.Equal(t, "cloudposse", info.RepoOwner)
-				assert.Equal(t, "atmos", info.RepoName)
-				assert.Equal(t, "github.com", info.RepoHost)
+				validateGitHubRepoInfo(t, &info, "git@github.com:cloudposse/atmos.git")
 			},
 		},
 		{
@@ -315,23 +300,7 @@ func TestGetRepoInfo(t *testing.T) {
 				require.NoError(t, err)
 
 				// Create an initial commit.
-				worktree, err := repo.Worktree()
-				require.NoError(t, err)
-
-				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0o644)
-				require.NoError(t, err)
-
-				_, err = worktree.Add("test.txt")
-				require.NoError(t, err)
-
-				_, err = worktree.Commit("Initial commit", &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  "Test User",
-						Email: "test@example.com",
-					},
-				})
-				require.NoError(t, err)
+				createInitialCommit(t, repo, tempDir)
 
 				return repo
 			},
@@ -365,23 +334,7 @@ func TestGetRepoInfo(t *testing.T) {
 				require.NoError(t, err)
 
 				// Create an initial commit.
-				worktree, err := repo.Worktree()
-				require.NoError(t, err)
-
-				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0o644)
-				require.NoError(t, err)
-
-				_, err = worktree.Add("test.txt")
-				require.NoError(t, err)
-
-				_, err = worktree.Commit("Initial commit", &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  "Test User",
-						Email: "test@example.com",
-					},
-				})
-				require.NoError(t, err)
+				createInitialCommit(t, repo, tempDir)
 
 				return repo
 			},
@@ -412,23 +365,7 @@ func TestGetRepoInfo(t *testing.T) {
 				require.NoError(t, err)
 
 				// Create an initial commit.
-				worktree, err := repo.Worktree()
-				require.NoError(t, err)
-
-				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0o644)
-				require.NoError(t, err)
-
-				_, err = worktree.Add("test.txt")
-				require.NoError(t, err)
-
-				_, err = worktree.Commit("Initial commit", &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  "Test User",
-						Email: "test@example.com",
-					},
-				})
-				require.NoError(t, err)
+				createInitialCommit(t, repo, tempDir)
 
 				return repo
 			},
@@ -444,37 +381,7 @@ func TestGetRepoInfo(t *testing.T) {
 		{
 			name: "repository with invalid remote URL",
 			setup: func(t *testing.T) *git.Repository {
-				tempDir := t.TempDir()
-				repo, err := git.PlainInit(tempDir, false)
-				require.NoError(t, err)
-
-				// Add a remote with an invalid URL format.
-				_, err = repo.CreateRemote(&config.RemoteConfig{
-					Name: "origin",
-					URLs: []string{"not-a-valid-url"},
-				})
-				require.NoError(t, err)
-
-				// Create an initial commit.
-				worktree, err := repo.Worktree()
-				require.NoError(t, err)
-
-				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0o644)
-				require.NoError(t, err)
-
-				_, err = worktree.Add("test.txt")
-				require.NoError(t, err)
-
-				_, err = worktree.Commit("Initial commit", &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  "Test User",
-						Email: "test@example.com",
-					},
-				})
-				require.NoError(t, err)
-
-				return repo
+				return createRepoWithRemote(t, "not-a-valid-url")
 			},
 			expectError: true,
 			validate: func(t *testing.T, info RepoInfo) {
@@ -553,23 +460,7 @@ func TestIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create an initial commit.
-	worktree, err := repo.Worktree()
-	require.NoError(t, err)
-
-	testFile := filepath.Join(tempDir, "test.txt")
-	err = os.WriteFile(testFile, []byte("test content"), 0o644)
-	require.NoError(t, err)
-
-	_, err = worktree.Add("test.txt")
-	require.NoError(t, err)
-
-	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  "Test User",
-			Email: "test@example.com",
-		},
-	})
-	require.NoError(t, err)
+	createInitialCommit(t, repo, tempDir)
 
 	// Test GetRepoConfig.
 	cfg, err := GetRepoConfig(repo)
