@@ -1,6 +1,6 @@
 # This works because `go list ./...` excludes vendor directories by default in modern versions of Go (1.11+).
-# No need for grep or additional filtering.
-TEST ?= $$(go list ./...)
+# Exclude experiments directory from tests.
+TEST ?= $$(go list ./... | grep -v experiments)
 TESTARGS ?=
 SHELL := /bin/bash
 #GOOS=darwin

@@ -51,3 +51,23 @@ internal/exec/output.*
 # Coverage files
 coverage.out
 coverage.html
+cover.out
+
+# Backup and temporary files
+*.bck.yml
+*.backup
+*.bak
+*.v2
+.tool-versions
+
+# Build artifacts
+atmos
+
+# Demo and experimental files
+demo/recordings/
+experiments/
+*.mp4
+*.mov
+*.avi
+*.gif
+vhs-recording-*/
