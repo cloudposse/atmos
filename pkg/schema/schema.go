@@ -991,10 +991,10 @@ type ProviderDefaultConfig struct {
 type Identity struct {
 	Identity string
 
-	Default  bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
-	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
-	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider,omitempty"`
-
+	Default           bool          `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
+	Enabled           bool          `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
+	Provider          string        `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider,omitempty"`
+	RequestedDuration time.Duration `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration,omitempty"`
 	// AWS Specific
 	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
 	// Env allows specifying environment variables to set when this identity is used.

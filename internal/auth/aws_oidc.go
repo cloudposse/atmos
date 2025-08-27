@@ -2,12 +2,16 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -20,19 +24,11 @@ type awsOidc struct {
 	Common          schema.ProviderDefaultConfig `yaml:",inline"`
 	schema.Identity `yaml:",inline"`
 
-	// Optional settings
-	SessionDuration      int32  `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
-	WebIdentityTokenFile string `yaml:"web_identity_token_file,omitempty" json:"web_identity_token_file,omitempty" mapstructure:"web_identity_token_file,omitempty"`
-	WebIdentityToken     string `yaml:"web_identity_token,omitempty" json:"web_identity_token,omitempty" mapstructure:"web_identity_token,omitempty"`
-	RoleSessionName      string `yaml:"role_session_name,omitempty" json:"role_session_name,omitempty" mapstructure:"role_session_name,omitempty"`
-
-	// Internal/testing: allow injecting a custom STS client (not marshaled)
-	stsClient stsAPI `yaml:"-" json:"-"`
-}
-
-// stsAPI is the minimal interface we use from the STS client (for testing/DI)
-type stsAPI interface {
-	AssumeRoleWithWebIdentity(ctx context.Context, params *sts.AssumeRoleWithWebIdentityInput, optFns ...func(*sts.Options)) (*sts.AssumeRoleWithWebIdentityOutput, error)
+	// Optional, mostly for overrides / local testing.
+	Audience       string `yaml:"audience,omitempty" json:"audience,omitempty" mapstructure:"audience,omitempty"`                         // default "sts.amazonaws.com"
+	SessionName    string `yaml:"session_name,omitempty" json:"session_name,omitempty" mapstructure:"session_name,omitempty"`             // default derived from GitHub envs
+	STSEndpoint    string `yaml:"sts_endpoint,omitempty" json:"sts_endpoint,omitempty" mapstructure:"sts_endpoint,omitempty"`             // optional (e.g., http://localhost:4566 for LocalStack)
+	ForceTokenFile string `yaml:"force_token_file,omitempty" json:"force_token_file,omitempty" mapstructure:"force_token_file,omitempty"` // optional path to a pre-fetched JWT (for local dev)
 }
 
 func NewAwsOidcFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
@@ -52,104 +48,86 @@ func NewAwsOidcFactory(provider string, identity string, config schema.AuthConfi
 // Validate checks minimum required fields
 func (i *awsOidc) Validate() error {
 	if i.RoleArn == "" {
-		return fmt.Errorf("role_arn is required for aws/oidc")
+		return errors.New("RoleARN is required")
 	}
-	// default region
+	if i.Audience == "" {
+		i.Audience = "sts.amazonaws.com"
+	}
 	if i.Common.Region == "" {
 		i.Common.Region = "us-east-1"
 	}
-	// Session duration default
-	if i.SessionDuration == 0 {
-		i.SessionDuration = 3600
-	}
-	// Ensure we can obtain a token one way or another
-	if i.WebIdentityToken == "" && i.WebIdentityTokenFile == "" && os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE") == "" {
-		log.Warn("No web identity token or token file configured; will still attempt during Login using env")
+	if i.SessionName == "" {
+		// Derive a nice session name for auditing
+		if rn := os.Getenv("GITHUB_RUN_ID"); rn != "" {
+			i.SessionName = fmt.Sprintf("gh-%s", rn)
+		} else {
+			i.SessionName = "github-actions"
+		}
 	}
 	return nil
 }
 
 // Login resolves token source but does not contact AWS.
 func (i *awsOidc) Login() error {
-	// Nothing to authenticate with an IdP here; we rely on provided token or file.
-	// However, provide a friendly log and basic check.
-	if i.WebIdentityToken == "" {
-		if i.WebIdentityTokenFile == "" {
-			i.WebIdentityTokenFile = os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
-		}
-		if i.WebIdentityTokenFile != "" {
-			b, err := ioutil.ReadFile(i.WebIdentityTokenFile)
-			if err != nil {
-				return fmt.Errorf("failed reading web identity token file %s: %w", i.WebIdentityTokenFile, err)
-			}
-			i.WebIdentityToken = string(b)
-		}
-	}
-	if i.WebIdentityToken == "" {
-		return fmt.Errorf("no web identity token available; set web_identity_token, web_identity_token_file, or AWS_WEB_IDENTITY_TOKEN_FILE")
-	}
-	log.Info("✅ OIDC token loaded for AssumeRoleWithWebIdentity")
-	return nil
-}
-
-// AssumeRole exchanges the OIDC token for AWS credentials using STS.
-func (i *awsOidc) AssumeRole() error {
-	if i.WebIdentityToken == "" {
-		return fmt.Errorf("no web identity token available, please login first")
-	}
-
 	ctx := context.Background()
 
-	// Create STS client with anonymous credentials (AssumeRoleWithWebIdentity is unsigned)
-	var stsClient stsAPI
-	if i.stsClient != nil {
-		stsClient = i.stsClient
-	} else {
-		opts := sts.Options{
-			Region:      i.Common.Region,
-			Credentials: aws.AnonymousCredentials{},
-		}
-		if ep := os.Getenv("AWS_STS_ENDPOINT_URL"); ep != "" {
-			resolver := sts.EndpointResolverFunc(func(region string, _ sts.EndpointResolverOptions) (aws.Endpoint, error) {
-				return aws.Endpoint{URL: ep, HostnameImmutable: true}, nil
-			})
-			opts.EndpointResolver = resolver
-		}
-		stsClient = sts.New(opts)
-	}
-
-	sessionName := i.RoleSessionName
-	if sessionName == "" {
-		sessionName = fmt.Sprintf("AtmosOIDC-%d", time.Now().Unix())
-	}
-
-	out, err := stsClient.AssumeRoleWithWebIdentity(ctx, &sts.AssumeRoleWithWebIdentityInput{
-		RoleArn:          aws.String(i.RoleArn),
-		RoleSessionName:  aws.String(sessionName),
-		WebIdentityToken: aws.String(i.WebIdentityToken),
-		DurationSeconds:  aws.Int32(i.SessionDuration),
-	})
+	// 1) Fetch a GitHub OIDC JWT
+	jwt, err := i.loadOIDCJWT()
 	if err != nil {
-		return fmt.Errorf("failed to assume role with web identity: %w", err)
+		return err
+	}
+	baseCfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(i.Common.Region),
+		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
+	)
+	if err != nil {
+		return fmt.Errorf("load AWS config: %w", err)
 	}
 
-	if out.Credentials == nil {
-		return fmt.Errorf("no credentials returned from AssumeRoleWithWebIdentity")
+	// 2) Build STS client using endpoint-resolution v2
+	var stsOpts []func(*sts.Options)
+	if i.STSEndpoint != "" {
+		stsOpts = append(stsOpts, func(o *sts.Options) {
+			// Endpoint v2: prefer BaseEndpoint over deprecated global resolver
+			o.BaseEndpoint = aws.String(i.STSEndpoint)
+		})
+	}
+	stsClient := sts.NewFromConfig(baseCfg, stsOpts...)
+
+	// 3) Exchange JWT → temp creds
+	input := &sts.AssumeRoleWithWebIdentityInput{
+		RoleArn:          aws.String(i.RoleArn),
+		RoleSessionName:  aws.String(i.SessionName),
+		WebIdentityToken: aws.String(jwt),
+	}
+	if i.RequestedDuration > 0 {
+		secs := int32(i.RequestedDuration.Seconds())
+		input.DurationSeconds = &secs
+	}
+	resp, err := stsClient.AssumeRoleWithWebIdentity(ctx, input)
+	if err != nil {
+		return fmt.Errorf("AssumeRoleWithWebIdentity: %w", err)
 	}
 
 	WriteAwsCredentials(
 		i.Common.Profile,
-		aws.ToString(out.Credentials.AccessKeyId),
-		aws.ToString(out.Credentials.SecretAccessKey),
-		aws.ToString(out.Credentials.SessionToken),
+		aws.ToString(resp.Credentials.AccessKeyId),
+		aws.ToString(resp.Credentials.SecretAccessKey),
+		aws.ToString(resp.Credentials.SessionToken),
 		"aws/oidc",
 	)
 
 	log.Info("✅ Successfully assumed role via OIDC",
 		"role", i.RoleArn,
+		"session_name", i.SessionName,
 		"profile", i.Common.Profile,
-		"expires", out.Credentials.Expiration.Local().Format(time.RFC1123),
+		"expires", resp.Credentials.Expiration.Local().Format(time.RFC1123),
 	)
+	return nil
+}
+
+// AssumeRole exchanges the OIDC token for AWS credentials using STS.
+func (i *awsOidc) AssumeRole() error {
 	return nil
 }
 
@@ -167,4 +145,91 @@ func (i *awsOidc) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 
 func (i *awsOidc) Logout() error {
 	return RemoveAwsCredentials(i.Common.Profile)
+}
+
+func (i *awsOidc) loadOIDCJWT() (string, error) {
+	ctx := context.Background()
+	if i.ForceTokenFile != "" {
+		b, err := os.ReadFile(i.ForceTokenFile)
+		if err != nil {
+			return "", fmt.Errorf("read ForceTokenFile: %w", err)
+		}
+		return string(b), nil
+	}
+	// GitHub OIDC envs require `permissions: id-token: write`
+	if u := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"); u != "" {
+		reqURL, err := url.Parse(u)
+		if err != nil {
+			return "", fmt.Errorf("parse ACTIONS_ID_TOKEN_REQUEST_URL: %w", err)
+		}
+		q := reqURL.Query()
+		q.Set("audience", i.Audience)
+		reqURL.RawQuery = q.Encode()
+
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+		req.Header.Set("Authorization", "bearer "+os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("request OIDC token: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("request OIDC token: unexpected status %s", resp.Status)
+		}
+		var body struct {
+			Value string `json:"value"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			return "", fmt.Errorf("decode OIDC response: %w", err)
+		}
+		if body.Value == "" {
+			return "", errors.New("empty OIDC token in response")
+		}
+		return body.Value, nil
+	}
+	if p := os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE"); p != "" {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return "", fmt.Errorf("read AWS_WEB_IDENTITY_TOKEN_FILE: %w", err)
+		}
+		return string(b), nil
+	}
+	return "", errors.New("no OIDC token source found (set permissions: id-token: write or provide a token file)")
+}
+
+func fetchGitHubOIDCToken(ctx context.Context, audience string) (string, error) {
+	reqURL := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+	reqTok := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	if reqURL == "" || reqTok == "" {
+		return "", errors.New("missing ACTIONS_ID_TOKEN_REQUEST_URL/TOKEN (needs permissions: id-token: write)")
+	}
+	u, err := url.Parse(reqURL)
+	if err != nil {
+		return "", fmt.Errorf("parse ACTIONS_ID_TOKEN_REQUEST_URL: %w", err)
+	}
+	q := u.Query()
+	q.Set("audience", audience)
+	u.RawQuery = q.Encode()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req.Header.Set("Authorization", "bearer "+reqTok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request OIDC token: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("request OIDC token: unexpected status %s", resp.Status)
+	}
+	var body struct {
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", fmt.Errorf("decode OIDC response: %w", err)
+	}
+	if body.Value == "" {
+		return "", errors.New("empty OIDC token in response")
+	}
+	return body.Value, nil
 }
