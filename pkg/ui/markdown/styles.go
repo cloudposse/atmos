@@ -7,15 +7,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// applyStyleSafely applies a color to a style primitive safely handling nil pointers.
-func applyStyleSafely(style *ansi.StylePrimitive, color string) {
-	if style == nil {
-		return
-	}
-	if style.Color != nil {
-		*style.Color = color
+// applyColorSafely applies a color to a color pointer safely handling nil pointers.
+func applyColorSafely(colorPtr **string, color string) {
+	if *colorPtr != nil {
+		**colorPtr = color
 	} else {
-		style.Color = &color
+		*colorPtr = &color
 	}
 }
 
@@ -35,28 +32,16 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 
 	// Apply custom styles on top of defaults
 	if atmosConfig.Settings.Markdown.Document.Color != "" {
-		if style.Document.Color != nil {
-			*style.Document.Color = atmosConfig.Settings.Markdown.Document.Color
-		} else {
-			style.Document.Color = &atmosConfig.Settings.Markdown.Document.Color
-		}
+		applyColorSafely(&style.Document.Color, atmosConfig.Settings.Markdown.Document.Color)
 	}
 
 	if atmosConfig.Settings.Markdown.Heading.Color != "" {
-		if style.Heading.Color != nil {
-			*style.Heading.Color = atmosConfig.Settings.Markdown.Heading.Color
-		} else {
-			style.Heading.Color = &atmosConfig.Settings.Markdown.Heading.Color
-		}
+		applyColorSafely(&style.Heading.Color, atmosConfig.Settings.Markdown.Heading.Color)
 		style.Heading.Bold = &atmosConfig.Settings.Markdown.Heading.Bold
 	}
 
 	if atmosConfig.Settings.Markdown.H1.Color != "" {
-		if style.H1.Color != nil {
-			*style.H1.Color = atmosConfig.Settings.Markdown.H1.Color
-		} else {
-			style.H1.Color = &atmosConfig.Settings.Markdown.H1.Color
-		}
+		applyColorSafely(&style.H1.Color, atmosConfig.Settings.Markdown.H1.Color)
 		if atmosConfig.Settings.Markdown.H1.BackgroundColor != "" {
 			style.H1.BackgroundColor = &atmosConfig.Settings.Markdown.H1.BackgroundColor
 		}
@@ -65,44 +50,32 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	}
 
 	if atmosConfig.Settings.Markdown.H2.Color != "" {
-		if style.H2.Color != nil {
-			*style.H2.Color = atmosConfig.Settings.Markdown.H2.Color
-		} else {
-			style.H2.Color = &atmosConfig.Settings.Markdown.H2.Color
-		}
+		applyColorSafely(&style.H2.Color, atmosConfig.Settings.Markdown.H2.Color)
 		style.H2.Bold = &atmosConfig.Settings.Markdown.H2.Bold
 	}
 
 	if atmosConfig.Settings.Markdown.H3.Color != "" {
-		if style.H3.Color != nil {
-			*style.H3.Color = atmosConfig.Settings.Markdown.H3.Color
-		} else {
-			style.H3.Color = &atmosConfig.Settings.Markdown.H3.Color
-		}
+		applyColorSafely(&style.H3.Color, atmosConfig.Settings.Markdown.H3.Color)
 		style.H3.Bold = &atmosConfig.Settings.Markdown.H3.Bold
 	}
 
 	if atmosConfig.Settings.Markdown.CodeBlock.Color != "" {
-		if style.CodeBlock.Color != nil {
-			*style.CodeBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
-		} else {
-			style.CodeBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
-		}
+		applyColorSafely(&style.CodeBlock.Color, atmosConfig.Settings.Markdown.CodeBlock.Color)
 		style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 	}
 
 	if atmosConfig.Settings.Markdown.Link.Color != "" {
-		applyStyleSafely(&style.Link, atmosConfig.Settings.Markdown.Link.Color)
+		applyColorSafely(&style.Link.Color, atmosConfig.Settings.Markdown.Link.Color)
 		style.Link.Underline = &atmosConfig.Settings.Markdown.Link.Underline
 	}
 
 	if atmosConfig.Settings.Markdown.Strong.Color != "" {
-		applyStyleSafely(&style.Strong, atmosConfig.Settings.Markdown.Strong.Color)
+		applyColorSafely(&style.Strong.Color, atmosConfig.Settings.Markdown.Strong.Color)
 		style.Strong.Bold = &atmosConfig.Settings.Markdown.Strong.Bold
 	}
 
 	if atmosConfig.Settings.Markdown.Emph.Color != "" {
-		applyStyleSafely(&style.Emph, atmosConfig.Settings.Markdown.Emph.Color)
+		applyColorSafely(&style.Emph.Color, atmosConfig.Settings.Markdown.Emph.Color)
 		style.Emph.Italic = &atmosConfig.Settings.Markdown.Emph.Italic
 	}
 

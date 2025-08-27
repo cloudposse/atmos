@@ -11,42 +11,40 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestApplyStyleSafely(t *testing.T) {
+func TestApplyColorSafely(t *testing.T) {
 	tests := []struct {
 		name     string
-		style    *ansi.StylePrimitive
+		initial  *string
 		color    string
 		expected string
 	}{
 		{
-			name:     "Apply to style with existing color",
-			style:    &ansi.StylePrimitive{Color: stringPtr("#FF0000")},
+			name:     "Apply to existing color pointer",
+			initial:  stringPtr("#FF0000"),
 			color:    "#00FF00",
 			expected: "#00FF00",
 		},
 		{
-			name:     "Apply to style without existing color",
-			style:    &ansi.StylePrimitive{},
+			name:     "Apply to nil color pointer",
+			initial:  nil,
 			color:    "#0000FF",
 			expected: "#0000FF",
 		},
 		{
-			name:     "Apply to nil style - should not panic",
-			style:    nil,
-			color:    "#FFFFFF",
-			expected: "", // Nothing happens for nil style
+			name:     "Apply empty string",
+			initial:  stringPtr("#111111"),
+			color:    "",
+			expected: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			applyStyleSafely(tt.style, tt.color)
+			colorPtr := tt.initial
+			applyColorSafely(&colorPtr, tt.color)
 
-			if tt.style != nil {
-				assert.NotNil(t, tt.style.Color)
-				assert.Equal(t, tt.expected, *tt.style.Color)
-			}
-			// Test should not panic even with nil style
+			assert.NotNil(t, colorPtr)
+			assert.Equal(t, tt.expected, *colorPtr)
 		})
 	}
 }
