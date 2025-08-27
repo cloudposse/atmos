@@ -31,9 +31,9 @@ commands:
   steps:
   - atmos validate stacks
   # Test dev stack
-  - atmos terraform plan whoami -s dev
-  - atmos terraform apply whoami -s dev -auto-approve
-  - atmos terraform destroy whoami -s dev -auto-approve
+  - atmos terraform plan whoami -s dev --identity oidc
+  - atmos terraform apply whoami -s dev -auto-approve -i oidc
+  - atmos terraform destroy whoami -s dev -auto-approve -i oidc
 
 # Auth configuration demo (stub values)
 auth:
@@ -64,16 +64,19 @@ auth:
     oidc:
       provider: oidc
       role_arn: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
-
+      default: false # we use the identity flag in the test custom command
     # Example identities mapping to providers (stubbed examples)
     saml:
+      enabled: false
       provider: idp-acme-saml
       role_arn: arn:aws:iam::111111111111:role/ExampleRole
     sso:
+      enabled: false
       provider: idp-acme-sso
       account_id: "111111111111"
       role_name: "ExampleRole"
     superuser:
+      enabled: false
       provider: idp-superuser
       profile: default
 
