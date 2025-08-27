@@ -42,7 +42,7 @@ func Test_CheckErrorPrintAndExit(t *testing.T) {
 }
 
 func TestCheckErrorAndPrint(t *testing.T) {
-	render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+	render, _ = markdown.NewTerminalMarkdownRenderer(&schema.AtmosConfiguration{})
 	title := "Test Error"
 	err := errors.New("this is a test error")
 	suggestion := "Try checking your configuration."
