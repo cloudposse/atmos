@@ -35,16 +35,28 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 
 	// Apply custom styles on top of defaults
 	if atmosConfig.Settings.Markdown.Document.Color != "" {
-		applyStyleSafely(&style.Document.StylePrimitive, atmosConfig.Settings.Markdown.Document.Color)
+		if style.Document.Color != nil {
+			*style.Document.Color = atmosConfig.Settings.Markdown.Document.Color
+		} else {
+			style.Document.Color = &atmosConfig.Settings.Markdown.Document.Color
+		}
 	}
 
 	if atmosConfig.Settings.Markdown.Heading.Color != "" {
-		applyStyleSafely(&style.Heading.StylePrimitive, atmosConfig.Settings.Markdown.Heading.Color)
+		if style.Heading.Color != nil {
+			*style.Heading.Color = atmosConfig.Settings.Markdown.Heading.Color
+		} else {
+			style.Heading.Color = &atmosConfig.Settings.Markdown.Heading.Color
+		}
 		style.Heading.Bold = &atmosConfig.Settings.Markdown.Heading.Bold
 	}
 
 	if atmosConfig.Settings.Markdown.H1.Color != "" {
-		applyStyleSafely(&style.H1.StylePrimitive, atmosConfig.Settings.Markdown.H1.Color)
+		if style.H1.Color != nil {
+			*style.H1.Color = atmosConfig.Settings.Markdown.H1.Color
+		} else {
+			style.H1.Color = &atmosConfig.Settings.Markdown.H1.Color
+		}
 		if atmosConfig.Settings.Markdown.H1.BackgroundColor != "" {
 			style.H1.BackgroundColor = &atmosConfig.Settings.Markdown.H1.BackgroundColor
 		}
@@ -53,20 +65,28 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	}
 
 	if atmosConfig.Settings.Markdown.H2.Color != "" {
-		applyStyleSafely(&style.H2.StylePrimitive, atmosConfig.Settings.Markdown.H2.Color)
+		if style.H2.Color != nil {
+			*style.H2.Color = atmosConfig.Settings.Markdown.H2.Color
+		} else {
+			style.H2.Color = &atmosConfig.Settings.Markdown.H2.Color
+		}
 		style.H2.Bold = &atmosConfig.Settings.Markdown.H2.Bold
 	}
 
 	if atmosConfig.Settings.Markdown.H3.Color != "" {
-		applyStyleSafely(&style.H3.StylePrimitive, atmosConfig.Settings.Markdown.H3.Color)
+		if style.H3.Color != nil {
+			*style.H3.Color = atmosConfig.Settings.Markdown.H3.Color
+		} else {
+			style.H3.Color = &atmosConfig.Settings.Markdown.H3.Color
+		}
 		style.H3.Bold = &atmosConfig.Settings.Markdown.H3.Bold
 	}
 
 	if atmosConfig.Settings.Markdown.CodeBlock.Color != "" {
-		if style.CodeBlock.StyleBlock.StylePrimitive.Color != nil {
-			*style.CodeBlock.StyleBlock.StylePrimitive.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
+		if style.CodeBlock.StyleBlock.Color != nil {
+			*style.CodeBlock.StyleBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
 		} else {
-			style.CodeBlock.StyleBlock.StylePrimitive.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
+			style.CodeBlock.StyleBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
 		style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 	}

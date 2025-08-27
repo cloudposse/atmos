@@ -373,7 +373,7 @@ func TestGetBuiltinDefaultStyle(t *testing.T) {
 
 		// Verify some expected default values are present
 		assert.NotNil(t, style.Document.Color)
-		assert.NotNil(t, style.Heading.StylePrimitive.Color)
+		assert.NotNil(t, style.Heading.Color)
 	})
 }
 
