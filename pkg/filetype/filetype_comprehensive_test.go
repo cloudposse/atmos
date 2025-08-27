@@ -556,10 +556,10 @@ func TestParseHCL(t *testing.T) {
 			},
 		},
 		{
-			name:        "empty input",
-			input:       []byte(``),
-			filename:    "test.hcl",
-			expected:    map[string]any{},
+			name:     "empty input",
+			input:    []byte(``),
+			filename: "test.hcl",
+			expected: map[string]any{},
 		},
 		{
 			name:        "hcl with blocks (not supported)",
@@ -654,7 +654,7 @@ func TestCtyToGo(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := parseHCL(tt.input, tt.filename)
