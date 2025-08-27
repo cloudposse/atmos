@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -10,6 +11,10 @@ import (
 )
 
 func TestExecuteHelmfile_Version(t *testing.T) {
+	// Skip if helmfile is not installed
+	if _, err := exec.LookPath("helmfile"); err != nil {
+		t.Skip("Skipping test: helmfile is not installed or not in PATH")
+	}
 	tests := []struct {
 		name           string
 		workDir        string
