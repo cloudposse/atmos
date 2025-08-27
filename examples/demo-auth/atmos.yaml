@@ -65,6 +65,7 @@ auth:
       provider: oidc
       role_arn: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
       default: false # we use the identity flag in the test custom command
+    
     # Example identities mapping to providers (stubbed examples)
     saml:
       enabled: false
