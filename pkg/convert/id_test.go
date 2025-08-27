@@ -357,7 +357,7 @@ func TestMakeId_Properties(t *testing.T) {
 
 		// Should only contain valid hex characters.
 		for _, c := range result {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			if c < '0' || (c > '9' && c < 'a') || c > 'f' {
 				t.Errorf("Invalid hex character: %c", c)
 			}
 		}
