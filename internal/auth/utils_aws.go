@@ -153,9 +153,21 @@ func UpdateAwsAtmosConfig(provider string, profile string, sourceProfile string,
 	// Update the profile section for the given profile
 	profileSection := f.Section(fmt.Sprintf("profile %s", profile)) // fmt.Sprintf("profile %s", profile)
 	profileSection.Key("region").SetValue(region)
-	profileSection.Key("source_profile").SetValue(sourceProfile)
+	// Handle source_profile: set when provided, otherwise remove to avoid chaining
+	if sourceProfile != "" {
+		profileSection.Key("source_profile").SetValue(sourceProfile)
+	} else {
+		if profileSection.HasKey("source_profile") {
+			profileSection.DeleteKey("source_profile")
+		}
+	}
+	// Handle role_arn: set when provided, otherwise remove to avoid AssumeRole
 	if roleArn != "" {
 		profileSection.Key("role_arn").SetValue(roleArn)
+	} else {
+		if profileSection.HasKey("role_arn") {
+			profileSection.DeleteKey("role_arn")
+		}
 	}
 
 	// Write atomically: dump to memory, write temp w/ 0600, then rename

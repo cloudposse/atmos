@@ -22,7 +22,7 @@ stacks:
 
 logs:
   file: "/dev/stderr"
-  level: Info
+  level: Debug
 
 # Custom CLI commands
 commands:

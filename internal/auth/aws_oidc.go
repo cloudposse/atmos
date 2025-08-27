@@ -133,11 +133,17 @@ func (i *awsOidc) AssumeRole() error {
 
 func (i *awsOidc) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	log.Info("Setting AWS environment variables")
-	if err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region); err != nil {
+	// Point AWS_PROFILE to the profile that holds the exchanged temporary credentials.
+	if err := SetAwsEnvVars(info, i.Common.Profile, i.Provider, i.Common.Region); err != nil {
 		return err
 	}
 	MergeIdentityEnvOverrides(info, i.Env)
-	if err := UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn); err != nil {
+	// Do not write role_arn into the AWS config for this flow.
+	// We already exchanged the OIDC JWT for temporary credentials in Login(),
+	// and Terraform should use those credentials directly (via AWS_PROFILE/AWS_CONFIG_FILE)
+	// without attempting another sts:AssumeRole.
+	// Keep the config minimal: just region for the credentials profile; no source_profile or role_arn.
+	if err := UpdateAwsAtmosConfig(i.Provider, i.Common.Profile, "", i.Common.Region, ""); err != nil {
 		return err
 	}
 	return nil
