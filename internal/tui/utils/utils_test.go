@@ -230,11 +230,11 @@ func TestPrintStyledTextToSpecifiedOutput(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				output := buf.String()
-				
+
 				if tt.expectOutput {
 					assert.NotEmpty(t, output, "Expected output but got empty string")
 				}
-				
+
 				if tt.checkOutput != nil {
 					tt.checkOutput(t, output)
 				}
@@ -343,7 +343,7 @@ func TestRenderMarkdown(t *testing.T) {
 			},
 		},
 		{
-			name:     "complex markdown document",
+			name: "complex markdown document",
 			markdown: `# Main Title
 
 ## Introduction
@@ -407,7 +407,7 @@ func TestRenderMarkdown_EdgeCases(t *testing.T) {
 	t.Run("very long line", func(t *testing.T) {
 		longLine := strings.Repeat("a", 200)
 		markdown := "# Heading\n\n" + longLine
-		
+
 		output, err := RenderMarkdown(markdown, "")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, output)
@@ -417,7 +417,7 @@ func TestRenderMarkdown_EdgeCases(t *testing.T) {
 
 	t.Run("unicode characters", func(t *testing.T) {
 		markdown := "# 你好世界 🌍\n\nThis contains unicode: 😀 ñ ü é"
-		
+
 		output, err := RenderMarkdown(markdown, "")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, output)
@@ -436,7 +436,7 @@ func TestRenderMarkdown_EdgeCases(t *testing.T) {
    ` + "```" + `
    code in list
    ` + "```"
-		
+
 		output, err := RenderMarkdown(markdown, "")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, output)

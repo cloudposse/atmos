@@ -65,7 +65,7 @@ func TestVersion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup()
 			defer tt.cleanup()
-			
+
 			assert.Equal(t, tt.expected, Version)
 		})
 	}
@@ -77,11 +77,11 @@ func TestVersionImmutability(t *testing.T) {
 	defer func() {
 		Version = originalVersion
 	}()
-	
+
 	// Test that version can be changed (as it would be during build).
 	Version = "build-version"
 	assert.Equal(t, "build-version", Version)
-	
+
 	// Test that version persists across function calls.
 	checkVersion := func() string {
 		return Version
@@ -95,22 +95,22 @@ func TestVersionConcurrency(t *testing.T) {
 	defer func() {
 		Version = originalVersion
 	}()
-	
+
 	// Test concurrent reads don't cause issues.
 	done := make(chan bool, 10)
-	
+
 	for i := 0; i < 10; i++ {
 		go func() {
 			_ = Version
 			done <- true
 		}()
 	}
-	
+
 	// Wait for all goroutines to complete.
 	for i := 0; i < 10; i++ {
 		<-done
 	}
-	
+
 	// Version should remain unchanged.
 	assert.Equal(t, originalVersion, Version)
 }
