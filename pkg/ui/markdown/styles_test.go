@@ -51,6 +51,29 @@ func TestApplyStyleSafely(t *testing.T) {
 	}
 }
 
+// verifyStyleCustomizations checks if style customizations were applied correctly.
+func verifyStyleCustomizations(t *testing.T, atmosConfig schema.AtmosConfiguration, style ansi.StyleConfig) {
+	if atmosConfig.Settings.Markdown.Document.Color != "" {
+		assert.NotNil(t, style.Document.Color)
+		assert.Equal(t, atmosConfig.Settings.Markdown.Document.Color, *style.Document.Color)
+	}
+
+	if atmosConfig.Settings.Markdown.Heading.Color != "" {
+		assert.NotNil(t, style.Heading.Color)
+		assert.Equal(t, atmosConfig.Settings.Markdown.Heading.Color, *style.Heading.Color)
+	}
+
+	if atmosConfig.Settings.Markdown.H1.Color != "" {
+		assert.NotNil(t, style.H1.Color)
+		assert.Equal(t, atmosConfig.Settings.Markdown.H1.Color, *style.H1.Color)
+	}
+
+	if atmosConfig.Settings.Markdown.H1.BackgroundColor != "" {
+		assert.NotNil(t, style.H1.BackgroundColor)
+		assert.Equal(t, atmosConfig.Settings.Markdown.H1.BackgroundColor, *style.H1.BackgroundColor)
+	}
+}
+
 func TestGetDefaultStyle(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -326,36 +349,19 @@ func TestGetDefaultStyle(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, styleBytes)
-
-				// Verify the returned JSON is valid
-				var style ansi.StyleConfig
-				err = json.Unmarshal(styleBytes, &style)
-				assert.NoError(t, err)
-
-				// Verify customizations were applied
-				if tt.atmosConfig.Settings.Markdown.Document.Color != "" {
-					assert.NotNil(t, style.Document.Color)
-					assert.Equal(t, tt.atmosConfig.Settings.Markdown.Document.Color, *style.Document.Color)
-				}
-
-				if tt.atmosConfig.Settings.Markdown.Heading.Color != "" {
-					assert.NotNil(t, style.Heading.Color)
-					assert.Equal(t, tt.atmosConfig.Settings.Markdown.Heading.Color, *style.Heading.Color)
-				}
-
-				if tt.atmosConfig.Settings.Markdown.H1.Color != "" {
-					assert.NotNil(t, style.H1.Color)
-					assert.Equal(t, tt.atmosConfig.Settings.Markdown.H1.Color, *style.H1.Color)
-				}
-
-				if tt.atmosConfig.Settings.Markdown.H1.BackgroundColor != "" {
-					assert.NotNil(t, style.H1.BackgroundColor)
-					assert.Equal(t, tt.atmosConfig.Settings.Markdown.H1.BackgroundColor, *style.H1.BackgroundColor)
-				}
+				return
 			}
+
+			assert.NoError(t, err)
+			assert.NotNil(t, styleBytes)
+
+			// Verify the returned JSON is valid
+			var style ansi.StyleConfig
+			err = json.Unmarshal(styleBytes, &style)
+			assert.NoError(t, err)
+
+			// Verify customizations were applied
+			verifyStyleCustomizations(t, tt.atmosConfig, style)
 		})
 	}
 }
