@@ -81,7 +81,7 @@ func TestGetLocalRepo(t *testing.T) {
 				require.NoError(t, err)
 
 				nestedDir := filepath.Join(tempDir, "nested", "deep")
-				err = os.MkdirAll(nestedDir, 0755)
+				err = os.MkdirAll(nestedDir, 0o755)
 				require.NoError(t, err)
 
 				err = os.Chdir(nestedDir)
@@ -234,7 +234,7 @@ func TestGetRepoInfo(t *testing.T) {
 				require.NoError(t, err)
 
 				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0644)
+				err = os.WriteFile(testFile, []byte("test content"), 0o644)
 				require.NoError(t, err)
 
 				_, err = worktree.Add("test.txt")
@@ -280,7 +280,7 @@ func TestGetRepoInfo(t *testing.T) {
 				require.NoError(t, err)
 
 				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0644)
+				err = os.WriteFile(testFile, []byte("test content"), 0o644)
 				require.NoError(t, err)
 
 				_, err = worktree.Add("test.txt")
@@ -319,7 +319,7 @@ func TestGetRepoInfo(t *testing.T) {
 				require.NoError(t, err)
 
 				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0644)
+				err = os.WriteFile(testFile, []byte("test content"), 0o644)
 				require.NoError(t, err)
 
 				_, err = worktree.Add("test.txt")
@@ -369,7 +369,7 @@ func TestGetRepoInfo(t *testing.T) {
 				require.NoError(t, err)
 
 				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0644)
+				err = os.WriteFile(testFile, []byte("test content"), 0o644)
 				require.NoError(t, err)
 
 				_, err = worktree.Add("test.txt")
@@ -416,7 +416,7 @@ func TestGetRepoInfo(t *testing.T) {
 				require.NoError(t, err)
 
 				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0644)
+				err = os.WriteFile(testFile, []byte("test content"), 0o644)
 				require.NoError(t, err)
 
 				_, err = worktree.Add("test.txt")
@@ -460,7 +460,7 @@ func TestGetRepoInfo(t *testing.T) {
 				require.NoError(t, err)
 
 				testFile := filepath.Join(tempDir, "test.txt")
-				err = os.WriteFile(testFile, []byte("test content"), 0644)
+				err = os.WriteFile(testFile, []byte("test content"), 0o644)
 				require.NoError(t, err)
 
 				_, err = worktree.Add("test.txt")
@@ -557,7 +557,7 @@ func TestIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	testFile := filepath.Join(tempDir, "test.txt")
-	err = os.WriteFile(testFile, []byte("test content"), 0644)
+	err = os.WriteFile(testFile, []byte("test content"), 0o644)
 	require.NoError(t, err)
 
 	_, err = worktree.Add("test.txt")
