@@ -22,16 +22,13 @@ stacks:
 
 logs:
   file: "/dev/stderr"
-  level: Debug
+  level: Info
 
 # Custom CLI commands
 commands:
 - name: "test"
   description: "Run all tests"
   steps:
-  - which atmos
-  - atmos version
-  - atmos auth --help
   - atmos validate stacks
   # Test dev stack
   - atmos terraform plan whoami -s dev --identity oidc

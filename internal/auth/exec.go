@@ -55,11 +55,8 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, info *schema.Config
 		}
 
 	}
-	// If we don't have a default, but several are enabled, prompt the user, if not in CI
-	if telemetry.IsCI() {
-		return nil
-	}
-	if identity == "" {
+
+	if identity == "" && !telemetry.IsCI() {
 		identity, _ = pickIdentity(GetEnabledIdentities(info.ComponentIdentitiesSection))
 	}
 
