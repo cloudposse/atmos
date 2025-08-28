@@ -98,7 +98,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	if atmosConfig.Settings.Terminal.NoColor {
+	if !atmosConfig.Settings.Terminal.IsColorEnabled() {
 		stylesDefault := log.DefaultStyles()
 		// Clear colors for levels
 		styles := &log.Styles{}

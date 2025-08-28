@@ -111,10 +111,10 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 		}
 		cliConfig.Format = format
 	}
-	if !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == "trace" {
+	if !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == u.LogLevelTrace {
 		cliConfig.Verbose = true
 	} else if cmd.Flags().Changed("logs-level") {
-		if v, err := cmd.Flags().GetString("logs-level"); err == nil && v == "trace" {
+		if v, err := cmd.Flags().GetString("logs-level"); err == nil && v == u.LogLevelTrace {
 			cliConfig.Verbose = true
 		}
 	}

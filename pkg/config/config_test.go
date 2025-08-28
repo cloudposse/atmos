@@ -737,6 +737,49 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			expectedNoColor: true,
 			expectedColor:   false, // NO_COLOR takes precedence
 		},
+		{
+			name: "PAGER environment variable fallback",
+			envVars: map[string]string{
+				"PAGER": "less -R",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "less -R",
+		},
+		{
+			name: "ATMOS_PAGER takes precedence over PAGER",
+			envVars: map[string]string{
+				"PAGER":       "less",
+				"ATMOS_PAGER": "more",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "more",
+		},
+		{
+			name: "CLI flag --no-color=false overrides NO_COLOR env var",
+			envVars: map[string]string{
+				"NO_COLOR": "1",
+			},
+			args:            []string{"atmos", "--no-color=false", "describe", "config"},
+			expectedNoColor: false,
+			expectedColor:   true,
+		},
+		{
+			name: "--pager=false overrides PAGER env var",
+			envVars: map[string]string{
+				"PAGER": "less",
+			},
+			args:          []string{"atmos", "--pager=false", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "--no-color=true explicitly sets NoColor",
+			envVars: map[string]string{
+				"COLOR": "true",
+			},
+			args:            []string{"atmos", "--no-color=true", "describe", "config"},
+			expectedNoColor: true,
+			expectedColor:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -746,7 +789,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			originalEnvVars := make(map[string]string)
 
 			// Clear and save relevant environment variables
-			envVarsToCheck := []string{"ATMOS_PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR"}
+			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR"}
 			for _, envVar := range envVarsToCheck {
 				if val, exists := os.LookupEnv(envVar); exists {
 					originalEnvVars[envVar] = val
@@ -782,7 +825,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			v.AutomaticEnv()
 
 			// Bind specific environment variables
-			v.BindEnv("settings.terminal.pager", "ATMOS_PAGER")
+			v.BindEnv("settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 			v.BindEnv("settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 			v.BindEnv("settings.terminal.color", "ATMOS_COLOR", "COLOR")
 
