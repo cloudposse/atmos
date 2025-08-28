@@ -1,6 +1,6 @@
 # Git Ignore Template
 
-This template provides a comprehensive `.gitignore` file for infrastructure and development projects.
+This template provides a comprehensive `.gitignore` file for infrastructure and development scaffold templates.
 
 ## What is .gitignore?
 
@@ -29,4 +29,4 @@ This will create a `.gitignore` file in the current directory with comprehensive
 
 ## Customization
 
-After initialization, you can modify the `.gitignore` file to add or remove patterns based on your specific project needs and technology stack.
+After initialization, you can modify the `.gitignore` file to add or remove patterns based on your specific scaffold template needs and technology stack.

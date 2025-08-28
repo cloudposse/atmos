@@ -34,10 +34,10 @@ func TestCreateField_InvalidFieldType(t *testing.T) {
 
 func TestCreateField_ValidFieldTypes(t *testing.T) {
 	values := map[string]interface{}{
-		"string_field":     "test_string",
-		"select_field":     "option1",
+		"string_field":      "test_string",
+		"select_field":      "option1",
 		"multiselect_field": []string{"option1", "option2"},
-		"confirm_field":    true,
+		"confirm_field":     true,
 	}
 
 	testCases := []struct {

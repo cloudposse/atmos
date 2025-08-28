@@ -12,7 +12,7 @@ import (
 )
 
 // loadLocalTemplate loads a template configuration from a local filesystem path
-func loadLocalTemplate(templatePath string) (*embeds.Configuration, error) {
+func loadLocalTemplate(templatePath, templateKey string) (*embeds.Configuration, error) {
 	// Check if template directory exists
 	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("template directory does not exist: %s", templatePath)
@@ -21,7 +21,6 @@ func loadLocalTemplate(templatePath string) (*embeds.Configuration, error) {
 	// Check for scaffold.yaml (optional)
 	scaffoldConfigPath := filepath.Join(templatePath, config.ScaffoldConfigFileName)
 	var scaffoldConfig *config.ScaffoldConfig
-	var templateID string
 
 	if _, err := os.Stat(scaffoldConfigPath); err == nil {
 		// scaffold.yaml exists, read and parse it
@@ -29,14 +28,10 @@ func loadLocalTemplate(templatePath string) (*embeds.Configuration, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", config.ScaffoldConfigFileName, err)
 		}
-
-		templateID = scaffoldConfig.Name
 	}
 
-	// Use directory name as template ID if not set
-	if templateID == "" {
-		templateID = filepath.Base(templatePath)
-	}
+	// Use the template key from atmos.yaml as the template ID
+	templateID := templateKey
 
 	// Read all files from template directory
 	files, err := readTemplateFiles(templatePath)
@@ -70,6 +65,10 @@ func loadLocalTemplate(templatePath string) (*embeds.Configuration, error) {
 		}
 		if scaffoldConfig.Description != "" {
 			config.Description = scaffoldConfig.Description
+		}
+		// Use the template_id from scaffold.yaml if available
+		if scaffoldConfig.TemplateID != "" {
+			config.TemplateID = scaffoldConfig.TemplateID
 		}
 	}
 

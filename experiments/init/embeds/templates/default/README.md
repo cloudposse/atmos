@@ -1,6 +1,6 @@
-# {{ .ProjectName | default "Atmos Project" }}
+# {{ .TemplateName | default "Atmos Scaffold Template" }}
 
-{{ .ProjectDescription | default "This is an Atmos project for managing infrastructure as code." }}
+{{ .TemplateDescription | default "This is an Atmos scaffold template for managing infrastructure as code." }}
 
 ## Overview
 
@@ -92,4 +92,4 @@ The main configuration is in `atmos.yaml`. Key settings:
 
 For support and questions:
 - [GitHub Issues](https://github.com/cloudposse/atmos/issues)
-- [Discord Community](https://cloudposse.co/discord) 
+- [Discord Community](https://cloudposse.co/discord)

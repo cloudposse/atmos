@@ -8,19 +8,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPromptForProjectConfig_FormCreation(t *testing.T) {
+func TestPromptForScaffoldConfig_FormCreation(t *testing.T) {
 	// Skip this test in non-interactive environments
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
 	// Test that forms can be created with different field types
-	projectConfig := &ProjectConfig{
-		Name:        "Test Project",
-		Description: "Test project configuration",
+	scaffoldConfig := &ScaffoldConfig{
+		Name:        "Test Scaffold Template",
+		Description: "Test scaffold template configuration",
 		Fields: map[string]FieldDefinition{
-			"project_name": {
-				Key:         "project_name",
+			"name": {
+				Key:         "name",
 				Type:        "input",
 				Label:       "Project Name",
 				Description: "The name of your project",
@@ -58,7 +58,7 @@ func TestPromptForProjectConfig_FormCreation(t *testing.T) {
 	}
 
 	userValues := map[string]interface{}{
-		"project_name": "test-project",
+		"name": "test-project",
 		"license":      "Apache",
 		"regions":      []string{"us-east-1", "us-west-2"},
 		"monitoring":   true,
@@ -66,24 +66,24 @@ func TestPromptForProjectConfig_FormCreation(t *testing.T) {
 
 	// Test that the function doesn't panic
 	assert.NotPanics(t, func() {
-		PromptForProjectConfig(projectConfig, userValues)
+		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 }
 
-func TestPromptForProjectConfig_FieldGrouping(t *testing.T) {
+func TestPromptForScaffoldConfig_FieldGrouping(t *testing.T) {
 	// Skip this test in non-interactive environments
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
 	// Test that fields are properly grouped by type
-	projectConfig := &ProjectConfig{
-		Name:        "Test Project",
-		Description: "Test project configuration",
+	scaffoldConfig := &ScaffoldConfig{
+		Name:        "Test Scaffold Template",
+		Description: "Test scaffold template configuration",
 		Fields: map[string]FieldDefinition{
 			// Basic fields (input, text)
-			"project_name": {
-				Key:      "project_name",
+			"name": {
+				Key:      "name",
 				Type:     "input",
 				Label:    "Project Name",
 				Required: true,
@@ -130,20 +130,20 @@ func TestPromptForProjectConfig_FieldGrouping(t *testing.T) {
 
 	// Test that the function doesn't panic with complex field grouping
 	assert.NotPanics(t, func() {
-		PromptForProjectConfig(projectConfig, userValues)
+		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 }
 
-func TestPromptForProjectConfig_Validation(t *testing.T) {
+func TestPromptForScaffoldConfig_Validation(t *testing.T) {
 	// Skip this test in non-interactive environments
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
 	// Test form validation
-	projectConfig := &ProjectConfig{
-		Name:        "Test Project",
-		Description: "Test project configuration",
+	scaffoldConfig := &ScaffoldConfig{
+		Name:        "Test Scaffold Template",
+		Description: "Test scaffold template configuration",
 		Fields: map[string]FieldDefinition{
 			"required_field": {
 				Key:      "required_field",
@@ -167,20 +167,20 @@ func TestPromptForProjectConfig_Validation(t *testing.T) {
 
 	// Test that the function doesn't panic with validation
 	assert.NotPanics(t, func() {
-		PromptForProjectConfig(projectConfig, userValues)
+		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 }
 
-func TestPromptForProjectConfig_DefaultValues(t *testing.T) {
+func TestPromptForScaffoldConfig_DefaultValues(t *testing.T) {
 	// Skip this test in non-interactive environments
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
 	// Test that default values are properly handled
-	projectConfig := &ProjectConfig{
-		Name:        "Test Project",
-		Description: "Test project configuration",
+	scaffoldConfig := &ScaffoldConfig{
+		Name:        "Test Scaffold Template",
+		Description: "Test scaffold template configuration",
 		Fields: map[string]FieldDefinition{
 			"string_default": {
 				Key:     "string_default",
@@ -208,23 +208,23 @@ func TestPromptForProjectConfig_DefaultValues(t *testing.T) {
 
 	// Test that the function doesn't panic with default values
 	assert.NotPanics(t, func() {
-		PromptForProjectConfig(projectConfig, userValues)
+		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 }
 
-func TestPromptForProjectConfig_ValueCapture(t *testing.T) {
+func TestPromptForScaffoldConfig_ValueCapture(t *testing.T) {
 	// Skip this test in non-interactive environments
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
 	// Test that form values are properly captured
-	projectConfig := &ProjectConfig{
-		Name:        "Test Project",
-		Description: "Test project configuration",
+	scaffoldConfig := &ScaffoldConfig{
+		Name:        "Test Scaffold Template",
+		Description: "Test scaffold template configuration",
 		Fields: map[string]FieldDefinition{
-			"project_name": {
-				Key:     "project_name",
+			"name": {
+				Key:     "name",
 				Type:    "input",
 				Label:   "Project Name",
 				Default: "default-project",
@@ -240,30 +240,30 @@ func TestPromptForProjectConfig_ValueCapture(t *testing.T) {
 	}
 
 	userValues := map[string]interface{}{
-		"project_name": "user-project",
+		"name": "user-project",
 		"license":      "Apache",
 	}
 
 	// Test that the function doesn't panic and values are captured
 	assert.NotPanics(t, func() {
-		PromptForProjectConfig(projectConfig, userValues)
+		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 
 	// Verify that user values override defaults
-	assert.Equal(t, "user-project", userValues["project_name"])
+	assert.Equal(t, "user-project", userValues["name"])
 	assert.Equal(t, "Apache", userValues["license"])
 }
 
-func TestPromptForProjectConfig_EmptyConfig(t *testing.T) {
+func TestPromptForScaffoldConfig_EmptyConfig(t *testing.T) {
 	// Skip this test in non-interactive environments
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
-	// Test with empty project config
-	projectConfig := &ProjectConfig{
+	// Test with empty scaffold config
+	scaffoldConfig := &ScaffoldConfig{
 		Name:        "Empty Project",
-		Description: "Empty project configuration",
+		Description: "Empty scaffold template configuration",
 		Fields:      map[string]FieldDefinition{},
 	}
 
@@ -271,21 +271,21 @@ func TestPromptForProjectConfig_EmptyConfig(t *testing.T) {
 
 	// Test that the function doesn't panic with empty config
 	assert.NotPanics(t, func() {
-		PromptForProjectConfig(projectConfig, userValues)
+		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 }
 
-func TestPromptForProjectConfig_AllFieldsCaptured(t *testing.T) {
+func TestPromptForScaffoldConfig_AllFieldsCaptured(t *testing.T) {
 	// Skip this test in non-interactive environments
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
-	// Create a project config with all field types
-	projectConfig := &ProjectConfig{
+	// Create a scaffold config with all field types
+	scaffoldConfig := &ScaffoldConfig{
 		Fields: map[string]FieldDefinition{
-			"project_name": {
-				Key:         "project_name",
+			"name": {
+				Key:         "name",
 				Type:        "input",
 				Label:       "Project Name",
 				Default:     "default-project",
@@ -336,7 +336,7 @@ func TestPromptForProjectConfig_AllFieldsCaptured(t *testing.T) {
 
 	// Initial user values
 	userValues := map[string]interface{}{
-		"project_name":      "test-project",
+		"name":      "test-project",
 		"author":            "Test Author",
 		"year":              "2025",
 		"license":           "Apache",
@@ -346,7 +346,7 @@ func TestPromptForProjectConfig_AllFieldsCaptured(t *testing.T) {
 
 	// This test verifies that all fields are properly captured
 	// In a real interactive test, we would need to mock the form input
-	err := PromptForProjectConfig(projectConfig, userValues)
+	err := PromptForScaffoldConfig(scaffoldConfig, userValues)
 
 	// The function should either complete successfully or return an error
 	// but it shouldn't crash
@@ -355,7 +355,7 @@ func TestPromptForProjectConfig_AllFieldsCaptured(t *testing.T) {
 	}
 
 	// Verify that all expected fields are present in userValues
-	expectedFields := []string{"project_name", "author", "year", "license", "regions", "enable_monitoring"}
+	expectedFields := []string{"name", "author", "year", "license", "regions", "enable_monitoring"}
 	for _, field := range expectedFields {
 		if _, exists := userValues[field]; !exists {
 			t.Errorf("Field '%s' is missing from userValues", field)
@@ -373,7 +373,7 @@ func TestCreateField_AllFieldTypes(t *testing.T) {
 		{
 			name: "input field",
 			field: FieldDefinition{
-				Key:         "project_name",
+				Key:         "name",
 				Type:        "input",
 				Label:       "Project Name",
 				Default:     "default-project",
@@ -537,10 +537,10 @@ func TestCreateField_UserInputPriority(t *testing.T) {
 	}
 }
 
-func TestPromptForProjectConfig_UserInputCapture(t *testing.T) {
+func TestPromptForScaffoldConfig_UserInputCapture(t *testing.T) {
 	// This test simulates the complete form flow to verify user input is captured
 
-	projectConfig := &ProjectConfig{
+	scaffoldConfig := &ScaffoldConfig{
 		Fields: map[string]FieldDefinition{
 			"year": {
 				Key:         "year",
@@ -573,8 +573,8 @@ func TestPromptForProjectConfig_UserInputCapture(t *testing.T) {
 	// Initialize form values with user values and defaults
 	formValues := make(map[string]interface{})
 
-	// Set defaults from project config
-	for key, field := range projectConfig.Fields {
+	// Set defaults from scaffold config
+	for key, field := range scaffoldConfig.Fields {
 		if field.Default != nil {
 			formValues[key] = field.Default
 		}
@@ -595,7 +595,7 @@ func TestPromptForProjectConfig_UserInputCapture(t *testing.T) {
 	}
 
 	// Test that the createField function uses the correct values
-	yearField, yearGetter := createField("year", projectConfig.Fields["year"], formValues)
+	yearField, yearGetter := createField("year", scaffoldConfig.Fields["year"], formValues)
 	if yearField == nil {
 		t.Errorf("Year field was not created")
 	}
@@ -607,7 +607,7 @@ func TestPromptForProjectConfig_UserInputCapture(t *testing.T) {
 	}
 
 	// Test author field
-	authorField, authorGetter := createField("author", projectConfig.Fields["author"], formValues)
+	authorField, authorGetter := createField("author", scaffoldConfig.Fields["author"], formValues)
 	if authorField == nil {
 		t.Errorf("Author field was not created")
 	}
@@ -618,10 +618,10 @@ func TestPromptForProjectConfig_UserInputCapture(t *testing.T) {
 	}
 }
 
-func TestPromptForProjectConfig_ExistingValuesPriority(t *testing.T) {
-	// This test verifies that existing values from config.yaml take priority over defaults
-	
-	projectConfig := &ProjectConfig{
+func TestPromptForScaffoldConfig_ExistingValuesPriority(t *testing.T) {
+	// This test verifies that existing values from scaffold.yaml take priority over defaults
+
+	scaffoldConfig := &ScaffoldConfig{
 		Fields: map[string]FieldDefinition{
 			"year": {
 				Key:         "year",
@@ -641,66 +641,66 @@ func TestPromptForProjectConfig_ExistingValuesPriority(t *testing.T) {
 			},
 		},
 	}
-	
-	// Simulate existing values from config.yaml (what would be loaded by LoadUserValues)
+
+	// Simulate existing values from scaffold.yaml (what would be loaded by LoadUserValues)
 	existingValues := map[string]interface{}{
-		"year":   "2025", // Existing value from config.yaml
-		"author": "Foobar", // Existing value from config.yaml
+		"year":   "2025",   // Existing value from scaffold.yaml
+		"author": "Foobar", // Existing value from scaffold.yaml
 	}
-	
+
 	// This simulates what happens in executeWithSetup
 	// Deep merge project defaults with user values
-	mergedValues := DeepMerge(projectConfig, existingValues)
-	
+	mergedValues := DeepMerge(scaffoldConfig, existingValues)
+
 	// Verify that existing values take priority over defaults
 	if mergedValues["year"] != "2025" {
 		t.Errorf("Expected year to be '2025' (existing value), but got '%v'", mergedValues["year"])
 	}
-	
+
 	if mergedValues["author"] != "Foobar" {
 		t.Errorf("Expected author to be 'Foobar' (existing value), but got '%v'", mergedValues["author"])
 	}
-	
-	// Now simulate what happens in PromptForProjectConfig
+
+	// Now simulate what happens in PromptForScaffoldConfig
 	formValues := make(map[string]interface{})
-	
-	// Set defaults from project config
-	for key, field := range projectConfig.Fields {
+
+	// Set defaults from scaffold config
+	for key, field := range scaffoldConfig.Fields {
 		if field.Default != nil {
 			formValues[key] = field.Default
 		}
 	}
-	
+
 	// Override with user values (mergedValues contains existing values)
 	for key, value := range mergedValues {
 		formValues[key] = value
 	}
-	
+
 	// Verify that existing values take priority in form values
 	if formValues["year"] != "2025" {
 		t.Errorf("Expected formValues year to be '2025' (existing value), but got '%v'", formValues["year"])
 	}
-	
+
 	if formValues["author"] != "Foobar" {
 		t.Errorf("Expected formValues author to be 'Foobar' (existing value), but got '%v'", formValues["author"])
 	}
-	
+
 	// Test that createField uses the correct values
-	yearField, yearGetter := createField("year", projectConfig.Fields["year"], formValues)
+	yearField, yearGetter := createField("year", scaffoldConfig.Fields["year"], formValues)
 	if yearField == nil {
 		t.Errorf("Year field was not created")
 	}
-	
+
 	yearValue := yearGetter()
 	if yearValue != "2025" {
 		t.Errorf("Expected year getter to return '2025' (existing value), but got '%v'", yearValue)
 	}
-	
-	authorField, authorGetter := createField("author", projectConfig.Fields["author"], formValues)
+
+	authorField, authorGetter := createField("author", scaffoldConfig.Fields["author"], formValues)
 	if authorField == nil {
 		t.Errorf("Author field was not created")
 	}
-	
+
 	authorValue := authorGetter()
 	if authorValue != "Foobar" {
 		t.Errorf("Expected author getter to return 'Foobar' (existing value), but got '%v'", authorValue)
