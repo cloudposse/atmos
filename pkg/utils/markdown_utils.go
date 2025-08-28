@@ -35,7 +35,7 @@ func PrintfMarkdown(format string, a ...interface{}) {
 // InitializeMarkdown initializes a new Markdown renderer.
 func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error
-	render, err = markdown.NewTerminalMarkdownRenderer(&atmosConfig)
+	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
 	}

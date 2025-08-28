@@ -74,7 +74,7 @@ func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.
 }
 
 func renderHelpMarkdown(cmd *cobra.Command) string {
-	render, err := markdown.NewTerminalMarkdownRenderer(&schema.AtmosConfiguration{})
+	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 	if err != nil {
 		return ""
 	}
@@ -117,7 +117,7 @@ func headingStyle(s string) string {
 }
 
 func renderMarkdown(example string) string {
-	render, err := markdown.NewTerminalMarkdownRenderer(&schema.AtmosConfiguration{})
+	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 	if err != nil {
 		return ""
 	}

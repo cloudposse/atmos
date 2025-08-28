@@ -26,13 +26,13 @@ type Renderer struct {
 }
 
 // NewRenderer creates a new Markdown renderer with the given options.
-func NewRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	r := &Renderer{
 		width:                 defaultWidth,           // default width
 		profile:               termenv.ColorProfile(), // default color profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
-		atmosConfig:           atmosConfig,
+		atmosConfig:           &atmosConfig,
 	}
 
 	// Apply options
@@ -56,7 +56,7 @@ func NewRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Rende
 	}
 
 	// Get default style
-	style, err := GetDefaultStyle(*atmosConfig)
+	style, err := GetDefaultStyle(atmosConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func WithWidth(width uint) Option {
 	}
 }
 
-func NewTerminalMarkdownRenderer(atmosConfig *schema.AtmosConfiguration) (*Renderer, error) {
+func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
 	// Use Terminal.MaxWidth instead of deprecated Docs.MaxWidth
 	maxWidth := atmosConfig.Settings.Terminal.MaxWidth
 	// Create a terminal writer to get the optimal width

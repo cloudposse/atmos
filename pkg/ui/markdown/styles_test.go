@@ -50,7 +50,7 @@ func TestApplyColorSafely(t *testing.T) {
 }
 
 // verifyStyleCustomizations checks if style customizations were applied correctly.
-func verifyStyleCustomizations(t *testing.T, atmosConfig *schema.AtmosConfiguration, style *ansi.StyleConfig) {
+func verifyStyleCustomizations(t *testing.T, atmosConfig schema.AtmosConfiguration, style *ansi.StyleConfig) {
 	if atmosConfig.Settings.Markdown.Document.Color != "" {
 		assert.NotNil(t, style.Document.Color)
 		assert.Equal(t, atmosConfig.Settings.Markdown.Document.Color, *style.Document.Color)
@@ -359,7 +359,7 @@ func TestGetDefaultStyle(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Verify customizations were applied
-			verifyStyleCustomizations(t, &tt.atmosConfig, &style)
+			verifyStyleCustomizations(t, tt.atmosConfig, &style)
 		})
 	}
 }

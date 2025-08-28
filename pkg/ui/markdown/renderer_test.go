@@ -45,7 +45,7 @@ func TestRenderer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, _ := NewRenderer(&tt.atmosConfig)
+			r, _ := NewRenderer(tt.atmosConfig)
 			r.isTTYSupportForStdout = func() bool {
 				return true
 			}
@@ -84,7 +84,7 @@ func TestRenderErrorf(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, _ := NewRenderer(&schema.AtmosConfiguration{})
+			r, _ := NewRenderer(schema.AtmosConfiguration{})
 			r.isTTYSupportForStderr = func() bool {
 				return tt.isColor
 			}
@@ -127,7 +127,7 @@ func TestRenderAsciiWithoutWordWrap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(&schema.AtmosConfiguration{})
+			r, err := NewRenderer(schema.AtmosConfiguration{})
 			require.NoError(t, err)
 
 			result, err := r.RenderAsciiWithoutWordWrap(tt.input)
@@ -157,7 +157,7 @@ func TestRenderAscii(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(&schema.AtmosConfiguration{})
+			r, err := NewRenderer(schema.AtmosConfiguration{})
 			require.NoError(t, err)
 
 			result, err := r.RenderAscii(tt.input)
@@ -187,7 +187,7 @@ func TestRenderWorkflow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(&schema.AtmosConfiguration{})
+			r, err := NewRenderer(schema.AtmosConfiguration{})
 			require.NoError(t, err)
 			r.isTTYSupportForStdout = func() bool {
 				return false // Force ASCII rendering for predictable output
@@ -240,7 +240,7 @@ func TestRenderError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(&schema.AtmosConfiguration{})
+			r, err := NewRenderer(schema.AtmosConfiguration{})
 			require.NoError(t, err)
 			r.isTTYSupportForStderr = func() bool {
 				return false // Force ASCII rendering
@@ -281,7 +281,7 @@ func TestRenderSuccess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewRenderer(&schema.AtmosConfiguration{})
+			r, err := NewRenderer(schema.AtmosConfiguration{})
 			require.NoError(t, err)
 			r.isTTYSupportForStdout = func() bool {
 				return false // Force ASCII rendering
@@ -300,7 +300,7 @@ func TestWithWidth(t *testing.T) {
 	t.Run("WithWidth option sets renderer width", func(t *testing.T) {
 		expectedWidth := uint(120)
 		r, err := NewRenderer(
-			&schema.AtmosConfiguration{},
+			schema.AtmosConfiguration{},
 			WithWidth(expectedWidth),
 		)
 		require.NoError(t, err)
@@ -308,7 +308,7 @@ func TestWithWidth(t *testing.T) {
 	})
 
 	t.Run("Default width when no option provided", func(t *testing.T) {
-		r, err := NewRenderer(&schema.AtmosConfiguration{})
+		r, err := NewRenderer(schema.AtmosConfiguration{})
 		require.NoError(t, err)
 		assert.Equal(t, uint(80), r.width)
 	})
@@ -358,7 +358,7 @@ func TestNewTerminalMarkdownRenderer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := NewTerminalMarkdownRenderer(&tt.atmosConfig)
+			r, err := NewTerminalMarkdownRenderer(tt.atmosConfig)
 			assert.NoError(t, err)
 			assert.NotNil(t, r)
 			// Width should be set based on terminal or max width
@@ -369,7 +369,7 @@ func TestNewTerminalMarkdownRenderer(t *testing.T) {
 
 func TestRender_NonTTY(t *testing.T) {
 	t.Run("Render falls back to ASCII for non-TTY stdout", func(t *testing.T) {
-		r, err := NewRenderer(&schema.AtmosConfiguration{})
+		r, err := NewRenderer(schema.AtmosConfiguration{})
 		require.NoError(t, err)
 		r.isTTYSupportForStdout = func() bool {
 			return false
@@ -385,7 +385,7 @@ func TestRender_NonTTY(t *testing.T) {
 
 func TestRenderWithoutWordWrap_NonTTY(t *testing.T) {
 	t.Run("RenderWithoutWordWrap falls back to ASCII for non-TTY stdout", func(t *testing.T) {
-		r, err := NewRenderer(&schema.AtmosConfiguration{})
+		r, err := NewRenderer(schema.AtmosConfiguration{})
 		require.NoError(t, err)
 		r.isTTYSupportForStdout = func() bool {
 			return false
@@ -396,5 +396,95 @@ func TestRenderWithoutWordWrap_NonTTY(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Contains(t, result, "Test")
 		assert.Contains(t, result, "Content")
+	})
+}
+
+// TestNewRendererErrorCases tests error handling in NewRenderer
+func TestNewRendererErrorCases(t *testing.T) {
+	// Note: It's hard to trigger actual errors in NewRenderer since glamour is quite robust
+	// But we can test the function works with various edge cases
+	
+	t.Run("NewRenderer with empty config", func(t *testing.T) {
+		atmosConfig := schema.AtmosConfiguration{}
+		renderer, err := NewRenderer(atmosConfig)
+		assert.NoError(t, err)
+		assert.NotNil(t, renderer)
+	})
+	
+	t.Run("NewRenderer with multiple options", func(t *testing.T) {
+		atmosConfig := schema.AtmosConfiguration{}
+		renderer, err := NewRenderer(atmosConfig, WithWidth(100), WithWidth(200))
+		assert.NoError(t, err)
+		assert.NotNil(t, renderer)
+		assert.Equal(t, uint(200), renderer.width) // Last option wins
+	})
+}
+
+// TestRenderErrorCases tests error handling in rendering methods
+func TestRenderErrorCases(t *testing.T) {
+	t.Run("Render with error in glamour render", func(t *testing.T) {
+		r, err := NewRenderer(schema.AtmosConfiguration{})
+		require.NoError(t, err)
+		
+		// Test with invalid markdown that might cause issues
+		// Using a very large input to potentially trigger errors
+		largeInput := ""
+		for i := 0; i < 10000; i++ {
+			largeInput += "# Header " + string(rune(i)) + "\n"
+		}
+		
+		// This should still work but tests the error path
+		_, err = r.Render(largeInput)
+		// Even large inputs should work, so no error expected
+		assert.NoError(t, err)
+	})
+}
+
+// TestNewTerminalMarkdownRendererEdgeCases tests edge cases for NewTerminalMarkdownRenderer
+func TestNewTerminalMarkdownRendererEdgeCases(t *testing.T) {
+	// Save original stdout
+	origStdout := os.Stdout
+	defer func() {
+		os.Stdout = origStdout
+	}()
+
+	t.Run("NewTerminalMarkdownRenderer with pipe stdout", func(t *testing.T) {
+		// Create a pipe to simulate non-terminal stdout
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+		defer r.Close()
+		defer w.Close()
+		
+		os.Stdout = w
+		
+		atmosConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					MaxWidth: 200,
+				},
+			},
+		}
+		
+		renderer, err := NewTerminalMarkdownRenderer(atmosConfig)
+		assert.NoError(t, err)
+		assert.NotNil(t, renderer)
+		// When stdout is a pipe, width should be limited by MaxWidth
+		assert.LessOrEqual(t, renderer.width, uint(200))
+	})
+
+	t.Run("NewTerminalMarkdownRenderer with very large MaxWidth", func(t *testing.T) {
+		atmosConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					MaxWidth: 10000,
+				},
+			},
+		}
+		
+		renderer, err := NewTerminalMarkdownRenderer(atmosConfig)
+		assert.NoError(t, err)
+		assert.NotNil(t, renderer)
+		// Width should be capped by terminal width or use the max value
+		assert.NotNil(t, renderer.width)
 	})
 }

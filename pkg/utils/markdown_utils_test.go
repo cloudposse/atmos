@@ -13,7 +13,7 @@ import (
 )
 
 func TestPrintfMarkdown(t *testing.T) {
-	render, _ = markdown.NewTerminalMarkdownRenderer(&schema.AtmosConfiguration{})
+	render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
