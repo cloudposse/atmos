@@ -137,7 +137,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
-	v.SetDefault("logs.level", "Info")
+	v.SetDefault("logs.level", "Warning")
 
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", true)

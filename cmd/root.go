@@ -95,7 +95,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	case "Off":
 		log.SetLevel(math.MaxInt32)
 	default:
-		log.SetLevel(log.InfoLevel)
+		log.SetLevel(log.WarnLevel)
 	}
 
 	if !atmosConfig.Settings.Terminal.IsColorEnabled() {
