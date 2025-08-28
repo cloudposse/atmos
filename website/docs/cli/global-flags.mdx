@@ -1,0 +1,366 @@
+---
+title: Global Flags
+sidebar_position: 3
+description: Complete reference for all global command-line flags available in Atmos
+---
+
+import Intro from '@site/src/components/Intro';
+import Note from '@site/src/components/Note';
+
+# Global Flags
+
+<Intro>
+Global flags are available for all Atmos commands and control the overall behavior of the CLI. These flags take precedence over environment variables and configuration files.
+</Intro>
+
+## Core Global Flags
+
+These flags are available for every Atmos command:
+
+<dl>
+  <dt>`--base-path`</dt>
+  <dd>
+    Base path for the Atmos project. This is the root directory where Atmos will look for configuration files, stacks, and components.
+    - Can also use `ATMOS_BASE_PATH` environment variable
+    - Supports both absolute and relative paths
+  </dd>
+
+  <dt>`--config`</dt>
+  <dd>
+    Path to a specific Atmos configuration file.
+    - Can be used multiple times for deep merging (later files override earlier ones)
+    - Example: `--config=base.yaml --config=override.yaml`
+  </dd>
+
+  <dt>`--config-path`</dt>
+  <dd>
+    Path to a directory containing Atmos configuration files.
+    - Can be used multiple times
+    - Atmos looks for `atmos.yaml`, `.atmos.yaml`, `atmos.yml`, or `.atmos.yml` in these directories
+  </dd>
+
+  <dt>`--logs-level`</dt>
+  <dd>
+    Set the logging level for Atmos operations.
+    - Options: `Trace`, `Debug`, `Info`, `Warning`, `Off`
+    - Default: `Info`
+    - Can also use `ATMOS_LOGS_LEVEL` environment variable
+  </dd>
+
+  <dt>`--logs-file`</dt>
+  <dd>
+    File to write Atmos logs to.
+    - Default: `/dev/stderr`
+    - Can be any file path or standard file descriptor (`/dev/stdout`, `/dev/stderr`, `/dev/null`)
+    - Can also use `ATMOS_LOGS_FILE` environment variable
+  </dd>
+
+  <dt>`--no-color`</dt>
+  <dd>
+    Disable colored terminal output.
+    - Useful for CI/CD environments or when piping output
+    - Can also use `ATMOS_NO_COLOR` or `NO_COLOR` environment variables
+    - The `NO_COLOR` env var follows the standard from https://no-color.org/
+  </dd>
+
+  <dt>`--pager`</dt>
+  <dd>
+    Configure pager behavior for command output.
+    - `--pager` (no value): Enable pager with default settings
+    - `--pager=true` or `--pager=on`: Explicitly enable pager
+    - `--pager=false` or `--pager=off`: Explicitly disable pager
+    - `--pager=less` or `--pager=more`: Use specific pager program
+    - **Default**: Pager is disabled unless explicitly enabled
+    - Can also use `ATMOS_PAGER` or `PAGER` environment variables
+  </dd>
+
+  <dt>`--redirect-stderr`</dt>
+  <dd>
+    Redirect stderr to a file or file descriptor.
+    - Can redirect to any file path or standard file descriptor
+    - Example: `--redirect-stderr=/dev/null` to suppress error output
+  </dd>
+</dl>
+
+## Command-Specific Global Flags
+
+These flags are available across multiple commands but not universally:
+
+### Processing Flags
+
+<dl>
+  <dt>`--process-templates`</dt>
+  <dd>
+    Enable or disable Go template processing in Atmos manifests.
+    - Default: `true`
+    - Available in: `describe stacks`, `list`, `validate` commands
+  </dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>
+    Enable or disable YAML function processing in Atmos manifests.
+    - Default: `true`
+    - Available in: `describe stacks`, `list`, `validate` commands
+  </dd>
+
+  <dt>`--skip`</dt>
+  <dd>
+    Skip processing specific Atmos functions in manifests.
+    - Can be used multiple times
+    - Example: `--skip=terraform.output --skip=include`
+    - Available in: `describe` commands
+  </dd>
+</dl>
+
+### Stack and Component Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>
+    Specify the stack to operate on.
+    - Available in most operational commands
+    - Supports tab completion
+  </dd>
+
+  <dt>`--component` / `-c`</dt>
+  <dd>
+    Specify the component to operate on.
+    - Available in component-related commands
+    - Supports tab completion
+  </dd>
+</dl>
+
+### Output Flags
+
+<dl>
+  <dt>`--format` / `-f`</dt>
+  <dd>
+    Specify the output format.
+    - Common values: `yaml`, `json`, `table`, `csv`
+    - Available in: `describe`, `list`, `validate` commands
+  </dd>
+
+  <dt>`--file`</dt>
+  <dd>
+    Write output to a file instead of stdout.
+    - Available in: `describe`, `generate` commands
+  </dd>
+
+  <dt>`--query` / `-q`</dt>
+  <dd>
+    Query output using JSONPath or yq expressions.
+    - Example: `--query='.components.vpc.vars'`
+    - Available in: `describe` commands
+  </dd>
+</dl>
+
+### Workflow and Execution Flags
+
+<dl>
+  <dt>`--dry-run`</dt>
+  <dd>
+    Simulate execution without making actual changes.
+    - Available in: `workflow`, `vendor pull`, `terraform` commands
+  </dd>
+
+  <dt>`--from-step`</dt>
+  <dd>
+    Resume workflow from a specific step.
+    - Available in: `workflow` command
+  </dd>
+
+  <dt>`--affected`</dt>
+  <dd>
+    Only operate on affected components.
+    - Available in: `terraform`, `describe` commands
+  </dd>
+</dl>
+
+## Environment Variables
+
+All global flags can be set using environment variables. The precedence order is:
+
+1. Command-line flags (highest priority)
+2. Environment variables
+3. Configuration file (`atmos.yaml`)
+4. Default values (lowest priority)
+
+### Core Environment Variables
+
+<dl>
+  <dt>`ATMOS_BASE_PATH`</dt>
+  <dd>Sets the base path for the Atmos project</dd>
+
+  <dt>`ATMOS_LOGS_LEVEL`</dt>
+  <dd>Sets the logging level</dd>
+
+  <dt>`ATMOS_LOGS_FILE`</dt>
+  <dd>Sets the log file location</dd>
+
+  <dt>`ATMOS_COLOR` / `COLOR`</dt>
+  <dd>
+    Enable or disable colored output.
+    - Set to `true` to enable color (default)
+    - Set to `false` to disable color
+    - Both `ATMOS_COLOR` and `COLOR` are supported for maximum portability
+  </dd>
+
+  <dt>`ATMOS_NO_COLOR` / `NO_COLOR`</dt>
+  <dd>
+    Disable colored output (any non-empty value disables color).
+    - `NO_COLOR` is a standard environment variable supported by many CLI tools (https://no-color.org/)
+    - Maintained for portability across different systems and CI/CD environments
+    - Takes precedence over `ATMOS_COLOR`/`COLOR` settings
+    - Both `ATMOS_NO_COLOR` and `NO_COLOR` are fully supported
+  </dd>
+
+  <dt>`ATMOS_PAGER` / `PAGER`</dt>
+  <dd>
+    Configure pager settings.
+    - `PAGER` is a standard Unix environment variable maintained for portability
+    - Both `ATMOS_PAGER` and `PAGER` are supported to ensure compatibility across different systems
+  </dd>
+</dl>
+
+## Portability Notes
+
+Atmos supports both standard and Atmos-prefixed environment variables to ensure maximum portability:
+
+- **Standard Variables** (`NO_COLOR`, `COLOR`, `PAGER`): Work across many CLI tools and Unix systems
+- **Atmos Variables** (`ATMOS_NO_COLOR`, `ATMOS_COLOR`, `ATMOS_PAGER`): Provide namespace isolation when needed
+
+This dual support ensures your scripts and CI/CD pipelines work consistently across different environments without modification.
+
+## Examples
+
+### Basic Usage
+
+```bash
+# Disable color and pager for CI environment
+atmos describe config --no-color --pager=off
+
+# Use specific pager with custom log level
+atmos describe stacks --pager=less --logs-level=Debug
+
+# Multiple config files with base path
+atmos --base-path=/infrastructure \
+      --config=base.yaml \
+      --config=override.yaml \
+      terraform plan vpc -s prod
+```
+
+### Pager Control Examples
+
+```bash
+# Enable pager (multiple ways)
+atmos describe config --pager                # Enable with default pager
+atmos describe config --pager=true           # Explicitly enable
+atmos describe config --pager=less           # Use specific pager
+ATMOS_PAGER=true atmos describe config      # Via environment variable
+
+# Disable pager (explicit)
+atmos describe config --pager=false          # Explicitly disable
+atmos describe config --pager=off            # Alternative syntax
+ATMOS_PAGER=false atmos describe config     # Via environment variable
+
+# Default behavior (no flag = pager disabled)
+atmos describe config                        # Pager is OFF by default
+```
+
+### Color Control Examples
+
+```bash
+# Multiple ways to disable color
+atmos describe config --no-color           # Using flag
+NO_COLOR=1 atmos describe config          # Using NO_COLOR standard
+ATMOS_NO_COLOR=1 atmos describe config    # Using ATMOS_NO_COLOR
+ATMOS_COLOR=false atmos describe config   # Using ATMOS_COLOR
+COLOR=false atmos describe config         # Using COLOR
+
+# Explicitly enable color (overrides config file setting)
+ATMOS_COLOR=true atmos describe config
+```
+
+### Environment Variable Usage
+
+```bash
+# Set environment variables
+export ATMOS_PAGER=off
+export ATMOS_COLOR=false
+export ATMOS_LOGS_LEVEL=Debug
+
+# Commands will use these settings
+atmos describe config
+```
+
+### CI/CD Configuration
+
+```bash
+# Typical CI/CD settings
+export ATMOS_NO_COLOR=true
+export ATMOS_PAGER=off
+export ATMOS_LOGS_LEVEL=Info
+export ATMOS_LOGS_FILE=/var/log/atmos.log
+
+# Run commands without interactive features
+atmos terraform apply --auto-approve
+```
+
+### CI/CD Portability Example
+
+```bash
+# These environment variables work across many tools, not just Atmos
+export NO_COLOR=1        # Disables color in Atmos and other NO_COLOR-compliant tools
+export PAGER=cat        # Disables paging in Atmos and other tools that respect PAGER
+
+# Run various CLI tools - all respect the same env vars
+atmos describe config
+terraform plan
+kubectl get pods
+```
+
+<Note>
+When output is piped to another command, Atmos automatically disables color output and pager to ensure compatibility:
+
+```bash
+# Color and pager automatically disabled
+atmos describe stacks | grep production
+```
+</Note>
+
+## Breaking Change: Pager Default Behavior
+
+**Previous behavior**: Pager was enabled by default for long output
+**New behavior**: Pager is disabled by default
+
+### How to restore previous behavior:
+
+#### Option 1: Configuration file
+```yaml
+# atmos.yaml
+settings:
+  terminal:
+    pager: true  # Enable pager globally
+```
+
+#### Option 2: Environment variable
+```bash
+export ATMOS_PAGER=true  # Enable for all commands in session
+```
+
+#### Option 3: Command flag
+```bash
+atmos describe config --pager  # Enable for specific command
+```
+
+### Why this change?
+- **Better for automation**: Scripts and CI/CD don't need to handle pager interaction
+- **Faster feedback**: Immediate output without waiting for pager
+- **Explicit control**: Users who want pager can easily enable it
+- **Better defaults**: Most modern terminals have built-in scrollback
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) - Detailed configuration file reference
+- [Terminal Settings](/cli/configuration/terminal) - Terminal-specific configuration options
+- [Environment Variables](/cli/configuration#environment-variables) - Complete environment variable reference

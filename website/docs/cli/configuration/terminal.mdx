@@ -27,11 +27,21 @@ Configure general terminal behavior. These are also the default settings if not 
 settings:
   terminal:
     max_width: 120        # Maximum width for terminal output
-    pager: true           # Pager setting for all terminal output
-    no_color: false       # Disable color output
+    pager: false          # Pager disabled by default (set to true, or pager name like 'less' to enable)
+    color: true           # Enable colored output (default: true)
+    # no_color: false     # DEPRECATED in config: Use 'color' instead (kept for backward compatibility)
     unicode: true         # Use Unicode characters in output
     tab_width: 2          # Number of spaces for YAML indentation (default: 2)
 ```
+
+:::warning Deprecation Notice
+The `no_color` field in the terminal configuration is deprecated. Please use `color: false` instead.
+The `NO_COLOR` and `ATMOS_NO_COLOR` environment variables are **NOT** deprecated and continue to be fully supported for portability.
+:::
+
+:::info Portability
+While `no_color` in the configuration file is deprecated in favor of `color`, the `NO_COLOR` and `ATMOS_NO_COLOR` environment variables remain fully supported for portability. This ensures your CI/CD pipelines and scripts continue to work across different environments without modification.
+:::
 
 ## Syntax Highlighting
 
@@ -48,7 +58,38 @@ settings:
       wrap: false                   # Wrap long lines
 ```
 
-### Configuration Options
+### Terminal Configuration Options
+
+<dl>
+  <dt>`max_width`</dt>
+  <dd>Maximum width for terminal output (default: `120`)</dd>
+  
+  <dt>`pager`</dt>
+  <dd>
+    Configure pager behavior for output display.
+    - `false` or empty: Pager disabled (default)
+    - `true` or `on`: Enable pager with system default
+    - Pager command (e.g., `less`, `more`): Use specific pager program
+    - Can also be set using `ATMOS_PAGER` or `PAGER` environment variables
+    - Can be enabled per command with `--pager` global flag
+  </dd>
+  
+  <dt>`color`</dt>
+  <dd>
+    Enable colored terminal output (default: `true`).
+    - Can also be set using:
+      - `ATMOS_COLOR` or `COLOR` environment variables
+      - `--no-color` global flag (sets color to false)
+  </dd>
+  
+  <dt>`unicode`</dt>
+  <dd>Use Unicode characters in output (default: `true`)</dd>
+  
+  <dt>`tab_width`</dt>
+  <dd>Number of spaces for YAML indentation (default: `2`)</dd>
+</dl>
+
+### Syntax Highlighting Configuration Options
 
 <dl>
   <dt>`enabled`</dt>
@@ -71,17 +112,12 @@ settings:
   </dd>
 
   <dt>`pager`</dt>
-  <dd>Whether to use a pager specifically for syntax-highlighted output. This setting is independent of the pager setting (default: `false`)</dd>
-
+  <dd>Whether to use a pager specifically for syntax-highlighted output. This setting is independent of the main pager setting (default: `false`)</dd>
   <dt>`line_numbers`</dt>
   <dd>Show line numbers in output (default: `false`)</dd>
 
   <dt>`wrap`</dt>
   <dd>Wrap long lines (default: `false`)</dd>
-
-  <dt>`no_color`</dt>
-  <dd>Disable color output (default: `false`)</dd>
-
 </dl>
 
 ### Example Usage
