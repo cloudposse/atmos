@@ -82,7 +82,7 @@ These flags are available for every Atmos command:
   </dd>
 </dl>
 
-## Command-Specific Global Flags
+## Command-Specific Flags
 
 These flags are available across multiple commands but not universally:
 
@@ -112,24 +112,6 @@ These flags are available across multiple commands but not universally:
   </dd>
 </dl>
 
-### Stack and Component Flags
-
-<dl>
-  <dt>`--stack` / `-s`</dt>
-  <dd>
-    Specify the stack to operate on.
-    - Available in most operational commands
-    - Supports tab completion
-  </dd>
-
-  <dt>`--component` / `-c`</dt>
-  <dd>
-    Specify the component to operate on.
-    - Available in component-related commands
-    - Supports tab completion
-  </dd>
-</dl>
-
 ### Output Flags
 
 <dl>
@@ -151,6 +133,24 @@ These flags are available across multiple commands but not universally:
     Query output using JSONPath or yq expressions.
     - Example: `--query='.components.vpc.vars'`
     - Available in: `describe` commands
+  </dd>
+</dl>
+
+### Stack and Component Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>
+    Specify the stack to operate on.
+    - Available in: most operational commands (`terraform`, `helmfile`, `describe`, etc.)
+    - Supports tab completion
+  </dd>
+
+  <dt>`--component` / `-c`</dt>
+  <dd>
+    Specify the component to operate on.
+    - Available in: component-related commands (`terraform`, `helmfile`, etc.)
+    - Supports tab completion
   </dd>
 </dl>
 
@@ -327,37 +327,6 @@ When output is piped to another command, Atmos automatically disables color outp
 atmos describe stacks | grep production
 ```
 </Note>
-
-## Breaking Change: Pager Default Behavior
-
-**Previous behavior**: Pager was enabled by default for long output
-**New behavior**: Pager is disabled by default
-
-### How to restore previous behavior:
-
-#### Option 1: Configuration file
-```yaml
-# atmos.yaml
-settings:
-  terminal:
-    pager: true  # Enable pager globally
-```
-
-#### Option 2: Environment variable
-```bash
-export ATMOS_PAGER=true  # Enable for all commands in session
-```
-
-#### Option 3: Command flag
-```bash
-atmos describe config --pager  # Enable for specific command
-```
-
-### Why this change?
-- **Better for automation**: Scripts and CI/CD don't need to handle pager interaction
-- **Faster feedback**: Immediate output without waiting for pager
-- **Explicit control**: Users who want pager can easily enable it
-- **Better defaults**: Most modern terminals have built-in scrollback
 
 ## See Also
 

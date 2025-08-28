@@ -275,12 +275,13 @@ func initCobraConfig() {
 
 			// Check if --pager flag was explicitly set
 			if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
-				// Handle --pager flag values
-				if pagerFlag == "true" || pagerFlag == "on" || pagerFlag == "yes" || pagerFlag == "1" {
+				// Handle --pager flag values using switch for better readability
+				switch pagerFlag {
+				case "true", "on", "yes", "1":
 					pagerEnabled = true
-				} else if pagerFlag == "false" || pagerFlag == "off" || pagerFlag == "no" || pagerFlag == "0" {
+				case "false", "off", "no", "0":
 					pagerEnabled = false
-				} else {
+				default:
 					// Assume it's a pager command like "less" or "more"
 					pagerEnabled = true
 				}
