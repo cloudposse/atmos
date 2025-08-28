@@ -16,6 +16,25 @@ import (
 	"time"
 )
 
+const (
+	// Format constants.
+	formatConsole  = "console"
+	formatMarkdown = "markdown"
+	formatGitHub   = "github"
+	formatBoth     = "both"
+
+	// File handling constants.
+	stdinMarker        = "-"
+	stdoutPath         = "stdout"
+	defaultSummaryFile = "test-summary.md"
+	filePermissions    = 0o644
+
+	// Coverage threshold constants.
+	coverageHighThreshold = 80.0
+	coverageMedThreshold  = 50.0
+	base10BitSize         = 64
+)
+
 // TestEvent represents a single event from go test -json output.
 type TestEvent struct {
 	Time    time.Time `json:"Time"`
@@ -44,33 +63,25 @@ type TestSummary struct {
 }
 
 func main() {
-	var (
-		inputFile  = flag.String("input", "-", "JSON test results file (- for stdin)")
-		format     = flag.String("format", "both", "Output format: console, markdown, both, github")
-		outputFile = flag.String("output", "", "Output file (default: stdout for markdown, test-summary.md for github)")
-	)
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: test-summary [options]\n\n")
-		fmt.Fprintf(os.Stderr, "Parse Go test JSON output and generate summaries.\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  # Pipe test output through for console display\n")
-		fmt.Fprintf(os.Stderr, "  go test -json ./... | test-summary -format=console\n\n")
-		fmt.Fprintf(os.Stderr, "  # Generate markdown summary from file\n")
-		fmt.Fprintf(os.Stderr, "  test-summary -input=test-results.json -format=markdown\n\n")
-		fmt.Fprintf(os.Stderr, "  # Generate GitHub Actions summary\n")
-		fmt.Fprintf(os.Stderr, "  test-summary -input=test-results.json -format=github\n")
-	}
+	inputFile := flag.String("input", stdinMarker, "JSON test results file (- for stdin)")
+	format := flag.String("format", formatBoth, "Output format: console, markdown, both, github")
+	outputFile := flag.String("output", "", "Output file (default: stdout for markdown, test-summary.md for github)")
+
+	setupUsage()
 	flag.Parse()
 
+	exitCode := run(*inputFile, *format, *outputFile)
+	os.Exit(exitCode)
+}
+
+func run(inputFile, format, outputFile string) int {
 	// Open input.
 	input := os.Stdin
-	if *inputFile != "-" {
-		file, err := os.Open(*inputFile)
+	if inputFile != stdinMarker {
+		file, err := os.Open(inputFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error opening input file: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		defer file.Close()
 		input = file
@@ -80,40 +91,57 @@ func main() {
 	summary, consoleOutput := parseTestJSON(input)
 
 	// Output based on format.
-	switch *format {
-	case "console":
+	exitCode := summary.ExitCode
+	switch format {
+	case formatConsole:
 		fmt.Print(consoleOutput)
-	case "markdown":
-		output := *outputFile
+	case formatMarkdown:
+		output := outputFile
 		if output == "" {
-			output = "-" // Default to stdout.
+			output = stdinMarker
 		}
-		if err := writeSummary(summary, "markdown", output); err != nil {
+		if err := writeSummary(summary, formatMarkdown, output); err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing summary: %v\n", err)
-			os.Exit(1)
+			exitCode = 1
 		}
-	case "github":
-		output := *outputFile
-		if err := writeSummary(summary, "github", output); err != nil {
+	case formatGitHub:
+		if err := writeSummary(summary, formatGitHub, outputFile); err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing summary: %v\n", err)
-			os.Exit(1)
+			exitCode = 1
 		}
-	case "both":
+	case formatBoth:
 		fmt.Print(consoleOutput)
-		output := *outputFile
+		output := outputFile
 		if output == "" {
-			output = "-" // Default to stdout for markdown.
+			output = stdinMarker
 		}
-		if err := writeSummary(summary, "markdown", output); err != nil {
+		if err := writeSummary(summary, formatMarkdown, output); err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing summary: %v\n", err)
-			os.Exit(1)
+			exitCode = 1
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "Error: Invalid format '%s'. Use: console, markdown, both, or github\n", *format)
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "Error: Invalid format '%s'. Use: %s, %s, %s, or %s\n",
+			format, formatConsole, formatMarkdown, formatBoth, formatGitHub)
+		exitCode = 1
 	}
 
-	os.Exit(summary.ExitCode)
+	return exitCode
+}
+
+func setupUsage() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: test-summary [options]\n\n")
+		fmt.Fprintf(os.Stderr, "Parse Go test JSON output and generate summaries.\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  # Pipe test output through for console display\n")
+		fmt.Fprintf(os.Stderr, "  go test -json ./... | test-summary -format=%s\n\n", formatConsole)
+		fmt.Fprintf(os.Stderr, "  # Generate markdown summary from file\n")
+		fmt.Fprintf(os.Stderr, "  test-summary -input=test-results.json -format=%s\n\n", formatMarkdown)
+		fmt.Fprintf(os.Stderr, "  # Generate GitHub Actions summary\n")
+		fmt.Fprintf(os.Stderr, "  test-summary -input=test-results.json -format=%s\n", formatGitHub)
+	}
 }
 
 func parseTestJSON(input io.Reader) (*TestSummary, string) {
@@ -125,43 +153,56 @@ func parseTestJSON(input io.Reader) (*TestSummary, string) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		var event TestEvent
+		processLine(line, &console, results, summary, coverageRe)
+	}
 
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			// Not JSON, pass through.
-			console.WriteString(line + "\n")
-			continue
-		}
+	categorizeResults(results, summary)
+	sortResults(summary)
 
-		// Output for console.
-		if event.Output != "" {
-			console.WriteString(event.Output)
+	return summary, console.String()
+}
 
-			// Check for coverage in output.
-			if matches := coverageRe.FindStringSubmatch(event.Output); len(matches) > 1 {
-				summary.Coverage = matches[1] + "%"
-			}
-		}
+func processLine(line string, console *strings.Builder, results map[string]*TestResult, summary *TestSummary, coverageRe *regexp.Regexp) {
+	var event TestEvent
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		// Not JSON, pass through.
+		console.WriteString(line + "\n")
+		return
+	}
 
-		// Track test results.
-		if event.Test != "" && (event.Action == "pass" || event.Action == "fail" || event.Action == "skip") {
-			result := TestResult{
-				Package:  event.Package,
-				Test:     event.Test,
-				Status:   event.Action,
-				Duration: event.Elapsed,
-			}
+	// Output for console.
+	if event.Output != "" {
+		console.WriteString(event.Output)
 
-			key := fmt.Sprintf("%s/%s", event.Package, event.Test)
-			results[key] = &result
-
-			if event.Action == "fail" {
-				summary.ExitCode = 1
-			}
+		// Check for coverage in output.
+		if matches := coverageRe.FindStringSubmatch(event.Output); len(matches) > 1 {
+			summary.Coverage = matches[1] + "%"
 		}
 	}
 
-	// Sort results into categories.
+	// Track test results.
+	if event.Test != "" && (event.Action == "pass" || event.Action == "fail" || event.Action == "skip") {
+		recordTestResult(&event, results, summary)
+	}
+}
+
+func recordTestResult(event *TestEvent, results map[string]*TestResult, summary *TestSummary) {
+	result := TestResult{
+		Package:  event.Package,
+		Test:     event.Test,
+		Status:   event.Action,
+		Duration: event.Elapsed,
+	}
+
+	key := fmt.Sprintf("%s/%s", event.Package, event.Test)
+	results[key] = &result
+
+	if event.Action == "fail" {
+		summary.ExitCode = 1
+	}
+}
+
+func categorizeResults(results map[string]*TestResult, summary *TestSummary) {
 	for _, result := range results {
 		switch result.Status {
 		case "fail":
@@ -172,8 +213,9 @@ func parseTestJSON(input io.Reader) (*TestSummary, string) {
 			summary.Passed = append(summary.Passed, *result)
 		}
 	}
+}
 
-	// Sort each slice for consistent output.
+func sortResults(summary *TestSummary) {
 	sortTests := func(tests []TestResult) {
 		sort.Slice(tests, func(i, j int) bool {
 			if tests[i].Package == tests[j].Package {
@@ -185,66 +227,83 @@ func parseTestJSON(input io.Reader) (*TestSummary, string) {
 	sortTests(summary.Failed)
 	sortTests(summary.Skipped)
 	sortTests(summary.Passed)
-
-	return summary, console.String()
 }
 
 func writeSummary(summary *TestSummary, format, outputFile string) error {
-	var output io.Writer
-	var outputPath string
-
-	if format == "github" {
-		// Try to use GitHub summary first.
-		githubSummary := os.Getenv("GITHUB_STEP_SUMMARY")
-		if githubSummary != "" {
-			// Running in GitHub Actions.
-			file, err := os.OpenFile(githubSummary, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-			if err != nil {
-				return fmt.Errorf("failed to open GITHUB_STEP_SUMMARY file: %w", err)
-			}
-			defer file.Close()
-			output = file
-			outputPath = githubSummary
-		} else {
-			// Running locally - use default file.
-			defaultFile := "test-summary.md"
-			if outputFile != "" {
-				defaultFile = outputFile
-			}
-
-			// Create the file in current directory.
-			file, err := os.Create(defaultFile)
-			if err != nil {
-				return fmt.Errorf("failed to create summary file: %w", err)
-			}
-			defer file.Close()
-			output = file
-			outputPath = defaultFile
-
-			// Inform the user.
-			absPath, _ := filepath.Abs(defaultFile)
-			fmt.Fprintf(os.Stderr, "📝 GITHUB_STEP_SUMMARY not set (running locally). Writing summary to: %s\n", absPath)
-		}
-	} else if outputFile == "-" || outputFile == "" {
-		// Write to stdout.
-		output = os.Stdout
-		outputPath = "stdout"
-	} else {
-		// Write to specified file.
-		file, err := os.Create(outputFile)
-		if err != nil {
-			return fmt.Errorf("failed to create output file: %w", err)
-		}
-		defer file.Close()
-		output = file
-		outputPath = outputFile
+	output, outputPath, err := openOutput(format, outputFile)
+	if err != nil {
+		return err
 	}
 
-	// Write markdown summary.
-	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
+	// Handle closing for files that need it.
+	if closer, ok := output.(io.Closer); ok && output != os.Stdout {
+		defer closer.Close()
+	}
 
-	// Add timestamp for local runs.
-	if format == "github" && os.Getenv("GITHUB_STEP_SUMMARY") == "" {
+	// Write the markdown content.
+	writeMarkdownContent(output, summary, format)
+
+	// Log success message for file outputs.
+	if outputPath != stdoutPath && outputPath != "" {
+		absPath, _ := filepath.Abs(outputPath)
+		fmt.Fprintf(os.Stderr, "✅ Test summary written to: %s\n", absPath)
+	}
+
+	return nil
+}
+
+func openOutput(format, outputFile string) (io.Writer, string, error) {
+	switch format {
+	case formatGitHub:
+		return openGitHubOutput(outputFile)
+	case formatMarkdown:
+		if outputFile == stdinMarker || outputFile == "" {
+			return os.Stdout, stdoutPath, nil
+		}
+		file, err := os.Create(outputFile)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to create output file: %w", err)
+		}
+		return file, outputFile, nil
+	default:
+		return os.Stdout, stdoutPath, nil
+	}
+}
+
+func openGitHubOutput(outputFile string) (io.Writer, string, error) {
+	//nolint:forbidigo // This is a standalone tool, not part of Atmos core - os.Getenv is appropriate here.
+	githubSummary := os.Getenv("GITHUB_STEP_SUMMARY")
+	if githubSummary != "" {
+		// Running in GitHub Actions.
+		file, err := os.OpenFile(githubSummary, os.O_APPEND|os.O_CREATE|os.O_WRONLY, filePermissions)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to open GITHUB_STEP_SUMMARY file: %w", err)
+		}
+		return file, githubSummary, nil
+	}
+
+	// Running locally - use default file.
+	defaultFile := defaultSummaryFile
+	if outputFile != "" {
+		defaultFile = outputFile
+	}
+
+	file, err := os.Create(defaultFile)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create summary file: %w", err)
+	}
+
+	// Inform the user.
+	absPath, _ := filepath.Abs(defaultFile)
+	fmt.Fprintf(os.Stderr, "📝 GITHUB_STEP_SUMMARY not set (running locally). Writing summary to: %s\n", absPath)
+
+	return file, defaultFile, nil
+}
+
+func writeMarkdownContent(output io.Writer, summary *TestSummary, format string) {
+	// Add timestamp for local GitHub format runs.
+	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
+	if format == formatGitHub && os.Getenv("GITHUB_STEP_SUMMARY") == "" {
 		fmt.Fprintf(output, "_Generated: %s_\n\n", time.Now().Format("2006-01-02 15:04:05"))
 	}
 
@@ -252,69 +311,86 @@ func writeSummary(summary *TestSummary, format, outputFile string) error {
 
 	// Add coverage if available.
 	if summary.Coverage != "" {
-		coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(summary.Coverage, "%"), 64)
-		emoji := "🔴" // red for < 50%
-		if coverageFloat >= 80 {
-			emoji = "🟢" // green for >= 80%
-		} else if coverageFloat >= 50 {
-			emoji = "🟡" // yellow for 50-79%
-		}
-		fmt.Fprintf(output, "**Coverage:** %s %s of statements\n\n", emoji, summary.Coverage)
+		writeCoverageSection(output, summary.Coverage)
 	}
 
+	// Write summary line.
+	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
 	fmt.Fprintf(output, "**Summary:** %d tests • ✅ %d passed • ❌ %d failed • ⏭️ %d skipped\n\n",
 		total, len(summary.Passed), len(summary.Failed), len(summary.Skipped))
 
-	// Failed tests first (most important).
-	if len(summary.Failed) > 0 {
-		fmt.Fprintf(output, "### ❌ Failed Tests (%d)\n\n", len(summary.Failed))
-		fmt.Fprintf(output, "| Test | Package | Duration |\n")
-		fmt.Fprintf(output, "|------|---------|----------|\n")
-		for _, test := range summary.Failed {
-			pkg := shortPackage(test.Package)
-			fmt.Fprintf(output, "| `%s` | %s | %.2fs |\n", test.Test, pkg, test.Duration)
-		}
-		fmt.Fprintf(output, "\n**Run locally to reproduce:**\n")
-		fmt.Fprintf(output, "```bash\n")
-		for _, test := range summary.Failed {
-			fmt.Fprintf(output, "go test %s -run ^%s$ -v\n", test.Package, test.Test)
-		}
-		fmt.Fprintf(output, "```\n\n")
+	// Write test sections.
+	writeFailedTests(output, summary.Failed)
+	writeSkippedTests(output, summary.Skipped)
+	writePassedTests(output, summary.Passed)
+}
+
+func writeCoverageSection(output io.Writer, coverage string) {
+	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverage, "%"), base10BitSize)
+	emoji := "🔴" // red for < 50%.
+	if coverageFloat >= coverageHighThreshold {
+		emoji = "🟢" // green for >= 80%.
+	} else if coverageFloat >= coverageMedThreshold {
+		emoji = "🟡" // yellow for 50-79%.
+	}
+	fmt.Fprintf(output, "**Coverage:** %s %s of statements\n\n", emoji, coverage)
+}
+
+func writeFailedTests(output io.Writer, failed []TestResult) {
+	if len(failed) == 0 {
+		return
 	}
 
-	// Skipped tests.
-	if len(summary.Skipped) > 0 {
-		fmt.Fprintf(output, "### ⏭️ Skipped Tests (%d)\n\n", len(summary.Skipped))
-		fmt.Fprintf(output, "| Test | Package |\n")
-		fmt.Fprintf(output, "|------|---------|)\n")
-		for _, test := range summary.Skipped {
-			pkg := shortPackage(test.Package)
-			fmt.Fprintf(output, "| `%s` | %s |\n", test.Test, pkg)
-		}
-		fmt.Fprintf(output, "\n")
+	fmt.Fprintf(output, "### ❌ Failed Tests (%d)\n\n", len(failed))
+	fmt.Fprintf(output, "| Test | Package | Duration |\n")
+	fmt.Fprintf(output, "|------|---------|----------|\n")
+
+	for _, test := range failed {
+		pkg := shortPackage(test.Package)
+		fmt.Fprintf(output, "| `%s` | %s | %.2fs |\n", test.Test, pkg, test.Duration)
 	}
 
-	// Passed tests (collapsible).
-	if len(summary.Passed) > 0 {
-		fmt.Fprintf(output, "### ✅ Passed Tests (%d)\n\n", len(summary.Passed))
-		fmt.Fprintf(output, "<details>\n")
-		fmt.Fprintf(output, "<summary>Click to show all passing tests</summary>\n\n")
-		fmt.Fprintf(output, "| Test | Package | Duration |\n")
-		fmt.Fprintf(output, "|------|---------|----------|\n")
-		for _, test := range summary.Passed {
-			pkg := shortPackage(test.Package)
-			fmt.Fprintf(output, "| `%s` | %s | %.2fs |\n", test.Test, pkg, test.Duration)
-		}
-		fmt.Fprintf(output, "\n</details>\n\n")
+	fmt.Fprintf(output, "\n**Run locally to reproduce:**\n")
+	fmt.Fprintf(output, "```bash\n")
+	for _, test := range failed {
+		fmt.Fprintf(output, "go test %s -run ^%s$ -v\n", test.Package, test.Test)
+	}
+	fmt.Fprintf(output, "```\n\n")
+}
+
+func writeSkippedTests(output io.Writer, skipped []TestResult) {
+	if len(skipped) == 0 {
+		return
 	}
 
-	// Always log success message for file outputs (not stdout).
-	if outputPath != "stdout" && outputPath != "" {
-		absPath, _ := filepath.Abs(outputPath)
-		fmt.Fprintf(os.Stderr, "✅ Test summary written to: %s\n", absPath)
+	fmt.Fprintf(output, "### ⏭️ Skipped Tests (%d)\n\n", len(skipped))
+	fmt.Fprintf(output, "| Test | Package |\n")
+	fmt.Fprintf(output, "|------|---------|)\n")
+
+	for _, test := range skipped {
+		pkg := shortPackage(test.Package)
+		fmt.Fprintf(output, "| `%s` | %s |\n", test.Test, pkg)
+	}
+	fmt.Fprintf(output, "\n")
+}
+
+func writePassedTests(output io.Writer, passed []TestResult) {
+	if len(passed) == 0 {
+		return
 	}
 
-	return nil
+	fmt.Fprintf(output, "### ✅ Passed Tests (%d)\n\n", len(passed))
+	fmt.Fprintf(output, "<details>\n")
+	fmt.Fprintf(output, "<summary>Click to show all passing tests</summary>\n\n")
+	fmt.Fprintf(output, "| Test | Package | Duration |\n")
+	fmt.Fprintf(output, "|------|---------|----------|\n")
+
+	for _, test := range passed {
+		pkg := shortPackage(test.Package)
+		fmt.Fprintf(output, "| `%s` | %s | %.2fs |\n", test.Test, pkg, test.Duration)
+	}
+
+	fmt.Fprintf(output, "\n</details>\n\n")
 }
 
 func shortPackage(pkg string) string {
