@@ -133,14 +133,14 @@ func handleDeprecatedSettings(cfg *schema.AtmosConfiguration) {
 			cfg.Settings.Terminal.Color = &color
 		}
 	}
-	
+
 	// Handle deprecated docs settings
 	//nolint:staticcheck // SA1019: Docs.MaxWidth is deprecated but we need to check it for migration
 	if cfg.Docs.MaxWidth > 0 && cfg.Settings.Terminal.MaxWidth == 0 {
 		cfg.Settings.Terminal.MaxWidth = cfg.Docs.MaxWidth
 		u.NotifyDeprecatedField("settings.docs.max-width", "settings.terminal.max_width")
 	}
-	
+
 	//nolint:staticcheck // SA1019: Docs.Pagination is deprecated but we need to check it for migration
 	if cfg.Docs.Pagination && cfg.Settings.Terminal.Pager == "" {
 		cfg.Settings.Terminal.Pager = "on"
