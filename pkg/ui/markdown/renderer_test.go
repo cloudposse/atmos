@@ -403,14 +403,14 @@ func TestRenderWithoutWordWrap_NonTTY(t *testing.T) {
 func TestNewRendererErrorCases(t *testing.T) {
 	// Note: It's hard to trigger actual errors in NewRenderer since glamour is quite robust
 	// But we can test the function works with various edge cases
-	
+
 	t.Run("NewRenderer with empty config", func(t *testing.T) {
 		atmosConfig := schema.AtmosConfiguration{}
 		renderer, err := NewRenderer(atmosConfig)
 		assert.NoError(t, err)
 		assert.NotNil(t, renderer)
 	})
-	
+
 	t.Run("NewRenderer with multiple options", func(t *testing.T) {
 		atmosConfig := schema.AtmosConfiguration{}
 		renderer, err := NewRenderer(atmosConfig, WithWidth(100), WithWidth(200))
@@ -425,14 +425,14 @@ func TestRenderErrorCases(t *testing.T) {
 	t.Run("Render with error in glamour render", func(t *testing.T) {
 		r, err := NewRenderer(schema.AtmosConfiguration{})
 		require.NoError(t, err)
-		
+
 		// Test with invalid markdown that might cause issues
 		// Using a very large input to potentially trigger errors
 		largeInput := ""
 		for i := 0; i < 10000; i++ {
 			largeInput += "# Header " + string(rune(i)) + "\n"
 		}
-		
+
 		// This should still work but tests the error path
 		_, err = r.Render(largeInput)
 		// Even large inputs should work, so no error expected
@@ -454,9 +454,9 @@ func TestNewTerminalMarkdownRendererEdgeCases(t *testing.T) {
 		require.NoError(t, err)
 		defer r.Close()
 		defer w.Close()
-		
+
 		os.Stdout = w
-		
+
 		atmosConfig := schema.AtmosConfiguration{
 			Settings: schema.AtmosSettings{
 				Terminal: schema.Terminal{
@@ -464,7 +464,7 @@ func TestNewTerminalMarkdownRendererEdgeCases(t *testing.T) {
 				},
 			},
 		}
-		
+
 		renderer, err := NewTerminalMarkdownRenderer(atmosConfig)
 		assert.NoError(t, err)
 		assert.NotNil(t, renderer)
@@ -480,7 +480,7 @@ func TestNewTerminalMarkdownRendererEdgeCases(t *testing.T) {
 				},
 			},
 		}
-		
+
 		renderer, err := NewTerminalMarkdownRenderer(atmosConfig)
 		assert.NoError(t, err)
 		assert.NotNil(t, renderer)
