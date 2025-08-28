@@ -705,14 +705,14 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 		{
 			name: "ATMOS_PAGER takes precedence over PAGER",
 			envVars: map[string]string{
-				"PAGER":       "more",
-				"ATMOS_PAGER": "less",
+				"PAGER":       "less",
+				"ATMOS_PAGER": "more",
 			},
 			args:          []string{"atmos", "describe", "config"},
-			expectedPager: "less",
+			expectedPager: "more",
 		},
 		{
-			name: "no-color=false flag overrides NO_COLOR env var",
+			name: "CLI flag --no-color=false overrides NO_COLOR env var",
 			envVars: map[string]string{
 				"NO_COLOR": "1",
 			},
@@ -721,12 +721,21 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			expectedColor:   true,
 		},
 		{
-			name: "pager=false flag overrides PAGER env var",
+			name: "--pager=false overrides PAGER env var",
 			envVars: map[string]string{
 				"PAGER": "less",
 			},
 			args:          []string{"atmos", "--pager=false", "describe", "config"},
 			expectedPager: "false",
+		},
+		{
+			name: "--no-color=true explicitly sets NoColor",
+			envVars: map[string]string{
+				"COLOR": "true",
+			},
+			args:            []string{"atmos", "--no-color=true", "describe", "config"},
+			expectedNoColor: true,
+			expectedColor:   false,
 		},
 	}
 

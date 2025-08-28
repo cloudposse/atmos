@@ -2,6 +2,7 @@ package schema
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -213,7 +214,8 @@ type Terminal struct {
 func (t *Terminal) IsPagerEnabled() bool {
 	// Changed: pager is DISABLED by default
 	// Only enabled if explicitly set to true/on/yes/1 or a pager command
-	if t.Pager == "" || t.Pager == "false" || t.Pager == "off" || t.Pager == "no" || t.Pager == "n" || t.Pager == "0" {
+	p := strings.ToLower(strings.TrimSpace(t.Pager))
+	if p == "" || p == "false" || p == "off" || p == "no" || p == "n" || p == "0" {
 		return false
 	}
 	// Enable for true/on/yes/1 or specific pager commands like "less", "more"

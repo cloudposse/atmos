@@ -69,9 +69,16 @@ These flags are available for every Atmos command:
     - `--pager` (no value): Enable pager with default settings
     - `--pager=true` or `--pager=on`: Explicitly enable pager
     - `--pager=false` or `--pager=off`: Explicitly disable pager
-    - `--pager=less` or `--pager=more`: Use specific pager program
-    - **Default**: Pager is disabled unless explicitly enabled
-    - Can also use `ATMOS_PAGER` or `PAGER` environment variables
+    - Any non-boolean value is treated as a pager command (first token) with following tokens as arguments
+    
+    **Examples:**
+    - `--pager='less -R'`: Use less with raw control chars
+    - `--pager="less --RAW-CONTROL-CHARS"`: Alternative syntax for less with options
+    - `export ATMOS_PAGER='less -R +Gg'` or `export PAGER='less -R'`: Set via environment variables
+    
+    **Default**: Pager is disabled unless explicitly enabled
+    
+    **Note**: Use quotes around the value to preserve spaces and prevent shell splitting when passing pager arguments. To disable, use `--pager=false`.
   </dd>
 
   <dt>`--redirect-stderr`</dt>
