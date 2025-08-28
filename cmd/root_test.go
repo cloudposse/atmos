@@ -19,7 +19,7 @@ func TestNoColorLog(t *testing.T) {
 	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
 
-	err = os.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	err = os.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
 
 	// Unset ENV variables after testing

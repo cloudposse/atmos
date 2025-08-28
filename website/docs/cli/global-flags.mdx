@@ -43,7 +43,7 @@ These flags are available for every Atmos command:
   <dd>
     Set the logging level for Atmos operations.
     - Options: `Trace`, `Debug`, `Info`, `Warning`, `Off`
-    - Default: `Info`
+    - Default: `Warning`
     - Can also use `ATMOS_LOGS_LEVEL` environment variable
   </dd>
 
@@ -143,45 +143,6 @@ These flags are available across multiple commands but not universally:
   </dd>
 </dl>
 
-### Stack and Component Flags
-
-<dl>
-  <dt>`--stack` / `-s`</dt>
-  <dd>
-    Specify the stack to operate on.
-    - Available in: most operational commands (`terraform`, `helmfile`, `describe`, etc.)
-    - Supports tab completion
-  </dd>
-
-  <dt>`--component` / `-c`</dt>
-  <dd>
-    Specify the component to operate on.
-    - Available in: component-related commands (`terraform`, `helmfile`, etc.)
-    - Supports tab completion
-  </dd>
-</dl>
-
-### Workflow and Execution Flags
-
-<dl>
-  <dt>`--dry-run`</dt>
-  <dd>
-    Simulate execution without making actual changes.
-    - Available in: `workflow`, `vendor pull`, `terraform` commands
-  </dd>
-
-  <dt>`--from-step`</dt>
-  <dd>
-    Resume workflow from a specific step.
-    - Available in: `workflow` command
-  </dd>
-
-  <dt>`--affected`</dt>
-  <dd>
-    Only operate on affected components.
-    - Available in: `terraform`, `describe` commands
-  </dd>
-</dl>
 
 ## Environment Variables
 
@@ -306,7 +267,7 @@ atmos describe config
 # Typical CI/CD settings
 export ATMOS_NO_COLOR=true
 export ATMOS_PAGER=off
-export ATMOS_LOGS_LEVEL=Info
+export ATMOS_LOGS_LEVEL=Warning
 export ATMOS_LOGS_FILE=/var/log/atmos.log
 
 # Run commands without interactive features

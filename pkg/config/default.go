@@ -79,7 +79,7 @@ var (
 		},
 		Logs: schema.Logs{
 			File:  "/dev/stderr",
-			Level: "Info",
+			Level: "Warning",
 		},
 		Schemas: map[string]interface{}{
 			"jsonschema": schema.ResourcePath{

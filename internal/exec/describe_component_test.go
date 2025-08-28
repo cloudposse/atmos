@@ -6,13 +6,19 @@ import (
 	"testing"
 
 	log "github.com/charmbracelet/log"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
+	// Set up gomock controller
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	mockedExec := &DescribeComponentExec{
 		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
 			return nil
@@ -37,39 +43,49 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 	tests := []struct {
 		name          string
 		params        DescribeComponentParams
+		pagerSetting  string
+		expectPager   bool
 		expectedError bool
 	}{
 		{
-			name: "Test with YAML format",
+			name: "Test pager with YAML format",
 			params: DescribeComponentParams{
 				Component: "component-1",
 				Stack:     "nonprod",
 				Format:    "yaml",
 			},
+			pagerSetting: "less",
+			expectPager:  true,
 		},
 		{
-			name: "Test with JSON format",
+			name: "Test pager with JSON format",
 			params: DescribeComponentParams{
 				Component: "component-1",
 				Stack:     "nonprod",
 				Format:    "json",
 			},
+			pagerSetting: "more",
+			expectPager:  true,
 		},
 		{
-			name: "Test with YAML format (legacy test)",
+			name: "Test no pager with YAML format",
 			params: DescribeComponentParams{
 				Component: "component-1",
 				Stack:     "nonprod",
 				Format:    "yaml",
 			},
+			pagerSetting: "false",
+			expectPager:  false,
 		},
 		{
-			name: "Test with JSON format (legacy test)",
+			name: "Test no pager with JSON format",
 			params: DescribeComponentParams{
 				Component: "component-1",
 				Stack:     "nonprod",
 				Format:    "json",
 			},
+			pagerSetting: "off",
+			expectPager:  false,
 		},
 		{
 			name: "Test invalid format",
@@ -78,24 +94,55 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				Stack:     "nonprod",
 				Format:    "invalid-format",
 			},
+			pagerSetting:  "less",
+			expectPager:   true,
 			expectedError: true,
 		},
 		{
-			name: "Test with query",
+			name: "Test pager with query",
 			params: DescribeComponentParams{
 				Component: "component-1",
 				Stack:     "nonprod",
 				Format:    "json",
 				Query:     ".component",
 			},
+			pagerSetting: "less",
+			expectPager:  true,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Note: Pager behavior is now controlled by global config, not per-command parameters
-			mockedExec.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
+			printOrWriteToFileCalled := false
+			
+			// Set up mock pager based on test expectation
+			if test.expectPager {
+				mockPager := pager.NewMockPageCreator(ctrl)
 				if test.expectedError && test.params.Format == "invalid-format" {
-					// Simulate format validation error for invalid formats
+					// The pager won't be called because viewConfig will return error before reaching pageCreator
+				} else {
+					mockPager.EXPECT().Run("component-1", gomock.Any()).Return(nil).Times(1)
+				}
+				mockedExec.pageCreator = mockPager
+			} else {
+				// For non-pager tests, we don't need to mock the pager as it won't be called
+				mockedExec.pageCreator = nil
+			}
+			
+			// Mock the initCliConfig to return a config with the test's pager setting
+			mockedExec.initCliConfig = func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+				return schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Pager: test.pagerSetting,
+						},
+					},
+				}, nil
+			}
+
+			// Mock printOrWriteToFile - this should only be called when pager is disabled or fails
+			mockedExec.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
+				printOrWriteToFileCalled = true
+				if test.expectedError && test.params.Format == "invalid-format" {
 					return DescribeConfigFormatError{format: "invalid-format"}
 				}
 				assert.Equal(t, test.params.Format, format)
@@ -106,13 +153,23 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				}, data)
 				return nil
 			}
-			// stub out internal deps
+
+			// Execute the command
 			err := mockedExec.ExecuteDescribeComponentCmd(test.params)
+			
+			// Assert expectations
 			if test.expectedError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 			}
+
+			// When pager is enabled and successful, printOrWriteToFile should NOT be called (pager path returns early)
+			// When pager is disabled, printOrWriteToFile SHOULD be called
+			// When pager is enabled but fails with DescribeConfigFormatError, printOrWriteToFile should NOT be called (error path returns early)
+			expectedPrintCall := !test.expectPager && !test.expectedError
+			assert.Equal(t, expectedPrintCall, printOrWriteToFileCalled, 
+				"printOrWriteToFile call expectation mismatch for pager setting: %s", test.pagerSetting)
 		})
 	}
 }
