@@ -136,7 +136,7 @@ func parseTestJSON(input io.Reader) (*TestSummary, string) {
 		// Output for console.
 		if event.Output != "" {
 			console.WriteString(event.Output)
-			
+
 			// Check for coverage in output.
 			if matches := coverageRe.FindStringSubmatch(event.Output); len(matches) > 1 {
 				summary.Coverage = matches[1] + "%"
@@ -198,7 +198,7 @@ func writeSummary(summary *TestSummary, format, outputFile string) error {
 		githubSummary := os.Getenv("GITHUB_STEP_SUMMARY")
 		if githubSummary != "" {
 			// Running in GitHub Actions.
-			file, err := os.OpenFile(githubSummary, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			file, err := os.OpenFile(githubSummary, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			if err != nil {
 				return fmt.Errorf("failed to open GITHUB_STEP_SUMMARY file: %w", err)
 			}
@@ -249,7 +249,7 @@ func writeSummary(summary *TestSummary, format, outputFile string) error {
 	}
 
 	fmt.Fprintf(output, "## Test Results\n\n")
-	
+
 	// Add coverage if available.
 	if summary.Coverage != "" {
 		coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(summary.Coverage, "%"), 64)
@@ -261,7 +261,7 @@ func writeSummary(summary *TestSummary, format, outputFile string) error {
 		}
 		fmt.Fprintf(output, "**Coverage:** %s %s of statements\n\n", emoji, summary.Coverage)
 	}
-	
+
 	fmt.Fprintf(output, "**Summary:** %d tests • ✅ %d passed • ❌ %d failed • ⏭️ %d skipped\n\n",
 		total, len(summary.Passed), len(summary.Failed), len(summary.Skipped))
 
