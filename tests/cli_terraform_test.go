@@ -8,9 +8,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCLITerraformClean(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -33,7 +39,7 @@ func TestCLITerraformClean(t *testing.T) {
 	}()
 
 	// Define the work directory and change to it
-	workDir := "../examples/quick-start-simple"
+	workDir := "fixtures/scenarios/basic"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
@@ -49,24 +55,23 @@ func TestCLITerraformClean(t *testing.T) {
 	// Clean everything
 	runTerraformCleanCommand(t, binaryPath)
 	// Clean specific component
-	runTerraformCleanCommand(t, binaryPath, "station")
+	runTerraformCleanCommand(t, binaryPath, "mycomponent")
 	// Clean component with stack
-	runTerraformCleanCommand(t, binaryPath, "station", "-s", "dev")
+	runTerraformCleanCommand(t, binaryPath, "mycomponent", "-s", "nonprod")
 
 	// Run terraform apply for prod environment
 	runTerraformApply(t, binaryPath, "prod")
-	verifyStateFilesExist(t, []string{"./components/terraform/weather/terraform.tfstate.d/prod-station"})
+	verifyStateFilesExist(t, []string{"./components/terraform/mock/terraform.tfstate.d/prod-mycomponent"})
 	runCLITerraformCleanComponent(t, binaryPath, "prod")
-	verifyStateFilesDeleted(t, []string{"./components/terraform/weather/terraform.tfstate.d/prod-station"})
+	verifyStateFilesDeleted(t, []string{"./components/terraform/mock/terraform.tfstate.d/prod-mycomponent"})
 
-	// Run terraform apply for dev environment
-	runTerraformApply(t, binaryPath, "dev")
+	// Run terraform apply for nonprod environment
+	runTerraformApply(t, binaryPath, "nonprod")
 
 	// Verify if state files exist before cleaning
 	stateFiles := []string{
-		"./components/terraform/weather/.terraform",
-		"./components/terraform/weather/terraform.tfstate.d",
-		"./components/terraform/weather/.terraform.lock.hcl",
+		"./components/terraform/mock/.terraform",
+		"./components/terraform/mock/terraform.tfstate.d",
 	}
 	verifyStateFilesExist(t, stateFiles)
 
@@ -79,7 +84,7 @@ func TestCLITerraformClean(t *testing.T) {
 
 // runTerraformApply runs the terraform apply command for a given environment.
 func runTerraformApply(t *testing.T, binaryPath, environment string) {
-	cmd := exec.Command(binaryPath, "terraform", "apply", "station", "-s", environment)
+	cmd := exec.Command(binaryPath, "terraform", "apply", "mycomponent", "-s", environment)
 	envVars := os.Environ()
 	envVars = append(envVars, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
 	cmd.Env = envVars
@@ -90,7 +95,7 @@ func runTerraformApply(t *testing.T, binaryPath, environment string) {
 	err := cmd.Run()
 	t.Log(stdout.String())
 	if err != nil {
-		t.Fatalf("Failed to run terraform apply station -s %s: %v", environment, stderr.String())
+		t.Fatalf("Failed to run terraform apply mycomponent -s %s: %v", environment, stderr.String())
 	}
 }
 
@@ -137,19 +142,7 @@ func verifyStateFilesDeleted(t *testing.T, stateFiles []string) {
 }
 
 func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string) {
-	cmd := exec.Command(binaryPath, "terraform", "clean", "station", "-s", environment, "--force")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	t.Logf("Clean command output:\n%s", stdout.String())
-	if err != nil {
-		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
-	}
-}
-
-func runCLITerraformClean(t *testing.T, binaryPath string) {
-	cmd := exec.Command(binaryPath, "terraform", "clean")
+	cmd := exec.Command(binaryPath, "terraform", "clean", "mycomponent", "-s", environment, "--force")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -170,5 +163,45 @@ func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
 	t.Logf("Clean command output:\n%s", stdout.String())
 	if err != nil {
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
+	}
+}
+
+func TestCollapseExtraSlashesHandlesOnlySlashes(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		// Basic cases with only slashes
+		{"///", "/"},
+		{"/", "/"},
+		{"//", "/"},
+		{"", ""},
+
+		// Relative paths
+		{"..//path", "../path"},
+		{"/path//to//file", "/path/to/file"},
+		{"./../path", "./../path"}, // No change expected
+
+		// Protocol handling
+		{"https://", "https://"},
+		{"http://", "http://"},
+		{"http://example.com//path//", "http://example.com/path/"},
+		{"https:////example.com", "https://example.com"}, // Normalize after protocol
+		{"http:/example.com", "http://example.com"},      // Fix missing slashes after protocol
+
+		// Complex URLs
+		{"http://example.com:8080//api//v1", "http://example.com:8080/api/v1"},
+		{"http://user:pass@example.com//path", "http://user:pass@example.com/path"},
+
+		// Edge cases for trimming
+		{"http:////example.com", "http://example.com"}, // Extra slashes after protocol
+		{"http:///path", "http://path"},                // Implicit empty authority
+	}
+
+	for _, tc := range testCases {
+		result := collapseExtraSlashes(tc.input)
+		if result != tc.expected {
+			t.Errorf("collapseExtraSlashes(%q) = %q, want %q", tc.input, result, tc.expected)
+		}
 	}
 }

@@ -15,12 +15,12 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports,
-// and returns a map of Spacelift stack configs
+// CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports, and returns a map of Spacelift stack configs.
 func CreateSpaceliftStacks(
 	stacksBasePath string,
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
+	packerComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
@@ -29,28 +29,27 @@ func CreateSpaceliftStacks(
 ) (map[string]any, error) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
-		u.LogError(err)
 		return nil, err
 	}
 
 	if len(filePaths) > 0 {
 		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
-			atmosConfig,
+			&atmosConfig,
 			stacksBasePath,
 			terraformComponentsBasePath,
 			helmfileComponentsBasePath,
+			packerComponentsBasePath,
 			filePaths,
 			processStackDeps,
 			processComponentDeps,
 			false,
 		)
 		if err != nil {
-			u.LogError(err)
 			return nil, err
 		}
 
 		return TransformStackConfigToSpaceliftStacks(
-			atmosConfig,
+			&atmosConfig,
 			stacks,
 			stackConfigPathTemplate,
 			"",
@@ -59,25 +58,25 @@ func CreateSpaceliftStacks(
 		)
 	} else {
 		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
-			atmosConfig,
+			&atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			atmosConfig.TerraformDirAbsolutePath,
 			atmosConfig.HelmfileDirAbsolutePath,
+			atmosConfig.PackerDirAbsolutePath,
 			atmosConfig.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps,
 			false,
 		)
 		if err != nil {
-			u.LogError(err)
 			return nil, err
 		}
 
 		return TransformStackConfigToSpaceliftStacks(
-			atmosConfig,
+			&atmosConfig,
 			stacks,
 			stackConfigPathTemplate,
-			e.GetStackNamePattern(atmosConfig),
+			e.GetStackNamePattern(&atmosConfig),
 			processImports,
 			rawStackConfigs,
 		)
@@ -86,7 +85,7 @@ func CreateSpaceliftStacks(
 
 // TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks
 func TransformStackConfigToSpaceliftStacks(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	stacks map[string]any,
 	stackConfigPathTemplate string,
 	stackNamePattern string,
@@ -185,7 +184,6 @@ func TransformStackConfigToSpaceliftStacks(
 					if stackNamePattern != "" {
 						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
-							u.LogError(err)
 							return nil, err
 						}
 					} else {
@@ -255,7 +253,6 @@ func TransformStackConfigToSpaceliftStacks(
 					// Terraform workspace
 					workspace, err := e.BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 					if err != nil {
-						u.LogError(err)
 						return nil, err
 					}
 					spaceliftConfig["workspace"] = workspace
@@ -298,7 +295,6 @@ func TransformStackConfigToSpaceliftStacks(
 							component,
 						)
 						if err != nil {
-							u.LogError(err)
 							return nil, err
 						}
 						spaceliftStackNameDependsOnLabels1 = append(spaceliftStackNameDependsOnLabels1, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
@@ -358,7 +354,6 @@ func TransformStackConfigToSpaceliftStacks(
 							allStackNames,
 						)
 						if err != nil {
-							u.LogError(err)
 							return nil, err
 						}
 						spaceliftStackNameDependsOnLabels2 = append(spaceliftStackNameDependsOnLabels2, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
@@ -376,7 +371,6 @@ func TransformStackConfigToSpaceliftStacks(
 					// Spacelift stack name
 					spaceliftStackName, spaceliftStackNamePattern, err := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 					if err != nil {
-						u.LogError(err)
 						return nil, err
 					}
 
@@ -395,7 +389,6 @@ func TransformStackConfigToSpaceliftStacks(
 							spaceliftStackNamePattern,
 						)
 						er := errors.New(errorMessage)
-						u.LogError(er)
 						return nil, er
 					}
 				}

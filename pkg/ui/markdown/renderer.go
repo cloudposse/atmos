@@ -7,29 +7,52 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/muesli/termenv"
+
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/muesli/termenv"
 )
+
+const defaultWidth = 80
 
 // Renderer is a markdown renderer using Glamour
 type Renderer struct {
-	renderer    *glamour.TermRenderer
-	width       uint
-	profile     termenv.Profile
-	atmosConfig *schema.AtmosConfiguration
+	renderer              *glamour.TermRenderer
+	width                 uint
+	profile               termenv.Profile
+	atmosConfig           *schema.AtmosConfiguration
+	isTTYSupportForStdout func() bool
+	isTTYSupportForStderr func() bool
 }
 
-// NewRenderer creates a new markdown renderer with the given options
+// NewRenderer creates a new Markdown renderer with the given options.
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	r := &Renderer{
-		width:   80,                     // default width
-		profile: termenv.ColorProfile(), // default color profile
+		width:                 defaultWidth,           // default width
+		profile:               termenv.ColorProfile(), // default color profile
+		isTTYSupportForStdout: term.IsTTYSupportForStdout,
+		isTTYSupportForStderr: term.IsTTYSupportForStderr,
+		atmosConfig:           &atmosConfig,
 	}
 
 	// Apply options
 	for _, opt := range opts {
 		opt(r)
+	}
+
+	if atmosConfig.Settings.Terminal.NoColor {
+		renderer, err := glamour.NewTermRenderer(
+			glamour.WithStandardStyle(styles.AsciiStyle),
+			glamour.WithWordWrap(int(r.width)),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		r.renderer = renderer
+		return r, nil
 	}
 
 	// Get default style
@@ -54,11 +77,52 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 	return r, nil
 }
 
-// Render renders markdown content to ANSI styled text
+func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
+	// Render without line wrapping
+	var out *glamour.TermRenderer
+	var err error
+	if r.atmosConfig.Settings.Terminal.NoColor {
+		out, err = glamour.NewTermRenderer(
+			glamour.WithStandardStyle(styles.AsciiStyle),
+			glamour.WithWordWrap(0),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		// Get default style
+		style, err := GetDefaultStyle(*r.atmosConfig)
+		if err != nil {
+			return "", err
+		}
+		out, err = glamour.NewTermRenderer(
+			glamour.WithAutoStyle(), // Uses terminal's default style
+			glamour.WithWordWrap(0),
+			glamour.WithStylesFromJSONBytes(style),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return "", err
+		}
+	}
+	result := ""
+	if r.isTTYSupportForStdout() {
+		result, err = out.Render(content)
+	} else {
+		// Fallback to ASCII rendering for non-TTY stdout
+		result, err = r.RenderAsciiWithoutWordWrap(content)
+	}
+	return result, err
+}
+
+// Render renders markdown content to ANSI styled text.
 func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
 	var err error
-	if term.IsTTYSupportForStdout() {
+	if r.isTTYSupportForStdout() {
 		rendered, err = r.renderer.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
@@ -89,6 +153,19 @@ func (r *Renderer) Render(content string) (string, error) {
 	return strings.Join(result, "\n"), nil
 }
 
+func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithWordWrap(0),
+		glamour.WithColorProfile(r.profile),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		return "", err
+	}
+	return renderer.Render(content)
+}
+
 func (r *Renderer) RenderAscii(content string) (string, error) {
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.AsciiStyle),
@@ -102,30 +179,14 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	return renderer.Render(content)
 }
 
-// RenderWithStyle renders markdown content with a specific style
-func (r *Renderer) RenderWithStyle(content string, style []byte) (string, error) {
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(int(r.width)),
-		glamour.WithStylesFromJSONBytes(style),
-		glamour.WithColorProfile(r.profile),
-		glamour.WithEmoji(),
-	)
-	if err != nil {
-		return "", err
-	}
-
-	return renderer.Render(content)
-}
-
-// RenderWorkflow renders workflow documentation with specific styling
+// RenderWorkflow renders workflow documentation with specific styling.
 func (r *Renderer) RenderWorkflow(content string) (string, error) {
 	// Add workflow header
 	content = "# Workflow\n\n" + content
 	return r.Render(content)
 }
 
-// RenderError renders an error message with specific styling
+// RenderError renders an error message with specific styling.
 func (r *Renderer) RenderError(title, details, suggestion string) (string, error) {
 	var content string
 
@@ -147,16 +208,16 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	return r.RenderErrorf(content)
 }
 
-// RenderErrorf renders an error message with specific styling
+// RenderErrorf renders an error message with specific styling.
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
-	if term.IsTTYSupportForStderr() {
+	if r.isTTYSupportForStderr() {
 		return r.Render(content)
 	}
 	// Fallback to ASCII rendering for non-TTY stderr
 	return r.RenderAscii(content)
 }
 
-// RenderSuccess renders a success message with specific styling
+// RenderSuccess renders a success message with specific styling.
 func (r *Renderer) RenderSuccess(title, details string) (string, error) {
 	content := fmt.Sprintf("# %s\n\n", title)
 
@@ -167,10 +228,10 @@ func (r *Renderer) RenderSuccess(title, details string) (string, error) {
 	return r.Render(content)
 }
 
-// Option is a function that configures the renderer
+// Option is a function that configures the renderer.
 type Option func(*Renderer)
 
-// WithWidth sets the word wrap width for the renderer
+// WithWidth sets the word wrap width for the renderer.
 func WithWidth(width uint) Option {
 	return func(r *Renderer) {
 		r.width = width

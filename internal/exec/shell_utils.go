@@ -2,9 +2,7 @@ package exec
 
 import (
 	"bytes"
-	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,39 +11,13 @@ import (
 	"strings"
 	"text/template"
 
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
+	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// MaxShellDepth is the maximum number of nested shell commands that can be executed
-const MaxShellDepth = 10
-
-// getNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded
-func getNextShellLevel() (int, error) {
-	atmosShellLvl := os.Getenv("ATMOS_SHLVL")
-	shellVal := 0
-	if atmosShellLvl != "" {
-		val, err := strconv.Atoi(atmosShellLvl)
-		if err != nil {
-			return 0, fmt.Errorf("invalid ATMOS_SHLVL value: %s", atmosShellLvl)
-		}
-		shellVal = val
-	}
-
-	shellVal++
-
-	if shellVal > MaxShellDepth {
-		return 0, fmt.Errorf("ATMOS_SHLVL (%d) exceeds maximum allowed depth (%d). Infinite recursion?",
-			shellVal, MaxShellDepth)
-	}
-	return shellVal, nil
-}
-
-// ExecuteShellCommand prints and executes the provided command with args and flags
+// ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
 	atmosConfig schema.AtmosConfiguration,
 	command string,
@@ -55,7 +27,7 @@ func ExecuteShellCommand(
 	dryRun bool,
 	redirectStdError string,
 ) error {
-	newShellLevel, err := getNextShellLevel()
+	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
 		return err
 	}
@@ -80,22 +52,20 @@ func ExecuteShellCommand(
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
-			u.LogWarning(err.Error())
+			log.Warn(err.Error())
 			return err
 		}
 
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.LogWarning(err.Error())
+				log.Warn(err.Error())
 			}
 		}(f)
 
 		cmd.Stderr = f
 	}
-
-	u.LogDebug("\nExecuting command:")
-	u.LogDebug(cmd.String())
+	log.Debug("Executing", "command", cmd.String())
 
 	if dryRun {
 		return nil
@@ -106,85 +76,30 @@ func ExecuteShellCommand(
 
 // ExecuteShell runs a shell script
 func ExecuteShell(
-	atmosConfig schema.AtmosConfiguration,
 	command string,
 	name string,
 	dir string,
 	env []string,
 	dryRun bool,
 ) error {
-	newShellLevel, err := getNextShellLevel()
+	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
 		return err
 	}
-	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+	env = append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
-	u.LogDebug("\nExecuting command:")
-	u.LogDebug(command)
+	log.Debug("Executing", "command", command)
 
 	if dryRun {
 		return nil
 	}
 
-	return shellRunner(command, name, dir, updatedEnv, os.Stdout)
-}
-
-// ExecuteShellAndReturnOutput runs a shell script and capture its standard output
-func ExecuteShellAndReturnOutput(
-	atmosConfig schema.AtmosConfiguration,
-	command string,
-	name string,
-	dir string,
-	env []string,
-	dryRun bool,
-) (string, error) {
-	var b bytes.Buffer
-
-	newShellLevel, err := getNextShellLevel()
-	if err != nil {
-		return "", err
-	}
-	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
-
-	u.LogDebug("\nExecuting command:")
-	u.LogDebug(command)
-
-	if dryRun {
-		return "", nil
-	}
-
-	err = shellRunner(command, name, dir, updatedEnv, &b)
-	if err != nil {
-		return "", err
-	}
-
-	return b.String(), nil
-}
-
-// shellRunner uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and divert its stdout
-func shellRunner(command string, name string, dir string, env []string, out io.Writer) error {
-	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
-	if err != nil {
-		return err
-	}
-
-	environ := append(os.Environ(), env...)
-	listEnviron := expand.ListEnviron(environ...)
-	runner, err := interp.New(
-		interp.Dir(dir),
-		interp.Env(listEnviron),
-		interp.StdIO(os.Stdin, out, os.Stderr),
-	)
-	if err != nil {
-		return err
-	}
-
-	return runner.Run(context.TODO(), parser)
+	return u.ShellRunner(command, name, dir, env, os.Stdout)
 }
 
 // execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
 func execTerraformShellCommand(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	componentEnvList []string,
@@ -214,7 +129,7 @@ func execTerraformShellCommand(
 		}
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			u.LogWarning(fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
+			log.Warn("Failed to parse ATMOS_SHLVL", "error", err)
 			return
 		}
 		// Prevent negative values
@@ -223,7 +138,7 @@ func execTerraformShellCommand(
 			newVal = 0
 		}
 		if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", newVal)); err != nil {
-			u.LogWarning(fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
+			log.Warn("Failed to update ATMOS_SHLVL", "error", err)
 		}
 	}()
 
@@ -260,16 +175,16 @@ func execTerraformShellCommand(
 			componentEnvList = append(componentEnvList, fmt.Sprintf("PS1=%s", result.String()))
 		}
 	}
+	log.Debug("Starting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)",
+		"component", component,
+		"stack", stack,
+		"cwd", workingDir,
+		"TerraformWorkspace", workspaceName)
 
-	u.LogDebug("\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
-	u.LogDebug(fmt.Sprintf("Component: %s\n", component))
-	u.LogDebug(fmt.Sprintf("Stack: %s\n", stack))
-	u.LogDebug(fmt.Sprintf("Working directory: %s\n", workingDir))
-	u.LogDebug(fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
-	u.LogDebug("\nSetting the ENV vars in the shell:\n")
+	log.Debug("Setting the ENV vars in the shell")
 
 	// Merge env vars, ensuring componentEnvList takes precedence
-	mergedEnv := mergeEnvVars(atmosConfig, componentEnvList)
+	mergedEnv := mergeEnvVars(componentEnvList)
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
 	pa := os.ProcAttr{
@@ -304,7 +219,7 @@ func execTerraformShellCommand(
 
 		// This means you cannot have a custom shell prompt inside Geodesic (Geodesic requires "-l").
 		// Perhaps we should have special detection for Geodesic?
-		// We could test if env var GEODESIC_SHELL is set to "true" (or set at all).
+		// Test if the environment variable GEODESIC_SHELL is set to "true" (or set at all).
 		if !hasCustomShellPrompt {
 			shellCommand = shellCommand + " -l"
 		}
@@ -313,8 +228,7 @@ func execTerraformShellCommand(
 			shellCommand = shellCommand + " -d -f -i"
 		}
 	}
-
-	u.LogDebug(fmt.Sprintf("Starting process: %s\n", shellCommand))
+	log.Debug("Starting process", "command", shellCommand)
 
 	args := strings.Fields(shellCommand)
 
@@ -323,31 +237,27 @@ func execTerraformShellCommand(
 		return err
 	}
 
-	// Wait until user exits the shell
+	// Wait until the user exits the shell
 	state, err := proc.Wait()
 	if err != nil {
 		return err
 	}
-
-	u.LogDebug(fmt.Sprintf("Exited shell: %s\n", state.String()))
+	log.Debug("Exited shell", "state", state.String())
 	return nil
 }
 
-// mergeEnvVars adds a list of environment variables to the system environment variables
+// mergeEnvVars adds a list of environment variables to the system environment variables.
 //
 // This is necessary because:
 //  1. We need to preserve existing system environment variables (PATH, HOME, etc.)
 //  2. Atmos-specific variables (TF_CLI_ARGS, ATMOS_* vars) must take precedence
 //  3. For conflicts, such as TF_CLI_ARGS_*, we need special handling to ensure proper merging rather than simple overwriting
-func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []string) []string {
+func mergeEnvVars(componentEnvList []string) []string {
 	envMap := make(map[string]string)
 
 	// Parse system environment variables
 	for _, env := range os.Environ() {
 		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			if strings.HasPrefix(parts[0], "TF_") {
-				u.LogWarning(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", parts[0]))
-			}
 			envMap[parts[0]] = parts[1]
 		}
 	}
@@ -366,7 +276,7 @@ func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []stri
 					envMap[parts[0]] = parts[1]
 				}
 			} else {
-				// For all other environment variables, simply override any existing value
+				// For all other environment variables, just override any existing value
 				envMap[parts[0]] = parts[1]
 			}
 		}
@@ -375,7 +285,7 @@ func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []stri
 	// Convert back to slice
 	merged := make([]string, 0, len(envMap))
 	for k, v := range envMap {
-		u.LogDebug(fmt.Sprintf("%s=%s", k, v))
+		log.Debug("Setting ENV var", "key", k, "value", v)
 		merged = append(merged, k+"="+v)
 	}
 	return merged

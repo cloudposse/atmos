@@ -77,12 +77,19 @@ In the example, we defined a few config files:
   - stack configuration (Terraform and helmfile variables) for the environment `ue2` and stage `prod`
 - [stacks/orgs/cp/tenant1/dev/global-region.yaml](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced/stacks/ue2-globals.yaml) - global
   settings for the environment `ue2` (e.g. `region`, `environment`)
-- [stacks/orgs/cp/_defaults.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/orgs/cp/_defaults.yaml) - global settings
+- [stacks/orgs/cp/_defaults.yaml](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/orgs/cp/_defaults.yaml) - global settings
   for the entire solution
 
-__NOTE:__ The stack configuration structure and the file names described above are just an example of how to name and structure the config files.
-You can choose any file name for a stack. You can also include other configuration files (e.g. globals for the environment, and globals for the entire
-solution) into a stack config using the `import` directive.
+:::note
+The stack configuration structure and the file names described above are just an example of how to name and structure the config files.
+You can choose any file name for a stack. You can also include other configuration files (e.g., globals for the environment, and globals for the entire
+solution) in a stack config using the `import` directive.
+:::
+
+:::info
+The `_defaults.yaml` stack manifests are not imported into other Atmos manifests automatically.
+You need to explicitly import them using [imports](/core-concepts/stacks/imports).
+:::
 
 Stack configuration files have a predefined format:
 
@@ -94,10 +101,10 @@ vars:
   stage: dev
 
 terraform:
-  vars: { }
+  vars: {}
 
 helmfile:
-  vars: { }
+  vars: {}
 
 components:
   terraform:
@@ -112,7 +119,7 @@ components:
       backend:
         s3:
           workspace_key_prefix: "eks"
-      vars: { }
+      vars: {}
 
   helmfile:
     nginx-ingress:

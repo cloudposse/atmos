@@ -14,6 +14,8 @@ var describeCmd = &cobra.Command{
 }
 
 func init() {
-	describeCmd.PersistentFlags().StringP("query", "q", "", "Query the results of an 'atmos describe' command using 'yq' expressions: atmos describe <subcommand> --query <yq-expression>")
+	describeCmd.PersistentFlags().StringP("query", "q", "", "Query the results of an `atmos describe` command using `yq` expressions")
+	describeCmd.PersistentFlags().String("pager", "true", "Disable / Enable the paging user experience")
+
 	RootCmd.AddCommand(describeCmd)
 }

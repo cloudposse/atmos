@@ -7,13 +7,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/git"
 	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 )
 
 type ProLockUnlockCmdArgs struct {
-	Component string
-	Logger    *l.Logger
-	Stack     string
+	Component   string
+	Logger      *l.Logger
+	Stack       string
+	AtmosConfig schema.AtmosConfiguration
 }
 
 type ProLockCmdArgs struct {
@@ -61,9 +64,10 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 	}
 
 	result := ProLockUnlockCmdArgs{
-		Component: component,
-		Logger:    logger,
-		Stack:     stack,
+		Component:   component,
+		Logger:      logger,
+		Stack:       stack,
+		AtmosConfig: atmosConfig,
 	}
 
 	return result, nil
@@ -115,7 +119,6 @@ func parseUnlockCliArgs(cmd *cobra.Command, args []string) (ProUnlockCmdArgs, er
 	}
 
 	return result, nil
-
 }
 
 // ExecuteProLockCommand executes `atmos pro lock` command
@@ -138,14 +141,14 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 	owner := repoInfo.RepoOwner
 	repoName := repoInfo.RepoName
 
-	dto := pro.LockStackRequest{
+	dto := dtos.LockStackRequest{
 		Key:         fmt.Sprintf("%s/%s/%s/%s", owner, repoName, a.Stack, a.Component),
 		TTL:         a.LockTTL,
 		LockMessage: a.LockMessage,
 		Properties:  nil,
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
 	if err != nil {
 		return err
 	}
@@ -183,11 +186,11 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	owner := repoInfo.RepoOwner
 	repoName := repoInfo.RepoName
 
-	dto := pro.UnlockStackRequest{
+	dto := dtos.UnlockStackRequest{
 		Key: fmt.Sprintf("%s/%s/%s/%s", owner, repoName, a.Stack, a.Component),
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
 	if err != nil {
 		return err
 	}

@@ -70,6 +70,11 @@ stacks:
   they just contain the default values for the organizations, OUs/tenants, accounts and regions (to make the entire configuration reusable and DRY)
   :::
 
+  :::info
+  The `_defaults.yaml` stack manifests are not imported into other Atmos manifests automatically.
+  You need to explicitly import them using [imports](/core-concepts/stacks/imports).
+  :::
+
 - `stacks.name_pattern` configures the name pattern for the top-level Atmos stacks using the context variables `namespace`, `tenant`, `environment`
   and `stage` as the tokens. Depending on the structure of your organization, OUs, accounts and regions, set `stacks.name_pattern` to the
   following:
@@ -101,7 +106,10 @@ stacks:
 
 - `stacks.name_template` serves the same purpose as `stacks.name_pattern` (defines the naming convention for the top-level Atmos stacks), but
   provides much more functionality. Instead of using the predefined context variables as tokens, it uses [Go templates](https://pkg.go.dev/text/template).
-  [Sprig Functions](https://masterminds.github.io/sprig/) are supported as well
+  [Atmos Template Functions](/core-concepts/stacks/templates/functions),
+  [Sprig Functions](https://masterminds.github.io/sprig/),
+  [Gomplate Functions](https://docs.gomplate.ca/functions/),
+  and [Gomplate Datasources](https://docs.gomplate.ca/datasources/) are supported as well
 
   - For the `Go` template tokens, and you can use any Atmos sections (e.g. `vars`, `providers`, `settings`)
     that the Atmos command [`atmos describe component <component> -s <stack>`](/cli/commands/describe/component) generates
@@ -134,13 +142,86 @@ stacks:
     atmos describe component <component> -s <division-account-region>
     ```
 
-    :::note
-    Use either `stacks.name_pattern` or `stacks.name_template` to define the naming convention for the top-level Atmos stacks.
+    `name_template` can have complex logic and use template expressions and functions.
+    The following template defines a `name_template` that builds a `stack_name` string by validating and concatenating
+    several input variables in a hierarchical order.
 
-    `stacks.name_template` has higher priority.
+    <File title="atmos.yaml">
+        ```yaml
+        name_template: |-
+          {{- $ns := .vars.namespace -}}
+          {{- $tenant := .vars.tenant -}}
+          {{- $env := .vars.environment -}}
+          {{- $stage := .vars.stage -}}
+          {{- $stack_name := "" -}}
 
-    If `stacks.name_template` is specified, `stacks.name_pattern` will be ignored.
-    :::
+          {{- if eq $ns "" -}}
+          {{- fail "Error: 'namespace' is required." -}}
+          {{- end -}}
+
+          {{- if and (ne $tenant "") (eq $ns "") -}}
+          {{- fail "Error: 'tenant' requires 'namespace'." -}}
+          {{- end -}}
+
+          {{- if and (ne $env "") (or (eq $tenant "") (eq $ns "")) -}}
+          {{- fail "Error: 'environment' requires 'tenant' and 'namespace'." -}}
+          {{- end -}}
+
+          {{- if and (ne $stage "") (or (eq $env "") (eq $tenant "") (eq $ns "")) -}}
+          {{- fail "Error: 'stage' requires 'environment', 'tenant', and 'namespace'." -}}
+          {{- end -}}
+
+          {{- if ne $tenant "" -}}
+          {{- $stack_name = $tenant -}}
+          {{- end -}}
+
+          {{- if ne $env "" -}}
+          {{- $stack_name = printf "%s-%s" $stack_name $env -}}
+          {{- end -}}
+
+          {{- if ne $stage "" -}}
+          {{- $stack_name = printf "%s-%s" $stack_name $stage -}}
+          {{- end -}}
+
+          {{- $stack_name -}}
+        ```
+    </File>
+
+    It pulls values from the Atmos section `vars` and assigns them to local template variables:
+     - `namespace`
+     - `tenant`
+     - `environment`
+     - `stage`
+
+    The template enforces hierarchical dependencies between variables:
+     - `namespace` is required
+     - If `tenant` is provided, `namespace` must also be set
+     - If `environment` is provided, both `tenant` and `namespace` must be set
+     - If `stage` is provided, then `environment`, `tenant`, and `namespace` must all be set
+
+    If validations pass, it constructs the `stack_name` progressively:
+     - Starts with `tenant` if it exists
+     - Appends `environment` if it exists
+     - Appends `stage` if it exists
+
+    The template outputs the resulting stack name. For example, if the variables are:
+
+    ```yaml
+    namespace: acme
+    tenant: plat
+    environment: ue2
+    stage: prod
+    ```
+
+    The resulting stack name will be `plat-ue2-prod`.
+
+:::note
+Use either `stacks.name_pattern` or `stacks.name_template` to define the naming convention for the top-level Atmos stacks.
+
+`stacks.name_template` has higher priority.
+
+If `stacks.name_template` is specified, `stacks.name_pattern` will be ignored.
+:::
 
 :::tip
 Refer to [Atmos Design Patterns](/design-patterns) for the examples on how to configure the `stacks` section in `atmos.yaml` for different use-cases

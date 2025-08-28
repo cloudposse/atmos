@@ -1,11 +1,10 @@
 package cmd
 
 import (
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
-	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/internal/exec"
 )
 
 // ValidateStacksCmd validates stacks
@@ -16,23 +15,24 @@ var ValidateStacksCmd = &cobra.Command{
 	Example:            "validate stacks",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		err := e.ExecuteValidateStacksCmd(cmd, args)
+		err := exec.ExecuteValidateStacksCmd(cmd, args)
 		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
+			return err
 		}
 
-		u.PrintMessageInColor("all stacks validated successfully\n", theme.Colors.Success)
+		log.Info("All stacks validated successfully")
+		return nil
 	},
 }
 
 func init() {
 	ValidateStacksCmd.DisableFlagParsing = false
 
-	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "atmos validate stacks --schemas-atmos-manifest <path-to-atmos-json-schema>")
+	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
 
 	validateCmd.AddCommand(ValidateStacksCmd)
 }

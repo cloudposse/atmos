@@ -12,8 +12,8 @@ tests:
       - "stacks"
     expect:
       diff: []
-      stdout:
-        - "all stacks validated successfully"
+      stderr:
+        - "INFO All stacks validated successfully"
       exit_code: 0
 
   - name: atmos terraform deploy unlocked component
@@ -25,7 +25,7 @@ tests:
     args:
       - "terraform"
       - "deploy"
-      - "myapp"
+      - "mock"
       - "-s"
       - "nonprod"
     expect:
@@ -40,12 +40,12 @@ tests:
     args:
       - "terraform"
       - "deploy"
-      - "myapp"
+      - "mock"
       - "-s"
       - "prod"
     expect:
       stderr:
-        - "component 'myapp' is locked and cannot be modified \\(metadata.locked = true\\)"
+        - "component is locked: component 'mock' cannot be modified \\(metadata.locked: true\\)"
       exit_code: 1
 
   - name: atmos terraform plan locked component
@@ -57,7 +57,7 @@ tests:
     args:
       - "terraform"
       - "plan"
-      - "myapp"
+      - "mock"
       - "-s"
       - "prod"
     expect:

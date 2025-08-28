@@ -1,22 +1,59 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
+	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteWorkflow executes an Atmos workflow
+// Static error definitions.
+var (
+	WorkflowErrTitle           = "Workflow Error"
+	ErrWorkflowNoSteps         = errors.New("workflow has no steps defined")
+	ErrInvalidWorkflowStepType = errors.New("invalid workflow step type")
+	ErrInvalidFromStep         = errors.New("invalid from-step flag")
+	ErrWorkflowStepFailed      = errors.New("workflow step execution failed")
+	ErrWorkflowNoWorkflow      = errors.New("no workflow found")
+	ErrWorkflowFileNotFound    = errors.New("workflow file not found")
+	ErrInvalidWorkflowManifest = errors.New("invalid workflow manifest")
+
+	KnownWorkflowErrors = []error{
+		ErrWorkflowNoSteps,
+		ErrInvalidWorkflowStepType,
+		ErrInvalidFromStep,
+		ErrWorkflowStepFailed,
+		ErrWorkflowNoWorkflow,
+		ErrWorkflowFileNotFound,
+		ErrInvalidWorkflowManifest,
+	}
+)
+
+// IsKnownWorkflowError returns true if the error matches any known workflow error.
+func IsKnownWorkflowError(err error) bool {
+	for _, knownErr := range KnownWorkflowErrors {
+		if errors.Is(err, knownErr) {
+			return true
+		}
+	}
+	return false
+}
+
+// ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
 	workflow string,
@@ -29,21 +66,21 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
-	}
-
-	logFunc := u.LogDebug
-	if dryRun {
-		logFunc = u.LogInfo
+		errUtils.CheckErrorAndPrint(
+			ErrWorkflowNoSteps,
+			WorkflowErrTitle,
+			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
+		)
+		return ErrWorkflowNoSteps
 	}
 
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
-	logFunc(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
+	log.Debug("Executing workflow", "workflow", workflow, "path", workflowPath)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err := u.PrintAsYAMLToFileDescriptor(atmosConfig, workflowDefinition)
+		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
 		if err != nil {
 			return err
 		}
@@ -56,15 +93,22 @@ func ExecuteWorkflow(
 		})
 
 		if len(steps) == 0 {
-			return fmt.Errorf("invalid '--from-step' flag. Workflow '%s' does not have a step with the name '%s'", workflow, fromStep)
+			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
+			errUtils.CheckErrorAndPrint(
+				ErrInvalidFromStep,
+				WorkflowErrTitle,
+				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
+			)
+			return ErrInvalidFromStep
 		}
 	}
 
 	for stepIdx, step := range steps {
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
+		finalStack := ""
 
-		logFunc(fmt.Sprintf("Executing workflow step: %s", command))
+		log.Debug("Executing workflow step", "step", stepIdx, "name", step.Name, "command", command)
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -73,13 +117,12 @@ func ExecuteWorkflow(
 		var err error
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(atmosConfig, command, commandName, ".", []string{}, dryRun)
+			err = ExecuteShell(command, commandName, ".", []string{}, dryRun)
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
 			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
 			stepStack := strings.TrimSpace(step.Stack)
-			finalStack := ""
 
 			// The workflow `stack` attribute overrides the stack in the `command` (if specified)
 			// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute
@@ -96,39 +139,85 @@ func ExecuteWorkflow(
 			}
 
 			if finalStack != "" {
-				args = append(args, []string{"-s", finalStack}...)
-				logFunc(fmt.Sprintf("Stack: %s", finalStack))
+				if idx := slices.Index(args, "--"); idx != -1 {
+					// Insert before the "--"
+					// Take everything up to idx, then add "-s", finalStack, then tack on the rest
+					args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
+				} else {
+					// just append at the end
+					args = append(args, []string{"-s", finalStack}...)
+				}
+
+				log.Debug("Using stack", "stack", finalStack)
 			}
 
-			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
+			u.PrintfMessageToTUI("Executing command: `atmos %s`\n", command)
+			err = retry.With7Params(context.Background(), step.Retry,
+				ExecuteShellCommand,
+				atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
-			return fmt.Errorf("invalid workflow step type '%s'. Supported types are 'atmos' and 'shell'", commandType)
+			errUtils.CheckErrorAndPrint(
+				ErrInvalidWorkflowStepType,
+				WorkflowErrTitle,
+				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})),
+			)
+			return ErrInvalidWorkflowStepType
 		}
 
 		if err != nil {
-			workflowFileName := filepath.Base(workflowPath)
+			log.Debug("Workflow failed", "error", err)
+
+			// Remove the workflow base path, stacks/workflows
+			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
+			// Remove the leading slash
+			workflowFileName = strings.TrimPrefix(workflowFileName, "/")
+			// Remove the file extension
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
-			failedMsg := fmt.Sprintf("\nStep '%s' failed!", step.Name)
-
-			u.LogDebug(fmt.Sprintf("\nCommand failed: %s", command))
-			u.LogDebug(fmt.Sprintf("Error: %v", err))
-
-			resumeMsg := fmt.Sprintf(
-				"\nTo resume the workflow from this step, run:\natmos workflow %s -f %s --from-step %s",
+			resumeCommand := fmt.Sprintf(
+				"%s workflow %s -f %s --from-step %s",
+				config.AtmosCommand,
 				workflow,
 				workflowFileName,
 				step.Name,
 			)
 
-			return fmt.Errorf("%s\n%s", failedMsg, resumeMsg)
+			// Add stack parameter to resume command if a stack was used
+			if finalStack != "" {
+				resumeCommand = fmt.Sprintf("%s -s %s", resumeCommand, finalStack)
+			}
+
+			failedCmd := command
+			if commandType == config.AtmosCommand {
+				failedCmd = config.AtmosCommand + " " + command
+				// Add stack parameter to failed command if a stack was used
+				if finalStack != "" {
+					failedCmd = fmt.Sprintf("%s -s %s", failedCmd, finalStack)
+				}
+			}
+
+			errUtils.CheckErrorAndPrint(
+				ErrWorkflowStepFailed,
+				WorkflowErrTitle,
+				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
+			)
+			return ErrWorkflowStepFailed
 		}
 	}
 
 	return nil
 }
 
-// ExecuteDescribeWorkflows executes `atmos describe workflows` command
+// FormatList formats a list of strings into a markdown bullet list.
+func FormatList(items []string) string {
+	var result strings.Builder
+	for _, item := range items {
+		result.WriteString(fmt.Sprintf("- `%s`\n", item))
+	}
+	return result.String()
+}
+
+// ExecuteDescribeWorkflows executes `atmos describe workflows` command.
 func ExecuteDescribeWorkflows(
 	atmosConfig schema.AtmosConfiguration,
 ) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
@@ -252,12 +341,8 @@ func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, s
 		return "", "", "", nil
 	}
 
-	fmt.Println()
-	u.PrintMessageInColor(fmt.Sprintf(
-		"Executing command:\n"+os.Args[0]+" workflow %s --file %s --from-step \"%s\"\n", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep),
-		theme.Colors.Info,
-	)
-	fmt.Println()
+	c := fmt.Sprintf("atmos workflow %s --file %s --from-step \"%s\"", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep)
+	log.Info("Executing", "command", c)
 
 	return selectedWorkflowFile, selectedWorkflow, selectedWorkflowStep, nil
 }

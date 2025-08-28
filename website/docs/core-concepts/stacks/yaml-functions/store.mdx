@@ -1,31 +1,46 @@
 ---
 title: "!store"
-sidebar_position: 4
+sidebar_position: 3
 sidebar_label: "!store"
-description: Read a value from a store
+description: Read a value from a store for an Atmos component in a stack
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-The `!store` YAML function allows reading the values from a remote [store](/core-concepts/projects/configuration/stores) (e.g. SSM Parameter Store, Artifactory, Redis, etc.)
-into Atmos stack manifests.
+The `!store` YAML function allows reading the values from a remote [store](/core-concepts/projects/configuration/stores)
+(e.g. SSM Parameter Store, Artifactory, Redis, etc.) for an Atmos component in a stack into Atmos stack manifests.
 </Intro>
 
 ## Usage
 
-The `!store` function can be called with either two or three parameters, and optionally a default value:
+The `!store` function can be called with either two, three, or four parameters, and optionally a default value and
+a [YQ](https://mikefarah.gitbook.io/yq) query expression:
+
+```yaml
+  !store <store_name> <stack> <component> <key> | default <default-value> | query <yq-expression>
+```
+
+Usage examples:
 
 ```yaml
   # Get the `key` from the store of a `component` in the current stack
   !store <store_name> <component> <key>
 
+  # Get the `key` from the store of a `component` in the current stack,
+  # and retrieve an individual value from the result using the YQ expression
+  !store <store_name> <component> <key> | query <yq-expression>
+
   # Get the `key` from the store of a `component` in a different stack
-  !store <store_name> <component> <stack> <key>
+  !store <store_name> <stack> <component> <key>
+
+  # Get the `key` from the store of a `component` in a different stack,
+  # and retrieve an individual value from the result using the YQ expression
+  !store <store_name> <stack> <component> <key> | query <yq-expression>
 
   # Get the `key` from the store of a `component` in a different stack, with a default value
-  !store <store_name> <component> <stack> <key> | default <default_value>
+  !store <store_name> <stack> <component> <key> | default <default-value>
 ```
 
 ## Arguments
@@ -34,17 +49,20 @@ The `!store` function can be called with either two or three parameters, and opt
   <dt>`store_name`</dt>
   <dd>The name of the store to read from (as defined in the `atmos.yaml` file)</dd>
 
-  <dt>`component`</dt>
-  <dd>Atmos component name</dd>
-
   <dt>`stack`</dt>
   <dd>(optional) Atmos stack name</dd>
+
+  <dt>`component`</dt>
+  <dd>Atmos component name</dd>
 
   <dt>`key`</dt>
   <dd>The key to read from the store</dd>
 
-  <dt>`default_value`</dt>
+  <dt>`default-value`</dt>
   <dd>(optional) The default value to return if the key is not found in the store</dd>
+
+  <dt>`yq-expression`</dt>
+  <dd>(optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the result</dd>
 </dl>
 
 
@@ -53,6 +71,30 @@ You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) i
 Atmos processes the templates first, and then executes the `!store` function, allowing you to provide the parameters to
 the function dynamically.
 :::
+
+## Using YQ Expressions to retrieve individual values
+
+To retrieve individual values from complex types such as maps and lists, or do any kind of filtering or querying,
+you can utilize [YQ](https://mikefarah.gitbook.io/yq) expressions.
+
+For example:
+
+- Retrieve the first item from a list
+
+```yaml
+subnet_id1: !store <store_name> <stack> <component> <key> | query .private_subnet_ids[0]
+```
+
+- Read a key from a map
+
+```yaml
+username: !store <store_name> <stack> <component> <key> | query .config_map.username
+```
+
+For more details, review the following docs:
+
+- [YQ Guide](https://mikefarah.gitbook.io/yq)
+- [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
 
 ## Examples
 
@@ -64,8 +106,9 @@ components:
       vars:
         vpc_config:
           security_group_id: !store prod/ssm security-group/lambda id
-          security_group_id2: !store prod/ssm security-group/lambda2 {{ .stack }} id
-          security_group_id3: !store prod/ssm security-group/lambda3 {{ .atmos_stack }} id
+          security_group_id2: !store prod/ssm {{ .stack }} security-group/lambda2 id
+          security_group_id3: !store prod/ssm {{ .atmos_stack }} security-group/lambda3 id
+        kms_key_arn: !store prod/ssm kms config | query .arn
 ```
 </File>
 
@@ -85,7 +128,7 @@ For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires 
     terraform:
       tgw:
         vars:
-          vpc_id: !store prod/ssm vpc plat-ue2-prod vpc_id
+          vpc_id: !store prod/ssm plat-ue2-prod vpc vpc_id
 ```
 
 ### Reference the Current Stack Name
@@ -94,8 +137,8 @@ Use the `.stack` (or `.atmos_stack`) template identifier to specify the same sta
 (for which the `!store` function is executed):
 
 ```yaml
-  !store <store_name> <component> {{ .stack }} <key>
-  !store <store_name> <component> {{ .atmos_stack }} <key>
+  !store <store_name> {{ .stack }} <component> <key>
+  !store <store_name> {{ .atmos_stack }} <component> <key>
 ```
 
 For example, you have a `tgw` component that requires the `vpc_id` key from the store for the `vpc` component in the same stack:
@@ -105,13 +148,14 @@ For example, you have a `tgw` component that requires the `vpc_id` key from the 
     terraform:
       tgw:
         vars:
-          vpc_id: !store prod/ssm vpc {{ .stack }} vpc_id
+          vpc_id: !store prod/ssm {{ .stack }} vpc vpc_id
 ```
 
 :::note Using the `.stack` or `.atmos_stack` template identifiers to specify the stack is the same as calling the
 `!store` function with two parameters without specifying the current stack, but without using `Go` templates. If you
 need to get a value from the store from a component in the current stack, using the `!store` function with two
-parameters is preferred because it has a simpler syntax and executes faster. :::
+parameters is preferred because it has a simpler syntax and executes faster.
+:::
 
 ### Use a Format Function
 
@@ -119,17 +163,17 @@ Use the `printf` template function to construct stack names using static strings
 This is convenient when you want to override some identifiers in the stack name:
 
 ```yaml
-  !store <store_name> <component> {{ printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage }} <key>
+  !store <store_name> {{ printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage }} <component> <key>
 
-  !store <store_name> <component> {{ printf "plat-%s-prod" .vars.environment }} <key>
+  !store <store_name> {{ printf "plat-%s-prod" .vars.environment }} <component> <key>
 
-  !store <store_name> <component> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <key>
+  !store <store_name> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <component> <key>
 ```
 
 <dl>
-  <dt>`<component`</dt>
+  <dt><code>&lt;component&gt;</code></dt>
   <dd>Placeholder for an actual component name (e.g. `vpc`)</dd>
-  <dt>`<key>`</dt>
+  <dt><code>&lt;key&gt;</code></dt>
   <dd>Placeholder for an actual key (e.g. `subnet_ids`)</dd>
 </dl>
 
@@ -143,20 +187,21 @@ tenant `net` (instead of `plat`):
     terraform:
       tgw:
         vars:
-          vpc_id: !store prod/ssm vpc {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc_id
+          vpc_id: !store prod/ssm {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc vpc_id
 ```
 
 :::tip Important
     By using the `printf "%s-%s-%s"` function, you are constructing stack names using the stack context variables/identifiers.
 
-    For more information on Atmos stack names and how to define them, refer to `stacks.name_template` and the older `stacks.name_pattern`
-    sections in [`atmos.yaml` CLI config file](/core-concepts/stacks/#stack-names-aka-slugs)
+    For more information on Atmos stack names and how to define them, refer to `stacks.name_pattern` and `stacks.name_template`
+    sections in [`atmos.yaml` CLI config file](/cli/configuration/)
 :::
 
 ## Considerations
 
- - Using `!store` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
-- When using `!store` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced remote states.
+- Using `!store` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
+- When using `!store` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced stores.
    If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
 - Be mindful of disaster recovery (DR) implications when using it across regions.
-- Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not yet be available and the `!store` function call will fail.
+- Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not
+  yet be available and the `!store` function call will fail unless you provide a default value with `| default`.

@@ -12,10 +12,9 @@ import (
 
 // BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from the component config
 func BuildAtlantisProjectNameFromComponentConfig(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
-
 	var atlantisProjectTemplate schema.AtlantisProjectConfig
 	var atlantisProjectName string
 

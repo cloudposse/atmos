@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -24,6 +25,21 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		return err
+	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		return err
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
@@ -34,23 +50,24 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
+	info.CliArgs = []string{"terraform", "generate", "backend"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		return err
 	}
 
 	if info.ComponentBackendType == "" {
-		return fmt.Errorf("\n'backend_type' is missing for the '%s' component.\n", component)
+		return fmt.Errorf("'backend_type' is missing for the '%s' component", component)
 	}
 
 	if info.ComponentBackendSection == nil {
-		return fmt.Errorf("\nCould not find 'backend' config for the '%s' component.\n", component)
+		return fmt.Errorf("could not find 'backend' config for the '%s' component", component)
 	}
 
 	componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
@@ -58,14 +75,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	u.LogDebug("Component backend config:\n\n")
-
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsJSONToFileDescriptor(atmosConfig, componentBackendConfig)
-		if err != nil {
-			return err
-		}
-	}
+	log.Debug("Component backend", "config", componentBackendConfig)
 
 	// Check if the `backend` section has `workspace_key_prefix` when `backend_type` is `s3`
 	if info.ComponentBackendType == "s3" {
@@ -74,7 +84,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		}
 	}
 
-	// Write backend config to file
+	// Write the backend config to a file
 	backendFilePath := filepath.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Terraform.BasePath,
@@ -83,8 +93,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		"backend.tf.json",
 	)
 
-	u.LogDebug("\nWriting the backend config to file:")
-	u.LogDebug(backendFilePath)
+	log.Debug("Writing the backend config to file", "file", backendFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0o644)

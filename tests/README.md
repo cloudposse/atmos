@@ -52,7 +52,7 @@ The tests will automatically set some environment variables:
 
 ### Flags
 
-To regenerate ALL snapshots pass the `-regenerate-snaphosts` flag.
+To regenerate ALL snapshots pass the `-regenerate-snapshots` flag.
 
 > ![WARNING]
 >

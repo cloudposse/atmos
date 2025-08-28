@@ -8,15 +8,6 @@
 # It supports POSIX-style Globs for file names/paths (double-star '**' is supported)
 # https://en.wikipedia.org/wiki/Glob_(programming)
 
-# Base path for components, stacks and workflows configurations.
-# Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
-# Supports both absolute and relative paths.
-# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
-# are independent settings (supporting both absolute and relative paths).
-# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
-# are considered paths relative to 'base_path'.
-base_path: ""
-
 vendor:
   # Path to vendor configuration file or directory containing vendor files
   # Supports both absolute and relative paths
@@ -50,6 +41,9 @@ components:
     init_run_reconfigure: true
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
     auto_generate_backend_file: false
+    init:
+      # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS' ENV var, or '--init-pass-vars' command-line argument
+      pass_vars: false
   helmfile:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
     # Supports both absolute and relative paths
@@ -356,10 +350,10 @@ settings:
 
   # Terminal settings for displaying content
   terminal:
-    max_width: 120 # Maximum width for terminal output
-    pager: true # Pager setting for all terminal output
-    colors: true # Enable colored output
-    unicode: true # Use unicode characters
+    max_width: 120          # Maximum width for terminal output
+    pager: true             # Pager setting for all terminal output
+    colors: true            # Enable colored output
+    unicode: true           # Use unicode characters
 
     syntax_highlighting:
       enabled: true
@@ -387,6 +381,28 @@ settings:
     emph:
       color: "${colors.muted}"
       italic: true
+
+docs:
+  generate:
+    # Generate README in current working directory
+    readme:
+      base-dir: .
+      input:
+        - "./README.yaml"
+      # To Do: template can be a remote URL/github, using this local for testing
+      template:  "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl"
+      # The final README
+      output: "./README.md"
+      terraform:
+        source: src/
+        enabled: false
+        format: "markdown"
+        show_providers: false
+        show_inputs: true
+        show_outputs: true
+        sort_by: "name"
+        hide_empty: false
+        indent_level: 2
 
 version:
   check:

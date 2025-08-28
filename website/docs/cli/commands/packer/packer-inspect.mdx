@@ -1,0 +1,115 @@
+---
+title: atmos packer inspect
+sidebar_label: inspect
+sidebar_class_name: command
+id: inspect
+---
+
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
+<img width="80" align="right" src={useBaseUrl('/img/hashicorp-packer.svg')} alt="Packer"/>
+
+:::note purpose
+Use this command to inspect the various components that a Packer template configured for an Atmos component in a stack defines.
+The command will show what variables a template accepts, the builders it defines, the provisioners it defines and the order they'll run, and more.
+:::
+
+## Usage
+
+Execute the `packer inspect` command like this:
+
+```shell
+atmos packer inspect <component> --stack <stack> [flags] -- [packer-options]
+```
+
+:::tip
+For more details on the `packer inspect` command and options, refer to [Packer inspect command reference](https://developer.hashicorp.com/packer/docs/commands/inspect).
+:::
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos Packer component.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em><em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--template` <em>(alias `-t`)</em><em>(optional)</em></dt>
+    <dd>
+        Packer template.
+        It can be specified in the `settings.packer.template` section in the Atmos component manifest,
+        or on the command line via the flag `--template <template>` (shorthand `-t`).
+        The command line flag takes precedence over `settings.packer.template`.
+    </dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos packer inspect aws/bastion --stack nonprod
+atmos packer inspect aws/bastion -s prod --template main.pkr.hcl
+atmos packer inspect aws/bastion -s nonprod -t main.nonprod.pkr.hcl
+```
+</Terminal>
+
+<Terminal title="atmos packer inspect aws/bastion --stack nonprod">
+```shell
+> atmos packer inspect aws/bastion --stack nonprod
+
+Packer Inspect: HCL2 mode
+
+> input-variables:
+
+var.ami_name: "bastion-al2023-1754457104"
+var.ami_org_arns: "[\n  \"arn:aws:organizations::xxxxxxxxxxxx:organization/o-xxxxxxxxx\",\n]"
+var.ami_ou_arns: "[]"
+var.ami_tags: "{\n  \"ScanStatus\" = \"pending\"\n  \"SourceAMI\" = \"ami-0013ceeff668b979b\"\n  \"SourceAMIDescription\" = \"Amazon Linux 2023 AMI 2023.7.20250527.1 arm64 HVM kernel-6.12\"\n  \"SourceAMIName\" = \"al2023-ami-2023.7.20250527.1-kernel-6.12-arm64\"\n  \"SourceAMIOwnerAccountId\" = \"137112412989\"\n  \"Stage\" = \"nonprod\"\n}"
+var.ami_users: "[]"
+var.associate_public_ip_address: "true"
+var.assume_role_arn: "null"
+var.assume_role_duration_seconds: "1800"
+var.assume_role_session_name: "atmos-packer"
+var.encrypt_boot: "false"
+var.force_delete_snapshot: "false"
+var.force_deregister: "false"
+var.instance_type: "t4g.small"
+var.kms_key_arn: "null"
+var.manifest_file_name: "manifest.json"
+var.manifest_strip_path: "false"
+var.provisioner_shell_commands: "[\n  \"sudo systemctl enable --now amazon-ssm-agent\",\n  \"sudo -E bash -c 'dnf install -y jq && dnf clean all && cloud-init clean'\",\n]"
+var.region: "us-east-2"
+var.skip_create_ami: "false"
+var.source_ami: "ami-0013ceeff668b979b"
+var.ssh_username: "ec2-user"
+var.stage: "nonprod"
+var.volume_size: "8"
+var.volume_type: "gp3"
+
+> local-variables:
+
+> builds:
+
+> <0>:
+sources:
+amazon-ebs.al2023
+
+provisioners:
+shell
+
+post-processors:
+0:
+manifest
+```
+</Terminal>

@@ -3,14 +3,13 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -18,7 +17,7 @@ import (
 
 // ExecuteWorkflowCmd executes an Atmos workflow
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
-	var workflow string
+	var workflowName string
 	var workflowFile string
 	var fromStep string
 
@@ -36,17 +35,17 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	// If the `workflow` argument is not passed, start the workflow UI
 	if len(args) != 1 {
-		workflowFile, workflow, fromStep, err = ExecuteWorkflowUI(atmosConfig)
+		workflowFile, workflowName, fromStep, err = ExecuteWorkflowUI(atmosConfig)
 		if err != nil {
 			return err
 		}
-		if workflowFile == "" || workflow == "" {
+		if workflowFile == "" || workflowName == "" {
 			return nil
 		}
 	}
 
-	if workflow == "" {
-		workflow = args[0]
+	if workflowName == "" {
+		workflowName = args[0]
 	}
 
 	flags := cmd.Flags()
@@ -93,7 +92,12 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		return fmt.Errorf("the workflow manifest file '%s' does not exist", workflowPath)
+		errUtils.CheckErrorPrintAndExit(
+			ErrWorkflowFileNotFound,
+			WorkflowErrTitle,
+			fmt.Sprintf("\n## Explanation\nThe workflow manifest file `%s` does not exist.", filepath.ToSlash(workflowPath)),
+		)
+		return ErrWorkflowFileNotFound
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
@@ -111,26 +115,34 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if workflowManifest.Workflows == nil {
-		return fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
+		errUtils.CheckErrorPrintAndExit(
+			ErrInvalidWorkflowManifest,
+			WorkflowErrTitle,
+			fmt.Sprintf("\n## Explanation\nThe workflow manifest `%s` must be a map with the top-level `workflows:` key.", filepath.ToSlash(workflowPath)),
+		)
+		return ErrInvalidWorkflowManifest
 	}
 
 	workflowConfig = workflowManifest.Workflows
 
-	if i, ok := workflowConfig[workflow]; !ok {
-		errorMarkdown := fmt.Sprintf("No workflow exists with the name `%s`\n\nAvailable workflows are:", workflow)
-		validWorkflows := []string{}
-		for w := range maps.Keys(workflowConfig) {
-			validWorkflows = append(validWorkflows, fmt.Sprintf("\n- %s", w))
+	if i, ok := workflowConfig[workflowName]; !ok {
+		validWorkflows := make([]string, 0, len(workflowConfig))
+		for w := range workflowConfig {
+			validWorkflows = append(validWorkflows, w)
 		}
 		// sorting so that the output is deterministic
-		sort.Sort(sort.StringSlice(validWorkflows))
-		errorMarkdown += strings.Join(validWorkflows, "")
-		return fmt.Errorf(errorMarkdown)
+		sort.Strings(validWorkflows)
+		errUtils.CheckErrorPrintAndExit(
+			ErrWorkflowNoWorkflow,
+			"Workflow Error",
+			fmt.Sprintf("\n## Explanation\nNo workflow exists with the name `%s`\n### Available workflows:\n%s", workflowName, FormatList(validWorkflows)),
+		)
+		return ErrWorkflowNoWorkflow
 	} else {
 		workflowDefinition = i
 	}
 
-	err = ExecuteWorkflow(atmosConfig, workflow, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
+	err = ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
 	if err != nil {
 		return err
 	}

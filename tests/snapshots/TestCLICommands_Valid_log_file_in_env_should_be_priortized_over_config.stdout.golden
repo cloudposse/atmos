@@ -1,7 +1,8 @@
-DEBU Found ENV var ATMOS_LOGS_FILE=/dev/stdout
-DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Using command line argument '--logs-level=Debug'
-DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU Set logs-level=debug logs-file=/dev/stdout
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 
 👽 Atmos test on darwin/arm64
 
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Telemetry event captured

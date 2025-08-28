@@ -6,20 +6,24 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
+// ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
+
+	info.CliArgs = []string{"terraform", "generate", "backends"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -62,12 +66,12 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 		format = "hcl"
 	}
 
-	return ExecuteTerraformGenerateBackends(atmosConfig, fileTemplate, format, stacks, components)
+	return ExecuteTerraformGenerateBackends(&atmosConfig, fileTemplate, format, stacks, components)
 }
 
-// ExecuteTerraformGenerateBackends generates backend configs for all terraform components
+// ExecuteTerraformGenerateBackends generates backend configs for all terraform components.
 func ExecuteTerraformGenerateBackends(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	fileTemplate string,
 	format string,
 	stacks []string,
@@ -238,6 +242,7 @@ func ExecuteTerraformGenerateBackends(
 
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
 					atmosConfig,
+					&configAndStacksInfo,
 					settingsSectionStruct,
 					"terraform-generate-backends",
 					componentSectionStr,
@@ -257,7 +262,7 @@ func ExecuteTerraformGenerateBackends(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					u.LogErrorAndExit(err)
+					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)
@@ -327,7 +332,7 @@ func ExecuteTerraformGenerateBackends(
 					}
 
 					// Write the backend config to the file
-					u.LogDebug(fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
+					log.Debug("Writing backend config for the component to file", "component", terraformComponent, "file", backendFilePath)
 
 					if format == "json" {
 						componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, "")
@@ -340,12 +345,12 @@ func ExecuteTerraformGenerateBackends(
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteTerraformBackendConfigToFileAsHcl(atmosConfig, backendFileAbsolutePath, backendTypeSection, backendSection)
+						err = u.WriteTerraformBackendConfigToFileAsHcl(backendFileAbsolutePath, backendTypeSection, backendSection)
 						if err != nil {
 							return err
 						}
 					} else if format == "backend-config" {
-						err = u.WriteToFileAsHcl(atmosConfig, backendFileAbsolutePath, backendSection, 0o644)
+						err = u.WriteToFileAsHcl(backendFileAbsolutePath, backendSection, 0o644)
 						if err != nil {
 							return err
 						}

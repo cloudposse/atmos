@@ -3,8 +3,8 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // helmfileGenerateVarfileCmd generates varfile for a helmfile component
@@ -14,28 +14,23 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 	Long:               "This command generates a values file for a specified Helmfile component.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
-		if err != nil {
-			u.LogErrorAndExit(err)
-		}
+		return err
 	},
 }
 
 func init() {
 	helmfileGenerateVarfileCmd.DisableFlagParsing = false
-	helmfileGenerateVarfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile generate varfile <component> -s <stack>")
 	AddStackCompletion(helmfileGenerateVarfileCmd)
-	helmfileGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "atmos helmfile generate varfile <component> -s <stack> -f <file>")
+	helmfileGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "Generate a variables file for the specified Helmfile component in the given stack and write the output to the provided file path.")
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	helmfileGenerateCmd.AddCommand(helmfileGenerateVarfileCmd)
 }

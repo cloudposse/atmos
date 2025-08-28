@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+
+	e "github.com/cloudposse/atmos/internal/exec"
 )
 
 // helmfileCmd represents the base command for all helmfile sub-commands
@@ -19,19 +19,17 @@ var helmfileCmd = &cobra.Command{
 func init() {
 	// https://github.com/spf13/cobra/issues/739
 	helmfileCmd.DisableFlagParsing = true
-	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile <helmfile_command> <component> -s <stack>")
 	helmfileCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	AddStackCompletion(helmfileCmd)
 	RootCmd.AddCommand(helmfileCmd)
 }
 
-func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
+func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	handleHelpRequest(cmd, args)
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
 	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	info.CliArgs = []string{"helmfile", commandName}
 	err := e.ExecuteHelmfile(info)
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
+	return err
 }

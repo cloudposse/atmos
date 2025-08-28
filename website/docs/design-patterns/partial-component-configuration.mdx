@@ -116,7 +116,7 @@ components:
         component: eks/cluster
       vars:
         name: eks
-        availability_zones: [ ] # Use the VPC subnet AZs
+        availability_zones: [] # Use the VPC subnet AZs
         managed_node_groups_enabled: true
         node_groups:
           # will create 1 node group for each item in map

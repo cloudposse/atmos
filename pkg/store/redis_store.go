@@ -23,8 +23,7 @@ type RedisStoreOptions struct {
 	URL            *string `mapstructure:"url"`
 }
 
-// RedisClient interface allows us to mock the Redis Client in test with only the methods we are using in the
-// RedisStore.
+// RedisClient interface allows us to mock the Redis Client in test with only the methods we are using in the RedisStore.
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
@@ -37,7 +36,7 @@ func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 	if options.URL != nil {
 		opts, err := redis.ParseURL(*options.URL)
 		if err != nil {
-			return &redis.Options{}, fmt.Errorf("failed to parse redis url: %v", err)
+			return &redis.Options{}, fmt.Errorf(errFormat, ErrParseRedisURL, err)
 		}
 
 		return opts, nil
@@ -47,7 +46,7 @@ func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 		return redis.ParseURL(os.Getenv("ATMOS_REDIS_URL"))
 	}
 
-	return &redis.Options{}, fmt.Errorf("either url must be set in options or ATMOS_REDIS_URL environment variable must be set")
+	return &redis.Options{}, ErrMissingRedisURL
 }
 
 func NewRedisStore(options RedisStoreOptions) (Store, error) {
@@ -63,7 +62,7 @@ func NewRedisStore(options RedisStoreOptions) (Store, error) {
 
 	opts, err := getRedisOptions(&options)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse redis url: %v", err)
+		return nil, fmt.Errorf(errFormat, ErrParseRedisURL, err)
 	}
 
 	redisClient := redis.NewClient(opts)
@@ -77,7 +76,7 @@ func NewRedisStore(options RedisStoreOptions) (Store, error) {
 
 func (s *RedisStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
-		return "", fmt.Errorf("stack delimiter is not set")
+		return "", ErrStackDelimiterNotSet
 	}
 
 	prefixParts := []string{s.prefix}
@@ -88,63 +87,107 @@ func (s *RedisStore) getKey(stack string, component string, key string) (string,
 
 func (s *RedisStore) Get(stack string, component string, key string) (interface{}, error) {
 	if stack == "" {
-		return nil, fmt.Errorf("stack cannot be empty")
+		return nil, ErrEmptyStack
 	}
 
 	if component == "" {
-		return nil, fmt.Errorf("component cannot be empty")
+		return nil, ErrEmptyComponent
 	}
 
 	if key == "" {
-		return nil, fmt.Errorf("key cannot be empty")
+		return nil, ErrEmptyKey
 	}
 
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key: %v", err)
+		return nil, fmt.Errorf(errFormat, ErrGetKey, err)
 	}
 
 	ctx := context.Background()
 	jsonData, err := s.redisClient.Get(ctx, paramName).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key: %v", err)
+		return nil, fmt.Errorf(errFormat, ErrGetRedisKey, err)
 	}
 
+	// First try to unmarshal as JSON
 	var result interface{}
-	err = json.Unmarshal([]byte(jsonData), &result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal file: %v", err)
+	if err := json.Unmarshal([]byte(jsonData), &result); err == nil {
+		return result, nil
 	}
 
-	return result, nil
+	// If JSON unmarshalling fails, return the raw string value
+	return jsonData, nil
 }
 
 func (s *RedisStore) Set(stack string, component string, key string, value interface{}) error {
 	if stack == "" {
-		return fmt.Errorf("stack cannot be empty")
+		return ErrEmptyStack
 	}
 
 	if component == "" {
-		return fmt.Errorf("component cannot be empty")
+		return ErrEmptyComponent
 	}
 
 	if key == "" {
-		return fmt.Errorf("key cannot be empty")
+		return ErrEmptyKey
 	}
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf("failed to get key: %v", err)
+		return fmt.Errorf(errFormat, ErrGetKey, err)
 	}
 
 	jsonData, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("failed to marshal value: %v", err)
+		return fmt.Errorf(errFormat, ErrMarshalValue, err)
 	}
 
 	ctx := context.Background()
 	err = s.redisClient.Set(ctx, paramName, jsonData, 0).Err()
 
 	return err
+}
+
+func (s *RedisStore) GetKey(key string) (interface{}, error) {
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
+	// Use the key directly as the Redis key
+	redisKey := key
+
+	// If prefix is set, prepend it to the key
+	if s.prefix != "" {
+		redisKey = s.prefix + ":" + key
+	}
+
+	// Get the value from Redis
+	resp := s.redisClient.Get(context.Background(), redisKey)
+	if resp.Err() != nil {
+		if resp.Err().Error() == "redis: nil" {
+			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, redisKey, resp.Err())
+		}
+		return nil, fmt.Errorf(errFormat, ErrGetParameter, resp.Err())
+	}
+
+	value := resp.Val()
+	if value == "" {
+		return "", nil
+	}
+
+	// Try to unmarshal as JSON first, fallback to string if it fails.
+	var result interface{}
+	if unmarshalErr := json.Unmarshal([]byte(value), &result); unmarshalErr != nil {
+		// If JSON unmarshaling fails, return as string.
+		// Intentionally ignoring JSON unmarshal error to fall back to string
+		//nolint:nilerr
+		return value, nil
+	}
+	return result, nil
+}
+
+// RedisClient returns the underlying Redis client for testing purposes.
+func (s *RedisStore) RedisClient() RedisClient {
+	return s.redisClient
 }

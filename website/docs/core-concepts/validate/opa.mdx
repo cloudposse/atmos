@@ -63,7 +63,7 @@ atmos validate component vpc -s plat-ue2-dev --timeout 15
 
 ### Configure Component Validation
 
-In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
+In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
 section:
 
 <File title="atmos.yaml">
@@ -78,16 +78,16 @@ schemas:
 ```
 </File>
 
-In the component [manifest](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
+In the component [manifest](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
 the `settings.validation` section:
 
 <EmbedFile filePath="examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml" />
 
-Add the following Rego package in the file [`stacks/schemas/opa/catalog/constants/constants.rego`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego):
+Add the following Rego package in the file [`stacks/schemas/opa/catalog/constants/constants.rego`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego):
 
 <EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego" />
 
-Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-component.rego`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego):
+Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-component.rego`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego):
 
 <EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
 
@@ -167,3 +167,64 @@ Since the OPA validation policies don't pass, Atmos does not allow provisioning 
 - If you want to match the backslash character itself, you'll need four slashes.
 
 :::
+
+## Policy Execution Context
+
+Atmos allows enforcing custom governance rules based on metadata about Atmos commands and provides a powerful
+policy evaluation mechanism by passing structured metadata to OPA policies at runtime.
+
+This metadata enables fine-grained control over when certain actions (like `terraform apply`) are allowed or denied,
+based on the context in which they're executed.
+
+### Policy Metadata
+
+When Atmos runs a command, it supplies an input object to OPA policies that contains detailed contextual information, such as:
+
+- `cli_args`: a list of the command line arguments and flags (e.g., executing the `atmos terraform apply` command will generate the `["terraform", "apply"]` list)
+- `vars`: a map of variables passed to the command, either via the stack config files or [CLI flags](/core-concepts/validate/terraform-variables)
+- other contextual attributes such as the stack and component names
+
+### Policy Execution Context Example
+
+Below is an OPA policy rule to enforce infrastructure governance during command execution.
+Specifically, this rule blocks the execution of `atmos terraform apply` if the variable `foo` is set to the string `"foo"`.
+
+<File title="validate-component.rego">
+```rego
+# 'package atmos' is required in all Atmos OPA policies
+package atmos
+
+# Atmos looks for the 'errors' (array of strings) output from all OPA policies
+# If the 'errors' output contains one or more error messages, Atmos considers the policy failed
+
+# Don't allow `terraform apply` if the `foo` variable is set to `foo`
+# The `input` map contains the `cli_args` attribute (a list of the command line arguments and flags)
+errors[message] {
+  count(input.cli_args) >= 2
+  input.cli_args[0] == "terraform"
+  input.cli_args[1] == "apply"
+  input.vars.foo == "foo"
+  message = "the component can't be applied if the 'foo' variable is set to 'foo'"
+}
+```
+</File>
+
+The rule checks if:
+ - The `cli_args` list has at least two items
+ - The command (first item in the `cli_args` list) is `terraform`
+ - The subcommand (second item in the `cli_args` list) is `apply`
+ - The variable `foo` is set to `"foo"`
+
+If all conditions are true, the rule generates an error message.
+
+The generated error message is added to the `errors` array.
+Atmos interprets the presence of any messages in `errors` as a policy violation and blocks the operation with the
+following error:
+
+<Terminal title="atmos terraform apply component-1 -s nonprod">
+```console
+the component can't be applied if the 'foo' variable is set to 'foo'
+
+exit status 1
+```
+</Terminal>

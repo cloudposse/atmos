@@ -1,10 +1,12 @@
 package main
 
 import (
-	"github.com/charmbracelet/log"
+	"errors"
+
+	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/cmd"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func main() {
@@ -13,6 +15,10 @@ func main() {
 
 	err := cmd.Execute()
 	if err != nil {
-		u.LogErrorAndExit(err)
+		if errors.Is(err, errUtils.ErrPlanHasDiff) {
+			log.Debug("Exiting with code 2 due to plan differences")
+			errUtils.Exit(2)
+		}
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }

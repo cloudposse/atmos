@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func ProcessCustomYamlTags(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	input schema.AtmosSectionMapType,
 	currentStack string,
 	skip []string,
@@ -18,7 +19,7 @@ func ProcessCustomYamlTags(
 }
 
 func processNodes(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	data map[string]any,
 	currentStack string,
 	skip []string,
@@ -58,26 +59,30 @@ func processNodes(
 }
 
 func processCustomTags(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 	skip []string,
 ) any {
 	switch {
 	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate) && !skipFunc(skip, u.AtmosYamlFuncTemplate):
-		return processTagTemplate(atmosConfig, input, currentStack)
+		return processTagTemplate(input)
 	case strings.HasPrefix(input, u.AtmosYamlFuncExec) && !skipFunc(skip, u.AtmosYamlFuncExec):
-		return processTagExec(atmosConfig, input, currentStack)
+		res, err := u.ProcessTagExec(input)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return res
+	case strings.HasPrefix(input, u.AtmosYamlFuncStoreGet) && !skipFunc(skip, u.AtmosYamlFuncStoreGet):
+		return processTagStoreGet(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncStore) && !skipFunc(skip, u.AtmosYamlFuncStore):
 		return processTagStore(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput) && !skipFunc(skip, u.AtmosYamlFuncTerraformOutput):
 		return processTagTerraformOutput(atmosConfig, input, currentStack)
+	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState):
+		return processTagTerraformState(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
-		return processTagEnv(atmosConfig, input, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncIncludeGoGetter) && !skipFunc(skip, u.AtmosYamlFuncInclude):
-		return processTagInclude(atmosConfig, input, u.AtmosYamlFuncIncludeGoGetter, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncIncludeLocalFile) && !skipFunc(skip, u.AtmosYamlFuncInclude):
-		return processTagInclude(atmosConfig, input, u.AtmosYamlFuncIncludeLocalFile, currentStack)
+		res, err := u.ProcessTagEnv(input)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return res
 	default:
 		// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing
 		return input

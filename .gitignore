@@ -7,12 +7,16 @@
 **/*.planfile
 **/*.kubeconfig
 **/terraform.tfvars.json
+**/helmfile.vars.yaml
+**/packer.vars.json
 **/*.terraform.tfvars.json
 **/*.helmfile.vars.yaml
+**/*.packer.vars.json
 **/.terraform.lock.hcl
 .vscode/
 **/nohup.out
 **/kubeconfig.yaml
+**/*.planfile.json
 
 # Module directory
 .terraform
@@ -39,5 +43,11 @@
 **/cache.*.txt
 
 # Ignore components vendored during tests
-tests/fixtures/scenarios/vendor/components/**
 examples/demo-vendoring/components/**
+tests/fixtures/scenarios/vendor-globs/components/**
+tests/fixtures/scenarios/vendor/components/**
+internal/exec/output.*
+
+# Coverage files
+coverage.out
+coverage.html

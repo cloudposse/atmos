@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 func TestProcessTagStore(t *testing.T) {
@@ -39,6 +40,14 @@ func TestProcessTagStore(t *testing.T) {
 	// Populate the store with some data
 	require.NoError(t, redisStore.Set("dev", "vpc", "cidr", "10.0.0.0/16"))
 	require.NoError(t, redisStore.Set("prod", "vpc", "cidr", "172.16.0.0/16"))
+	require.NoError(t, redisStore.Set("test", "c1", "map", map[string]any{
+		"a": "a1",
+		"b": "b2",
+		"c": map[string]any{
+			"d": "d3",
+			"e": "e4",
+		},
+	}))
 
 	tests := []struct {
 		name         string
@@ -80,19 +89,31 @@ func TestProcessTagStore(t *testing.T) {
 			name:         "lookup with invalid default format",
 			input:        "!store redis staging vpc cidr | default",
 			currentStack: "dev",
-			expected:     "invalid default value format in: redis staging vpc cidr | default",
+			expected:     "invalid YAML function: !store redis staging vpc cidr | default",
 		},
 		{
 			name:         "lookup with extra parameters after default",
 			input:        "!store redis staging vpc cidr | default 172.20.0.0/16 extra",
 			currentStack: "dev",
-			expected:     "invalid default value format in: redis staging vpc cidr | default 172.20.0.0/16 extra",
+			expected:     "invalid YAML function: !store redis staging vpc cidr | default 172.20.0.0/16 extra",
+		},
+		{
+			name:         "lookup cross-stack and get a value from the result map using a YQ expression",
+			input:        "!store redis test c1 map | default \"0\" | query .a",
+			currentStack: "dev",
+			expected:     "a1",
+		},
+		{
+			name:         "lookup in current stack and get a value from the result map using a YQ expression",
+			input:        "!store redis c1 map | query .c.e",
+			currentStack: "test",
+			expected:     "e4",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processTagStore(atmosConfig, tt.input, tt.currentStack)
+			result := processTagStore(&atmosConfig, tt.input, tt.currentStack)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

@@ -4,47 +4,54 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/config"
+	log "github.com/charmbracelet/log"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// processTagTerraformOutput processes `!terraform.output` YAML tag.
 func processTagTerraformOutput(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 ) any {
-	u.LogTrace(fmt.Sprintf("Executing Atmos YAML function: %s", input))
+	log.Debug("Executing Atmos YAML function", "function", input)
 
-	str, err := getStringAfterTag(input, config.AtmosYamlFuncTerraformOutput)
-	if err != nil {
-		u.LogErrorAndExit(err)
-	}
+	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	var component string
 	var stack string
 	var output string
 
 	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace
-	parts := strings.Fields(str)
+	// while also ignoring leading and trailing whitespace.
+	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
+	parts, err := u.SplitStringByDelimiter(str, ' ')
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+
 	partsLen := len(parts)
 
-	if partsLen == 3 {
+	switch partsLen {
+	case 3:
 		component = strings.TrimSpace(parts[0])
 		stack = strings.TrimSpace(parts[1])
 		output = strings.TrimSpace(parts[2])
-	} else if partsLen == 2 {
+	case 2:
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
-		u.LogTrace(fmt.Sprintf("Atmos YAML function `%s` is called with two parameters 'component' and 'output'. "+
-			"Using the current stack '%s' as the 'stack' parameter", input, currentStack))
-	} else {
-		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
-		u.LogErrorAndExit(err)
+		log.Debug("Executing Atmos YAML function with component and output parameters; using current stack",
+			"function", input,
+			"stack", currentStack,
+		)
+	default:
+		er := fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	value := GetTerraformOutput(&atmosConfig, stack, component, output, false)
+	value := GetTerraformOutput(atmosConfig, stack, component, output, false)
 	return value
 }

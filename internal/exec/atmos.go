@@ -2,15 +2,14 @@ package exec
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/samber/lo"
 
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -41,7 +40,7 @@ func ExecuteAtmosCmd() error {
 
 	// Get a map of stacks and components in the stacks
 	// Don't process `Go` templates and YAML functions in Atmos stack manifests since we just need to display the stack and component names in the TUI
-	stacksMap, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
@@ -96,19 +95,15 @@ func ExecuteAtmosCmd() error {
 	}
 
 	// Process the selected command, stack and component
-	fmt.Println()
-	u.PrintMessageInColor(fmt.Sprintf(
-		"Executing command:\n"+os.Args[0]+" %s %s --stack %s\n", selectedCommand, selectedComponent, selectedStack),
-		theme.Colors.Info,
-	)
-	fmt.Println()
+	c := fmt.Sprintf("atmos %s %s --stack %s", selectedCommand, selectedComponent, selectedStack)
+	log.Info("Executing", "command", c)
 
 	if selectedCommand == "describe component" {
 		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true, true, nil)
 		if err != nil {
 			return err
 		}
-		err = u.PrintAsYAML(data)
+		err = u.PrintAsYAML(&atmosConfig, data)
 		if err != nil {
 			return err
 		}
@@ -116,11 +111,11 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "describe dependents" {
-		data, err := ExecuteDescribeDependents(atmosConfig, selectedComponent, selectedStack, false)
+		data, err := ExecuteDescribeDependents(&atmosConfig, selectedComponent, selectedStack, false, true, true, nil)
 		if err != nil {
 			return err
 		}
-		err = u.PrintAsYAML(data)
+		err = u.PrintAsYAML(&atmosConfig, data)
 		if err != nil {
 			return err
 		}
@@ -128,13 +123,12 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "validate component" {
-		_, err = ExecuteValidateComponent(atmosConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
+		_, err = ExecuteValidateComponent(&atmosConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
 		if err != nil {
 			return err
 		}
 
-		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", selectedComponent, selectedStack)
-		u.PrintMessageInColor(m, theme.Colors.Success)
+		log.Info("Validated successfully", "component", selectedComponent, "stack", selectedStack)
 		return nil
 	}
 
@@ -147,6 +141,8 @@ func ExecuteAtmosCmd() error {
 		configAndStacksInfo.ComponentFromArg = selectedComponent
 		configAndStacksInfo.Stack = selectedStack
 		configAndStacksInfo.SubCommand = subcommand
+		configAndStacksInfo.ProcessTemplates = true
+		configAndStacksInfo.ProcessFunctions = true
 		err = ExecuteTerraform(configAndStacksInfo)
 		if err != nil {
 			return err

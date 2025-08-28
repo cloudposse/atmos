@@ -51,7 +51,6 @@ Atmos is extensible to accommodate any tooling, including enterprise-scale Terra
 
 ## Introduction
 
-
 [Atmos](https://atmos.tools) centralizes the DevOps chain and cloud automation/orchestration into a robust command-line tool,
 streamlining environments and workflows into straightforward CLI commands. Leveraging advanced hierarchical configurations,
 it efficiently orchestrates both local and CI/CD pipeline tasks, optimizing infrastructure management for engineers and cloud
@@ -125,6 +124,19 @@ and best practices, such as:
 - It can be extended to include new features, commands, and workflows
 - The commands have a clean, consistent and easy to understand syntax
 - The CLI code is modular and self-documenting
+
+## Telemetry
+
+Atmos collects **anonymous telemetry** to help improve the product by understanding how it's used.
+
+You can **opt-out** of telemetry collection in either of the following ways:
+
+- Set `settings.telemetry.enabled: false` in your `atmos.yaml`
+- Or set the environment variable: `ATMOS_TELEMETRY_ENABLED=false`
+
+> **Note for Atmos Pro users:** If you’re using [Atmos Pro](https://atmos-pro.com), your [workspace ID](https://atmos-pro.com/docs/authentication/workspace-id) will be included in telemetry events. This allows our team to provide more effective support and assist with troubleshooting as part of your subscription.
+
+To learn more about what is collected and how it works, see the [Telemetry Documentation](https://atmos.tools/cli/telemetry).
 
 ## Documentation
 
@@ -216,7 +228,7 @@ All other trademarks referenced herein are the property of their respective owne
 
 
 ---
-Copyright © 2017-2024 [Cloud Posse, LLC](https://cpco.io/copyright)
+Copyright © 2017-2025 [Cloud Posse, LLC](https://cpco.io/copyright)
 
 
 <a href="https://cloudposse.com/readme/footer/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=readme_footer_link"><img alt="README footer" src="https://cloudposse.com/readme/footer/img"/></a>

@@ -1,0 +1,54 @@
+workflows:
+  pass:
+    description: |
+      Run a command that will pass.
+    steps:
+      - command: terraform plan mock -s nonprod
+
+  fail:
+    description: |
+      Run a command that will fail.
+    steps:
+      - command: terraform plan mock -s idontexist
+
+  shell-pass:
+    description: |
+      Run a shell command that will pass.
+    steps:
+      - command: echo "This should pass"
+        type: shell
+
+  shell-failure:
+    description: |
+      Run a shell command that will fail.
+    steps:
+      - command: |
+          echo "This should fail"
+          exit 1
+        type: shell
+  shell-command-not-found:
+    description: |
+      Run a shell command that doesn't exist.
+    steps:
+      - command: nonexistentcommand
+        type: shell
+
+  no-steps:
+    description: |
+      A workflow with no steps.
+    steps: []
+
+  invalid-step-type:
+    description: |
+      A workflow with an invalid step type.
+    steps:
+      - command: echo "This should fail"
+        type: invalid
+
+  fail-with-stack:
+    description: |
+      Run a command that will fail with a stack parameter.
+    stack: prod
+    steps:
+      - command: terraform plan idontexist
+

@@ -55,6 +55,8 @@ atmos describe component vpc -s tenant1-ue2-dev --skip=include,eval
 atmos describe component vpc -s plat-ue2-prod --query .vars.tags
 
 atmos describe component vpc -s plat-ue2-prod -q .settings
+
+atmos describe component vpc -s plat-ue2-prod --pager=more
 ```
 
 ## Arguments
@@ -74,6 +76,7 @@ atmos describe component vpc -s plat-ue2-prod -q .settings
 | `--process-functions` | Enable/disable processing of all Atmos YAML functions<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the functions are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-functions=false`                               |       | no       |
 | `--skip`              | Skip processing a specific Atmos YAML function<br/>in Atmos stacks manifests when executing the command.<br/>To specify more than one function,<br/>use multiple `--skip` flags, or separate the functions with a comma:<br/>`atmos describe component <c> -s <stack> --skip=terraform.output --skip=include`<br/>`atmos describe component <c> -s <stack> --skip=terraform.output,include` |       | no       |
 | `--query`             | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                                                                                                                          | `-q`  | no       |
+| `--pager`             | Disable/Enable the paging user experience                                                                                                                                                                                                                                                                                                                                                   |       |          |
 
 ## Output
 
@@ -102,6 +105,8 @@ The output contains the following sections:
 - `command` - the binary to execute when provisioning the component (e.g. `terraform`, `terraform-1`, `tofu`, `helmfile`)
 
 - `component` - the Terraform/OpenTofu component for which the Atmos component provides configuration
+
+- `component_type` - the type of the component (`terraform` or `helmfile`)
 
 - `component_info` - a block describing the Terraform or Helmfile components that the Atmos component manages. The `component_info` block has the
   following sections:

@@ -1,2 +1,5 @@
-DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
-DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU Set logs-level=debug logs-file=/dev/stderr
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Telemetry event captured

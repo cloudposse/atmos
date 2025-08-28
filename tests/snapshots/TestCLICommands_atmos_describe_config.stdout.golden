@@ -11,6 +11,12 @@
       "command": "",
       "shell": {
         "prompt": ""
+      },
+      "init": {
+        "pass_vars": false
+      },
+      "plan": {
+        "skip_planfile": false
       }
     },
     "helmfile": {
@@ -19,6 +25,10 @@
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
+      "command": ""
+    },
+    "packer": {
+      "base_path": "",
       "command": ""
     }
   },
@@ -47,12 +57,6 @@
   "integrations": {
     "atlantis": {}
   },
-  "schemas": {
-    "jsonschema": {},
-    "cue": {},
-    "opa": {},
-    "atmos": {}
-  },
   "templates": {
     "settings": {
       "enabled": false,
@@ -70,8 +74,7 @@
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,
-      "pager": false,
-      "colors": false,
+      "pager": "0",
       "unicode": false,
       "syntax_highlighting": {
         "enabled": false,
@@ -81,7 +84,8 @@
         "pager": false,
         "line_numbers": false,
         "wrap": false
-      }
+      },
+      "no_color": false
     },
     "docs": {
       "max_width": 0,
@@ -117,10 +121,36 @@
       "link": {},
       "link_text": {}
     },
-    "InjectGithubToken": true
+    "InjectGithubToken": true,
+    "GithubToken": "",
+    "AtmosGithubToken": "",
+    "InjectBitbucketToken": false,
+    "BitbucketToken": "",
+    "AtmosBitbucketToken": "",
+    "BitbucketUsername": "",
+    "InjectGitlabToken": false,
+    "AtmosGitlabToken": "",
+    "GitlabToken": "",
+    "pro": {
+      "base_url": "https://atmos-pro.com",
+      "endpoint": "api/v1",
+      "github_oidc": {}
+    },
+    "telemetry": {
+      "enabled": true,
+      "endpoint": "https://us.i.posthog.com",
+      "token": "phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS"
+    }
+  },
+  "describe": {
+    "settings": {}
   },
   "vendor": {
-    "base_path": ""
+    "base_path": "",
+    "list": {
+      "format": "",
+      "columns": null
+    }
   },
   "initialized": true,
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
@@ -132,6 +162,7 @@
   ],
   "terraformDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/terraform",
   "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "Check": {
@@ -141,9 +172,18 @@
     }
   },
   "validate": {
-    "editorconfig": {
-      "color": true
-    }
+    "editorconfig": {}
   },
-  "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks/atmos"
+  "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks",
+  "import": null,
+  "docs": {
+    "max_width": 0,
+    "pagination": false,
+    "generate": {
+      "readme": {
+        "output": "./README.md",
+        "terraform": {}
+      }
+    }
+  }
 }

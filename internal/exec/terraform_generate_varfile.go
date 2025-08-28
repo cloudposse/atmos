@@ -2,8 +2,8 @@ package exec
 
 import (
 	"errors"
-	"fmt"
 
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -23,6 +23,21 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		return err
+	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		return err
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
@@ -33,13 +48,14 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
+	info.CliArgs = []string{"terraform", "generate", "varfile"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		return err
 	}
@@ -55,22 +71,14 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
+		varFilePath = constructTerraformComponentVarfilePath(&atmosConfig, &info)
 	}
 
 	// Print the component variables
-	u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+	log.Debug("Generating varfile for variables", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Write the variables to file
-	u.LogDebug("Writing the variables to file:")
-	u.LogDebug(varFilePath)
+	// Write the variables to a file.
+	log.Debug("Writing the variables to file", "file", varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)

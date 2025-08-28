@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -15,43 +16,57 @@ type params struct {
 	stack        string
 	component    string
 	key          string
+	query        string
 	defaultValue *string
 }
 
-func processTagStore(atmosConfig schema.AtmosConfiguration, input string, currentStack string) any {
-	log.Debug("Executing Atmos YAML function store", "input", input)
+func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
+	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
-	if err != nil {
-		u.LogErrorAndExit(err)
-	}
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	// Split the input on the pipe symbol to separate the store parameters and default value
 	parts := strings.Split(str, "|")
 	storePart := strings.TrimSpace(parts[0])
 
+	// Default value and query
 	var defaultValue *string
+	var query string
 	if len(parts) > 1 {
-		// Expecting the format: default <value>
-		defaultParts := strings.Fields(strings.TrimSpace(parts[1]))
-		if len(defaultParts) != 2 || defaultParts[0] != "default" {
-			log.Error(fmt.Sprintf("invalid default value format in: %s", str))
-			return fmt.Sprintf("invalid default value format in: %s", str)
+		// Expecting the format: default <value> or query <yq-expression>
+		for _, p := range parts[1:] {
+			pipeParts := strings.Fields(strings.TrimSpace(p))
+			if len(pipeParts) != 2 {
+				log.Error(invalidYamlFuncMsg, function, input, "invalid number of parameters after the pipe", len(pipeParts))
+				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+			}
+			v1 := strings.Trim(pipeParts[0], `"'`) // Remove surrounding quotes if present
+			v2 := strings.Trim(pipeParts[1], `"'`)
+			switch v1 {
+			case "default":
+				defaultValue = &v2
+			case "query":
+				query = v2
+			default:
+				log.Error(invalidYamlFuncMsg, function, input, "invalid identifier after the pipe", v1)
+				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+			}
 		}
-		val := strings.Trim(defaultParts[1], `"'`) // Remove surrounding quotes if present
-		defaultValue = &val
 	}
 
 	// Process the main store part
 	storeParts := strings.Fields(storePart)
 	partsLength := len(storeParts)
 	if partsLength != 3 && partsLength != 4 {
-		return fmt.Sprintf("invalid Atmos Store YAML function execution:: %s\ninvalid parameters: store_name, {stack}, component, key", input)
+		log.Error(invalidYamlFuncMsg, function, input, "invalid number of parameters", partsLength)
+		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 	}
 
 	retParams := params{
 		storeName:    strings.TrimSpace(storeParts[0]),
 		defaultValue: defaultValue,
+		query:        query,
 	}
 
 	if partsLength == 4 {
@@ -68,7 +83,8 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	store := atmosConfig.Stores[retParams.storeName]
 
 	if store == nil {
-		u.LogErrorAndExit(fmt.Errorf("invalid Atmos Store YAML function execution:: %s\nstore '%s' not found", input, retParams.storeName))
+		er := fmt.Errorf("failed to execute YAML function %s. Store %s not found", input, retParams.storeName)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
 	// Retrieve the value from the store
@@ -77,8 +93,17 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
-		u.LogErrorAndExit(fmt.Errorf("failed to get key: %s", err))
+		er := fmt.Errorf("error executing YAML function %s. Failed to get key %s. Error: %w", input, retParams.key, err)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	return value
+	// Execute the YQ expression if provided
+	res := value
+
+	if retParams.query != "" {
+		res, err = u.EvaluateYqExpression(atmosConfig, value, retParams.query)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	return res
 }

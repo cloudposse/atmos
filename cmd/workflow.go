@@ -2,13 +2,11 @@ package cmd
 
 import (
 	_ "embed"
-	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 //go:embed markdown/workflow.md
@@ -19,56 +17,50 @@ var workflowCmd = &cobra.Command{
 	Use:   "workflow",
 	Short: "Run predefined tasks using workflows",
 	Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
-	Example: "atmos workflow\n" +
-		"atmos workflow <name> --file <file>\n" +
-		"atmos workflow <name> --file <file> --stack <stack>\n" +
-		"atmos workflow <name> --file <file> --from-step <step-name>\n\n" +
-		"To resume the workflow from this step, run:\n" +
-		"atmos workflow deploy-infra --file workflow1 --from-step deploy-vpc\n\n" +
-		"For more details refer to https://atmos.tools/cli/commands/workflow/",
+
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// If no arguments are provided, start the workflow UI
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				return err
 			}
-			return
 		}
 
 		// Get the --file flag value
 		workflowFile, _ := cmd.Flags().GetString("file")
 
-		// If no file is provided, show invalid command error with usage information
+		// If no file is provided, show the usage information
 		if workflowFile == "" {
-			cmd.Usage()
+			err := cmd.Usage()
+			if err != nil {
+				return err
+			}
 		}
 
 		// Execute the workflow command
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
-			// Format common error messages
-			if strings.Contains(err.Error(), "does not exist") {
-				u.PrintErrorMarkdownAndExit("File Not Found", fmt.Errorf("`%v` was not found", workflowFile), "")
-			} else if strings.Contains(err.Error(), "No workflow exists with the name") {
-				u.PrintErrorMarkdownAndExit("Invalid Workflow Name", err, "")
-			} else {
-				// For other errors, use the standard error handler
-				u.PrintErrorMarkdownAndExit("", err, "")
+			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
+			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
+			if e.IsKnownWorkflowError(err) {
+				errUtils.Exit(1)
 			}
+			return err
 		}
+
+		return nil
 	},
 }
 
 func init() {
 	workflowCmd.DisableFlagParsing = false
-	workflowCmd.PersistentFlags().StringP("file", "f", "", "atmos workflow <name> --file <file>")
-	workflowCmd.PersistentFlags().Bool("dry-run", false, "atmos workflow <name> --file <file> --dry-run")
-	workflowCmd.PersistentFlags().StringP("stack", "s", "", "atmos workflow <name> --file <file> --stack <stack>")
+	workflowCmd.PersistentFlags().StringP("file", "f", "", "Specify the workflow file to run")
+	workflowCmd.PersistentFlags().Bool("dry-run", false, "Simulate the workflow without making any changes")
 	AddStackCompletion(workflowCmd)
-	workflowCmd.PersistentFlags().String("from-step", "", "atmos workflow <name> --file <file> --from-step <step-name>")
+	workflowCmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
 
 	RootCmd.AddCommand(workflowCmd)
 }

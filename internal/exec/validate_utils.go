@@ -72,7 +72,6 @@ func ValidateWithOpa(
 	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
-
 	// Set timeout for schema validation
 	if timeoutSeconds == 0 {
 		timeoutSeconds = 20

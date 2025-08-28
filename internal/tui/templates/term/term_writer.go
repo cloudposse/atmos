@@ -43,7 +43,8 @@ func NewResponsiveWriter(w io.Writer) io.Writer {
 	var limit uint
 	switch {
 	case width >= maxWidth:
-		limit = maxWidth
+		// TODO: Why did we have this limit. My terminal does not work as per expectations for long sentences in markdown
+		// limit = maxWidth
 	case width >= mediumWidth:
 		limit = mediumWidth
 	case width >= minWidth:

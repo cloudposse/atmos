@@ -1,0 +1,14 @@
+components:
+  helmfile:
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "components/helmfile"
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_USE_EKS' ENV var
+    # If not specified, defaults to 'true'
+    use_eks: true
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV var
+    kubeconfig_path: "/dev/shm"
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV var
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"

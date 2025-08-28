@@ -3,72 +3,85 @@ package exec
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
-
 	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeDependentsCmd executes `describe dependents` command
-func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
-	if err != nil {
-		return err
+type DescribeDependentsExecProps struct {
+	File                 string
+	Format               string
+	Query                string
+	Stack                string
+	Component            string
+	IncludeSettings      bool
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+}
+
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+type DescribeDependentsExec interface {
+	Execute(describeDependentsExecProps *DescribeDependentsExecProps) error
+}
+
+type describeDependentsExec struct {
+	atmosConfig               *schema.AtmosConfiguration
+	executeDescribeDependents func(
+		atmosConfig *schema.AtmosConfiguration,
+		component string,
+		stack string,
+		includeSettings bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		skip []string,
+	) ([]schema.Dependent, error)
+	newPageCreator        pager.PageCreator
+	isTTYSupportForStdout func() bool
+	evaluateYqExpression  func(
+		atmosConfig *schema.AtmosConfiguration,
+		data any,
+		yq string,
+	) (any, error)
+}
+
+// NewDescribeDependentsExec creates a new `describe dependents` executor.
+func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeDependentsExec {
+	return &describeDependentsExec{
+		executeDescribeDependents: ExecuteDescribeDependents,
+		newPageCreator:            pager.New(),
+		isTTYSupportForStdout:     term.IsTTYSupportForStdout,
+		atmosConfig:               atmosConfig,
+		evaluateYqExpression:      u.EvaluateYqExpression,
 	}
+}
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	err = ValidateStacks(atmosConfig)
-	if err != nil {
-		return err
-	}
-
-	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `component`")
-	}
-
-	flags := cmd.Flags()
-
-	stack, err := flags.GetString("stack")
-	if err != nil {
-		return err
-	}
-
-	format, err := flags.GetString("format")
-	if err != nil {
-		return err
-	}
-
-	file, err := flags.GetString("file")
-	if err != nil {
-		return err
-	}
-
-	query, err := flags.GetString("query")
-	if err != nil {
-		return err
-	}
-
-	component := args[0]
-
-	dependents, err := ExecuteDescribeDependents(atmosConfig, component, stack, false)
+func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDependentsExecProps) error {
+	dependents, err := d.executeDescribeDependents(
+		d.atmosConfig,
+		describeDependentsExecProps.Component,
+		describeDependentsExecProps.Stack,
+		describeDependentsExecProps.IncludeSettings,
+		describeDependentsExecProps.ProcessTemplates,
+		describeDependentsExecProps.ProcessYamlFunctions,
+		describeDependentsExecProps.Skip,
+	)
 	if err != nil {
 		return err
 	}
 
 	var res any
 
-	if query != "" {
-		res, err = u.EvaluateYqExpression(&atmosConfig, dependents, query)
+	if describeDependentsExecProps.Query != "" {
+		res, err = d.evaluateYqExpression(d.atmosConfig, dependents, describeDependentsExecProps.Query)
 		if err != nil {
 			return err
 		}
@@ -76,31 +89,59 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		res = dependents
 	}
 
-	err = printOrWriteToFile(format, file, res)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return viewWithScroll(&viewWithScrollProps{
+		atmosConfig:           d.atmosConfig,
+		format:                describeDependentsExecProps.Format,
+		file:                  describeDependentsExecProps.File,
+		res:                   res,
+		pageCreator:           d.newPageCreator,
+		isTTYSupportForStdout: d.isTTYSupportForStdout,
+		displayName:           fmt.Sprintf("Dependents of '%s' in stack '%s'", describeDependentsExecProps.Component, describeDependentsExecProps.Stack),
+		printOrWriteToFile:    printOrWriteToFile,
+	})
 }
 
-// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
+// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 func ExecuteDescribeDependents(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	includeSettings bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Dependent, error) {
+	if atmosConfig == nil {
+		return nil, errUtils.ErrAtmosConfigIsNil
+	}
+
 	dependents := []schema.Dependent{}
 	var ok bool
 
 	// Get all stacks with all components
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
+	stacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		processTemplates,
+		processYamlFunctions,
+		false,
+		skip,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	providedComponentSection, err := ExecuteDescribeComponent(
+		component,
+		stack,
+		processTemplates,
+		processYamlFunctions,
+		skip,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +236,21 @@ func ExecuteDescribeDependents(
 						continue
 					}
 
+					// Include the component if any of the following is true:
+					// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`
+					// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`
+					if dependsOn.Stack != "" {
+						if stack != dependsOn.Stack {
+							continue
+						}
+					} else if stack != stackName &&
+						dependsOn.Namespace == "" &&
+						dependsOn.Tenant == "" &&
+						dependsOn.Environment == "" &&
+						dependsOn.Stage == "" {
+						continue
+					}
+
 					// Include the component from the stack if any of the following is true:
 					// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`
 					// - `namespace` is not specified in `depends_on` and the provided component is from the same namespace as the component in `depends_on`
@@ -241,7 +297,7 @@ func ExecuteDescribeDependents(
 
 					dependent := schema.Dependent{
 						Component:     stackComponentName,
-						ComponentPath: BuildComponentPath(atmosConfig, stackComponentMap, stackComponentType),
+						ComponentPath: BuildComponentPath(atmosConfig, &stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
 						Stack:         stackName,
 						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.Replace(stackComponentName, "/", "-", -1)),
@@ -289,5 +345,35 @@ func ExecuteDescribeDependents(
 		}
 	}
 
+	sortDependentsByStackSlugRecursive(dependents)
 	return dependents, nil
+}
+
+// sortDependentsByStackSlug sorts the dependents by stack slug.
+func sortDependentsByStackSlug(deps []schema.Dependent) {
+	if len(deps) == 0 {
+		return
+	}
+	sort.SliceStable(deps, func(i, j int) bool {
+		// primary key
+		if deps[i].StackSlug != deps[j].StackSlug {
+			return deps[i].StackSlug < deps[j].StackSlug
+		}
+		// tie-breakers to keep order stable across runs
+		if deps[i].Component != deps[j].Component {
+			return deps[i].Component < deps[j].Component
+		}
+		return deps[i].Stack < deps[j].Stack
+	})
+}
+
+// sortDependentsByStackSlugRecursive sorts the dependents by stack slug recursively.
+func sortDependentsByStackSlugRecursive(deps []schema.Dependent) {
+	if len(deps) == 0 {
+		return
+	}
+	for i := range deps {
+		sortDependentsByStackSlugRecursive(deps[i].Dependents)
+	}
+	sortDependentsByStackSlug(deps)
 }

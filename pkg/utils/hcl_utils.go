@@ -4,14 +4,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hashicorp/hcl"
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"
 	jsonParser "github.com/hashicorp/hcl/json/parser"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console
@@ -31,7 +29,6 @@ func PrintAsHcl(data any) error {
 
 // WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file
 func WriteToFileAsHcl(
-	atmosConfig schema.AtmosConfiguration,
 	filePath string,
 	data any,
 	fileMode os.FileMode,
@@ -49,7 +46,7 @@ func WriteToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(err.Error())
+			log.Warn(err.Error())
 		}
 	}(f)
 
@@ -90,7 +87,6 @@ func ConvertToHclAst(data any) (ast.Node, error) {
 // https://dev.to/pdcommunity/write-terraform-files-in-go-with-hclwrite-2e1j
 // https://pkg.go.dev/github.com/hashicorp/hcl/v2/hclwrite
 func WriteTerraformBackendConfigToFileAsHcl(
-	atmosConfig schema.AtmosConfiguration,
 	filePath string,
 	backendType string,
 	backendConfig map[string]any,
@@ -130,7 +126,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(err.Error())
+			log.Warn(err.Error())
 		}
 	}(f)
 
@@ -140,14 +136,4 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	}
 
 	return nil
-}
-
-// IsHCL checks if data is in HCL format
-func IsHCL(data string) bool {
-	if strings.TrimSpace(data) == "" {
-		return false
-	}
-
-	var hclData any
-	return hcl.Unmarshal([]byte(data), &hclData) == nil
 }

@@ -27,18 +27,23 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
-// Command-line flag for regenerating snapshots
+// Command-line flag for regenerating snapshots.
 var (
 	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 	startingDir         string
 	snapshotBaseDir     string
 )
 
-// Define styles using lipgloss
+// Define styles using lipgloss.
 var (
 	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
 	removedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("160")) // Red
@@ -46,13 +51,14 @@ var (
 var logger *log.Logger
 
 type Expectation struct {
-	Stdout       []MatchPattern            `yaml:"stdout"`        // Expected stdout output
-	Stderr       []MatchPattern            `yaml:"stderr"`        // Expected stderr output
-	ExitCode     int                       `yaml:"exit_code"`     // Expected exit code
-	FileExists   []string                  `yaml:"file_exists"`   // Files to validate
-	FileContains map[string][]MatchPattern `yaml:"file_contains"` // File contents to validate (file to patterns map)
-	Diff         []string                  `yaml:"diff"`          // Acceptable differences in snapshot
-	Timeout      string                    `yaml:"timeout"`       // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
+	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output
+	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output
+	ExitCode      int                       `yaml:"exit_code"`       // Expected exit code
+	FileExists    []string                  `yaml:"file_exists"`     // Files to validate
+	FileNotExists []string                  `yaml:"file_not_exists"` // Files that should not exist
+	FileContains  map[string][]MatchPattern `yaml:"file_contains"`   // File contents to validate (file to patterns map)
+	Diff          []string                  `yaml:"diff"`            // Acceptable differences in snapshot
+	Timeout       string                    `yaml:"timeout"`         // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
 }
 type TestCase struct {
 	Name        string            `yaml:"name"`        // Name of the test
@@ -248,7 +254,24 @@ func isCIEnvironment() bool {
 
 // collapseExtraSlashes replaces multiple consecutive slashes with a single slash.
 func collapseExtraSlashes(s string) string {
-	return regexp.MustCompile("/+").ReplaceAllString(s, "/")
+	// Normalize the protocol to have exactly two slashes after http: or https:
+	protocolRegex := regexp.MustCompile(`(?i)(https?):/*`)
+	s = protocolRegex.ReplaceAllString(s, "$1://")
+
+	// Split into protocol and the rest of the URL
+	parts := regexp.MustCompile(`(?i)^(https?://)(.*)$`).FindStringSubmatch(s)
+	if len(parts) == 3 {
+		protocol := parts[1]
+		rest := parts[2]
+		// Collapse multiple slashes in the rest part
+		rest = regexp.MustCompile(`/+`).ReplaceAllString(rest, "/")
+		// Remove any leading slashes after the protocol to avoid triple slashes
+		rest = strings.TrimLeft(rest, "/")
+		return protocol + rest
+	}
+
+	// If no protocol, collapse all slashes
+	return regexp.MustCompile(`/+`).ReplaceAllString(s, "/")
 }
 
 // sanitizeOutput replaces occurrences of the repository's absolute path in the output
@@ -312,6 +335,15 @@ func sanitizeOutput(output string) (string, error) {
 		return groups[1] + fixedRemainder
 	})
 
+	// 6. Handle URLs in the output to ensure they are normalized.
+	//    Use a regex to find URLs and collapse extra slashes while preserving the protocol.
+	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
+	result = urlRegex.ReplaceAllStringFunc(result, collapseExtraSlashes)
+
+	// 7. Remove the random number added to file name like `atmos-import-454656846`
+	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
+	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
+
 	return result, nil
 }
 
@@ -330,7 +362,7 @@ func sanitizeTestName(name string) string {
 	return name
 }
 
-// Drop any lines matched by the ignore patterns so they do not affect the comparison
+// Drop any lines matched by the ignore patterns so they do not affect the comparison.
 func applyIgnorePatterns(input string, patterns []string) string {
 	lines := strings.Split(input, "\n") // Split input into lines
 	var filteredLines []string          // Store lines that don't match the patterns
@@ -352,7 +384,7 @@ func applyIgnorePatterns(input string, patterns []string) string {
 	return strings.Join(filteredLines, "\n") // Join the filtered lines back into a string
 }
 
-// Simulate TTY command execution with optional stdin and proper stdout redirection
+// Simulate TTY command execution with optional stdin and proper stdout redirection.
 func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, error) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
@@ -402,7 +434,7 @@ func ptyError(err error) error {
 	return nil
 }
 
-// loadTestSuites loads and merges all .yaml files from the test-cases directory
+// loadTestSuites loads and merges all .yaml files from the test-cases directory.
 func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	var mergedSuite TestSuite
 
@@ -425,7 +457,7 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	return &mergedSuite, nil
 }
 
-// Entry point for tests to parse flags and handle setup/teardown
+// Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
@@ -468,7 +500,7 @@ func TestMain(m *testing.M) {
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
 	flag.Parse() // Parse command-line flags
-	os.Exit(m.Run())
+	errUtils.Exit(m.Run())
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
@@ -517,7 +549,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
 		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
-
 		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
 		filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
@@ -560,13 +591,27 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
 	}
 
+	// Include the system PATH in the test environment
+	tc.Env["PATH"] = os.Getenv("PATH")
+
+	// Remove the cache file before running the test.
+	// This is to ensure that the test is not affected by the cache file.
+	err = removeCacheFile()
+	assert.NoError(t, err, "failed to remove cache file")
+
+	// Preserve the CI environment variables.
+	// This is to ensure that the test is not affected by the CI environment variables.
+	currentEnvVars := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(currentEnvVars)
+
 	// Prepare the command using the context
 	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
-	// Set environment variables
-	envVars := os.Environ()
+	// Set environment variables without inheriting from the current environment.
+	// This ensures an isolated test environment, preventing unintended side effects
+	// and improving reproducibility across different systems.
+	var envVars []string
 	for key, value := range tc.Env {
-		// t.Logf("Setting env: %s=%s", key, value)
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Env = envVars
@@ -658,6 +703,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
+	// Validate file not existence
+	if !verifyFileNotExists(t, tc.Expect.FileNotExists) {
+		t.Errorf("Description: %s", tc.Description)
+	}
+
 	// Validate file contents
 	if !verifyFileContains(t, tc.Expect.FileContains) {
 		t.Errorf("Description: %s", tc.Description)
@@ -667,6 +717,22 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if !verifySnapshot(t, tc, stdout.String(), stderr.String(), *regenerateSnapshots) {
 		t.Errorf("Description: %s", tc.Description)
 	}
+}
+
+func removeCacheFile() error {
+	cacheFilePath, err := config.GetCacheFilePath()
+	if err != nil {
+		return nil
+	}
+
+	if _, err := os.Stat(cacheFilePath); os.IsNotExist(err) {
+		return nil
+	}
+	err = os.Remove(cacheFilePath)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func TestCLICommands(t *testing.T) {
@@ -766,6 +832,20 @@ func verifyFileExists(t *testing.T, files []string) bool {
 	return success
 }
 
+func verifyFileNotExists(t *testing.T, files []string) bool {
+	success := true
+	for _, file := range files {
+		if _, err := os.Stat(file); err == nil {
+			t.Errorf("Reason: File %q exists but it should not.", file)
+			success = false
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("Reason: Unexpected error checking file %q: %v", file, err)
+			success = false
+		}
+	}
+	return success
+}
+
 func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bool {
 	success := true
 	for file, patterns := range filePatterns {
@@ -821,7 +901,7 @@ func readSnapshot(t *testing.T, fullPath string) string {
 	return string(data)
 }
 
-// Generate a unified diff using gotextdiff
+// Generate a unified diff using gotextdiff.
 func generateUnifiedDiff(actual, expected string) string {
 	edits := myers.ComputeEdits(span.URIFromPath("actual"), expected, actual)
 	unified := gotextdiff.ToUnified("expected", "actual", expected, edits)
@@ -844,7 +924,7 @@ func generateUnifiedDiff(actual, expected string) string {
 	return buf.String()
 }
 
-// Generate a diff using diffmatchpatch
+// Generate a diff using diffmatchpatch.
 func DiffStrings(x, y string) string {
 	dmp := diffmatchpatch.New()
 	diffs := dmp.DiffMain(x, y, false)
@@ -852,7 +932,7 @@ func DiffStrings(x, y string) string {
 	return dmp.DiffPrettyText(diffs)
 }
 
-// Colorize diff output based on the threshold
+// Colorize diff output based on the threshold.
 func colorizeDiffWithThreshold(actual, expected string, threshold int) string {
 	dmp := diffmatchpatch.New()
 	diffs := dmp.DiffMain(expected, actual, false)
@@ -958,7 +1038,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	return true
 }
 
-// Clean up untracked files in the working directory
+// Clean up untracked files in the working directory.
 func cleanDirectory(t *testing.T, workdir string) error {
 	// Find the root of the Git repository
 	repoRoot, err := findGitRepoRoot(workdir)
@@ -1042,7 +1122,7 @@ func checkIfRebuildNeeded(binaryPath string, srcDir string) (bool, error) {
 	return latestModTime.After(binModTime), nil
 }
 
-// findGitRepo finds the Git repository root
+// findGitRepo finds the Git repository root.
 func findGitRepoRoot(path string) (string, error) {
 	// Open the Git repository starting from the given path
 	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})

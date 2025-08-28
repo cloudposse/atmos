@@ -72,7 +72,7 @@ const config = {
         [
             "posthog-docusaurus",
             {
-              apiKey: "phc_G3idXOACKt4vIzgRu2FVP8ORO1D2VlkeEwX9mE2jDvT",
+              apiKey: "phc_uoINtjtkrInRNNYGdTU6VyFzEL2fWwB8le1xSxvSOjk",
               appUrl: "https://us.i.posthog.com",
               enableInDevelopment: false, // optional
             },
@@ -97,14 +97,14 @@ const config = {
                     routeBasePath: '/',
                     sidebarPath: require.resolve('./sidebars.js'),
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
-                        return `https://github.com/cloudposse/atmos/edit/master/website/${versionDocsDirPath}/${docPath}`;
+                        return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
                     exclude: ['README.md'],
                 },
                 blog: {
                     showReadingTime: true,
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
-                        return `https://github.com/cloudposse/atmos/edit/master/website/${versionDocsDirPath}/${docPath}`;
+                        return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
                     exclude: ['README.md'],
                 },

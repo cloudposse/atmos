@@ -38,13 +38,14 @@ Terraform remote state is incompatible with the `local` backend type. This is be
 </Note>
 
 
-:::tip New & Improved Way to Share Data
-Atmos now supports a new way to share data between components using the template function `atmos.Component`
-and the Atmos YAML function `!terraform.output`
-in your Stack configurations:
+:::tip New & Improved Ways to Share Data
+Atmos now supports new ways to share data between components using the template function `atmos.Component`
+and the Atmos YAML functions `!terraform.state` and `!terraform.output` in your Stack configurations:
 
-```
+```shell
 {{ (atmos.Component <component> <stack>).outputs.<output_name> }}
+
+!terraform.state <component> <stack> <output_name>
 
 !terraform.output <component> <stack> <output_name>
 ```
@@ -54,7 +55,9 @@ of an Atmos component in a stack.
 
 For more details on `atmos.Component` function, refer to [`atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component).
 
-The `!terraform.output` Atmos YAML function allows reading any output (remote state) of an Atmos component in a stack.
+The `!terraform.state` and `!terraform.output` Atmos YAML functions allow reading any output (remote state) of an Atmos component in a stack.
+
+For more details on `!terraform.state` YAML function, refer to [`!terraform.state`](/core-concepts/stacks/yaml-functions/terraform.state).
 
 For more details on `!terraform.output` YAML function, refer to [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output).
 :::
@@ -322,10 +325,10 @@ For this to work for both the `atmos` CLI and the Terraform provider, we recomme
   set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
 
 - When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
-  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml)
-  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/Dockerfile)
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/Dockerfile)
   by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
-  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
+  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/main/examples/quick-start)
   uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
   var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
 
@@ -353,13 +356,13 @@ For this to work for both the `atmos` CLI and the Terraform provider, we recomme
 
 <ActionCard title="Use Remote State in Stack Configurations">
 Atmos supports alternative ways to read the outputs (remote state) of components directly in Atmos stack manifests by
-using the [`atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component) Go template function and
-the [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output) Atmos YAML function instead of using
+using the [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output) Atmos YAML function
+and the [`atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component) Go template function instead of using
 the [`remote-state`](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module
 and configuring Terraform/OpenTofu components to use the module.
 
-<PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Component">Learn how to use 'atmos.Component' template function</PrimaryCTA>
-
 <PrimaryCTA to="/core-concepts/stacks/yaml-functions/terraform.output">Learn how to use '!terraform.output' YAML function</PrimaryCTA>
+
+<PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Component">Learn how to use 'atmos.Component' template function</PrimaryCTA>
 
 </ActionCard>
