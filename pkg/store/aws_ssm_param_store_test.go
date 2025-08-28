@@ -216,7 +216,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:        "test-value",
 			writeRoleArn: aws.String("arn:aws:iam::123456789012:role/write-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("UseProfile", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/write-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(&sts.AssumeRoleOutput{
@@ -243,7 +243,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:        "test-value",
 			writeRoleArn: aws.String("arn:aws:iam::123456789012:role/write-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("UseProfile", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/write-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(nil, fmt.Errorf("failed to assume role"))
@@ -489,7 +489,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:         "config-key",
 			readRoleArn: aws.String("arn:aws:iam::123456789012:role/read-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("UseProfile", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/read-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(&sts.AssumeRoleOutput{
@@ -517,7 +517,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:         "config-key",
 			readRoleArn: aws.String("arn:aws:iam::123456789012:role/read-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("UseProfile", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/read-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(nil, fmt.Errorf("failed to assume role"))

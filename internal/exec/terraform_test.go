@@ -14,7 +14,7 @@ import (
 
 // TestExecuteTerraform_ExportEnvVar check that when executing the terraform apply command.
 // It checks that the environment variables are correctly exported and used.
-// E var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
+// Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
 // Check that `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` point to a directory.
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	// Capture the starting working directory
