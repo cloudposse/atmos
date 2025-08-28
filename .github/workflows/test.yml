@@ -574,6 +574,73 @@ jobs:
               ]
             }
 
+  integration-oidc-localstack:
+    needs: [build]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - { os: ubuntu-latest, target: linux }
+    runs-on: ${{ matrix.flavor.os }}
+    steps:
+      - name: Check out code into the Go module directory
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: actions/checkout@v4
+
+      - name: Add GNU tar to flavor.target (significantly faster than windows tar)
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
+
+      - name: Download build artifacts for ${{ matrix.flavor.target }}
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.flavor.target }}
+          path: ${{ github.workspace }}
+
+      - name: Add build artifacts directory to PATH for linux or macos
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
+        run: |
+          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          chmod +x "${{ github.workspace }}/atmos"
+
+      - name: Add build artifacts directory to PATH for windows
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        run: |
+          echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
+
+      - name: Install Terraform
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Install OpenTofu
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
+          tofu_wrapper: false
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        with:
+          go-version-file: "go.mod"
+        id: go
+      - name: Get dependencies
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          make deps
+      - name: Run OIDC + LocalStack integration tests
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true" # optional: reduce perms footprint
+          DOCKER_TLS_VERIFY: "" # ensure local docker
+        run: |
+          go test -tags integration_oidc_localstack ./tests -run TestOIDC_Login_And_Terraform_With_Localstack -v -count=1
+
   release:
     needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'
