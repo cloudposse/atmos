@@ -18,7 +18,7 @@ components:
       env:
         TF_VAR_environment: "{{ .Config.environment }}"
         TF_VAR_cloud_provider: "{{ .Config.cloud_provider }}"
-        TF_VAR_project_name: "{{ .Config.project_name }}"
+        TF_VAR_project_name: "{{ .Config.name }}"
         TF_VAR_author: "{{ .Config.author }}"
         TF_VAR_year: "{{ .Config.year }}"
         TF_VAR_license: "{{ .Config.license }}"

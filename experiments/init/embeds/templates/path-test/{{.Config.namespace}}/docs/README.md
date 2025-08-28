@@ -6,8 +6,8 @@ This is the documentation for the **{{.Config.namespace}}** namespace.
 Created by: {{.Config.author | default "Unknown Author"}}
 
 ## Project Details
-- Project Name: {{.ProjectName}}
-- Target Path: {{.TargetPath}}
+- Template Name: {{.TemplateName}}
+- Scaffold Path: {{.ScaffoldPath}}
 - Namespace: {{.Config.namespace}}
 
 ## Description
