@@ -34,6 +34,10 @@ var (
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_template' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrMissingStackNameTemplateAndEnv        = errors.New("stack name pattern must be provided in 'stacks.name_template' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
+	ErrMissingStackNameTemplateCliConfig     = errors.New("stack name pattern must be provided in 'stacks.name_template' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
+	ErrMissingStackBasePath                  = errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
+	ErrMissingStackIncludedPaths             = errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")

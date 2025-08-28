@@ -122,10 +122,9 @@ func parseFlags() map[string]string {
 	return flags
 }
 
-// handleDeprecatedSettings handles deprecated configuration fields and migrates them to new locations
+// handleDeprecatedSettings handles deprecated configuration fields and migrates them to new locations.
 func handleDeprecatedSettings(cfg *schema.AtmosConfiguration) {
 	// Handle deprecated no_color
-	//nolint:staticcheck // SA1019: NoColor is deprecated but we need to check it for migration
 	if cfg.Settings.Terminal.NoColor {
 		u.NotifyDeprecatedField("settings.terminal.no_color", "settings.terminal.color")
 		if cfg.Settings.Terminal.Color == nil {

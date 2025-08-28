@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -411,11 +411,11 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) error {
 	if isProcessStack && len(atmosConfig.Stacks.BasePath) < 1 {
-		return errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
+		return errUtils.ErrMissingStackBasePath
 	}
 
 	if isProcessStack && len(atmosConfig.Stacks.IncludedPaths) < 1 {
-		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
+		return errUtils.ErrMissingStackIncludedPaths
 	}
 
 	if len(atmosConfig.Logs.Level) > 0 {
@@ -658,7 +658,7 @@ func GetContextFromVars(vars map[string]any) schema.Context {
 func GetContextPrefix(stack string, context schema.Context, stackNamePattern string, stackFile string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
-			errors.New("stack name pattern must be provided in 'stacks.name_template' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
+			errUtils.ErrMissingStackNameTemplateAndEnv
 	}
 
 	contextPrefix := ""

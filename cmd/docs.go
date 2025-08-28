@@ -107,8 +107,8 @@ var docsCmd = &cobra.Command{
 			}
 
 			pager := atmosConfig.Settings.Terminal.IsPagerEnabled()
-			if !pager && atmosConfig.Docs.Pagination {
-				pager = atmosConfig.Docs.Pagination
+			if !pager && atmosConfig.Docs.Pagination { //nolint:staticcheck // SA1019: Docs.Pagination is deprecated but we need to check it for migration
+				pager = atmosConfig.Docs.Pagination //nolint:staticcheck // SA1019: Docs.Pagination is deprecated but we need to check it for migration
 				u.NotifyDeprecatedField("docs.pagination", "settings.terminal.pager")
 			}
 

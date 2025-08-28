@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -9,6 +8,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -135,7 +135,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 			}
 
 			if len(GetStackNamePattern(&atmosConfig)) < 1 {
-				return errors.New("stack name pattern must be provided in `stacks.name_template` CLI config or `ATMOS_STACKS_NAME_PATTERN` ENV variable")
+				return errUtils.ErrMissingStackNameTemplateCliConfig
 			}
 
 			stack, err := cfg.GetStackNameFromContextAndStackNamePattern(
