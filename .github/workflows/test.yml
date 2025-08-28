@@ -198,7 +198,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make testacc-cover
+        run: make testacc-ci
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'

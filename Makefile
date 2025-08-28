@@ -68,4 +68,30 @@ testacc-cover: get
 testacc-coverage: testacc-cover
 	go tool cover -html=coverage.out -o coverage.html
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage
+# New target with test summary for local development
+testacc-summary: get
+	@echo "Running tests with coverage and summary"
+	@go test $(TEST) -v -json -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp 2>&1 | \
+		tee test-results.json | \
+		go run ./tools/test-summary/main.go -format=console
+	@cat coverage.out.tmp | grep -v "mock_" > coverage.out
+	@echo ""
+	@echo "=== GENERATING TEST SUMMARY ==="
+	@go run ./tools/test-summary/main.go -input=test-results.json -format=github
+
+# CI target (alias for testacc-summary)
+testacc-ci: testacc-summary
+
+# View existing test results without re-running tests
+testacc-view-summary:
+	@if [ -f test-results.json ]; then \
+		go run ./tools/test-summary/main.go -input=test-results.json -format=markdown; \
+	else \
+		echo "No test-results.json found. Run 'make testacc-summary' first."; \
+	fi
+
+# Clean test artifacts
+clean-test:
+	rm -f test-results.json test-summary.md coverage.out coverage.out.tmp coverage.html
+
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-summary testacc-ci testacc-view-summary clean-test
