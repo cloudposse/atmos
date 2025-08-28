@@ -488,51 +488,51 @@ func changeWorkingDir(t *testing.T, dir string) {
 }
 func TestParseFlagsForPager(t *testing.T) {
 	tests := []struct {
-		name          string
-		args          []string
-		expectedPager string
+		name            string
+		args            []string
+		expectedPager   string
 		expectedNoColor bool
 	}{
 		{
-			name:          "no pager flag",
-			args:          []string{"atmos", "describe", "config"},
-			expectedPager: "",
+			name:            "no pager flag",
+			args:            []string{"atmos", "describe", "config"},
+			expectedPager:   "",
 			expectedNoColor: false,
 		},
 		{
-			name:          "pager flag without value",
-			args:          []string{"atmos", "describe", "config", "--pager"},
-			expectedPager: "true",
+			name:            "pager flag without value",
+			args:            []string{"atmos", "describe", "config", "--pager"},
+			expectedPager:   "true",
 			expectedNoColor: false,
 		},
 		{
-			name:          "pager flag with true",
-			args:          []string{"atmos", "describe", "config", "--pager=true"},
-			expectedPager: "true",
+			name:            "pager flag with true",
+			args:            []string{"atmos", "describe", "config", "--pager=true"},
+			expectedPager:   "true",
 			expectedNoColor: false,
 		},
 		{
-			name:          "pager flag with false",
-			args:          []string{"atmos", "describe", "config", "--pager=false"},
-			expectedPager: "false",
+			name:            "pager flag with false",
+			args:            []string{"atmos", "describe", "config", "--pager=false"},
+			expectedPager:   "false",
 			expectedNoColor: false,
 		},
 		{
-			name:          "pager flag with less",
-			args:          []string{"atmos", "describe", "config", "--pager=less"},
-			expectedPager: "less",
+			name:            "pager flag with less",
+			args:            []string{"atmos", "describe", "config", "--pager=less"},
+			expectedPager:   "less",
 			expectedNoColor: false,
 		},
 		{
-			name:          "no-color flag",
-			args:          []string{"atmos", "describe", "config", "--no-color"},
-			expectedPager: "",
+			name:            "no-color flag",
+			args:            []string{"atmos", "describe", "config", "--no-color"},
+			expectedPager:   "",
 			expectedNoColor: true,
 		},
 		{
-			name:          "both pager and no-color flags",
-			args:          []string{"atmos", "describe", "config", "--pager=more", "--no-color"},
-			expectedPager: "more",
+			name:            "both pager and no-color flags",
+			args:            []string{"atmos", "describe", "config", "--pager=more", "--no-color"},
+			expectedPager:   "more",
 			expectedNoColor: true,
 		},
 	}
@@ -576,17 +576,17 @@ func TestSetLogConfigWithPager(t *testing.T) {
 		expectedColor   bool
 	}{
 		{
-			name:          "pager from flag",
-			args:          []string{"atmos", "--pager=less"},
-			expectedPager: "less",
+			name:            "pager from flag",
+			args:            []string{"atmos", "--pager=less"},
+			expectedPager:   "less",
 			expectedNoColor: false,
 		},
 		{
-			name:          "no-color flag sets both NoColor and Color",
-			args:          []string{"atmos", "--no-color"},
-			expectedPager: "",
+			name:            "no-color flag sets both NoColor and Color",
+			args:            []string{"atmos", "--no-color"},
+			expectedPager:   "",
 			expectedNoColor: true,
-			expectedColor: false,
+			expectedColor:   false,
 		},
 	}
 
@@ -735,7 +735,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			// Save original state
 			originalArgs := os.Args
 			originalEnvVars := make(map[string]string)
-			
+
 			// Clear and save relevant environment variables
 			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR"}
 			for _, envVar := range envVarsToCheck {
@@ -771,7 +771,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			v := viper.New()
 			v.SetEnvPrefix("ATMOS")
 			v.AutomaticEnv()
-			
+
 			// Bind specific environment variables
 			v.BindEnv("settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 			v.BindEnv("settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")

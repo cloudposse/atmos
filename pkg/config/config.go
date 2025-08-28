@@ -83,7 +83,7 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	} else if flagKeyValue == "false" {
 		atmosConfig.Settings.Terminal.NoColor = false
 	}
-	
+
 	// Handle --pager global flag
 	if v, ok := flagKeyValue["pager"]; ok {
 		atmosConfig.Settings.Terminal.Pager = v
