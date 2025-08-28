@@ -13,6 +13,9 @@
     "helmfile": {
       "$ref": "#/definitions/helmfile"
     },
+    "packer": {
+      "$ref": "#/definitions/packer"
+    },
     "vars": {
       "$ref": "#/definitions/vars"
     },
@@ -62,6 +65,11 @@
         {
           "required": [
             "helmfile"
+          ]
+        },
+        {
+          "required": [
+            "packer"
           ]
         },
         {
@@ -139,6 +147,9 @@
         },
         "helmfile": {
           "$ref": "#/definitions/helmfile_components"
+        },
+        "packer": {
+          "$ref": "#/definitions/packer_components"
         }
       },
       "required": [],
@@ -300,6 +311,68 @@
       },
       "required": [],
       "title": "helmfile_component_manifest"
+    },
+    "packer": {
+      "type": "object",
+      "description": "Packer section",
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "$ref": "#/definitions/component"
+        },
+        "vars": {
+          "$ref": "#/definitions/vars"
+        },
+        "env": {
+          "$ref": "#/definitions/env"
+        },
+        "settings": {
+          "$ref": "#/definitions/settings"
+        },
+        "metadata": {
+          "$ref": "#/definitions/metadata"
+        }
+      },
+      "required": [],
+      "title": "packer"
+    },
+    "packer_components": {
+      "type": "object",
+      "description": "Packer components section",
+      "patternProperties": {
+        "^[\/a-zA-Z0-9-_{}. ]+$": {
+          "$ref": "#/definitions/packer_component_manifest"
+        }
+      },
+      "additionalProperties": false,
+      "title": "packer_components"
+    },
+    "packer_component_manifest": {
+      "type": "object",
+      "description": "Packer component manifest",
+      "additionalProperties": false,
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/metadata"
+        },
+        "component": {
+          "$ref": "#/definitions/component"
+        },
+        "vars": {
+          "$ref": "#/definitions/vars"
+        },
+        "env": {
+          "$ref": "#/definitions/env"
+        },
+        "settings": {
+          "$ref": "#/definitions/settings"
+        },
+        "command": {
+          "$ref": "#/definitions/command"
+        }
+      },
+      "required": [],
+      "title": "packer_component_manifest"
     },
     "command": {
       "type": "string",

@@ -39,6 +39,45 @@
             "type": {
               "type": "string",
               "description": "The type of step (e.g., shell, script, etc.)."
+            },
+            "retry": {
+              "type": "object",
+              "description": "Retry configuration for the step",
+              "properties": {
+                "max_attempts": {
+                  "type": "integer",
+                  "description": "Maximum number of retry attempts",
+                  "minimum": 1
+                },
+                "backoff_strategy": {
+                  "type": "string",
+                  "description": "Backoff strategy for retries",
+                  "enum": ["constant", "linear", "exponential"]
+                },
+                "initial_delay": {
+                  "type": "string",
+                  "description": "Initial delay between retries (e.g., '1s', '500ms')"
+                },
+                "max_delay": {
+                  "type": "string",
+                  "description": "Maximum delay between retries"
+                },
+                "random_jitter": {
+                  "type": "number",
+                  "description": "Random jitter to add to delay",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "multiplier": {
+                  "type": "number",
+                  "description": "Multiplier for exponential backoff",
+                  "minimum": 1
+                },
+                "max_elapsed_time": {
+                  "type": "string",
+                  "description": "Maximum elapsed time for all retries"
+                }
+              }
             }
           },
           "required": ["command"]
