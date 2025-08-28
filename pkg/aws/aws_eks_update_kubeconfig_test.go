@@ -28,8 +28,8 @@ func TestClusterNamePattern(t *testing.T) {
 	// Build `Context` from the variables
 	context := cfg.GetContextFromVars(componentVars)
 
-	// Build EKS cluster name using the `components.helmfile.cluster_name_pattern` config from `atmos.yaml`
-	// cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-{attributes}-eks-cluster"
+	// Build EKS cluster name using the `components.helmfile.cluster_name_template` config from `atmos.yaml`
+	// cluster_name_template: "{namespace}-{tenant}-{environment}-{stage}-{attributes}-eks-cluster"
 	clusterName := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
 	u.PrintMessage(fmt.Sprintf("Cluster name: %s", clusterName))
 	assert.Equal(t, "cp-plat-ue2-dev-blue-eks-cluster", clusterName)

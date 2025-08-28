@@ -18,7 +18,7 @@ atmos_cli_config:
             - '**/_defaults.yaml'
         included_paths:
             - deploy/**/*
-        name_pattern: '{stage}'
+        name_template: '{stage}'
     workflows:
         list:
             columns: []

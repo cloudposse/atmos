@@ -38,7 +38,7 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"	
+  name_template: "{stage}"	
 vendor:  
   base_path: "./test-vendor.yaml"
 logs:
