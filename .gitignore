@@ -51,3 +51,4 @@ internal/exec/output.*
 # Coverage files
 coverage.out
 coverage.html
+node_modules
