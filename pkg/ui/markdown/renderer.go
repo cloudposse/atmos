@@ -15,7 +15,7 @@ import (
 
 const defaultWidth = 80
 
-// Renderer is a markdown renderer using Glamour
+// Renderer is a markdown renderer using Glamour.
 type Renderer struct {
 	renderer              *glamour.TermRenderer
 	width                 uint
@@ -195,7 +195,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	}
 
 	if details != "" {
-		content += fmt.Sprintf("%s", details)
+		content += details
 	}
 
 	if suggestion != "" {
@@ -239,7 +239,8 @@ func WithWidth(width uint) Option {
 }
 
 func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
-	maxWidth := atmosConfig.Settings.Docs.MaxWidth
+	// Use Terminal.MaxWidth instead of deprecated Docs.MaxWidth
+	maxWidth := atmosConfig.Settings.Terminal.MaxWidth
 	// Create a terminal writer to get the optimal width
 	termWriter := term.NewResponsiveWriter(os.Stdout)
 	var wr *term.TerminalWriter
