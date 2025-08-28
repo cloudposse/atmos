@@ -70,66 +70,14 @@ func TestMerge_WithConflicts(t *testing.T) {
 	existing := "line1\nline2\nline3"
 	newContent := "line1\n<<<<<<< HEAD\nline2\n=======\nline2b\n>>>>>>> branch\nline3"
 
-	result, err := merger.Merge(existing, newContent, "test.txt")
-	if err != nil {
-		t.Fatalf("Expected no error for conflicts, got: %v", err)
+	// Since the merge package now returns an error for conflicts instead of resolving them
+	_, err := merger.Merge(existing, newContent, "test.txt")
+	if err == nil {
+		t.Fatal("Expected error for merge conflicts, got none")
 	}
 
-	if !strings.Contains(result, "# CONFLICT RESOLVED for test.txt") {
-		t.Error("Expected conflict resolution marker in result")
-	}
-}
-
-func TestResolveConflicts(t *testing.T) {
-	merger := NewThreeWayMerger(10)
-
-	content := `line1
-<<<<<<< HEAD
-line2
-=======
-line2b
->>>>>>> branch
-line3`
-
-	result := merger.resolveConflicts(content, "test.txt")
-
-	if !strings.Contains(result, "# CONFLICT RESOLVED for test.txt") {
-		t.Error("Expected conflict resolution marker")
-	}
-
-	if !strings.Contains(result, "line2") {
-		t.Error("Expected to preserve conflict content")
-	}
-}
-
-func TestResolveConflictBlock(t *testing.T) {
-	merger := NewThreeWayMerger(10)
-
-	conflictLines := []string{"line1", "line2", "line3"}
-	result := merger.resolveConflictBlock(conflictLines, "test.txt")
-
-	if len(result) == 0 {
-		t.Error("Expected non-empty result")
-	}
-
-	if !strings.Contains(result[0], "# CONFLICT RESOLVED for test.txt") {
-		t.Error("Expected conflict resolution marker")
-	}
-
-	// Check that all non-empty lines are preserved
-	for _, line := range conflictLines {
-		if strings.TrimSpace(line) != "" {
-			found := false
-			for _, resultLine := range result {
-				if strings.Contains(resultLine, line) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Errorf("Expected to find line %q in result", line)
-			}
-		}
+	if !strings.Contains(err.Error(), "merge conflicts detected") {
+		t.Errorf("Expected error about merge conflicts, got: %v", err)
 	}
 }
 

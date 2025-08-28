@@ -1,8 +1,8 @@
-# {{ .Config.project_name | title }}
+# {{ .Config.name | title }}
 
-{{ .Config.project_description }}
+{{ .Config.description }}
 
-## Project Information
+## Scaffold Template Information
 
 - **Author**: {{ .Config.author | default "Unknown" }}
 - **Year**: {{ .Config.year | default "2024" }}
@@ -15,7 +15,7 @@
 {{ if .Config.regions }}
 ## AWS Regions
 
-This project is configured to deploy to the following AWS regions:
+This scaffold template is configured to deploy to the following AWS regions:
 {{ if (kindIs "slice" .Config.regions) }}
 {{ range .Config.regions }}
 - {{ . | upper }}
@@ -32,13 +32,13 @@ This project is configured to deploy to the following AWS regions:
 {{ if .Config.enable_monitoring }}
 ## Monitoring
 
-This project includes monitoring and alerting infrastructure.
+This scaffold template includes monitoring and alerting infrastructure.
 {{ end }}
 
 {{ if .Config.enable_logging }}
 ## Logging
 
-This project includes centralized logging infrastructure.
+This scaffold template includes centralized logging infrastructure.
 {{ end }}
 
 ## Getting Started
@@ -48,14 +48,14 @@ This project includes centralized logging infrastructure.
 3. Run `atmos terraform plan` to see what will be deployed
 4. Run `atmos terraform apply` to deploy the infrastructure
 
-## Project Structure
+## Scaffold Template Structure
 
 ```
 .
 ├── atmos.yaml              # Atmos configuration
-├── project-config.yaml     # Project configuration schema
+├── scaffold.yaml           # Scaffold template configuration schema
 ├── .atmos/                 # Atmos configuration directory
-│   └── config.yaml         # User configuration values
+│   └── scaffold.yaml       # User configuration values
 ├── components/             # Terraform components
 ├── stacks/                 # Stack configurations
 └── README.md              # This file
@@ -63,7 +63,7 @@ This project includes centralized logging infrastructure.
 
 ## Configuration
 
-This project uses a rich configuration system. You can modify the configuration by editing `.atmos/config.yaml` or re-running the initialization process.
+This scaffold template uses a rich configuration system. You can modify the configuration by editing `.atmos/scaffold.yaml` or re-running the initialization process.
 
 To update the configuration:
 

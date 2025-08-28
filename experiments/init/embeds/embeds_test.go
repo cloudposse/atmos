@@ -3,6 +3,8 @@ package embeds
 import (
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/experiments/init/internal/types"
 )
 
 func TestGetAvailableConfigurations(t *testing.T) {
@@ -16,9 +18,16 @@ func TestGetAvailableConfigurations(t *testing.T) {
 	}
 
 	// Check for expected configurations
-	expectedConfigs := []string{"default", "atmos.yaml", ".editorconfig", ".gitignore"}
-	found := make(map[string]bool)
+	expectedConfigs := []string{
+		"atmos.yaml",
+		".editorconfig",
+		".gitignore",
+		"examples/demo-stacks",
+		"examples/demo-localstack",
+		"rich-project",
+	}
 
+	found := make(map[string]bool)
 	for name := range configs {
 		found[name] = true
 	}
@@ -37,17 +46,17 @@ func TestGetConfiguration(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	config, exists := configs["default"]
+	config, exists := configs["atmos.yaml"]
 	if !exists {
-		t.Fatal("Expected 'default' config to exist")
+		t.Fatal("Expected 'atmos.yaml' config to exist")
 	}
 
-	if config.Name != "default" {
-		t.Errorf("Expected config name 'default', got %s", config.Name)
+	if config.Name != "atmos.yaml" {
+		t.Errorf("Expected config name 'atmos.yaml', got %s", config.Name)
 	}
 
 	if len(config.Files) == 0 {
-		t.Error("Expected default config to have files")
+		t.Error("Expected atmos.yaml config to have files")
 	}
 }
 
@@ -79,8 +88,8 @@ func TestGetConfiguration_AtmosYAML(t *testing.T) {
 		t.Errorf("Expected config name 'atmos.yaml', got %s", config.Name)
 	}
 
-	if len(config.Files) != 1 {
-		t.Errorf("Expected 1 file, got %d", len(config.Files))
+	if len(config.Files) != 2 {
+		t.Errorf("Expected 2 files, got %d", len(config.Files))
 	}
 
 	file := config.Files[0]
@@ -108,17 +117,25 @@ func TestGetConfiguration_EditorConfig(t *testing.T) {
 		t.Errorf("Expected config name '.editorconfig', got %s", config.Name)
 	}
 
-	if len(config.Files) != 1 {
-		t.Errorf("Expected 1 file, got %d", len(config.Files))
+	if len(config.Files) != 3 {
+		t.Errorf("Expected 3 files, got %d", len(config.Files))
 	}
 
-	file := config.Files[0]
-	if file.Path != ".editorconfig" {
-		t.Errorf("Expected file path '.editorconfig', got %s", file.Path)
+	// Find the .editorconfig file
+	var editorConfigFile *types.File
+	for i := range config.Files {
+		if config.Files[i].Path == ".editorconfig" {
+			editorConfigFile = &config.Files[i]
+			break
+		}
 	}
 
-	if file.IsTemplate {
-		t.Error("Expected .editorconfig to not be a template")
+	if editorConfigFile == nil {
+		t.Error("Expected .editorconfig file not found")
+	} else {
+		if editorConfigFile.IsTemplate {
+			t.Error("Expected .editorconfig to not be a template (static file)")
+		}
 	}
 }
 
@@ -137,75 +154,49 @@ func TestGetConfiguration_Gitignore(t *testing.T) {
 		t.Errorf("Expected config name '.gitignore', got %s", config.Name)
 	}
 
-	if len(config.Files) != 1 {
-		t.Errorf("Expected 1 file, got %d", len(config.Files))
+	if len(config.Files) != 3 {
+		t.Errorf("Expected 3 files, got %d", len(config.Files))
 	}
 
-	file := config.Files[0]
-	if file.Path != ".gitignore" {
-		t.Errorf("Expected file path '.gitignore', got %s", file.Path)
+	// Find the .gitignore file
+	var gitignoreFile *types.File
+	for i := range config.Files {
+		if config.Files[i].Path == ".gitignore" {
+			gitignoreFile = &config.Files[i]
+			break
+		}
 	}
 
-	if file.IsTemplate {
-		t.Error("Expected .gitignore to not be a template")
-	}
-}
-
-func TestGetConfiguration_DemoStacks(t *testing.T) {
-	configs, err := GetAvailableConfigurations()
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	config, exists := configs["examples/demo-stacks"]
-	if !exists {
-		t.Fatal("Expected 'examples/demo-stacks' config to exist")
-	}
-
-	if config.Name != "examples/demo-stacks" {
-		t.Errorf("Expected config name 'examples/demo-stacks', got %s", config.Name)
-	}
-
-	if len(config.Files) == 0 {
-		t.Error("Expected demo-stacks config to have files")
-	}
-
-	// Check for expected files
-	expectedFiles := []string{"stack.yaml", "vpc.tf", "README.md"}
-	found := make(map[string]bool)
-
-	for _, file := range config.Files {
-		found[file.Path] = true
-	}
-
-	for _, expected := range expectedFiles {
-		if !found[expected] {
-			t.Errorf("Expected file %s not found in demo-stacks", expected)
+	if gitignoreFile == nil {
+		t.Error("Expected .gitignore file not found")
+	} else {
+		if gitignoreFile.IsTemplate {
+			t.Error("Expected .gitignore to not be a template (static file)")
 		}
 	}
 }
 
-func TestGetConfiguration_DemoLocalstack(t *testing.T) {
+func TestGetConfiguration_RichProject(t *testing.T) {
 	configs, err := GetAvailableConfigurations()
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	config, exists := configs["examples/demo-localstack"]
+	config, exists := configs["rich-project"]
 	if !exists {
-		t.Fatal("Expected 'examples/demo-localstack' config to exist")
+		t.Fatal("Expected 'rich-project' config to exist")
 	}
 
-	if config.Name != "examples/demo-localstack" {
-		t.Errorf("Expected config name 'examples/demo-localstack', got %s", config.Name)
+	if config.Name != "Atmos Scaffold Template Configuration" {
+		t.Errorf("Expected config name 'Atmos Scaffold Template Configuration', got %s", config.Name)
 	}
 
 	if len(config.Files) == 0 {
-		t.Error("Expected demo-localstack config to have files")
+		t.Error("Expected rich-project config to have files")
 	}
 
 	// Check for expected files
-	expectedFiles := []string{"docker-compose.yml", "atmos.yaml", "README.md"}
+	expectedFiles := []string{"README.md", "scaffold.yaml"}
 	found := make(map[string]bool)
 
 	for _, file := range config.Files {
@@ -214,32 +205,32 @@ func TestGetConfiguration_DemoLocalstack(t *testing.T) {
 
 	for _, expected := range expectedFiles {
 		if !found[expected] {
-			t.Errorf("Expected file %s not found in demo-localstack", expected)
+			t.Errorf("Expected file %s not found in rich-project", expected)
 		}
 	}
 }
 
-func TestGetConfiguration_DemoHelmfile(t *testing.T) {
+func TestGetConfiguration_SimpleScaffold(t *testing.T) {
 	configs, err := GetAvailableConfigurations()
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	config, exists := configs["examples/demo-helmfile"]
+	config, exists := configs["simple-scaffold"]
 	if !exists {
-		t.Fatal("Expected 'examples/demo-helmfile' config to exist")
+		t.Fatal("Expected 'simple-scaffold' config to exist")
 	}
 
-	if config.Name != "examples/demo-helmfile" {
-		t.Errorf("Expected config name 'examples/demo-helmfile', got %s", config.Name)
+	if config.Name != "Simple Scaffold Configuration" {
+		t.Errorf("Expected config name 'Simple Scaffold Configuration', got %s", config.Name)
 	}
 
 	if len(config.Files) == 0 {
-		t.Error("Expected demo-helmfile config to have files")
+		t.Error("Expected simple-scaffold config to have files")
 	}
 
 	// Check for expected files
-	expectedFiles := []string{"component.yaml", "stack.yaml", "README.md"}
+	expectedFiles := []string{"README.md", "scaffold.yaml"}
 	found := make(map[string]bool)
 
 	for _, file := range config.Files {
@@ -248,7 +239,41 @@ func TestGetConfiguration_DemoHelmfile(t *testing.T) {
 
 	for _, expected := range expectedFiles {
 		if !found[expected] {
-			t.Errorf("Expected file %s not found in demo-helmfile", expected)
+			t.Errorf("Expected file %s not found in simple-scaffold", expected)
+		}
+	}
+}
+
+func TestGetConfiguration_PathTest(t *testing.T) {
+	configs, err := GetAvailableConfigurations()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	config, exists := configs["path-test"]
+	if !exists {
+		t.Fatal("Expected 'path-test' config to exist")
+	}
+
+	if config.Name != "Path Template Test" {
+		t.Errorf("Expected config name 'Path Template Test', got %s", config.Name)
+	}
+
+	if len(config.Files) == 0 {
+		t.Error("Expected path-test config to have files")
+	}
+
+	// Check for expected files
+	expectedFiles := []string{"scaffold.yaml", "{{.Config.namespace}}-monitoring.yaml", "{{.Config.namespace}}/config.yaml", "{{.Config.namespace}}/{{.Config.subdirectory}}/deep.yaml", "{{.Config.namespace}}/docs/README.md"}
+	found := make(map[string]bool)
+
+	for _, file := range config.Files {
+		found[file.Path] = true
+	}
+
+	for _, expected := range expectedFiles {
+		if !found[expected] {
+			t.Errorf("Expected file %s not found in path-test", expected)
 		}
 	}
 }
