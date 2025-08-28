@@ -19,7 +19,7 @@ components:
     use_eks: true
     kubeconfig_path: /dev/shm
     helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
-    cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+    cluster_name_template: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
     command: ""
   packer:
     base_path: ""
@@ -30,7 +30,7 @@ stacks:
     - deploy/**/*
   excluded_paths:
     - '**/_defaults.yaml'
-  name_pattern: '{dev}'
+  name_template: '{dev}'
   name_template: ""
 workflows:
   base_path: stacks/workflows
