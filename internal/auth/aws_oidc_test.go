@@ -1,14 +1,15 @@
 package auth
 
 import (
-	"os"
-	"path/filepath"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
