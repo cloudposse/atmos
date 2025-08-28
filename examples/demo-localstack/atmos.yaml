@@ -49,7 +49,7 @@ commands:
   - name: "localstack"
     commands:
       - name: "up"
-        description: Start lockstack in the background
+        description: Start LocalStack in the background
         steps:
           - |
             container_running=$(docker ps -q -f "name=localstack")

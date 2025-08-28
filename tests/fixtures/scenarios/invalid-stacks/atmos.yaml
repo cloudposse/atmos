@@ -14,7 +14,7 @@ stacks:
     - "orgs/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{namespace}-{tenant}-{stage}"
+  name_template: "{namespace}-{tenant}-{stage}"
 
 logs:
   file: "/dev/stderr"

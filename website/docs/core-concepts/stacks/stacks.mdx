@@ -64,10 +64,10 @@ Atmos supports two methods of configuration for defining stack names:
   ```
 
 </dd>
-<dt>`stacks.name_pattern` (deprecated)</dt>
+<dt>`stacks.name_template` (deprecated)</dt>
 <dd>
 
-  The `name_pattern` is the *legacy* method for determining stack names, retained for backward compatibility.
+  The `name_template` is the *legacy* method for determining stack names, retained for backward compatibility.
 
   It **only** supports the following optionated interpolations, and therefore is not recommended. Use `name_template` instead.
   <dl>
@@ -84,11 +84,11 @@ Atmos supports two methods of configuration for defining stack names:
   ```yaml
   # atmos.yaml
   stacks:
-    name_pattern: "{tenant}-{environment}-{stage}"
+    name_template: "{tenant}-{environment}-{stage}"
   ```
 
   :::important Deprecated
-  The `name_pattern` is deprecated and will be removed in a future release. Please use `name_template` instead.
+  The `name_template` is deprecated and will be removed in a future release. Please use `name_template` instead.
   :::
 
 

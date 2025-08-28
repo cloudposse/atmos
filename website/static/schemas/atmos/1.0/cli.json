@@ -141,7 +141,7 @@
                 "type": "string",
                 "description": "Pattern for AWS profiles used by Helm"
               },
-              "cluster_name_pattern": {
+              "cluster_name_template": {
                 "type": "string",
                 "description": "Pattern for cluster names"
               }
@@ -185,13 +185,13 @@
               "type": "string"
             }
           },
-          "name_pattern": {
+          "name_template": {
             "type": "string",
             "description": "Pattern for stack names (legacy)"
           },
           "name_template": {
             "type": "string",
-            "description": "Go template for stack names (preferred over name_pattern)"
+            "description": "Go template for stack names (preferred over name_template)"
           }
         }
       },

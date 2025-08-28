@@ -335,7 +335,7 @@ type Helmfile struct {
 	UseEKS                bool   `yaml:"use_eks" json:"use_eks" mapstructure:"use_eks"`
 	KubeconfigPath        string `yaml:"kubeconfig_path" json:"kubeconfig_path" mapstructure:"kubeconfig_path"`
 	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"`
-	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`
+	ClusterNamePattern    string `yaml:"cluster_name_template" json:"cluster_name_template" mapstructure:"cluster_name_template"`
 	Command               string `yaml:"command" json:"command" mapstructure:"command"`
 }
 
@@ -354,7 +354,7 @@ type Stacks struct {
 	BasePath      string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
 	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
-	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NamePattern   string   `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
 	NameTemplate  string   `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
 }
 

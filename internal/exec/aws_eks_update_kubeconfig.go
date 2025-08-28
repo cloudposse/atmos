@@ -135,7 +135,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 			}
 
 			if len(GetStackNamePattern(&atmosConfig)) < 1 {
-				return errors.New("stack name pattern must be provided in `stacks.name_pattern` CLI config or `ATMOS_STACKS_NAME_PATTERN` ENV variable")
+				return errors.New("stack name pattern must be provided in `stacks.name_template` CLI config or `ATMOS_STACKS_NAME_PATTERN` ENV variable")
 			}
 
 			stack, err := cfg.GetStackNameFromContextAndStackNamePattern(
@@ -170,7 +170,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 
 		context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
-		// Add Component to allow the `cluster_name_pattern` in `atmos.yaml` to use `{component} token
+		// Add Component to allow the `cluster_name_template` in `atmos.yaml` to use `{component} token
 		context.Component = strings.Replace(kubeconfigContext.Component, "/", "-", -1)
 
 		// `kubeconfig` can be overridden on the command line

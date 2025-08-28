@@ -41,7 +41,7 @@ components:
     use_eks: true                                  # Enable EKS integration
     kubeconfig_path: "/dev/shm"                   # Secure kubeconfig location
     helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
-    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+    cluster_name_template: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
 
   # Packer configuration
   packer:
@@ -58,7 +58,7 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
     - "**/README.md"
-  # name_pattern: "{tenant}-{environment}-{stage}"  # DEPRECATED: Use name_template
+  # name_template: "{tenant}-{environment}-{stage}"  # DEPRECATED: Use name_template
   name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
 
 # Workflow configuration

@@ -301,7 +301,7 @@ func checkHelmfileConfig(atmosConfig schema.AtmosConfiguration) error {
 		}
 
 		if len(atmosConfig.Components.Helmfile.ClusterNamePattern) < 1 {
-			return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_pattern' config or " +
+			return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_template' config or " +
 				"'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable")
 		}
 	}

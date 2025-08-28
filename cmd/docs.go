@@ -107,9 +107,9 @@ var docsCmd = &cobra.Command{
 			}
 
 			pager := atmosConfig.Settings.Terminal.IsPagerEnabled()
-			if !pager && atmosConfig.Settings.Docs.Pagination {
-				pager = atmosConfig.Settings.Docs.Pagination
-				u.NotifyDeprecatedField("settings.docs.pagination", "settings.terminal.pager")
+			if !pager && atmosConfig.Docs.Pagination {
+				pager = atmosConfig.Docs.Pagination
+				u.NotifyDeprecatedField("docs.pagination", "settings.terminal.pager")
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {

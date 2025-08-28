@@ -10,7 +10,7 @@ import (
 
 // BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern
 func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Context, contextPrefix string) (string, string, error) {
-	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
+	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_template"].(string); ok {
 		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern, nil
 	} else if spaceliftStackName, ok := spaceliftSettings["stack_name"].(string); ok {
 		return spaceliftStackName, contextPrefix, nil

@@ -42,7 +42,7 @@ components:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV var
     helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
-    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+    cluster_name_template: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
 
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments

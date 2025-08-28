@@ -5,7 +5,7 @@ import (
 	log "github.com/charmbracelet/log"
 )
 
-// NotifyDeprecatedField logs a deprecation warning for a configuration field
+// NotifyDeprecatedField logs a deprecation warning for a configuration field.
 func NotifyDeprecatedField(oldPath string, newPath interface{}) {
 	var message string
 	if newPath != nil {
