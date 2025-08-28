@@ -1,12 +1,15 @@
 package telemetry
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -164,7 +167,7 @@ func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
-	// Disable telemetry via environment variable
+	// Disable telemetry via environment variable.
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmdString("test-cmd", nil, mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
@@ -187,7 +190,7 @@ func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
-	// Disable telemetry via environment variable.
+	// Disable telemetry via environment variable..
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmdString("test-cmd", errors.New("test-error"), mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
@@ -238,10 +241,10 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 }
 
 // TestGetTelemetryFromConfigIntergration tests the integration of telemetry configuration
-// by creating a telemetry instance with default settings and verifying all required
+// by creating a telemetry instance with default settings and verifying all required.
 // fields are properly initialized.
 func TestGetTelemetryFromConfigIntergration(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference.
+	// Preserve and restore CI environment variables to avoid interference..
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -262,7 +265,7 @@ func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 // TestCaptureCmd tests the captureCmd function for successful command execution
 // by setting up mock expectations and verifying telemetry data is captured correctly.
 func TestCaptureCmd(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference.
+	// Preserve and restore CI environment variables to avoid interference..
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -318,7 +321,7 @@ func TestCaptureCmd(t *testing.T) {
 // TestCaptureCmdError tests the captureCmd function for failed command execution
 // by setting up mock expectations and verifying error telemetry data is captured correctly.
 func TestCaptureCmdError(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference.
+	// Preserve and restore CI environment variables to avoid interference..
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -381,7 +384,7 @@ func TestCaptureCmdError(t *testing.T) {
 // TestCaptureCmdDisabledWithEnvvar tests that telemetry is disabled when
 // ATMOS_TELEMETRY_ENABLED environment variable is set to false.
 func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference.
+	// Preserve and restore CI environment variables to avoid interference..
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -402,7 +405,7 @@ func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
 		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
-	// Disable telemetry via environment variable and test command capture.
+	// Disable telemetry via environment variable. and test command capture.
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmd(cmd, nil, mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
@@ -411,7 +414,7 @@ func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
 // TestCaptureCmdFailureDisabledWithEnvvar tests that telemetry is disabled for failed commands
 // when ATMOS_TELEMETRY_ENABLED environment variable is set to false.
 func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference.
+	// Preserve and restore CI environment variables to avoid interference..
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -432,7 +435,7 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
-	// Disable telemetry via environment variable and test error command capture.
+	// Disable telemetry via environment variable. and test error command capture.
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmd(cmd, errors.New("test-error"), mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
@@ -442,7 +445,7 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 // has not been shown before. It verifies that the first call returns the expected disclosure message
 // and subsequent calls return empty strings (indicating the disclosure has been marked as shown).
 func TestTelemetryDisclosureMessage(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference.
+	// Preserve and restore CI environment variables to avoid interference..
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -472,7 +475,7 @@ by visiting the following URL: https://atmos.tools/cli/telemetry
 // TestTelemetryDisclosureMessageShown tests that no disclosure message is returned when
 // the telemetry disclosure has already been shown to the user.
 func TestTelemetryDisclosureMessageShown(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference
+	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -492,7 +495,7 @@ func TestTelemetryDisclosureMessageShown(t *testing.T) {
 // TestTelemetryDisclosureMessageHideForCI tests that disclosure messages are suppressed
 // when running in a CI environment (when CI environment variable is set to "true").
 func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference.
+	// Preserve and restore CI environment variables to avoid interference..
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -515,7 +518,7 @@ func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
 // TestTelemetryDisclosureMessageHideIfTelemetryDisabled tests that disclosure messages are suppressed
 // when telemetry is disabled.
 func TestTelemetryDisclosureMessageHideIfTelemetryDisabled(t *testing.T) {
-	// Preserve and restore CI environment variables to avoid interference.
+	// Preserve and restore CI environment variables to avoid interference..
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -527,10 +530,83 @@ func TestTelemetryDisclosureMessageHideIfTelemetryDisabled(t *testing.T) {
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
-	// Disable telemetry via environment variable.
+	// Disable telemetry via environment variable..
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	// Should return empty string when telemetry is disabled.
 	message := disclosureMessage()
 	assert.Empty(t, message)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+}
+
+// TestPrintTelemetryDisclosureOutputsToStderr tests that the telemetry disclosure
+// message is printed to stderr and not stdout.
+func TestPrintTelemetryDisclosureOutputsToStderr(t *testing.T) {
+	// Preserve and restore CI environment variables to avoid interference..
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Helper function to capture stdout.
+	captureStdout := func(f func()) string {
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		f()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		return buf.String()
+	}
+
+	// Helper function to capture stderr.
+	captureStderr := func(f func()) string {
+		old := os.Stderr
+		r, w, _ := os.Pipe()
+		os.Stderr = w
+
+		f()
+
+		w.Close()
+		os.Stderr = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		return buf.String()
+	}
+
+	// Set up cache to show disclosure.
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryDisclosureShown = false
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	// Enable telemetry.
+	os.Setenv("ATMOS_TELEMETRY_ENABLED", "true")
+	defer os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+
+	// Capture stdout - should be empty.
+	stdoutOutput := captureStdout(func() {
+		PrintTelemetryDisclosure()
+	})
+
+	// Reset cache for stderr test.
+	cacheCfg.TelemetryDisclosureShown = false
+	cfg.SaveCache(cacheCfg)
+
+	// Capture stderr - should contain the disclosure message.
+	stderrOutput := captureStderr(func() {
+		PrintTelemetryDisclosure()
+	})
+
+	// Verify stdout is empty (no output to stdout).
+	assert.Empty(t, stdoutOutput, "Telemetry disclosure should not write to stdout")
+
+	// Verify stderr contains the disclosure message.
+	assert.True(t, strings.Contains(stderrOutput, "Notice: Atmos now collects"),
+		"Telemetry disclosure should write to stderr")
 }
