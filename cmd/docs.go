@@ -46,7 +46,7 @@ var docsCmd = &cobra.Command{
 			maxWidth := atmosConfig.Settings.Terminal.MaxWidth
 			if maxWidth == 0 && atmosConfig.Settings.Docs.MaxWidth > 0 {
 				maxWidth = atmosConfig.Settings.Docs.MaxWidth
-				log.Warn("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
+				u.NotifyDeprecatedField("settings.docs.max-width", "settings.terminal.max_width")
 			}
 			defaultWidth := 120
 			screenWidth := defaultWidth
@@ -109,7 +109,7 @@ var docsCmd = &cobra.Command{
 			pager := atmosConfig.Settings.Terminal.IsPagerEnabled()
 			if !pager && atmosConfig.Settings.Docs.Pagination {
 				pager = atmosConfig.Settings.Docs.Pagination
-				log.Warn("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
+				u.NotifyDeprecatedField("settings.docs.pagination", "settings.terminal.pager")
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {

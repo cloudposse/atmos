@@ -206,6 +206,7 @@ type Terminal struct {
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"`
+	Color              *bool              `yaml:"color" json:"color" mapstructure:"color"`
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 }
 

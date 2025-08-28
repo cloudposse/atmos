@@ -38,6 +38,9 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		atmosConfig.Components.Terraform.AppendUserAgent = fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version)
 	}
 
+	// Handle deprecated settings
+	handleDeprecatedSettings(&atmosConfig)
+
 	// Check config
 	err = checkConfig(atmosConfig, processStacks)
 	if err != nil {
@@ -117,6 +120,29 @@ func parseFlags() map[string]string {
 		}
 	}
 	return flags
+}
+
+// handleDeprecatedSettings handles deprecated configuration fields and migrates them to new locations
+func handleDeprecatedSettings(cfg *schema.AtmosConfiguration) {
+	// Handle deprecated no_color
+	if cfg.Settings.Terminal.NoColor {
+		u.NotifyDeprecatedField("settings.terminal.no_color", "settings.terminal.color")
+		if cfg.Settings.Terminal.Color == nil {
+			color := !cfg.Settings.Terminal.NoColor
+			cfg.Settings.Terminal.Color = &color
+		}
+	}
+	
+	// Handle deprecated docs settings
+	if cfg.Docs.MaxWidth > 0 && cfg.Settings.Terminal.MaxWidth == 0 {
+		cfg.Settings.Terminal.MaxWidth = cfg.Docs.MaxWidth
+		u.NotifyDeprecatedField("settings.docs.max-width", "settings.terminal.max_width")
+	}
+	
+	if cfg.Docs.Pagination && cfg.Settings.Terminal.Pager == "" {
+		cfg.Settings.Terminal.Pager = "on"
+		u.NotifyDeprecatedField("settings.docs.pagination", "settings.terminal.pager")
+	}
 }
 
 func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
