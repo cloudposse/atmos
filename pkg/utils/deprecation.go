@@ -1,6 +1,9 @@
 package utils
 
-import "fmt"
+import (
+	"fmt"
+	log "github.com/charmbracelet/log"
+)
 
 // NotifyDeprecatedField logs a deprecation warning for a configuration field
 func NotifyDeprecatedField(oldPath string, newPath interface{}) {
@@ -10,5 +13,5 @@ func NotifyDeprecatedField(oldPath string, newPath interface{}) {
 	} else {
 		message = fmt.Sprintf("`%s` is deprecated", oldPath)
 	}
-	LogWarning(message)
+	log.Warn(message)
 }

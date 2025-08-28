@@ -6,5 +6,17 @@ description: Vendor Schema
 ---
 import Schema from '@site/static/schemas/atmos/1.0/vendor.json'
 import JSONSchemaViewer from "@theme/JSONSchemaViewer";
+import File from '@site/src/components/File'
+import VendorYAML from '!!raw-loader!@site/static/examples/schemas/vendor.yaml';
 
 <JSONSchemaViewer schema={ Schema } />
+
+## Complete Example
+
+The following example demonstrates vendoring components from various sources including GitHub, GitLab, S3, and local files:
+
+<File title="vendor.yaml">
+```yaml
+{VendorYAML}
+```
+</File>

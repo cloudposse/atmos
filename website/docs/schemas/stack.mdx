@@ -6,5 +6,17 @@ description: Stack Schema
 ---
 import Schema from '@site/static/schemas/atmos/1.0/stack.json'
 import JSONSchemaViewer from "@theme/JSONSchemaViewer";
+import File from '@site/src/components/File'
+import StackYAML from '!!raw-loader!@site/static/examples/schemas/stack.yaml';
 
 <JSONSchemaViewer schema={ Schema } />
+
+## Complete Example
+
+The following example demonstrates all available stack manifest configuration options including Terraform, Helmfile, and Packer components:
+
+<File title="stack.yaml">
+```yaml
+{StackYAML}
+```
+</File>
