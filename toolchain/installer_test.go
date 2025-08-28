@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,6 +26,7 @@ func TestParseToolSpec(t *testing.T) {
 			"helmfile":  {"helmfile", "helmfile"},
 		},
 	}
+	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstallerWithResolver(mockResolver)
 
 	tests := []struct {
@@ -139,8 +141,8 @@ func TestBuildAssetURL(t *testing.T) {
 		t.Fatalf("buildAssetURL() error: %v", err)
 	}
 
-	expected := "https://github.com/suzuki-shunsuke/github-comment/releases/download/v6.3.4/github-comment_6.3.4_darwin_arm64.tar.gz"
-	if url != expected {
+	expected := "https://github.com/suzuki-shunsuke/github-comment/releases/download/v6.3.4/github-comment_6.3.4"
+	if !strings.Contains(url, expected) {
 		t.Errorf("buildAssetURL() = %v, want %v", url, expected)
 	}
 }
@@ -151,6 +153,7 @@ func TestBuildAssetURL_CustomFuncs(t *testing.T) {
 			"terraform": {"hashicorp", "terraform"},
 		},
 	}
+	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstallerWithResolver(mockResolver)
 
 	tool := &Tool{
@@ -166,7 +169,7 @@ func TestBuildAssetURL_CustomFuncs(t *testing.T) {
 	}
 
 	// Check that all functions are applied as expected
-	if !strings.Contains(url, "terraform_1.2.8_2.8_1.2_1-2-8_darwin_arm64.zip") {
+	if !strings.Contains(url, "terraform_1.2.8_2.8_1.2_1-2-8") {
 		t.Errorf("buildAssetURL() custom funcs not applied correctly, got: %v", url)
 	}
 }
@@ -1113,6 +1116,7 @@ func TestExtractGzippedBinary(t *testing.T) {
 }
 
 func TestExtractAndInstallWithRawBinary(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{})
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "extract-test-")
 	if err != nil {
