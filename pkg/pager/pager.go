@@ -28,7 +28,7 @@ func NewWithAtmosConfig(enablePager bool) PageCreator {
 
 func New() PageCreator {
 	return &pageCreator{
-		enablePager:           true,
+		enablePager:           false,
 		newTeaProgram:         tea.NewProgram,
 		contentFitsTerminal:   ContentFitsTerminal,
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
@@ -51,8 +51,7 @@ func (p *pageCreator) Run(title, content string) error {
 				ready:    false,
 				viewport: viewport.New(0, 0),
 			},
-			tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
-			tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
+			tea.WithAltScreen(), // use the full size of the terminal in its "alternate screen buffer"
 		).Run(); err != nil {
 			return err
 		}
