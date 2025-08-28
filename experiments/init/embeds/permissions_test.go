@@ -67,7 +67,7 @@ func TestFilePermissionsHandling(t *testing.T) {
 
 			// Create the file with the specified permissions
 			filePath := filepath.Join(testDir, tc.file.Path)
-			
+
 			// Create directory if needed
 			dir := filepath.Dir(filePath)
 			if err := os.MkdirAll(dir, 0755); err != nil {
@@ -92,4 +92,4 @@ func TestFilePermissionsHandling(t *testing.T) {
 			}
 		})
 	}
-} 
+}

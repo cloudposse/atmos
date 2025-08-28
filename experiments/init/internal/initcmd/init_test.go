@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/experiments/init/internal/config"
+	"github.com/cloudposse/atmos/experiments/init/internal/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -173,52 +175,6 @@ func TestExecuteInit_DemoConfig(t *testing.T) {
 	}
 }
 
-func TestGenerateHelpText(t *testing.T) {
-	helpText := generateHelpText()
-
-	if helpText == "" {
-		t.Error("Expected help text to be non-empty")
-	}
-
-	// Check for expected content
-	expectedSections := []string{
-		"Initialize a typical project for atmos",
-		"Initialize a local atmos CLI configuration file",
-		"Initialize a local Editor Config file",
-		"Initialize a recommend Git ignore file",
-		"Demonstration of using Atmos stacks",
-		"Demonstration of using Atmos with localstack",
-		"Demonstration of using Atmos with Helmfile",
-		"Force overwrite existing files",
-		"Update existing files with 3-way merge",
-	}
-
-	for _, section := range expectedSections {
-		if !contains(helpText, section) {
-			t.Errorf("Expected help text to contain: %s", section)
-		}
-	}
-}
-
-func TestGenerateHelpText_Examples(t *testing.T) {
-	helpText := generateHelpText()
-
-	// Check for expected examples
-	expectedExamples := []string{
-		"$ atmos init default",
-		"$ atmos init atmos.yaml",
-		"$ atmos init examples/demo-localstack",
-		"$ atmos init default --force",
-		"$ atmos init default --update",
-	}
-
-	for _, example := range expectedExamples {
-		if !contains(helpText, example) {
-			t.Errorf("Expected help text to contain example: %s", example)
-		}
-	}
-}
-
 func TestExecuteInit_PathTemplating(t *testing.T) {
 	cmd := &cobra.Command{}
 	tempDir := t.TempDir()
@@ -310,7 +266,7 @@ func TestParseTemplateValues_ValidValues(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := parseTemplateValues(tc.values)
+			result, err := utils.ParseTemplateValues(tc.values)
 			if err != nil {
 				t.Fatalf("Expected no error, got: %v", err)
 			}
@@ -358,7 +314,7 @@ func TestParseTemplateValues_InvalidValues(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := parseTemplateValues(tc.values)
+			_, err := utils.ParseTemplateValues(tc.values)
 			if tc.expectedErr == "" {
 				// Expect success
 				if err != nil {
@@ -437,27 +393,9 @@ func TestExecuteInit_WithProjectValues(t *testing.T) {
 	}
 
 	// Check that user values were saved
-	valuesPath := filepath.Join(tempDir, ".atmos", "config.yaml")
+	valuesPath := filepath.Join(tempDir, config.ScaffoldConfigDir, "scaffold.yaml")
 	if _, err := os.Stat(valuesPath); os.IsNotExist(err) {
-		t.Error("Expected .atmos/config.yaml to be created")
-	}
-}
-
-func TestGenerateHelpText_ValuesExamples(t *testing.T) {
-	helpText := generateHelpText()
-
-	// Check for --values examples in help text
-	expectedExamples := []string{
-		"--values author=John --values year=2024 --values license=MIT",
-		"--values project_name=my-project --values cloud_provider=aws --values enable_monitoring=true",
-		"Set template values via command line",
-		"Set template values and skip prompts",
-	}
-
-	for _, example := range expectedExamples {
-		if !contains(helpText, example) {
-			t.Errorf("Expected help text to contain: %s", example)
-		}
+		t.Errorf("Expected %s/scaffold.yaml to be created", config.ScaffoldConfigDir)
 	}
 }
 
@@ -541,7 +479,7 @@ func TestParseValue_EdgeCases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := parseValue(tc.input)
+			result, err := utils.ParseValue(tc.input)
 			if err != nil {
 				t.Fatalf("Expected no error for '%s', got: %v", tc.input, err)
 			}
@@ -573,7 +511,7 @@ func TestParseValue_ErrorCases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := parseValue(tc.input)
+			_, err := utils.ParseValue(tc.input)
 			if err != nil {
 				t.Errorf("Expected no error for '%s', got: %v", tc.input, err)
 			}

@@ -1,239 +1,147 @@
 package merge
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func TestNewThreeWayMerger(t *testing.T) {
-	merger := NewThreeWayMerger(5)
-	if merger.maxChanges != 5 {
-		t.Errorf("Expected maxChanges to be 5, got %d", merger.maxChanges)
-	}
+func TestMergeBasic(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+
+	map1 := map[string]any{"foo": "bar"}
+	map2 := map[string]any{"baz": "bat"}
+
+	inputs := []map[string]any{map1, map2}
+	expected := map[string]any{"foo": "bar", "baz": "bat"}
+
+	result, err := Merge(atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, result)
 }
 
-func TestMerge_SimpleChanges(t *testing.T) {
-	merger := NewThreeWayMerger(10)
+func TestMergeBasicOverride(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
 
-	existing := "line1\nline2\nline3"
-	newContent := "line1\nline2\nline3\nline4"
+	map1 := map[string]any{"foo": "bar"}
+	map2 := map[string]any{"baz": "bat"}
+	map3 := map[string]any{"foo": "ood"}
 
-	result, err := merger.Merge(existing, newContent, "test.txt")
-	if err != nil {
-		t.Fatalf("Expected no error for simple changes, got: %v", err)
-	}
+	inputs := []map[string]any{map1, map2, map3}
+	expected := map[string]any{"foo": "ood", "baz": "bat"}
 
-	expected := "line1\nline2\nline3\nline4"
-	if result != expected {
-		t.Errorf("Expected %q, got %q", expected, result)
-	}
+	result, err := Merge(atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, result)
 }
 
-func TestMerge_NoChanges(t *testing.T) {
-	merger := NewThreeWayMerger(10)
-
-	content := "line1\nline2\nline3"
-
-	result, err := merger.Merge(content, content, "test.txt")
-	if err != nil {
-		t.Fatalf("Expected no error for identical content, got: %v", err)
+func TestMergeListReplace(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: ListMergeStrategyReplace,
+		},
 	}
 
-	if result != content {
-		t.Errorf("Expected %q, got %q", content, result)
+	map1 := map[string]any{
+		"list": []string{"1", "2", "3"},
 	}
+
+	map2 := map[string]any{
+		"list": []string{"4", "5", "6"},
+	}
+
+	inputs := []map[string]any{map1, map2}
+	expected := map[string]any{"list": []any{"4", "5", "6"}}
+
+	result, err := Merge(atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, result)
+
+	yamlConfig, err := u.ConvertToYAML(result)
+	assert.Nil(t, err)
+	t.Log(yamlConfig)
 }
 
-func TestMerge_TooManyChanges(t *testing.T) {
-	merger := NewThreeWayMerger(5)
-
-	existing := strings.Repeat("line1\n", 10)
-	newContent := strings.Repeat("line2\n", 10)
-
-	_, err := merger.Merge(existing, newContent, "test.txt")
-	if err == nil {
-		t.Fatal("Expected error for too many changes")
+func TestMergeListAppend(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: ListMergeStrategyAppend,
+		},
 	}
 
-	if !strings.Contains(err.Error(), "too many changes detected") {
-		t.Errorf("Expected error about too many changes, got: %v", err)
+	map1 := map[string]any{
+		"list": []string{"1", "2", "3"},
 	}
+
+	map2 := map[string]any{
+		"list": []string{"4", "5", "6"},
+	}
+
+	inputs := []map[string]any{map1, map2}
+	expected := map[string]any{"list": []any{"1", "2", "3", "4", "5", "6"}}
+
+	result, err := Merge(atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, result)
+
+	yamlConfig, err := u.ConvertToYAML(result)
+	assert.Nil(t, err)
+	t.Log(yamlConfig)
 }
 
-func TestMerge_WithConflicts(t *testing.T) {
-	merger := NewThreeWayMerger(10)
-
-	existing := "line1\nline2\nline3"
-	newContent := "line1\n<<<<<<< HEAD\nline2\n=======\nline2b\n>>>>>>> branch\nline3"
-
-	result, err := merger.Merge(existing, newContent, "test.txt")
-	if err != nil {
-		t.Fatalf("Expected no error for conflicts, got: %v", err)
+func TestMergeListMerge(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: ListMergeStrategyMerge,
+		},
 	}
 
-	if !strings.Contains(result, "# CONFLICT RESOLVED for test.txt") {
-		t.Error("Expected conflict resolution marker in result")
-	}
-}
-
-func TestResolveConflicts(t *testing.T) {
-	merger := NewThreeWayMerger(10)
-
-	content := `line1
-<<<<<<< HEAD
-line2
-=======
-line2b
->>>>>>> branch
-line3`
-
-	result := merger.resolveConflicts(content, "test.txt")
-
-	if !strings.Contains(result, "# CONFLICT RESOLVED for test.txt") {
-		t.Error("Expected conflict resolution marker")
+	map1 := map[string]any{
+		"list": []map[string]string{
+			{
+				"1": "1",
+				"2": "2",
+				"3": "3",
+				"4": "4",
+			},
+		},
 	}
 
-	if !strings.Contains(result, "line2") {
-		t.Error("Expected to preserve conflict content")
-	}
-}
-
-func TestResolveConflictBlock(t *testing.T) {
-	merger := NewThreeWayMerger(10)
-
-	conflictLines := []string{"line1", "line2", "line3"}
-	result := merger.resolveConflictBlock(conflictLines, "test.txt")
-
-	if len(result) == 0 {
-		t.Error("Expected non-empty result")
+	map2 := map[string]any{
+		"list": []map[string]string{
+			{
+				"1": "1b",
+				"2": "2",
+				"3": "3b",
+				"5": "5",
+			},
+		},
 	}
 
-	if !strings.Contains(result[0], "# CONFLICT RESOLVED for test.txt") {
-		t.Error("Expected conflict resolution marker")
+	inputs := []map[string]any{map1, map2}
+
+	result, err := Merge(atmosConfig, inputs)
+	assert.Nil(t, err)
+
+	var mergedList []any
+	var ok bool
+
+	if mergedList, ok = result["list"].([]any); !ok {
+		t.Errorf("invalid merge result: %v", result)
 	}
 
-	// Check that all non-empty lines are preserved
-	for _, line := range conflictLines {
-		if strings.TrimSpace(line) != "" {
-			found := false
-			for _, resultLine := range result {
-				if strings.Contains(resultLine, line) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Errorf("Expected to find line %q in result", line)
-			}
-		}
-	}
-}
+	merged := mergedList[0].(map[string]any)
 
-func TestMerge_YAMLExample(t *testing.T) {
-	merger := NewThreeWayMerger(20)
+	assert.Equal(t, "1b", merged["1"])
+	assert.Equal(t, "2", merged["2"])
+	assert.Equal(t, "3b", merged["3"])
+	assert.Equal(t, "4", merged["4"])
+	assert.Equal(t, "5", merged["5"])
 
-	existing := `# Custom configuration
-base_path: "."
-components:
-  terraform:
-    base_path: "components/terraform"
-    apply_auto_approve: false
-    deploy_run_init: true
-    vars:
-      enabled: true
-      custom_setting: true`
-
-	newContent := `# Atmos CLI Configuration
-# https://atmos.tools/cli/configuration
-base_path: "."
-components:
-  terraform:
-    base_path: "components/terraform"
-    apply_auto_approve: false
-    deploy_run_init: true
-    init_run_reconfigure: true
-    auto_generate_backend_file: true
-    plan:
-      skip_planfile: false
-  helmfile:
-    base_path: "components/helmfile"`
-
-	result, err := merger.Merge(existing, newContent, "atmos.yaml")
-	if err != nil {
-		t.Fatalf("Expected no error for YAML merge, got: %v", err)
-	}
-
-	// Should preserve existing custom content
-	if !strings.Contains(result, "custom_setting: true") {
-		t.Error("Expected to preserve custom setting")
-	}
-
-	// Should add new template content
-	if !strings.Contains(result, "init_run_reconfigure: true") {
-		t.Error("Expected to add new template content")
-	}
-}
-
-func TestMerge_ComplexYAMLConflict(t *testing.T) {
-	merger := NewThreeWayMerger(5) // Low threshold to trigger rejection
-
-	existing := strings.Repeat(`# Custom configuration
-base_path: "."
-components:
-  terraform:
-    base_path: "components/terraform"
-    apply_auto_approve: false
-    deploy_run_init: true
-    vars:
-      enabled: true
-      custom_setting: true
-`, 5)
-
-	newContent := strings.Repeat(`# Atmos CLI Configuration
-base_path: "."
-components:
-  terraform:
-    base_path: "components/terraform"
-    apply_auto_approve: true
-    deploy_run_init: false
-    init_run_reconfigure: true
-    auto_generate_backend_file: true
-`, 5)
-
-	_, err := merger.Merge(existing, newContent, "atmos.yaml")
-	if err == nil {
-		t.Fatal("Expected error for complex YAML changes")
-	}
-
-	if !strings.Contains(err.Error(), "too many changes detected") {
-		t.Errorf("Expected error about too many changes, got: %v", err)
-	}
-}
-
-func BenchmarkMerge_Simple(b *testing.B) {
-	merger := NewThreeWayMerger(10)
-	existing := "line1\nline2\nline3"
-	newContent := "line1\nline2\nline3\nline4"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := merger.Merge(existing, newContent, "test.txt")
-		if err != nil {
-			b.Fatalf("Unexpected error: %v", err)
-		}
-	}
-}
-
-func BenchmarkMerge_Complex(b *testing.B) {
-	merger := NewThreeWayMerger(100)
-	existing := strings.Repeat("line1\nline2\nline3\n", 100)
-	newContent := strings.Repeat("line1\nline2\nline3\nline4\n", 100)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := merger.Merge(existing, newContent, "test.txt")
-		if err != nil {
-			b.Fatalf("Unexpected error: %v", err)
-		}
-	}
+	yamlConfig, err := u.ConvertToYAML(result)
+	assert.Nil(t, err)
+	t.Log(yamlConfig)
 }

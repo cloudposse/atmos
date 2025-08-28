@@ -3,7 +3,6 @@ package scaffoldcmd
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/experiments/init/internal/ui"
@@ -58,7 +57,7 @@ fields:
 	}
 
 	// Test loading the template
-	config, err := loadLocalTemplate(tempDir)
+	config, err := loadLocalTemplate(tempDir, "test-template")
 	if err != nil {
 		t.Fatalf("Failed to load template: %v", err)
 	}
@@ -122,13 +121,13 @@ func TestLoadLocalTemplate_WithoutScaffoldConfig(t *testing.T) {
 	}
 
 	// Test loading the template
-	config, err := loadLocalTemplate(tempDir)
+	config, err := loadLocalTemplate(tempDir, "test-template")
 	if err != nil {
 		t.Fatalf("Failed to load template: %v", err)
 	}
 
-	// Verify the configuration uses directory name
-	expectedName := filepath.Base(tempDir)
+	// Verify the configuration uses template key name
+	expectedName := "test-template"
 	if config.Name != expectedName {
 		t.Errorf("Expected name '%s', got '%s'", expectedName, config.Name)
 	}
@@ -198,7 +197,7 @@ fields:
 	}
 
 	// Load the template
-	config, err := loadLocalTemplate(tempDir)
+	config, err := loadLocalTemplate(tempDir, "test-template")
 	if err != nil {
 		t.Fatalf("Failed to load template: %v", err)
 	}
@@ -283,7 +282,7 @@ func TestScaffoldFileSkipping_WithoutScaffoldConfig(t *testing.T) {
 	}
 
 	// Load the template
-	config, err := loadLocalTemplate(tempDir)
+	config, err := loadLocalTemplate(tempDir, "test-template")
 	if err != nil {
 		t.Fatalf("Failed to load template: %v", err)
 	}
@@ -374,7 +373,7 @@ fields:
 	}
 
 	// Load the template
-	config, err := loadLocalTemplate(tempDir)
+	config, err := loadLocalTemplate(tempDir, "test-template")
 	if err != nil {
 		t.Fatalf("Failed to load template: %v", err)
 	}
@@ -564,85 +563,435 @@ scaffold:
 	}
 }
 
-func TestReadScaffoldConfig_WithValidConfig(t *testing.T) {
-	// Create a temporary directory for testing
+func TestGenerateProject_ScaffoldTemplate(t *testing.T) {
+	// Create a temporary atmos.yaml with scaffold configuration
 	tempDir := t.TempDir()
-
-	// Create atmos.yaml with scaffold configuration
-	atmosConfig := `# Atmos CLI Configuration
-base_path: .
-
-scaffold:
+	atmosYAML := `scaffold:
   templates:
     test-template:
-      source: "github.com/test/template"
-      ref: "v1.0.0"
-      target_dir: "./test"
-      values:
-        key: "value"`
+      source: "./test-template"
+      ref: "local"
+      target_dir: "./{{ .Config.name }}"
+      description: "Test template"`
 
 	atmosPath := filepath.Join(tempDir, "atmos.yaml")
-	if err := os.WriteFile(atmosPath, []byte(atmosConfig), 0644); err != nil {
+	if err := os.WriteFile(atmosPath, []byte(atmosYAML), 0644); err != nil {
 		t.Fatalf("Failed to create atmos.yaml: %v", err)
 	}
 
-	// Test reading scaffold config
-	scaffoldConfig, err := readScaffoldConfig(tempDir)
+	// Create test template directory
+	templateDir := filepath.Join(tempDir, "test-template")
+	if err := os.MkdirAll(templateDir, 0755); err != nil {
+		t.Fatalf("Failed to create template directory: %v", err)
+	}
+
+	// Create scaffold.yaml in template
+	scaffoldConfig := `name: "Test Template"
+description: "A test template"
+template_id: "test-template"
+
+fields:
+  name:
+    type: string
+    label: "Name"
+    default: "test-project"`
+
+	scaffoldPath := filepath.Join(templateDir, "scaffold.yaml")
+	if err := os.WriteFile(scaffoldPath, []byte(scaffoldConfig), 0644); err != nil {
+		t.Fatalf("Failed to create scaffold.yaml: %v", err)
+	}
+
+	// Create a simple template file
+	templateFile := filepath.Join(templateDir, "README.md")
+	if err := os.WriteFile(templateFile, []byte("# {{ .Config.name }}"), 0644); err != nil {
+		t.Fatalf("Failed to create template file: %v", err)
+	}
+
+	// Change to temp directory for test
+	originalWd, err := os.Getwd()
 	if err != nil {
-		t.Fatalf("Failed to read scaffold config: %v", err)
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(originalWd)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
 	}
 
-	// Verify scaffold config structure
-	templates, ok := scaffoldConfig["templates"]
-	if !ok {
-		t.Fatal("Expected 'templates' key in scaffold config")
+	// Test generateProject with scaffold template
+	targetPath := filepath.Join(tempDir, "output")
+	err = generateProject("test-template", targetPath, false, false, true, 50, map[string]interface{}{
+		"name": "my-test-project",
+	})
+	if err != nil {
+		t.Fatalf("Failed to generate project: %v", err)
 	}
 
-	templatesMap, ok := templates.(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected templates to be a map")
-	}
-
-	// Verify template configuration
-	templateConfig, ok := templatesMap["test-template"]
-	if !ok {
-		t.Fatal("Expected 'test-template' in templates")
-	}
-
-	templateMap, ok := templateConfig.(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected template config to be a map")
-	}
-
-	// Verify template properties
-	source, ok := templateMap["source"].(string)
-	if !ok || source != "github.com/test/template" {
-		t.Errorf("Expected source 'github.com/test/template', got '%s'", source)
-	}
-
-	ref, ok := templateMap["ref"].(string)
-	if !ok || ref != "v1.0.0" {
-		t.Errorf("Expected ref 'v1.0.0', got '%s'", ref)
-	}
-
-	targetDir, ok := templateMap["target_dir"].(string)
-	if !ok || targetDir != "./test" {
-		t.Errorf("Expected target_dir './test', got '%s'", targetDir)
+	// Verify output was created
+	outputFile := filepath.Join(targetPath, "README.md")
+	if _, err := os.Stat(outputFile); os.IsNotExist(err) {
+		t.Error("Expected README.md to be created")
 	}
 }
 
-func TestReadScaffoldConfig_WithNoAtmosYaml(t *testing.T) {
-	// Create a temporary directory without atmos.yaml
+func TestGenerateProject_LocalTemplate(t *testing.T) {
+	// Create a temporary template directory
 	tempDir := t.TempDir()
-
-	// Test reading scaffold config - should return error
-	_, err := readScaffoldConfig(tempDir)
-	if err == nil {
-		t.Fatal("Expected error when atmos.yaml doesn't exist, but got none")
+	templateDir := filepath.Join(tempDir, "local-template")
+	if err := os.MkdirAll(templateDir, 0755); err != nil {
+		t.Fatalf("Failed to create template directory: %v", err)
 	}
 
-	expectedError := "failed to read atmos.yaml"
-	if !strings.Contains(err.Error(), expectedError) {
-		t.Errorf("Expected error containing '%s', got '%s'", expectedError, err.Error())
+	// Create a simple template file
+	templateFile := filepath.Join(templateDir, "README.md")
+	if err := os.WriteFile(templateFile, []byte("# Local Template"), 0644); err != nil {
+		t.Fatalf("Failed to create template file: %v", err)
+	}
+
+	// Test generateProject with local template
+	targetPath := filepath.Join(tempDir, "output")
+	err := generateProject(templateDir, targetPath, false, false, true, 50, map[string]interface{}{
+		"name": "test-project",
+	})
+	if err != nil {
+		t.Fatalf("Failed to generate project: %v", err)
+	}
+
+	// Verify output was created
+	outputFile := filepath.Join(targetPath, "README.md")
+	if _, err := os.Stat(outputFile); os.IsNotExist(err) {
+		t.Error("Expected README.md to be created")
+	}
+}
+
+func TestGenerateProject_RemoteTemplate(t *testing.T) {
+	// Test generateProject with remote template (should fail gracefully)
+	targetPath := filepath.Join(t.TempDir(), "output")
+	err := generateProject("https://github.com/nonexistent/template.git", targetPath, false, false, true, 50, make(map[string]interface{}))
+	if err == nil {
+		t.Error("Expected error for non-existent remote template")
+	}
+}
+
+func TestIsScaffoldTemplate(t *testing.T) {
+	// Create a temporary atmos.yaml with scaffold configuration
+	tempDir := t.TempDir()
+	atmosYAML := `scaffold:
+  templates:
+    test-template:
+      source: "./test-template"
+      ref: "local"`
+
+	atmosPath := filepath.Join(tempDir, "atmos.yaml")
+	if err := os.WriteFile(atmosPath, []byte(atmosYAML), 0644); err != nil {
+		t.Fatalf("Failed to create atmos.yaml: %v", err)
+	}
+
+	// Change to temp directory for test
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(originalWd)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Test valid scaffold template
+	if !isScaffoldTemplate("test-template") {
+		t.Error("Expected 'test-template' to be recognized as scaffold template")
+	}
+
+	// Test invalid scaffold template
+	if isScaffoldTemplate("nonexistent-template") {
+		t.Error("Expected 'nonexistent-template' to not be recognized as scaffold template")
+	}
+}
+
+func TestIsRemoteTemplate(t *testing.T) {
+	testCases := []struct {
+		name     string
+		path     string
+		expected bool
+	}{
+		{
+			name:     "https URL",
+			path:     "https://github.com/user/template.git",
+			expected: true,
+		},
+		{
+			name:     "http URL",
+			path:     "http://github.com/user/template.git",
+			expected: true,
+		},
+		{
+			name:     "git URL",
+			path:     "git://github.com/user/template.git",
+			expected: true,
+		},
+		{
+			name:     "ssh URL",
+			path:     "ssh://git@github.com/user/template.git",
+			expected: true,
+		},
+		{
+			name:     "local path",
+			path:     "./local-template",
+			expected: false,
+		},
+		{
+			name:     "absolute path",
+			path:     "/tmp/template",
+			expected: false,
+		},
+		{
+			name:     "relative path",
+			path:     "template",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isRemoteTemplate(tc.path)
+			if result != tc.expected {
+				t.Errorf("Expected isRemoteTemplate('%s') to be %v, got %v", tc.path, tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestGenerateFromScaffoldTemplate_ValidTemplate(t *testing.T) {
+	// Create a temporary atmos.yaml with scaffold configuration
+	tempDir := t.TempDir()
+	atmosYAML := `scaffold:
+  templates:
+    test-template:
+      source: "./test-template"
+      ref: "local"
+      target_dir: "./{{ .Config.name }}"
+      description: "Test template"`
+
+	atmosPath := filepath.Join(tempDir, "atmos.yaml")
+	if err := os.WriteFile(atmosPath, []byte(atmosYAML), 0644); err != nil {
+		t.Fatalf("Failed to create atmos.yaml: %v", err)
+	}
+
+	// Create test template directory
+	templateDir := filepath.Join(tempDir, "test-template")
+	if err := os.MkdirAll(templateDir, 0755); err != nil {
+		t.Fatalf("Failed to create template directory: %v", err)
+	}
+
+	// Create scaffold.yaml in template
+	scaffoldConfig := `name: "Test Template"
+description: "A test template"
+template_id: "test-template"
+
+fields:
+  name:
+    type: string
+    label: "Name"
+    default: "test-project"`
+
+	scaffoldPath := filepath.Join(templateDir, "scaffold.yaml")
+	if err := os.WriteFile(scaffoldPath, []byte(scaffoldConfig), 0644); err != nil {
+		t.Fatalf("Failed to create scaffold.yaml: %v", err)
+	}
+
+	// Create a simple template file
+	templateFile := filepath.Join(templateDir, "README.md")
+	if err := os.WriteFile(templateFile, []byte("# {{ .Config.name }}"), 0644); err != nil {
+		t.Fatalf("Failed to create template file: %v", err)
+	}
+
+	// Change to temp directory for test
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(originalWd)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Test generateFromScaffoldTemplate
+	ui := ui.NewInitUI()
+	targetPath := filepath.Join(tempDir, "output")
+	err = generateFromScaffoldTemplate("test-template", targetPath, false, false, true, map[string]interface{}{
+		"name": "my-test-project",
+	}, ui)
+	if err != nil {
+		t.Fatalf("Failed to generate from scaffold template: %v", err)
+	}
+
+	// Verify output was created
+	outputFile := filepath.Join(targetPath, "README.md")
+	if _, err := os.Stat(outputFile); os.IsNotExist(err) {
+		t.Error("Expected README.md to be created")
+	}
+}
+
+func TestGenerateFromScaffoldTemplate_InvalidTemplate(t *testing.T) {
+	// Create a temporary atmos.yaml with scaffold configuration
+	tempDir := t.TempDir()
+	atmosYAML := `scaffold:
+  templates:
+    test-template:
+      source: "./test-template"
+      ref: "local"`
+
+	atmosPath := filepath.Join(tempDir, "atmos.yaml")
+	if err := os.WriteFile(atmosPath, []byte(atmosYAML), 0644); err != nil {
+		t.Fatalf("Failed to create atmos.yaml: %v", err)
+	}
+
+	// Change to temp directory for test
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(originalWd)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Test generateFromScaffoldTemplate with invalid template
+	ui := ui.NewInitUI()
+	targetPath := filepath.Join(tempDir, "output")
+	err = generateFromScaffoldTemplate("nonexistent-template", targetPath, false, false, true, make(map[string]interface{}), ui)
+	if err == nil {
+		t.Error("Expected error for non-existent template")
+	}
+}
+
+func TestValidateScaffoldTemplate_Valid(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create .atmos directory
+	atmosDir := filepath.Join(tempDir, ".atmos")
+	if err := os.MkdirAll(atmosDir, 0755); err != nil {
+		t.Fatalf("Failed to create .atmos directory: %v", err)
+	}
+
+	// Create scaffold.yaml with valid template
+	scaffoldConfig := `template: "test-template"
+values:
+  name: "test-project"`
+
+	scaffoldPath := filepath.Join(atmosDir, "scaffold.yaml")
+	if err := os.WriteFile(scaffoldPath, []byte(scaffoldConfig), 0644); err != nil {
+		t.Fatalf("Failed to create scaffold.yaml: %v", err)
+	}
+
+	// Test validation
+	err := validateScaffoldTemplate(tempDir, "test-template")
+	if err != nil {
+		t.Errorf("Expected validation to pass, got error: %v", err)
+	}
+}
+
+func TestValidateScaffoldTemplate_Mismatch(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create .atmos directory
+	atmosDir := filepath.Join(tempDir, ".atmos")
+	if err := os.MkdirAll(atmosDir, 0755); err != nil {
+		t.Fatalf("Failed to create .atmos directory: %v", err)
+	}
+
+	// Create scaffold.yaml with different template
+	scaffoldConfig := `template: "different-template"
+values:
+  name: "test-project"`
+
+	scaffoldPath := filepath.Join(atmosDir, "scaffold.yaml")
+	if err := os.WriteFile(scaffoldPath, []byte(scaffoldConfig), 0644); err != nil {
+		t.Fatalf("Failed to create scaffold.yaml: %v", err)
+	}
+
+	// Test validation
+	err := validateScaffoldTemplate(tempDir, "test-template")
+	if err == nil {
+		t.Error("Expected validation to fail due to template mismatch")
+	}
+}
+
+func TestValidateScaffoldTemplate_NoScaffoldFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Test validation without scaffold.yaml (should pass)
+	err := validateScaffoldTemplate(tempDir, "test-template")
+	if err != nil {
+		t.Errorf("Expected validation to pass when no scaffold.yaml exists, got error: %v", err)
+	}
+}
+
+func TestValidateScaffoldTemplate_MissingTemplateKey(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create .atmos directory
+	atmosDir := filepath.Join(tempDir, ".atmos")
+	if err := os.MkdirAll(atmosDir, 0755); err != nil {
+		t.Fatalf("Failed to create .atmos directory: %v", err)
+	}
+
+	// Create scaffold.yaml without template key
+	scaffoldConfig := `values:
+  name: "test-project"`
+
+	scaffoldPath := filepath.Join(atmosDir, "scaffold.yaml")
+	if err := os.WriteFile(scaffoldPath, []byte(scaffoldConfig), 0644); err != nil {
+		t.Fatalf("Failed to create scaffold.yaml: %v", err)
+	}
+
+	// Test validation
+	err := validateScaffoldTemplate(tempDir, "test-template")
+	if err == nil {
+		t.Error("Expected validation to fail due to missing template key")
+	}
+}
+
+func TestGenerateFromLocal_ValidTemplate(t *testing.T) {
+	// Create a temporary template directory
+	tempDir := t.TempDir()
+	templateDir := filepath.Join(tempDir, "local-template")
+	if err := os.MkdirAll(templateDir, 0755); err != nil {
+		t.Fatalf("Failed to create template directory: %v", err)
+	}
+
+	// Create a simple template file
+	templateFile := filepath.Join(templateDir, "README.md")
+	if err := os.WriteFile(templateFile, []byte("# Local Template"), 0644); err != nil {
+		t.Fatalf("Failed to create template file: %v", err)
+	}
+
+	// Test generateFromLocal
+	ui := ui.NewInitUI()
+	targetPath := filepath.Join(tempDir, "output")
+	err := generateFromLocal(templateDir, targetPath, false, false, true, map[string]interface{}{
+		"name": "test-project",
+	}, ui, []string{"{{", "}}"})
+	if err != nil {
+		t.Fatalf("Failed to generate from local template: %v", err)
+	}
+
+	// Verify output was created
+	outputFile := filepath.Join(targetPath, "README.md")
+	if _, err := os.Stat(outputFile); os.IsNotExist(err) {
+		t.Error("Expected README.md to be created")
+	}
+}
+
+func TestGenerateFromLocal_NonexistentTemplate(t *testing.T) {
+	// Test generateFromLocal with non-existent template
+	ui := ui.NewInitUI()
+	targetPath := filepath.Join(t.TempDir(), "output")
+	err := generateFromLocal("/nonexistent/template", targetPath, false, false, true, make(map[string]interface{}), ui, []string{"{{", "}}"})
+	if err == nil {
+		t.Error("Expected error for non-existent template")
 	}
 }

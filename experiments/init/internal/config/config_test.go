@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLoadProjectConfigFromContent(t *testing.T) {
+func TestLoadScaffoldConfigFromContent(t *testing.T) {
 	content := `name: "Test Project"
 description: "Test project configuration"
 version: "1.0.0"
@@ -35,7 +35,7 @@ fields:
       - "Apache"
       - "GPL"`
 
-	config, err := LoadProjectConfigFromContent(content)
+	config, err := LoadScaffoldConfigFromContent(content)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test Project", config.Name)
 	assert.Equal(t, "Test project configuration", config.Description)
@@ -64,7 +64,7 @@ func TestLoadUserValues(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Test loading from non-existent file
-	values, templateID, err := LoadUserValues(tempDir)
+	values, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
 	assert.Empty(t, values)
 
@@ -73,15 +73,17 @@ func TestLoadUserValues(t *testing.T) {
 	err = os.MkdirAll(configDir, 0755)
 	assert.NoError(t, err)
 
-	configPath := filepath.Join(configDir, "config.yaml")
-	configContent := `project_name: "test-project"
-author: "Test User"
-license: "MIT"`
+	configPath := filepath.Join(configDir, "scaffold.yaml")
+	configContent := `template_id: "test-template"
+values:
+  project_name: "test-project"
+  author: "Test User"
+  license: "MIT"`
 
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	assert.NoError(t, err)
 
-	values, templateID, err = LoadUserValues(tempDir)
+	values, err = LoadUserValues(tempDir)
 	assert.NoError(t, err)
 	assert.Equal(t, "test-project", values["project_name"])
 	assert.Equal(t, "Test User", values["author"])
@@ -112,12 +114,12 @@ func TestLoadUserValues_ExistingConfig(t *testing.T) {
 	err := os.MkdirAll(atmosDir, 0755)
 	assert.NoError(t, err)
 
-	configPath := filepath.Join(atmosDir, "config.yaml")
+	configPath := filepath.Join(atmosDir, "scaffold.yaml")
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	assert.NoError(t, err)
 
 	// Load the values
-	values, templateID, err := LoadUserValues(tempDir)
+	values, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
 
 	// Verify all values are loaded correctly
@@ -145,17 +147,16 @@ func TestSaveUserValues(t *testing.T) {
 		"monitoring":   true,
 	}
 
-	err := SaveUserValues(tempDir, values, "test-template")
+	err := SaveUserValues(tempDir, values)
 	assert.NoError(t, err)
 
 	// Verify file was created
-	configPath := filepath.Join(tempDir, ".atmos", "config.yaml")
+	configPath := filepath.Join(tempDir, ".atmos", "scaffold.yaml")
 	assert.FileExists(t, configPath)
 
 	// Load and verify content
-	loadedValues, loadedTemplateID, err := LoadUserValues(tempDir)
+	loadedValues, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
-	assert.Equal(t, "test-template", loadedTemplateID)
 	assert.Equal(t, "test-project", loadedValues["project_name"])
 	assert.Equal(t, "Test User", loadedValues["author"])
 	assert.Equal(t, "MIT", loadedValues["license"])
@@ -164,7 +165,7 @@ func TestSaveUserValues(t *testing.T) {
 }
 
 func TestDeepMerge(t *testing.T) {
-	projectConfig := &ProjectConfig{
+	projectConfig := &ScaffoldConfig{
 		Fields: map[string]FieldDefinition{
 			"project_name": {
 				Default: "default-project",
@@ -275,11 +276,11 @@ func TestPersistenceFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify file was created
-	configPath := filepath.Join(tempDir, ".atmos", "config.yaml")
+	configPath := filepath.Join(tempDir, ".atmos", "scaffold.yaml")
 	assert.FileExists(t, configPath)
 
 	// Load and verify all values are persisted correctly
-	loadedValues, loadedTemplateID, err := LoadUserValues(tempDir)
+	loadedValues, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
 
 	// Test all the key values
@@ -311,11 +312,11 @@ func TestPersistenceFlow(t *testing.T) {
 	assert.Contains(t, contentStr, "enable_logging: true")
 }
 
-func TestPersistenceWithProjectConfig(t *testing.T) {
+func TestPersistenceWithScaffoldConfig(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Create a mock project config
-	projectConfig := &ProjectConfig{
+	projectConfig := &ScaffoldConfig{
 		Fields: map[string]FieldDefinition{
 			"project_name": {
 				Key:      "project_name",
@@ -375,13 +376,12 @@ func TestPersistenceWithProjectConfig(t *testing.T) {
 	assert.Equal(t, true, mergedValues["enable_monitoring"])
 
 	// Save the merged values
-	err := SaveUserValues(tempDir, mergedValues, "test-template")
+	err := SaveUserValues(tempDir, mergedValues)
 	assert.NoError(t, err)
 
 	// Load and verify persistence
-	loadedValues, loadedTemplateID, err := LoadUserValues(tempDir)
+	loadedValues, err := LoadUserValues(tempDir)
 	assert.NoError(t, err)
-	assert.Equal(t, "test-template", loadedTemplateID)
 
 	assert.Equal(t, "my-custom-project", loadedValues["project_name"])
 	assert.Equal(t, "Jane Smith", loadedValues["author"])
@@ -390,14 +390,14 @@ func TestPersistenceWithProjectConfig(t *testing.T) {
 	assert.Equal(t, true, loadedValues["enable_monitoring"])
 }
 
-func TestPromptForProjectConfigUpdatesUserValues(t *testing.T) {
+func TestPromptForScaffoldConfigUpdatesUserValues(t *testing.T) {
 	// Skip this test in non-interactive environments
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
 	// Create a simple project config
-	projectConfig := &ProjectConfig{
+	projectConfig := &ScaffoldConfig{
 		Fields: map[string]FieldDefinition{
 			"project_name": {
 				Key:         "project_name",
@@ -438,7 +438,7 @@ func TestPromptForProjectConfigUpdatesUserValues(t *testing.T) {
 
 	// This test verifies that the function signature and structure are correct
 	// In a real interactive test, we would need to mock the form input
-	err := PromptForProjectConfig(projectConfig, userValues)
+	err := PromptForScaffoldConfig(projectConfig, userValues)
 
 	// The function should either complete successfully or return an error
 	// but it shouldn't crash
