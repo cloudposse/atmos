@@ -269,10 +269,10 @@ func initCobraConfig() {
 			if err := oldUsageFunc(command); err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
-			
+
 			// Check if pager should be enabled based on flag, env var, or config
 			pagerEnabled := atmosConfig.Settings.Terminal.IsPagerEnabled()
-			
+
 			// Check if --pager flag was explicitly set
 			if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
 				// Handle --pager flag values
@@ -285,7 +285,7 @@ func initCobraConfig() {
 					pagerEnabled = true
 				}
 			}
-			
+
 			pager := pager.NewWithAtmosConfig(pagerEnabled)
 			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
 				log.Error("Failed to run pager", "error", err)
