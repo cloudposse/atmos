@@ -179,7 +179,7 @@ automatically (which is this example is `vpc`). `/` (slash) in the Atmos compone
 We usually don’t specify `workspace_key_prefix` for each component and let Atmos use the component name as `workspace_key_prefix`.
 
 Once all the above is configured, when you run the commands `atmos terraform plan vpc -s <stack>`
-or `atmos terraform apply vpc -s <stack>`, before executing the Terraform commands, Atmos will [deep-merge](#terraform-backend-inheritance)
+or `atmos terraform apply vpc -s <stack>`, before executing the Terraform commands, Atmos will [deep-merge](#backend-inheritance)
 the backend configurations from the `_defaults.yaml` manifest and from the component itself, and will generate a backend
 config JSON file `backend.tf.json` in the component's folder, similar to the following example:
 
@@ -249,7 +249,7 @@ to auto-generate the `key` parameter in the format `<component-name>.terraform.t
 with the Atmos component name. In `<component-name>`, all occurrences of `/` (slash) will be replaced with `-` (dash).
 
 If `auto_generate_backend_file` is set to `true` in the `atmos.yaml` CLI config file in the `components.terraform` section,
-Atmos will [deep-merge](#terraform-backend-inheritance) the backend configurations from the `_defaults.yaml` manifests and
+Atmos will [deep-merge](#backend-inheritance) the backend configurations from the `_defaults.yaml` manifests and
 from the component itself, and will generate a backend config JSON file `backend.tf.json` in the component's folder,
 similar to the following example:
 
@@ -308,7 +308,7 @@ If the `prefix` is not specified for a component, Atmos will use the component n
 to auto-generate the `prefix`. In the component name, all occurrences of `/` (slash) will be replaced with `-` (dash).
 
 If `auto_generate_backend_file` is set to `true` in the `atmos.yaml` CLI config file in the `components.terraform` section,
-Atmos will [deep-merge](#terraform-backend-inheritance) the backend configurations from the `_defaults.yaml` manifests and
+Atmos will [deep-merge](#backend-inheritance) the backend configurations from the `_defaults.yaml` manifests and
 from the component itself, and will generate a backend config JSON file `backend.tf.json` in the component's folder,
 similar to the following example:
 
@@ -364,7 +364,7 @@ components:
 </Terminal>
 
 If `auto_generate_backend_file` is set to `true` in the `atmos.yaml` CLI config file in the `components.terraform` section,
-Atmos will [deep-merge](#terraform-backend-inheritance) the backend configurations from the `_defaults.yaml` manifests and
+Atmos will [deep-merge](#backend-inheritance) the backend configurations from the `_defaults.yaml` manifests and
 from the component itself, and will generate a backend config JSON file `backend.tf.json` in the component's folder,
 similar to the following example:
 

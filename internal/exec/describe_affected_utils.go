@@ -26,6 +26,7 @@ func executeDescribeAffected(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	excludeLocked bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
@@ -177,6 +178,7 @@ func executeDescribeAffected(
 		includeSpaceliftAdminStacks,
 		includeSettings,
 		stack,
+		excludeLocked,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -194,6 +196,7 @@ func findAffected(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stackToFilter string,
+	excludeLocked bool,
 ) ([]schema.Affected, error) {
 	res := []schema.Affected{}
 	var err error
@@ -220,6 +223,10 @@ func findAffected(
 								}
 								// Skip disabled components
 								if !isComponentEnabled(metadataSection, componentName) {
+									continue
+								}
+								// Skip locked components (if `--exclude-locked` is provided on the command line)
+								if excludeLocked && isComponentLocked(metadataSection) {
 									continue
 								}
 								// Check `metadata` section
@@ -458,6 +465,10 @@ func findAffected(
 								if !isComponentEnabled(metadataSection, componentName) {
 									continue
 								}
+								// Skip locked components (if `--exclude-locked` is provided on the command line)
+								if excludeLocked && isComponentLocked(metadataSection) {
+									continue
+								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, metadataSection, "metadata") {
 									affected := schema.Affected{
@@ -663,6 +674,10 @@ func findAffected(
 								}
 								// Skip disabled components
 								if !isComponentEnabled(metadataSection, componentName) {
+									continue
+								}
+								// Skip locked components (if `--exclude-locked` is provided on the command line)
+								if excludeLocked && isComponentLocked(metadataSection) {
 									continue
 								}
 								// Check `metadata` section

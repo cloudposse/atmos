@@ -11,7 +11,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// describeWorkflowsCmd executes 'atmos describe workflows' CLI commands
+var (
+	ErrInvalidOutputType = fmt.Errorf("invalid output type specified. Valid values are 'list', 'map', and 'all'")
+	ErrInvalidFormat     = fmt.Errorf("invalid format specified. Valid values are 'yaml' and 'json'")
+)
+
+// describeWorkflowsCmd executes 'atmos describe workflows' CLI commands.
 var describeWorkflowsCmd = &cobra.Command{
 	Use:                "workflows",
 	Short:              "List Atmos workflows and their associated files",
@@ -82,22 +87,6 @@ func flagsToDescribeWorkflowsArgs(flags *pflag.FlagSet, describe *exec.DescribeW
 
 	return nil
 }
-
-func setStringFlagIfChanged(flags *pflag.FlagSet, name string, target *string) error {
-	if flags.Changed(name) {
-		val, err := flags.GetString(name)
-		if err != nil {
-			return err
-		}
-		*target = val
-	}
-	return nil
-}
-
-var (
-	ErrInvalidOutputType = fmt.Errorf("invalid output type specified. Valid values are 'list', 'map', and 'all'")
-	ErrInvalidFormat     = fmt.Errorf("invalid format specified. Valid values are 'yaml' and 'json'")
-)
 
 func validateAndSetDefaults(describe *exec.DescribeWorkflowsArgs) error {
 	if describe.Format == "" {

@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/pkg/errors"
 )
 
 // prepareNewPlanFile handles the new plan file (generates one if not provided).
@@ -70,6 +71,10 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	// Create a new info object for the plan command
 	planInfo := *info
 	planInfo.SubCommand = "plan"
+
+	// Process templates and Atmos YAML functions in the plan command.
+	planInfo.ProcessTemplates = true
+	planInfo.ProcessFunctions = true
 
 	// Filter out --orig and --new flags from AdditionalArgsAndFlags
 	planArgs := filterPlanDiffFlags(info.AdditionalArgsAndFlags)

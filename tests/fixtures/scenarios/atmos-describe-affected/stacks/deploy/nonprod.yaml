@@ -11,10 +11,11 @@ components:
       settings:
         a: 1
         b: 2
+        c: 3
       vars:
-        foo: "foo"
-        bar: "bar"
-        baz: "baz"
+        foo: "{{ .settings.a }}"
+        bar: "{{ .settings.b }}"
+        baz: "{{ .settings.c }}"
 
     component-2:
       metadata:

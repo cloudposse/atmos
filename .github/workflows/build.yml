@@ -19,7 +19,6 @@ concurrency:
 
 jobs:
   release:
-    if: ${{ github.event.release.prerelease == false }}
     uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@main
     secrets: inherit
 
