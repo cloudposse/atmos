@@ -72,6 +72,7 @@ const (
 	PackerSectionName                 = "packer"
 	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
+	IdentitiesSectionName             = "identities"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
@@ -112,4 +113,6 @@ const (
 
 	ComponentStr = "component"
 	StackStr     = "stack"
+
+	IdentityFlag = "--identity"
 )

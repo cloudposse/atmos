@@ -1,0 +1,7 @@
+components:
+  terraform:
+    mycomponent:
+      metadata:
+        component: mock_caller_identity
+      vars:
+        region: us-east-1

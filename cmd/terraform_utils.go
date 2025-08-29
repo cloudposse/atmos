@@ -68,6 +68,12 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Components = components
 	info.DryRun = dryRun
 
+	identityFlag, err := flags.GetString("identity")
+	if err != nil {
+		return err
+	}
+	info.Identity = identityFlag
+
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")

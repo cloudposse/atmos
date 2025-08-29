@@ -1,0 +1,21 @@
+base_path: "./"
+components:
+  terraform:
+    base_path: "../../components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+auth:
+  providers:
+    oidcprov:
+      type: aws/oidc
+      region: us-east-1
+      profile: oidc-prof
+  identities:
+    oidc:
+      provider: oidcprov
+      role_arn: arn:aws:iam::000000000000:role/Dummy
+logs:
+  level: Debug

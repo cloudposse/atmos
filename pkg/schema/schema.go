@@ -57,6 +57,7 @@ type AtmosConfiguration struct {
 	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
 	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
 	Docs          Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth          AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -453,6 +454,7 @@ type ArgsAndFlagsInfo struct {
 	Query                     string
 	Affected                  bool
 	All                       bool
+	Identity                  string
 }
 
 type ConfigAndStacksInfo struct {
@@ -477,6 +479,7 @@ type ConfigAndStacksInfo struct {
 	ComponentProvidersSection     AtmosSectionMapType
 	ComponentHooksSection         AtmosSectionMapType
 	ComponentEnvSection           AtmosSectionMapType
+	ComponentIdentitiesSection    AtmosSectionMapType
 	ComponentEnvList              []string
 	ComponentBackendSection       AtmosSectionMapType
 	ComponentBackendType          string
@@ -532,6 +535,7 @@ type ConfigAndStacksInfo struct {
 	Affected                      bool
 	All                           bool
 	Components                    []string
+	Identity                      string
 }
 
 // Workflows
@@ -965,4 +969,38 @@ type ListConfig struct {
 type ListColumnConfig struct {
 	Name  string `yaml:"name" json:"name" mapstructure:"name"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
+}
+
+type AuthConfig struct {
+	Providers      map[string]interface{} `yaml:"providers" json:"providers" mapstructure:"providers"`
+	Identities     map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
+	DefaultRegion  string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
+	DefaultProfile string                 `yaml:"default_profile" json:"default_profile" mapstructure:"default_profile"`
+}
+
+// ProviderDefaultConfig defines the default configuration for an identity provider, this is shared amongst all providers
+
+type ProviderDefaultConfig struct {
+	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
+	Url  string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
+	// AWS Specific
+	Region  string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
+	Profile string `yaml:"profile,omitempty" json:"profile,omitempty" mapstructure:"profile,omitempty"`
+}
+
+type Identity struct {
+	Identity string
+
+	Default           bool          `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
+	Enabled           bool          `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
+	Provider          string        `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider,omitempty"`
+	RequestedDuration time.Duration `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration,omitempty"`
+	// AWS Specific
+	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
+	// Env allows specifying environment variables to set when this identity is used.
+	// Preserves key casing:
+	//   env:
+	//     - key: AWS_PROFILE
+	//       value: acme-identity
+	Env []CommandEnv `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 }
