@@ -178,15 +178,6 @@ func writeTestCoverageSection(output io.Writer, coverageData *CoverageData) {
 		writePRFilteredUncoveredFunctions(output, coverageData.FunctionCoverage)
 	}
 
-	// Show filtered files if any.
-	if len(coverageData.FilteredFiles) > 0 {
-		fmt.Fprint(output, detailsOpenTag)
-		fmt.Fprintf(output, "<summary>Excluded mock files (%d)</summary>\n\n", len(coverageData.FilteredFiles))
-		for _, file := range coverageData.FilteredFiles {
-			fmt.Fprintf(output, "- `%s`\n", file)
-		}
-		fmt.Fprint(output, detailsCloseTag)
-	}
 }
 
 // writePRFilteredUncoveredFunctions writes uncovered functions filtered by PR changes.

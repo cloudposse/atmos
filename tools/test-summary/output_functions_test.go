@@ -244,10 +244,9 @@ func TestWriteMarkdownContent(t *testing.T) {
 			format: formatMarkdown,
 			want: []string{
 				"# Test Results",
-				"| Result | Count | Percentage |",
-				"| ✅ Passed | 1 | 33.3% |",
-				"| ❌ Failed | 1 | 33.3% |",
-				"| ⏭️ Skipped | 1 | 33.3% |",
+				"[![Passed](https://shields.io/badge/PASSED-1-success?style=for-the-badge)](#user-content-passed)",
+				"[![Failed](https://shields.io/badge/FAILED-1-critical?style=for-the-badge)](#user-content-failed)",
+				"[![Skipped](https://shields.io/badge/SKIPPED-1-inactive?style=for-the-badge)](#user-content-skipped)",
 				"### ❌ Failed Tests (1)",
 				"### ⏭️ Skipped Tests (1)",
 				"### ✅ Passed Tests (1)",
@@ -274,10 +273,7 @@ func TestWriteMarkdownContent(t *testing.T) {
 			format: formatMarkdown,
 			want: []string{
 				"# Test Results",
-				"| Result | Count | Percentage |",
-				"| ✅ Passed | 1 | 100.0% |",
-				"| ❌ Failed | 0 | 0.0% |",
-				"| ⏭️ Skipped | 0 | 0.0% |",
+				"[![Passed](https://shields.io/badge/PASSED-1-success?style=for-the-badge)](#user-content-passed)",
 			},
 		},
 	}

@@ -146,7 +146,7 @@ func getFunctionCoverage(profileFile string, excludeMocks bool) ([]CoverageFunct
 	
 	// Use filepath.Clean to sanitize the path.
 	cleanPath := filepath.Clean(profileFile)
-	cmd := exec.Command("go", "tool", "cover", "-func="+cleanPath)
+	cmd := exec.Command("go", "tool", "cover", "-func", cleanPath)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get function coverage: %w", err)

@@ -70,6 +70,12 @@ func writeGitHubSummary(summary *TestSummary, outputFile string) error {
 
 // writeMarkdownContent writes the markdown content for test results.
 func writeMarkdownContent(output io.Writer, summary *TestSummary, format string) {
+	// Add UUID magic comment to prevent duplicate GitHub comments.
+	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
+	if uuid := os.Getenv("TEST_SUMMARY_UUID"); uuid != "" {
+		fmt.Fprintf(output, "<!-- test-summary-uuid: %s -->\n\n", uuid)
+	}
+
 	// Add timestamp for local GitHub format runs.
 	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
 	if format == formatGitHub && os.Getenv("GITHUB_STEP_SUMMARY") == "" {
@@ -79,23 +85,23 @@ func writeMarkdownContent(output io.Writer, summary *TestSummary, format string)
 	// Test Results section (h1).
 	fmt.Fprintf(output, "# Test Results\n\n")
 
-	// Write multi-line summary with percentages.
+	// Get test counts.
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
-	passedPercent := 0.0
-	failedPercent := 0.0
-	skippedPercent := 0.0
 
-	if total > 0 {
-		passedPercent = (float64(len(summary.Passed)) / float64(total)) * percentageMultiplier
-		failedPercent = (float64(len(summary.Failed)) / float64(total)) * percentageMultiplier
-		skippedPercent = (float64(len(summary.Skipped)) / float64(total)) * percentageMultiplier
+	// Display test results as shields.io badges.
+	if len(summary.Passed) > 0 {
+		fmt.Fprintf(output, "[![Passed](https://shields.io/badge/PASSED-%d-success?style=for-the-badge)](#user-content-passed) ", len(summary.Passed))
 	}
-
-	fmt.Fprintf(output, "| Result | Count | Percentage |\n")
-	fmt.Fprintf(output, "|--------|-------|------------|\n")
-	fmt.Fprintf(output, "| ✅ Passed | %d | %.1f%% |\n", len(summary.Passed), passedPercent)
-	fmt.Fprintf(output, "| ❌ Failed | %d | %.1f%% |\n", len(summary.Failed), failedPercent)
-	fmt.Fprintf(output, "| ⏭️ Skipped | %d | %.1f%% |\n\n", len(summary.Skipped), skippedPercent)
+	if len(summary.Failed) > 0 {
+		fmt.Fprintf(output, "[![Failed](https://shields.io/badge/FAILED-%d-critical?style=for-the-badge)](#user-content-failed) ", len(summary.Failed))
+	}
+	if len(summary.Skipped) > 0 {
+		fmt.Fprintf(output, "[![Skipped](https://shields.io/badge/SKIPPED-%d-inactive?style=for-the-badge)](#user-content-skipped) ", len(summary.Skipped))
+	}
+	if total == 0 {
+		fmt.Fprintf(output, "[![No Tests](https://shields.io/badge/NO_TESTS-0-inactive?style=for-the-badge)](#user-content-no-tests)")
+	}
+	fmt.Fprintf(output, "\n\n")
 
 	// Write test sections.
 	writeFailedTests(output, summary.Failed)
