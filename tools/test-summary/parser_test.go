@@ -8,13 +8,13 @@ import (
 
 func TestParseTestJSON(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		wantPassed  int
-		wantFailed  int
-		wantSkipped int
+		name         string
+		input        string
+		wantPassed   int
+		wantFailed   int
+		wantSkipped  int
 		wantCoverage string
-		wantConsole string
+		wantConsole  string
 	}{
 		{
 			name:       "single passing test",
@@ -99,9 +99,9 @@ func TestProcessLine(t *testing.T) {
 			wantConsole: "This is plain text\n",
 		},
 		{
-			name:        "output event with coverage",
-			line:        coverageOutputJSON,
-			wantConsole: "coverage: 75.5% of statements\n",
+			name:         "output event with coverage",
+			line:         coverageOutputJSON,
+			wantConsole:  "coverage: 75.5% of statements\n",
 			wantCoverage: "75.5%",
 		},
 		{

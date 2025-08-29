@@ -6,7 +6,7 @@ import (
 
 func TestRun_InvalidFormat(t *testing.T) {
 	exitCode := run("", "invalid-format", "")
-	
+
 	// Should exit with 1 for invalid format
 	if exitCode != 1 {
 		t.Errorf("Expected exit code 1 for invalid format, got %d", exitCode)
@@ -16,11 +16,11 @@ func TestRun_InvalidFormat(t *testing.T) {
 func TestHandleOutput(t *testing.T) {
 	summary := createTestSummary(2, 1, 0, "75.0%")
 	consoleOutput := "test console output"
-	
+
 	tests := []struct {
-		name       string
-		format     string
-		wantExit   int
+		name     string
+		format   string
+		wantExit int
 	}{
 		{
 			name:     "console format",
@@ -28,12 +28,12 @@ func TestHandleOutput(t *testing.T) {
 			wantExit: 1, // Summary has 1 failed test
 		},
 		{
-			name:     "invalid format", 
+			name:     "invalid format",
 			format:   "invalid",
 			wantExit: 1,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exitCode := handleOutput(tt.format, "", summary, consoleOutput)
@@ -61,7 +61,7 @@ func TestOpenInput(t *testing.T) {
 			wantErr:  true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := openInput(tt.filename)

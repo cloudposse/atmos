@@ -69,6 +69,7 @@ func main() {
 	exitCode := run(*inputFile, *format, *outputFile)
 	os.Exit(exitCode)
 }
+
 func run(inputFile, format, outputFile string) int {
 	// Open input.
 	input, err := openInput(inputFile)
@@ -86,12 +87,14 @@ func run(inputFile, format, outputFile string) int {
 	// Handle output based on format.
 	return handleOutput(format, outputFile, summary, consoleOutput)
 }
+
 func openInput(inputFile string) (io.Reader, error) {
 	if inputFile == stdinMarker {
 		return os.Stdin, nil
 	}
 	return os.Open(inputFile)
 }
+
 func handleOutput(format, outputFile string, summary *TestSummary, consoleOutput string) int {
 	exitCode := summary.ExitCode
 	switch format {
@@ -114,6 +117,7 @@ func handleOutput(format, outputFile string, summary *TestSummary, consoleOutput
 	}
 	return exitCode
 }
+
 func handleMarkdownOutput(outputFile string, summary *TestSummary, exitCode int) int {
 	output := outputFile
 	if output == "" {
@@ -125,6 +129,7 @@ func handleMarkdownOutput(outputFile string, summary *TestSummary, exitCode int)
 	}
 	return exitCode
 }
+
 func setupUsage() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: test-summary [options]\n\n")
@@ -140,6 +145,7 @@ func setupUsage() {
 		fmt.Fprintf(os.Stderr, "  test-summary -input=test-results.json -format=%s\n", formatGitHub)
 	}
 }
+
 func parseTestJSON(input io.Reader) (*TestSummary, string) {
 	scanner := bufio.NewScanner(input)
 	var console strings.Builder
@@ -154,6 +160,7 @@ func parseTestJSON(input io.Reader) (*TestSummary, string) {
 	sortResults(summary)
 	return summary, console.String()
 }
+
 func processLine(line string, console *strings.Builder, results map[string]*TestResult, summary *TestSummary, coverageRe *regexp.Regexp) {
 	var event TestEvent
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
@@ -174,6 +181,7 @@ func processLine(line string, console *strings.Builder, results map[string]*Test
 		recordTestResult(&event, results, summary)
 	}
 }
+
 func recordTestResult(event *TestEvent, results map[string]*TestResult, summary *TestSummary) {
 	result := TestResult{
 		Package:  event.Package,
@@ -187,6 +195,7 @@ func recordTestResult(event *TestEvent, results map[string]*TestResult, summary 
 		summary.ExitCode = 1
 	}
 }
+
 func categorizeResults(results map[string]*TestResult, summary *TestSummary) {
 	for _, result := range results {
 		switch result.Status {
@@ -199,6 +208,7 @@ func categorizeResults(results map[string]*TestResult, summary *TestSummary) {
 		}
 	}
 }
+
 func sortResults(summary *TestSummary) {
 	sortTests := func(tests []TestResult) {
 		sort.Slice(tests, func(i, j int) bool {
@@ -212,6 +222,7 @@ func sortResults(summary *TestSummary) {
 	sortTests(summary.Skipped)
 	sortTests(summary.Passed)
 }
+
 func writeSummary(summary *TestSummary, format, outputFile string) error {
 	output, outputPath, err := openOutput(format, outputFile)
 	if err != nil {
@@ -230,6 +241,7 @@ func writeSummary(summary *TestSummary, format, outputFile string) error {
 	}
 	return nil
 }
+
 func openOutput(format, outputFile string) (io.Writer, string, error) {
 	switch format {
 	case formatGitHub:
@@ -247,6 +259,7 @@ func openOutput(format, outputFile string) (io.Writer, string, error) {
 		return os.Stdout, stdoutPath, nil
 	}
 }
+
 func openGitHubOutput(outputFile string) (io.Writer, string, error) {
 	//nolint:forbidigo // This is a standalone tool, not part of Atmos core - os.Getenv is appropriate here.
 	githubSummary := os.Getenv("GITHUB_STEP_SUMMARY")
@@ -272,6 +285,7 @@ func openGitHubOutput(outputFile string) (io.Writer, string, error) {
 	fmt.Fprintf(os.Stderr, "📝 GITHUB_STEP_SUMMARY not set (running locally). Writing summary to: %s\n", absPath)
 	return file, defaultFile, nil
 }
+
 func writeMarkdownContent(output io.Writer, summary *TestSummary, format string) {
 	// Add timestamp for local GitHub format runs.
 	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
@@ -292,6 +306,7 @@ func writeMarkdownContent(output io.Writer, summary *TestSummary, format string)
 	writeSkippedTests(output, summary.Skipped)
 	writePassedTests(output, summary.Passed)
 }
+
 func writeCoverageSection(output io.Writer, coverage string) {
 	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverage, "%"), base10BitSize)
 	emoji := "🔴" // red for < 50%.
@@ -302,6 +317,7 @@ func writeCoverageSection(output io.Writer, coverage string) {
 	}
 	fmt.Fprintf(output, "**Coverage:** %s %s of statements\n\n", emoji, coverage)
 }
+
 func writeFailedTests(output io.Writer, failed []TestResult) {
 	if len(failed) == 0 {
 		return
@@ -320,6 +336,7 @@ func writeFailedTests(output io.Writer, failed []TestResult) {
 	}
 	fmt.Fprintf(output, "```\n\n")
 }
+
 func writeSkippedTests(output io.Writer, skipped []TestResult) {
 	if len(skipped) == 0 {
 		return
@@ -333,6 +350,7 @@ func writeSkippedTests(output io.Writer, skipped []TestResult) {
 	}
 	fmt.Fprintf(output, "\n")
 }
+
 func writePassedTests(output io.Writer, passed []TestResult) {
 	if len(passed) == 0 {
 		return
@@ -348,6 +366,7 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 	}
 	fmt.Fprintf(output, "\n</details>\n\n")
 }
+
 func shortPackage(pkg string) string {
 	// Shorten package name for readability.
 	// github.com/cloudposse/atmos/cmd -> cmd

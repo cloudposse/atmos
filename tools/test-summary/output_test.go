@@ -7,10 +7,10 @@ import (
 
 func TestWriteCoverageSection(t *testing.T) {
 	tests := []struct {
-		name        string
-		coverage    string
-		wantEmoji   string
-		wantText    string
+		name      string
+		coverage  string
+		wantEmoji string
+		wantText  string
 	}{
 		{
 			name:      "high coverage",
