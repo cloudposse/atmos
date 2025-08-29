@@ -61,8 +61,7 @@ testacc: get
 
 testacc-cover: get
 	@echo "Running tests with coverage"
-	go test $(TEST) -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp
-	cat coverage.out.tmp | grep -v "mock_" > coverage.out
+	go test $(TEST) -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out
 
 # Run acceptance tests with coverage report
 testacc-coverage: testacc-cover
@@ -71,13 +70,12 @@ testacc-coverage: testacc-cover
 # New target with test summary for local development
 testacc-summary: get
 	@echo "Running tests with coverage and summary"
-	@go test $(TEST) -v -json -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp 2>&1 | \
+	@go test $(TEST) -v -json -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out 2>&1 | \
 		tee test-results.json | \
 		go run ./tools/test-summary/main.go -format=console
-	@cat coverage.out.tmp | grep -v "mock_" > coverage.out
 	@echo ""
 	@echo "=== GENERATING TEST SUMMARY ==="
-	@go run ./tools/test-summary/main.go -input=test-results.json -format=github
+	@go run ./tools/test-summary/main.go -input=test-results.json -coverprofile=coverage.out -format=github
 
 # CI target (alias for testacc-summary)
 testacc-ci: testacc-summary
@@ -92,6 +90,6 @@ testacc-view-summary:
 
 # Clean test artifacts
 clean-test:
-	rm -f test-results.json test-summary.md coverage.out coverage.out.tmp coverage.html
+	rm -f test-results.json test-summary.md coverage.out coverage.html
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-summary testacc-ci testacc-view-summary clean-test

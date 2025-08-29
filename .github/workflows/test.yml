@@ -215,7 +215,7 @@ jobs:
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.number }}
-          body-path: ${{ env.GITHUB_STEP_SUMMARY }}
+          body-path: test-summary.md
           edit-mode: replace
 
       - name: Upload coverage report to Codecov
