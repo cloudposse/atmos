@@ -43,8 +43,6 @@ func getThemeAwareChromaTheme(config *schema.AtmosConfiguration) string {
 
 	// Second priority: Check config if available and non-nil
 	if themeName == "" && config != nil &&
-		config.Settings != nil &&
-		config.Settings.Terminal != nil &&
 		config.Settings.Terminal.Theme != "" {
 		themeName = config.Settings.Terminal.Theme
 	}
