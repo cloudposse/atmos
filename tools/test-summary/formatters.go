@@ -177,7 +177,6 @@ func writeTestCoverageSection(output io.Writer, coverageData *CoverageData) {
 	if len(coverageData.FunctionCoverage) > 0 {
 		writePRFilteredUncoveredFunctions(output, coverageData.FunctionCoverage)
 	}
-
 }
 
 // writePRFilteredUncoveredFunctions writes uncovered functions filtered by PR changes.
