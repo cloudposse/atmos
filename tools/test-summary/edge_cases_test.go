@@ -24,7 +24,7 @@ func TestOpenOutputEdgeCases(t *testing.T) {
 	// Test creating file in existing directory
 	tempDir := "/tmp"
 	tempFile := tempDir + "/test-summary-temp.md"
-	
+
 	writer, path, err := openOutput(formatMarkdown, tempFile)
 	if err != nil {
 		t.Errorf("openOutput() error = %v", err)
@@ -37,7 +37,7 @@ func TestOpenOutputEdgeCases(t *testing.T) {
 	if path != tempFile {
 		t.Errorf("openOutput() path = %v, want %v", path, tempFile)
 	}
-	
+
 	// Clean up
 	if closer, ok := writer.(io.Closer); ok {
 		closer.Close()
@@ -63,14 +63,14 @@ func TestWriteMarkdownContentWithGitHubActions(t *testing.T) {
 
 	var buf bytes.Buffer
 	writeMarkdownContent(&buf, summary, formatGitHub)
-	
+
 	output := buf.String()
-	
+
 	// Should not include timestamp when GITHUB_STEP_SUMMARY is set
 	if strings.Contains(output, "_Generated:") {
 		t.Error("writeMarkdownContent() should not include timestamp when GITHUB_STEP_SUMMARY is set")
 	}
-	
+
 	// Should include test results
 	if !strings.Contains(output, "## Test Results") {
 		t.Error("writeMarkdownContent() missing test results header")
@@ -126,7 +126,7 @@ func TestHandleOutputBothFormat(t *testing.T) {
 
 	// Capture output for both format
 	exitCode := handleOutput(formatBoth, "-", summary, consoleOutput)
-	
+
 	if exitCode != 0 {
 		t.Errorf("handleOutput() both format = %v, want 0", exitCode)
 	}

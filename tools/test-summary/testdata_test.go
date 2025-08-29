@@ -91,7 +91,6 @@ func containsAll(t *testing.T, got string, want ...string) {
 	}
 }
 
-
 // Helper function to assert test counts.
 func assertTestCounts(t *testing.T, summary *TestSummary, wantPassed, wantFailed, wantSkipped int) {
 	t.Helper()

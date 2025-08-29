@@ -20,8 +20,8 @@ func TestWriteSummary(t *testing.T) {
 		{
 			name: "markdown to stdout",
 			summary: &TestSummary{
-				Failed: []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.5}},
-				Passed: []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
+				Failed:   []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.5}},
+				Passed:   []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
 				Coverage: "85.5%",
 			},
 			format:     formatMarkdown,
@@ -88,23 +88,23 @@ func TestSetupUsage(t *testing.T) {
 	// Test that setupUsage function configures flag.Usage properly
 	// We can't easily capture the output, but we can test that the function runs without error
 	setupUsage()
-	
+
 	// Test that flag.Usage is not nil after setup
 	if flag.Usage == nil {
 		t.Error("setupUsage() should set flag.Usage")
 	}
-	
+
 	// We can verify the function was called by checking it's been assigned
 	// This is more of a smoke test to ensure the function doesn't panic
 }
 
 func TestOpenOutput(t *testing.T) {
 	tests := []struct {
-		name         string
-		format       string
-		outputFile   string
-		wantPath     string
-		wantError    bool
+		name       string
+		format     string
+		outputFile string
+		wantPath   string
+		wantError  bool
 	}{
 		{
 			name:       "markdown to stdout",
@@ -143,7 +143,7 @@ func TestOpenOutput(t *testing.T) {
 			if path != tt.wantPath && !strings.Contains(path, tt.wantPath) {
 				t.Errorf("openOutput() path = %v, want %v", path, tt.wantPath)
 			}
-			
+
 			// Close if it's a file
 			if closer, ok := writer.(io.Closer); ok && writer != os.Stdout {
 				closer.Close()
@@ -167,7 +167,7 @@ func TestOpenGitHubOutput(t *testing.T) {
 		if path != defaultSummaryFile {
 			t.Errorf("openGitHubOutput() path = %v, want %v", path, defaultSummaryFile)
 		}
-		
+
 		// Close and cleanup
 		if closer, ok := writer.(io.Closer); ok {
 			closer.Close()
@@ -190,7 +190,7 @@ func TestOpenGitHubOutput(t *testing.T) {
 		if path != customFile {
 			t.Errorf("openGitHubOutput() path = %v, want %v", path, customFile)
 		}
-		
+
 		// Close and cleanup
 		if closer, ok := writer.(io.Closer); ok {
 			closer.Close()
@@ -209,9 +209,9 @@ func TestWriteMarkdownContent(t *testing.T) {
 		{
 			name: "basic summary with all test types",
 			summary: &TestSummary{
-				Failed:  []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.5}},
-				Skipped: []TestResult{{Package: "test/pkg", Test: "TestSkip", Status: "skip", Duration: 0}},
-				Passed:  []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
+				Failed:   []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.5}},
+				Skipped:  []TestResult{{Package: "test/pkg", Test: "TestSkip", Status: "skip", Duration: 0}},
+				Passed:   []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
 				Coverage: "75.5%",
 			},
 			format: formatMarkdown,
@@ -251,14 +251,14 @@ func TestWriteMarkdownContent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			
+
 			// Set up environment for timestamp test
 			if tt.format == formatGitHub {
 				os.Unsetenv("GITHUB_STEP_SUMMARY")
 			}
-			
+
 			writeMarkdownContent(&buf, tt.summary, tt.format)
-			
+
 			output := buf.String()
 			for _, want := range tt.want {
 				if !strings.Contains(output, want) {

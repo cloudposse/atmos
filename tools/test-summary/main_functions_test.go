@@ -8,7 +8,7 @@ import (
 func TestMain_Integration(t *testing.T) {
 	// This test verifies the main function integration
 	// We'll test by setting up args and capturing exit behavior
-	
+
 	tests := []struct {
 		name     string
 		args     []string
@@ -26,13 +26,13 @@ func TestMain_Integration(t *testing.T) {
 			// Save original args
 			oldArgs := os.Args
 			defer func() { os.Args = oldArgs }()
-			
+
 			// Set test args
 			os.Args = tt.args
-			
+
 			// Test run function directly to avoid os.Exit
 			exitCode := run("non-existent-file.json", "invalid", "")
-			
+
 			if exitCode != tt.wantExit {
 				t.Errorf("run() exitCode = %v, want %v", exitCode, tt.wantExit)
 			}
