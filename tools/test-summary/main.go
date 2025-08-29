@@ -34,9 +34,9 @@ const (
 	base10BitSize         = 64
 	// Test display limits.
 	maxTestsInChangedPackages = 200
-	maxSlowestTests          = 20
-	maxTotalTestsShown       = 250
-	minTestsForSmartDisplay  = 100
+	maxSlowestTests           = 20
+	maxTotalTestsShown        = 250
+	minTestsForSmartDisplay   = 100
 )
 
 // TestEvent represents a single event from go test -json output.
@@ -524,32 +524,32 @@ func writeMarkdownContent(output io.Writer, summary *TestSummary, format string)
 	if format == formatGitHub && os.Getenv("GITHUB_STEP_SUMMARY") == "" {
 		fmt.Fprintf(output, "_Generated: %s_\n\n", time.Now().Format("2006-01-02 15:04:05"))
 	}
-	
+
 	// Test Results section (h1).
 	fmt.Fprintf(output, "# Test Results\n\n")
-	
+
 	// Write multi-line summary with percentages.
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
 	passedPercent := 0.0
 	failedPercent := 0.0
 	skippedPercent := 0.0
-	
+
 	if total > 0 {
 		passedPercent = (float64(len(summary.Passed)) / float64(total)) * 100
 		failedPercent = (float64(len(summary.Failed)) / float64(total)) * 100
 		skippedPercent = (float64(len(summary.Skipped)) / float64(total)) * 100
 	}
-	
+
 	fmt.Fprintf(output, "Summary: %d tests\n", total)
 	fmt.Fprintf(output, "✅ %d passed (%.1f%%)\n", len(summary.Passed), passedPercent)
 	fmt.Fprintf(output, "❌ %d failed (%.1f%%)\n", len(summary.Failed), failedPercent)
 	fmt.Fprintf(output, "⏭️ %d skipped (%.1f%%)\n\n", len(summary.Skipped), skippedPercent)
-	
+
 	// Write test sections.
 	writeFailedTests(output, summary.Failed)
 	writeSkippedTests(output, summary.Skipped)
 	writePassedTests(output, summary.Passed)
-	
+
 	// Test Coverage section (h1) - moved after test results.
 	if summary.CoverageData != nil {
 		writeTestCoverageSection(output, summary.CoverageData)
@@ -560,7 +560,7 @@ func writeMarkdownContent(output io.Writer, summary *TestSummary, format string)
 
 func writeTestCoverageSection(output io.Writer, coverageData *CoverageData) {
 	fmt.Fprintf(output, "# Test Coverage\n\n")
-	
+
 	// Build statement coverage details.
 	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverageData.StatementCoverage, "%"), base10BitSize)
 	emoji := "🔴" // red for < 40%.
@@ -569,12 +569,12 @@ func writeTestCoverageSection(output io.Writer, coverageData *CoverageData) {
 	} else if coverageFloat >= coverageMedThreshold {
 		emoji = "🟡" // yellow for 40-79%.
 	}
-	
+
 	statementDetails := emoji
 	if len(coverageData.FilteredFiles) > 0 {
 		statementDetails += fmt.Sprintf(" (excluded %d mock files)", len(coverageData.FilteredFiles))
 	}
-	
+
 	// Calculate function coverage statistics.
 	totalFunctions := len(coverageData.FunctionCoverage)
 	coveredFunctions := 0
@@ -588,18 +588,18 @@ func writeTestCoverageSection(output io.Writer, coverageData *CoverageData) {
 		functionCoveragePercent = (float64(coveredFunctions) / float64(totalFunctions)) * 100
 	}
 	functionDetails := fmt.Sprintf("%d/%d functions covered", coveredFunctions, totalFunctions)
-	
+
 	// Write coverage table.
 	fmt.Fprintf(output, "| Metric | Coverage | Details |\n")
 	fmt.Fprintf(output, "|--------|----------|----------|\n")
 	fmt.Fprintf(output, "| Statement Coverage | %s | %s |\n", coverageData.StatementCoverage, statementDetails)
 	fmt.Fprintf(output, "| Function Coverage | %.1f%% | %s |\n\n", functionCoveragePercent, functionDetails)
-	
+
 	// Show uncovered functions from changed files only.
 	if len(coverageData.FunctionCoverage) > 0 {
 		writePRFilteredUncoveredFunctions(output, coverageData.FunctionCoverage)
 	}
-	
+
 	// Show filtered files if any.
 	if len(coverageData.FilteredFiles) > 0 {
 		fmt.Fprintf(output, "<details>\n")
@@ -622,7 +622,7 @@ func writePRFilteredUncoveredFunctions(output io.Writer, functions []CoverageFun
 		// No changed files detected, skip this section.
 		return
 	}
-	
+
 	// Create set of changed files for faster lookup.
 	changedFileSet := make(map[string]bool)
 	for _, file := range changedFiles {
@@ -632,7 +632,7 @@ func writePRFilteredUncoveredFunctions(output io.Writer, functions []CoverageFun
 	// Filter uncovered functions to only those in changed files.
 	var uncoveredInPR []CoverageFunction
 	totalUncovered := 0
-	
+
 	for _, fn := range functions {
 		if fn.Coverage == 0 {
 			totalUncovered++
@@ -669,7 +669,7 @@ func writeLegacyCoverageSection(output io.Writer, coverage string) {
 	} else if coverageFloat >= coverageMedThreshold {
 		emoji = "🟡" // yellow for 40-79%.
 	}
-	
+
 	fmt.Fprintf(output, "| Metric | Coverage | Details |\n")
 	fmt.Fprintf(output, "|--------|----------|----------|\n")
 	fmt.Fprintf(output, "| Statement Coverage | %s | %s |\n\n", coverage, emoji)
@@ -677,12 +677,12 @@ func writeLegacyCoverageSection(output io.Writer, coverage string) {
 
 func writeFailedTests(output io.Writer, failed []TestResult) {
 	fmt.Fprintf(output, "### ❌ Failed Tests (%d)\n\n", len(failed))
-	
+
 	if len(failed) == 0 {
 		fmt.Fprintf(output, "No tests failed 🎉\n\n")
 		return
 	}
-	
+
 	fmt.Fprintf(output, "<details>\n")
 	fmt.Fprintf(output, "<summary>Click to see failed tests</summary>\n\n")
 	fmt.Fprintf(output, "| Test | Package | Duration |\n")
@@ -720,9 +720,9 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 	if len(passed) == 0 {
 		return
 	}
-	
+
 	fmt.Fprintf(output, "### ✅ Passed Tests (%d)\n\n", len(passed))
-	
+
 	// For small number of tests, show all in one block.
 	if len(passed) < minTestsForSmartDisplay {
 		fmt.Fprintf(output, "<details>\n")
@@ -731,16 +731,16 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 		fmt.Fprintf(output, "</details>\n\n")
 		return
 	}
-	
+
 	// For large number of tests, use hybrid strategy.
 	changedPackages := getChangedPackages()
 	changedTests := filterTestsByPackages(passed, changedPackages)
 	slowestTests := getTopSlowestTests(passed, maxSlowestTests)
 	packageSummaries := generatePackageSummary(passed)
-	
+
 	testsShown := len(changedTests) + len(slowestTests)
 	fmt.Fprintf(output, "> Showing %d of %d passed tests. Full results available locally.\n\n", testsShown, len(passed))
-	
+
 	// Show tests from changed packages.
 	if len(changedTests) > 0 {
 		fmt.Fprintf(output, "<details>\n")
@@ -748,7 +748,7 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 		writeTestTable(output, changedTests, true)
 		fmt.Fprintf(output, "</details>\n\n")
 	}
-	
+
 	// Show slowest tests.
 	if len(slowestTests) > 0 {
 		fmt.Fprintf(output, "<details>\n")
@@ -756,7 +756,7 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 		writeTestTable(output, slowestTests, true)
 		fmt.Fprintf(output, "</details>\n\n")
 	}
-	
+
 	// Show package summary.
 	if len(packageSummaries) > 0 {
 		fmt.Fprintf(output, "<details>\n")
@@ -812,7 +812,7 @@ func getChangedFiles() []string {
 func getChangedPackages() []string {
 	files := getChangedFiles()
 	packageSet := make(map[string]bool)
-	
+
 	for _, file := range files {
 		// Convert file path to package path.
 		// e.g., "tools/test-summary/main.go" -> "tools/test-summary"
@@ -821,7 +821,7 @@ func getChangedPackages() []string {
 			packageSet[dir] = true
 		}
 	}
-	
+
 	var packages []string
 	for pkg := range packageSet {
 		packages = append(packages, pkg)
@@ -833,12 +833,12 @@ func filterTestsByPackages(tests []TestResult, packages []string) []TestResult {
 	if len(packages) == 0 {
 		return []TestResult{} // No changed packages, return empty.
 	}
-	
+
 	packageSet := make(map[string]bool)
 	for _, pkg := range packages {
 		packageSet[pkg] = true
 	}
-	
+
 	var filtered []TestResult
 	for _, test := range tests {
 		// Check if test package ends with any of the changed packages.
@@ -856,14 +856,14 @@ func getTopSlowestTests(tests []TestResult, n int) []TestResult {
 	if len(tests) <= n {
 		return tests
 	}
-	
+
 	// Sort by duration descending.
 	sorted := make([]TestResult, len(tests))
 	copy(sorted, tests)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Duration > sorted[j].Duration
 	})
-	
+
 	return sorted[:n]
 }
 
@@ -876,7 +876,7 @@ type PackageSummary struct {
 
 func generatePackageSummary(tests []TestResult) []PackageSummary {
 	packageStats := make(map[string]*PackageSummary)
-	
+
 	for _, test := range tests {
 		pkg := shortPackage(test.Package)
 		if _, exists := packageStats[pkg]; !exists {
@@ -888,18 +888,18 @@ func generatePackageSummary(tests []TestResult) []PackageSummary {
 		stats.TestCount++
 		stats.TotalDuration += test.Duration
 	}
-	
+
 	var summaries []PackageSummary
 	for _, stats := range packageStats {
 		stats.AvgDuration = stats.TotalDuration / float64(stats.TestCount)
 		summaries = append(summaries, *stats)
 	}
-	
+
 	// Sort by total duration descending.
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].TotalDuration > summaries[j].TotalDuration
 	})
-	
+
 	return summaries
 }
 
