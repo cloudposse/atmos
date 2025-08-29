@@ -37,6 +37,10 @@ type awsUser struct {
 	schema.Identity `yaml:",inline"`
 }
 
+// newKeyringStore is a package-level factory to create a keyring-backed GenericStore.
+// Tests can override this to inject a mock store.
+var newKeyringStore = func() authstore.GenericStore { return authstore.NewKeyringAuthStore() }
+
 func NewAwsUserFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
 	data := &awsUser{
 		Identity: NewIdentity(),
@@ -64,7 +68,7 @@ func (i *awsUser) Validate() error {
 // Login retrieves long-lived user credentials from keyring and exchanges them for short-lived session
 // credentials via STS GetSessionToken. If an MFA device ARN is configured, the user is prompted for an MFA code.
 func (i *awsUser) Login() error {
-	store := authstore.NewKeyringAuthStore()
+	store := newKeyringStore()
 	key := i.keyringAlias()
 	ctx := context.Background()
 	var secret awsUserSecret
