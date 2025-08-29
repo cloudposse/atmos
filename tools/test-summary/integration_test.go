@@ -5,7 +5,7 @@ import (
 )
 
 func TestRun_InvalidFormat(t *testing.T) {
-	exitCode := run("", "invalid-format", "")
+	exitCode := run("", "invalid-format", "", "", false)
 
 	// Should exit with 1 for invalid format
 	if exitCode != 1 {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -22,8 +23,8 @@ func TestWriteSummaryErrorHandling(t *testing.T) {
 
 func TestOpenOutputEdgeCases(t *testing.T) {
 	// Test creating file in existing directory
-	tempDir := "/tmp"
-	tempFile := tempDir + "/test-summary-temp.md"
+	tempDir := t.TempDir()
+	tempFile := filepath.Join(tempDir, "test-summary-temp.md")
 
 	writer, path, err := openOutput(formatMarkdown, tempFile)
 	if err != nil {
@@ -42,7 +43,6 @@ func TestOpenOutputEdgeCases(t *testing.T) {
 	if closer, ok := writer.(io.Closer); ok {
 		closer.Close()
 	}
-	os.Remove(tempFile)
 }
 
 func TestWriteMarkdownContentWithGitHubActions(t *testing.T) {
@@ -79,13 +79,13 @@ func TestWriteMarkdownContentWithGitHubActions(t *testing.T) {
 
 func TestOpenGitHubOutputWithEnv(t *testing.T) {
 	// Create temporary file for test
-	tempFile := "/tmp/test-github-summary.md"
+	tempDir := t.TempDir()
+	tempFile := filepath.Join(tempDir, "test-github-summary.md")
 	file, err := os.Create(tempFile)
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
 	file.Close()
-	defer os.Remove(tempFile)
 
 	// Test with GITHUB_STEP_SUMMARY set
 	oldEnv := os.Getenv("GITHUB_STEP_SUMMARY")
@@ -137,12 +137,10 @@ func TestWriteSummaryToFile(t *testing.T) {
 		Failed: []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
 	}
 
-	tempFile := "/tmp/test-summary-output.md"
+	tempDir := t.TempDir()
+	tempFile := filepath.Join(tempDir, "test-summary-output.md")
 	err := writeSummary(summary, formatMarkdown, tempFile)
 	if err != nil {
 		t.Errorf("writeSummary() error = %v", err)
 	}
-
-	// Clean up
-	os.Remove(tempFile)
 }

@@ -31,7 +31,7 @@ func TestMain_Integration(t *testing.T) {
 			os.Args = tt.args
 
 			// Test run function directly to avoid os.Exit
-			exitCode := run("non-existent-file.json", "invalid", "")
+			exitCode := run("non-existent-file.json", "invalid", "", "", false)
 
 			if exitCode != tt.wantExit {
 				t.Errorf("run() exitCode = %v, want %v", exitCode, tt.wantExit)
@@ -66,7 +66,7 @@ func TestRun_AdditionalCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := run(tt.inputFile, tt.format, tt.outputFile)
+			got := run(tt.inputFile, tt.format, tt.outputFile, "", false)
 			if got != tt.wantExit {
 				t.Errorf("run() = %v, want %v", got, tt.wantExit)
 			}
