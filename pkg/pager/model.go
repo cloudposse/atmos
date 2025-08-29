@@ -44,63 +44,61 @@ type pagerStatusMessage struct {
 	isError bool
 }
 
-var (
-	pagerHelpHeight int
-)
+var pagerHelpHeight int
 
 // getPagerStyles returns theme-aware styles for the pager
 func getPagerStyles() struct {
-	statusBarNote            func(string) string
-	statusBarHelp            func(string) string
-	statusBarMessage         func(string) string
-	errorMessage             func(string) string
+	statusBarNote             func(string) string
+	statusBarHelp             func(string) string
+	statusBarMessage          func(string) string
+	errorMessage              func(string) string
 	statusBarMessageScrollPos func(string) string
-	statusBarMessageHelp     func(string) string
-	helpView                 func(string) string
-	highlight                func(string) string
+	statusBarMessageHelp      func(string) string
+	helpView                  func(string) string
+	highlight                 func(string) string
 } {
 	styles := theme.GetCurrentStyles()
 	if styles == nil {
 		// Fallback to basic rendering if theme isn't available
 		return struct {
-			statusBarNote            func(string) string
-			statusBarHelp            func(string) string
-			statusBarMessage         func(string) string
-			errorMessage             func(string) string
+			statusBarNote             func(string) string
+			statusBarHelp             func(string) string
+			statusBarMessage          func(string) string
+			errorMessage              func(string) string
 			statusBarMessageScrollPos func(string) string
-			statusBarMessageHelp     func(string) string
-			helpView                 func(string) string
-			highlight                func(string) string
+			statusBarMessageHelp      func(string) string
+			helpView                  func(string) string
+			highlight                 func(string) string
 		}{
-			statusBarNote:            func(s string) string { return s },
-			statusBarHelp:            func(s string) string { return s },
-			statusBarMessage:         func(s string) string { return s },
-			errorMessage:             func(s string) string { return s },
+			statusBarNote:             func(s string) string { return s },
+			statusBarHelp:             func(s string) string { return s },
+			statusBarMessage:          func(s string) string { return s },
+			errorMessage:              func(s string) string { return s },
 			statusBarMessageScrollPos: func(s string) string { return s },
-			statusBarMessageHelp:     func(s string) string { return s },
-			helpView:                 func(s string) string { return s },
-			highlight:                func(s string) string { return s },
+			statusBarMessageHelp:      func(s string) string { return s },
+			helpView:                  func(s string) string { return s },
+			highlight:                 func(s string) string { return s },
 		}
 	}
-	
+
 	return struct {
-		statusBarNote            func(string) string
-		statusBarHelp            func(string) string
-		statusBarMessage         func(string) string
-		errorMessage             func(string) string
+		statusBarNote             func(string) string
+		statusBarHelp             func(string) string
+		statusBarMessage          func(string) string
+		errorMessage              func(string) string
 		statusBarMessageScrollPos func(string) string
-		statusBarMessageHelp     func(string) string
-		helpView                 func(string) string
-		highlight                func(string) string
+		statusBarMessageHelp      func(string) string
+		helpView                  func(string) string
+		highlight                 func(string) string
 	}{
-		statusBarNote:            func(s string) string { return styles.Pager.StatusBar.Render(s) },
-		statusBarHelp:            func(s string) string { return styles.Pager.StatusBarHelp.Render(s) },
-		statusBarMessage:         func(s string) string { return styles.Pager.StatusBarMessage.Render(s) },
-		errorMessage:             func(s string) string { return styles.Pager.ErrorMessage.Render(s) },
+		statusBarNote:             func(s string) string { return styles.Pager.StatusBar.Render(s) },
+		statusBarHelp:             func(s string) string { return styles.Pager.StatusBarHelp.Render(s) },
+		statusBarMessage:          func(s string) string { return styles.Pager.StatusBarMessage.Render(s) },
+		errorMessage:              func(s string) string { return styles.Pager.ErrorMessage.Render(s) },
 		statusBarMessageScrollPos: func(s string) string { return styles.Pager.StatusBarMessage.Render(s) },
-		statusBarMessageHelp:     func(s string) string { return styles.Pager.StatusBarMessage.Render(s) },
-		helpView:                 func(s string) string { return styles.Pager.HelpView.Render(s) },
-		highlight:                func(s string) string { return styles.Pager.Highlight.Render(s) },
+		statusBarMessageHelp:      func(s string) string { return styles.Pager.StatusBarMessage.Render(s) },
+		helpView:                  func(s string) string { return styles.Pager.HelpView.Render(s) },
+		highlight:                 func(s string) string { return styles.Pager.Highlight.Render(s) },
 	}
 }
 

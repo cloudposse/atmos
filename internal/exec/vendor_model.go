@@ -68,9 +68,7 @@ func getGrayColor() lipgloss.Style {
 	return styles.Muted
 }
 
-var (
-	doneStyle = lipgloss.NewStyle().Margin(1, 2)
-)
+var doneStyle = lipgloss.NewStyle().Margin(1, 2)
 
 type installedPkgMsg struct {
 	err  error

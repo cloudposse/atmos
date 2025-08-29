@@ -3,7 +3,7 @@ package theme
 import (
 	"os"
 	"strings"
-	
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
 )
@@ -32,12 +32,12 @@ type StyleSet struct {
 	Label       lipgloss.Style // Section labels/headers (non-status)
 
 	// Table styles
-	TableHeader   lipgloss.Style
-	TableRow      lipgloss.Style
-	TableActive   lipgloss.Style
-	TableBorder   lipgloss.Style
-	TableSpecial  lipgloss.Style // For special indicators like stars
-	TableDarkType lipgloss.Style // For "Dark" theme type
+	TableHeader    lipgloss.Style
+	TableRow       lipgloss.Style
+	TableActive    lipgloss.Style
+	TableBorder    lipgloss.Style
+	TableSpecial   lipgloss.Style // For special indicators like stars
+	TableDarkType  lipgloss.Style // For "Dark" theme type
 	TableLightType lipgloss.Style // For "Light" theme type
 
 	// Special elements
@@ -45,12 +45,12 @@ type StyleSet struct {
 	XMark     lipgloss.Style
 	Footer    lipgloss.Style
 	Border    lipgloss.Style
-	
+
 	// Version styles
 	VersionNumber lipgloss.Style
 	NewVersion    lipgloss.Style
 	PackageName   lipgloss.Style
-	
+
 	// Pager styles
 	Pager struct {
 		StatusBar        lipgloss.Style
@@ -60,7 +60,7 @@ type StyleSet struct {
 		Highlight        lipgloss.Style
 		HelpView         lipgloss.Style
 	}
-	
+
 	// TUI component styles
 	TUI struct {
 		ItemStyle         lipgloss.Style
@@ -68,7 +68,7 @@ type StyleSet struct {
 		BorderFocused     lipgloss.Style
 		BorderUnfocused   lipgloss.Style
 	}
-	
+
 	// Diff/Output styles
 	Diff struct {
 		Added   lipgloss.Style
@@ -76,21 +76,20 @@ type StyleSet struct {
 		Changed lipgloss.Style
 		Header  lipgloss.Style
 	}
-	
+
 	// Help/Documentation styles
 	Help struct {
-		Heading       lipgloss.Style // Section headings (uppercase)
-		CommandName   lipgloss.Style // Command names in lists
-		CommandDesc   lipgloss.Style // Command descriptions
-		FlagName      lipgloss.Style // Flag names
-		FlagDesc      lipgloss.Style // Flag descriptions
-		FlagDataType  lipgloss.Style // Flag data types
-		UsageBlock    lipgloss.Style // Styled box for usage examples
-		ExampleBlock  lipgloss.Style // Styled box for code examples
-		Code          lipgloss.Style // Inline code elements
+		Heading      lipgloss.Style // Section headings (uppercase)
+		CommandName  lipgloss.Style // Command names in lists
+		CommandDesc  lipgloss.Style // Command descriptions
+		FlagName     lipgloss.Style // Flag names
+		FlagDesc     lipgloss.Style // Flag descriptions
+		FlagDataType lipgloss.Style // Flag data types
+		UsageBlock   lipgloss.Style // Styled box for usage examples
+		ExampleBlock lipgloss.Style // Styled box for code examples
+		Code         lipgloss.Style // Inline code elements
 	}
 }
-
 
 // GetStyles generates styles from a color scheme.
 func GetStyles(scheme *ColorScheme) *StyleSet {
@@ -145,12 +144,12 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Border: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(scheme.Border)),
-		
+
 		// Version styles
 		VersionNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
 		NewVersion:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)),
 		PackageName:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Secondary)),
-		
+
 		// Pager styles
 		Pager: struct {
 			StatusBar        lipgloss.Style
@@ -180,7 +179,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 				Foreground(lipgloss.Color(scheme.TextMuted)).
 				Background(lipgloss.Color(scheme.BackgroundHighlight)),
 		},
-		
+
 		// TUI component styles
 		TUI: struct {
 			ItemStyle         lipgloss.Style
@@ -196,7 +195,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 			BorderUnfocused: lipgloss.NewStyle().
 				Border(lipgloss.HiddenBorder()),
 		},
-		
+
 		// Diff/Output styles
 		Diff: struct {
 			Added   lipgloss.Style
@@ -209,18 +208,18 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 			Changed: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
 			Header:  lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)).Bold(true),
 		},
-		
+
 		// Help/Documentation styles
 		Help: struct {
-			Heading       lipgloss.Style
-			CommandName   lipgloss.Style
-			CommandDesc   lipgloss.Style
-			FlagName      lipgloss.Style
-			FlagDesc      lipgloss.Style
-			FlagDataType  lipgloss.Style
-			UsageBlock    lipgloss.Style
-			ExampleBlock  lipgloss.Style
-			Code          lipgloss.Style
+			Heading      lipgloss.Style
+			CommandName  lipgloss.Style
+			CommandDesc  lipgloss.Style
+			FlagName     lipgloss.Style
+			FlagDesc     lipgloss.Style
+			FlagDataType lipgloss.Style
+			UsageBlock   lipgloss.Style
+			ExampleBlock lipgloss.Style
+			Code         lipgloss.Style
 		}{
 			Heading: lipgloss.NewStyle().
 				Foreground(lipgloss.Color(scheme.Primary)).
@@ -265,12 +264,12 @@ var currentThemeName string
 func GetCurrentStyles() *StyleSet {
 	// Determine the theme name from configuration or environment
 	themeName := getActiveThemeName()
-	
+
 	// If the theme hasn't changed and we already have styles, return them
 	if CurrentStyles != nil && currentThemeName == themeName {
 		return CurrentStyles
 	}
-	
+
 	// Load the new theme and generate styles
 	scheme, err := GetColorSchemeForTheme(themeName)
 	if err != nil {
@@ -282,7 +281,7 @@ func GetCurrentStyles() *StyleSet {
 			scheme = &tmpScheme
 		}
 	}
-	
+
 	CurrentStyles = GetStyles(scheme)
 	currentThemeName = themeName
 	return CurrentStyles
@@ -311,13 +310,13 @@ func getActiveThemeName() string {
 	if viper.IsSet("settings.terminal.theme") {
 		return viper.GetString("settings.terminal.theme")
 	}
-	
+
 	// Fallback to direct environment variable check
 	// This is needed because viper might not be initialized yet when help is rendered
 	if theme := os.Getenv("ATMOS_THEME"); theme != "" {
 		return theme
 	}
-	
+
 	// Default to "default" theme
 	return "default"
 }

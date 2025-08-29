@@ -81,12 +81,12 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 
 	// Get theme styles
 	styles := theme.GetCurrentStyles()
-	
+
 	// Build flag parts separately for styling
 	indent := strings.Repeat(" ", nameIndent)
 	flagPart := ""
 	typePart := ""
-	
+
 	if flag.Shorthand != "" {
 		if flag.Value.Type() != "bool" {
 			flagPart = fmt.Sprintf("-%s, --%s", flag.Shorthand, flag.Name)
@@ -102,7 +102,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 			flagPart = fmt.Sprintf("    --%s", flag.Name)
 		}
 	}
-	
+
 	// Build the styled flag components
 	var styledFlagPart, styledTypePart string
 	if styles != nil {
@@ -114,19 +114,19 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 		styledFlagPart = flagPart
 		styledTypePart = typePart
 	}
-	
+
 	// Calculate visual width (ignoring ANSI codes)
 	flagWidth := len(indent) + lipgloss.Width(styledFlagPart)
 	if typePart != "" {
 		flagWidth += 1 + lipgloss.Width(styledTypePart) // +1 for space between flag and type
 	}
-	
+
 	// Calculate padding needed to reach maxFlagLen
 	padding := p.maxFlagLen - flagWidth
 	if padding < 0 {
 		padding = 0
 	}
-	
+
 	// Build the complete flag section with proper spacing
 	var flagSection string
 	if typePart != "" {
@@ -134,7 +134,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	} else {
 		flagSection = fmt.Sprintf("%s%s%s", indent, styledFlagPart, strings.Repeat(" ", padding))
 	}
-	
+
 	// Handle case where flag is too long for single line
 	availWidth := int(p.wrapLimit) - p.maxFlagLen - 4
 	if availWidth < minDescWidth {
@@ -144,7 +144,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 		flagSection = strings.Repeat(" ", p.maxFlagLen)
 		availWidth = int(p.wrapLimit) - 4
 	}
-	
+
 	descIndent := p.maxFlagLen + 4
 
 	description := flag.Usage
@@ -160,12 +160,12 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	}
 	wrapped = strings.TrimSuffix(wrapped, "\n\n")
 	lines := strings.Split(wrapped, "\n")
-	
+
 	// Skip empty first line if present (from markdown rendering)
 	if len(lines) > 0 && lines[0] == "" {
 		lines = lines[1:]
 	}
-	
+
 	// Print first line with flag
 	if len(lines) > 0 {
 		if _, err := fmt.Fprintf(p.out, "%s    %s\n", flagSection, lines[0]); err != nil {

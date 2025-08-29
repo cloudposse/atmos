@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fatih/color"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/fatih/color"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -68,7 +68,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 func (l *Logger) log(style lipgloss.Style, message string) {
 	// Apply style to the message
 	styledMessage := style.Render(message)
-	
+
 	if l.File != "" {
 		if l.File == "/dev/stdout" {
 			fmt.Fprintln(os.Stdout, styledMessage)

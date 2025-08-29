@@ -254,7 +254,7 @@ func getRelativePath(basePath, componentPath string) (string, error) {
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
 	t := huh.ThemeCharm()
-	
+
 	// Apply theme colors to huh form
 	themeName := "default"
 	if theme.GetCurrentStyles() != nil {
@@ -280,7 +280,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 		t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
 		t.Blurred.Title = t.Blurred.Title.Foreground(purple)
 	}
-	
+
 	confirmPrompt := huh.NewConfirm().
 		Title(message).
 		Affirmative("Yes!").

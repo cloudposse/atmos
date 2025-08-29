@@ -38,7 +38,7 @@ func TestFilterRecommendedThemes(t *testing.T) {
 	recommended := filterRecommendedThemes(themes, "default")
 
 	assert.Len(t, recommended, 3) // default, Dracula, Catppuccin Mocha
-	
+
 	// Verify all recommended themes are in the result
 	names := make([]string, len(recommended))
 	for i, t := range recommended {
@@ -48,11 +48,11 @@ func TestFilterRecommendedThemes(t *testing.T) {
 	assert.Contains(t, names, "Dracula")
 	assert.Contains(t, names, "Catppuccin Mocha")
 	assert.NotContains(t, names, "NotRecommended")
-	
+
 	// Test with active theme that's not recommended
 	recommended2 := filterRecommendedThemes(themes, "NotRecommended")
 	assert.Len(t, recommended2, 4) // Should include the active theme even if not recommended
-	
+
 	names2 := make([]string, len(recommended2))
 	for i, t := range recommended2 {
 		names2[i] = t.Name
@@ -84,7 +84,7 @@ func TestFormatThemesTable(t *testing.T) {
 		{
 			Name: "Solarized Light",
 			Meta: theme.Meta{
-				IsDark: false,
+				IsDark:  false,
 				Credits: nil,
 			},
 		},
@@ -131,10 +131,10 @@ func TestFormatSimpleOutput(t *testing.T) {
 
 	// Test simple output format (non-TTY)
 	output := formatSimpleOutput(themes, "default", true)
-	assert.Contains(t, output, "> ")  // Active indicator for default
+	assert.Contains(t, output, "> ") // Active indicator for default
 	assert.Contains(t, output, "default")
 	assert.Contains(t, output, "Dracula")
-	assert.Contains(t, output, "★")  // Recommended indicator
+	assert.Contains(t, output, "★") // Recommended indicator
 	assert.Contains(t, output, "(recommended)")
 }
 
@@ -206,7 +206,7 @@ func TestListThemesCommand(t *testing.T) {
 			found = true
 			assert.Equal(t, "themes", subCmd.Use)
 			assert.Contains(t, strings.ToLower(subCmd.Short), "terminal themes")
-			
+
 			// Check that flags are registered
 			assert.NotNil(t, subCmd.Flags().Lookup("all"))
 			break

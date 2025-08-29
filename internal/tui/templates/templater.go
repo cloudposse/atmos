@@ -27,7 +27,7 @@ func getCommandStyles() (commandNameStyle, commandDescStyle, commandUnsupportedN
 		// Fallback to unstyled if theme is not available
 		return lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle()
 	}
-	
+
 	commandNameStyle = styles.Help.CommandName
 	commandDescStyle = styles.Help.CommandDesc
 	commandUnsupportedNameStyle = styles.Help.CommandName.
@@ -35,7 +35,7 @@ func getCommandStyles() (commandNameStyle, commandDescStyle, commandUnsupportedN
 		Bold(true)
 	commandUnsupportedDescStyle = styles.Help.CommandDesc.
 		Foreground(lipgloss.Color(theme.ColorGray))
-	
+
 	return
 }
 
@@ -43,7 +43,7 @@ func getCommandStyles() (commandNameStyle, commandDescStyle, commandUnsupportedN
 func formatCommand(name string, desc string, padding int, IsNotSupported bool) string {
 	paddedName := fmt.Sprintf("%-*s", padding, name)
 	commandNameStyle, commandDescStyle, commandUnsupportedNameStyle, commandUnsupportedDescStyle := getCommandStyles()
-	
+
 	if IsNotSupported {
 		styledName := commandUnsupportedNameStyle.Render(paddedName)
 		styledDesc := commandUnsupportedDescStyle.Render(desc + " [unsupported]")

@@ -17,19 +17,19 @@ func ConvertToGlamourStyle(t *Theme) ([]byte, error) {
 func createGlamourStyleFromTheme(t *Theme) *ansi.StyleConfig {
 	// Use the theme's foreground and background as base colors
 	docColor := t.Foreground
-	
+
 	// Determine primary colors based on theme
 	primaryColor := t.Blue
 	secondaryColor := t.Magenta
 	accentColor := t.Cyan
-	
+
 	// For headings, use brighter colors
 	h1BgColor := primaryColor
 	h1Color := t.Background // Inverted for better contrast
 	if !t.Meta.IsDark {
 		h1Color = t.White
 	}
-	
+
 	style := &ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
@@ -170,7 +170,7 @@ func createGlamourStyleFromTheme(t *Theme) *ansi.StyleConfig {
 			Bold:  boolPtr(true),
 		},
 	}
-	
+
 	return style
 }
 
@@ -249,7 +249,7 @@ func GetGlamourStyleForTheme(themeName string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create theme registry: %w", err)
 	}
-	
+
 	theme := registry.GetOrDefault(themeName)
 	return ConvertToGlamourStyle(theme)
 }

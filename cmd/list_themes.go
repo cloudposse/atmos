@@ -26,14 +26,12 @@ var listThemesCmd = &cobra.Command{
 }
 
 const (
-	maxSourceLength = 50
+	maxSourceLength  = 50
 	sourceElipsisLen = 47
-	lineWidth = 80
+	lineWidth        = 80
 )
 
-var (
-	listAllThemes bool
-)
+var listAllThemes bool
 
 func init() {
 	listThemesCmd.Flags().BoolVar(&listAllThemes, "all", false, "Show all available themes (default: show only recommended themes)")
@@ -49,7 +47,7 @@ func executeListThemes(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		activeTheme = atmosConfig.Settings.Terminal.Theme
 	}
-	
+
 	themes, err := listThemes()
 	if err != nil {
 		return err
@@ -78,7 +76,7 @@ func listThemes() ([]*theme.Theme, error) {
 func filterRecommendedThemes(themes []*theme.Theme, activeTheme string) []*theme.Theme {
 	var recommended []*theme.Theme
 	hasActiveTheme := false
-	
+
 	for _, t := range themes {
 		if theme.IsRecommended(t.Name) {
 			recommended = append(recommended, t)
@@ -87,7 +85,7 @@ func filterRecommendedThemes(themes []*theme.Theme, activeTheme string) []*theme
 			}
 		}
 	}
-	
+
 	// If the active theme is not in the recommended list, add it
 	if activeTheme != "" && !hasActiveTheme {
 		for _, t := range themes {
@@ -97,12 +95,12 @@ func filterRecommendedThemes(themes []*theme.Theme, activeTheme string) []*theme
 			}
 		}
 	}
-	
+
 	// Sort the themes by name for consistent output
 	sort.Slice(recommended, func(i, j int) bool {
 		return recommended[i].Name < recommended[j].Name
 	})
-	
+
 	return recommended
 }
 
@@ -115,7 +113,7 @@ func displayThemes(themes []*theme.Theme, activeTheme string, showingRecommended
 		fmt.Fprint(os.Stderr, output)
 		return nil
 	}
-	
+
 	output := formatThemesTable(themes, activeTheme, showingRecommendedOnly)
 	fmt.Fprint(os.Stderr, output)
 	return nil
@@ -126,29 +124,29 @@ func formatThemesTable(themes []*theme.Theme, activeTheme string, showingRecomme
 	// Prepare headers and rows
 	headers := []string{"", "Name", "Type", "Source"}
 	var rows [][]string
-	
+
 	for _, t := range themes {
 		// Active indicator
 		activeIndicator := "  "
 		if t.Name == activeTheme {
 			activeIndicator = "> "
 		}
-		
+
 		// Theme name with recommended indicator (only show star when --all is used)
 		name := t.Name
 		if listAllThemes && theme.IsRecommended(t.Name) {
 			name += " ★"
 		}
-		
+
 		// Theme type (Dark/Light)
 		themeType := getThemeType(t)
-		
+
 		// Source
 		source := getThemeSource(t)
 		if len(source) > maxSourceLength {
 			source = source[:sourceElipsisLen] + "..."
 		}
-		
+
 		row := []string{
 			activeIndicator,
 			name,
@@ -157,75 +155,75 @@ func formatThemesTable(themes []*theme.Theme, activeTheme string, showingRecomme
 		}
 		rows = append(rows, row)
 	}
-	
+
 	// Use the new themed table creation
 	output := theme.CreateThemedTable(headers, rows, activeTheme) + "\n"
-	
+
 	// Footer message
 	styles := theme.GetCurrentStyles()
-	
+
 	footer := fmt.Sprintf("\n%d theme", len(themes))
 	if len(themes) != 1 {
 		footer += "s"
 	}
-	
+
 	if showingRecommendedOnly {
 		footer += " (recommended). Use --all to see all available themes."
 	} else {
 		footer += " available."
 	}
-	
+
 	if activeTheme != "" {
 		footer += fmt.Sprintf("\nActive theme: %s", activeTheme)
 	}
-	
+
 	output += styles.Footer.Render(footer) + "\n"
-	
+
 	return output
 }
 
 // formatSimpleOutput formats themes as simple text for non-TTY output.
 func formatSimpleOutput(themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool) string {
 	var output string
-	
+
 	// Header
 	output += fmt.Sprintf("   %-30s %-8s %-4s %s\n", "Name", "Type", "Rec", "Source")
 	output += fmt.Sprintf("%s\n", strings.Repeat("=", lineWidth))
-	
+
 	// Theme rows
 	for _, t := range themes {
 		activeIndicator := "  "
 		if t.Name == activeTheme {
 			activeIndicator = "> "
 		}
-		
+
 		recommended := ""
 		if listAllThemes && theme.IsRecommended(t.Name) {
 			recommended = "★"
 		}
-		
+
 		themeType := getThemeType(t)
 		source := getThemeSource(t)
-		
+
 		output += fmt.Sprintf("%-2s %-30s %-8s %-4s %s\n", activeIndicator, t.Name, themeType, recommended, source)
 	}
-	
+
 	// Footer message
 	output += fmt.Sprintf("\n%d theme", len(themes))
 	if len(themes) != 1 {
 		output += "s"
 	}
-	
+
 	if showingRecommendedOnly {
 		output += " (recommended). Use --all to see all available themes.\n"
 	} else {
 		output += " available.\n"
 	}
-	
+
 	if activeTheme != "" {
 		output += fmt.Sprintf("Active theme: %s\n", activeTheme)
 	}
-	
+
 	return output
 }
 

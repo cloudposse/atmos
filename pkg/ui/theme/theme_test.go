@@ -8,11 +8,11 @@ import (
 
 func TestLoadThemes(t *testing.T) {
 	themes, err := LoadThemes()
-	
+
 	assert.NoError(t, err)
 	assert.NotEmpty(t, themes)
 	assert.Greater(t, len(themes), 300, "Should have at least 300 themes")
-	
+
 	// Check that default theme is first
 	assert.Equal(t, "default", themes[0].Name)
 	assert.True(t, themes[0].Meta.IsDark)
@@ -35,9 +35,9 @@ func TestSortThemes(t *testing.T) {
 		{Name: "default"},
 		{Name: "Banana"},
 	}
-	
+
 	SortThemes(themes)
-	
+
 	assert.Equal(t, "Apple", themes[0].Name)
 	assert.Equal(t, "Banana", themes[1].Name)
 	assert.Equal(t, "default", themes[2].Name)
@@ -52,9 +52,9 @@ func TestFilterRecommended(t *testing.T) {
 		{Name: "NotRecommended2"},
 		{Name: "Catppuccin Mocha"},
 	}
-	
+
 	recommended := FilterRecommended(themes)
-	
+
 	assert.Len(t, recommended, 3)
 	assert.Equal(t, "default", recommended[0].Name)
 	assert.Equal(t, "Dracula", recommended[1].Name)
@@ -67,22 +67,22 @@ func TestFindTheme(t *testing.T) {
 		{Name: "Dracula"},
 		{Name: "Solarized Dark"},
 	}
-	
+
 	// Test exact match
 	theme, found := FindTheme(themes, "default")
 	assert.True(t, found)
 	assert.Equal(t, "default", theme.Name)
-	
+
 	// Test case-insensitive match
 	theme, found = FindTheme(themes, "DRACULA")
 	assert.True(t, found)
 	assert.Equal(t, "Dracula", theme.Name)
-	
+
 	// Test with spaces
 	theme, found = FindTheme(themes, "solarized dark")
 	assert.True(t, found)
 	assert.Equal(t, "Solarized Dark", theme.Name)
-	
+
 	// Test not found
 	theme, found = FindTheme(themes, "NotATheme")
 	assert.False(t, found)
@@ -92,7 +92,7 @@ func TestFindTheme(t *testing.T) {
 func TestThemeStructure(t *testing.T) {
 	themes, err := LoadThemes()
 	assert.NoError(t, err)
-	
+
 	// Verify the structure of the default theme
 	defaultTheme := themes[0]
 	assert.Equal(t, "default", defaultTheme.Name)
@@ -106,7 +106,7 @@ func TestThemeStructure(t *testing.T) {
 	assert.NotEmpty(t, defaultTheme.Magenta)
 	assert.NotEmpty(t, defaultTheme.Cyan)
 	assert.NotEmpty(t, defaultTheme.White)
-	
+
 	// Check that bright colors are present
 	assert.NotEmpty(t, defaultTheme.BrightBlack)
 	assert.NotEmpty(t, defaultTheme.BrightRed)
@@ -116,7 +116,7 @@ func TestThemeStructure(t *testing.T) {
 	assert.NotEmpty(t, defaultTheme.BrightMagenta)
 	assert.NotEmpty(t, defaultTheme.BrightCyan)
 	assert.NotEmpty(t, defaultTheme.BrightWhite)
-	
+
 	// Check metadata
 	assert.True(t, defaultTheme.Meta.IsDark)
 	assert.NotNil(t, defaultTheme.Meta.Credits)

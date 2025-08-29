@@ -19,7 +19,7 @@ func PrintMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 		fmt.Printf("Update available! %s » %s\n", version.Version, latestVersion)
 		return
 	}
-	
+
 	// Define content using dynamic theme styles
 	message := lipgloss.NewStyle().
 		Render(fmt.Sprintf("Update available! %s » %s",

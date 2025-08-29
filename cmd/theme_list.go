@@ -28,9 +28,7 @@ atmos theme list --recommended`,
 	RunE: executeThemeList,
 }
 
-var (
-	themeListRecommendedOnly bool
-)
+var themeListRecommendedOnly bool
 
 func init() {
 	themeListCmd.Flags().BoolVar(&themeListRecommendedOnly, "recommended", false, "Show only recommended themes")
@@ -46,7 +44,7 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		activeTheme = atmosConfig.Settings.Terminal.Theme
 	}
-	
+
 	themes, err := listAvailableThemes()
 	if err != nil {
 		return err
@@ -59,7 +57,7 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 
 	// When showing all themes, display stars for recommended ones
 	showStars := !themeListRecommendedOnly
-	
+
 	return displayThemeList(themes, activeTheme, themeListRecommendedOnly, showStars)
 }
 
@@ -77,7 +75,7 @@ func listAvailableThemes() ([]*theme.Theme, error) {
 func filterRecommended(themes []*theme.Theme, activeTheme string) []*theme.Theme {
 	var recommended []*theme.Theme
 	hasActiveTheme := false
-	
+
 	for _, t := range themes {
 		if theme.IsRecommended(t.Name) {
 			recommended = append(recommended, t)
@@ -86,7 +84,7 @@ func filterRecommended(themes []*theme.Theme, activeTheme string) []*theme.Theme
 			}
 		}
 	}
-	
+
 	// If the active theme is not in the recommended list, add it
 	if activeTheme != "" && !hasActiveTheme {
 		for _, t := range themes {
@@ -96,12 +94,12 @@ func filterRecommended(themes []*theme.Theme, activeTheme string) []*theme.Theme
 			}
 		}
 	}
-	
+
 	// Sort the themes by name for consistent output
 	sort.Slice(recommended, func(i, j int) bool {
 		return recommended[i].Name < recommended[j].Name
 	})
-	
+
 	return recommended
 }
 
@@ -114,7 +112,7 @@ func displayThemeList(themes []*theme.Theme, activeTheme string, showingRecommen
 		fmt.Fprint(os.Stderr, output)
 		return nil
 	}
-	
+
 	output := formatThemeTable(themes, activeTheme, showingRecommendedOnly, showStars)
 	fmt.Fprint(os.Stderr, output)
 	return nil
@@ -125,23 +123,23 @@ func formatThemeTable(themes []*theme.Theme, activeTheme string, showingRecommen
 	// Prepare headers and rows
 	headers := []string{"", "Name", "Type", "Source"}
 	var rows [][]string
-	
+
 	for _, t := range themes {
 		// Active indicator
 		activeIndicator := "  "
 		if t.Name == activeTheme {
 			activeIndicator = "> "
 		}
-		
+
 		// Theme name with recommended indicator (only show star when requested)
 		name := t.Name
 		if showStars && theme.IsRecommended(t.Name) {
 			name += " ★"
 		}
-		
+
 		// Theme type (Dark/Light)
 		themeType := getThemeTypeString(t)
-		
+
 		// Source
 		source := getThemeSourceString(t)
 		const maxSourceLen = 50
@@ -149,7 +147,7 @@ func formatThemeTable(themes []*theme.Theme, activeTheme string, showingRecommen
 		if len(source) > maxSourceLen {
 			source = source[:sourceElipsis] + "..."
 		}
-		
+
 		row := []string{
 			activeIndicator,
 			name,
@@ -158,18 +156,18 @@ func formatThemeTable(themes []*theme.Theme, activeTheme string, showingRecommen
 		}
 		rows = append(rows, row)
 	}
-	
+
 	// Use the new themed table creation
 	output := theme.CreateThemedTable(headers, rows, activeTheme) + "\n"
-	
+
 	// Footer message
 	styles := theme.GetCurrentStyles()
-	
+
 	footer := fmt.Sprintf("\n%d theme", len(themes))
 	if len(themes) != 1 {
 		footer += "s"
 	}
-	
+
 	if showingRecommendedOnly {
 		footer += " (recommended). Use without --recommended to see all themes."
 	} else {
@@ -178,13 +176,13 @@ func formatThemeTable(themes []*theme.Theme, activeTheme string, showingRecommen
 			footer += " ★ indicates recommended themes."
 		}
 	}
-	
+
 	if activeTheme != "" {
 		footer += fmt.Sprintf("\nActive theme: %s", activeTheme)
 	}
-	
+
 	output += styles.Footer.Render(footer) + "\n"
-	
+
 	return output
 }
 
@@ -192,35 +190,35 @@ func formatThemeTable(themes []*theme.Theme, activeTheme string, showingRecommen
 func formatSimpleThemeList(themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool, showStars bool) string {
 	var output string
 	const lineWidth = 80
-	
+
 	// Header
 	output += fmt.Sprintf("   %-30s %-8s %-4s %s\n", "Name", "Type", "Rec", "Source")
 	output += fmt.Sprintf("%s\n", strings.Repeat("=", lineWidth))
-	
+
 	// Theme rows
 	for _, t := range themes {
 		activeIndicator := "  "
 		if t.Name == activeTheme {
 			activeIndicator = "> "
 		}
-		
+
 		recommended := ""
 		if showStars && theme.IsRecommended(t.Name) {
 			recommended = "★"
 		}
-		
+
 		themeType := getThemeTypeString(t)
 		source := getThemeSourceString(t)
-		
+
 		output += fmt.Sprintf("%-2s %-30s %-8s %-4s %s\n", activeIndicator, t.Name, themeType, recommended, source)
 	}
-	
+
 	// Footer message
 	output += fmt.Sprintf("\n%d theme", len(themes))
 	if len(themes) != 1 {
 		output += "s"
 	}
-	
+
 	if showingRecommendedOnly {
 		output += " (recommended). Use without --recommended to see all themes.\n"
 	} else {
@@ -230,11 +228,11 @@ func formatSimpleThemeList(themes []*theme.Theme, activeTheme string, showingRec
 		}
 		output += "\n"
 	}
-	
+
 	if activeTheme != "" {
 		output += fmt.Sprintf("Active theme: %s\n", activeTheme)
 	}
-	
+
 	return output
 }
 
