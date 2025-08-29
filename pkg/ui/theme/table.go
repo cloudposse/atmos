@@ -19,12 +19,12 @@ const (
 
 // TableConfig defines the configuration for table rendering.
 type TableConfig struct {
-	Style        TableStyle      // The table style to use
-	ShowBorders  bool            // Override for borders (when true, forces borders regardless of Style)
-	ShowHeader   bool            // Show header separator (default true for Minimal)
-	BorderStyle  lipgloss.Border // Border style when borders are shown
-	Styles       *StyleSet       // Reference to theme styles
-	StyleFunc    table.StyleFunc // Optional custom style function
+	Style       TableStyle      // The table style to use
+	ShowBorders bool            // Override for borders (when true, forces borders regardless of Style)
+	ShowHeader  bool            // Show header separator (default true for Minimal)
+	BorderStyle lipgloss.Border // Border style when borders are shown
+	Styles      *StyleSet       // Reference to theme styles
+	StyleFunc   table.StyleFunc // Optional custom style function
 }
 
 // DefaultTableConfig returns a default table configuration with minimal style.
@@ -83,7 +83,7 @@ func CreateTable(config *TableConfig, headers []string, rows [][]string) string 
 		// Use default style function based on theme
 		t = t.StyleFunc(func(row, col int) lipgloss.Style {
 			style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-			
+
 			if row == -1 { // Header row
 				return style.Inherit(config.Styles.TableHeader)
 			}
@@ -100,7 +100,7 @@ func CreateTable(config *TableConfig, headers []string, rows [][]string) string 
 // CreateThemedTable creates a table with theme-aware styling for the list themes command.
 func CreateThemedTable(headers []string, rows [][]string, activeTheme string) string {
 	styles := GetCurrentStyles()
-	
+
 	config := TableConfig{
 		Style:       TableStyleMinimal,
 		ShowBorders: false,
@@ -108,26 +108,26 @@ func CreateThemedTable(headers []string, rows [][]string, activeTheme string) st
 		Styles:      styles,
 		StyleFunc: func(row, col int) lipgloss.Style {
 			style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-			
+
 			// Header row styling
 			if row == -1 {
 				return style.Inherit(styles.TableHeader)
 			}
-			
+
 			// Regular row styling with special cases
 			if row >= 0 && row < len(rows) {
 				rowData := rows[row]
-				
+
 				// Check if this is the active theme row (has "> " indicator)
 				isActive := len(rowData) > 0 && rowData[0] == "> "
-				
+
 				switch col {
 				case 0: // Active indicator column
 					if isActive {
 						return style.Inherit(styles.Selected)
 					}
 					return style
-					
+
 				case 1: // Name column (may contain ★ for recommended)
 					if isActive {
 						return style.Inherit(styles.TableActive)
@@ -139,7 +139,7 @@ func CreateThemedTable(headers []string, rows [][]string, activeTheme string) st
 						}
 					}
 					return style.Inherit(styles.TableRow)
-					
+
 				case 2: // Type column (Dark/Light)
 					if len(rowData) > 2 {
 						if rowData[2] == "Dark" {
@@ -149,19 +149,19 @@ func CreateThemedTable(headers []string, rows [][]string, activeTheme string) st
 						}
 					}
 					return style.Inherit(styles.TableRow)
-					
+
 				case 3: // Source column
 					return style.Inherit(styles.TableRow)
-					
+
 				default:
 					return style.Inherit(styles.TableRow)
 				}
 			}
-			
+
 			return style.Inherit(styles.TableRow)
 		},
 	}
-	
+
 	return CreateTable(&config, headers, rows)
 }
 

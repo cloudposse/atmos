@@ -30,33 +30,33 @@ type Meta struct {
 
 // Theme represents a terminal color theme.
 type Theme struct {
-	Name         string `json:"name"`
-	Black        string `json:"black"`
-	Red          string `json:"red"`
-	Green        string `json:"green"`
-	Yellow       string `json:"yellow"`
-	Blue         string `json:"blue"`
-	Magenta      string `json:"magenta"`
-	Cyan         string `json:"cyan"`
-	White        string `json:"white"`
-	BrightBlack  string `json:"brightBlack"`
-	BrightRed    string `json:"brightRed"`
-	BrightGreen  string `json:"brightGreen"`
-	BrightYellow string `json:"brightYellow"`
-	BrightBlue   string `json:"brightBlue"`
+	Name          string `json:"name"`
+	Black         string `json:"black"`
+	Red           string `json:"red"`
+	Green         string `json:"green"`
+	Yellow        string `json:"yellow"`
+	Blue          string `json:"blue"`
+	Magenta       string `json:"magenta"`
+	Cyan          string `json:"cyan"`
+	White         string `json:"white"`
+	BrightBlack   string `json:"brightBlack"`
+	BrightRed     string `json:"brightRed"`
+	BrightGreen   string `json:"brightGreen"`
+	BrightYellow  string `json:"brightYellow"`
+	BrightBlue    string `json:"brightBlue"`
 	BrightMagenta string `json:"brightMagenta"`
-	BrightCyan   string `json:"brightCyan"`
-	BrightWhite  string `json:"brightWhite"`
-	Background   string `json:"background"`
-	Foreground   string `json:"foreground"`
-	Cursor       string `json:"cursor"`
-	Selection    string `json:"selection"`
-	Meta         Meta   `json:"meta"`
+	BrightCyan    string `json:"brightCyan"`
+	BrightWhite   string `json:"brightWhite"`
+	Background    string `json:"background"`
+	Foreground    string `json:"foreground"`
+	Cursor        string `json:"cursor"`
+	Selection     string `json:"selection"`
+	Meta          Meta   `json:"meta"`
 }
 
 // RecommendedThemes is a curated list of themes that work well with Atmos.
 var RecommendedThemes = []string{
-	"default",           // Atmos native theme
+	"default",          // Atmos native theme
 	"Dracula",          // Popular dark theme with excellent contrast
 	"Catppuccin Mocha", // Modern dark theme, easy on the eyes
 	"Catppuccin Latte", // Modern light theme

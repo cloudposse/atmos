@@ -41,14 +41,14 @@ func getThemeAwareChromaTheme(config *schema.AtmosConfiguration) string {
 			themeName = "default"
 		}
 	}
-	
+
 	// Get the color scheme for the theme
 	scheme, err := theme.GetColorSchemeForTheme(themeName)
 	if err != nil || scheme == nil || scheme.ChromaTheme == "" {
 		// Fallback to dracula if we can't get the theme's Chroma theme
 		return "dracula"
 	}
-	
+
 	return scheme.ChromaTheme
 }
 

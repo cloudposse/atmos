@@ -508,7 +508,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	// Get theme-aware styles
 	styles := theme.GetCurrentStyles()
 	var codeStyle, successStyle lipgloss.Style
-	
+
 	if styles != nil {
 		codeStyle = styles.Help.Code // Use Code style for inline code-like elements
 		successStyle = styles.Success

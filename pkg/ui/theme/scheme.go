@@ -20,10 +20,10 @@ type ColorScheme struct {
 	TextLight     string // Light theme indicator (white)
 
 	// UI elements
-	Border          string // Borders and dividers (typically blue or brightBlack)
-	Background      string // Background colors
-	BackgroundDark  string // Dark background for status bars
-	Surface         string // Card/panel backgrounds
+	Border         string // Borders and dividers (typically blue or brightBlack)
+	Background     string // Background colors
+	BackgroundDark string // Dark background for status bars
+	Surface        string // Card/panel backgrounds
 
 	// Semantic elements
 	Link      string // Links (typically cyan)
@@ -35,10 +35,10 @@ type ColorScheme struct {
 	HeaderText string // Table header text (typically brightCyan or green)
 	RowText    string // Table row text (typically white)
 	RowAlt     string // Alternating row background
-	
+
 	// Help/Documentation specific
 	BackgroundHighlight string // Background for highlighted sections (usage/example blocks)
-	
+
 	// Syntax highlighting
 	ChromaTheme string // Chroma theme name for syntax highlighting
 }
@@ -49,20 +49,20 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 	// Default to light text on dark background
 	textPrimary := t.White
 	textSecondary := t.BrightBlack
-	
+
 	// For light themes, invert text colors
 	if !t.Meta.IsDark {
 		textPrimary = t.Black
 		textSecondary = t.BrightBlack
 	}
-	
+
 	return ColorScheme{
 		// Core semantic colors - map ANSI colors to purposes
-		Primary:   t.Blue,        // Blue for primary actions (commands, headings)
-		Secondary: t.Magenta,     // Magenta for secondary
-		Success:   t.Green,       // Green for success
-		Warning:   t.Yellow,      // Yellow for warnings
-		Error:     t.Red,         // Red for errors
+		Primary:   t.Blue,    // Blue for primary actions (commands, headings)
+		Secondary: t.Magenta, // Magenta for secondary
+		Success:   t.Green,   // Green for success
+		Warning:   t.Yellow,  // Yellow for warnings
+		Error:     t.Red,     // Red for errors
 
 		// Text colors
 		TextPrimary:   textPrimary,
@@ -72,25 +72,25 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 		TextLight:     t.White, // Always white for "Light" theme type indicator
 
 		// UI elements
-		Border:         t.Blue,         // Blue for borders
-		Background:     t.Background,   // Theme background
-		BackgroundDark: t.BrightBlack,  // Dark background for status bars
-		Surface:        t.BrightBlack,  // Slightly elevated surface
+		Border:         t.Blue,        // Blue for borders
+		Background:     t.Background,  // Theme background
+		BackgroundDark: t.BrightBlack, // Dark background for status bars
+		Surface:        t.BrightBlack, // Slightly elevated surface
 
 		// Semantic elements
-		Link:      t.BrightBlue,   // Bright blue for links
-		Selected:  t.BrightGreen,  // Bright green for selected
+		Link:      t.BrightBlue,    // Bright blue for links
+		Selected:  t.BrightGreen,   // Bright green for selected
 		Highlight: t.BrightMagenta, // Bright magenta for highlights
-		Gold:      t.BrightYellow, // Bright yellow for special indicators
+		Gold:      t.BrightYellow,  // Bright yellow for special indicators
 
 		// Table specific
 		HeaderText: t.Green,       // Green for headers
 		RowText:    textPrimary,   // Same as primary text
 		RowAlt:     t.BrightBlack, // Subtle alternating rows
-		
+
 		// Help/Documentation specific
 		BackgroundHighlight: t.Black, // Dark background for code blocks
-		
+
 		// Syntax highlighting - map themes to appropriate Chroma themes
 		ChromaTheme: getChromaThemeForAtmosTheme(t),
 	}
@@ -140,7 +140,7 @@ func GetColorSchemeForTheme(themeName string) (*ColorScheme, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	theme := registry.GetOrDefault(themeName)
 	scheme := GenerateColorScheme(theme)
 	return &scheme, nil
