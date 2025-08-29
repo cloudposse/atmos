@@ -50,3 +50,10 @@ type PackageSummary struct {
 	AvgDuration   float64
 	TotalDuration float64
 }
+
+// CoverageLine represents parsed coverage data from a single line.
+type CoverageLine struct {
+	Filename   string
+	Statements int
+	Covered    int
+}

@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// shortPackage shortens a package name for readability.
-// github.com/cloudposse/atmos/cmd -> cmd
+// ShortPackage shortens a package name for readability.
+// Example: github.com/cloudposse/atmos/cmd -> cmd.
 func shortPackage(pkg string) string {
 	parts := strings.Split(pkg, "/")
 	if len(parts) > 0 {

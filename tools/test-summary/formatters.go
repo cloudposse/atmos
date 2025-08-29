@@ -125,45 +125,46 @@ func writeTestTable(output io.Writer, tests []TestResult, includeDuration bool) 
 	fmt.Fprintf(output, "\n")
 }
 
+// getCoverageEmoji returns the appropriate emoji for a coverage percentage.
+func getCoverageEmoji(percentage float64) string {
+	if percentage >= coverageHighThreshold {
+		return "🟢"
+	} else if percentage >= coverageMedThreshold {
+		return "🟡"
+	}
+	return "🔴"
+}
+
+// calculateFunctionCoverage calculates function coverage statistics.
+func calculateFunctionCoverage(functions []CoverageFunction) (covered, total int, percentage float64) {
+	total = len(functions)
+	for _, fn := range functions {
+		if fn.Coverage > 0 {
+			covered++
+		}
+	}
+	if total > 0 {
+		percentage = (float64(covered) / float64(total)) * percentageMultiplier
+	}
+	return
+}
+
 // writeTestCoverageSection writes the test coverage section with table format.
 func writeTestCoverageSection(output io.Writer, coverageData *CoverageData) {
 	fmt.Fprintf(output, "# Test Coverage\n\n")
 
 	// Build statement coverage details.
 	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverageData.StatementCoverage, "%"), base10BitSize)
-	emoji := "🔴" // red for < 40%.
-	if coverageFloat >= coverageHighThreshold {
-		emoji = "🟢" // green for >= 80%.
-	} else if coverageFloat >= coverageMedThreshold {
-		emoji = "🟡" // yellow for 40-79%.
-	}
-
-	statementDetails := emoji
+	statementEmoji := getCoverageEmoji(coverageFloat)
+	
+	statementDetails := statementEmoji
 	if len(coverageData.FilteredFiles) > 0 {
 		statementDetails += fmt.Sprintf(" (excluded %d mock files)", len(coverageData.FilteredFiles))
 	}
 
 	// Calculate function coverage statistics.
-	totalFunctions := len(coverageData.FunctionCoverage)
-	coveredFunctions := 0
-	for _, fn := range coverageData.FunctionCoverage {
-		if fn.Coverage > 0 {
-			coveredFunctions++
-		}
-	}
-	functionCoveragePercent := 0.0
-	if totalFunctions > 0 {
-		functionCoveragePercent = (float64(coveredFunctions) / float64(totalFunctions)) * percentageMultiplier
-	}
-
-	// Calculate emoji for function coverage.
-	funcEmoji := "🔴" // red for < 40%.
-	if functionCoveragePercent >= coverageHighThreshold {
-		funcEmoji = "🟢" // green for >= 80%.
-	} else if functionCoveragePercent >= coverageMedThreshold {
-		funcEmoji = "🟡" // yellow for 40-79%.
-	}
-
+	coveredFunctions, totalFunctions, functionCoveragePercent := calculateFunctionCoverage(coverageData.FunctionCoverage)
+	funcEmoji := getCoverageEmoji(functionCoveragePercent)
 	functionDetails := fmt.Sprintf("%s %d/%d functions covered", funcEmoji, coveredFunctions, totalFunctions)
 
 	// Write coverage table.

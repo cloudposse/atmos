@@ -68,7 +68,7 @@ func processLine(line string, tests map[string]TestResult) string {
 
 	// Record test results.
 	if event.Test != "" && contains([]string{"pass", "fail", "skip"}, event.Action) {
-		recordTestResult(event, tests)
+		recordTestResult(&event, tests)
 	}
 
 	return ""
@@ -86,7 +86,7 @@ func extractCoverage(output string) string {
 }
 
 // recordTestResult records a test result in the tests map.
-func recordTestResult(event TestEvent, tests map[string]TestResult) {
+func recordTestResult(event *TestEvent, tests map[string]TestResult) {
 	key := event.Package + "::" + event.Test
 	tests[key] = TestResult{
 		Package:  event.Package,

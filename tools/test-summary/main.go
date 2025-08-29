@@ -83,7 +83,7 @@ func handleOutput(summary *TestSummary, format, outputFile string) error {
 		}
 		return writeSummary(summary, formatMarkdown, outputFile)
 	}
-	return fmt.Errorf("unsupported format: %s", format)
+	return fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
 }
 
 // handleConsoleOutput writes console-formatted output.

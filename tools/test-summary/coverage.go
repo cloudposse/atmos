@@ -57,19 +57,19 @@ func parseStatementCoverage(profileFile string, excludeMocks bool) (string, []st
 			continue
 		}
 
-		filename, statements, covered, err := parseCoverageLine(line)
+		coverageLine, err := parseCoverageLine(line)
 		if err != nil {
 			continue // Skip invalid lines.
 		}
 
 		// Check if we should exclude mock files.
-		if excludeMocks && isMockFile(filename) {
-			filteredFiles = append(filteredFiles, filename)
+		if excludeMocks && isMockFile(coverageLine.Filename) {
+			filteredFiles = append(filteredFiles, coverageLine.Filename)
 			continue
 		}
 
-		totalStatements += statements
-		coveredStatements += covered
+		totalStatements += coverageLine.Statements
+		coveredStatements += coverageLine.Covered
 	}
 
 	coverage := calculateStatementCoverage(totalStatements, coveredStatements)
@@ -77,30 +77,30 @@ func parseStatementCoverage(profileFile string, excludeMocks bool) (string, []st
 }
 
 // parseCoverageLine parses a single coverage profile line.
-func parseCoverageLine(line string) (string, int, int, error) {
+func parseCoverageLine(line string) (*CoverageLine, error) {
 	// Parse line: "file:startline.col,endline.col numstmt count".
 	parts := strings.Fields(line)
 	if len(parts) < 3 {
-		return "", 0, 0, fmt.Errorf("invalid coverage line format")
+		return nil, ErrInvalidCoverageLineFormat
 	}
 
 	// Extract filename from "file:line.col,line.col".
 	colonIndex := strings.Index(parts[0], ":")
 	if colonIndex == -1 {
-		return "", 0, 0, fmt.Errorf("invalid file format")
+		return nil, ErrInvalidFileFormat
 	}
 	filename := parts[0][:colonIndex]
 
 	// Parse statement count.
 	statements, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return "", 0, 0, err
+		return nil, err
 	}
 
 	// Parse execution count.
 	execCount, err := strconv.Atoi(parts[2])
 	if err != nil {
-		return "", 0, 0, err
+		return nil, err
 	}
 
 	// If executed at least once, statements are covered.
@@ -109,7 +109,11 @@ func parseCoverageLine(line string) (string, int, int, error) {
 		covered = statements
 	}
 
-	return filename, statements, covered, nil
+	return &CoverageLine{
+		Filename:   filename,
+		Statements: statements,
+		Covered:    covered,
+	}, nil
 }
 
 // isMockFile checks if a filename represents a mock file.
@@ -135,7 +139,14 @@ func calculateStatementCoverage(total, covered int) string {
 
 // getFunctionCoverage gets function-level coverage information.
 func getFunctionCoverage(profileFile string, excludeMocks bool) ([]CoverageFunction, error) {
-	cmd := exec.Command("go", "tool", "cover", "-func="+profileFile)
+	// Validate profileFile exists and is a regular file for security.
+	if _, err := os.Stat(profileFile); err != nil {
+		return nil, fmt.Errorf("invalid profile file: %w", err)
+	}
+	
+	// Use filepath.Clean to sanitize the path.
+	cleanPath := filepath.Clean(profileFile)
+	cmd := exec.Command("go", "tool", "cover", "-func="+cleanPath)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get function coverage: %w", err)
@@ -174,7 +185,7 @@ func parseFunctionCoverageLine(line string) (CoverageFunction, error) {
 	matches := re.FindStringSubmatch(line)
 
 	if len(matches) < regexMatchGroups-1 { // We expect 4 groups (including full match).
-		return CoverageFunction{}, fmt.Errorf("invalid function coverage line format")
+		return CoverageFunction{}, ErrInvalidFunctionCoverageFormat
 	}
 
 	coverage, err := strconv.ParseFloat(matches[3], floatBitSize)
