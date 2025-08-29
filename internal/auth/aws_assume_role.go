@@ -19,6 +19,8 @@ type awsAssumeRole struct {
 	schema.Identity `yaml:",inline"`
 
 	SessionDuration int32 `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
+	// STSEndpoint allows tests to inject a custom STS endpoint (httptest server)
+	STSEndpoint string `yaml:"-" json:"-"`
 }
 
 func NewAwsAssumeRoleFactory(provider string, identity string, config schema.AuthConfig) (LoginMethod, error) {
@@ -88,7 +90,12 @@ func (i *awsAssumeRole) Login() error {
 	}
 
 	// Verify credentials work by calling STS GetCallerIdentity
-	stsClient := sts.NewFromConfig(cfg)
+	var stsClient *sts.Client
+	if i.STSEndpoint != "" {
+		stsClient = sts.NewFromConfig(cfg, func(o *sts.Options) { o.BaseEndpoint = aws.String(i.STSEndpoint) })
+	} else {
+		stsClient = sts.NewFromConfig(cfg)
+	}
 	identity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
 		return fmt.Errorf("failed to validate AWS credentials: %w", err)
@@ -129,7 +136,12 @@ func (i *awsAssumeRole) AssumeRole() error {
 	}
 
 	// Create an STS client
-	stsClient := sts.NewFromConfig(cfg)
+	var stsClient *sts.Client
+	if i.STSEndpoint != "" {
+		stsClient = sts.NewFromConfig(cfg, func(o *sts.Options) { o.BaseEndpoint = aws.String(i.STSEndpoint) })
+	} else {
+		stsClient = sts.NewFromConfig(cfg)
+	}
 
 	// Get the current identity to use as session name
 	callerIdentity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})

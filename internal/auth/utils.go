@@ -26,6 +26,14 @@ func pickKeyFromMap(Map map[string]any) (string, error) {
 	for k := range Map {
 		items = append(items, k)
 	}
+	// Non-interactive test hook
+	if choice := os.Getenv("ATMOS_IDENTITY"); choice != "" {
+		for _, k := range items {
+			if k == choice {
+				return choice, nil
+			}
+		}
+	}
 	choice := ""
 	selector := huh.NewSelect[string]().
 		Value(&choice).
@@ -52,6 +60,12 @@ func pickIdentity(identities map[string]schema.Identity) (string, error) {
 	items := []string{}
 	for k := range identities {
 		items = append(items, k)
+	}
+	// Non-interactive test hook
+	if want := os.Getenv("ATMOS_IDENTITY"); want != "" {
+		if _, ok := identities[want]; ok {
+			return want, nil
+		}
 	}
 	choice := ""
 	selector := huh.NewSelect[string]().
