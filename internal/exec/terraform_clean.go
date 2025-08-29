@@ -202,7 +202,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	return folders, nil
 }
 
-// get stack terraform state files
+// get stack terraform state files.
 func getStackTerraformStateFolder(componentPath string, stack string) ([]Directory, error) {
 	tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d")
 	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack)
@@ -260,7 +260,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	themeName := "default"
 	if theme.GetCurrentStyles() != nil {
 		// Get the actual active theme name
-		viper.BindEnv("ATMOS_THEME")
+		_ = viper.BindEnv("ATMOS_THEME")
 		themeName = viper.GetString("ATMOS_THEME")
 		if themeName == "" {
 			themeName = "default"
@@ -298,7 +298,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	return confirm, nil
 }
 
-// DeletePathTerraform deletes the specified file or folder. with a checkmark or xmark
+// DeletePathTerraform deletes the specified file or folder with a checkmark or xmark.
 func DeletePathTerraform(fullPath string, objectName string) error {
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
@@ -389,7 +389,7 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig *schema
 
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
 func handleTFDataDir(componentPath string, relativePath string) {
-	viper.BindEnv("TF_DATA_DIR")
+	_ = viper.BindEnv("TF_DATA_DIR")
 	tfDataDir := viper.GetString("TF_DATA_DIR")
 	if tfDataDir == "" {
 		return
@@ -505,7 +505,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			folders = append(folders, stackFolders...)
 		}
 	}
-	viper.BindEnv("TF_DATA_DIR")
+	_ = viper.BindEnv("TF_DATA_DIR")
 	tfDataDir := viper.GetString("TF_DATA_DIR")
 
 	var tfDataDirFolders []Directory

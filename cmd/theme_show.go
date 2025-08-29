@@ -13,13 +13,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-// Constants for formatting
+// Constants for formatting.
 const (
 	colorColumnSeparator = "\n  "
 	sectionSeparator     = "\n\n"
 	lineBreak            = "\n"
 	hexColorLength       = 6
 	hexBase              = 16
+	intBitSize           = 64
 	luminanceRedWeight   = 0.299
 	luminanceGreenWeight = 0.587
 	luminanceBlueWeight  = 0.114
@@ -240,9 +241,9 @@ func getContrastColor(hexColor string) string {
 	}
 
 	// Convert hex to RGB
-	r, _ := strconv.ParseInt(color[0:2], hexBase, 64)
-	g, _ := strconv.ParseInt(color[2:4], hexBase, 64)
-	b, _ := strconv.ParseInt(color[4:6], hexBase, 64)
+	r, _ := strconv.ParseInt(color[0:2], hexBase, intBitSize)
+	g, _ := strconv.ParseInt(color[2:4], hexBase, intBitSize)
+	b, _ := strconv.ParseInt(color[4:6], hexBase, intBitSize)
 
 	// Calculate relative luminance using WCAG formula
 	// See: https://www.w3.org/TR/WCAG20-TECHS/G17.html

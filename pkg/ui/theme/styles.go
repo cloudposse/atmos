@@ -312,7 +312,7 @@ func getActiveThemeName() string {
 
 	// Fallback to direct environment variable check
 	// This is needed because viper might not be initialized yet when help is rendered
-	viper.BindEnv("ATMOS_THEME")
+	_ = viper.BindEnv("ATMOS_THEME")
 	if theme := viper.GetString("ATMOS_THEME"); theme != "" {
 		return theme
 	}

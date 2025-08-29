@@ -66,13 +66,13 @@ var (
 	ErrAtmosConfigIsNil = errors.New("atmos config is nil")
 	ErrThemeNotFound    = errors.New("theme not found")
 
-	// Command errors
+	// Command errors.
 	ErrSubcommandNotFound   = errors.New("subcommand not found")
 	ErrCommandNoSteps       = errors.New("command has no steps or subcommands configured")
 	ErrInvalidCommandConfig = errors.New("invalid command configuration")
 	ErrInvalidEnvVarConfig  = errors.New("invalid environment variable configuration")
 
-	// Terraform clean errors
+	// Terraform clean errors.
 	ErrReadingPath       = errors.New("error reading path")
 	ErrUserAborted       = errors.New("operation aborted by user")
 	ErrSymlinkNotAllowed = errors.New("refusing to delete symbolic link")
