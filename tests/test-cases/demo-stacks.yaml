@@ -11,7 +11,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - "Available Commands:"
+        - "AVAILABLE COMMANDS"
         - "\\batlantis\\b"
         - "\\baws\\b"
         - "\\bcompletion\\b"
@@ -22,11 +22,12 @@ tests:
         - "\\blist\\b"
         - "\\bpro\\b"
         - "\\bterraform\\b"
+        - "\\btheme\\b"
         - "\\bvalidate\\b"
         - "\\bvendor\\b"
         - "\\bversion\\b"
         - "\\bworkflow\\b"
-        - "Flags:"
+        - "FLAGS"
         - "for more information about a command"
       stderr:
         - "^$"
