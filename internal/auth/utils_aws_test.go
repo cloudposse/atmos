@@ -32,18 +32,18 @@ func TestUpdateAwsAtmosConfig_SetAndRemoveKeys(t *testing.T) {
 		t.Fatalf("UpdateAwsAtmosConfig set: %v", err)
 	}
 	f, err := ini.Load(cfg)
-	if err != nil { 
-		t.Fatalf("load: %v", err) 
+	if err != nil {
+		t.Fatalf("load: %v", err)
 	}
 	sec := f.Section("profile p1")
-	if sec.Key("region").String() != "us-west-2" { 
-		t.Fatalf("region not set") 
+	if sec.Key("region").String() != "us-west-2" {
+		t.Fatalf("region not set")
 	}
-	if sec.Key("source_profile").String() != "src" { 
-		t.Fatalf("source_profile not set") 
+	if sec.Key("source_profile").String() != "src" {
+		t.Fatalf("source_profile not set")
 	}
-	if sec.Key("role_arn").String() != "arn:aws:iam::123:role/R" { 
-		t.Fatalf("role_arn not set") 
+	if sec.Key("role_arn").String() != "arn:aws:iam::123:role/R" {
+		t.Fatalf("role_arn not set")
 	}
 
 	// Second: remove source_profile and role_arn by passing empty
@@ -51,18 +51,18 @@ func TestUpdateAwsAtmosConfig_SetAndRemoveKeys(t *testing.T) {
 		t.Fatalf("UpdateAwsAtmosConfig remove: %v", err)
 	}
 	f2, err := ini.Load(cfg)
-	if err != nil { 
-		t.Fatalf("load2: %v", err) 
+	if err != nil {
+		t.Fatalf("load2: %v", err)
 	}
 	sec2 := f2.Section("profile p1")
-	if sec2.HasKey("source_profile") { 
-		t.Fatalf("source_profile should be removed") 
+	if sec2.HasKey("source_profile") {
+		t.Fatalf("source_profile should be removed")
 	}
-	if sec2.HasKey("role_arn") { 
-		t.Fatalf("role_arn should be removed") 
+	if sec2.HasKey("role_arn") {
+		t.Fatalf("role_arn should be removed")
 	}
-	if sec2.Key("region").String() != "eu-north-1" { 
-		t.Fatalf("region should be updated") 
+	if sec2.Key("region").String() != "eu-north-1" {
+		t.Fatalf("region should be updated")
 	}
 }
 
@@ -74,25 +74,25 @@ func TestUpdateAwsAtmosConfig_PreserveUnrelatedSections(t *testing.T) {
 	// Pre-seed file with an unrelated section
 	f := ini.Empty()
 	f.Section("unrelated").Key("k").SetValue("v")
-	if err := f.SaveTo(cfg); err != nil { 
-		t.Fatalf("seed: %v", err) 
+	if err := f.SaveTo(cfg); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
 
 	if err := UpdateAwsAtmosConfig("prov", "p2", "src", "us-east-2", "arn:aws:iam::111:role/R"); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	loaded, err := ini.Load(cfg)
-	if err != nil { 
-		t.Fatalf("load: %v", err) 
+	if err != nil {
+		t.Fatalf("load: %v", err)
 	}
-	if !loaded.HasSection("unrelated") { 
-		t.Fatalf("unrelated section lost") 
+	if !loaded.HasSection("unrelated") {
+		t.Fatalf("unrelated section lost")
 	}
-	if loaded.Section("unrelated").Key("k").String() != "v" { 
-		t.Fatalf("unrelated key changed") 
+	if loaded.Section("unrelated").Key("k").String() != "v" {
+		t.Fatalf("unrelated key changed")
 	}
-	if !loaded.HasSection("profile p2") { 
-		t.Fatalf("profile p2 missing") 
+	if !loaded.HasSection("profile p2") {
+		t.Fatalf("profile p2 missing")
 	}
 }
 

@@ -67,24 +67,24 @@ func newMockStsServer() *httptest.Server {
 
 // server that always returns 400
 func newErrorStsServer() *httptest.Server {
-    return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        w.WriteHeader(400)
-    }))
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+	}))
 }
 
 func TestAwsAssumeRole_Login_Error_STS(t *testing.T) {
-    srv := newErrorStsServer()
-    defer srv.Close()
+	srv := newErrorStsServer()
+	defer srv.Close()
 
-    t.Setenv("AWS_ACCESS_KEY_ID", "AKIAFAKE")
-    t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAFAKE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
 
-    i := &awsAssumeRole{}
-    i.Common.Region = "us-east-1"
-    i.STSEndpoint = srv.URL
-    if err := i.Login(); err == nil {
-        t.Fatalf("expected error from STS, got nil")
-    }
+	i := &awsAssumeRole{}
+	i.Common.Region = "us-east-1"
+	i.STSEndpoint = srv.URL
+	if err := i.Login(); err == nil {
+		t.Fatalf("expected error from STS, got nil")
+	}
 }
 
 func TestAwsAssumeRole_Login_ValidatesWithSTS(t *testing.T) {
