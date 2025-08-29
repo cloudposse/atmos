@@ -136,7 +136,7 @@ func usageBlock(content string) string {
 		if width > 100 {
 			width = 80 // Cap at 80 for readability
 		} else if width > 40 {
-			width = width - 4 // Leave some margin
+			width -= 4 // Leave some margin
 		}
 		return styles.Help.UsageBlock.Width(width).Render(strings.TrimSpace(content))
 	}
@@ -152,7 +152,7 @@ func exampleBlock(content string) string {
 		if width > 100 {
 			width = 80 // Cap at 80 for readability
 		} else if width > 40 {
-			width = width - 4 // Leave some margin
+			width -= 4 // Leave some margin
 		}
 		return styles.Help.ExampleBlock.Width(width).Render(strings.TrimSpace(content))
 	}

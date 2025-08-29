@@ -64,7 +64,9 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 			style.H1.BackgroundColor = &atmosConfig.Settings.Markdown.H1.BackgroundColor
 		}
 		style.H1.Bold = &atmosConfig.Settings.Markdown.H1.Bold
-		style.H1.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.H1.Margin))
+		if atmosConfig.Settings.Markdown.H1.Margin >= 0 {
+			style.H1.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.H1.Margin))
+		}
 	}
 
 	if atmosConfig.Settings.Markdown.H2.Color != "" {
@@ -83,7 +85,9 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 		} else {
 			style.CodeBlock.StyleBlock.StylePrimitive.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
-		style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
+		if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
+			style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
+		}
 	}
 
 	if atmosConfig.Settings.Markdown.Link.Color != "" {
@@ -321,7 +325,9 @@ func applyCustomStylesToTheme(themeStyleBytes []byte, atmosConfig schema.AtmosCo
 			style.H1.BackgroundColor = &atmosConfig.Settings.Markdown.H1.BackgroundColor
 		}
 		style.H1.Bold = &atmosConfig.Settings.Markdown.H1.Bold
-		style.H1.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.H1.Margin))
+		if atmosConfig.Settings.Markdown.H1.Margin >= 0 {
+			style.H1.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.H1.Margin))
+		}
 	}
 
 	if atmosConfig.Settings.Markdown.H2.Color != "" {
@@ -340,7 +346,9 @@ func applyCustomStylesToTheme(themeStyleBytes []byte, atmosConfig schema.AtmosCo
 		} else {
 			style.CodeBlock.StyleBlock.StylePrimitive.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
-		style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
+		if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
+			style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
+		}
 	}
 
 	if atmosConfig.Settings.Markdown.Link.Color != "" {

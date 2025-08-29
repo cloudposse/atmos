@@ -45,7 +45,7 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
-// processCustomCommands processes and executes custom commands
+// processCustomCommands processes and executes custom commands.
 func processCustomCommands(
 	atmosConfig schema.AtmosConfiguration,
 	commands []schema.Command,
@@ -140,7 +140,7 @@ func processCustomCommands(
 	return nil
 }
 
-// addCommandWithAlias adds a command hierarchy based on the full command
+// addCommandWithAlias adds a command hierarchy based on the full command.
 func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
 	if len(parts) == 0 {
 		return
@@ -169,7 +169,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 	}
 }
 
-// processCommandAliases processes the command aliases
+// processCommandAliases processes the command aliases.
 func processCommandAliases(
 	atmosConfig schema.AtmosConfiguration,
 	aliases schema.CommandAliases,
@@ -214,7 +214,7 @@ func processCommandAliases(
 	return nil
 }
 
-// preCustomCommand is run before a custom command is executed
+// preCustomCommand is run before a custom command is executed.
 func preCustomCommand(
 	cmd *cobra.Command,
 	args []string,
@@ -301,7 +301,7 @@ func preCustomCommand(
 	}
 }
 
-// getTopLevelCommands returns the top-level commands
+// getTopLevelCommands returns the top-level commands.
 func getTopLevelCommands() map[string]*cobra.Command {
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
@@ -312,7 +312,7 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	return existingTopLevelCommands
 }
 
-// executeCustomCommand executes a custom command
+// executeCustomCommand executes a custom command.
 func executeCustomCommand(
 	atmosConfig schema.AtmosConfiguration,
 	cmd *cobra.Command,
@@ -465,7 +465,7 @@ func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
 	return mainArgs, trailingArgs
 }
 
-// cloneCommand clones a custom command config into a new struct
+// cloneCommand clones a custom command config into a new struct.
 func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	origJSON, err := json.Marshal(orig)
 	if err != nil {
@@ -480,7 +480,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// checkAtmosConfig checks Atmos config
+// checkAtmosConfig checks Atmos config.
 func checkAtmosConfig(opts ...AtmosValidateOption) {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
@@ -503,7 +503,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 }
 
-// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
+// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	// Get theme-aware styles
 	styles := theme.GetCurrentStyles()
@@ -542,19 +542,25 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		fmt.Println(",\nbut the directory does not exist.")
 	}
 
-	fmt.Println("\nTo configure and start using Atmos, refer to the following documents:\n")
+	fmt.Println()
+	fmt.Println("To configure and start using Atmos, refer to the following documents:")
+	fmt.Println()
 
 	fmt.Println(labelStyle.Render("Atmos CLI Configuration:"))
-	fmt.Println("https://atmos.tools/cli/configuration\n")
+	fmt.Println("https://atmos.tools/cli/configuration")
+	fmt.Println()
 
 	fmt.Println(labelStyle.Render("Atmos Components:"))
-	fmt.Println("https://atmos.tools/core-concepts/components\n")
+	fmt.Println("https://atmos.tools/core-concepts/components")
+	fmt.Println()
 
 	fmt.Println(labelStyle.Render("Atmos Stacks:"))
-	fmt.Println("https://atmos.tools/core-concepts/stacks\n")
+	fmt.Println("https://atmos.tools/core-concepts/stacks")
+	fmt.Println()
 
 	fmt.Println(labelStyle.Render("Quick Start:"))
-	fmt.Println("https://atmos.tools/quick-start\n")
+	fmt.Println("https://atmos.tools/quick-start")
+	fmt.Println()
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
@@ -607,12 +613,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	}
 }
 
-// Check Atmos is version command
+// Check Atmos is version command.
 func isVersionCommand() bool {
 	return len(os.Args) > 1 && os.Args[1] == "version"
 }
 
-// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h"
+// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
 		cmd.Help()
@@ -647,7 +653,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	return nil
 }
 
-// getConfigAndStacksInfo processes the CLI config and stacks
+// getConfigAndStacksInfo processes the CLI config and stacks.
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
 	// Check Atmos configuration
 	checkAtmosConfig()

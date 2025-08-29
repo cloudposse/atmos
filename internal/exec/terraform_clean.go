@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -259,7 +260,8 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	themeName := "default"
 	if theme.GetCurrentStyles() != nil {
 		// Get the actual active theme name
-		themeName = os.Getenv("ATMOS_THEME")
+		viper.BindEnv("ATMOS_THEME")
+		themeName = viper.GetString("ATMOS_THEME")
 		if themeName == "" {
 			themeName = "default"
 		}
@@ -387,7 +389,8 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig *schema
 
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
 func handleTFDataDir(componentPath string, relativePath string) {
-	tfDataDir := os.Getenv("TF_DATA_DIR")
+	viper.BindEnv("TF_DATA_DIR")
+	tfDataDir := viper.GetString("TF_DATA_DIR")
 	if tfDataDir == "" {
 		return
 	}
@@ -502,7 +505,8 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			folders = append(folders, stackFolders...)
 		}
 	}
-	tfDataDir := os.Getenv("TF_DATA_DIR")
+	viper.BindEnv("TF_DATA_DIR")
+	tfDataDir := viper.GetString("TF_DATA_DIR")
 
 	var tfDataDirFolders []Directory
 	if tfDataDir != "" {

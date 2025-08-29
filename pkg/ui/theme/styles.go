@@ -1,7 +1,6 @@
 package theme
 
 import (
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -313,7 +312,8 @@ func getActiveThemeName() string {
 
 	// Fallback to direct environment variable check
 	// This is needed because viper might not be initialized yet when help is rendered
-	if theme := os.Getenv("ATMOS_THEME"); theme != "" {
+	viper.BindEnv("ATMOS_THEME")
+	if theme := viper.GetString("ATMOS_THEME"); theme != "" {
 		return theme
 	}
 

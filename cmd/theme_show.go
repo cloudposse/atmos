@@ -9,7 +9,22 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+)
+
+// Constants for formatting
+const (
+	colorColumnSeparator = "\n  "
+	sectionSeparator     = "\n\n"
+	lineBreak            = "\n"
+	hexColorLength       = 6
+	hexBase              = 16
+	luminanceRedWeight   = 0.299
+	luminanceGreenWeight = 0.587
+	luminanceBlueWeight  = 0.114
+	luminanceThreshold   = 0.5
+	rgbMax               = 255
 )
 
 // themeShowCmd shows details and preview of a specific theme.
@@ -43,7 +58,7 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 	// Get the specified theme
 	selectedTheme, exists := registry.Get(themeName)
 	if !exists {
-		return fmt.Errorf("theme %q not found", themeName)
+		return fmt.Errorf("%w: %s", errUtils.ErrThemeNotFound, themeName)
 	}
 
 	// Generate color scheme for the theme
@@ -67,7 +82,7 @@ func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme
 		themeHeader += " " + styles.Success.Render("★ Recommended")
 	}
 	output.WriteString(styles.Title.Render(themeHeader))
-	output.WriteString("\n\n")
+	output.WriteString(sectionSeparator)
 
 	// Theme metadata with styled labels
 	output.WriteString(styles.Label.Render("Type:"))
@@ -87,35 +102,35 @@ func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme
 		}
 	}
 
-	output.WriteString("\n")
+	output.WriteString(lineBreak)
 
 	// Color Palette Section
 	output.WriteString(styles.Heading.Render("COLOR PALETTE"))
-	output.WriteString("\n\n")
+	output.WriteString(sectionSeparator)
 
 	// Display color swatches
 	output.WriteString(formatColorPalette(t))
-	output.WriteString("\n")
+	output.WriteString(lineBreak)
 
 	// Sample UI Elements Section
 	output.WriteString(styles.Heading.Render("SAMPLE UI ELEMENTS"))
-	output.WriteString("\n\n")
+	output.WriteString(sectionSeparator)
 
 	// Status messages
 	output.WriteString(styles.Label.Render("Status Messages:"))
-	output.WriteString("\n  ")
+	output.WriteString(colorColumnSeparator)
 	output.WriteString(styles.Success.Render("✓ Success message"))
-	output.WriteString("\n  ")
+	output.WriteString(colorColumnSeparator)
 	output.WriteString(styles.Warning.Render("⚠ Warning message"))
-	output.WriteString("\n  ")
+	output.WriteString(colorColumnSeparator)
 	output.WriteString(styles.Error.Render("✗ Error message"))
-	output.WriteString("\n  ")
+	output.WriteString(colorColumnSeparator)
 	output.WriteString(styles.Info.Render("ℹ Info message"))
-	output.WriteString("\n\n")
+	output.WriteString(sectionSeparator)
 
 	// Sample table
 	output.WriteString(styles.Label.Render("Sample Table:"))
-	output.WriteString("\n")
+	output.WriteString(lineBreak)
 	headers := []string{"Component", "Stack", "Status"}
 	rows := [][]string{
 		{"vpc", "dev", "deployed"},
@@ -124,21 +139,21 @@ func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme
 	}
 	tableOutput := theme.CreateMinimalTable(headers, rows)
 	output.WriteString(tableOutput)
-	output.WriteString("\n")
+	output.WriteString(lineBreak)
 
 	// Command examples
-	output.WriteString("\n")
+	output.WriteString(lineBreak)
 	output.WriteString(styles.Label.Render("Command Examples:"))
-	output.WriteString("\n")
+	output.WriteString(lineBreak)
 	output.WriteString("  ")
 	output.WriteString(styles.Command.Render("atmos terraform plan"))
 	output.WriteString(" - ")
 	output.WriteString(styles.Description.Render("Plan terraform changes"))
-	output.WriteString("\n  ")
+	output.WriteString(colorColumnSeparator)
 	output.WriteString(styles.Command.Render("atmos describe stacks"))
 	output.WriteString(" - ")
 	output.WriteString(styles.Description.Render("Show stack configurations"))
-	output.WriteString("\n\n")
+	output.WriteString(sectionSeparator)
 
 	// Footer with activation instructions
 	footer := fmt.Sprintf("\nTo use this theme, set ATMOS_THEME=%s or add to atmos.yaml:\n", t.Name)
@@ -198,7 +213,7 @@ func formatColorPalette(t *theme.Theme) string {
 
 		// Add newline every 2 colors for better layout
 		if i%2 == 1 {
-			output.WriteString("\n")
+			output.WriteString(lineBreak)
 		} else {
 			output.WriteString("  ")
 		}
@@ -220,21 +235,21 @@ func getContrastColor(hexColor string) string {
 	}
 
 	// Parse hex values
-	if len(color) != 6 {
+	if len(color) != hexColorLength {
 		return "#000000" // Default to black for invalid colors
 	}
 
 	// Convert hex to RGB
-	r, _ := strconv.ParseInt(color[0:2], 16, 64)
-	g, _ := strconv.ParseInt(color[2:4], 16, 64)
-	b, _ := strconv.ParseInt(color[4:6], 16, 64)
+	r, _ := strconv.ParseInt(color[0:2], hexBase, 64)
+	g, _ := strconv.ParseInt(color[2:4], hexBase, 64)
+	b, _ := strconv.ParseInt(color[4:6], hexBase, 64)
 
 	// Calculate relative luminance using WCAG formula
 	// See: https://www.w3.org/TR/WCAG20-TECHS/G17.html
-	luminance := (0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) / 255
+	luminance := (luminanceRedWeight*float64(r) + luminanceGreenWeight*float64(g) + luminanceBlueWeight*float64(b)) / rgbMax
 
 	// Use black text for light backgrounds, white for dark
-	if luminance > 0.5 {
+	if luminance > luminanceThreshold {
 		return "#000000"
 	}
 	return "#ffffff"

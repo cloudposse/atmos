@@ -202,15 +202,16 @@ func TestListThemesCommand(t *testing.T) {
 	cmd := listCmd
 	found := false
 	for _, subCmd := range cmd.Commands() {
-		if subCmd.Name() == "themes" {
-			found = true
-			assert.Equal(t, "themes", subCmd.Use)
-			assert.Contains(t, strings.ToLower(subCmd.Short), "terminal themes")
-
-			// Check that flags are registered
-			assert.NotNil(t, subCmd.Flags().Lookup("all"))
-			break
+		if subCmd.Name() != "themes" {
+			continue
 		}
+		found = true
+		assert.Equal(t, "themes", subCmd.Use)
+		assert.Contains(t, strings.ToLower(subCmd.Short), "terminal themes")
+
+		// Check that flags are registered
+		assert.NotNil(t, subCmd.Flags().Lookup("all"))
+		break
 	}
 	assert.True(t, found, "list themes command should be registered")
 }
