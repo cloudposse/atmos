@@ -72,10 +72,10 @@ testacc-summary: get
 	@echo "Running tests with coverage and summary"
 	@go test $(TEST) -v -json -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out 2>&1 | \
 		tee test-results.json | \
-		go run ./tools/test-summary/main.go -format=console
+		go run ./tools/test-summary -format=console
 	@echo ""
 	@echo "=== GENERATING TEST SUMMARY ==="
-	@go run ./tools/test-summary/main.go -input=test-results.json -coverprofile=coverage.out -format=github
+	@go run ./tools/test-summary -input=test-results.json -coverprofile=coverage.out -format=github
 
 # CI target (alias for testacc-summary)
 testacc-ci: testacc-summary
@@ -83,7 +83,7 @@ testacc-ci: testacc-summary
 # View existing test results without re-running tests
 testacc-view-summary:
 	@if [ -f test-results.json ]; then \
-		go run ./tools/test-summary/main.go -input=test-results.json -format=markdown; \
+		go run ./tools/test-summary -input=test-results.json -format=markdown; \
 	else \
 		echo "No test-results.json found. Run 'make testacc-summary' first."; \
 	fi
