@@ -61,27 +61,29 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme.StyleSet) string {
 	var output strings.Builder
 	
-	// Theme header
-	output.WriteString(styles.Title.Render(fmt.Sprintf("Theme: %s", t.Name)))
+	// Theme header with recommended badge on same line
+	themeHeader := fmt.Sprintf("Theme: %s", t.Name)
+	if theme.IsRecommended(t.Name) {
+		themeHeader += " " + styles.Success.Render("★ Recommended")
+	}
+	output.WriteString(styles.Title.Render(themeHeader))
 	output.WriteString("\n\n")
 	
-	// Theme metadata
+	// Theme metadata with styled labels
+	output.WriteString(styles.Label.Render("Type:"))
 	if t.Meta.IsDark {
-		output.WriteString("Type: Dark\n")
+		output.WriteString(" Dark\n")
 	} else {
-		output.WriteString("Type: Light\n")
-	}
-	
-	if theme.IsRecommended(t.Name) {
-		output.WriteString(styles.Success.Render("★ Recommended"))
-		output.WriteString("\n")
+		output.WriteString(" Light\n")
 	}
 	
 	if t.Meta.Credits != nil && len(*t.Meta.Credits) > 0 {
 		credits := *t.Meta.Credits
-		output.WriteString(fmt.Sprintf("Source: %s\n", credits[0].Name))
+		output.WriteString(styles.Label.Render("Source:"))
+		output.WriteString(fmt.Sprintf(" %s\n", credits[0].Name))
 		if credits[0].Link != "" {
-			output.WriteString(fmt.Sprintf("Link: %s\n", credits[0].Link))
+			output.WriteString(styles.Label.Render("Link:"))
+			output.WriteString(fmt.Sprintf(" %s\n", credits[0].Link))
 		}
 	}
 	
@@ -100,8 +102,8 @@ func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme
 	output.WriteString("\n\n")
 	
 	// Status messages
-	output.WriteString("Status Messages:\n")
-	output.WriteString("  ")
+	output.WriteString(styles.Label.Render("Status Messages:"))
+	output.WriteString("\n  ")
 	output.WriteString(styles.Success.Render("✓ Success message"))
 	output.WriteString("\n  ")
 	output.WriteString(styles.Warning.Render("⚠ Warning message"))
@@ -112,7 +114,8 @@ func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme
 	output.WriteString("\n\n")
 	
 	// Sample table
-	output.WriteString("Sample Table:\n")
+	output.WriteString(styles.Label.Render("Sample Table:"))
+	output.WriteString("\n")
 	headers := []string{"Component", "Stack", "Status"}
 	rows := [][]string{
 		{"vpc", "dev", "deployed"},
@@ -124,7 +127,9 @@ func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme
 	output.WriteString("\n")
 	
 	// Command examples
-	output.WriteString("\nCommand Examples:\n")
+	output.WriteString("\n")
+	output.WriteString(styles.Label.Render("Command Examples:"))
+	output.WriteString("\n")
 	output.WriteString("  ")
 	output.WriteString(styles.Command.Render("atmos terraform plan"))
 	output.WriteString(" - ")
@@ -183,7 +188,7 @@ func formatColorPalette(t *theme.Theme) string {
 			Background(lipgloss.Color(color.value)).
 			Foreground(lipgloss.Color(getContrastColor(color.value))).
 			Padding(0, 1).
-			Render(fmt.Sprintf("%-12s", color.label))
+			Render(fmt.Sprintf("%-14s", color.label))
 		
 		// Add hex value
 		hexValue := fmt.Sprintf(" %s", color.value)
