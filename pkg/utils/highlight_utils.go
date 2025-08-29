@@ -12,10 +12,12 @@ import (
 	"github.com/alecthomas/chroma/lexers"
 	"github.com/alecthomas/chroma/quick"
 	"github.com/alecthomas/chroma/styles"
+	"github.com/spf13/viper"
+	"golang.org/x/term"
+
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"golang.org/x/term"
 )
 
 // DefaultHighlightSettings returns the default syntax highlighting settings
@@ -32,14 +34,24 @@ func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 
 // getThemeAwareChromaTheme returns the appropriate Chroma theme based on the active Atmos theme
 func getThemeAwareChromaTheme(config *schema.AtmosConfiguration) string {
-	// Get the theme name from config or environment
-	themeName := config.Settings.Terminal.Theme
+	var themeName string
+	
+	// First priority: Check Viper for flags/env (includes ATMOS_THEME env var)
+	if viper.IsSet("settings.terminal.theme") {
+		themeName = viper.GetString("settings.terminal.theme")
+	}
+	
+	// Second priority: Check config if available and non-nil
+	if themeName == "" && config != nil && 
+	   config.Settings != nil && 
+	   config.Settings.Terminal != nil && 
+	   config.Settings.Terminal.Theme != "" {
+		themeName = config.Settings.Terminal.Theme
+	}
+	
+	// Final fallback: Use default
 	if themeName == "" {
-		if envTheme := os.Getenv("ATMOS_THEME"); envTheme != "" {
-			themeName = envTheme
-		} else {
-			themeName = "default"
-		}
+		themeName = "default"
 	}
 
 	// Get the color scheme for the theme
@@ -61,10 +73,15 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 		return defaults
 	}
 	settings := &config.Settings.Terminal.SyntaxHighlighting
-	// Apply defaults for any unset fields
-	if !settings.Enabled {
-		settings.Enabled = defaults.Enabled
-	}
+	
+	// Apply defaults only for truly unset fields
+	// NOTE: For proper tri-state handling, the schema should use *bool pointers
+	// For now, we can't distinguish between explicitly set false and unset
+	// So we only apply defaults for zero values that are likely unintended
+	
+	// For Enabled: We assume if the whole struct exists, they want it enabled unless explicitly false
+	// This is the one case where false might be intentional, so we don't override it
+	
 	if settings.Formatter == "" {
 		settings.Formatter = defaults.Formatter
 	}
@@ -72,15 +89,22 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 		// Use theme-aware Chroma theme if not explicitly set
 		settings.Theme = getThemeAwareChromaTheme(config)
 	}
-	if !settings.HighlightedOutputPager {
+	
+	// For these boolean fields, we only set defaults if they're false AND the config seems minimal
+	// This is a compromise until the schema uses *bool
+	// We check if other fields are set to determine if the user intentionally set these to false
+	configHasExplicitSettings := settings.Formatter != "" || settings.Theme != ""
+	
+	if !settings.HighlightedOutputPager && !configHasExplicitSettings {
 		settings.HighlightedOutputPager = defaults.HighlightedOutputPager
 	}
-	if !settings.LineNumbers {
+	if !settings.LineNumbers && !configHasExplicitSettings {
 		settings.LineNumbers = defaults.LineNumbers
 	}
-	if !settings.Wrap {
+	if !settings.Wrap && !configHasExplicitSettings {
 		settings.Wrap = defaults.Wrap
 	}
+	
 	return settings
 }
 

@@ -1,23 +1,10 @@
----
-title: Style Guide for Developers
-sidebar_position: 5
-sidebar_label: Style Guide
-description: Style guide for consistent terminal output in Atmos CLI development
-id: style-guide
----
+# Atmos Go Code Style Guide
 
-import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
-
-# Style Guide for Developers
-
-<Intro>
-This style guide provides guidelines for developers contributing to Atmos CLI on how to use the theming and styling system consistently across all terminal output.
-</Intro>
+This style guide provides guidelines for developers working on the Atmos Go codebase on how to use the theming and styling system consistently across all terminal output.
 
 ## Overview
 
-Atmos uses a comprehensive theming system built on `github.com/charmbracelet/lipgloss` to provide consistent, accessible, and customizable terminal output. This guide explains when and how to use each style for different types of output.
+Atmos uses a comprehensive theming system built on `github.com/charmbracelet/lipgloss` to provide consistent, accessible, and customizable terminal output. This guide explains when and how to use each style for different types of output in the Atmos codebase.
 
 ## Semantic Style Usage
 
@@ -450,4 +437,3 @@ When using the theme system:
 
 - [Lipgloss Documentation](https://github.com/charmbracelet/lipgloss)
 - [WCAG Contrast Guidelines](https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html)
-- [Atmos Theme Configuration](/cli/configuration/terminal#theme)

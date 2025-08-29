@@ -157,7 +157,7 @@ func formatThemesTable(themes []*theme.Theme, activeTheme string, showingRecomme
 	}
 
 	// Use the new themed table creation
-	output := theme.CreateThemedTable(headers, rows, activeTheme) + "\n"
+	output := theme.CreateThemedTable(headers, rows) + "\n"
 
 	// Footer message
 	styles := theme.GetCurrentStyles()

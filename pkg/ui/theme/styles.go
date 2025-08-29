@@ -173,7 +173,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 				Background(lipgloss.Color(scheme.BackgroundDark)),
 			Highlight: lipgloss.NewStyle().
 				Background(lipgloss.Color(scheme.Warning)).
-				Foreground(lipgloss.Color(scheme.Background)).
+				Foreground(lipgloss.Color(scheme.TextInverse)).
 				Bold(true),
 			HelpView: lipgloss.NewStyle().
 				Foreground(lipgloss.Color(scheme.TextMuted)).

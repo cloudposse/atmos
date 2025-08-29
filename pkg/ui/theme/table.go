@@ -98,7 +98,7 @@ func CreateTable(config *TableConfig, headers []string, rows [][]string) string 
 }
 
 // CreateThemedTable creates a table with theme-aware styling for the list themes command.
-func CreateThemedTable(headers []string, rows [][]string, activeTheme string) string {
+func CreateThemedTable(headers []string, rows [][]string) string {
 	styles := GetCurrentStyles()
 
 	config := TableConfig{
