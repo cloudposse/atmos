@@ -629,3 +629,12 @@ The project includes Cursor rules in `.cursor/rules/atmos-rules.mdc` covering:
 - Cross-platform builds supported
 - Version injected at build time via ldflags
 - Binary output to `./build/` directory
+
+### Compilation Requirements (MANDATORY)
+- **ALWAYS compile after making changes** - Run `go build` after ANY code modification
+- **Verify no compilation errors** before proceeding with further changes or commits
+- **Run tests after successful compilation** - Execute `go test ./...` to ensure functionality
+- **Never assume code changes work** without compilation verification
+- **Use build-and-test pattern**: `go build -o binary . && go test ./... 2>&1`
+- **Fix compilation errors immediately** - Do not proceed with additional changes until compilation succeeds
+- **This prevents undefined function/variable errors** that waste time and create broken commits
