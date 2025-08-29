@@ -200,6 +200,24 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-ci
 
+      - name: Find existing test summary comment
+        uses: peter-evans/find-comment@v3
+        id: find-comment
+        if: github.event_name == 'pull_request' && matrix.flavor.target == 'linux'
+        with:
+          issue-number: ${{ github.event.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '## Test Results'
+
+      - name: Post test summary to PR
+        uses: peter-evans/create-or-update-comment@v4
+        if: github.event_name == 'pull_request' && matrix.flavor.target == 'linux'
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.number }}
+          body-path: ${{ env.GITHUB_STEP_SUMMARY }}
+          edit-mode: replace
+
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'
         uses: codecov/codecov-action@v5
