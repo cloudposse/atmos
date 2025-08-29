@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
-	l "github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth"
 	"github.com/cloudposse/atmos/internal/auth/authstore"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -105,7 +105,7 @@ var authUserConfigureCmd = &cobra.Command{
 		if err := store.SetAny(alias, secret); err != nil {
 			return err
 		}
-		l.Info("Saved credentials to keyring", "alias", alias)
+		log.Info("Saved credentials to keyring", "alias", alias)
 		return nil
 	},
 }

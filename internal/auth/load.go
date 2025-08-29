@@ -3,7 +3,7 @@ package auth
 import (
 	"errors"
 
-	l "github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
 )
@@ -39,11 +39,11 @@ func GetDefaultIdentity(configuration map[string]any) (string, error) {
 			defaultIdentities = append(defaultIdentities, k)
 		}
 	}
-	l.Debug("Fount default identities", "defaultIdentities", defaultIdentities)
+	log.Debug("Fount default identities", "defaultIdentities", defaultIdentities)
 	if len(defaultIdentities) == 1 {
 		return defaultIdentities[0], nil
 	} else if len(defaultIdentities) > 1 {
-		l.Warn("multiple default identities found", "defaultIdentities", defaultIdentities)
+		log.Warn("multiple default identities found", "defaultIdentities", defaultIdentities)
 		return "", errors.New("multiple default identities found")
 	}
 	return "", errors.New("no default identity found")
@@ -54,13 +54,13 @@ func GetProviderConfigs(config schema.AuthConfig) (map[string]schema.ProviderDef
 	for k := range config.Providers {
 		rawBytes, err := yaml.Marshal(config.Providers[k])
 		if err != nil {
-			l.Errorf("failed to marshal identity %q: %v", k, err)
+			log.Errorf("failed to marshal identity %q: %v", k, err)
 			return nil, err
 		}
 
 		identityConfig := &schema.ProviderDefaultConfig{}
 		if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
-			l.Errorf("failed to unmarshal identity %q: %v", k, err)
+			log.Errorf("failed to unmarshal identity %q: %v", k, err)
 			return nil, err
 		}
 		identityConfigs[k] = *identityConfig
@@ -74,7 +74,7 @@ func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identi
 	for k, v := range identityMap {
 		rawBytes, err := yaml.Marshal(v)
 		if err != nil {
-			l.Errorf("failed to marshal identity %q: %v", k, err)
+			log.Errorf("failed to marshal identity %q: %v", k, err)
 			return nil, err
 		}
 
@@ -83,7 +83,7 @@ func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identi
 			Enabled: true,
 		}
 		if err := yaml.Unmarshal(rawBytes, identityConfig); err != nil {
-			l.Errorf("failed to unmarshal identity %q: %v", k, err)
+			log.Errorf("failed to unmarshal identity %q: %v", k, err)
 			return nil, err
 		}
 		identityConfigs[k] = *identityConfig
@@ -95,7 +95,7 @@ func GetAllIdentityConfigs(identityMap map[string]any) (map[string]schema.Identi
 func GetEnabledIdentities(identityMap map[string]any) map[string]schema.Identity {
 	identityConfigs, err := GetEnabledIdentitiesE(identityMap)
 	if err != nil {
-		l.Errorf("failed to get enabled identities: %v", err)
+		log.Errorf("failed to get enabled identities: %v", err)
 		return nil
 	}
 	return identityConfigs
@@ -166,7 +166,7 @@ func GetIdentityInstance(identity string, config schema.AuthConfig, info *schema
 
 	idpName, err := GetIdp(identity, mergedConfig)
 	typeVal, err := GetType(idpName, mergedConfig)
-	l.Info("Using Identity Instance", "identity", identity, "provider", idpName, "type", typeVal)
+	log.Info("Using Identity Instance", "identity", identity, "provider", idpName, "type", typeVal)
 
 	if err != nil {
 		return nil, err
@@ -193,6 +193,6 @@ func GetIdentityInstance(identity string, config schema.AuthConfig, info *schema
 		supportedTypes = append(supportedTypes, k)
 	}
 
-	l.Error("unsupported identity type", "type", typeVal, "identity", identity, "supported_types", supportedTypes)
+	log.Error("unsupported identity type", "type", typeVal, "identity", identity, "supported_types", supportedTypes)
 	return nil, errors.New("unsupported identity type")
 }

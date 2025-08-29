@@ -6,23 +6,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command
+// authLoginCmd logs in using a configured identity.
 var authLoginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "",
-	Long:  ``,
+	Short: "Authenticate using a configured identity",
+	Long:  "Authenticate to cloud providers using an identity defined in atmos.yaml.",
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	Run: func(cmd *cobra.Command, args []string) {
 		err := auth.ExecuteAuthLoginCommand(cmd, args)
 		if err != nil {
-			u.PrintfMarkdown("", err, "")
+			u.PrintfMarkdown("%v", err)
 		}
 	},
 }
 
-// https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 func init() {
 	AddStackCompletion(authLoginCmd)
 	authCmd.AddCommand(authLoginCmd)

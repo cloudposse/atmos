@@ -17,8 +17,8 @@ func IsInDocker() bool {
 	return true
 }
 
-// pickKeyFromMap presents a simple picker to the user, where The user is asked to choose
-// a key from the map
+// pickKeyFromMap presents a simple picker to the user, where the user is asked to choose
+// a key from the map.
 //
 // If the user cancels the picker, an error is returned.
 func pickKeyFromMap(Map map[string]any) (string, error) {
@@ -27,7 +27,7 @@ func pickKeyFromMap(Map map[string]any) (string, error) {
 		items = append(items, k)
 	}
 	// Non-interactive test hook
-	if choice := os.Getenv("ATMOS_IDENTITY"); choice != "" {
+	if choice, ok := os.LookupEnv("ATMOS_IDENTITY"); ok && choice != "" {
 		for _, k := range items {
 			if k == choice {
 				return choice, nil
@@ -47,7 +47,7 @@ func pickKeyFromMap(Map map[string]any) (string, error) {
 	return choice, nil
 }
 
-// Todo, would be cool to have huh model that shows info of the identity
+// TODO: would be cool to have a huh model that shows info of the identity.
 func pickIdentity(identities map[string]schema.Identity) (string, error) {
 	if len(identities) == 0 {
 		return "", nil
@@ -61,8 +61,8 @@ func pickIdentity(identities map[string]schema.Identity) (string, error) {
 	for k := range identities {
 		items = append(items, k)
 	}
-	// Non-interactive test hook
-	if want := os.Getenv("ATMOS_IDENTITY"); want != "" {
+	// Non-interactive test hook.
+	if want, ok := os.LookupEnv("ATMOS_IDENTITY"); ok && want != "" {
 		if _, ok := identities[want]; ok {
 			return want, nil
 		}

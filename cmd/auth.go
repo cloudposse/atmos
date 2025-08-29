@@ -4,11 +4,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// authCmd executes 'aws sso login' command
+// authCmd groups authentication-related subcommands.
 var authCmd = &cobra.Command{
 	Use:                "auth",
-	Short:              "",
-	Long:               ``,
+	Short:              "Authentication commands",
+	Long:               "Commands to authenticate and manage identities for Atmos.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 }
