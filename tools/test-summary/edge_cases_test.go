@@ -124,7 +124,6 @@ func TestHandleOutputBothFormat(t *testing.T) {
 
 	// Test both format
 	err := handleOutput(summary, formatBoth, "-")
-
 	if err != nil {
 		t.Errorf("handleOutput() both format = %v, want nil", err)
 	}
