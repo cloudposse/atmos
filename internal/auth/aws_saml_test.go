@@ -134,11 +134,11 @@ func TestEnsureSaml2awsStorageDir(t *testing.T) {
 }
 
 func TestAwsSaml_SetEnvVarsDelegates(t *testing.T) {
-    info := &schema.ConfigAndStacksInfo{ComponentEnvSection: schema.AtmosSectionMapType{}}
-    i := &awsSaml{}
-    i.Common.Profile = "p"    // This is the source profile
-    i.Identity.Identity = "i" // This is the new profile created on the fly.
-    i.Common.Region = "us-west-2"
+	info := &schema.ConfigAndStacksInfo{ComponentEnvSection: schema.AtmosSectionMapType{}}
+	i := &awsSaml{}
+	i.Common.Profile = "p"    // This is the source profile
+	i.Identity.Identity = "i" // This is the new profile created on the fly.
+	i.Common.Region = "us-west-2"
 
 	wantedProfile := "i"
 	i.Provider = "idp"

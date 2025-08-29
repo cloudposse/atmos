@@ -136,7 +136,7 @@ func TestAwsUser_keyringAlias(t *testing.T) {
 
 // mockStore implements a minimal in-memory GenericStore for tests
 type mockStore struct {
-	data map[string][]byte
+	data   map[string][]byte
 	getErr error
 }
 
@@ -153,8 +153,12 @@ func (m *mockStore) GetInto(alias string, out any) error {
 
 func (m *mockStore) SetAny(alias string, v any) error {
 	b, err := json.Marshal(v)
-	if err != nil { return err }
-	if m.data == nil { m.data = map[string][]byte{} }
+	if err != nil {
+		return err
+	}
+	if m.data == nil {
+		m.data = map[string][]byte{}
+	}
 	m.data[alias] = b
 	return nil
 }
@@ -164,8 +168,8 @@ func (m *mockStore) Delete(alias string) error { delete(m.data, alias); return n
 func TestAwsUser_Login_Error_NoStoredCredentials(t *testing.T) {
 	// Override keyring store
 	old := newKeyringStore
-	newKeyringStore = func() authstore.GenericStore { return &mockStore{ data: map[string][]byte{} } }
-	defer func(){ newKeyringStore = old }()
+	newKeyringStore = func() authstore.GenericStore { return &mockStore{data: map[string][]byte{}} }
+	defer func() { newKeyringStore = old }()
 
 	i := &awsUser{}
 	i.Provider = "aws/user"
@@ -177,7 +181,9 @@ func TestAwsUser_Login_Error_NoStoredCredentials(t *testing.T) {
 func TestAwsUser_Login_UsesCachedToken_WritesCredentials(t *testing.T) {
 	tmp := t.TempDir()
 	credFile := filepath.Join(tmp, ".aws", "credentials")
-	if err := os.MkdirAll(filepath.Dir(credFile), 0o755); err != nil { t.Fatalf("mkdir: %v", err) }
+	if err := os.MkdirAll(filepath.Dir(credFile), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", credFile)
 
 	i := &awsUser{}
@@ -206,9 +212,9 @@ func TestAwsUser_Login_UsesCachedToken_WritesCredentials(t *testing.T) {
 
 	old := newKeyringStore
 	newKeyringStore = func() authstore.GenericStore {
-		return &mockStore{ data: map[string][]byte{ alias: b } }
+		return &mockStore{data: map[string][]byte{alias: b}}
 	}
-	defer func(){ newKeyringStore = old }()
+	defer func() { newKeyringStore = old }()
 
 	if err := i.Login(); err != nil {
 		t.Fatalf("Login error: %v", err)
@@ -216,9 +222,17 @@ func TestAwsUser_Login_UsesCachedToken_WritesCredentials(t *testing.T) {
 
 	// Verify credentials file has profile p with expected values
 	f, err := ini.Load(credFile)
-	if err != nil { t.Fatalf("load creds: %v", err) }
-	if !f.HasSection("p") { t.Fatalf("expected credentials section 'p'") }
+	if err != nil {
+		t.Fatalf("load creds: %v", err)
+	}
+	if !f.HasSection("p") {
+		t.Fatalf("expected credentials section 'p'")
+	}
 	s := f.Section("p")
-	if s.Key("aws_access_key_id").String() != "ASIA_TEMP" { t.Fatalf("unexpected access key: %s", s.Key("aws_access_key_id").String()) }
-	if s.Key("aws_session_token").String() != "temp_token" { t.Fatalf("unexpected session token: %s", s.Key("aws_session_token").String()) }
+	if s.Key("aws_access_key_id").String() != "ASIA_TEMP" {
+		t.Fatalf("unexpected access key: %s", s.Key("aws_access_key_id").String())
+	}
+	if s.Key("aws_session_token").String() != "temp_token" {
+		t.Fatalf("unexpected session token: %s", s.Key("aws_session_token").String())
+	}
 }

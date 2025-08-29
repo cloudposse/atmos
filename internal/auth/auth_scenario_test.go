@@ -177,7 +177,7 @@ func TestScenario_Auth_OIDC_SetEnvVars(t *testing.T) {
 
 	// Env should include AWS_PROFILE and AWS_REGION
 	assert.Equal(t, "oidc-prof", info.ComponentEnvSection["AWS_PROFILE"]) // from scenario provider profile
-	assert.Equal(t, "us-east-1", info.ComponentEnvSection["AWS_REGION"])   // from scenario provider region
+	assert.Equal(t, "us-east-1", info.ComponentEnvSection["AWS_REGION"])  // from scenario provider region
 	// AWS_CONFIG_FILE should be set to our forced path
 	assert.Equal(t, cfgFile, info.ComponentEnvSection["AWS_CONFIG_FILE"])
 
