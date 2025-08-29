@@ -141,7 +141,7 @@ func TestOpenOutput(t *testing.T) {
 					}
 				}()
 			}
-			
+
 			writer, path, err := openOutput(tt.format, tt.outputFile)
 			if (err != nil) != tt.wantError {
 				t.Errorf("openOutput() error = %v, wantError %v", err, tt.wantError)
@@ -174,7 +174,7 @@ func TestOpenGitHubOutput(t *testing.T) {
 				os.Setenv("GITHUB_STEP_SUMMARY", oldEnv)
 			}
 		}()
-		
+
 		writer, path, err := openGitHubOutput("")
 		if err != nil {
 			t.Errorf("openGitHubOutput() error = %v", err)
@@ -205,7 +205,7 @@ func TestOpenGitHubOutput(t *testing.T) {
 				os.Setenv("GITHUB_STEP_SUMMARY", oldEnv)
 			}
 		}()
-		
+
 		customFile := "custom-summary.md"
 		writer, path, err := openGitHubOutput(customFile)
 		if err != nil {
