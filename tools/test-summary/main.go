@@ -68,12 +68,12 @@ type CoverageData struct {
 
 // TestSummary holds all test results and metadata.
 type TestSummary struct {
-	Failed        []TestResult
-	Skipped       []TestResult
-	Passed        []TestResult
-	Coverage      string // Legacy statement coverage
-	CoverageData  *CoverageData
-	ExitCode      int
+	Failed       []TestResult
+	Skipped      []TestResult
+	Passed       []TestResult
+	Coverage     string // Legacy statement coverage
+	CoverageData *CoverageData
+	ExitCode     int
 }
 
 func main() {
@@ -102,7 +102,7 @@ func run(inputFile, format, outputFile, coverProfile string, excludeMocks bool) 
 	}
 	// Parse and process.
 	summary, consoleOutput := parseTestJSON(input)
-	
+
 	// Process coverage profile if provided.
 	if coverProfile != "" {
 		coverageData, err := parseCoverageProfile(coverProfile, excludeMocks)
@@ -112,7 +112,7 @@ func run(inputFile, format, outputFile, coverProfile string, excludeMocks bool) 
 			summary.CoverageData = coverageData
 		}
 	}
-	
+
 	// Handle output based on format.
 	return handleOutput(format, outputFile, summary, consoleOutput)
 }
@@ -123,7 +123,7 @@ func parseCoverageProfile(profileFile string, excludeMocks bool) (*CoverageData,
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Then get function-level coverage using go tool cover -func
 	functions, err := getFunctionCoverage(profileFile, excludeMocks)
 	if err != nil {
@@ -131,7 +131,7 @@ func parseCoverageProfile(profileFile string, excludeMocks bool) (*CoverageData,
 		fmt.Fprintf(os.Stderr, "Warning: Failed to get function coverage: %v\n", err)
 		functions = []CoverageFunction{}
 	}
-	
+
 	return &CoverageData{
 		StatementCoverage: statementCoverage,
 		FunctionCoverage:  functions,
@@ -149,7 +149,7 @@ func parseStatementCoverage(profileFile string, excludeMocks bool) (string, []st
 	scanner := bufio.NewScanner(file)
 	var filteredFiles []string
 	mockRegex := regexp.MustCompile(`mock_.*\.go|.*mock\.go|.*/mock/.*\.go`)
-	
+
 	// Skip the first line (mode: set, atomic, etc.)
 	if scanner.Scan() {
 		// First line is mode declaration
@@ -157,21 +157,21 @@ func parseStatementCoverage(profileFile string, excludeMocks bool) (string, []st
 
 	totalStatements := 0
 	coveredStatements := 0
-	
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
 			continue
 		}
-		
+
 		// Parse coverage line: file:startLine.startCol,endLine.endCol numStmts count
 		parts := strings.Fields(line)
 		if len(parts) < 3 {
 			continue
 		}
-		
+
 		filePath := strings.Split(parts[0], ":")[0]
-		
+
 		// Filter out mock files if requested
 		if excludeMocks && mockRegex.MatchString(filePath) {
 			if !contains(filteredFiles, filePath) {
@@ -179,34 +179,34 @@ func parseStatementCoverage(profileFile string, excludeMocks bool) (string, []st
 			}
 			continue
 		}
-		
+
 		numStmts, err := strconv.Atoi(parts[1])
 		if err != nil {
 			continue
 		}
-		
+
 		count, err := strconv.Atoi(parts[2])
 		if err != nil {
 			continue
 		}
-		
+
 		totalStatements += numStmts
 		if count > 0 {
 			coveredStatements += numStmts
 		}
 	}
-	
+
 	if err := scanner.Err(); err != nil {
 		return "", nil, fmt.Errorf("error reading coverage profile: %w", err)
 	}
-	
+
 	// Calculate overall statement coverage
 	statementCoverage := "0.0%"
 	if totalStatements > 0 {
 		coverage := float64(coveredStatements) / float64(totalStatements) * 100
 		statementCoverage = fmt.Sprintf("%.1f%%", coverage)
 	}
-	
+
 	return statementCoverage, filteredFiles, nil
 }
 
@@ -217,11 +217,11 @@ func getFunctionCoverage(profileFile string, excludeMocks bool) ([]CoverageFunct
 	if err != nil {
 		return nil, fmt.Errorf("failed to run go tool cover -func: %w", err)
 	}
-	
+
 	var functions []CoverageFunction
 	mockRegex := regexp.MustCompile(`mock_.*\.go|.*mock\.go|.*/mock/.*\.go`)
 	funcRegex := regexp.MustCompile(`^(.+?):(\d+):\s+(.+?)\s+(\d+\.\d+)%`)
-	
+
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -229,33 +229,33 @@ func getFunctionCoverage(profileFile string, excludeMocks bool) ([]CoverageFunct
 			// Skip the total line
 			continue
 		}
-		
+
 		matches := funcRegex.FindStringSubmatch(line)
 		if len(matches) < 5 {
 			continue
 		}
-		
+
 		file := matches[1]
 		functionName := matches[3]
 		coverageStr := matches[4]
-		
+
 		// Filter out mock files if requested
 		if excludeMocks && mockRegex.MatchString(file) {
 			continue
 		}
-		
+
 		coverage, err := strconv.ParseFloat(coverageStr, 64)
 		if err != nil {
 			continue
 		}
-		
+
 		functions = append(functions, CoverageFunction{
 			File:     file,
 			Function: functionName,
 			Coverage: coverage,
 		})
 	}
-	
+
 	// Sort functions by file then function name
 	sort.Slice(functions, func(i, j int) bool {
 		if functions[i].File == functions[j].File {
@@ -263,7 +263,7 @@ func getFunctionCoverage(profileFile string, excludeMocks bool) ([]CoverageFunct
 		}
 		return functions[i].File < functions[j].File
 	})
-	
+
 	return functions, nil
 }
 
@@ -416,7 +416,7 @@ func sortResults(summary *TestSummary) {
 func writeSummary(summary *TestSummary, format, outputFile string) error {
 	if format == formatGitHub {
 		// For GitHub format, write to both GITHUB_STEP_SUMMARY and a persistent file
-		
+
 		// 1. Write to GITHUB_STEP_SUMMARY (if available)
 		githubWriter, githubPath, err := openGitHubOutput("")
 		if err == nil {
@@ -430,26 +430,26 @@ func writeSummary(summary *TestSummary, format, outputFile string) error {
 				fmt.Fprintf(os.Stderr, "✅ GitHub Step Summary written\n")
 			}
 		}
-		
+
 		// 2. ALWAYS write to a regular file for persistence
 		regularFile := outputFile
 		if regularFile == "" {
 			regularFile = "test-summary.md" // Default file for PR comments
 		}
-		
+
 		file, err := os.Create(regularFile)
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
 		defer file.Close()
-		
+
 		writeMarkdownContent(file, summary, format)
 		absPath, _ := filepath.Abs(regularFile)
 		fmt.Fprintf(os.Stderr, "✅ Test summary written to: %s\n", absPath)
-		
+
 		return nil
 	}
-	
+
 	// For other formats, use the original logic
 	output, outputPath, err := openOutput(format, outputFile)
 	if err != nil {
@@ -545,18 +545,18 @@ func writeCoverageSectionWithDetails(output io.Writer, coverageData *CoverageDat
 		emoji = "🟡" // yellow for 40-79%.
 	}
 	fmt.Fprintf(output, "**Coverage:** %s %s of statements", emoji, coverageData.StatementCoverage)
-	
+
 	// Add information about filtered files
 	if len(coverageData.FilteredFiles) > 0 {
 		fmt.Fprintf(output, " (excluded %d mock files)", len(coverageData.FilteredFiles))
 	}
 	fmt.Fprintf(output, "\n\n")
-	
+
 	// Show function-level coverage if available
 	if len(coverageData.FunctionCoverage) > 0 {
 		writeFunctionCoverageDetails(output, coverageData.FunctionCoverage)
 	}
-	
+
 	// Show filtered files if any
 	if len(coverageData.FilteredFiles) > 0 {
 		fmt.Fprintf(output, "<details>\n")
@@ -572,12 +572,12 @@ func writeFunctionCoverageDetails(output io.Writer, functions []CoverageFunction
 	if len(functions) == 0 {
 		return
 	}
-	
+
 	// Calculate function coverage statistics
 	totalFunctions := len(functions)
 	coveredFunctions := 0
 	uncoveredFunctions := []CoverageFunction{}
-	
+
 	for _, fn := range functions {
 		if fn.Coverage > 0 {
 			coveredFunctions++
@@ -585,12 +585,12 @@ func writeFunctionCoverageDetails(output io.Writer, functions []CoverageFunction
 			uncoveredFunctions = append(uncoveredFunctions, fn)
 		}
 	}
-	
+
 	functionCoveragePercent := float64(coveredFunctions) / float64(totalFunctions) * 100
-	
-	fmt.Fprintf(output, "**Function Coverage:** %.1f%% (%d/%d functions covered)\n\n", 
+
+	fmt.Fprintf(output, "**Function Coverage:** %.1f%% (%d/%d functions covered)\n\n",
 		functionCoveragePercent, coveredFunctions, totalFunctions)
-	
+
 	// Show uncovered functions if any
 	if len(uncoveredFunctions) > 0 {
 		fmt.Fprintf(output, "<details>\n")
