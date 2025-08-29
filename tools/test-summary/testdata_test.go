@@ -91,15 +91,6 @@ func containsAll(t *testing.T, got string, want ...string) {
 	}
 }
 
-// Helper function to check if a string contains none of the given substrings.
-func containsNone(t *testing.T, got string, unwanted ...string) {
-	t.Helper()
-	for _, u := range unwanted {
-		if strings.Contains(got, u) {
-			t.Errorf("output contains unexpected substring %q\nGot:\n%s", u, got)
-		}
-	}
-}
 
 // Helper function to assert test counts.
 func assertTestCounts(t *testing.T, summary *TestSummary, wantPassed, wantFailed, wantSkipped int) {
