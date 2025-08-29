@@ -114,8 +114,8 @@ func TestConstants(t *testing.T) {
 	if coverageHighThreshold != 80.0 {
 		t.Errorf("coverageHighThreshold = %v, want 80.0", coverageHighThreshold)
 	}
-	if coverageMedThreshold != 50.0 {
-		t.Errorf("coverageMedThreshold = %v, want 50.0", coverageMedThreshold)
+	if coverageMedThreshold != 40.0 {
+		t.Errorf("coverageMedThreshold = %v, want 40.0", coverageMedThreshold)
 	}
 	if base10BitSize != 64 {
 		t.Errorf("base10BitSize = %v, want 64", base10BitSize)

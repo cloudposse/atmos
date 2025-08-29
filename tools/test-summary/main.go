@@ -29,7 +29,7 @@ const (
 	filePermissions    = 0o644
 	// Coverage threshold constants.
 	coverageHighThreshold = 80.0
-	coverageMedThreshold  = 50.0
+	coverageMedThreshold  = 40.0
 	base10BitSize         = 64
 )
 
@@ -309,11 +309,11 @@ func writeMarkdownContent(output io.Writer, summary *TestSummary, format string)
 
 func writeCoverageSection(output io.Writer, coverage string) {
 	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverage, "%"), base10BitSize)
-	emoji := "🔴" // red for < 50%.
+	emoji := "🔴" // red for < 40%.
 	if coverageFloat >= coverageHighThreshold {
 		emoji = "🟢" // green for >= 80%.
 	} else if coverageFloat >= coverageMedThreshold {
-		emoji = "🟡" // yellow for 50-79%.
+		emoji = "🟡" // yellow for 40-79%.
 	}
 	fmt.Fprintf(output, "**Coverage:** %s %s of statements\n\n", emoji, coverage)
 }

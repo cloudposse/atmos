@@ -38,9 +38,9 @@ func TestWriteCoverageSection(t *testing.T) {
 		},
 		{
 			name:      "exact medium threshold",
-			coverage:  "50.0%",
+			coverage:  "40.0%",
 			wantEmoji: "🟡",
-			wantText:  "50.0%",
+			wantText:  "40.0%",
 		},
 	}
 
