@@ -14,13 +14,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// authUserCmd groups user-related auth commands
+// authUserCmd groups user-related auth commands.
 var authUserCmd = &cobra.Command{
 	Use:   "user",
 	Short: "Manage aws user credentials for atmos auth",
 }
 
-// configure command prompts for static AWS user credentials and stores them in keyring
+// configure command prompts for static AWS user credentials and stores them in keyring.
 var authUserConfigureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Configure static AWS user credentials (stored securely in keyring)",

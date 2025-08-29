@@ -175,7 +175,7 @@ func (i *awsAssumeRole) AssumeRole() error {
 			aws.ToString(result.Credentials.AccessKeyId),
 			aws.ToString(result.Credentials.SecretAccessKey),
 			aws.ToString(result.Credentials.SessionToken),
-			"aws-assume-role",
+			i.Provider,
 		)
 		log.Info("✅ Successfully assumed role",
 			"role", i.RoleArn,

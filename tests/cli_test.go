@@ -245,7 +245,7 @@ func (pm *PathManager) Apply() error {
 	return os.Setenv("PATH", pm.GetPath())
 }
 
-// Determine if running in a CI environment
+// Determine if running in a CI environment.
 func isCIEnvironment() bool {
 	// Check for common CI environment variables
 	// Note, that the CI variable has many possible truthy values, so we check for any non-empty value that is not "false".
@@ -537,7 +537,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if err != nil {
 		t.Fatalf("Failed to create temporary directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tempDir) // Clean up the temporary directory after the test
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
