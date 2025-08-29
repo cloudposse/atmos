@@ -6,22 +6,26 @@ by visiting the following URL: https://atmos.tools/cli/telemetry
 
 This command generates configuration files to automate and streamline Terraform workflows with Atlantis.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
 
-Usage:
+USAGE
 
-  atmos atlantis generate [sub-command] [flags]
+                                                                            
+                                                                            
+  atmos atlantis generate [sub-command] [flags]                             
+                                                                            
+                                                                            
 
 
-Available Commands:
+AVAILABLE COMMANDS
 
   repo-config                    Generate repository configuration for Atlantis
 
 
-Flags:
+FLAGS
 
     -h, --help    help for generate
 
 
-Global Flags:
+GLOBAL FLAGS
 
         --base-path string           Base path for Atmos project
 

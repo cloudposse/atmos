@@ -6,16 +6,20 @@ by visiting the following URL: https://atmos.tools/cli/telemetry
 
 This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
 
-Usage:
+USAGE
 
-  atmos terraform [sub-command] [flags]
+                                                                            
+                                                                            
+  atmos terraform [sub-command] [flags]                                     
+                                                                            
+                                                                            
 
-Aliases:
+ALIASES
 
   terraform, tf
 
 
-Available Commands:
+AVAILABLE COMMANDS
 
   clean                          Clean up Terraform state and artifacts.
   deploy                         Deploy the specified infrastructure using Terraform
@@ -25,7 +29,7 @@ Available Commands:
   varfile                        Load variables from a file
   write                          Write variables to a file
 
-Native terraform Commands:
+NATIVE TERRAFORM COMMANDS
 
   apply                          Apply changes to infrastructure
   console                        Try Terraform expressions at an interactive command prompt
@@ -54,7 +58,7 @@ Native terraform Commands:
   workspace                      Manage Terraform workspaces
 
 
-Flags:
+FLAGS
 
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
                                       variable to customize the User-Agent
@@ -153,7 +157,7 @@ Flags:
                                       arguments and flags for the command.
 
 
-Global Flags:
+GLOBAL FLAGS
 
         --base-path string           Base path for Atmos project
 
@@ -184,10 +188,14 @@ Global Flags:
                                      /dev/null)
 
 
-Examples:
+EXAMPLES
 
-– Execute a terraform subcommand                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-  $ atmos terraform [subcommand] <component-name> -s <stack-name>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+                                                                            
+                                                                            
+  – Execute a terraform subcommand                                          
+    $ atmos terraform [subcommand] <component-name> -s <stack-name>         
+                                                                            
+                                                                            
 
 
 Use atmos terraform [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           

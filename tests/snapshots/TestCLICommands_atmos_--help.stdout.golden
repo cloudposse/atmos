@@ -6,13 +6,21 @@ by visiting the following URL: https://atmos.tools/cli/telemetry
 
 Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 
-Usage:
+USAGE
 
-  atmos [flags]
-  atmos [sub-command] [flags]
+                                                                            
+                                                                            
+  atmos [flags]                                                             
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+  atmos [sub-command] [flags]                                               
+                                                                            
+                                                                            
 
 
-Available Commands:
+AVAILABLE COMMANDS
 
   about                          Learn about Atmos
   atlantis                       Generate and manage Atlantis configurations
@@ -27,19 +35,20 @@ Available Commands:
   pro                            Access premium features integrated with atmos-pro.com
   support                        Show Atmos support options
   terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
+  theme                          Manage terminal themes for Atmos CLI
   validate                       Validate configurations against OPA policies and JSON schemas
   vendor                         Manage external dependencies for components or stacks
   version                        Display the version of Atmos you are running and check for updates
   workflow                       Run predefined tasks using workflows
 
-Subcommand Aliases:
+SUBCOMMAND ALIASES
 
   hf                             Alias of "atmos helmfile" command
   pk                             Alias of "atmos packer" command
   tf                             Alias of "atmos terraform" command
 
 
-Flags:
+FLAGS
 
         --base-path string           Base path for Atmos project
 

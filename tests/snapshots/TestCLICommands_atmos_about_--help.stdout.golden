@@ -6,17 +6,21 @@ by visiting the following URL: https://atmos.tools/cli/telemetry
 
 Display information about Atmos, its features, and benefits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
 
-Usage:
+USAGE
 
-  atmos about [flags]
+                                                                            
+                                                                            
+  atmos about [flags]                                                       
+                                                                            
+                                                                            
 
 
-Flags:
+FLAGS
 
     -h, --help    help for about
 
 
-Global Flags:
+GLOBAL FLAGS
 
         --base-path string           Base path for Atmos project
 
@@ -47,10 +51,14 @@ Global Flags:
                                      /dev/null)
 
 
-Examples:
+EXAMPLES
 
-• Learn about atmos                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
-  $ atmos about                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+                                                                            
+                                                                            
+  • Learn about atmos                                                       
+    $ atmos about                                                           
+                                                                            
+                                                                            
 
 
 Use atmos about --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
