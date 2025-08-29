@@ -24,6 +24,8 @@ type awsSaml struct {
 	Common          schema.ProviderDefaultConfig `yaml:",inline"`
 	schema.Identity `yaml:",inline"`
 
+	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
+
 	SessionDuration int32 `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration,omitempty"`
 
 	// Store SAML assertion and roles between Login and AssumeRole steps
@@ -288,10 +290,10 @@ func (i *awsSaml) AssumeRole() error {
 
 	// Pick target role
 	targetRole := i.samlRoles[0]
-	if i.RoleArn != "" {
-		selected, err := saml2aws.LocateRole(i.samlRoles, i.RoleArn)
+	if i.RoleArnToAssume != "" {
+		selected, err := saml2aws.LocateRole(i.samlRoles, i.RoleArnToAssume)
 		if err != nil {
-			return fmt.Errorf("role %s not present in assertion: %w", i.RoleArn, err)
+			return fmt.Errorf("role %s not present in assertion: %w", i.RoleArnToAssume, err)
 		}
 		targetRole = selected
 	}
@@ -344,7 +346,7 @@ func (i *awsSaml) AssumeRole() error {
 func (i *awsSaml) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	log.Info("Setting AWS environment variables")
 
-	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
+	err := CreateAwsFilesAndUpdateEnvVars(info, i.Identity.Identity, i.Common.Profile, i.Provider, i.Common.Region, i.RoleArnToAssume)
 	if err != nil {
 		return err
 	}
@@ -352,7 +354,7 @@ func (i *awsSaml) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	// Merge identity-specific env overrides (preserve key casing)
 	MergeIdentityEnvOverrides(info, i.Env)
 
-	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArnToAssume)
 	if err != nil {
 		return err
 	}

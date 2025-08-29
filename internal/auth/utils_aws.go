@@ -17,11 +17,13 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-func SetAwsEnvVars(info *schema.ConfigAndStacksInfo, profile, provider, region string) error {
-	if profile == "" {
-		return fmt.Errorf("profile is required")
+func CreateAwsFilesAndUpdateEnvVars(info *schema.ConfigAndStacksInfo, identity, profile, provider, region, roleArn string) error {
+	if roleArn != "" {
+		if profile == "" {
+			return fmt.Errorf("profile is required")
+		}
+		info.ComponentEnvSection["AWS_PROFILE"] = profile
 	}
-	info.ComponentEnvSection["AWS_PROFILE"] = profile
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_PROFILE=%s", profile))
 	configFilePath, err := CreateAwsAtmosConfigFilepath(provider)
 	if err != nil {
@@ -29,6 +31,14 @@ func SetAwsEnvVars(info *schema.ConfigAndStacksInfo, profile, provider, region s
 	}
 	info.ComponentEnvSection["AWS_CONFIG_FILE"] = configFilePath // CreateAwsAtmosConfigFilepath
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_CONFIG_FILE=%s", configFilePath))
+
+	// Ensure Atmos-scoped credentials path exists and export it
+	credsFilePath, err := CreateAwsAtmosCredentialsFilepath(provider)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"] = credsFilePath
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_SHARED_CREDENTIALS_FILE=%s", credsFilePath))
 	info.ComponentEnvSection["AWS_REGION"] = region
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_REGION=%s", region))
 
@@ -40,12 +50,24 @@ func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken, id
 		return fmt.Errorf("profile is required")
 	}
 
-	targetPath, err := GetAwsCredentialsFilepath()
-	if err != nil {
-		return err
+	// Determine target credentials file path with Atmos-first precedence.
+	// identity is used as the provider key for Atmos-scoped path.
+	var targetPath string
+	if v := os.Getenv("AWS_SHARED_CREDENTIALS_FILE"); v != "" {
+		targetPath = v
+	} else if v := os.Getenv("ATMOS_AWS_CREDENTIALS_FILE"); v != "" {
+		targetPath = v
+	} else {
+		// Fall back to Atmos-managed location ~/.aws/atmos/<provider>/credentials
+		p, err := CreateAwsAtmosCredentialsFilepath(identity)
+		if err != nil {
+			return err
+		}
+		targetPath = p
 	}
 
 	// Ensure parent dir exists
+	var err error
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
 		return fmt.Errorf("ensure aws dir: %w", err)
 	}
@@ -56,7 +78,6 @@ func WriteAwsCredentials(profile, accessKeyID, secretAccessKey, sessionToken, id
 		Loose:               true, // don't error if file doesn't exist
 	}
 	var f *ini.File
-	err = nil
 	if _, statErr := os.Stat(targetPath); statErr == nil {
 		f, err = ini.LoadSources(loadOpts, targetPath)
 		if err != nil {
@@ -125,10 +146,36 @@ func CreateAwsAtmosConfigFilepath(provider string) (string, error) {
 		targetPath = filepath.Join(homeDir, ".aws", "atmos", provider)
 		_ = os.MkdirAll(targetPath, os.ModePerm)
 		target := filepath.Join(targetPath, "config")
-		_, _ = os.Create(target) // touch targetPath)
+		_, _ = os.Create(target) // touch targetPath
 
 		log.Debug("AWS config file path", "path", targetPath+"/config")
 		return target, nil
+	}
+	return targetPath, nil
+}
+
+func CreateAwsAtmosCredentialsFilepath(provider string) (string, error) {
+	// Respect explicit override
+	targetPath := os.Getenv("ATMOS_AWS_CREDENTIALS_FILE")
+	if targetPath == "" {
+		homeDir, err := homedir.Dir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home dir: %w", err)
+		}
+		dir := filepath.Join(homeDir, ".aws", "atmos", provider)
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return "", fmt.Errorf("ensure credentials dir: %w", err)
+		}
+		targetPath = filepath.Join(dir, "credentials")
+		// touch file so downstream tooling has a file to read
+		if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+			if f, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+				_ = f.Close()
+			}
+		}
+
+		log.Debug("AWS credentials file path", "path", targetPath)
+		return targetPath, nil
 	}
 	return targetPath, nil
 }
@@ -154,7 +201,7 @@ func UpdateAwsAtmosConfig(provider string, profile string, sourceProfile string,
 	profileSection := f.Section(fmt.Sprintf("profile %s", profile)) // fmt.Sprintf("profile %s", profile)
 	profileSection.Key("region").SetValue(region)
 	// Handle source_profile: set when provided, otherwise remove to avoid chaining
-	if sourceProfile != "" {
+	if sourceProfile != "" && roleArn != "" {
 		profileSection.Key("source_profile").SetValue(sourceProfile)
 	} else {
 		if profileSection.HasKey("source_profile") {
@@ -224,6 +271,10 @@ func RemoveAwsCredentials(profile string) error {
 
 	// Determine credentials file path
 	targetPath := os.Getenv("AWS_SHARED_CREDENTIALS_FILE")
+	if targetPath == "" {
+		// Allow explicit Atmos override
+		targetPath = os.Getenv("ATMOS_AWS_CREDENTIALS_FILE")
+	}
 	if targetPath == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {

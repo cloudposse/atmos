@@ -39,7 +39,7 @@ func NewAwsAssumeRoleFactory(provider string, identity string, config schema.Aut
 
 // Validate checks if the required fields are set
 func (i *awsAssumeRole) Validate() error {
-	if i.RoleArn == "" {
+	if i.RoleArnToAssume == "" {
 		return fmt.Errorf("role_arn is required for AWS assume role")
 	}
 
@@ -153,19 +153,19 @@ func (i *awsAssumeRole) AssumeRole() error {
 	sessionName := fmt.Sprintf("AtmosSession-%s", os.Getenv("USER"))
 
 	log.Debug("Assuming role",
-		"role_arn", i.RoleArn,
+		"role_arn", i.RoleArnToAssume,
 		"source_identity", aws.ToString(callerIdentity.Arn),
 		"session_name", sessionName,
 	)
 
 	// Assume the specified role
 	result, err := stsClient.AssumeRole(ctx, &sts.AssumeRoleInput{
-		RoleArn:         aws.String(i.RoleArn),
+		RoleArn:         aws.String(i.RoleArnToAssume),
 		RoleSessionName: aws.String(sessionName),
 		DurationSeconds: aws.Int32(i.SessionDuration),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to assume role %s: %w", i.RoleArn, err)
+		return fmt.Errorf("failed to assume role %s: %w", i.RoleArnToAssume, err)
 	}
 
 	// Write credentials to the AWS credentials file
@@ -178,20 +178,20 @@ func (i *awsAssumeRole) AssumeRole() error {
 			i.Provider,
 		)
 		log.Info("✅ Successfully assumed role",
-			"role", i.RoleArn,
+			"role", i.RoleArnToAssume,
 			"profile", i.Common.Profile,
 			"expires", result.Credentials.Expiration.Local().Format(time.RFC1123),
 		)
 		return nil
 	}
 
-	return fmt.Errorf("no credentials returned when assuming role %s", i.RoleArn)
+	return fmt.Errorf("no credentials returned when assuming role %s", i.RoleArnToAssume)
 }
 
 func (i *awsAssumeRole) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	log.Info("Setting AWS environment variables")
 
-	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
+	err := CreateAwsFilesAndUpdateEnvVars(info, i.Identity.Identity, i.Common.Profile, i.Provider, i.Common.Region, i.RoleArnToAssume)
 	if err != nil {
 		return err
 	}
@@ -199,7 +199,7 @@ func (i *awsAssumeRole) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	// Merge identity-specific env overrides (preserve key casing)
 	MergeIdentityEnvOverrides(info, i.Env)
 
-	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArnToAssume)
 	if err != nil {
 		return err
 	}

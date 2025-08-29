@@ -45,6 +45,7 @@ auth:
       type: aws/oidc
       region: us-east-1
       profile: oidc
+      role_arn: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
     idp-acme-saml:
       type: aws/saml
       url: https://mock
@@ -63,7 +64,6 @@ auth:
     # Used in tests
     oidc:
       provider: oidc
-      role_arn: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
       default: false # we use the identity flag in the test custom command
     
     # Example identities mapping to providers (stubbed examples)

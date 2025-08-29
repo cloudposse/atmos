@@ -88,9 +88,9 @@ func TestIdentityCenter_SetEnvVars_WritesConfig(t *testing.T) {
 			Profile: "sso-prof",
 		},
 		Identity: schema.Identity{
-			Identity: "ic", // identity key
-			Provider: "aws/iam-identity-center",
-			RoleArn:  "arn:aws:iam::111122223333:role/Admin",
+			Identity:        "ic", // identity key
+			Provider:        "aws/iam-identity-center",
+			RoleArnToAssume: "arn:aws:iam::111122223333:role/Admin",
 		},
 		RoleName:  "Admin",
 		AccountId: "111122223333",
@@ -105,7 +105,7 @@ func TestIdentityCenter_SetEnvVars_WritesConfig(t *testing.T) {
 	require.NoError(t, ic.SetEnvVars(info))
 
 	// Env should have profile/region/config path
-	assert.Equal(t, "ic", info.ComponentEnvSection["AWS_PROFILE"]) // SetAwsEnvVars uses identity as profile for IC
+	assert.Equal(t, "ic", info.ComponentEnvSection["AWS_PROFILE"]) // CreateAwsFilesAndUpdateEnvVars uses identity as profile for IC
 	assert.Equal(t, "us-west-2", info.ComponentEnvSection["AWS_REGION"])
 	assert.Equal(t, cfgFile, info.ComponentEnvSection["AWS_CONFIG_FILE"])
 

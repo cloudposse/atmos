@@ -996,7 +996,7 @@ type Identity struct {
 	Provider          string        `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider,omitempty"`
 	RequestedDuration time.Duration `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration,omitempty"`
 	// AWS Specific
-	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
+	RoleArnToAssume string `yaml:"role_arn_to_assume,omitempty" json:"role_arn_to_assume,omitempty" mapstructure:"role_arn_to_assume,omitempty"`
 	// Env allows specifying environment variables to set when this identity is used.
 	// Preserves key casing:
 	//   env:

@@ -66,7 +66,7 @@ func TestAwsOidc_Validate_Login_AssumeRole_SetEnv(t *testing.T) {
 	i.Common.Profile = "src-prof"       // source profile name used for credentials file section
 	i.Identity.Identity = "ci-identity" // identity name -> becomes AWS_PROFILE in env
 	i.Provider = "aws/oidc"
-	i.RoleArn = "arn:aws:iam::111111111111:role/Test"
+	i.RoleArnToAssume = "arn:aws:iam::111111111111:role/Test"
 	i.ForceTokenFile = tokenPath
 	i.STSEndpoint = stsStub.URL
 	i.RequestedDuration = 900 * time.Second
@@ -171,7 +171,7 @@ func TestAwsOidc_Login_ThenCallerIdentity_WithMockSTS(t *testing.T) {
 	i.Common.Profile = "src-prof"
 	i.Identity.Identity = "ci-identity"
 	i.Provider = "aws/oidc"
-	i.RoleArn = "arn:aws:iam::222233334444:role/Test"
+	i.RoleArnToAssume = "arn:aws:iam::222233334444:role/Test"
 	i.ForceTokenFile = tokenPath
 	i.STSEndpoint = stsStub.URL
 	i.RequestedDuration = 900 * time.Second
@@ -220,7 +220,7 @@ func TestAwsOidc_SetEnvVars_WritesMinimalConfig(t *testing.T) {
 	i.Common.Profile = "ci-prof"
 	i.Identity.Identity = "ci-identity"
 	i.Provider = "aws/oidc"
-	i.RoleArn = "arn:aws:iam::999988887777:role/Test"
+	i.RoleArnToAssume = "arn:aws:iam::999988887777:role/Test"
 
 	info := &schema.ConfigAndStacksInfo{ComponentEnvSection: schema.AtmosSectionMapType{}}
 	if err := i.SetEnvVars(info); err != nil {

@@ -109,7 +109,7 @@ func GetEnabledIdentitiesE(identityMap map[string]any) (map[string]schema.Identi
 	filteredIdentities := make(map[string]schema.Identity)
 	for k, v := range identityConfigs {
 		// TODO move this to a validate method
-		if v.Enabled && (v.Provider != "" || v.RoleArn != "") {
+		if v.Enabled && (v.Provider != "" || v.RoleArnToAssume != "") {
 			filteredIdentities[k] = v
 		}
 	}

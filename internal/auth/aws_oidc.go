@@ -24,6 +24,7 @@ type awsOidc struct {
 	Common          schema.ProviderDefaultConfig `yaml:",inline"`
 	schema.Identity `yaml:",inline"`
 
+	RoleArn string `yaml:"role_arn,omitempty" json:"role_arn,omitempty" mapstructure:"role_arn,omitempty"`
 	// Optional, mostly for overrides / local testing.
 	Audience       string `yaml:"audience,omitempty" json:"audience,omitempty" mapstructure:"audience,omitempty"`                         // default "sts.amazonaws.com"
 	SessionName    string `yaml:"session_name,omitempty" json:"session_name,omitempty" mapstructure:"session_name,omitempty"`             // default derived from GitHub envs
@@ -133,7 +134,7 @@ func (i *awsOidc) AssumeRole() error {
 func (i *awsOidc) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	log.Info("Setting AWS environment variables")
 	// Point AWS_PROFILE to the profile that holds the exchanged temporary credentials.
-	if err := SetAwsEnvVars(info, i.Common.Profile, i.Provider, i.Common.Region); err != nil {
+	if err := CreateAwsFilesAndUpdateEnvVars(info, i.Identity.Identity, i.Common.Profile, i.Provider, i.Common.Region, i.RoleArnToAssume); err != nil {
 		return err
 	}
 	MergeIdentityEnvOverrides(info, i.Env)

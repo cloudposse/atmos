@@ -39,7 +39,7 @@ func TestAwsSaml_SetEnvVars_WritesConfigWithDelegation(t *testing.T) {
 	i.Common.Profile = "src-prof"
 	i.Identity.Identity = "saml-prof"
 	i.Provider = "aws/saml"
-	i.RoleArn = "arn:aws:iam::123456789012:role/SAMLRole"
+	i.RoleArnToAssume = "arn:aws:iam::123456789012:role/SAMLRole"
 
 	info := &schema.ConfigAndStacksInfo{ComponentEnvSection: schema.AtmosSectionMapType{}}
 	if err := i.SetEnvVars(info); err != nil {
@@ -69,8 +69,8 @@ func TestAwsSaml_SetEnvVars_WritesConfigWithDelegation(t *testing.T) {
 	if !sec.HasKey("source_profile") || sec.Key("source_profile").String() != i.Common.Profile {
 		t.Fatalf("expected source_profile %q to be set", i.Common.Profile)
 	}
-	if !sec.HasKey("role_arn") || sec.Key("role_arn").String() != i.RoleArn {
-		t.Fatalf("expected role_arn %q to be set", i.RoleArn)
+	if !sec.HasKey("role_arn") || sec.Key("role_arn").String() != i.RoleArnToAssume {
+		t.Fatalf("expected role_arn %q to be set", i.RoleArnToAssume)
 	}
 }
 

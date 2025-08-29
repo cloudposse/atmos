@@ -68,12 +68,12 @@ func (config *awsIamIdentityCenter) Validate() error {
 	}
 
 	// Validate we have enough information to determine the role
-	if config.RoleArn == "" && config.RoleName == "" {
+	if config.RoleArnToAssume == "" && config.RoleName == "" {
 		return fmt.Errorf("either role or role_name must be specified for AWS IAM Identity Center")
 	}
 
 	// Validate we have enough information to determine the account
-	if config.RoleArn == "" && config.AccountId == "" && config.AccountName == "" {
+	if config.RoleArnToAssume == "" && config.AccountId == "" && config.AccountName == "" {
 		return fmt.Errorf("either role, account_id, or account_name must be specified for AWS IAM Identity Center")
 	}
 
@@ -157,7 +157,7 @@ func (config *awsIamIdentityCenter) AssumeRole() error {
 		AccountId:   aws.String(accountId),
 		RoleName:    aws.String(roleName),
 	})
-	log.Debug("Role Credentials", "role_name", roleName, "accountid", accountId, "role", config.RoleArn)
+	log.Debug("Role Credentials", "role_name", roleName, "accountid", accountId, "role", config.RoleArnToAssume)
 	if err != nil {
 		var roles []string
 		r, _ := getAccountRoles(ctx, ssoClient, config.token, accountId)
@@ -221,7 +221,7 @@ func getAccountRoles(ctx context.Context, client *sso.Client, token, accountID s
 func (i *awsIamIdentityCenter) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	log.Info("Setting AWS environment variables")
 
-	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
+	err := CreateAwsFilesAndUpdateEnvVars(info, i.Identity.Identity, i.Common.Profile,  i.Provider, i.Common.Region, i.RoleArnToAssume)
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func (i *awsIamIdentityCenter) SetEnvVars(info *schema.ConfigAndStacksInfo) erro
 	// Merge identity-specific env overrides (preserve key casing)
 	MergeIdentityEnvOverrides(info, i.Env)
 
-	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArnToAssume)
 	if err != nil {
 		return err
 	}

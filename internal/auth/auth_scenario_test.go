@@ -101,7 +101,7 @@ func TestScenario_Auth_OIDC_GetIdentity(t *testing.T) {
 
 	// Validate required fields populated from scenario
 	require.NoError(t, awsOidcInst.Validate())
-	assert.Equal(t, "arn:aws:iam::000000000000:role/Dummy", awsOidcInst.RoleArn)
+	assert.Equal(t, "arn:aws:iam::000000000000:role/Dummy", awsOidcInst.RoleArnToAssume)
 	assert.Equal(t, "us-east-1", awsOidcInst.Common.Region)
 	assert.Equal(t, "oidc-prof", awsOidcInst.Common.Profile)
 }

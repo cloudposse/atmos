@@ -179,8 +179,8 @@ func TestSetAwsEnvVars(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := SetAwsEnvVars(tt.args.info, tt.args.profile, tt.args.provider, tt.args.region); (err != nil) && !tt.wantErr {
-				t.Errorf("SetAwsEnvVars() error = %v, wantErr %v", err, tt.wantErr)
+			if err := CreateAwsFilesAndUpdateEnvVars(tt.args.info, tt.args.profile, tt.args.provider, tt.args.region); (err != nil) && !tt.wantErr {
+				t.Errorf("CreateAwsFilesAndUpdateEnvVars() error = %v, wantErr %v", err, tt.wantErr)
 				if tt.wantErr {
 					assert.Error(t, err)
 				} else {
@@ -188,18 +188,18 @@ func TestSetAwsEnvVars(t *testing.T) {
 				}
 			}
 			if tt.args.info.ComponentEnvSection["AWS_PROFILE"] != tt.args.profile && !tt.wantErr {
-				t.Errorf("SetAwsEnvVars() Expected AWS_PROFILE to be set, got `%v`, expected `%v`", tt.args.info.ComponentEnvSection["AWS_PROFILE"], tt.args.profile)
+				t.Errorf("CreateAwsFilesAndUpdateEnvVars() Expected AWS_PROFILE to be set, got `%v`, expected `%v`", tt.args.info.ComponentEnvSection["AWS_PROFILE"], tt.args.profile)
 			}
 
 			// Test Config File E Var
 			if tt.wantedConfigFile != "" {
 				expected, err := CreateAwsAtmosConfigFilepath(tt.args.provider)
 				if err != nil {
-					t.Errorf("SetAwsEnvVars() error = %v", err)
+					t.Errorf("CreateAwsFilesAndUpdateEnvVars() error = %v", err)
 				}
 				actual := tt.args.info.ComponentEnvSection["AWS_CONFIG_FILE"]
 				if actual != expected {
-					t.Errorf("SetAwsEnvVars() Expected AWS_CONFIG_FILE to be set, got `%v`, expected `%v`", expected, tt.args.info.ComponentEnvSection["AWS_CONFIG_FILE"])
+					t.Errorf("CreateAwsFilesAndUpdateEnvVars() Expected AWS_CONFIG_FILE to be set, got `%v`, expected `%v`", expected, tt.args.info.ComponentEnvSection["AWS_CONFIG_FILE"])
 				}
 			}
 		})

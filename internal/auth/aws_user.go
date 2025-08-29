@@ -163,7 +163,7 @@ func (i *awsUser) AssumeRole() error { return nil }
 func (i *awsUser) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	log.Info("Setting AWS environment variables")
 
-	err := SetAwsEnvVars(info, i.Identity.Identity, i.Provider, i.Common.Region)
+	err := CreateAwsFilesAndUpdateEnvVars(info, i.Identity.Identity, i.Common.Profile, i.Provider, i.Common.Region, i.RoleArnToAssume)
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,7 @@ func (i *awsUser) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	// Merge identity-specific env overrides (preserve key casing)
 	MergeIdentityEnvOverrides(info, i.Env)
 
-	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArn)
+	err = UpdateAwsAtmosConfig(i.Provider, i.Identity.Identity, i.Common.Profile, i.Common.Region, i.RoleArnToAssume)
 	if err != nil {
 		return err
 	}

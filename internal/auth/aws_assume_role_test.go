@@ -18,7 +18,7 @@ func TestAwsAssumeRole_Validate_DefaultsAndErrors(t *testing.T) {
 		t.Fatalf("expected error without role_arn")
 	}
 	// Provide role_arn, expect default region applied
-	i.RoleArn = "arn:aws:iam::123456789012:role/MyRole"
+	i.RoleArnToAssume = "arn:aws:iam::123456789012:role/MyRole"
 	if err := i.Validate(); err != nil {
 		t.Fatalf("unexpected validate error: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestAwsAssumeRole_AssumeRole_WritesCredentials(t *testing.T) {
 	i := &awsAssumeRole{}
 	i.Common.Profile = "src-prof"
 	i.Common.Region = "us-east-1"
-	i.RoleArn = "arn:aws:iam::111122223333:role/Target"
+	i.RoleArnToAssume = "arn:aws:iam::111122223333:role/Target"
 	i.STSEndpoint = srv.URL
 
 	if err := i.AssumeRole(); err != nil {
@@ -178,7 +178,7 @@ func TestAwsAssumeRole_SetEnvVars_WritesConfigWithRoleAndSourceProfile(t *testin
 	i.Identity.Identity = "my-ident"
 	i.Common.Profile = "src-prof"
 	i.Common.Region = "eu-central-1"
-	i.RoleArn = "arn:aws:iam::111122223333:role/Target"
+	i.RoleArnToAssume = "arn:aws:iam::111122223333:role/Target"
 
 	info := &schema.ConfigAndStacksInfo{ComponentEnvSection: schema.AtmosSectionMapType{}}
 	if err := i.SetEnvVars(info); err != nil {
@@ -206,8 +206,8 @@ func TestAwsAssumeRole_SetEnvVars_WritesConfigWithRoleAndSourceProfile(t *testin
 	if sec.Key("region").String() != i.Common.Region {
 		t.Fatalf("expected region %q, got %q", i.Common.Region, sec.Key("region").String())
 	}
-	if sec.Key("role_arn").String() != i.RoleArn {
-		t.Fatalf("expected role_arn %q, got %q", i.RoleArn, sec.Key("role_arn").String())
+	if sec.Key("role_arn").String() != i.RoleArnToAssume {
+		t.Fatalf("expected role_arn %q, got %q", i.RoleArnToAssume, sec.Key("role_arn").String())
 	}
 	if sec.Key("source_profile").String() != i.Common.Profile {
 		t.Fatalf("expected source_profile %q, got %q", i.Common.Profile, sec.Key("source_profile").String())
