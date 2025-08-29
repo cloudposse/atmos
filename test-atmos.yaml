@@ -1,0 +1,4 @@
+base_path: "."
+settings:
+  terminal:
+    theme: "Dracula"

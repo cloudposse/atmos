@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/mattn/go-runewidth"
 	"github.com/muesli/ansi"
 	"github.com/muesli/reflow/truncate"
@@ -45,60 +46,63 @@ type pagerStatusMessage struct {
 
 var (
 	pagerHelpHeight int
-
-	logo = statusBarHelpStyle(" \U0001F47D  ")
-
-	mintGreen = lipgloss.AdaptiveColor{Light: "#89F0CB", Dark: "#89F0CB"}
-	darkGreen = lipgloss.AdaptiveColor{Light: "#1C8760", Dark: "#1C8760"}
-	errorRed  = lipgloss.AdaptiveColor{Light: "#FF5555", Dark: "#FF5555"}
-	darkGray  = lipgloss.AdaptiveColor{Light: "#333333", Dark: "#333333"}
-
-	statusBarNoteFg = lipgloss.AdaptiveColor{Light: "#656565", Dark: "#7D7D7D"}
-	statusBarBg     = lipgloss.AdaptiveColor{Light: "#E6E6E6", Dark: "#242424"}
-
-	statusBarNoteStyle = lipgloss.NewStyle().
-				Foreground(statusBarNoteFg).
-				Background(statusBarBg).
-				Render
-
-	statusBarHelpStyle = lipgloss.NewStyle().
-				Foreground(statusBarNoteFg).
-				Background(lipgloss.AdaptiveColor{Light: "#DCDCDC", Dark: "#323232"}).
-				Render
-
-	statusBarMessageStyle = lipgloss.NewStyle().
-				Foreground(mintGreen).
-				Background(darkGreen).
-				Render
-	errorMessageStyle = lipgloss.NewStyle().
-				Foreground(errorRed).
-				Background(darkGray).
-				Render
-
-	statusBarMessageScrollPosStyle = lipgloss.NewStyle().
-					Foreground(mintGreen).
-					Background(darkGreen).
-					Render
-
-	statusBarMessageHelpStyle = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#B6FFE4")).
-					Background(green).
-					Render
-
-	helpViewStyle = lipgloss.NewStyle().
-			Foreground(statusBarNoteFg).
-			Background(lipgloss.AdaptiveColor{Light: "#f2f2f2", Dark: "#1B1B1B"}).
-			Render
-
-	// Add highlight style for search matches.
-	highlightStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#FFFF00")).
-			Foreground(lipgloss.Color("#000000")).
-			Bold(true).
-			Render
-
-	green = lipgloss.Color("#04B575")
 )
+
+// getPagerStyles returns theme-aware styles for the pager
+func getPagerStyles() struct {
+	statusBarNote            func(string) string
+	statusBarHelp            func(string) string
+	statusBarMessage         func(string) string
+	errorMessage             func(string) string
+	statusBarMessageScrollPos func(string) string
+	statusBarMessageHelp     func(string) string
+	helpView                 func(string) string
+	highlight                func(string) string
+} {
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		// Fallback to basic rendering if theme isn't available
+		return struct {
+			statusBarNote            func(string) string
+			statusBarHelp            func(string) string
+			statusBarMessage         func(string) string
+			errorMessage             func(string) string
+			statusBarMessageScrollPos func(string) string
+			statusBarMessageHelp     func(string) string
+			helpView                 func(string) string
+			highlight                func(string) string
+		}{
+			statusBarNote:            func(s string) string { return s },
+			statusBarHelp:            func(s string) string { return s },
+			statusBarMessage:         func(s string) string { return s },
+			errorMessage:             func(s string) string { return s },
+			statusBarMessageScrollPos: func(s string) string { return s },
+			statusBarMessageHelp:     func(s string) string { return s },
+			helpView:                 func(s string) string { return s },
+			highlight:                func(s string) string { return s },
+		}
+	}
+	
+	return struct {
+		statusBarNote            func(string) string
+		statusBarHelp            func(string) string
+		statusBarMessage         func(string) string
+		errorMessage             func(string) string
+		statusBarMessageScrollPos func(string) string
+		statusBarMessageHelp     func(string) string
+		helpView                 func(string) string
+		highlight                func(string) string
+	}{
+		statusBarNote:            func(s string) string { return styles.Pager.StatusBar.Render(s) },
+		statusBarHelp:            func(s string) string { return styles.Pager.StatusBarHelp.Render(s) },
+		statusBarMessage:         func(s string) string { return styles.Pager.StatusBarMessage.Render(s) },
+		errorMessage:             func(s string) string { return styles.Pager.ErrorMessage.Render(s) },
+		statusBarMessageScrollPos: func(s string) string { return styles.Pager.StatusBarMessage.Render(s) },
+		statusBarMessageHelp:     func(s string) string { return styles.Pager.StatusBarMessage.Render(s) },
+		helpView:                 func(s string) string { return styles.Pager.HelpView.Render(s) },
+		highlight:                func(s string) string { return styles.Pager.Highlight.Render(s) },
+	}
+}
 
 // Common stuff we'll need to access in all models.
 type commonModel struct {
@@ -224,11 +228,12 @@ func (m *model) highlightSearchTerm() {
 				// Get the actual text (preserving case)
 				actualMatch := highlightedLine[actualIdx : actualIdx+len(m.searchTerm)]
 				// Replace with highlighted version
+				pagerStyles := getPagerStyles()
 				highlightedLine = highlightedLine[:actualIdx] +
-					highlightStyle(actualMatch) +
+					pagerStyles.highlight(actualMatch) +
 					highlightedLine[actualIdx+len(m.searchTerm):]
 				// Move past this match for next iteration
-				startIdx = actualIdx + len(highlightStyle(actualMatch))
+				startIdx = actualIdx + len(pagerStyles.highlight(actualMatch))
 			}
 			highlightedLines = append(highlightedLines, highlightedLine)
 		} else {
@@ -525,7 +530,8 @@ func (m *model) helpView() string {
 		content = strings.Join(contentLines, nextLine)
 	}
 
-	return helpViewStyle(content)
+	pagerStyles := getPagerStyles()
+	return pagerStyles.helpView(content)
 }
 
 func (m *model) footerView() string {
@@ -547,18 +553,20 @@ func (m *model) statusBarView(b *strings.Builder) {
 	// Scroll percent
 	percent := math.Max(minPercent, math.Min(maxPercent, m.viewport.ScrollPercent()))
 	scrollPercent := fmt.Sprintf(" %3.f%% ", percent*percentToStringMagnitude)
+	pagerStyles := getPagerStyles()
 	var note, helpNote string
+	logo := pagerStyles.statusBarHelp(" \U0001F47D  ")
 	switch {
 	case showStatusMessage && m.statusMessage.isError:
-		note = errorMessageStyle(" " + m.statusMessage.message + " ")
-		helpNote = errorMessageStyle(" ? Help ")
-		scrollPercent = errorMessageStyle(scrollPercent)
+		note = pagerStyles.errorMessage(" " + m.statusMessage.message + " ")
+		helpNote = pagerStyles.errorMessage(" ? Help ")
+		scrollPercent = pagerStyles.errorMessage(scrollPercent)
 	case showStatusMessage:
-		scrollPercent = statusBarMessageScrollPosStyle(scrollPercent)
-		note = statusBarMessageStyle(" " + m.statusMessage.message + " ")
-		helpNote = statusBarMessageHelpStyle(" ? Help ")
+		scrollPercent = pagerStyles.statusBarMessageScrollPos(scrollPercent)
+		note = pagerStyles.statusBarMessage(" " + m.statusMessage.message + " ")
+		helpNote = pagerStyles.statusBarMessageHelp(" ? Help ")
 	default:
-		scrollPercent = statusBarNoteStyle(scrollPercent)
+		scrollPercent = pagerStyles.statusBarNote(scrollPercent)
 		titleText := m.title
 		// Show search prompt if in search mode
 		if m.forwardSlashPressed {
@@ -567,8 +575,8 @@ func (m *model) statusBarView(b *strings.Builder) {
 		if m.searchTerm != "" && !m.forwardSlashPressed {
 			titleText += fmt.Sprintf(" (searching: %s)", m.searchTerm)
 		}
-		note = statusBarNoteStyle(" " + titleText + " ")
-		helpNote = statusBarHelpStyle(" ? Help ")
+		note = pagerStyles.statusBarNote(" " + titleText + " ")
+		helpNote = pagerStyles.statusBarHelp(" ? Help ")
 	}
 
 	note = truncate.StringWithTail(note, uint(max(0, //nolint:gosec
@@ -588,11 +596,11 @@ func (m *model) statusBarView(b *strings.Builder) {
 	emptySpace := strings.Repeat(" ", padding)
 	switch {
 	case showStatusMessage && m.statusMessage.isError:
-		emptySpace = errorMessageStyle(emptySpace)
+		emptySpace = pagerStyles.errorMessage(emptySpace)
 	case showStatusMessage:
-		emptySpace = statusBarMessageStyle(emptySpace)
+		emptySpace = pagerStyles.statusBarMessage(emptySpace)
 	default:
-		emptySpace = statusBarNoteStyle(emptySpace)
+		emptySpace = pagerStyles.statusBarNote(emptySpace)
 	}
 
 	fmt.Fprintf(b, "%s%s%s%s%s",

@@ -14,6 +14,7 @@ import (
 	"github.com/alecthomas/chroma/styles"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"golang.org/x/term"
 )
 
@@ -29,10 +30,34 @@ func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	}
 }
 
+// getThemeAwareChromaTheme returns the appropriate Chroma theme based on the active Atmos theme
+func getThemeAwareChromaTheme(config *schema.AtmosConfiguration) string {
+	// Get the theme name from config or environment
+	themeName := config.Settings.Terminal.Theme
+	if themeName == "" {
+		if envTheme := os.Getenv("ATMOS_THEME"); envTheme != "" {
+			themeName = envTheme
+		} else {
+			themeName = "default"
+		}
+	}
+	
+	// Get the color scheme for the theme
+	scheme, err := theme.GetColorSchemeForTheme(themeName)
+	if err != nil || scheme == nil || scheme.ChromaTheme == "" {
+		// Fallback to dracula if we can't get the theme's Chroma theme
+		return "dracula"
+	}
+	
+	return scheme.ChromaTheme
+}
+
 // GetHighlightSettings returns the syntax highlighting settings from the config or defaults
 func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighlighting {
 	defaults := DefaultHighlightSettings()
 	if config.Settings.Terminal.SyntaxHighlighting == (schema.SyntaxHighlighting{}) {
+		// Use theme-aware defaults
+		defaults.Theme = getThemeAwareChromaTheme(config)
 		return defaults
 	}
 	settings := &config.Settings.Terminal.SyntaxHighlighting
@@ -44,7 +69,8 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 		settings.Formatter = defaults.Formatter
 	}
 	if settings.Theme == "" {
-		settings.Theme = defaults.Theme
+		// Use theme-aware Chroma theme if not explicitly set
+		settings.Theme = getThemeAwareChromaTheme(config)
 	}
 	if !settings.HighlightedOutputPager {
 		settings.HighlightedOutputPager = defaults.HighlightedOutputPager

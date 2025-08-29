@@ -20,21 +20,30 @@ type Templater struct {
 	UsageTemplate string
 }
 
-// commandStyle defines the styles for command formatting
-var (
-	commandNameStyle = theme.Styles.CommandName
-	commandDescStyle = theme.Styles.Description
-
-	commandUnsupportedNameStyle = theme.Styles.CommandName.
-					Foreground(lipgloss.Color(theme.ColorGray)).
-					Bold(true)
-	commandUnsupportedDescStyle = theme.Styles.Description.
-					Foreground(lipgloss.Color(theme.ColorGray))
-)
+// getCommandStyles returns theme-aware styles for command formatting
+func getCommandStyles() (commandNameStyle, commandDescStyle, commandUnsupportedNameStyle, commandUnsupportedDescStyle lipgloss.Style) {
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		// Fallback to unstyled if theme is not available
+		return lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle()
+	}
+	
+	commandNameStyle = styles.Help.CommandName
+	commandDescStyle = styles.Help.CommandDesc
+	commandUnsupportedNameStyle = styles.Help.CommandName.
+		Foreground(lipgloss.Color(theme.ColorGray)).
+		Bold(true)
+	commandUnsupportedDescStyle = styles.Help.CommandDesc.
+		Foreground(lipgloss.Color(theme.ColorGray))
+	
+	return
+}
 
 // formatCommand returns a styled string for a command and its description
 func formatCommand(name string, desc string, padding int, IsNotSupported bool) string {
 	paddedName := fmt.Sprintf("%-*s", padding, name)
+	commandNameStyle, commandDescStyle, commandUnsupportedNameStyle, commandUnsupportedDescStyle := getCommandStyles()
+	
 	if IsNotSupported {
 		styledName := commandUnsupportedNameStyle.Render(paddedName)
 		styledDesc := commandUnsupportedDescStyle.Render(desc + " [unsupported]")
@@ -109,11 +118,45 @@ func isAliasesPresent(cmds []*cobra.Command) bool {
 }
 
 func headingStyle(s string) string {
-	if theme.Styles.Help.Headings != nil {
-		ch := theme.Styles.Help.Headings
-		return ch.Sprint(s)
+	styles := theme.GetCurrentStyles()
+	if styles != nil {
+		// Transform to uppercase and remove underscores
+		transformed := strings.ToUpper(strings.ReplaceAll(s, "_", " "))
+		return styles.Help.Heading.Render(transformed)
 	}
 	return s
+}
+
+// usageBlock wraps usage content in a styled block
+func usageBlock(content string) string {
+	styles := theme.GetCurrentStyles()
+	if styles != nil {
+		// Calculate width for consistent box sizing
+		width := GetTerminalWidth()
+		if width > 100 {
+			width = 80 // Cap at 80 for readability
+		} else if width > 40 {
+			width = width - 4 // Leave some margin
+		}
+		return styles.Help.UsageBlock.Width(width).Render(strings.TrimSpace(content))
+	}
+	return content
+}
+
+// exampleBlock wraps example content in a styled block
+func exampleBlock(content string) string {
+	styles := theme.GetCurrentStyles()
+	if styles != nil {
+		// Calculate width for consistent box sizing
+		width := GetTerminalWidth()
+		if width > 100 {
+			width = 80 // Cap at 80 for readability
+		} else if width > 40 {
+			width = width - 4 // Leave some margin
+		}
+		return styles.Help.ExampleBlock.Width(width).Render(strings.TrimSpace(content))
+	}
+	return content
 }
 
 func renderMarkdown(example string) string {
@@ -234,6 +277,8 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	cobra.AddTemplateFunc("renderMarkdown", renderMarkdown)
 	cobra.AddTemplateFunc("renderHelpMarkdown", renderHelpMarkdown)
 	cobra.AddTemplateFunc("HeadingStyle", headingStyle)
+	cobra.AddTemplateFunc("UsageBlock", usageBlock)
+	cobra.AddTemplateFunc("ExampleBlock", exampleBlock)
 
 	return nil
 }

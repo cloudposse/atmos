@@ -12,24 +12,32 @@ import (
 
 // PrintMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
 func PrintMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
-	// Define content
+	// Get current theme styles
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		// Fallback to basic output if styles aren't available
+		fmt.Printf("Update available! %s » %s\n", version.Version, latestVersion)
+		return
+	}
+	
+	// Define content using dynamic theme styles
 	message := lipgloss.NewStyle().
 		Render(fmt.Sprintf("Update available! %s » %s",
-			theme.Styles.VersionNumber.Render(version.Version),
-			theme.Styles.NewVersion.Render(latestVersion)))
+			styles.VersionNumber.Render(version.Version),
+			styles.NewVersion.Render(latestVersion)))
 
 	links := []string{
-		lipgloss.NewStyle().Render(fmt.Sprintf("Atmos Releases: %s", theme.Styles.Link.Render("https://github.com/cloudposse/atmos/releases"))),
-		lipgloss.NewStyle().Render(fmt.Sprintf("Install Atmos: %s", theme.Styles.Link.Render("https://atmos.tools/install"))),
+		lipgloss.NewStyle().Render(fmt.Sprintf("Atmos Releases: %s", styles.Link.Render("https://github.com/cloudposse/atmos/releases"))),
+		lipgloss.NewStyle().Render(fmt.Sprintf("Install Atmos: %s", styles.Link.Render("https://atmos.tools/install"))),
 	}
 
 	messageLines := append([]string{message}, links...)
 	messageContent := strings.Join(messageLines, "\n")
 
-	// Define box
+	// Define box using theme-aware border color
 	style := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorGreen)).
+		BorderForeground(lipgloss.Color(theme.GetSuccessColor())).
 		Padding(0, 1).
 		Align(lipgloss.Center)
 

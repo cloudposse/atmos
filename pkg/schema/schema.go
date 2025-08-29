@@ -207,6 +207,7 @@ type Terminal struct {
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"`
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
+	Theme              string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
 }
 
 func (t *Terminal) IsPagerEnabled() bool {

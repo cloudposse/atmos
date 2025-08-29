@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
@@ -504,8 +505,18 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	c1 := theme.Colors.Info
-	c2 := theme.Colors.Success
+	// Get theme-aware styles
+	styles := theme.GetCurrentStyles()
+	var codeStyle, successStyle lipgloss.Style
+	
+	if styles != nil {
+		codeStyle = styles.Help.Code // Use Code style for inline code-like elements
+		successStyle = styles.Success
+	} else {
+		// Fallback to basic styles if theme is not available
+		codeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9B51E0")) // Purple fallback
+		successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00"))
+	}
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
@@ -518,31 +529,31 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 
 	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config
-		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Fprint(os.Stdout, codeStyle.Render("atmos.yaml"))
 		fmt.Println(" CLI config file was not found.")
 		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
+		fmt.Fprint(os.Stdout, codeStyle.Render(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
 		fmt.Println(",\nbut the directory does not exist in the current path.")
 	} else {
 		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
-		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Fprint(os.Stdout, codeStyle.Render("atmos.yaml"))
 		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
+		fmt.Fprint(os.Stdout, codeStyle.Render(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
 		fmt.Println(",\nbut the directory does not exist.")
 	}
 
 	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
 
-	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
+	fmt.Fprintln(os.Stdout, successStyle.Render("Atmos CLI Configuration:"))
 	u.PrintMessage("https://atmos.tools/cli/configuration\n")
 
-	u.PrintMessageInColor("Atmos Components:\n", c2)
+	fmt.Fprintln(os.Stdout, successStyle.Render("Atmos Components:"))
 	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
 
-	u.PrintMessageInColor("Atmos Stacks:\n", c2)
+	fmt.Fprintln(os.Stdout, successStyle.Render("Atmos Stacks:"))
 	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
 
-	u.PrintMessageInColor("Quick Start:\n", c2)
+	fmt.Fprintln(os.Stdout, successStyle.Render("Quick Start:"))
 	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
 

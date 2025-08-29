@@ -72,10 +72,28 @@ func (c *columnView) setSize(width, height int) {
 func (c *columnView) getStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Padding(1, 2).Height(c.height).Width(c.width)
 
-	if c.Focused() {
-		s = s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.ColorBorder))
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		// Fallback if theme isn't available
+		if c.Focused() {
+			s = s.Border(lipgloss.RoundedBorder())
+		} else {
+			s = s.Border(lipgloss.HiddenBorder())
+		}
 	} else {
-		s = s.Border(lipgloss.HiddenBorder())
+		if c.Focused() {
+			s = styles.TUI.BorderFocused.
+				Copy().
+				Padding(1, 2).
+				Height(c.height).
+				Width(c.width)
+		} else {
+			s = styles.TUI.BorderUnfocused.
+				Copy().
+				Padding(1, 2).
+				Height(c.height).
+				Width(c.width)
+		}
 	}
 
 	return s

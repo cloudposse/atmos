@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/fatih/color"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -64,42 +65,42 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 	return "", fmt.Errorf("invalid log level `%s`. Valid options are: %v", logLevel, validLevels)
 }
 
-func (l *Logger) log(logColor *color.Color, message string) {
+func (l *Logger) log(style lipgloss.Style, message string) {
+	// Apply style to the message
+	styledMessage := style.Render(message)
+	
 	if l.File != "" {
 		if l.File == "/dev/stdout" {
-			_, err := logColor.Fprintln(os.Stdout, message)
-			if err != nil {
-				color.Red("%s\n", err)
-			}
+			fmt.Fprintln(os.Stdout, styledMessage)
 		} else if l.File == "/dev/stderr" {
-			_, err := logColor.Fprintln(os.Stderr, message)
-			if err != nil {
-				color.Red("%s\n", err)
-			}
+			fmt.Fprintln(os.Stderr, styledMessage)
 		} else {
+			// For regular files, write without styling
 			f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
 			if err != nil {
-				color.Red("%s\n", err)
+				// Use theme error style for error messages
+				errorStyle := theme.GetErrorStyle()
+				fmt.Fprintln(os.Stderr, errorStyle.Render(fmt.Sprintf("Error opening log file: %s", err)))
 				return
 			}
 
 			defer func(f *os.File) {
 				err = f.Close()
 				if err != nil {
-					color.Red("%s\n", err)
+					errorStyle := theme.GetErrorStyle()
+					fmt.Fprintln(os.Stderr, errorStyle.Render(fmt.Sprintf("Error closing log file: %s", err)))
 				}
 			}(f)
 
+			// Write plain message to file (no styling)
 			_, err = f.Write([]byte(fmt.Sprintf("%s\n", message)))
 			if err != nil {
-				color.Red("%s\n", err)
+				errorStyle := theme.GetErrorStyle()
+				fmt.Fprintln(os.Stderr, errorStyle.Render(fmt.Sprintf("Error writing to log file: %s", err)))
 			}
 		}
 	} else {
-		_, err := logColor.Fprintln(os.Stdout, message)
-		if err != nil {
-			color.Red("%s\n", err)
-		}
+		fmt.Fprintln(os.Stdout, styledMessage)
 	}
 }
 
@@ -110,12 +111,14 @@ func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 
 func (l *Logger) Error(err error) {
 	if err != nil && l.LogLevel != LogLevelOff {
-		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
+		errorStyle := theme.GetErrorStyle()
+		_, err2 := fmt.Fprintln(color.Error, errorStyle.Render(err.Error()))
 		if err2 != nil {
-			color.Red("Error logging the error:")
-			color.Red("%s\n", err2)
-			color.Red("Original error:")
-			color.Red("%s\n", err)
+			// Fallback error handling
+			fmt.Fprintln(os.Stderr, errorStyle.Render("Error logging the error:"))
+			fmt.Fprintln(os.Stderr, errorStyle.Render(fmt.Sprintf("%s", err2)))
+			fmt.Fprintln(os.Stderr, errorStyle.Render("Original error:"))
+			fmt.Fprintln(os.Stderr, errorStyle.Render(fmt.Sprintf("%s", err)))
 		}
 	}
 }
@@ -130,24 +133,24 @@ func (l *Logger) isLevelEnabled(level LogLevel) bool {
 
 func (l *Logger) Trace(message string) {
 	if l.isLevelEnabled(LogLevelTrace) {
-		l.log(theme.Colors.Info, message)
+		l.log(theme.GetTraceStyle(), message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
 	if l.isLevelEnabled(LogLevelDebug) {
-		l.log(theme.Colors.Info, message)
+		l.log(theme.GetDebugStyle(), message)
 	}
 }
 
 func (l *Logger) Info(message string) {
 	if l.isLevelEnabled(LogLevelInfo) {
-		l.log(theme.Colors.Info, message)
+		l.log(theme.GetInfoStyle(), message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
 	if l.isLevelEnabled(LogLevelWarning) {
-		l.log(theme.Colors.Warning, message)
+		l.log(theme.GetWarningStyle(), message)
 	}
 }
