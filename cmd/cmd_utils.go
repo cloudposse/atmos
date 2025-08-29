@@ -507,15 +507,15 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	// Get theme-aware styles
 	styles := theme.GetCurrentStyles()
-	var codeStyle, successStyle lipgloss.Style
+	var codeStyle, labelStyle lipgloss.Style
 	
 	if styles != nil {
 		codeStyle = styles.Help.Code // Use Code style for inline code-like elements
-		successStyle = styles.Success
+		labelStyle = styles.Label    // Use Label style for section headers
 	} else {
 		// Fallback to basic styles if theme is not available
 		codeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9B51E0")) // Purple fallback
-		successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00"))
+		labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00A3E0")).Bold(true) // Blue fallback
 	}
 
 	fmt.Println()
@@ -542,19 +542,19 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		fmt.Println(",\nbut the directory does not exist.")
 	}
 
-	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
+	fmt.Println("\nTo configure and start using Atmos, refer to the following documents:\n")
 
-	fmt.Fprintln(os.Stdout, successStyle.Render("Atmos CLI Configuration:"))
-	u.PrintMessage("https://atmos.tools/cli/configuration\n")
+	fmt.Println(labelStyle.Render("Atmos CLI Configuration:"))
+	fmt.Println("https://atmos.tools/cli/configuration\n")
 
-	fmt.Fprintln(os.Stdout, successStyle.Render("Atmos Components:"))
-	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
+	fmt.Println(labelStyle.Render("Atmos Components:"))
+	fmt.Println("https://atmos.tools/core-concepts/components\n")
 
-	fmt.Fprintln(os.Stdout, successStyle.Render("Atmos Stacks:"))
-	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
+	fmt.Println(labelStyle.Render("Atmos Stacks:"))
+	fmt.Println("https://atmos.tools/core-concepts/stacks\n")
 
-	fmt.Fprintln(os.Stdout, successStyle.Render("Quick Start:"))
-	u.PrintMessage("https://atmos.tools/quick-start\n")
+	fmt.Println(labelStyle.Render("Quick Start:"))
+	fmt.Println("https://atmos.tools/quick-start\n")
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.

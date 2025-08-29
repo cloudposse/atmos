@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -123,7 +124,7 @@ func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme
 	output.WriteString("\n")
 	
 	// Command examples
-	output.WriteString("Command Examples:\n")
+	output.WriteString("\nCommand Examples:\n")
 	output.WriteString("  ")
 	output.WriteString(styles.Command.Render("atmos terraform plan"))
 	output.WriteString(" - ")
@@ -203,10 +204,32 @@ func formatColorPalette(t *theme.Theme) string {
 
 // getContrastColor returns white or black depending on the background color.
 func getContrastColor(hexColor string) string {
-	// Simple heuristic: if the color contains mostly high values, use black text
-	// This is a simplified approach; a proper implementation would calculate luminance
-	if strings.Contains(hexColor, "f") || strings.Contains(hexColor, "e") || 
-	   strings.Contains(hexColor, "d") || strings.Contains(hexColor, "c") {
+	// Remove # prefix if present
+	color := strings.TrimPrefix(hexColor, "#")
+	
+	// Handle short hex colors (e.g., #FFF)
+	if len(color) == 3 {
+		color = string(color[0]) + string(color[0]) + 
+		        string(color[1]) + string(color[1]) + 
+		        string(color[2]) + string(color[2])
+	}
+	
+	// Parse hex values
+	if len(color) != 6 {
+		return "#000000" // Default to black for invalid colors
+	}
+	
+	// Convert hex to RGB
+	r, _ := strconv.ParseInt(color[0:2], 16, 64)
+	g, _ := strconv.ParseInt(color[2:4], 16, 64)
+	b, _ := strconv.ParseInt(color[4:6], 16, 64)
+	
+	// Calculate relative luminance using WCAG formula
+	// See: https://www.w3.org/TR/WCAG20-TECHS/G17.html
+	luminance := (0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) / 255
+	
+	// Use black text for light backgrounds, white for dark
+	if luminance > 0.5 {
 		return "#000000"
 	}
 	return "#ffffff"

@@ -29,6 +29,7 @@ type StyleSet struct {
 	Link        lipgloss.Style
 	Command     lipgloss.Style
 	Description lipgloss.Style
+	Label       lipgloss.Style // Section labels/headers (non-status)
 
 	// Table styles
 	TableHeader   lipgloss.Style
@@ -116,6 +117,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Link:        lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Link)),
 		Command:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)),
 		Description: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextPrimary)),
+		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)).Bold(true),
 
 		// Table styles
 		TableHeader: lipgloss.NewStyle().
