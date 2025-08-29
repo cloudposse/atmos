@@ -508,13 +508,13 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	// Get theme-aware styles
 	styles := theme.GetCurrentStyles()
 	var codeStyle, labelStyle lipgloss.Style
-	
+
 	if styles != nil {
 		codeStyle = styles.Help.Code // Use Code style for inline code-like elements
 		labelStyle = styles.Label    // Use Label style for section headers
 	} else {
 		// Fallback to basic styles if theme is not available
-		codeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9B51E0")) // Purple fallback
+		codeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9B51E0"))             // Purple fallback
 		labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00A3E0")).Bold(true) // Blue fallback
 	}
 
