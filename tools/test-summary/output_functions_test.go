@@ -131,6 +131,17 @@ func TestOpenOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// For github format tests, ensure we test local mode behavior by unsetting GITHUB_STEP_SUMMARY
+			if tt.format == formatGitHub {
+				oldEnv, hasEnv := os.LookupEnv("GITHUB_STEP_SUMMARY")
+				os.Unsetenv("GITHUB_STEP_SUMMARY")
+				defer func() {
+					if hasEnv {
+						os.Setenv("GITHUB_STEP_SUMMARY", oldEnv)
+					}
+				}()
+			}
+			
 			writer, path, err := openOutput(tt.format, tt.outputFile)
 			if (err != nil) != tt.wantError {
 				t.Errorf("openOutput() error = %v, wantError %v", err, tt.wantError)
@@ -155,6 +166,15 @@ func TestOpenOutput(t *testing.T) {
 func TestOpenGitHubOutput(t *testing.T) {
 	// Test without GITHUB_STEP_SUMMARY
 	t.Run("local mode", func(t *testing.T) {
+		// Ensure we test local mode behavior by unsetting GITHUB_STEP_SUMMARY
+		oldEnv, hasEnv := os.LookupEnv("GITHUB_STEP_SUMMARY")
+		os.Unsetenv("GITHUB_STEP_SUMMARY")
+		defer func() {
+			if hasEnv {
+				os.Setenv("GITHUB_STEP_SUMMARY", oldEnv)
+			}
+		}()
+		
 		writer, path, err := openGitHubOutput("")
 		if err != nil {
 			t.Errorf("openGitHubOutput() error = %v", err)
@@ -177,6 +197,15 @@ func TestOpenGitHubOutput(t *testing.T) {
 
 	// Test with custom output file
 	t.Run("custom output file", func(t *testing.T) {
+		// Ensure we test local mode behavior by unsetting GITHUB_STEP_SUMMARY
+		oldEnv, hasEnv := os.LookupEnv("GITHUB_STEP_SUMMARY")
+		os.Unsetenv("GITHUB_STEP_SUMMARY")
+		defer func() {
+			if hasEnv {
+				os.Setenv("GITHUB_STEP_SUMMARY", oldEnv)
+			}
+		}()
+		
 		customFile := "custom-summary.md"
 		writer, path, err := openGitHubOutput(customFile)
 		if err != nil {
