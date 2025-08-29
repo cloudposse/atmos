@@ -143,7 +143,7 @@ func getFunctionCoverage(profileFile string, excludeMocks bool) ([]CoverageFunct
 	if _, err := os.Stat(profileFile); err != nil {
 		return nil, fmt.Errorf("invalid profile file: %w", err)
 	}
-	
+
 	// Use filepath.Clean to sanitize the path.
 	cleanPath := filepath.Clean(profileFile)
 	cmd := exec.Command("go", "tool", "cover", "-func", cleanPath)

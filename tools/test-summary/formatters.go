@@ -156,7 +156,7 @@ func writeTestCoverageSection(output io.Writer, coverageData *CoverageData) {
 	// Build statement coverage details.
 	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverageData.StatementCoverage, "%"), base10BitSize)
 	statementEmoji := getCoverageEmoji(coverageFloat)
-	
+
 	statementDetails := statementEmoji
 	if len(coverageData.FilteredFiles) > 0 {
 		statementDetails += fmt.Sprintf(" (excluded %d mock files)", len(coverageData.FilteredFiles))
