@@ -1,0 +1,262 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
+)
+
+// writeFailedTests writes the failed tests section.
+func writeFailedTests(output io.Writer, failed []TestResult) {
+	fmt.Fprintf(output, "### ❌ Failed Tests (%d)\n\n", len(failed))
+
+	if len(failed) == 0 {
+		fmt.Fprintf(output, "No tests failed 🎉\n\n")
+		return
+	}
+
+	fmt.Fprint(output, detailsOpenTag)
+	fmt.Fprintf(output, "<summary>Click to see failed tests</summary>\n\n")
+	fmt.Fprintf(output, "| Test | Package | Duration |\n")
+	fmt.Fprintf(output, "|------|---------|----------|\n")
+	for _, test := range failed {
+		pkg := shortPackage(test.Package)
+		fmt.Fprintf(output, "| `%s` | %s | %.2fs |\n", test.Test, pkg, test.Duration)
+	}
+	fmt.Fprintf(output, "\n**Run locally to reproduce:**\n")
+	fmt.Fprintf(output, "```bash\n")
+	for _, test := range failed {
+		fmt.Fprintf(output, "go test %s -run ^%s$ -v\n", test.Package, test.Test)
+	}
+	fmt.Fprintf(output, "```"+detailsCloseTag)
+}
+
+// writeSkippedTests writes the skipped tests section.
+func writeSkippedTests(output io.Writer, skipped []TestResult) {
+	if len(skipped) == 0 {
+		return
+	}
+	fmt.Fprintf(output, "### ⏭️ Skipped Tests (%d)\n\n", len(skipped))
+	fmt.Fprint(output, detailsOpenTag)
+	fmt.Fprintf(output, "<summary>Click to see skipped tests</summary>\n\n")
+	fmt.Fprintf(output, "| Test | Package |\n")
+	fmt.Fprintf(output, "|------|--------|\n")
+	for _, test := range skipped {
+		pkg := shortPackage(test.Package)
+		fmt.Fprintf(output, "| `%s` | %s |\n", test.Test, pkg)
+	}
+	fmt.Fprint(output, detailsCloseTag)
+}
+
+// writePassedTests writes the passed tests section with hybrid strategy.
+func writePassedTests(output io.Writer, passed []TestResult) {
+	if len(passed) == 0 {
+		return
+	}
+
+	fmt.Fprintf(output, "### ✅ Passed Tests (%d)\n\n", len(passed))
+
+	// For small number of tests, show all in one block.
+	if len(passed) < minTestsForSmartDisplay {
+		fmt.Fprint(output, detailsOpenTag)
+		fmt.Fprintf(output, "<summary>Click to show all passing tests</summary>\n\n")
+		writeTestTable(output, passed, true)
+		fmt.Fprint(output, detailsCloseTag)
+		return
+	}
+
+	// For large number of tests, use hybrid strategy.
+	changedPackages := getChangedPackages()
+	changedTests := filterTestsByPackages(passed, changedPackages)
+	slowestTests := getTopSlowestTests(passed, maxSlowestTests)
+	packageSummaries := generatePackageSummary(passed)
+
+	testsShown := len(changedTests) + len(slowestTests)
+	fmt.Fprintf(output, "Showing %d of %d passed tests.\n\n", testsShown, len(passed))
+
+	// Show tests from changed packages.
+	if len(changedTests) > 0 {
+		fmt.Fprint(output, detailsOpenTag)
+		fmt.Fprintf(output, "<summary>📝 Tests in Changed Packages (%d)</summary>\n\n", len(changedTests))
+		writeTestTable(output, changedTests, true)
+		fmt.Fprint(output, detailsCloseTag)
+	}
+
+	// Show slowest tests.
+	if len(slowestTests) > 0 {
+		fmt.Fprint(output, detailsOpenTag)
+		fmt.Fprintf(output, "<summary>⏱️ Slowest Tests (%d)</summary>\n\n", len(slowestTests))
+		writeTestTable(output, slowestTests, true)
+		fmt.Fprint(output, detailsCloseTag)
+	}
+
+	// Show package summary.
+	if len(packageSummaries) > 0 {
+		fmt.Fprint(output, detailsOpenTag)
+		fmt.Fprintf(output, "<summary>📊 Package Summary</summary>\n\n")
+		fmt.Fprintf(output, "| Package | Tests Passed | Avg Duration | Total Duration |\n")
+		fmt.Fprintf(output, "|---------|--------------|--------------|----------------|\n")
+		for _, summary := range packageSummaries {
+			fmt.Fprintf(output, "| %s | %d | %.3fs | %.2fs |\n",
+				summary.Package, summary.TestCount, summary.AvgDuration, summary.TotalDuration)
+		}
+		fmt.Fprint(output, detailsCloseTag)
+	}
+}
+
+// writeTestTable writes a table of tests.
+func writeTestTable(output io.Writer, tests []TestResult, includeDuration bool) {
+	if includeDuration {
+		fmt.Fprintf(output, "| Test | Package | Duration |\n")
+		fmt.Fprintf(output, "|------|---------|----------|\n")
+		for _, test := range tests {
+			pkg := shortPackage(test.Package)
+			fmt.Fprintf(output, "| `%s` | %s | %.2fs |\n", test.Test, pkg, test.Duration)
+		}
+	} else {
+		fmt.Fprintf(output, "| Test | Package |\n")
+		fmt.Fprintf(output, "|------|--------|\n")
+		for _, test := range tests {
+			pkg := shortPackage(test.Package)
+			fmt.Fprintf(output, "| `%s` | %s |\n", test.Test, pkg)
+		}
+	}
+	fmt.Fprintf(output, "\n")
+}
+
+// writeTestCoverageSection writes the test coverage section with table format.
+func writeTestCoverageSection(output io.Writer, coverageData *CoverageData) {
+	fmt.Fprintf(output, "# Test Coverage\n\n")
+
+	// Build statement coverage details.
+	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverageData.StatementCoverage, "%"), base10BitSize)
+	emoji := "🔴" // red for < 40%.
+	if coverageFloat >= coverageHighThreshold {
+		emoji = "🟢" // green for >= 80%.
+	} else if coverageFloat >= coverageMedThreshold {
+		emoji = "🟡" // yellow for 40-79%.
+	}
+
+	statementDetails := emoji
+	if len(coverageData.FilteredFiles) > 0 {
+		statementDetails += fmt.Sprintf(" (excluded %d mock files)", len(coverageData.FilteredFiles))
+	}
+
+	// Calculate function coverage statistics.
+	totalFunctions := len(coverageData.FunctionCoverage)
+	coveredFunctions := 0
+	for _, fn := range coverageData.FunctionCoverage {
+		if fn.Coverage > 0 {
+			coveredFunctions++
+		}
+	}
+	functionCoveragePercent := 0.0
+	if totalFunctions > 0 {
+		functionCoveragePercent = (float64(coveredFunctions) / float64(totalFunctions)) * percentageMultiplier
+	}
+
+	// Calculate emoji for function coverage.
+	funcEmoji := "🔴" // red for < 40%.
+	if functionCoveragePercent >= coverageHighThreshold {
+		funcEmoji = "🟢" // green for >= 80%.
+	} else if functionCoveragePercent >= coverageMedThreshold {
+		funcEmoji = "🟡" // yellow for 40-79%.
+	}
+
+	functionDetails := fmt.Sprintf("%s %d/%d functions covered", funcEmoji, coveredFunctions, totalFunctions)
+
+	// Write coverage table.
+	fmt.Fprintf(output, "| Metric | Coverage | Details |\n")
+	fmt.Fprintf(output, "|--------|----------|----------|\n")
+	fmt.Fprintf(output, "| Statement Coverage | %s | %s |\n", coverageData.StatementCoverage, statementDetails)
+	fmt.Fprintf(output, "| Function Coverage | %.1f%% | %s |\n\n", functionCoveragePercent, functionDetails)
+
+	// Show uncovered functions from changed files only.
+	if len(coverageData.FunctionCoverage) > 0 {
+		writePRFilteredUncoveredFunctions(output, coverageData.FunctionCoverage)
+	}
+
+	// Show filtered files if any.
+	if len(coverageData.FilteredFiles) > 0 {
+		fmt.Fprint(output, detailsOpenTag)
+		fmt.Fprintf(output, "<summary>Excluded mock files (%d)</summary>\n\n", len(coverageData.FilteredFiles))
+		for _, file := range coverageData.FilteredFiles {
+			fmt.Fprintf(output, "- `%s`\n", file)
+		}
+		fmt.Fprint(output, detailsCloseTag)
+	}
+}
+
+// writePRFilteredUncoveredFunctions writes uncovered functions filtered by PR changes.
+func writePRFilteredUncoveredFunctions(output io.Writer, functions []CoverageFunction) {
+	changedFiles := getChangedFiles()
+	if len(changedFiles) == 0 {
+		// No changed files detected, skip this section.
+		return
+	}
+
+	uncoveredInPR, totalUncovered := getUncoveredFunctionsInPR(functions, changedFiles)
+
+	// Only show if there are uncovered functions in PR files.
+	if len(uncoveredInPR) > 0 {
+		writeUncoveredFunctionsTable(output, uncoveredInPR, totalUncovered)
+	}
+}
+
+// getUncoveredFunctionsInPR filters uncovered functions to those in changed files.
+func getUncoveredFunctionsInPR(functions []CoverageFunction, changedFiles []string) ([]CoverageFunction, int) {
+	// Create set of changed files for faster lookup.
+	changedFileSet := make(map[string]bool)
+	for _, file := range changedFiles {
+		changedFileSet[file] = true
+	}
+
+	// Filter uncovered functions to only those in changed files.
+	var uncoveredInPR []CoverageFunction
+	totalUncovered := 0
+
+	for _, fn := range functions {
+		if fn.Coverage == 0 {
+			totalUncovered++
+			// Check if this function's file is in the changed files.
+			for changedFile := range changedFileSet {
+				if strings.Contains(fn.File, changedFile) || strings.Contains(changedFile, fn.File) {
+					uncoveredInPR = append(uncoveredInPR, fn)
+					break
+				}
+			}
+		}
+	}
+
+	return uncoveredInPR, totalUncovered
+}
+
+// writeUncoveredFunctionsTable writes the table of uncovered functions.
+func writeUncoveredFunctionsTable(output io.Writer, functions []CoverageFunction, total int) {
+	fmt.Fprint(output, detailsOpenTag)
+	fmt.Fprintf(output, "<summary>❌ Uncovered Functions in This PR (%d of %d)</summary>\n\n", len(functions), total)
+	fmt.Fprintf(output, "| Function | File |\n")
+	fmt.Fprintf(output, "|----------|------|\n")
+	for _, fn := range functions {
+		file := shortPackage(fn.File)
+		fmt.Fprintf(output, "| `%s` | %s |\n", fn.Function, file)
+	}
+	fmt.Fprint(output, detailsCloseTag)
+}
+
+// writeLegacyCoverageSection writes coverage in the legacy table format.
+func writeLegacyCoverageSection(output io.Writer, coverage string) {
+	fmt.Fprintf(output, "# Test Coverage\n\n")
+	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverage, "%"), base10BitSize)
+	emoji := "🔴" // red for < 40%.
+	if coverageFloat >= coverageHighThreshold {
+		emoji = "🟢" // green for >= 80%.
+	} else if coverageFloat >= coverageMedThreshold {
+		emoji = "🟡" // yellow for 40-79%.
+	}
+
+	fmt.Fprintf(output, "| Metric | Coverage | Details |\n")
+	fmt.Fprintf(output, "|--------|----------|----------|\n")
+	fmt.Fprintf(output, "| Statement Coverage | %s | %s |\n\n", coverage, emoji)
+}

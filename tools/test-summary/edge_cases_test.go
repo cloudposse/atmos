@@ -119,16 +119,14 @@ func TestOpenGitHubOutputWithEnv(t *testing.T) {
 
 func TestHandleOutputBothFormat(t *testing.T) {
 	summary := &TestSummary{
-		Passed:   []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
-		ExitCode: 0,
+		Passed: []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
 	}
-	consoleOutput := "test console output"
 
-	// Capture output for both format
-	exitCode := handleOutput(formatBoth, "-", summary, consoleOutput)
+	// Test both format
+	err := handleOutput(summary, formatBoth, "-")
 
-	if exitCode != 0 {
-		t.Errorf("handleOutput() both format = %v, want 0", exitCode)
+	if err != nil {
+		t.Errorf("handleOutput() both format = %v, want nil", err)
 	}
 }
 

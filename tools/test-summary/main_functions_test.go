@@ -75,16 +75,14 @@ func TestRun_AdditionalCases(t *testing.T) {
 }
 
 func TestHandleOutputWithFailedSummary(t *testing.T) {
-	// Test that exit code is preserved from summary
+	// Test that console output works with failed tests
 	summary := &TestSummary{
-		Failed:   []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
-		ExitCode: 1,
+		Failed: []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
 	}
-	consoleOutput := "test failed"
 
-	got := handleOutput(formatConsole, "", summary, consoleOutput)
-	if got != 1 {
-		t.Errorf("handleOutput() with failed tests = %v, want 1", got)
+	err := handleOutput(summary, formatConsole, "")
+	if err != nil {
+		t.Errorf("handleOutput() with failed tests = %v, want nil", err)
 	}
 }
 

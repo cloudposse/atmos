@@ -14,31 +14,35 @@ func TestRun_InvalidFormat(t *testing.T) {
 }
 
 func TestHandleOutput(t *testing.T) {
-	summary := createTestSummary(2, 1, 0, "75.0%")
-	consoleOutput := "test console output"
+	summary := &TestSummary{
+		Passed:   []TestResult{{Package: "test/pkg", Test: "TestPass1", Status: "pass", Duration: 0.5}, {Package: "test/pkg", Test: "TestPass2", Status: "pass", Duration: 0.3}},
+		Failed:   []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
+		Coverage: "75.0%",
+	}
 
 	tests := []struct {
-		name     string
-		format   string
-		wantExit int
+		name      string
+		format    string
+		wantError bool
 	}{
 		{
-			name:     "console format",
-			format:   formatConsole,
-			wantExit: 1, // Summary has 1 failed test
+			name:      "console format",
+			format:    formatConsole,
+			wantError: false,
 		},
 		{
-			name:     "invalid format",
-			format:   "invalid",
-			wantExit: 1,
+			name:      "invalid format",
+			format:    "invalid",
+			wantError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			exitCode := handleOutput(tt.format, "", summary, consoleOutput)
-			if exitCode != tt.wantExit {
-				t.Errorf("handleOutput() = %d, want %d", exitCode, tt.wantExit)
+			err := handleOutput(summary, tt.format, "")
+			hasError := (err != nil)
+			if hasError != tt.wantError {
+				t.Errorf("handleOutput() error = %v, wantError %v", err, tt.wantError)
 			}
 		})
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -50,7 +51,7 @@ func TestWriteCoverageSection(t *testing.T) {
 			writeLegacyCoverageSection(&buf, tt.coverage)
 			output := buf.String()
 
-			containsAll(t, output, tt.wantEmoji, tt.wantText, "Statement Coverage")
+			checkContainsAll(t, output, tt.wantEmoji, tt.wantText, "Statement Coverage")
 		})
 	}
 }
@@ -90,5 +91,14 @@ func TestShortPackage(t *testing.T) {
 				t.Errorf("shortPackage(%q) = %q, want %q", tt.pkg, got, tt.want)
 			}
 		})
+	}
+}
+
+// checkContainsAll checks if the output contains all expected strings.
+func checkContainsAll(t *testing.T, got string, want ...string) {
+	for _, w := range want {
+		if !strings.Contains(got, w) {
+			t.Errorf("Output missing expected content: %s\nGot:\n%s", w, got)
+		}
 	}
 }

@@ -57,28 +57,26 @@ func TestHandleMarkdownOutput(t *testing.T) {
 	tests := []struct {
 		name       string
 		outputFile string
-		exitCode   int
-		wantCode   int
+		wantError  bool
 	}{
 		{
 			name:       "with output file",
 			outputFile: "test-output.md",
-			exitCode:   0,
-			wantCode:   0,
+			wantError:  false,
 		},
 		{
 			name:       "empty output file defaults to stdout",
 			outputFile: "",
-			exitCode:   1,
-			wantCode:   1,
+			wantError:  false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := handleMarkdownOutput(tt.outputFile, summary, tt.exitCode)
-			if got != tt.wantCode {
-				t.Errorf("handleMarkdownOutput() = %v, want %v", got, tt.wantCode)
+			err := handleMarkdownOutput(summary, tt.outputFile)
+			hasError := (err != nil)
+			if hasError != tt.wantError {
+				t.Errorf("handleMarkdownOutput() error = %v, wantError %v", err, tt.wantError)
 			}
 		})
 	}
@@ -246,10 +244,10 @@ func TestWriteMarkdownContent(t *testing.T) {
 			format: formatMarkdown,
 			want: []string{
 				"# Test Results",
-				"Summary: 3 tests",
-				"✅ 1 passed (33.3%)",
-				"❌ 1 failed (33.3%)",
-				"⏭️ 1 skipped (33.3%)",
+				"| Result | Count | Percentage |",
+				"| ✅ Passed | 1 | 33.3% |",
+				"| ❌ Failed | 1 | 33.3% |",
+				"| ⏭️ Skipped | 1 | 33.3% |",
 				"### ❌ Failed Tests (1)",
 				"### ⏭️ Skipped Tests (1)",
 				"### ✅ Passed Tests (1)",
@@ -276,10 +274,10 @@ func TestWriteMarkdownContent(t *testing.T) {
 			format: formatMarkdown,
 			want: []string{
 				"# Test Results",
-				"Summary: 1 tests",
-				"✅ 1 passed (100.0%)",
-				"❌ 0 failed (0.0%)",
-				"⏭️ 0 skipped (0.0%)",
+				"| Result | Count | Percentage |",
+				"| ✅ Passed | 1 | 100.0% |",
+				"| ❌ Failed | 0 | 0.0% |",
+				"| ⏭️ Skipped | 0 | 0.0% |",
 			},
 		},
 	}
