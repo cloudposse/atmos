@@ -47,10 +47,10 @@ func TestWriteCoverageSection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writeCoverageSection(&buf, tt.coverage)
+			writeLegacyCoverageSection(&buf, tt.coverage)
 			output := buf.String()
 
-			containsAll(t, output, tt.wantEmoji, tt.wantText, "**Coverage:**")
+			containsAll(t, output, tt.wantEmoji, tt.wantText, "Statement Coverage")
 		})
 	}
 }

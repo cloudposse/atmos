@@ -15,7 +15,7 @@ func TestWriteFailedTests(t *testing.T) {
 		{
 			name:   "no failed tests",
 			failed: []TestResult{},
-			want:   []string{},
+			want:   []string{"### ❌ Failed Tests (0)", "No tests failed 🎉"},
 		},
 		{
 			name: "single failed test",

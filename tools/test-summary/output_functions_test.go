@@ -245,12 +245,16 @@ func TestWriteMarkdownContent(t *testing.T) {
 			},
 			format: formatMarkdown,
 			want: []string{
-				"## Test Results",
-				"**Coverage:** 🟡 75.5%",
-				"**Summary:** 3 tests • ✅ 1 passed • ❌ 1 failed • ⏭️ 1 skipped",
+				"# Test Results",
+				"Summary: 3 tests",
+				"✅ 1 passed (33.3%)",
+				"❌ 1 failed (33.3%)",
+				"⏭️ 1 skipped (33.3%)",
 				"### ❌ Failed Tests (1)",
 				"### ⏭️ Skipped Tests (1)",
 				"### ✅ Passed Tests (1)",
+				"# Test Coverage",
+				"| Statement Coverage | 75.5% | 🟡 |",
 			},
 		},
 		{
@@ -261,7 +265,7 @@ func TestWriteMarkdownContent(t *testing.T) {
 			format: formatGitHub,
 			want: []string{
 				"_Generated:",
-				"## Test Results",
+				"# Test Results",
 			},
 		},
 		{
@@ -271,8 +275,11 @@ func TestWriteMarkdownContent(t *testing.T) {
 			},
 			format: formatMarkdown,
 			want: []string{
-				"## Test Results",
-				"**Summary:** 1 tests • ✅ 1 passed • ❌ 0 failed • ⏭️ 0 skipped",
+				"# Test Results",
+				"Summary: 1 tests",
+				"✅ 1 passed (100.0%)",
+				"❌ 0 failed (0.0%)",
+				"⏭️ 0 skipped (0.0%)",
 			},
 		},
 	}

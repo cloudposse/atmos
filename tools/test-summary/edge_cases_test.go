@@ -72,7 +72,7 @@ func TestWriteMarkdownContentWithGitHubActions(t *testing.T) {
 	}
 
 	// Should include test results
-	if !strings.Contains(output, "## Test Results") {
+	if !strings.Contains(output, "# Test Results") {
 		t.Error("writeMarkdownContent() missing test results header")
 	}
 }
