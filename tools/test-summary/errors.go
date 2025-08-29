@@ -8,7 +8,7 @@ var (
 	ErrInvalidCoverageLineFormat     = errors.New("invalid coverage line format")
 	ErrInvalidFileFormat             = errors.New("invalid file format")
 	ErrInvalidFunctionCoverageFormat = errors.New("invalid function coverage line format")
-	
+
 	// Format errors.
 	ErrUnsupportedFormat = errors.New("unsupported format")
 )
