@@ -85,19 +85,15 @@ func writeMarkdownContent(output io.Writer, summary *TestSummary, format string)
 	// Test Results section (h1).
 	fmt.Fprintf(output, "# Test Results\n\n")
 
-	// Get test counts, adjusting failed count if test suite passed
-	failedCount := len(summary.Failed)
-	if os.Getenv("TEST_SUITE_PASSED") == "1" {
-		failedCount = 0 // Don't count "failed" tests when suite passed
-	}
-	total := len(summary.Passed) + failedCount + len(summary.Skipped)
+	// Get test counts.
+	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
 
 	// Display test results as shields.io badges - always show all badges.
 	if total == 0 {
 		fmt.Fprintf(output, "[![No Tests](https://shields.io/badge/NO_TESTS-0-inactive?style=for-the-badge)](#user-content-no-tests)")
 	} else {
 		fmt.Fprintf(output, "[![Passed](https://shields.io/badge/PASSED-%d-success?style=for-the-badge)](#user-content-passed) ", len(summary.Passed))
-		fmt.Fprintf(output, "[![Failed](https://shields.io/badge/FAILED-%d-critical?style=for-the-badge)](#user-content-failed) ", failedCount)
+		fmt.Fprintf(output, "[![Failed](https://shields.io/badge/FAILED-%d-critical?style=for-the-badge)](#user-content-failed) ", len(summary.Failed))
 		fmt.Fprintf(output, "[![Skipped](https://shields.io/badge/SKIPPED-%d-inactive?style=for-the-badge)](#user-content-skipped) ", len(summary.Skipped))
 	}
 	fmt.Fprintf(output, "\n\n")

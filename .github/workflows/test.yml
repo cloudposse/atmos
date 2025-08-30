@@ -220,6 +220,17 @@ jobs:
           body-path: test-summary.md
           edit-mode: replace
 
+      - name: Upload test artifacts for debugging
+        if: always() && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft )
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.flavor.target }}
+          path: |
+            test-results.json
+            test-summary.md
+            coverage.out
+          retention-days: 7
+
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'
         uses: codecov/codecov-action@v5
