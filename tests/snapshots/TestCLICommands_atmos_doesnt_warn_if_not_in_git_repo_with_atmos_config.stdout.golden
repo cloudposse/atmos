@@ -1,25 +1,10 @@
-
-Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
-by visiting the following URL: https://atmos.tools/cli/telemetry
-
-atmos.yaml CLI config file was not found.
-
-The default Atmos stacks directory is set to atmos/tests/fixtures/scenarios/complete/stacks,
-but the directory does not exist in the current path.
-
-To configure and start using Atmos, refer to the following documents:
-
-Atmos CLI Configuration:
-https://atmos.tools/cli/configuration
-
-Atmos Components:
-https://atmos.tools/core-concepts/components
-
-Atmos Stacks:
-https://atmos.tools/core-concepts/stacks
-
-Quick Start:
-https://atmos.tools/quick-start
-
+tenant1-ue2-dev
+tenant1-ue2-prod
+tenant1-ue2-staging
+tenant1-ue2-test-1
+tenant1-uw1-test-1
+tenant1-uw2-dev
+tenant1-uw2-test-1
+tenant2-ue2-dev
+tenant2-ue2-prod
+tenant2-ue2-staging
