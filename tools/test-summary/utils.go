@@ -26,14 +26,11 @@ func filterTestsByPackages(tests []TestResult, packages []string) []TestResult {
 		packageSet[pkg] = true
 	}
 
-	var filtered []TestResult
+	filtered := []TestResult{}
 	for _, test := range tests {
-		// Check if test package ends with any of the changed packages.
-		for pkg := range packageSet {
-			if strings.Contains(test.Package, pkg) {
-				filtered = append(filtered, test)
-				break
-			}
+		// Check if test package matches any of the changed packages.
+		if packageSet[test.Package] {
+			filtered = append(filtered, test)
 		}
 	}
 	return filtered
@@ -41,16 +38,16 @@ func filterTestsByPackages(tests []TestResult, packages []string) []TestResult {
 
 // getTopSlowestTests returns the N slowest tests.
 func getTopSlowestTests(tests []TestResult, n int) []TestResult {
-	if len(tests) <= n {
-		return tests
-	}
-
 	// Sort by duration descending.
 	sorted := make([]TestResult, len(tests))
 	copy(sorted, tests)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Duration > sorted[j].Duration
 	})
+
+	if len(sorted) <= n {
+		return sorted
+	}
 
 	return sorted[:n]
 }
@@ -60,7 +57,7 @@ func generatePackageSummary(tests []TestResult) []PackageSummary {
 	packageStats := make(map[string]*PackageSummary)
 
 	for _, test := range tests {
-		pkg := shortPackage(test.Package)
+		pkg := test.Package
 		if _, exists := packageStats[pkg]; !exists {
 			packageStats[pkg] = &PackageSummary{
 				Package: pkg,

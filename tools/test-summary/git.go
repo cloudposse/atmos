@@ -16,7 +16,7 @@ func getChangedFiles() []string {
 		return []string{}
 	}
 
-	var files []string
+	files := []string{}
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -41,7 +41,7 @@ func getChangedPackages() []string {
 		}
 	}
 
-	var packages []string
+	packages := []string{}
 	for pkg := range packageSet {
 		packages = append(packages, pkg)
 	}

@@ -15,10 +15,10 @@ func TestGetChangedFiles(t *testing.T) {
 		setupGit    bool
 	}{
 		{
-			name: "multiple changed files",
+			name:        "multiple changed files",
 			mockGitDiff: "file1.go\nfile2.go\nsubdir/file3.go\n",
-			want: []string{"file1.go", "file2.go", "subdir/file3.go"},
-			setupGit: true,
+			want:        []string{"file1.go", "file2.go", "subdir/file3.go"},
+			setupGit:    true,
 		},
 		{
 			name:        "single changed file",
@@ -50,7 +50,7 @@ func TestGetChangedFiles(t *testing.T) {
 			}
 
 			got := getChangedFiles()
-			
+
 			if tt.setupGit {
 				// We can't easily mock exec.Command in this test environment,.
 				// so we'll just verify the function returns a slice.
@@ -101,7 +101,7 @@ func TestGetChangedPackages(t *testing.T) {
 			}
 
 			got := getChangedPackages()
-			
+
 			if tt.expectSlice {
 				if got == nil {
 					t.Error("getChangedPackages() returned nil")
@@ -121,7 +121,7 @@ func TestGitFunctionHelpers(t *testing.T) {
 		if files == nil {
 			t.Error("getChangedFiles() should return empty slice, not nil")
 		}
-		
+
 		// getChangedPackages should handle empty output.
 		packages := getChangedPackages()
 		if packages == nil {
@@ -156,14 +156,14 @@ func TestFilePathProcessing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var got []string
+			got := []string{}
 			for _, path := range tt.filePaths {
 				// Simple filter for .go files (simulating what git functions might do).
 				if len(path) > 3 && path[len(path)-3:] == ".go" {
 					got = append(got, path)
 				}
 			}
-			
+
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("filtered paths = %v, want %v", got, tt.want)
 			}

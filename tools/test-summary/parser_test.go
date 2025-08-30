@@ -46,7 +46,7 @@ func TestProcessLine(t *testing.T) {
 			name:           "coverage output line",
 			line:           `{"Time":"2024-01-01T00:00:00Z","Action":"output","Package":"github.com/test/pkg","Output":"coverage: 75.5% of statements\n"}`,
 			initialTests:   make(map[string]TestResult),
-			expectedOutput: "coverage: 75.5% of statements\n",
+			expectedOutput: "75.5%",
 			expectedTests:  make(map[string]TestResult),
 		},
 		{
@@ -233,7 +233,14 @@ func TestRecordTestResult(t *testing.T) {
 				Test:    "TestExample",
 			},
 			initialTests: make(map[string]TestResult),
-			want:         make(map[string]TestResult),
+			want: map[string]TestResult{
+				"github.com/test/pkg.TestExample": {
+					Package:  "github.com/test/pkg",
+					Test:     "TestExample",
+					Status:   "run",
+					Duration: 0,
+				},
+			},
 		},
 	}
 

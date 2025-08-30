@@ -87,7 +87,7 @@ func extractCoverage(output string) string {
 
 // recordTestResult records a test result in the tests map.
 func recordTestResult(event *TestEvent, tests map[string]TestResult) {
-	key := event.Package + "::" + event.Test
+	key := event.Package + "." + event.Test
 	tests[key] = TestResult{
 		Package:  event.Package,
 		Test:     event.Test,

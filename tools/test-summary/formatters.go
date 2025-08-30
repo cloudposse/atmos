@@ -97,10 +97,10 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 	if len(packageSummaries) > 0 {
 		fmt.Fprint(output, detailsOpenTag)
 		fmt.Fprintf(output, "<summary>📊 Package Summary</summary>\n\n")
-		
+
 		// Calculate total duration across all packages.
 		totalDuration := calculateTotalDuration(passed)
-		
+
 		fmt.Fprintf(output, "| Package | Tests Passed | Avg Duration | Total Duration | %% of Total |\n")
 		fmt.Fprintf(output, "|---------|--------------|--------------|----------------|----------|\n")
 		for _, summary := range packageSummaries {
@@ -229,24 +229,21 @@ func getUncoveredFunctionsInPR(functions []CoverageFunction, changedFiles []stri
 		changedFileSet[file] = true
 	}
 
-	// Filter uncovered functions to only those in changed files.
+	// Filter functions to only those in changed files.
 	var uncoveredInPR []CoverageFunction
-	totalUncovered := 0
+	totalInChangedFiles := 0
 
 	for _, fn := range functions {
-		if fn.Coverage == 0 {
-			totalUncovered++
-			// Check if this function's file is in the changed files.
-			for changedFile := range changedFileSet {
-				if strings.Contains(fn.File, changedFile) || strings.Contains(changedFile, fn.File) {
-					uncoveredInPR = append(uncoveredInPR, fn)
-					break
-				}
+		// Check if this function's file is in the changed files.
+		if changedFileSet[fn.File] {
+			totalInChangedFiles++
+			if fn.Coverage == 0 {
+				uncoveredInPR = append(uncoveredInPR, fn)
 			}
 		}
 	}
 
-	return uncoveredInPR, totalUncovered
+	return uncoveredInPR, totalInChangedFiles
 }
 
 // writeUncoveredFunctionsTable writes the table of uncovered functions.

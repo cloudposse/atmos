@@ -45,7 +45,7 @@ func parseStatementCoverage(profileFile string, excludeMocks bool) (string, []st
 	defer file.Close()
 
 	var totalStatements, coveredStatements int
-	var filteredFiles []string
+	filteredFiles := []string{}
 
 	scanner := bufio.NewScanner(file)
 	// Skip the first line (mode line).
@@ -124,8 +124,8 @@ func isMockFile(filename string) bool {
 	// Check various mock patterns.
 	return strings.HasPrefix(base, "mock_") ||
 		strings.HasSuffix(base, "_mock.go") ||
-		strings.Contains(dir, "/mock/") ||
-		strings.Contains(dir, "\\mock\\")
+		strings.Contains(dir, "/mock") ||
+		strings.Contains(dir, "\\mock")
 }
 
 // calculateStatementCoverage calculates coverage percentage.

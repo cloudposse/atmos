@@ -71,11 +71,11 @@ func TestGetCoverageEmoji(t *testing.T) {
 
 func TestCalculateFunctionCoverage(t *testing.T) {
 	tests := []struct {
-		name                string
-		functions           []CoverageFunction
-		wantCovered         int
-		wantTotal           int
-		wantPercentage      float64
+		name           string
+		functions      []CoverageFunction
+		wantCovered    int
+		wantTotal      int
+		wantPercentage float64
 	}{
 		{
 			name: "mixed coverage functions",
@@ -163,7 +163,7 @@ func TestWriteTestCoverageSection(t *testing.T) {
 			wantContains: []string{
 				"# Test Coverage",
 				"75.5%",
-				"🟡", // Should have medium coverage emoji for 75.5%
+				"🟡",                     // Should have medium coverage emoji for 75.5%
 				"1/2 functions covered", // 1 out of 2 functions has coverage > 0%
 			},
 		},
@@ -257,14 +257,14 @@ func TestGetUncoveredFunctionsInPR(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotUncovered, gotTotal := getUncoveredFunctionsInPR(tt.functions, tt.changedFiles)
-			
+
 			if len(gotUncovered) != tt.wantCount {
 				t.Errorf("getUncoveredFunctionsInPR() uncovered count = %d, want %d", len(gotUncovered), tt.wantCount)
 			}
 			if gotTotal != tt.wantTotal {
 				t.Errorf("getUncoveredFunctionsInPR() total = %d, want %d", gotTotal, tt.wantTotal)
 			}
-			
+
 			// Verify that returned uncovered functions are actually uncovered.
 			for _, fn := range gotUncovered {
 				if fn.Coverage > 0 {
@@ -332,14 +332,14 @@ func TestWritePRFilteredUncoveredFunctions(t *testing.T) {
 		{
 			name: "write filtered uncovered functions",
 			functions: []CoverageFunction{
-				{Function: "func1", File: "file1.go", Coverage: 0.0},
-				{Function: "func2", File: "file2.go", Coverage: 0.0},
+				{Function: "func1", File: "tools/test-summary/coverage.go", Coverage: 0.0},
+				{Function: "func2", File: "tools/test-summary/formatters.go", Coverage: 0.0},
 			},
 			wantContains: []string{
 				"func1",
 				"func2",
-				"file1.go",
-				"file2.go",
+				"coverage.go",
+				"formatters.go",
 			},
 		},
 		{
@@ -394,7 +394,7 @@ func TestFormatterHelpers(t *testing.T) {
 			{"file.go", "file.go"},
 			{"", ""},
 		}
-		
+
 		for _, tt := range tests {
 			// This tests the logic that shortPackage uses.
 			got := shortPackage(tt.fullPath)
