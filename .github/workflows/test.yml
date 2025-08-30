@@ -95,6 +95,8 @@ jobs:
           - { os: macos-latest, target: macos }
     timeout-minutes: 30
     runs-on: ${{ matrix.flavor.os }}
+    env:
+      TEST_SUMMARY_UUID: e7b3c8f2-4d5a-4c9b-8e1f-2a3b4c5d6e7f
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -198,7 +200,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TEST_SUMMARY_UUID: e7b3c8f2-4d5a-4c9b-8e1f-2a3b4c5d6e7f
         run: make testacc-ci
 
       - name: Find existing test summary comment
@@ -208,7 +209,7 @@ jobs:
         with:
           issue-number: ${{ github.event.number }}
           comment-author: 'github-actions[bot]'
-          body-includes: 'test-summary-uuid: e7b3c8f2-4d5a-4c9b-8e1f-2a3b4c5d6e7f'
+          body-includes: 'test-summary-uuid: ${{ env.TEST_SUMMARY_UUID }}'
 
       - name: Post test summary to PR
         uses: peter-evans/create-or-update-comment@v4
