@@ -300,3 +300,67 @@ func TestWriteMarkdownContent(t *testing.T) {
 		})
 	}
 }
+
+func TestUUIDCommentInjection(t *testing.T) {
+	tests := []struct {
+		name     string
+		uuid     string
+		setEnv   bool
+		wantUUID bool
+	}{
+		{
+			name:     "UUID set in environment",
+			uuid:     "test-uuid-12345",
+			setEnv:   true,
+			wantUUID: true,
+		},
+		{
+			name:     "no UUID environment variable",
+			uuid:     "",
+			setEnv:   false,
+			wantUUID: false,
+		},
+		{
+			name:     "empty UUID environment variable",
+			uuid:     "",
+			setEnv:   true,
+			wantUUID: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up environment.
+			if tt.setEnv {
+				os.Setenv("TEST_SUMMARY_UUID", tt.uuid)
+				defer os.Unsetenv("TEST_SUMMARY_UUID")
+			} else {
+				os.Unsetenv("TEST_SUMMARY_UUID")
+			}
+
+			summary := &TestSummary{
+				Passed: []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
+			}
+
+			var buf bytes.Buffer
+			writeMarkdownContent(&buf, summary, formatMarkdown)
+			output := buf.String()
+
+			expectedComment := "<!-- test-summary-uuid: " + tt.uuid + " -->"
+
+			if tt.wantUUID && tt.uuid != "" {
+				if !strings.Contains(output, expectedComment) {
+					t.Errorf("UUID comment not found in output. Expected: %s\nGot output:\n%s", expectedComment, output)
+				}
+				// Verify it's at the beginning of the output.
+				if !strings.HasPrefix(output, expectedComment) {
+					t.Errorf("UUID comment should be at the beginning of output. Got:\n%s", output)
+				}
+			} else {
+				if strings.Contains(output, "<!-- test-summary-uuid:") {
+					t.Errorf("UUID comment should not be present when not set or empty. Got output:\n%s", output)
+				}
+			}
+		})
+	}
+}
