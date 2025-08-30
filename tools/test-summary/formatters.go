@@ -60,7 +60,8 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 	if len(passed) < minTestsForSmartDisplay {
 		fmt.Fprint(output, detailsOpenTag)
 		fmt.Fprintf(output, "<summary>Click to show all passing tests</summary>\n\n")
-		writeTestTable(output, passed, true)
+		totalDuration := calculateTotalDuration(passed)
+		writeTestTable(output, passed, true, totalDuration)
 		fmt.Fprint(output, detailsCloseTag)
 		return
 	}
@@ -78,7 +79,8 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 	if len(changedTests) > 0 {
 		fmt.Fprint(output, detailsOpenTag)
 		fmt.Fprintf(output, "<summary>📝 Tests in Changed Packages (%d)</summary>\n\n", len(changedTests))
-		writeTestTable(output, changedTests, true)
+		totalDuration := calculateTotalDuration(changedTests)
+		writeTestTable(output, changedTests, true, totalDuration)
 		fmt.Fprint(output, detailsCloseTag)
 	}
 
@@ -86,7 +88,8 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 	if len(slowestTests) > 0 {
 		fmt.Fprint(output, detailsOpenTag)
 		fmt.Fprintf(output, "<summary>⏱️ Slowest Tests (%d)</summary>\n\n", len(slowestTests))
-		writeTestTable(output, slowestTests, true)
+		totalDuration := calculateTotalDuration(passed) // Use all passed tests for total
+		writeTestTable(output, slowestTests, true, totalDuration)
 		fmt.Fprint(output, detailsCloseTag)
 	}
 
@@ -94,24 +97,39 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 	if len(packageSummaries) > 0 {
 		fmt.Fprint(output, detailsOpenTag)
 		fmt.Fprintf(output, "<summary>📊 Package Summary</summary>\n\n")
-		fmt.Fprintf(output, "| Package | Tests Passed | Avg Duration | Total Duration |\n")
-		fmt.Fprintf(output, "|---------|--------------|--------------|----------------|\n")
+		
+		// Calculate total duration across all packages
+		totalDuration := calculateTotalDuration(passed)
+		
+		fmt.Fprintf(output, "| Package | Tests Passed | Avg Duration | Total Duration | %% of Total |\n")
+		fmt.Fprintf(output, "|---------|--------------|--------------|----------------|----------|\n")
 		for _, summary := range packageSummaries {
-			fmt.Fprintf(output, "| %s | %d | %.3fs | %.2fs |\n",
-				summary.Package, summary.TestCount, summary.AvgDuration, summary.TotalDuration)
+			percentage := (summary.TotalDuration / totalDuration) * 100
+			fmt.Fprintf(output, "| %s | %d | %.3fs | %.2fs | %.1f%% |\n",
+				summary.Package, summary.TestCount, summary.AvgDuration, summary.TotalDuration, percentage)
 		}
 		fmt.Fprint(output, detailsCloseTag)
 	}
 }
 
 // writeTestTable writes a table of tests.
-func writeTestTable(output io.Writer, tests []TestResult, includeDuration bool) {
+func writeTestTable(output io.Writer, tests []TestResult, includeDuration bool, totalDuration float64) {
 	if includeDuration {
-		fmt.Fprintf(output, "| Test | Package | Duration |\n")
-		fmt.Fprintf(output, "|------|---------|----------|\n")
-		for _, test := range tests {
-			pkg := shortPackage(test.Package)
-			fmt.Fprintf(output, "| `%s` | %s | %.2fs |\n", test.Test, pkg, test.Duration)
+		if totalDuration > 0 {
+			fmt.Fprintf(output, "| Test | Package | Duration | %% of Total |\n")
+			fmt.Fprintf(output, "|------|---------|----------|----------|\n")
+			for _, test := range tests {
+				pkg := shortPackage(test.Package)
+				percentage := (test.Duration / totalDuration) * 100
+				fmt.Fprintf(output, "| `%s` | %s | %.2fs | %.1f%% |\n", test.Test, pkg, test.Duration, percentage)
+			}
+		} else {
+			fmt.Fprintf(output, "| Test | Package | Duration |\n")
+			fmt.Fprintf(output, "|------|---------|----------|\n")
+			for _, test := range tests {
+				pkg := shortPackage(test.Package)
+				fmt.Fprintf(output, "| `%s` | %s | %.2fs |\n", test.Test, pkg, test.Duration)
+			}
 		}
 	} else {
 		fmt.Fprintf(output, "| Test | Package |\n")
@@ -122,6 +140,15 @@ func writeTestTable(output io.Writer, tests []TestResult, includeDuration bool) 
 		}
 	}
 	fmt.Fprintf(output, "\n")
+}
+
+// calculateTotalDuration calculates the total duration from a list of test results.
+func calculateTotalDuration(tests []TestResult) float64 {
+	var total float64
+	for _, test := range tests {
+		total += test.Duration
+	}
+	return total
 }
 
 // getCoverageEmoji returns the appropriate emoji for a coverage percentage.
