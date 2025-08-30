@@ -349,17 +349,21 @@ func TestUUIDCommentInjection(t *testing.T) {
 			expectedComment := "<!-- test-summary-uuid: " + tt.uuid + " -->"
 
 			if tt.wantUUID && tt.uuid != "" {
+				// Check for presence of UUID comment.
 				if !strings.Contains(output, expectedComment) {
 					t.Errorf("UUID comment not found in output. Expected: %s\nGot output:\n%s", expectedComment, output)
+					return
 				}
 				// Verify it's at the beginning of the output.
 				if !strings.HasPrefix(output, expectedComment) {
 					t.Errorf("UUID comment should be at the beginning of output. Got:\n%s", output)
 				}
-			} else {
-				if strings.Contains(output, "<!-- test-summary-uuid:") {
-					t.Errorf("UUID comment should not be present when not set or empty. Got output:\n%s", output)
-				}
+				return
+			}
+			
+			// Should not contain UUID comment when not expected.
+			if strings.Contains(output, "<!-- test-summary-uuid:") {
+				t.Errorf("UUID comment should not be present when not set or empty. Got output:\n%s", output)
 			}
 		})
 	}
