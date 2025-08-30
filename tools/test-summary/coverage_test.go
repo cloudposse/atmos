@@ -170,7 +170,7 @@ github.com/example/pkg/file1.go:10.2,12.3 2 1
 github.com/example/pkg/file2.go:15.1,16.2 3 3
 github.com/example/mock/mock_service.go:5.1,6.2 1 0
 `
-	err := os.WriteFile(coverageFile, []byte(coverageContent), 0644)
+	err := os.WriteFile(coverageFile, []byte(coverageContent), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create test coverage file: %v", err)
 	}
@@ -304,7 +304,7 @@ github.com/example/pkg/file1.go:10.2,12.3 2 1
 github.com/example/pkg/file2.go:15.1,16.2 3 3
 github.com/example/mock/mock_service.go:5.1,6.2 1 0
 `
-	err := os.WriteFile(coverageFile, []byte(coverageContent), 0644)
+	err := os.WriteFile(coverageFile, []byte(coverageContent), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create test coverage file: %v", err)
 	}

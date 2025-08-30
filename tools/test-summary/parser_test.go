@@ -15,9 +15,9 @@ func TestProcessLine(t *testing.T) {
 		expectedTests  map[string]TestResult
 	}{
 		{
-			name: "valid test pass event",
-			line: `{"Time":"2024-01-01T00:00:00Z","Action":"pass","Package":"github.com/test/pkg","Test":"TestExample","Elapsed":0.5}`,
-			initialTests: make(map[string]TestResult),
+			name:           "valid test pass event",
+			line:           `{"Time":"2024-01-01T00:00:00Z","Action":"pass","Package":"github.com/test/pkg","Test":"TestExample","Elapsed":0.5}`,
+			initialTests:   make(map[string]TestResult),
 			expectedOutput: "",
 			expectedTests: map[string]TestResult{
 				"github.com/test/pkg.TestExample": {
@@ -29,9 +29,9 @@ func TestProcessLine(t *testing.T) {
 			},
 		},
 		{
-			name: "valid test fail event",
-			line: `{"Time":"2024-01-01T00:00:00Z","Action":"fail","Package":"github.com/test/pkg","Test":"TestFailing","Elapsed":1.2}`,
-			initialTests: make(map[string]TestResult),
+			name:           "valid test fail event",
+			line:           `{"Time":"2024-01-01T00:00:00Z","Action":"fail","Package":"github.com/test/pkg","Test":"TestFailing","Elapsed":1.2}`,
+			initialTests:   make(map[string]TestResult),
 			expectedOutput: "",
 			expectedTests: map[string]TestResult{
 				"github.com/test/pkg.TestFailing": {
@@ -43,18 +43,18 @@ func TestProcessLine(t *testing.T) {
 			},
 		},
 		{
-			name: "coverage output line",
-			line: `{"Time":"2024-01-01T00:00:00Z","Action":"output","Package":"github.com/test/pkg","Output":"coverage: 75.5% of statements\n"}`,
-			initialTests: make(map[string]TestResult),
+			name:           "coverage output line",
+			line:           `{"Time":"2024-01-01T00:00:00Z","Action":"output","Package":"github.com/test/pkg","Output":"coverage: 75.5% of statements\n"}`,
+			initialTests:   make(map[string]TestResult),
 			expectedOutput: "coverage: 75.5% of statements\n",
-			expectedTests: make(map[string]TestResult),
+			expectedTests:  make(map[string]TestResult),
 		},
 		{
-			name: "regular output line",
-			line: `{"Time":"2024-01-01T00:00:00Z","Action":"output","Package":"github.com/test/pkg","Test":"TestExample","Output":"=== RUN   TestExample\n"}`,
-			initialTests: make(map[string]TestResult),
+			name:           "regular output line",
+			line:           `{"Time":"2024-01-01T00:00:00Z","Action":"output","Package":"github.com/test/pkg","Test":"TestExample","Output":"=== RUN   TestExample\n"}`,
+			initialTests:   make(map[string]TestResult),
 			expectedOutput: "",
-			expectedTests: make(map[string]TestResult),
+			expectedTests:  make(map[string]TestResult),
 		},
 		{
 			name:           "invalid JSON",
@@ -75,11 +75,11 @@ func TestProcessLine(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotOutput := processLine(tt.line, tt.initialTests)
-			
+
 			if gotOutput != tt.expectedOutput {
 				t.Errorf("processLine() output = %v, want %v", gotOutput, tt.expectedOutput)
 			}
-			
+
 			if !reflect.DeepEqual(tt.initialTests, tt.expectedTests) {
 				t.Errorf("processLine() tests map = %v, want %v", tt.initialTests, tt.expectedTests)
 			}
@@ -240,7 +240,7 @@ func TestRecordTestResult(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			recordTestResult(tt.event, tt.initialTests)
-			
+
 			if !reflect.DeepEqual(tt.initialTests, tt.want) {
 				t.Errorf("recordTestResult() result = %v, want %v", tt.initialTests, tt.want)
 			}
@@ -250,14 +250,14 @@ func TestRecordTestResult(t *testing.T) {
 
 func TestParseTestJSON(t *testing.T) {
 	tests := []struct {
-		name         string
-		jsonInput    string
-		coverProfile string
-		excludeMocks bool
-		wantErr      bool
-		checkCounts  bool
-		expectPassed int
-		expectFailed int
+		name          string
+		jsonInput     string
+		coverProfile  string
+		excludeMocks  bool
+		wantErr       bool
+		checkCounts   bool
+		expectPassed  int
+		expectFailed  int
 		expectSkipped int
 	}{
 		{
@@ -280,11 +280,11 @@ func TestParseTestJSON(t *testing.T) {
 			expectPassed: 1,
 		},
 		{
-			name:      "empty input",
-			jsonInput: "",
-			checkCounts: true,
-			expectPassed: 0,
-			expectFailed: 0,
+			name:          "empty input",
+			jsonInput:     "",
+			checkCounts:   true,
+			expectPassed:  0,
+			expectFailed:  0,
 			expectSkipped: 0,
 		},
 		{
@@ -302,13 +302,13 @@ invalid json line
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := strings.NewReader(tt.jsonInput)
-			
+
 			got, err := parseTestJSON(reader, tt.coverProfile, tt.excludeMocks)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseTestJSON() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if tt.checkCounts {
 				if len(got.Passed) != tt.expectPassed {
 					t.Errorf("parseTestJSON() passed count = %d, want %d", len(got.Passed), tt.expectPassed)

@@ -97,10 +97,10 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 	if len(packageSummaries) > 0 {
 		fmt.Fprint(output, detailsOpenTag)
 		fmt.Fprintf(output, "<summary>📊 Package Summary</summary>\n\n")
-		
+
 		// Calculate total duration across all packages
 		totalDuration := calculateTotalDuration(passed)
-		
+
 		fmt.Fprintf(output, "| Package | Tests Passed | Avg Duration | Total Duration | %% of Total |\n")
 		fmt.Fprintf(output, "|---------|--------------|--------------|----------------|----------|\n")
 		for _, summary := range packageSummaries {

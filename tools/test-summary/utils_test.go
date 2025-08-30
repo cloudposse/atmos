@@ -243,7 +243,7 @@ func TestGeneratePackageSummary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := generatePackageSummary(tt.tests)
-			
+
 			// Sort both slices by package name for consistent comparison
 			sort.Slice(got, func(i, j int) bool {
 				return got[i].Package < got[j].Package
@@ -251,13 +251,13 @@ func TestGeneratePackageSummary(t *testing.T) {
 			sort.Slice(tt.want, func(i, j int) bool {
 				return tt.want[i].Package < tt.want[j].Package
 			})
-			
+
 			// Check lengths first
 			if len(got) != len(tt.want) {
 				t.Errorf("generatePackageSummary() length = %d, want %d", len(got), len(tt.want))
 				return
 			}
-			
+
 			// Check each package summary individually
 			for i, gotSummary := range got {
 				wantSummary := tt.want[i]
@@ -287,23 +287,23 @@ func TestUtilsHelperFunctions(t *testing.T) {
 			{Test: "Slow", Duration: 2.0},
 			{Test: "Medium", Duration: 1.0},
 		}
-		
+
 		// Test that we can sort by duration (this tests the underlying logic)
 		sort.Slice(tests, func(i, j int) bool {
 			return tests[i].Duration > tests[j].Duration
 		})
-		
+
 		expected := []TestResult{
 			{Test: "Slow", Duration: 2.0},
 			{Test: "Medium", Duration: 1.0},
 			{Test: "Fast", Duration: 0.1},
 		}
-		
+
 		if !reflect.DeepEqual(tests, expected) {
 			t.Errorf("Duration sorting failed: got %v, want %v", tests, expected)
 		}
 	})
-	
+
 	t.Run("package name extraction", func(t *testing.T) {
 		tests := []struct {
 			fullPackage string
@@ -314,7 +314,7 @@ func TestUtilsHelperFunctions(t *testing.T) {
 			{"simple", "simple"},
 			{"", ""},
 		}
-		
+
 		for _, tt := range tests {
 			// This simulates what shortPackage does
 			parts := strings.Split(tt.fullPackage, "/")
@@ -322,7 +322,7 @@ func TestUtilsHelperFunctions(t *testing.T) {
 			if len(parts) > 0 && parts[len(parts)-1] != "" {
 				got = parts[len(parts)-1]
 			}
-			
+
 			if got != tt.want {
 				t.Errorf("Package name extraction for %s = %v, want %v", tt.fullPackage, got, tt.want)
 			}
