@@ -3,7 +3,6 @@ package exec
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	log "github.com/charmbracelet/log"
@@ -15,11 +14,6 @@ import (
 )
 
 func TestYamlFuncTerraformOutput(t *testing.T) {
-	// Skip this test on Windows due to path handling and terraform execution differences
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows due to path handling differences with Terraform execution")
-	}
-	
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
@@ -56,7 +50,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	}()
 
 	// Define the working directory
-	workDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-terraform-output-yaml-function")
+	workDir := "../../tests/fixtures/scenarios/atmos-terraform-output-yaml-function"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}

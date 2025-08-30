@@ -296,9 +296,6 @@ func TestParseFunctionCoverageLine(t *testing.T) {
 }
 
 func TestParseCoverageProfile(t *testing.T) {
-	// Skip this test since it requires go tool cover -func to work with real files.
-	t.Skip("Skipping integration test that requires real source files")
-
 	// Use existing coverage file that has valid entries.
 	coverageFile := "test.out"
 

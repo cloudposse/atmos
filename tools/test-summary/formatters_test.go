@@ -324,12 +324,6 @@ func TestWriteUncoveredFunctionsTable(t *testing.T) {
 }
 
 func TestWritePRFilteredUncoveredFunctions(t *testing.T) {
-	// Skip this test in CI environment due to GitHub environment variables affecting
-	// the test behavior. The test calls functions that interact with GITHUB_STEP_SUMMARY
-	// and other CI variables, causing different behavior in CI vs local environments.
-	if os.Getenv("CI") == "true" || os.Getenv("GITHUB_ACTIONS") == "true" {
-		t.Skip("Skipping in CI environment due to GitHub environment variable interactions")
-	}
 	tests := []struct {
 		name         string
 		functions    []CoverageFunction
