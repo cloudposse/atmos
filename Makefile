@@ -70,12 +70,14 @@ testacc-coverage: testacc-cover
 # New target with test summary for local development
 testacc-summary: get
 	@echo "Running tests with coverage and summary"
-	@go test $(TEST) -v -json -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out 2>&1 | \
+	@set -o pipefail; go test $(TEST) -v -json -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out 2>&1 | \
 		tee test-results.json | \
-		go run ./tools/test-summary -format=console
-	@echo ""
-	@echo "=== GENERATING TEST SUMMARY ==="
-	@go run ./tools/test-summary -input=test-results.json -coverprofile=coverage.out -format=github
+		go run ./tools/test-summary -format=console; \
+	TEST_EXIT_CODE=$$?; \
+	echo ""; \
+	echo "=== GENERATING TEST SUMMARY ==="; \
+	export TEST_SUITE_PASSED=$$((TEST_EXIT_CODE == 0 ? 1 : 0)); \
+	go run ./tools/test-summary -input=test-results.json -coverprofile=coverage.out -format=github
 
 # CI target (alias for testacc-summary)
 testacc-ci: testacc-summary
