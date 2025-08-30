@@ -360,7 +360,7 @@ func TestUUIDCommentInjection(t *testing.T) {
 				}
 				return
 			}
-			
+
 			// Should not contain UUID comment when not expected.
 			if strings.Contains(output, "<!-- test-summary-uuid:") {
 				t.Errorf("UUID comment should not be present when not set or empty. Got output:\n%s", output)
