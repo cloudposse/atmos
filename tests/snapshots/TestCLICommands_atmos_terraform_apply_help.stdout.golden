@@ -6,12 +6,16 @@ by visiting the following URL: https://atmos.tools/cli/telemetry
 
 Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
 
-Usage:
+USAGE
 
-  atmos terraform apply [flags]
+                                                                            
+                                                                            
+  atmos terraform apply [flags]                                             
+                                                                            
+                                                                            
 
 
-Flags:
+FLAGS
 
         --affected           Apply the affected components in dependency order
                              (default false)
@@ -27,7 +31,7 @@ Flags:
         --planfile string    Set the plan file to use
 
 
-Global Flags:
+GLOBAL FLAGS
 
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
                                       variable to customize the User-Agent
@@ -152,10 +156,14 @@ Global Flags:
                                       arguments and flags for the command.
 
 
-Examples:
+EXAMPLES
 
-– Apply changes to a terraform component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
-  $ atmos terraform apply <component-name> -s <stack-name>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+                                                                            
+                                                                            
+  – Apply changes to a terraform component                                  
+    $ atmos terraform apply <component-name> -s <stack-name>                
+                                                                            
+                                                                            
 
 
 Use atmos terraform apply --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  

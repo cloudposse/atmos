@@ -6,16 +6,20 @@ by visiting the following URL: https://atmos.tools/cli/telemetry
 
 This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
 
-Usage:
+USAGE
 
-  atmos helmfile [sub-command] [flags]
+                                                                            
+                                                                            
+  atmos helmfile [sub-command] [flags]                                      
+                                                                            
+                                                                            
 
-Aliases:
+ALIASES
 
   helmfile, hf
 
 
-Available Commands:
+AVAILABLE COMMANDS
 
   apply                          Apply changes to align the actual state of Helm releases with the desired state.
   destroy                        Destroy the Helm releases for the specified stack.
@@ -25,7 +29,7 @@ Available Commands:
   version                        Get Helmfile version
 
 
-Flags:
+FLAGS
 
     -h, --help            help for helmfile
 
@@ -36,7 +40,7 @@ Flags:
                           from native arguments and flags for the command.
 
 
-Global Flags:
+GLOBAL FLAGS
 
         --base-path string           Base path for Atmos project
 

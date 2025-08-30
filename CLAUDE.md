@@ -31,6 +31,7 @@ make testacc-coverage       # Generate coverage HTML report
 
 # Code Quality
 make lint                    # Run golangci-lint (only files changed from origin/main)
+gofumpt -l -w .              # Format all Go files with gofumpt (REQUIRED before commit)
 make get                     # Download dependencies
 
 # Version and validation
@@ -287,7 +288,8 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 7. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
 8. Add tests with fixtures
 9. Add integration test in `tests/`
-10. **Create pull request following template format**
+10. **Format code with gofumpt**: `gofumpt -l -w <changed_files>`
+11. **Create pull request following template format**
 
 ### Documentation Requirements (MANDATORY)
 - **All new commands/flags/parameters MUST have Docusaurus documentation**
@@ -381,6 +383,7 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 2. **Run the test to confirm it fails** - verify the test reproduces the expected behavior
 3. **Fix the bug iteratively** - make changes and re-run test until it passes
 4. **Verify fix doesn't break existing functionality** - run full test suite
+5. **Format changed files with gofumpt**: `gofumpt -l -w <changed_files>`
 
 ```go
 // Example: Test should describe the expected behavior, not that it's a bug fix
@@ -420,6 +423,23 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 4. Update schema if configuration changes
 
 ## Critical Development Requirements
+
+### Code Formatting (MANDATORY)
+- **ALWAYS run gofumpt before committing Go files**:
+  ```bash
+  # Format all changed Go files (preferred)
+  gofumpt -l -w $ALL_CHANGED_FILES
+  
+  # Or format specific files
+  gofumpt -l -w cmd/theme_show.go pkg/ui/theme/styles.go
+  
+  # Or format entire project
+  gofumpt -l -w .
+  ```
+- **gofumpt** is stricter than gofmt and ensures consistent formatting
+- This prevents CI failures and maintains code consistency
+- Run this AFTER making all code changes but BEFORE committing
+- The `-l` flag lists files that need formatting, `-w` writes the changes
 
 ### Test Coverage (MANDATORY)
 - **80% minimum coverage** on new/changed lines (enforced by CodeCov)

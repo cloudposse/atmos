@@ -6,16 +6,18 @@ import (
 )
 
 const (
-	// Base colors
-	ColorGray      = "#808080" // Version number
-	ColorGreen     = "#00FF00" // Success, new version
-	ColorCyan      = "#00FFFF" // Links, info
-	ColorPink      = "#FF69B4" // Package names
-	ColorBlue      = "#5F5FFF" // UI elements
-	ColorDarkGray  = "#626262" // Subtle text
-	ColorRed       = "#FF0000" // Errors, x mark
-	ColorCheckmark = "#00D700" // Checkmark
-	ColorWhite     = "#FFFFFF" // Default text
+	// Base colors.
+	ColorGray         = "#808080" // Version number
+	ColorGreen        = "#00FF00" // Success, new version
+	ColorCyan         = "#00FFFF" // Links, info
+	ColorPink         = "#FF69B4" // Package names
+	ColorBlue         = "#5F5FFF" // UI elements
+	ColorDarkGray     = "#626262" // Subtle text
+	ColorRed          = "#FF0000" // Errors, x mark
+	ColorCheckmark    = "#00D700" // Checkmark
+	ColorWhite        = "#FFFFFF" // Default text
+	ColorBrightYellow = "#FFFF00" // Bright/Light theme indicator
+	ColorGold         = "#FFD700" // Recommended indicator
 
 	ColorSelectedItem = "#10ff10" // Selected items in lists
 	ColorBorder       = "#5F5FD7" // UI borders
@@ -33,7 +35,7 @@ type HelpStyle struct {
 	Aliases       *color.Color
 }
 
-// Styles provides pre-configured lipgloss styles for common UI elements
+// Styles provides pre-configured lipgloss styles for common UI elements.
 var Styles = struct {
 	VersionNumber lipgloss.Style
 	NewVersion    lipgloss.Style
@@ -68,7 +70,7 @@ var Styles = struct {
 	},
 }
 
-// Colors provides color.Attribute mappings for the old color.New style
+// Colors provides color.Attribute mappings for the old color.New style.
 var Colors = struct {
 	Error   *color.Color
 	Info    *color.Color

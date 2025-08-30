@@ -11,10 +11,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-var (
-	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
-	selectedItemStyle = theme.Styles.SelectedItem
-)
+func getItemStyles() (lipgloss.Style, lipgloss.Style) {
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		return lipgloss.NewStyle().PaddingLeft(4), lipgloss.NewStyle().PaddingLeft(2)
+	}
+	return styles.TUI.ItemStyle, styles.TUI.SelectedItemStyle
+}
 
 type listItem string
 
@@ -34,6 +37,7 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 		return
 	}
 
+	itemStyle, selectedItemStyle := getItemStyles()
 	fn := itemStyle.Render
 	if index == m.Index() {
 		fn = func(s ...string) string {

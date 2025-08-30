@@ -44,16 +44,15 @@ func newColumn(columnPointer int) columnView {
 	}
 }
 
-// Init does initial setup
+// Init does initial setup.
 func (c *columnView) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles all the I/O
+// Update handles all the I/O.
 func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	switch message := msg.(type) {
-	case tea.WindowSizeMsg:
+	if message, ok := msg.(tea.WindowSizeMsg); ok {
 		c.setSize(message.Width, message.Height)
 		c.list.SetSize(message.Width/4, message.Height/3)
 	}
@@ -69,14 +68,31 @@ func (c *columnView) setSize(width, height int) {
 	c.width = width / 4
 }
 
-func (c *columnView) getStyle() lipgloss.Style {
-	s := lipgloss.NewStyle().Padding(1, 2).Height(c.height).Width(c.width)
-
-	if c.Focused() {
-		s = s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.ColorBorder))
-	} else {
-		s = s.Border(lipgloss.HiddenBorder())
+// applyColumnBorder applies the appropriate border style based on focus state.
+func applyColumnBorder(s *lipgloss.Style, focused bool, styles *theme.StyleSet) lipgloss.Style {
+	if styles == nil {
+		// Fallback if theme isn't available
+		if focused {
+			return s.Border(lipgloss.RoundedBorder())
+		}
+		return s.Border(lipgloss.HiddenBorder())
 	}
 
-	return s
+	// Apply theme-based styling
+	if focused {
+		return styles.TUI.BorderFocused.
+			Padding(1, 2).
+			Height(s.GetHeight()).
+			Width(s.GetWidth())
+	}
+	return styles.TUI.BorderUnfocused.
+		Padding(1, 2).
+		Height(s.GetHeight()).
+		Width(s.GetWidth())
+}
+
+func (c *columnView) getStyle() lipgloss.Style {
+	baseStyle := lipgloss.NewStyle().Padding(1, 2).Height(c.height).Width(c.width)
+	styles := theme.GetCurrentStyles()
+	return applyColumnBorder(&baseStyle, c.Focused(), styles)
 }

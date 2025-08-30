@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
@@ -44,7 +45,7 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
-// processCustomCommands processes and executes custom commands
+// processCustomCommands processes and executes custom commands.
 func processCustomCommands(
 	atmosConfig schema.AtmosConfiguration,
 	commands []schema.Command,
@@ -139,7 +140,7 @@ func processCustomCommands(
 	return nil
 }
 
-// addCommandWithAlias adds a command hierarchy based on the full command
+// addCommandWithAlias adds a command hierarchy based on the full command.
 func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
 	if len(parts) == 0 {
 		return
@@ -168,7 +169,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 	}
 }
 
-// processCommandAliases processes the command aliases
+// processCommandAliases processes the command aliases.
 func processCommandAliases(
 	atmosConfig schema.AtmosConfiguration,
 	aliases schema.CommandAliases,
@@ -213,7 +214,7 @@ func processCommandAliases(
 	return nil
 }
 
-// preCustomCommand is run before a custom command is executed
+// preCustomCommand is run before a custom command is executed.
 func preCustomCommand(
 	cmd *cobra.Command,
 	args []string,
@@ -300,7 +301,7 @@ func preCustomCommand(
 	}
 }
 
-// getTopLevelCommands returns the top-level commands
+// getTopLevelCommands returns the top-level commands.
 func getTopLevelCommands() map[string]*cobra.Command {
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
@@ -311,7 +312,7 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	return existingTopLevelCommands
 }
 
-// executeCustomCommand executes a custom command
+// executeCustomCommand executes a custom command.
 func executeCustomCommand(
 	atmosConfig schema.AtmosConfiguration,
 	cmd *cobra.Command,
@@ -464,7 +465,7 @@ func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
 	return mainArgs, trailingArgs
 }
 
-// cloneCommand clones a custom command config into a new struct
+// cloneCommand clones a custom command config into a new struct.
 func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	origJSON, err := json.Marshal(orig)
 	if err != nil {
@@ -479,7 +480,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// checkAtmosConfig checks Atmos config
+// checkAtmosConfig checks Atmos config.
 func checkAtmosConfig(opts ...AtmosValidateOption) {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
@@ -502,10 +503,20 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 }
 
-// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
+// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	c1 := theme.Colors.Info
-	c2 := theme.Colors.Success
+	// Get theme-aware styles
+	styles := theme.GetCurrentStyles()
+	var codeStyle, labelStyle lipgloss.Style
+
+	if styles != nil {
+		codeStyle = styles.Help.Code // Use Code style for inline code-like elements
+		labelStyle = styles.Label    // Use Label style for section headers
+	} else {
+		// Fallback to basic styles if theme is not available
+		codeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9B51E0"))             // Purple fallback
+		labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00A3E0")).Bold(true) // Blue fallback
+	}
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
@@ -518,32 +529,38 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 
 	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config
-		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Fprint(os.Stdout, codeStyle.Render("atmos.yaml"))
 		fmt.Println(" CLI config file was not found.")
 		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
+		fmt.Fprint(os.Stdout, codeStyle.Render(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
 		fmt.Println(",\nbut the directory does not exist in the current path.")
 	} else {
 		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
-		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Fprint(os.Stdout, codeStyle.Render("atmos.yaml"))
 		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
+		fmt.Fprint(os.Stdout, codeStyle.Render(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
 		fmt.Println(",\nbut the directory does not exist.")
 	}
 
-	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
+	fmt.Println()
+	fmt.Println("To configure and start using Atmos, refer to the following documents:")
+	fmt.Println()
 
-	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
-	u.PrintMessage("https://atmos.tools/cli/configuration\n")
+	fmt.Println(labelStyle.Render("Atmos CLI Configuration:"))
+	fmt.Println("https://atmos.tools/cli/configuration")
+	fmt.Println()
 
-	u.PrintMessageInColor("Atmos Components:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
+	fmt.Println(labelStyle.Render("Atmos Components:"))
+	fmt.Println("https://atmos.tools/core-concepts/components")
+	fmt.Println()
 
-	u.PrintMessageInColor("Atmos Stacks:\n", c2)
-	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
+	fmt.Println(labelStyle.Render("Atmos Stacks:"))
+	fmt.Println("https://atmos.tools/core-concepts/stacks")
+	fmt.Println()
 
-	u.PrintMessageInColor("Quick Start:\n", c2)
-	u.PrintMessage("https://atmos.tools/quick-start\n")
+	fmt.Println(labelStyle.Render("Quick Start:"))
+	fmt.Println("https://atmos.tools/quick-start")
+	fmt.Println()
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
@@ -596,12 +613,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	}
 }
 
-// Check Atmos is version command
+// Check Atmos is version command.
 func isVersionCommand() bool {
 	return len(os.Args) > 1 && os.Args[1] == "version"
 }
 
-// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h"
+// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
 		cmd.Help()
@@ -636,7 +653,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	return nil
 }
 
-// getConfigAndStacksInfo processes the CLI config and stacks
+// getConfigAndStacksInfo processes the CLI config and stacks.
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
 	// Check Atmos configuration
 	checkAtmosConfig()
