@@ -347,11 +347,11 @@ func sanitizeOutput(output string) (string, error) {
 		// Pattern 1: "is set to <repoName>/..." - commonly appears in error messages
 		pattern1 := regexp.MustCompile(`(is set to )` + regexp.QuoteMeta(repoName) + `/`)
 		result = pattern1.ReplaceAllString(result, "${1}atmos/")
-		
+
 		// Pattern 2: After whitespace or at line start, followed by /tests/
 		pattern2 := regexp.MustCompile(`(^|\s)` + regexp.QuoteMeta(repoName) + `/tests/`)
 		result = pattern2.ReplaceAllString(result, "${1}atmos/tests/")
-		
+
 		// Pattern 3: With ./ prefix
 		pattern3 := regexp.MustCompile(`\./` + regexp.QuoteMeta(repoName) + `/`)
 		result = pattern3.ReplaceAllString(result, "./atmos/")

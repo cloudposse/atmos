@@ -85,32 +85,32 @@ func TestSanitizeOutput(t *testing.T) {
 			// The actual sanitizeOutput function uses findGitRepoRoot which we can't easily mock
 			// So we'll test the patterns directly
 			result := tc.input
-			
+
 			// Simulate what sanitizeOutput does for repo name normalization
 			repoName := "feature-dev-2904-theme-chrome-style-for-glamour-implementation"
 			if repoName != "atmos" {
 				// Apply the same patterns as in sanitizeOutput
-				
+
 				// Pattern 1: "is set to <repoName>/..."
 				pattern1 := regexp.MustCompile(`(is set to )` + regexp.QuoteMeta(repoName) + `/`)
 				result = pattern1.ReplaceAllString(result, "${1}atmos/")
-				
+
 				// Pattern 2: After whitespace or at line start, followed by /tests/
 				pattern2 := regexp.MustCompile(`(^|\s)` + regexp.QuoteMeta(repoName) + `/tests/`)
 				result = pattern2.ReplaceAllString(result, "${1}atmos/tests/")
-				
+
 				// Pattern 3: With ./ prefix
 				pattern3 := regexp.MustCompile(`\./` + regexp.QuoteMeta(repoName) + `/`)
 				result = pattern3.ReplaceAllString(result, "./atmos/")
 			}
-			
+
 			// Apply URL normalization
 			result = collapseExtraSlashes(result)
-			
+
 			// Apply import file normalization
 			filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 			result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
-			
+
 			assert.Equal(t, tc.expected, result)
 		})
 	}
@@ -125,18 +125,18 @@ func TestCollapseExtraSlashesInSanitize(t *testing.T) {
 		// Basic cases
 		{"path//to//file", "path/to/file"},
 		{"///multiple///slashes///", "/multiple/slashes/"},
-		
+
 		// URLs
 		{"https://example.com//path", "https://example.com/path"},
 		{"http://example.com///api//v1", "http://example.com/api/v1"},
-		
+
 		// Edge cases
 		{"no/extra/slashes", "no/extra/slashes"},
 		{"", ""},
 		{"/", "/"},
 		{"//", "/"},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
 			result := collapseExtraSlashes(tc.input)
@@ -149,40 +149,40 @@ func TestCollapseExtraSlashesInSanitize(t *testing.T) {
 func TestSanitizeOutputIntegration(t *testing.T) {
 	// This test runs the actual sanitizeOutput function
 	// It will use the real git repo detection, so results depend on the actual repo name
-	
+
 	testCases := []struct {
-		name            string
-		input           string
+		name             string
+		input            string
 		expectNormalized bool // Whether we expect normalization to happen
 	}{
 		{
-			name:            "URLs should be normalized",
-			input:           "Visit https://example.com//docs//api",
+			name:             "URLs should be normalized",
+			input:            "Visit https://example.com//docs//api",
 			expectNormalized: true,
 		},
 		{
-			name:            "Import paths should be normalized",
-			input:           "file_path=/tmp/atmos-import-987654321/atmos-import-987654321.yaml",
+			name:             "Import paths should be normalized",
+			input:            "file_path=/tmp/atmos-import-987654321/atmos-import-987654321.yaml",
 			expectNormalized: true,
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := sanitizeOutput(tc.input)
 			assert.NoError(t, err)
-			
+
 			if tc.expectNormalized {
 				// Check that some normalization happened
 				assert.NotEqual(t, tc.input, result, "Expected output to be normalized")
 			}
-			
+
 			// Specific checks
 			if tc.name == "URLs should be normalized" {
 				assert.Contains(t, result, "https://example.com/docs/api")
 				assert.NotContains(t, result, "//docs//")
 			}
-			
+
 			if tc.name == "Import paths should be normalized" {
 				assert.Contains(t, result, "file_path=/atmos-import/atmos-import.yaml")
 				assert.NotContains(t, result, "987654321")
