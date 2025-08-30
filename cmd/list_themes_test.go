@@ -142,7 +142,7 @@ func TestFormatSimpleThemeList(t *testing.T) {
 	assert.Contains(t, outputNoStars, "> ") // Active indicator for default
 	assert.Contains(t, outputNoStars, "default")
 	assert.Contains(t, outputNoStars, "Dracula")
-	assert.NotContains(t, outputNoStars, "★") // Should not have stars when showStars=false
+	assert.NotContains(t, outputNoStars, "★")             // Should not have stars when showStars=false
 	assert.NotContains(t, outputNoStars, "(recommended)") // No recommended message when not filtering
 }
 
