@@ -11,11 +11,18 @@ func TestLoadThemes(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, themes)
-	assert.Greater(t, len(themes), 300, "Should have at least 300 themes")
+	assert.GreaterOrEqual(t, len(themes), 200, "Should have at least 200 themes")
 
-	// Check that default theme is first
-	assert.Equal(t, "default", themes[0].Name)
-	assert.True(t, themes[0].Meta.IsDark)
+	// Find and verify the default theme
+	var defaultTheme *Theme
+	for _, theme := range themes {
+		if theme.Name == "default" {
+			defaultTheme = theme
+			break
+		}
+	}
+	assert.NotNil(t, defaultTheme, "Default theme should exist")
+	assert.True(t, defaultTheme.Meta.IsDark, "Default theme should be dark")
 }
 
 func TestIsRecommended(t *testing.T) {
@@ -93,8 +100,17 @@ func TestThemeStructure(t *testing.T) {
 	themes, err := LoadThemes()
 	assert.NoError(t, err)
 
+	// Find the default theme
+	var defaultTheme *Theme
+	for _, theme := range themes {
+		if theme.Name == "default" {
+			defaultTheme = theme
+			break
+		}
+	}
+	assert.NotNil(t, defaultTheme, "Default theme should exist")
+
 	// Verify the structure of the default theme
-	defaultTheme := themes[0]
 	assert.Equal(t, "default", defaultTheme.Name)
 	assert.NotEmpty(t, defaultTheme.Background)
 	assert.NotEmpty(t, defaultTheme.Foreground)

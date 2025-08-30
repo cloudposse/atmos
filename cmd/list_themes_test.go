@@ -106,7 +106,7 @@ func TestFormatThemesTable(t *testing.T) {
 	assert.NotContains(t, output, "(recommended)")
 }
 
-func TestFormatSimpleOutput(t *testing.T) {
+func TestFormatSimpleThemeList(t *testing.T) {
 	// Create test themes
 	themes := []*theme.Theme{
 		{
@@ -129,13 +129,21 @@ func TestFormatSimpleOutput(t *testing.T) {
 		},
 	}
 
-	// Test simple output format (non-TTY)
-	output := formatSimpleOutput(themes, "default", true)
-	assert.Contains(t, output, "> ") // Active indicator for default
-	assert.Contains(t, output, "default")
-	assert.Contains(t, output, "Dracula")
-	assert.Contains(t, output, "★") // Recommended indicator
-	assert.Contains(t, output, "(recommended)")
+	// Test simple output format (non-TTY) with stars enabled
+	outputWithStars := formatSimpleThemeList(themes, "default", true, true)
+	assert.Contains(t, outputWithStars, "> ") // Active indicator for default
+	assert.Contains(t, outputWithStars, "default")
+	assert.Contains(t, outputWithStars, "Dracula")
+	assert.Contains(t, outputWithStars, "★") // Should have stars when showStars=true
+	assert.Contains(t, outputWithStars, "(recommended)")
+
+	// Test simple output format without stars
+	outputNoStars := formatSimpleThemeList(themes, "default", false, false)
+	assert.Contains(t, outputNoStars, "> ") // Active indicator for default
+	assert.Contains(t, outputNoStars, "default")
+	assert.Contains(t, outputNoStars, "Dracula")
+	assert.NotContains(t, outputNoStars, "★") // Should not have stars when showStars=false
+	assert.NotContains(t, outputNoStars, "(recommended)") // No recommended message when not filtering
 }
 
 func TestGetThemeType(t *testing.T) {

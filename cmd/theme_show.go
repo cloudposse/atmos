@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -61,7 +60,7 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 	// Get the specified theme
 	selectedTheme, exists := registry.Get(themeName)
 	if !exists {
-		return fmt.Errorf("%w: %s", errUtils.ErrThemeNotFound, themeName)
+		return fmt.Errorf("%w: %s", theme.ErrThemeNotFound, themeName)
 	}
 
 	// Generate color scheme for the theme

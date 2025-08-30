@@ -299,15 +299,71 @@ func safeIntToUint(i int) uint {
 // hasCustomMarkdownStyles checks if any custom markdown styles are configured.
 func hasCustomMarkdownStyles(atmosConfig *schema.AtmosConfiguration) bool {
 	m := atmosConfig.Settings.Markdown
-	return m.Document.Color != "" ||
-		m.Heading.Color != "" ||
-		m.H1.Color != "" ||
-		m.H2.Color != "" ||
-		m.H3.Color != "" ||
-		m.CodeBlock.Color != "" ||
-		m.Link.Color != "" ||
-		m.Strong.Color != "" ||
-		m.Emph.Color != ""
+
+	// Check Document styles
+	if hasAnyStyleSet(m.Document) {
+		return true
+	}
+
+	// Check heading styles
+	if hasAnyStyleSet(m.Heading) || hasAnyStyleSet(m.H1) || hasAnyStyleSet(m.H2) ||
+		hasAnyStyleSet(m.H3) || hasAnyStyleSet(m.H4) || hasAnyStyleSet(m.H5) || hasAnyStyleSet(m.H6) {
+		return true
+	}
+
+	// Check text styles
+	if hasAnyStyleSet(m.Text) || hasAnyStyleSet(m.Strong) || hasAnyStyleSet(m.Emph) {
+		return true
+	}
+
+	// Check block styles
+	if hasAnyStyleSet(m.BlockQuote) || hasAnyStyleSet(m.Paragraph) || hasAnyStyleSet(m.Hr) {
+		return true
+	}
+
+	// Check list styles
+	if hasAnyStyleSet(m.List) || hasAnyStyleSet(m.ListItem) || hasAnyStyleSet(m.Item) || hasAnyStyleSet(m.Enumeration) {
+		return true
+	}
+
+	// Check code styles
+	if hasAnyStyleSet(m.Code) || hasAnyStyleSet(m.CodeBlock) {
+		return true
+	}
+
+	// Check table and definition styles
+	if hasAnyStyleSet(m.Table) || hasAnyStyleSet(m.DefinitionList) ||
+		hasAnyStyleSet(m.DefinitionTerm) || hasAnyStyleSet(m.DefinitionDescription) {
+		return true
+	}
+
+	// Check HTML and link styles
+	if hasAnyStyleSet(m.HtmlBlock) || hasAnyStyleSet(m.HtmlSpan) ||
+		hasAnyStyleSet(m.Link) || hasAnyStyleSet(m.LinkText) {
+		return true
+	}
+
+	return false
+}
+
+// hasAnyStyleSet checks if any style property is set in a MarkdownStyle.
+func hasAnyStyleSet(style schema.MarkdownStyle) bool {
+	return style.BlockPrefix != "" ||
+		style.BlockSuffix != "" ||
+		style.Color != "" ||
+		style.BackgroundColor != "" ||
+		style.Bold ||
+		style.Italic ||
+		style.Underline ||
+		style.Margin != 0 ||
+		style.Padding != 0 ||
+		style.Indent != 0 ||
+		style.IndentToken != "" ||
+		style.LevelIndent != 0 ||
+		style.Format != "" ||
+		style.Prefix != "" ||
+		style.StyleOverride ||
+		len(style.Chroma) > 0
 }
 
 // applyCustomStylesToTheme applies custom markdown styles on top of a theme style.

@@ -88,18 +88,22 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 		settings.Theme = getThemeAwareChromaTheme(config)
 	}
 
-	// For these boolean fields, we only set defaults if they're false AND the config seems minimal
-	// This is a compromise until the schema uses *bool
-	// We check if other fields are set to determine if the user intentionally set these to false
-	configHasExplicitSettings := settings.Formatter != "" || settings.Theme != ""
+	// For boolean fields, we check if the user explicitly set them using viper
+	// This is a better approach than guessing based on other fields
+	// NOTE: Long-term fix would be to use *bool in the schema for proper tri-state handling
+	// (nil = unset, *true = explicitly true, *false = explicitly false)
 
-	if !settings.HighlightedOutputPager && !configHasExplicitSettings {
+	// Check if each boolean field was explicitly set
+	if !settings.Enabled && !viper.IsSet("settings.terminal.syntax_highlighting.enabled") {
+		settings.Enabled = defaults.Enabled
+	}
+	if !settings.HighlightedOutputPager && !viper.IsSet("settings.terminal.syntax_highlighting.highlighted_output_pager") {
 		settings.HighlightedOutputPager = defaults.HighlightedOutputPager
 	}
-	if !settings.LineNumbers && !configHasExplicitSettings {
+	if !settings.LineNumbers && !viper.IsSet("settings.terminal.syntax_highlighting.line_numbers") {
 		settings.LineNumbers = defaults.LineNumbers
 	}
-	if !settings.Wrap && !configHasExplicitSettings {
+	if !settings.Wrap && !viper.IsSet("settings.terminal.syntax_highlighting.wrap") {
 		settings.Wrap = defaults.Wrap
 	}
 

@@ -234,19 +234,25 @@ fmt.Fprintf(os.Stderr, "Processing component...\n")
 
 ### Consistency Guidelines
 
-#### Always use fmt.Println for consistency
-Avoid mixing different output functions unless necessary:
+#### Choose the appropriate output stream
+Use the correct stream based on the type of content:
 
 ```go
-// GOOD: Consistent output
-fmt.Println(labelStyle.Render("Component:"))
-fmt.Println("vpc")
+// For data/results (stdout):
+fmt.Println(componentData)
+
+// For UI/status messages (stderr):
+fmt.Fprintf(os.Stderr, styles.Processing.Render("Processing component...\n"))
+
+// Avoid mixing output methods unnecessarily:
+// GOOD: Consistent approach
+fmt.Fprintf(os.Stderr, labelStyle.Render("Component:"))
+fmt.Fprintf(os.Stderr, " vpc\n")
 
 // AVOID: Mixed output methods
 fmt.Fprintln(os.Stdout, labelStyle.Render("Component:"))
 u.PrintMessage("vpc")
 ```
-
 ## Code Examples
 
 ### Getting and Using Styles

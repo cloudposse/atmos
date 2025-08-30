@@ -46,6 +46,7 @@ SUBCOMMAND ALIASES
   hf                             Alias of "atmos helmfile" command
   pk                             Alias of "atmos packer" command
   tf                             Alias of "atmos terraform" command
+  tr                             Alias of "atmos terraform" command
 
 
 FLAGS

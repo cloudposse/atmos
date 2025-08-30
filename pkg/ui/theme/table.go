@@ -50,14 +50,14 @@ func CreateTable(config *TableConfig, headers []string, rows [][]string) string 
 			BorderStyle(config.Styles.TableBorder)
 
 	case TableStyleMinimal:
-		// No borders except header separator
+		// No borders except header separator (if ShowHeader is true)
 		t = t.BorderTop(false).
 			BorderBottom(false).
 			BorderLeft(false).
 			BorderRight(false).
 			BorderColumn(false).
 			BorderRow(false).
-			BorderHeader(true) // Keep header separator
+			BorderHeader(config.ShowHeader) // Honor ShowHeader setting
 
 	case TableStylePlain:
 		// No borders at all
@@ -73,7 +73,14 @@ func CreateTable(config *TableConfig, headers []string, rows [][]string) string 
 	// Override with ShowBorders if explicitly set
 	if config.ShowBorders && config.Style != TableStyleBordered {
 		t = t.Border(config.BorderStyle).
-			BorderStyle(config.Styles.TableBorder)
+			BorderStyle(config.Styles.TableBorder).
+			BorderTop(true).
+			BorderBottom(true).
+			BorderLeft(true).
+			BorderRight(true).
+			BorderColumn(true).
+			BorderRow(true).
+			BorderHeader(true)
 	}
 
 	// Apply style function
@@ -107,38 +114,52 @@ func isRecommendedTheme(name string) bool {
 	return len(name) > 0 && name[len(name)-1:] == "★"
 }
 
+// getActiveColumnStyle returns the style for the active indicator column.
+func getActiveColumnStyle(isActive bool, styles *StyleSet) lipgloss.Style {
+	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+	if isActive {
+		return baseStyle.Inherit(styles.Selected)
+	}
+	return baseStyle
+}
+
+// getNameColumnStyle returns the style for the name column.
+func getNameColumnStyle(rowData []string, isActive bool, styles *StyleSet) lipgloss.Style {
+	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+	if isActive {
+		return baseStyle.Inherit(styles.TableActive)
+	}
+	if len(rowData) > 1 && isRecommendedTheme(rowData[1]) {
+		return baseStyle.Inherit(styles.TableSpecial)
+	}
+	return baseStyle.Inherit(styles.TableRow)
+}
+
+// getTypeColumnStyle returns the style for the type column.
+func getTypeColumnStyle(rowData []string, styles *StyleSet) lipgloss.Style {
+	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+	if len(rowData) > 2 {
+		switch rowData[2] {
+		case "Dark":
+			return baseStyle.Inherit(styles.TableDarkType)
+		case "Light":
+			return baseStyle.Inherit(styles.TableLightType)
+		}
+	}
+	return baseStyle.Inherit(styles.TableRow)
+}
+
 // getCellStyle determines the appropriate style for a table cell.
 func getCellStyle(col int, rowData []string, isActive bool, styles *StyleSet) lipgloss.Style {
-	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-
 	switch col {
 	case 0: // Active indicator column
-		if isActive {
-			return baseStyle.Inherit(styles.Selected)
-		}
-		return baseStyle
-
+		return getActiveColumnStyle(isActive, styles)
 	case 1: // Name column (may contain ★ for recommended)
-		if isActive {
-			return baseStyle.Inherit(styles.TableActive)
-		}
-		if len(rowData) > 1 && isRecommendedTheme(rowData[1]) {
-			return baseStyle.Inherit(styles.TableSpecial)
-		}
-		return baseStyle.Inherit(styles.TableRow)
-
+		return getNameColumnStyle(rowData, isActive, styles)
 	case 2: // Type column (Dark/Light)
-		if len(rowData) > 2 {
-			switch rowData[2] {
-			case "Dark":
-				return baseStyle.Inherit(styles.TableDarkType)
-			case "Light":
-				return baseStyle.Inherit(styles.TableLightType)
-			}
-		}
-		return baseStyle.Inherit(styles.TableRow)
-
+		return getTypeColumnStyle(rowData, styles)
 	default: // Source column and others
+		baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
 		return baseStyle.Inherit(styles.TableRow)
 	}
 }
@@ -146,6 +167,11 @@ func getCellStyle(col int, rowData []string, isActive bool, styles *StyleSet) li
 // createTableStyleFunc returns a styling function for the table.
 func createTableStyleFunc(rows [][]string, styles *StyleSet) func(int, int) lipgloss.Style {
 	return func(row, col int) lipgloss.Style {
+		// Nil safety check
+		if styles == nil {
+			return lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+		}
+
 		baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
 
 		// Header row styling
