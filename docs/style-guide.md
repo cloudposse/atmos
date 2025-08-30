@@ -196,11 +196,11 @@ fmt.Println(styles.Footer.Render("Run 'atmos help' for more information"))
 - Additional notes
 - Help text at the bottom
 
-#### Code Style (Help.Code)
+#### Code Style (Command)
 Use for inline code, file names, and paths.
 
 ```go
-fmt.Println(styles.Help.Code.Render("atmos.yaml"))
+fmt.Println(styles.Command.Render("atmos.yaml"))
 ```
 
 **When to use:**

@@ -97,7 +97,7 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 	if !settings.Enabled && !viper.IsSet("settings.terminal.syntax_highlighting.enabled") {
 		settings.Enabled = defaults.Enabled
 	}
-	if !settings.HighlightedOutputPager && !viper.IsSet("settings.terminal.syntax_highlighting.highlighted_output_pager") {
+	if !settings.HighlightedOutputPager && !viper.IsSet("settings.terminal.syntax_highlighting.pager") {
 		settings.HighlightedOutputPager = defaults.HighlightedOutputPager
 	}
 	if !settings.LineNumbers && !viper.IsSet("settings.terminal.syntax_highlighting.line_numbers") {
@@ -210,11 +210,14 @@ func NewHighlightWriter(w io.Writer, config *schema.AtmosConfiguration, format .
 	if len(format) > 0 {
 		f = format[0]
 	}
-	return &HighlightWriter{
-		config: *config,
+	hw := &HighlightWriter{
 		writer: w,
 		format: f,
 	}
+	if config != nil {
+		hw.config = *config
+	}
+	return hw
 }
 
 // Write implements io.Writer

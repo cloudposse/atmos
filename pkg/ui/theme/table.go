@@ -1,6 +1,8 @@
 package theme
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 )
@@ -111,12 +113,15 @@ func isActiveRow(rowData []string) bool {
 
 // isRecommendedTheme checks if the theme name contains a star indicator.
 func isRecommendedTheme(name string) bool {
-	return len(name) > 0 && name[len(name)-1:] == "★"
+	return strings.HasSuffix(name, "★")
 }
 
 // getActiveColumnStyle returns the style for the active indicator column.
 func getActiveColumnStyle(isActive bool, styles *StyleSet) lipgloss.Style {
 	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+	if styles == nil {
+		return baseStyle
+	}
 	if isActive {
 		return baseStyle.Inherit(styles.Selected)
 	}
@@ -126,6 +131,9 @@ func getActiveColumnStyle(isActive bool, styles *StyleSet) lipgloss.Style {
 // getNameColumnStyle returns the style for the name column.
 func getNameColumnStyle(rowData []string, isActive bool, styles *StyleSet) lipgloss.Style {
 	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+	if styles == nil {
+		return baseStyle
+	}
 	if isActive {
 		return baseStyle.Inherit(styles.TableActive)
 	}
@@ -138,6 +146,9 @@ func getNameColumnStyle(rowData []string, isActive bool, styles *StyleSet) lipgl
 // getTypeColumnStyle returns the style for the type column.
 func getTypeColumnStyle(rowData []string, styles *StyleSet) lipgloss.Style {
 	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+	if styles == nil {
+		return baseStyle
+	}
 	if len(rowData) > 2 {
 		switch rowData[2] {
 		case "Dark":
@@ -160,6 +171,9 @@ func getCellStyle(col int, rowData []string, isActive bool, styles *StyleSet) li
 		return getTypeColumnStyle(rowData, styles)
 	default: // Source column and others
 		baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+		if styles == nil {
+			return baseStyle
+		}
 		return baseStyle.Inherit(styles.TableRow)
 	}
 }

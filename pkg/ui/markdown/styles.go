@@ -71,39 +71,39 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 
 	if atmosConfig.Settings.Markdown.H2.Color != "" {
 		applyStyleSafely(&style.H2.StylePrimitive, atmosConfig.Settings.Markdown.H2.Color)
-		style.H2.Bold = &atmosConfig.Settings.Markdown.H2.Bold
 	}
+	style.H2.Bold = &atmosConfig.Settings.Markdown.H2.Bold
 
 	if atmosConfig.Settings.Markdown.H3.Color != "" {
 		applyStyleSafely(&style.H3.StylePrimitive, atmosConfig.Settings.Markdown.H3.Color)
-		style.H3.Bold = &atmosConfig.Settings.Markdown.H3.Bold
 	}
+	style.H3.Bold = &atmosConfig.Settings.Markdown.H3.Bold
 
 	if atmosConfig.Settings.Markdown.CodeBlock.Color != "" {
-		if style.CodeBlock.Color != nil {
-			*style.CodeBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
+		if style.CodeBlock.StyleBlock.Color != nil {
+			*style.CodeBlock.StyleBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
 		} else {
-			style.CodeBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
+			style.CodeBlock.StyleBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
 		if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
-			style.CodeBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
+			style.CodeBlock.StyleBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 		}
 	}
 
 	if atmosConfig.Settings.Markdown.Link.Color != "" {
 		applyStyleSafely(&style.Link, atmosConfig.Settings.Markdown.Link.Color)
-		style.Link.Underline = &atmosConfig.Settings.Markdown.Link.Underline
 	}
+	style.Link.Underline = &atmosConfig.Settings.Markdown.Link.Underline
 
 	if atmosConfig.Settings.Markdown.Strong.Color != "" {
 		applyStyleSafely(&style.Strong, atmosConfig.Settings.Markdown.Strong.Color)
-		style.Strong.Bold = &atmosConfig.Settings.Markdown.Strong.Bold
 	}
+	style.Strong.Bold = &atmosConfig.Settings.Markdown.Strong.Bold
 
 	if atmosConfig.Settings.Markdown.Emph.Color != "" {
 		applyStyleSafely(&style.Emph, atmosConfig.Settings.Markdown.Emph.Color)
-		style.Emph.Italic = &atmosConfig.Settings.Markdown.Emph.Italic
 	}
+	style.Emph.Italic = &atmosConfig.Settings.Markdown.Emph.Italic
 
 	return json.Marshal(style)
 }
@@ -355,7 +355,7 @@ func hasAnyStyleSet(style schema.MarkdownStyle) bool {
 		style.Bold ||
 		style.Italic ||
 		style.Underline ||
-		style.Margin != 0 ||
+		style.Margin >= 0 ||
 		style.Padding != 0 ||
 		style.Indent != 0 ||
 		style.IndentToken != "" ||
@@ -396,39 +396,39 @@ func applyCustomStylesToTheme(themeStyleBytes []byte, atmosConfig *schema.AtmosC
 
 	if atmosConfig.Settings.Markdown.H2.Color != "" {
 		applyStyleSafely(&style.H2.StylePrimitive, atmosConfig.Settings.Markdown.H2.Color)
-		style.H2.Bold = &atmosConfig.Settings.Markdown.H2.Bold
 	}
+	style.H2.Bold = &atmosConfig.Settings.Markdown.H2.Bold
 
 	if atmosConfig.Settings.Markdown.H3.Color != "" {
 		applyStyleSafely(&style.H3.StylePrimitive, atmosConfig.Settings.Markdown.H3.Color)
-		style.H3.Bold = &atmosConfig.Settings.Markdown.H3.Bold
 	}
+	style.H3.Bold = &atmosConfig.Settings.Markdown.H3.Bold
 
 	if atmosConfig.Settings.Markdown.CodeBlock.Color != "" {
-		if style.CodeBlock.Color != nil {
-			*style.CodeBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
+		if style.CodeBlock.StyleBlock.Color != nil {
+			*style.CodeBlock.StyleBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
 		} else {
-			style.CodeBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
+			style.CodeBlock.StyleBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
 		if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
-			style.CodeBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
+			style.CodeBlock.StyleBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 		}
 	}
 
 	if atmosConfig.Settings.Markdown.Link.Color != "" {
 		applyStyleSafely(&style.Link, atmosConfig.Settings.Markdown.Link.Color)
-		style.Link.Underline = &atmosConfig.Settings.Markdown.Link.Underline
 	}
+	style.Link.Underline = &atmosConfig.Settings.Markdown.Link.Underline
 
 	if atmosConfig.Settings.Markdown.Strong.Color != "" {
 		applyStyleSafely(&style.Strong, atmosConfig.Settings.Markdown.Strong.Color)
-		style.Strong.Bold = &atmosConfig.Settings.Markdown.Strong.Bold
 	}
+	style.Strong.Bold = &atmosConfig.Settings.Markdown.Strong.Bold
 
 	if atmosConfig.Settings.Markdown.Emph.Color != "" {
 		applyStyleSafely(&style.Emph, atmosConfig.Settings.Markdown.Emph.Color)
-		style.Emph.Italic = &atmosConfig.Settings.Markdown.Emph.Italic
 	}
+	style.Emph.Italic = &atmosConfig.Settings.Markdown.Emph.Italic
 
 	return json.Marshal(style)
 }

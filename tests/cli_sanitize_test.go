@@ -8,13 +8,13 @@ import (
 )
 
 func TestSanitizeOutput(t *testing.T) {
-	// Save original startingDir
+	// Save original startingDir.
 	originalDir := startingDir
 	defer func() { startingDir = originalDir }()
 
-	// For testing, we'll simulate different scenarios
-	// Note: In actual test runs, sanitizeOutput uses findGitRepoRoot which finds the real repo
-	// These tests verify the replacement patterns work correctly
+	// For testing, we'll simulate different scenarios.
+	// Note: In actual test runs, sanitizeOutput uses findGitRepoRoot which finds the real repo.
+	// These tests verify the replacement patterns work correctly.
 
 	testCases := []struct {
 		name     string
@@ -81,33 +81,33 @@ func TestSanitizeOutput(t *testing.T) {
 				t.Skip("Skipping test that depends on file system state")
 			}
 
-			// For most tests, we'll just test the string replacements
-			// The actual sanitizeOutput function uses findGitRepoRoot which we can't easily mock
-			// So we'll test the patterns directly
+			// For most tests, we'll just test the string replacements.
+			// The actual sanitizeOutput function uses findGitRepoRoot which we can't easily mock.
+			// So we'll test the patterns directly.
 			result := tc.input
 
-			// Simulate what sanitizeOutput does for repo name normalization
+			// Simulate what sanitizeOutput does for repo name normalization.
 			repoName := "feature-dev-2904-theme-chrome-style-for-glamour-implementation"
 			if repoName != "atmos" {
-				// Apply the same patterns as in sanitizeOutput
+				// Apply the same patterns as in sanitizeOutput.
 
-				// Pattern 1: "is set to <repoName>/..."
+				// Pattern 1: "is set to <repoName>/...".
 				pattern1 := regexp.MustCompile(`(is set to )` + regexp.QuoteMeta(repoName) + `/`)
 				result = pattern1.ReplaceAllString(result, "${1}atmos/")
 
-				// Pattern 2: After whitespace or at line start, followed by /tests/
+				// Pattern 2: After whitespace or at line start, followed by /tests/.
 				pattern2 := regexp.MustCompile(`(^|\s)` + regexp.QuoteMeta(repoName) + `/tests/`)
 				result = pattern2.ReplaceAllString(result, "${1}atmos/tests/")
 
-				// Pattern 3: With ./ prefix
+				// Pattern 3: With ./ prefix.
 				pattern3 := regexp.MustCompile(`\./` + regexp.QuoteMeta(repoName) + `/`)
 				result = pattern3.ReplaceAllString(result, "./atmos/")
 			}
 
-			// Apply URL normalization
+			// Apply URL normalization.
 			result = collapseExtraSlashes(result)
 
-			// Apply import file normalization
+			// Apply import file normalization.
 			filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 			result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
 
@@ -116,21 +116,21 @@ func TestSanitizeOutput(t *testing.T) {
 	}
 }
 
-// TestCollapseExtraSlashesInSanitize tests the collapseExtraSlashes helper function
+// TestCollapseExtraSlashesInSanitize tests the collapseExtraSlashes helper function.
 func TestCollapseExtraSlashesInSanitize(t *testing.T) {
 	testCases := []struct {
 		input    string
 		expected string
 	}{
-		// Basic cases
+		// Basic cases.
 		{"path//to//file", "path/to/file"},
 		{"///multiple///slashes///", "/multiple/slashes/"},
 
-		// URLs
+		// URLs.
 		{"https://example.com//path", "https://example.com/path"},
 		{"http://example.com///api//v1", "http://example.com/api/v1"},
 
-		// Edge cases
+		// Edge cases.
 		{"no/extra/slashes", "no/extra/slashes"},
 		{"", ""},
 		{"/", "/"},
@@ -145,10 +145,10 @@ func TestCollapseExtraSlashesInSanitize(t *testing.T) {
 	}
 }
 
-// TestSanitizeOutputIntegration tests the actual sanitizeOutput function with real repo detection
+// TestSanitizeOutputIntegration tests the actual sanitizeOutput function with real repo detection.
 func TestSanitizeOutputIntegration(t *testing.T) {
-	// This test runs the actual sanitizeOutput function
-	// It will use the real git repo detection, so results depend on the actual repo name
+	// This test runs the actual sanitizeOutput function.
+	// It will use the real git repo detection, so results depend on the actual repo name.
 
 	testCases := []struct {
 		name             string
@@ -173,11 +173,11 @@ func TestSanitizeOutputIntegration(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tc.expectNormalized {
-				// Check that some normalization happened
+				// Check that some normalization happened.
 				assert.NotEqual(t, tc.input, result, "Expected output to be normalized")
 			}
 
-			// Specific checks
+			// Specific checks.
 			if tc.name == "URLs should be normalized" {
 				assert.Contains(t, result, "https://example.com/docs/api")
 				assert.NotContains(t, result, "//docs//")

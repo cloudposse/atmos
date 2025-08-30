@@ -19,6 +19,7 @@ const (
 	LogLevelDebug   LogLevel = "Debug"
 	LogLevelInfo    LogLevel = "Info"
 	LogLevelWarning LogLevel = "Warning"
+	LogLevelError   LogLevel = "Error"
 )
 
 // logLevelOrder defines the order of log levels from most verbose to least verbose
@@ -27,7 +28,8 @@ var logLevelOrder = map[LogLevel]int{
 	LogLevelDebug:   1,
 	LogLevelInfo:    2,
 	LogLevelWarning: 3,
-	LogLevelOff:     4,
+	LogLevelError:   4,
+	LogLevelOff:     5,
 }
 
 type Logger struct {
@@ -55,7 +57,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		return LogLevelInfo, nil
 	}
 
-	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelOff}
+	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelError, LogLevelOff}
 	for _, level := range validLevels {
 		if LogLevel(logLevel) == level {
 			return level, nil
