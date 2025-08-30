@@ -46,7 +46,7 @@ type pagerStatusMessage struct {
 
 var pagerHelpHeight int
 
-// getPagerStyles returns theme-aware styles for the pager
+// getPagerStyles returns theme-aware styles for the pager.
 func getPagerStyles() struct {
 	statusBarNote             func(string) string
 	statusBarHelp             func(string) string

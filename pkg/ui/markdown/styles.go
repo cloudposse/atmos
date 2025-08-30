@@ -28,9 +28,9 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 		themeStyle, err := theme.GetGlamourStyleForTheme(atmosConfig.Settings.Terminal.Theme)
 		if err == nil {
 			// Successfully loaded theme, check if there are custom overrides
-			if hasCustomMarkdownStyles(atmosConfig) {
+			if hasCustomMarkdownStyles(&atmosConfig) {
 				// Apply custom styles on top of theme
-				return applyCustomStylesToTheme(themeStyle, atmosConfig)
+				return applyCustomStylesToTheme(themeStyle, &atmosConfig)
 			}
 			return themeStyle, nil
 		}
@@ -65,7 +65,7 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 		}
 		style.H1.Bold = &atmosConfig.Settings.Markdown.H1.Bold
 		if atmosConfig.Settings.Markdown.H1.Margin >= 0 {
-			style.H1.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.H1.Margin))
+			style.H1.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.H1.Margin))
 		}
 	}
 
@@ -80,13 +80,13 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	}
 
 	if atmosConfig.Settings.Markdown.CodeBlock.Color != "" {
-		if style.CodeBlock.StyleBlock.StylePrimitive.Color != nil {
-			*style.CodeBlock.StyleBlock.StylePrimitive.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
+		if style.CodeBlock.Color != nil {
+			*style.CodeBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
 		} else {
-			style.CodeBlock.StyleBlock.StylePrimitive.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
+			style.CodeBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
 		if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
-			style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
+			style.CodeBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 		}
 	}
 
@@ -288,8 +288,16 @@ func uintPtr(u uint) *uint {
 	return &u
 }
 
+// safeIntToUint safely converts an int to uint, returning 0 if the value is negative.
+func safeIntToUint(i int) uint {
+	if i < 0 {
+		return 0
+	}
+	return uint(i)
+}
+
 // hasCustomMarkdownStyles checks if any custom markdown styles are configured.
-func hasCustomMarkdownStyles(atmosConfig schema.AtmosConfiguration) bool {
+func hasCustomMarkdownStyles(atmosConfig *schema.AtmosConfiguration) bool {
 	m := atmosConfig.Settings.Markdown
 	return m.Document.Color != "" ||
 		m.Heading.Color != "" ||
@@ -303,7 +311,7 @@ func hasCustomMarkdownStyles(atmosConfig schema.AtmosConfiguration) bool {
 }
 
 // applyCustomStylesToTheme applies custom markdown styles on top of a theme style.
-func applyCustomStylesToTheme(themeStyleBytes []byte, atmosConfig schema.AtmosConfiguration) ([]byte, error) {
+func applyCustomStylesToTheme(themeStyleBytes []byte, atmosConfig *schema.AtmosConfiguration) ([]byte, error) {
 	var style ansi.StyleConfig
 	if err := json.Unmarshal(themeStyleBytes, &style); err != nil {
 		return nil, err
@@ -326,7 +334,7 @@ func applyCustomStylesToTheme(themeStyleBytes []byte, atmosConfig schema.AtmosCo
 		}
 		style.H1.Bold = &atmosConfig.Settings.Markdown.H1.Bold
 		if atmosConfig.Settings.Markdown.H1.Margin >= 0 {
-			style.H1.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.H1.Margin))
+			style.H1.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.H1.Margin))
 		}
 	}
 
@@ -341,13 +349,13 @@ func applyCustomStylesToTheme(themeStyleBytes []byte, atmosConfig schema.AtmosCo
 	}
 
 	if atmosConfig.Settings.Markdown.CodeBlock.Color != "" {
-		if style.CodeBlock.StyleBlock.StylePrimitive.Color != nil {
-			*style.CodeBlock.StyleBlock.StylePrimitive.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
+		if style.CodeBlock.Color != nil {
+			*style.CodeBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
 		} else {
-			style.CodeBlock.StyleBlock.StylePrimitive.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
+			style.CodeBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
 		if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
-			style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
+			style.CodeBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 		}
 	}
 

@@ -47,18 +47,18 @@ func TestConvertToGlamourStyle(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify colors were applied
-	assert.NotNil(t, style.Document.StylePrimitive.Color)
-	assert.Equal(t, "#E0E0E0", *style.Document.StylePrimitive.Color)
+	assert.NotNil(t, style.Document.Color)
+	assert.Equal(t, "#E0E0E0", *style.Document.Color)
 
-	assert.NotNil(t, style.Heading.StylePrimitive.Color)
-	assert.Equal(t, "#0000FF", *style.Heading.StylePrimitive.Color)
+	assert.NotNil(t, style.Heading.Color)
+	assert.Equal(t, "#0000FF", *style.Heading.Color)
 
-	assert.NotNil(t, style.H1.StylePrimitive.Color)
-	assert.NotNil(t, style.H1.StylePrimitive.BackgroundColor)
-	assert.Equal(t, "#0000FF", *style.H1.StylePrimitive.BackgroundColor)
+	assert.NotNil(t, style.H1.Color)
+	assert.NotNil(t, style.H1.BackgroundColor)
+	assert.Equal(t, "#0000FF", *style.H1.BackgroundColor)
 
-	assert.NotNil(t, style.H2.StylePrimitive.Color)
-	assert.Equal(t, "#FF00FF", *style.H2.StylePrimitive.Color)
+	assert.NotNil(t, style.H2.Color)
+	assert.Equal(t, "#FF00FF", *style.H2.Color)
 
 	assert.NotNil(t, style.Strong.Color)
 	assert.Equal(t, "#FF00FF", *style.Strong.Color)

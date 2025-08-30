@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -73,19 +75,19 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// formatThemeDetails creates a detailed preview of the theme.
-func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme.StyleSet) string {
-	var output strings.Builder
-
-	// Theme header with recommended badge on same line
+// formatThemeHeader creates the header section with theme name and badges.
+func formatThemeHeader(t *theme.Theme, styles *theme.StyleSet) string {
 	themeHeader := fmt.Sprintf("Theme: %s", t.Name)
 	if theme.IsRecommended(t.Name) {
 		themeHeader += " " + styles.Success.Render("★ Recommended")
 	}
-	output.WriteString(styles.Title.Render(themeHeader))
-	output.WriteString(sectionSeparator)
+	return styles.Title.Render(themeHeader) + sectionSeparator
+}
 
-	// Theme metadata with styled labels
+// formatThemeMetadata formats the theme's metadata information.
+func formatThemeMetadata(t *theme.Theme, styles *theme.StyleSet) string {
+	var output strings.Builder
+
 	output.WriteString(styles.Label.Render("Type:"))
 	if t.Meta.IsDark {
 		output.WriteString(" Dark\n")
@@ -103,19 +105,12 @@ func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme
 		}
 	}
 
-	output.WriteString(lineBreak)
+	return output.String()
+}
 
-	// Color Palette Section
-	output.WriteString(styles.Heading.Render("COLOR PALETTE"))
-	output.WriteString(sectionSeparator)
-
-	// Display color swatches
-	output.WriteString(formatColorPalette(t))
-	output.WriteString(lineBreak)
-
-	// Sample UI Elements Section
-	output.WriteString(styles.Heading.Render("SAMPLE UI ELEMENTS"))
-	output.WriteString(sectionSeparator)
+// formatUIElements formats the sample UI elements section.
+func formatUIElements(styles *theme.StyleSet) string {
+	var output strings.Builder
 
 	// Status messages
 	output.WriteString(styles.Label.Render("Status Messages:"))
@@ -154,15 +149,104 @@ func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme
 	output.WriteString(styles.Command.Render("atmos describe stacks"))
 	output.WriteString(" - ")
 	output.WriteString(styles.Description.Render("Show stack configurations"))
-	output.WriteString(sectionSeparator)
 
-	// Footer with activation instructions
+	return output.String()
+}
+
+// formatMarkdownPreview renders a sample markdown document with the theme.
+func formatMarkdownPreview(t *theme.Theme, _ *theme.StyleSet) string {
+	// Sample markdown content
+	markdownContent := `# Heading Level 1
+## Heading Level 2  
+### Heading Level 3
+
+This is a paragraph with **bold text** and *italic text*.
+
+> This is a blockquote with important information.
+> It can span multiple lines.
+
+- First item in list
+- Second item with **emphasis**
+  - Nested item
+  - Another nested item
+
+1. Numbered list item
+2. Second numbered item
+
+` + "```go\n" + `// Code block with syntax highlighting
+func main() {
+    fmt.Println("Hello, Atmos!")
+}` + "\n```\n\n" +
+		`Here's a [link to documentation](https://atmos.tools).
+
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Data 1   | Data 2   | Data 3   |
+| Value A  | Value B  | Value C  |
+`
+
+	// Create a markdown renderer with the theme
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				Theme: t.Name,
+			},
+		},
+	}
+
+	renderer, err := markdown.NewTerminalMarkdownRenderer(atmosConfig)
+	if err != nil {
+		return "Error rendering markdown preview\n"
+	}
+
+	rendered, err := renderer.Render(markdownContent)
+	if err != nil {
+		return "Error rendering markdown preview\n"
+	}
+
+	return rendered
+}
+
+// formatUsageInstructions generates the usage instructions section.
+func formatUsageInstructions(t *theme.Theme, styles *theme.StyleSet) string {
 	footer := fmt.Sprintf("\nTo use this theme, set ATMOS_THEME=%s or add to atmos.yaml:\n", t.Name)
 	footer += "settings:\n"
 	footer += "  terminal:\n"
 	footer += fmt.Sprintf("    theme: %s\n", t.Name)
+	return styles.Footer.Render(footer)
+}
 
-	output.WriteString(styles.Footer.Render(footer))
+// formatThemeDetails creates a detailed preview of the theme.
+func formatThemeDetails(t *theme.Theme, _ *theme.ColorScheme, styles *theme.StyleSet) string {
+	var output strings.Builder
+
+	// Theme header
+	output.WriteString(formatThemeHeader(t, styles))
+
+	// Theme metadata
+	output.WriteString(formatThemeMetadata(t, styles))
+	output.WriteString(lineBreak)
+
+	// Color Palette Section
+	output.WriteString(styles.Heading.Render("COLOR PALETTE"))
+	output.WriteString(sectionSeparator)
+	output.WriteString(formatColorPalette(t))
+	output.WriteString(lineBreak)
+
+	// Markdown Preview Section
+	output.WriteString(styles.Heading.Render("MARKDOWN PREVIEW"))
+	output.WriteString(sectionSeparator)
+	output.WriteString(formatMarkdownPreview(t, styles))
+	output.WriteString(lineBreak)
+
+	// Sample UI Elements Section
+	output.WriteString(styles.Heading.Render("SAMPLE UI ELEMENTS"))
+	output.WriteString(sectionSeparator)
+	output.WriteString(formatUIElements(styles))
+	output.WriteString(sectionSeparator)
+
+	// Footer with activation instructions
+	output.WriteString(formatUsageInstructions(t, styles))
 
 	return output.String()
 }

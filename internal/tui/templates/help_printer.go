@@ -19,6 +19,7 @@ const (
 	flagIndent      = "    "
 	nameIndentWidth = 4
 	minDescWidth    = 20
+	spaceChar       = " "
 )
 
 type HelpFlagPrinter struct {
@@ -83,7 +84,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	styles := theme.GetCurrentStyles()
 
 	// Build flag parts separately for styling
-	indent := strings.Repeat(" ", nameIndent)
+	indent := strings.Repeat(spaceChar, nameIndent)
 	flagPart := ""
 	typePart := ""
 
@@ -130,9 +131,9 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	// Build the complete flag section with proper spacing
 	var flagSection string
 	if typePart != "" {
-		flagSection = fmt.Sprintf("%s%s %s%s", indent, styledFlagPart, styledTypePart, strings.Repeat(" ", padding))
+		flagSection = fmt.Sprintf("%s%s %s%s", indent, styledFlagPart, styledTypePart, strings.Repeat(spaceChar, padding))
 	} else {
-		flagSection = fmt.Sprintf("%s%s%s", indent, styledFlagPart, strings.Repeat(" ", padding))
+		flagSection = fmt.Sprintf("%s%s%s", indent, styledFlagPart, strings.Repeat(spaceChar, padding))
 	}
 
 	// Handle case where flag is too long for single line
@@ -141,7 +142,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 		if _, err := fmt.Fprintf(p.out, "%s\n", flagSection); err != nil {
 			return
 		}
-		flagSection = strings.Repeat(" ", p.maxFlagLen)
+		flagSection = strings.Repeat(spaceChar, p.maxFlagLen)
 		availWidth = int(p.wrapLimit) - 4
 	}
 
@@ -167,21 +168,20 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	}
 
 	// Print first line with flag
-	if len(lines) > 0 {
-		if _, err := fmt.Fprintf(p.out, "%s    %s\n", flagSection, lines[0]); err != nil {
-			return
-		}
-	} else {
+	if len(lines) == 0 {
 		// No description, just print the flag
 		if _, err := fmt.Fprintf(p.out, "%s\n", flagSection); err != nil {
 			return
 		}
 		return
 	}
+	if _, err := fmt.Fprintf(p.out, "%s    %s\n", flagSection, lines[0]); err != nil {
+		return
+	}
 
 	// Print remaining lines with proper indentation
 	for _, line := range lines[1:] {
-		if _, err := fmt.Fprintf(p.out, "%s%s\n", strings.Repeat(" ", descIndent), line); err != nil {
+		if _, err := fmt.Fprintf(p.out, "%s%s\n", strings.Repeat(spaceChar, descIndent), line); err != nil {
 			return
 		}
 	}

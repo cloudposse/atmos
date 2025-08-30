@@ -96,42 +96,35 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 	}
 }
 
+// chromaThemeMap maps Atmos theme names to Chroma syntax highlighting themes.
+var chromaThemeMap = map[string]string{
+	"dracula":         "dracula",
+	"monokai":         "monokai",
+	"github-dark":     "github-dark",
+	"nord":            "nord",
+	"solarized-dark":  "solarized-dark",
+	"solarized-light": "solarized-light",
+	"github-light":    "github",
+	"tokyo-night":     "onedark",
+	"gruvbox":         "gruvbox",
+	"catppuccin":      "catppuccin-mocha",
+	"one-dark":        "onedark",
+	"material":        "material",
+}
+
 // getChromaThemeForAtmosTheme returns an appropriate Chroma syntax highlighting theme
 // based on the Atmos theme characteristics.
 func getChromaThemeForAtmosTheme(t *Theme) string {
-	// Map specific themes to their best Chroma equivalents
-	switch strings.ToLower(t.Name) {
-	case "dracula":
-		return "dracula"
-	case "monokai":
-		return "monokai"
-	case "github-dark":
-		return "github-dark"
-	case "nord":
-		return "nord"
-	case "solarized-dark":
-		return "solarized-dark"
-	case "solarized-light":
-		return "solarized-light"
-	case "github-light":
-		return "github"
-	case "tokyo-night":
-		return "onedark"
-	case "gruvbox":
-		return "gruvbox"
-	case "catppuccin":
-		return "catppuccin-mocha"
-	case "one-dark":
-		return "onedark"
-	case "material":
-		return "material"
-	default:
-		// For unknown themes, choose based on dark/light
-		if t.Meta.IsDark {
-			return "dracula" // Good default dark theme
-		}
-		return "github" // Good default light theme
+	// Try to find a mapped theme
+	if chromaTheme, ok := chromaThemeMap[strings.ToLower(t.Name)]; ok {
+		return chromaTheme
 	}
+
+	// For unknown themes, choose based on dark/light
+	if t.Meta.IsDark {
+		return "dracula" // Good default dark theme
+	}
+	return "github" // Good default light theme
 }
 
 // GetColorSchemeForTheme loads a theme by name and generates its color scheme.

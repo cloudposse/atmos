@@ -35,7 +35,7 @@ const (
 	pkgTypeLocal
 )
 
-// Style getters that use dynamic theme
+// Style getters that use dynamic theme.
 func getCurrentPkgNameStyle() lipgloss.Style {
 	styles := theme.GetCurrentStyles()
 	if styles == nil {

@@ -15,42 +15,63 @@ import (
 	"golang.org/x/term"
 )
 
+// Terminal width constants for readability.
+const (
+	maxTerminalWidth = 100
+	readableWidth    = 80
+	minTerminalWidth = 40
+	widthMargin      = 4
+)
+
 // Templater handles the generation and management of command usage templates.
 type Templater struct {
 	UsageTemplate string
 }
 
-// getCommandStyles returns theme-aware styles for command formatting
-func getCommandStyles() (commandNameStyle, commandDescStyle, commandUnsupportedNameStyle, commandUnsupportedDescStyle lipgloss.Style) {
+// CommandStyles holds all command-related styles.
+type CommandStyles struct {
+	NameStyle            lipgloss.Style
+	DescStyle            lipgloss.Style
+	UnsupportedNameStyle lipgloss.Style
+	UnsupportedDescStyle lipgloss.Style
+}
+
+// getCommandStyles returns theme-aware styles for command formatting.
+func getCommandStyles() CommandStyles {
 	styles := theme.GetCurrentStyles()
 	if styles == nil {
 		// Fallback to unstyled if theme is not available
-		return lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle()
+		return CommandStyles{
+			NameStyle:            lipgloss.NewStyle(),
+			DescStyle:            lipgloss.NewStyle(),
+			UnsupportedNameStyle: lipgloss.NewStyle(),
+			UnsupportedDescStyle: lipgloss.NewStyle(),
+		}
 	}
 
-	commandNameStyle = styles.Help.CommandName
-	commandDescStyle = styles.Help.CommandDesc
-	commandUnsupportedNameStyle = styles.Help.CommandName.
-		Foreground(lipgloss.Color(theme.ColorGray)).
-		Bold(true)
-	commandUnsupportedDescStyle = styles.Help.CommandDesc.
-		Foreground(lipgloss.Color(theme.ColorGray))
-
-	return
+	return CommandStyles{
+		NameStyle: styles.Help.CommandName,
+		DescStyle: styles.Help.CommandDesc,
+		UnsupportedNameStyle: styles.Help.CommandName.
+			Foreground(lipgloss.Color(theme.ColorGray)).
+			Bold(true),
+		UnsupportedDescStyle: styles.Help.CommandDesc.
+			Foreground(lipgloss.Color(theme.ColorGray)),
+	}
 }
 
 // formatCommand returns a styled string for a command and its description
 func formatCommand(name string, desc string, padding int, IsNotSupported bool) string {
 	paddedName := fmt.Sprintf("%-*s", padding, name)
-	commandNameStyle, commandDescStyle, commandUnsupportedNameStyle, commandUnsupportedDescStyle := getCommandStyles()
+	cmdStyles := getCommandStyles()
 
 	if IsNotSupported {
-		styledName := commandUnsupportedNameStyle.Render(paddedName)
-		styledDesc := commandUnsupportedDescStyle.Render(desc + " [unsupported]")
+		styledName := cmdStyles.UnsupportedNameStyle.Render(paddedName)
+		styledDesc := cmdStyles.UnsupportedDescStyle.Render(desc + " [unsupported]")
 		return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 	}
-	styledName := commandNameStyle.Render(paddedName)
-	styledDesc := commandDescStyle.Render(desc)
+	styledName := cmdStyles.NameStyle.Render(paddedName)
+	styledDesc := cmdStyles.DescStyle.Render(desc)
 	return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 }
 
@@ -127,32 +148,32 @@ func headingStyle(s string) string {
 	return s
 }
 
-// usageBlock wraps usage content in a styled block
+// usageBlock wraps usage content in a styled block.
 func usageBlock(content string) string {
 	styles := theme.GetCurrentStyles()
 	if styles != nil {
 		// Calculate width for consistent box sizing
 		width := GetTerminalWidth()
-		if width > 100 {
-			width = 80 // Cap at 80 for readability
-		} else if width > 40 {
-			width -= 4 // Leave some margin
+		if width > maxTerminalWidth {
+			width = readableWidth // Cap at 80 for readability
+		} else if width > minTerminalWidth {
+			width -= widthMargin // Leave some margin
 		}
 		return styles.Help.UsageBlock.Width(width).Render(strings.TrimSpace(content))
 	}
 	return content
 }
 
-// exampleBlock wraps example content in a styled block
+// exampleBlock wraps example content in a styled block.
 func exampleBlock(content string) string {
 	styles := theme.GetCurrentStyles()
 	if styles != nil {
 		// Calculate width for consistent box sizing
 		width := GetTerminalWidth()
-		if width > 100 {
-			width = 80 // Cap at 80 for readability
-		} else if width > 40 {
-			width -= 4 // Leave some margin
+		if width > maxTerminalWidth {
+			width = readableWidth // Cap at 80 for readability
+		} else if width > minTerminalWidth {
+			width -= widthMargin // Leave some margin
 		}
 		return styles.Help.ExampleBlock.Width(width).Render(strings.TrimSpace(content))
 	}

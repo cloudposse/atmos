@@ -65,7 +65,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 	return "", fmt.Errorf("invalid log level `%s`. Valid options are: %v", logLevel, validLevels)
 }
 
-func (l *Logger) log(style lipgloss.Style, message string) {
+func (l *Logger) log(style *lipgloss.Style, message string) {
 	// Apply style to the message
 	styledMessage := style.Render(message)
 
@@ -133,24 +133,28 @@ func (l *Logger) isLevelEnabled(level LogLevel) bool {
 
 func (l *Logger) Trace(message string) {
 	if l.isLevelEnabled(LogLevelTrace) {
-		l.log(theme.GetTraceStyle(), message)
+		style := theme.GetTraceStyle()
+		l.log(&style, message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
 	if l.isLevelEnabled(LogLevelDebug) {
-		l.log(theme.GetDebugStyle(), message)
+		style := theme.GetDebugStyle()
+		l.log(&style, message)
 	}
 }
 
 func (l *Logger) Info(message string) {
 	if l.isLevelEnabled(LogLevelInfo) {
-		l.log(theme.GetInfoStyle(), message)
+		style := theme.GetInfoStyle()
+		l.log(&style, message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
 	if l.isLevelEnabled(LogLevelWarning) {
-		l.log(theme.GetWarningStyle(), message)
+		style := theme.GetWarningStyle()
+		l.log(&style, message)
 	}
 }

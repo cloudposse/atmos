@@ -118,53 +118,53 @@ func displayThemeList(themes []*theme.Theme, activeTheme string, showingRecommen
 	return nil
 }
 
-// formatThemeTable formats themes into a styled Charmbracelet table.
-func formatThemeTable(themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool, showStars bool) string {
-	// Prepare headers and rows
-	headers := []string{"", "Name", "Type", "Source"}
+// buildThemeRows converts themes to table rows for display.
+func buildThemeRows(themes []*theme.Theme, activeTheme string, showStars bool) [][]string {
 	var rows [][]string
-
 	for _, t := range themes {
-		// Active indicator
-		activeIndicator := "  "
-		if t.Name == activeTheme {
-			activeIndicator = "> "
-		}
-
-		// Theme name with recommended indicator (only show star when requested)
-		name := t.Name
-		if showStars && theme.IsRecommended(t.Name) {
-			name += " ★"
-		}
-
-		// Theme type (Dark/Light)
-		themeType := getThemeTypeString(t)
-
-		// Source
-		source := getThemeSourceString(t)
-		const maxSourceLen = 50
-		const sourceElipsis = 47
-		if len(source) > maxSourceLen {
-			source = source[:sourceElipsis] + "..."
-		}
-
-		row := []string{
-			activeIndicator,
-			name,
-			themeType,
-			source,
-		}
+		row := formatThemeRow(t, activeTheme, showStars)
 		rows = append(rows, row)
 	}
+	return rows
+}
 
-	// Use the new themed table creation
-	output := theme.CreateThemedTable(headers, rows) + "\n"
+// formatThemeRow formats a single theme as a table row.
+func formatThemeRow(t *theme.Theme, activeTheme string, showStars bool) []string {
+	// Active indicator
+	activeIndicator := "  "
+	if t.Name == activeTheme {
+		activeIndicator = "> "
+	}
 
-	// Footer message
-	styles := theme.GetCurrentStyles()
+	// Theme name with recommended indicator (only show star when requested)
+	name := t.Name
+	if showStars && theme.IsRecommended(t.Name) {
+		name += " ★"
+	}
 
-	footer := fmt.Sprintf("\n%d theme", len(themes))
-	if len(themes) != 1 {
+	// Theme type (Dark/Light)
+	themeType := getThemeTypeString(t)
+
+	// Source
+	source := getThemeSourceString(t)
+	const maxSourceLen = 50
+	const sourceElipsis = 47
+	if len(source) > maxSourceLen {
+		source = source[:sourceElipsis] + "..."
+	}
+
+	return []string{
+		activeIndicator,
+		name,
+		themeType,
+		source,
+	}
+}
+
+// buildFooterMessage creates the footer text for the theme list.
+func buildFooterMessage(themeCount int, showingRecommendedOnly bool, showStars bool, activeTheme string) string {
+	footer := fmt.Sprintf("\n%d theme", themeCount)
+	if themeCount != 1 {
 		footer += "s"
 	}
 
@@ -181,6 +181,21 @@ func formatThemeTable(themes []*theme.Theme, activeTheme string, showingRecommen
 		footer += fmt.Sprintf("\nActive theme: %s", activeTheme)
 	}
 
+	return footer
+}
+
+// formatThemeTable formats themes into a styled Charmbracelet table.
+func formatThemeTable(themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool, showStars bool) string {
+	// Prepare headers and rows
+	headers := []string{"", "Name", "Type", "Source"}
+	rows := buildThemeRows(themes, activeTheme, showStars)
+
+	// Use the new themed table creation
+	output := theme.CreateThemedTable(headers, rows) + "\n"
+
+	// Footer message
+	styles := theme.GetCurrentStyles()
+	footer := buildFooterMessage(len(themes), showingRecommendedOnly, showStars, activeTheme)
 	output += styles.Footer.Render(footer) + "\n"
 
 	return output

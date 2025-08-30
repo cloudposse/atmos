@@ -137,36 +137,35 @@ func (c *columnView) setSize(width, height int) {
 	}
 }
 
-func (c *columnView) getStyle() lipgloss.Style {
-	s := lipgloss.NewStyle().Padding(0).Margin(2).Height(c.height).Width(c.width)
-
-	styles := theme.GetCurrentStyles()
+// applyWorkflowBorder applies the appropriate border style based on focus state.
+func applyWorkflowBorder(s *lipgloss.Style, focused bool, styles *theme.StyleSet) lipgloss.Style {
 	if styles == nil {
 		// Fallback if theme isn't available
-		if c.Focused() {
-			s = s.Border(lipgloss.RoundedBorder())
-		} else {
-			s = s.Border(lipgloss.HiddenBorder())
+		if focused {
+			return s.Border(lipgloss.RoundedBorder())
 		}
-	} else {
-		if c.Focused() {
-			s = styles.TUI.BorderFocused.
-				Copy().
-				Padding(0).
-				Margin(2).
-				Height(c.height).
-				Width(c.width)
-		} else {
-			s = styles.TUI.BorderUnfocused.
-				Copy().
-				Padding(0).
-				Margin(2).
-				Height(c.height).
-				Width(c.width)
-		}
+		return s.Border(lipgloss.HiddenBorder())
 	}
 
-	return s
+	// Apply theme-based styling
+	if focused {
+		return styles.TUI.BorderFocused.
+			Padding(0).
+			Margin(2).
+			Height(s.GetHeight()).
+			Width(s.GetWidth())
+	}
+	return styles.TUI.BorderUnfocused.
+		Padding(0).
+		Margin(2).
+		Height(s.GetHeight()).
+		Width(s.GetWidth())
+}
+
+func (c *columnView) getStyle() lipgloss.Style {
+	baseStyle := lipgloss.NewStyle().Padding(0).Margin(2).Height(c.height).Width(c.width)
+	styles := theme.GetCurrentStyles()
+	return applyWorkflowBorder(&baseStyle, c.Focused(), styles)
 }
 
 // SetContent sets content.

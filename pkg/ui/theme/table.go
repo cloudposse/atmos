@@ -97,6 +97,73 @@ func CreateTable(config *TableConfig, headers []string, rows [][]string) string 
 	return t.String()
 }
 
+// isActiveRow checks if the row represents an active theme.
+func isActiveRow(rowData []string) bool {
+	return len(rowData) > 0 && rowData[0] == "> "
+}
+
+// isRecommendedTheme checks if the theme name contains a star indicator.
+func isRecommendedTheme(name string) bool {
+	return len(name) > 0 && name[len(name)-1:] == "★"
+}
+
+// getCellStyle determines the appropriate style for a table cell.
+func getCellStyle(col int, rowData []string, isActive bool, styles *StyleSet) lipgloss.Style {
+	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+
+	switch col {
+	case 0: // Active indicator column
+		if isActive {
+			return baseStyle.Inherit(styles.Selected)
+		}
+		return baseStyle
+
+	case 1: // Name column (may contain ★ for recommended)
+		if isActive {
+			return baseStyle.Inherit(styles.TableActive)
+		}
+		if len(rowData) > 1 && isRecommendedTheme(rowData[1]) {
+			return baseStyle.Inherit(styles.TableSpecial)
+		}
+		return baseStyle.Inherit(styles.TableRow)
+
+	case 2: // Type column (Dark/Light)
+		if len(rowData) > 2 {
+			switch rowData[2] {
+			case "Dark":
+				return baseStyle.Inherit(styles.TableDarkType)
+			case "Light":
+				return baseStyle.Inherit(styles.TableLightType)
+			}
+		}
+		return baseStyle.Inherit(styles.TableRow)
+
+	default: // Source column and others
+		return baseStyle.Inherit(styles.TableRow)
+	}
+}
+
+// createTableStyleFunc returns a styling function for the table.
+func createTableStyleFunc(rows [][]string, styles *StyleSet) func(int, int) lipgloss.Style {
+	return func(row, col int) lipgloss.Style {
+		baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+
+		// Header row styling
+		if row == -1 {
+			return baseStyle.Inherit(styles.TableHeader)
+		}
+
+		// Regular row styling
+		if row >= 0 && row < len(rows) {
+			rowData := rows[row]
+			isActive := isActiveRow(rowData)
+			return getCellStyle(col, rowData, isActive, styles)
+		}
+
+		return baseStyle.Inherit(styles.TableRow)
+	}
+}
+
 // CreateThemedTable creates a table with theme-aware styling for the list themes command.
 func CreateThemedTable(headers []string, rows [][]string) string {
 	styles := GetCurrentStyles()
@@ -106,60 +173,7 @@ func CreateThemedTable(headers []string, rows [][]string) string {
 		ShowBorders: false,
 		ShowHeader:  true,
 		Styles:      styles,
-		StyleFunc: func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-
-			// Header row styling
-			if row == -1 {
-				return style.Inherit(styles.TableHeader)
-			}
-
-			// Regular row styling with special cases
-			if row >= 0 && row < len(rows) {
-				rowData := rows[row]
-
-				// Check if this is the active theme row (has "> " indicator)
-				isActive := len(rowData) > 0 && rowData[0] == "> "
-
-				switch col {
-				case 0: // Active indicator column
-					if isActive {
-						return style.Inherit(styles.Selected)
-					}
-					return style
-
-				case 1: // Name column (may contain ★ for recommended)
-					if isActive {
-						return style.Inherit(styles.TableActive)
-					}
-					// Check if name contains the star for recommended themes
-					if len(rowData) > 1 && len(rowData[1]) > 0 {
-						if rowData[1][len(rowData[1])-1:] == "★" {
-							return style.Inherit(styles.TableSpecial)
-						}
-					}
-					return style.Inherit(styles.TableRow)
-
-				case 2: // Type column (Dark/Light)
-					if len(rowData) > 2 {
-						if rowData[2] == "Dark" {
-							return style.Inherit(styles.TableDarkType)
-						} else if rowData[2] == "Light" {
-							return style.Inherit(styles.TableLightType)
-						}
-					}
-					return style.Inherit(styles.TableRow)
-
-				case 3: // Source column
-					return style.Inherit(styles.TableRow)
-
-				default:
-					return style.Inherit(styles.TableRow)
-				}
-			}
-
-			return style.Inherit(styles.TableRow)
-		},
+		StyleFunc:   createTableStyleFunc(rows, styles),
 	}
 
 	return CreateTable(&config, headers, rows)
