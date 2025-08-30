@@ -19,7 +19,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping on Windows due to path handling differences with Terraform execution")
 	}
-	
+
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
