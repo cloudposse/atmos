@@ -208,7 +208,7 @@ jobs:
         with:
           issue-number: ${{ github.event.number }}
           comment-author: 'github-actions[bot]'
-          body-includes: '## Test Results'
+          body-includes: 'test-summary-uuid: e7b3c8f2-4d5a-4c9b-8e1f-2a3b4c5d6e7f'
 
       - name: Post test summary to PR
         uses: peter-evans/create-or-update-comment@v4
