@@ -51,3 +51,8 @@ internal/exec/output.*
 # Coverage files
 coverage.out
 coverage.html
+coverage.out.tmp
+
+# Test artifacts
+test-results.json
+test-summary.md
