@@ -34,7 +34,7 @@ func getChangedPackages() []string {
 
 	for _, file := range files {
 		// Convert file path to package path.
-		// e.g., "tools/test-summary/main.go" -> "tools/test-summary"
+		// e.g., "tools/test-summary/main.go" -> "tools/test-summary".
 		dir := filepath.Dir(file)
 		if dir != "." {
 			packageSet[dir] = true

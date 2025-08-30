@@ -244,7 +244,7 @@ func TestGeneratePackageSummary(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := generatePackageSummary(tt.tests)
 			
-			// Sort both slices by package name for consistent comparison
+			// Sort both slices by package name for consistent comparison.
 			sort.Slice(got, func(i, j int) bool {
 				return got[i].Package < got[j].Package
 			})
@@ -252,13 +252,13 @@ func TestGeneratePackageSummary(t *testing.T) {
 				return tt.want[i].Package < tt.want[j].Package
 			})
 			
-			// Check lengths first
+			// Check lengths first.
 			if len(got) != len(tt.want) {
 				t.Errorf("generatePackageSummary() length = %d, want %d", len(got), len(tt.want))
 				return
 			}
 			
-			// Check each package summary individually
+			// Check each package summary individually.
 			for i, gotSummary := range got {
 				wantSummary := tt.want[i]
 				if gotSummary.Package != wantSummary.Package {
@@ -270,7 +270,7 @@ func TestGeneratePackageSummary(t *testing.T) {
 				if gotSummary.TotalDuration != wantSummary.TotalDuration {
 					t.Errorf("generatePackageSummary()[%d].TotalDuration = %v, want %v", i, gotSummary.TotalDuration, wantSummary.TotalDuration)
 				}
-				// For average duration, allow larger floating point differences due to rounding
+				// For average duration, allow larger floating point differences due to rounding.
 				if diff := gotSummary.AvgDuration - wantSummary.AvgDuration; diff < -0.1 || diff > 0.1 {
 					t.Errorf("generatePackageSummary()[%d].AvgDuration = %v, want %v (diff: %v)", i, gotSummary.AvgDuration, wantSummary.AvgDuration, diff)
 				}
@@ -279,7 +279,7 @@ func TestGeneratePackageSummary(t *testing.T) {
 	}
 }
 
-// Test helper function that might be used by utils
+// Test helper function that might be used by utils.
 func TestUtilsHelperFunctions(t *testing.T) {
 	t.Run("test result sorting by duration", func(t *testing.T) {
 		tests := []TestResult{
@@ -288,7 +288,7 @@ func TestUtilsHelperFunctions(t *testing.T) {
 			{Test: "Medium", Duration: 1.0},
 		}
 		
-		// Test that we can sort by duration (this tests the underlying logic)
+		// Test that we can sort by duration (this tests the underlying logic).
 		sort.Slice(tests, func(i, j int) bool {
 			return tests[i].Duration > tests[j].Duration
 		})
@@ -316,7 +316,7 @@ func TestUtilsHelperFunctions(t *testing.T) {
 		}
 		
 		for _, tt := range tests {
-			// This simulates what shortPackage does
+			// This simulates what shortPackage does.
 			parts := strings.Split(tt.fullPackage, "/")
 			var got string
 			if len(parts) > 0 && parts[len(parts)-1] != "" {

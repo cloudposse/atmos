@@ -187,4 +187,4 @@ func TestWritePassedTests(t *testing.T) {
 	}
 }
 
-// Note: TestWriteCoverageSection and TestShortPackage already exist in output_test.go
+// Note: TestWriteCoverageSection and TestShortPackage already exist in output_test.go.

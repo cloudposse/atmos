@@ -14,7 +14,7 @@ func TestWriteSummaryErrorHandling(t *testing.T) {
 		Passed: []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
 	}
 
-	// Test writing to invalid path
+	// Test writing to invalid path.
 	err := writeSummary(summary, formatMarkdown, "/invalid/path/file.md")
 	if err == nil {
 		t.Error("writeSummary() should return error for invalid path")
@@ -22,7 +22,7 @@ func TestWriteSummaryErrorHandling(t *testing.T) {
 }
 
 func TestOpenOutputEdgeCases(t *testing.T) {
-	// Test creating file in existing directory
+	// Test creating file in existing directory.
 	tempDir := t.TempDir()
 	tempFile := filepath.Join(tempDir, "test-summary-temp.md")
 
@@ -39,14 +39,14 @@ func TestOpenOutputEdgeCases(t *testing.T) {
 		t.Errorf("openOutput() path = %v, want %v", path, tempFile)
 	}
 
-	// Clean up
+	// Clean up.
 	if closer, ok := writer.(io.Closer); ok {
 		closer.Close()
 	}
 }
 
 func TestWriteMarkdownContentWithGitHubActions(t *testing.T) {
-	// Test with GITHUB_STEP_SUMMARY set
+	// Test with GITHUB_STEP_SUMMARY set.
 	oldEnv := os.Getenv("GITHUB_STEP_SUMMARY")
 	os.Setenv("GITHUB_STEP_SUMMARY", "/dev/null")
 	defer func() {
@@ -66,19 +66,19 @@ func TestWriteMarkdownContentWithGitHubActions(t *testing.T) {
 
 	output := buf.String()
 
-	// Should not include timestamp when GITHUB_STEP_SUMMARY is set
+	// Should not include timestamp when GITHUB_STEP_SUMMARY is set.
 	if strings.Contains(output, "_Generated:") {
 		t.Error("writeMarkdownContent() should not include timestamp when GITHUB_STEP_SUMMARY is set")
 	}
 
-	// Should include test results
+	// Should include test results.
 	if !strings.Contains(output, "# Test Results") {
 		t.Error("writeMarkdownContent() missing test results header")
 	}
 }
 
 func TestOpenGitHubOutputWithEnv(t *testing.T) {
-	// Create temporary file for test
+	// Create temporary file for test.
 	tempDir := t.TempDir()
 	tempFile := filepath.Join(tempDir, "test-github-summary.md")
 	file, err := os.Create(tempFile)
@@ -87,7 +87,7 @@ func TestOpenGitHubOutputWithEnv(t *testing.T) {
 	}
 	file.Close()
 
-	// Test with GITHUB_STEP_SUMMARY set
+	// Test with GITHUB_STEP_SUMMARY set.
 	oldEnv := os.Getenv("GITHUB_STEP_SUMMARY")
 	os.Setenv("GITHUB_STEP_SUMMARY", tempFile)
 	defer func() {
@@ -111,7 +111,7 @@ func TestOpenGitHubOutputWithEnv(t *testing.T) {
 		t.Errorf("openGitHubOutput() path = %v, want %v", path, tempFile)
 	}
 
-	// Clean up
+	// Clean up.
 	if closer, ok := writer.(io.Closer); ok {
 		closer.Close()
 	}
@@ -122,7 +122,7 @@ func TestHandleOutputBothFormat(t *testing.T) {
 		Passed: []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
 	}
 
-	// Test both format
+	// Test both format.
 	err := handleOutput(summary, formatBoth, "-")
 	if err != nil {
 		t.Errorf("handleOutput() both format = %v, want nil", err)

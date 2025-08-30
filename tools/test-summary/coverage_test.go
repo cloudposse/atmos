@@ -161,7 +161,7 @@ func TestCalculateStatementCoverage(t *testing.T) {
 }
 
 func TestParseStatementCoverage(t *testing.T) {
-	// Create a temporary coverage profile file for testing
+	// Create a temporary coverage profile file for testing.
 	tempDir := t.TempDir()
 	coverageFile := filepath.Join(tempDir, "coverage.out")
 
@@ -295,7 +295,7 @@ func TestParseFunctionCoverageLine(t *testing.T) {
 }
 
 func TestParseCoverageProfile(t *testing.T) {
-	// Create a temporary coverage profile file for testing
+	// Create a temporary coverage profile file for testing.
 	tempDir := t.TempDir()
 	coverageFile := filepath.Join(tempDir, "coverage.out")
 
@@ -343,7 +343,7 @@ github.com/example/mock/mock_service.go:5.1,6.2 1 0
 				return
 			}
 			if tt.checkResult && got != nil {
-				// Basic checks for valid result
+				// Basic checks for valid result.
 				if got.StatementCoverage == "" {
 					t.Error("parseCoverageProfile() returned empty StatementCoverage")
 				}

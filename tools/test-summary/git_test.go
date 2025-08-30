@@ -41,9 +41,9 @@ func TestGetChangedFiles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip git tests if git is not available or we're in an environment without git
+			// Skip git tests if git is not available or we're in an environment without git.
 			if !tt.setupGit {
-				// Test the error case by temporarily breaking git
+				// Test the error case by temporarily breaking git.
 				oldPath := os.Getenv("PATH")
 				os.Setenv("PATH", "")
 				defer os.Setenv("PATH", oldPath)
@@ -52,15 +52,15 @@ func TestGetChangedFiles(t *testing.T) {
 			got := getChangedFiles()
 			
 			if tt.setupGit {
-				// We can't easily mock exec.Command in this test environment,
-				// so we'll just verify the function returns a slice
+				// We can't easily mock exec.Command in this test environment,.
+				// so we'll just verify the function returns a slice.
 				if got == nil {
 					t.Error("getChangedFiles() returned nil")
 				}
-				// The actual content will depend on the real git state,
-				// but we can verify it returns a slice
+				// The actual content will depend on the real git state,.
+				// but we can verify it returns a slice.
 			} else {
-				// For error cases, should return empty slice
+				// For error cases, should return empty slice.
 				if len(got) != 0 {
 					t.Errorf("getChangedFiles() in error case should return empty slice, got %v", got)
 				}
@@ -90,10 +90,10 @@ func TestGetChangedPackages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if !tt.setupGit {
-				// Test the error case by checking git availability
+				// Test the error case by checking git availability.
 				_, err := exec.LookPath("git")
 				if err == nil {
-					// If git is available, temporarily break it
+					// If git is available, temporarily break it.
 					oldPath := os.Getenv("PATH")
 					os.Setenv("PATH", "")
 					defer os.Setenv("PATH", oldPath)
@@ -106,23 +106,23 @@ func TestGetChangedPackages(t *testing.T) {
 				if got == nil {
 					t.Error("getChangedPackages() returned nil")
 				}
-				// Verify it returns a slice (content depends on actual git state)
+				// Verify it returns a slice (content depends on actual git state).
 			}
 		})
 	}
 }
 
-// Test helper functions that would be used by git functions
+// Test helper functions that would be used by git functions.
 func TestGitFunctionHelpers(t *testing.T) {
-	// Test that git functions handle empty output correctly
+	// Test that git functions handle empty output correctly.
 	t.Run("empty git output handling", func(t *testing.T) {
-		// getChangedFiles should handle empty output
+		// getChangedFiles should handle empty output.
 		files := getChangedFiles()
 		if files == nil {
 			t.Error("getChangedFiles() should return empty slice, not nil")
 		}
 		
-		// getChangedPackages should handle empty output
+		// getChangedPackages should handle empty output.
 		packages := getChangedPackages()
 		if packages == nil {
 			t.Error("getChangedPackages() should return empty slice, not nil")
@@ -130,7 +130,7 @@ func TestGitFunctionHelpers(t *testing.T) {
 	})
 }
 
-// Test file path processing that git functions might do
+// Test file path processing that git functions might do.
 func TestFilePathProcessing(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -158,7 +158,7 @@ func TestFilePathProcessing(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var got []string
 			for _, path := range tt.filePaths {
-				// Simple filter for .go files (simulating what git functions might do)
+				// Simple filter for .go files (simulating what git functions might do).
 				if len(path) > 3 && path[len(path)-3:] == ".go" {
 					got = append(got, path)
 				}

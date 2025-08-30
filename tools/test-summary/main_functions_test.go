@@ -6,8 +6,8 @@ import (
 )
 
 func TestMain_Integration(t *testing.T) {
-	// This test verifies the main function integration
-	// We'll test by setting up args and capturing exit behavior
+	// This test verifies the main function integration.
+	// We'll test by setting up args and capturing exit behavior.
 
 	tests := []struct {
 		name     string
@@ -23,14 +23,14 @@ func TestMain_Integration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original args
+			// Save original args.
 			oldArgs := os.Args
 			defer func() { os.Args = oldArgs }()
 
-			// Set test args
+			// Set test args.
 			os.Args = tt.args
 
-			// Test run function directly to avoid os.Exit
+			// Test run function directly to avoid os.Exit.
 			exitCode := run("non-existent-file.json", "invalid", "", "", false)
 
 			if exitCode != tt.wantExit {
@@ -75,7 +75,7 @@ func TestRun_AdditionalCases(t *testing.T) {
 }
 
 func TestHandleOutputWithFailedSummary(t *testing.T) {
-	// Test that console output works with failed tests
+	// Test that console output works with failed tests.
 	summary := &TestSummary{
 		Failed: []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
 	}
@@ -87,7 +87,7 @@ func TestHandleOutputWithFailedSummary(t *testing.T) {
 }
 
 func TestConstants(t *testing.T) {
-	// Test that constants are properly defined
+	// Test that constants are properly defined.
 	if formatConsole != "console" {
 		t.Errorf("formatConsole = %v, want 'console'", formatConsole)
 	}

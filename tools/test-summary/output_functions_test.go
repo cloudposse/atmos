@@ -83,17 +83,17 @@ func TestHandleMarkdownOutput(t *testing.T) {
 }
 
 func TestSetupUsage(t *testing.T) {
-	// Test that setupUsage function configures flag.Usage properly
-	// We can't easily capture the output, but we can test that the function runs without error
+	// Test that setupUsage function configures flag.Usage properly.
+	// We can't easily capture the output, but we can test that the function runs without error.
 	setupUsage()
 
-	// Test that flag.Usage is not nil after setup
+	// Test that flag.Usage is not nil after setup.
 	if flag.Usage == nil {
 		t.Error("setupUsage() should set flag.Usage")
 	}
 
-	// We can verify the function was called by checking it's been assigned
-	// This is more of a smoke test to ensure the function doesn't panic
+	// We can verify the function was called by checking it's been assigned.
+	// This is more of a smoke test to ensure the function doesn't panic.
 }
 
 func TestOpenOutput(t *testing.T) {
@@ -129,7 +129,7 @@ func TestOpenOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// For github format tests, ensure we test local mode behavior by unsetting GITHUB_STEP_SUMMARY
+			// For github format tests, ensure we test local mode behavior by unsetting GITHUB_STEP_SUMMARY.
 			if tt.format == formatGitHub {
 				oldEnv, hasEnv := os.LookupEnv("GITHUB_STEP_SUMMARY")
 				os.Unsetenv("GITHUB_STEP_SUMMARY")
@@ -153,7 +153,7 @@ func TestOpenOutput(t *testing.T) {
 				t.Errorf("openOutput() path = %v, want %v", path, tt.wantPath)
 			}
 
-			// Close if it's a file
+			// Close if it's a file.
 			if closer, ok := writer.(io.Closer); ok && writer != os.Stdout {
 				closer.Close()
 			}
@@ -162,9 +162,9 @@ func TestOpenOutput(t *testing.T) {
 }
 
 func TestOpenGitHubOutput(t *testing.T) {
-	// Test without GITHUB_STEP_SUMMARY
+	// Test without GITHUB_STEP_SUMMARY.
 	t.Run("local mode", func(t *testing.T) {
-		// Ensure we test local mode behavior by unsetting GITHUB_STEP_SUMMARY
+		// Ensure we test local mode behavior by unsetting GITHUB_STEP_SUMMARY.
 		oldEnv, hasEnv := os.LookupEnv("GITHUB_STEP_SUMMARY")
 		os.Unsetenv("GITHUB_STEP_SUMMARY")
 		defer func() {
@@ -186,16 +186,16 @@ func TestOpenGitHubOutput(t *testing.T) {
 			t.Errorf("openGitHubOutput() path = %v, want %v", path, defaultSummaryFile)
 		}
 
-		// Close and cleanup
+		// Close and cleanup.
 		if closer, ok := writer.(io.Closer); ok {
 			closer.Close()
 		}
 		os.Remove(defaultSummaryFile)
 	})
 
-	// Test with custom output file
+	// Test with custom output file.
 	t.Run("custom output file", func(t *testing.T) {
-		// Ensure we test local mode behavior by unsetting GITHUB_STEP_SUMMARY
+		// Ensure we test local mode behavior by unsetting GITHUB_STEP_SUMMARY.
 		oldEnv, hasEnv := os.LookupEnv("GITHUB_STEP_SUMMARY")
 		os.Unsetenv("GITHUB_STEP_SUMMARY")
 		defer func() {
@@ -218,7 +218,7 @@ func TestOpenGitHubOutput(t *testing.T) {
 			t.Errorf("openGitHubOutput() path = %v, want %v", path, customFile)
 		}
 
-		// Close and cleanup
+		// Close and cleanup.
 		if closer, ok := writer.(io.Closer); ok {
 			closer.Close()
 		}
@@ -284,7 +284,7 @@ func TestWriteMarkdownContent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 
-			// Set up environment for timestamp test
+			// Set up environment for timestamp test.
 			if tt.format == formatGitHub {
 				os.Unsetenv("GITHUB_STEP_SUMMARY")
 			}

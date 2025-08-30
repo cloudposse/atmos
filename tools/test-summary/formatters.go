@@ -98,13 +98,13 @@ func writePassedTests(output io.Writer, passed []TestResult) {
 		fmt.Fprint(output, detailsOpenTag)
 		fmt.Fprintf(output, "<summary>📊 Package Summary</summary>\n\n")
 		
-		// Calculate total duration across all packages
+		// Calculate total duration across all packages.
 		totalDuration := calculateTotalDuration(passed)
 		
 		fmt.Fprintf(output, "| Package | Tests Passed | Avg Duration | Total Duration | %% of Total |\n")
 		fmt.Fprintf(output, "|---------|--------------|--------------|----------------|----------|\n")
 		for _, summary := range packageSummaries {
-			percentage := (summary.TotalDuration / totalDuration) * 100
+			percentage := (summary.TotalDuration / totalDuration) * percentageMultiplier
 			fmt.Fprintf(output, "| %s | %d | %.3fs | %.2fs | %.1f%% |\n",
 				summary.Package, summary.TestCount, summary.AvgDuration, summary.TotalDuration, percentage)
 		}
@@ -120,7 +120,7 @@ func writeTestTable(output io.Writer, tests []TestResult, includeDuration bool, 
 			fmt.Fprintf(output, "|------|---------|----------|----------|\n")
 			for _, test := range tests {
 				pkg := shortPackage(test.Package)
-				percentage := (test.Duration / totalDuration) * 100
+				percentage := (test.Duration / totalDuration) * percentageMultiplier
 				fmt.Fprintf(output, "| `%s` | %s | %.2fs | %.1f%% |\n", test.Test, pkg, test.Duration, percentage)
 			}
 		} else {

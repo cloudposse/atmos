@@ -265,7 +265,7 @@ func TestGetUncoveredFunctionsInPR(t *testing.T) {
 				t.Errorf("getUncoveredFunctionsInPR() total = %d, want %d", gotTotal, tt.wantTotal)
 			}
 			
-			// Verify that returned uncovered functions are actually uncovered
+			// Verify that returned uncovered functions are actually uncovered.
 			for _, fn := range gotUncovered {
 				if fn.Coverage > 0 {
 					t.Errorf("getUncoveredFunctionsInPR() returned covered function: %+v", fn)
@@ -371,9 +371,9 @@ func TestWritePRFilteredUncoveredFunctions(t *testing.T) {
 	}
 }
 
-// Test coverage threshold constants
+// Test coverage threshold constants.
 func TestCoverageThresholds(t *testing.T) {
-	// Verify that the thresholds are set correctly
+	// Verify that the thresholds are set correctly.
 	if coverageHighThreshold != 80.0 {
 		t.Errorf("coverageHighThreshold = %v, want 80.0", coverageHighThreshold)
 	}
@@ -382,7 +382,7 @@ func TestCoverageThresholds(t *testing.T) {
 	}
 }
 
-// Test that formatter helper functions work correctly
+// Test that formatter helper functions work correctly.
 func TestFormatterHelpers(t *testing.T) {
 	t.Run("file name shortening logic", func(t *testing.T) {
 		tests := []struct {
@@ -396,12 +396,12 @@ func TestFormatterHelpers(t *testing.T) {
 		}
 		
 		for _, tt := range tests {
-			// This tests the logic that shortPackage uses
+			// This tests the logic that shortPackage uses.
 			got := shortPackage(tt.fullPath)
-			// shortPackage should return the package name, but we're testing file paths
-			// For file paths, we'd want to extract just the meaningful part
+			// shortPackage should return the package name, but we're testing file paths.
+			// For file paths, we'd want to extract just the meaningful part.
 			if tt.fullPath != "" && !strings.Contains(got, tt.want) {
-				// This is expected behavior - shortPackage works on packages, not file paths
+				// This is expected behavior - shortPackage works on packages, not file paths.
 				continue
 			}
 		}
