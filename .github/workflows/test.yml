@@ -198,6 +198,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST_SUMMARY_UUID: e7b3c8f2-4d5a-4c9b-8e1f-2a3b4c5d6e7f
         run: make testacc-ci
 
       - name: Find existing test summary comment
