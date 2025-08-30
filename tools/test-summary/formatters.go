@@ -9,12 +9,11 @@ import (
 
 // writeFailedTests writes the failed tests section.
 func writeFailedTests(output io.Writer, failed []TestResult) {
-	fmt.Fprintf(output, "### ❌ Failed Tests (%d)\n\n", len(failed))
-
 	if len(failed) == 0 {
-		fmt.Fprintf(output, "No tests failed 🎉\n\n")
-		return
+		return // Hide entire section when no failures
 	}
+
+	fmt.Fprintf(output, "### ❌ Failed Tests (%d)\n\n", len(failed))
 
 	fmt.Fprint(output, detailsOpenTag)
 	fmt.Fprintf(output, "<summary>Click to see failed tests</summary>\n\n")
