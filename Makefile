@@ -70,7 +70,10 @@ testacc-coverage: testacc-cover
 # New target with test summary for local development
 testacc-summary: get
 	@echo "Running tests with coverage and summary"
-	@go test $(TEST) -v -json -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out 2>&1 > test-results.json
+	@TEST='$(TEST)' TESTARGS='$(TESTARGS) -timeout 40m' \
+		go run ./tools/test-summary -format=stream \
+		-coverprofile=coverage.out \
+		-output=test-results.json
 	@echo ""
 	@echo "=== GENERATING TEST SUMMARY ==="
 	@go run ./tools/test-summary -input=test-results.json -coverprofile=coverage.out -format=github

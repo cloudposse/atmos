@@ -6,6 +6,7 @@ const (
 	formatMarkdown = "markdown"
 	formatGitHub   = "github"
 	formatBoth     = "both"
+	formatStream   = "stream"
 	// File handling constants.
 	stdinMarker        = "-"
 	stdoutPath         = "stdout"

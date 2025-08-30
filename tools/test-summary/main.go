@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // main is the entry point for the test-summary tool.
@@ -11,12 +12,45 @@ func main() {
 	setupUsage()
 
 	inputFile := flag.String("input", "", "Input file (JSON from go test -json). Use '-' for stdin")
-	format := flag.String("format", formatConsole, "Output format: console, markdown, both, or github")
+	format := flag.String("format", formatConsole, "Output format: console, markdown, both, github, or stream")
 	outputFile := flag.String("output", "", "Output file (defaults to stdout for console/markdown, test-summary.md for github)")
 	coverProfile := flag.String("coverprofile", "", "Coverage profile file for detailed analysis")
 	excludeMocks := flag.Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
 
 	flag.Parse()
+
+	// Handle stream mode specially - it runs tests directly
+	if *format == formatStream {
+		// Default output file for stream mode
+		if *outputFile == "" {
+			*outputFile = "test-results.json"
+		}
+
+		// Get test packages from remaining arguments, environment, or use default
+		testPackages := flag.Args()
+		if len(testPackages) == 0 {
+			// Check environment variable (used by Makefile)
+			if testEnv := os.Getenv("TEST"); testEnv != "" {
+				testPackages = strings.Fields(testEnv)
+			} else {
+				// Default to all packages
+				testPackages = []string{"./..."}
+			}
+		}
+
+		// Extract test arguments from environment or use defaults
+		testArgs := os.Getenv("TESTARGS")
+		if testArgs == "" {
+			testArgs = "-timeout 40m"
+		}
+
+		err := StreamMode(testPackages, *outputFile, *coverProfile, testArgs)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	exitCode := run(*inputFile, *format, *outputFile, *coverProfile, *excludeMocks)
 	os.Exit(exitCode)
@@ -25,7 +59,7 @@ func main() {
 // run executes the main logic and returns exit code.
 func run(inputFile, format, outputFile, coverProfile string, excludeMocks bool) int {
 	if !isValidFormat(format) {
-		fmt.Fprintf(os.Stderr, "Error: Invalid format '%s'. Use: console, markdown, both, or github\n", format)
+		fmt.Fprintf(os.Stderr, "Error: Invalid format '%s'. Use: console, markdown, both, github, or stream\n", format)
 		return 1
 	}
 
@@ -57,7 +91,7 @@ func run(inputFile, format, outputFile, coverProfile string, excludeMocks bool) 
 
 // isValidFormat checks if the format is supported.
 func isValidFormat(format string) bool {
-	return contains([]string{formatConsole, formatMarkdown, formatBoth, formatGitHub}, format)
+	return contains([]string{formatConsole, formatMarkdown, formatBoth, formatGitHub, formatStream}, format)
 }
 
 // openInput opens the input file or stdin.
