@@ -143,6 +143,83 @@ introduction: |-
 
   To learn more about what is collected and how it works, see the [Telemetry Documentation](https://atmos.tools/cli/telemetry).
 
+  ## Testing with gotcha
+
+  Atmos includes **[gotcha](tools/gotcha)** - a sophisticated Go test runner with real-time progress tracking and beautiful terminal output.
+
+  ### Installation
+
+  Build gotcha from the tools directory:
+
+  ```bash
+  cd tools/gotcha
+  go build -o gotcha .
+  ```
+
+  ### Running Tests
+
+  #### Stream Mode (Real-time execution)
+  ```bash
+  # Run all tests with live progress
+  ./tools/gotcha/gotcha
+
+  # Test specific packages  
+  ./tools/gotcha/gotcha ./pkg/utils ./internal/...
+
+  # Show only failed tests
+  ./tools/gotcha/gotcha --show=failed
+
+  # Apply package filters and pass-through arguments
+  ./tools/gotcha/gotcha --include=".*api.*" --exclude=".*mock.*" -- -race -short
+  ```
+
+  #### Parse Mode (Process existing results)
+  ```bash
+  # Process go test -json output
+  go test -json ./... | ./tools/gotcha/gotcha parse
+
+  # Generate markdown summary
+  ./tools/gotcha/gotcha parse test-results.json --format=markdown --output=summary.md
+
+  # Create GitHub step summary for CI
+  ./tools/gotcha/gotcha parse --format=github --output=step-summary.md
+  ```
+
+  ### Key Features
+  - **Real-time progress tracking** with test count and elapsed time
+  - **Auto-discovery** of git repository root and configuration
+  - **Package filtering** with regex include/exclude patterns
+  - **Multiple output formats** (markdown, GitHub step summaries)
+  - **Coverage analysis** with visual badges and detailed reports
+  - **GitHub Actions integration** for PR comments
+
+  gotcha draws inspiration from [gotestdox](https://github.com/bitfield/gotestdox), [gotest](https://github.com/rakyll/gotest), and [gotestsum](https://github.com/gotestyourself/gotestsum).
+
+  See the [full gotcha documentation](tools/gotcha/README.md) for complete usage details.
+
+  ## Development
+
+  ### Running Tests (Traditional)
+  ```bash
+  # Run all tests
+  go test ./...
+
+  # Run with coverage
+  go test -cover ./...
+
+  # Run acceptance tests
+  make testacc
+  ```
+
+  ### Using gotcha for Enhanced Testing
+  ```bash
+  # Install gotcha
+  cd tools/gotcha && go build -o gotcha .
+
+  # Run tests with real-time progress and filtering
+  ./tools/gotcha/gotcha --show=failed --include="pkg/.*" --exclude=".*mock.*"
+  ```
+
   ## Documentation
 
   Find all documentation at: [atmos.tools](https://atmos.tools)
