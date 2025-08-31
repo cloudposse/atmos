@@ -470,7 +470,7 @@ func TestAquaRegistry_GetLatestVersion_NoReleases(t *testing.T) {
 	assert.Error(t, err)
 	assert.Empty(t, version)
 	// The error message may vary depending on GitHub API response
-	assert.True(t, strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "404"))
+	assert.True(t, strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "404"), "got: "+err.Error())
 }
 
 func TestAquaRegistry_GetAvailableVersions(t *testing.T) {
