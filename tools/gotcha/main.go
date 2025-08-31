@@ -219,7 +219,12 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	_, _ = cmd.Flags().GetBool("exclude-mocks") // Not used in stream mode
 	include, _ := cmd.Flags().GetString("include")
 	exclude, _ := cmd.Flags().GetString("exclude")
-
+	
+	// Validate show filter
+	if !isValidShowFilter(show) {
+		return fmt.Errorf("invalid show filter '%s'. Valid options: all, failed, passed, skipped", show)
+	}
+	
 	// Set default output file if empty
 	if output == "" {
 		output = "gotcha-results.json"

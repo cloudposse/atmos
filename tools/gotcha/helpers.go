@@ -11,6 +11,17 @@ import (
 	"strings"
 )
 
+// isValidShowFilter validates that the show filter is one of the allowed values
+func isValidShowFilter(show string) bool {
+	validFilters := []string{"all", "failed", "passed", "skipped"}
+	for _, valid := range validFilters {
+		if show == valid {
+			return true
+		}
+	}
+	return false
+}
+
 // filterPackages applies include/exclude regex patterns to filter packages
 func filterPackages(packages []string, includePatterns, excludePatterns string) ([]string, error) {
 	// If no packages provided, return as-is
