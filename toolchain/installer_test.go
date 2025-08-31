@@ -1151,12 +1151,8 @@ func TestExtractAndInstallWithRawBinary(t *testing.T) {
 
 func TestExtractAndInstallWithGzippedBinary(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "extract-test-")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
+	tempDir := t.TempDir()
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir}})
 	installer := NewInstaller()
 
 	// Create a mock binary content
