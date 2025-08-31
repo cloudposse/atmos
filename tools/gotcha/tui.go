@@ -142,6 +142,7 @@ type (
 		elapsed float64
 	}
 )
+
 type testFailMsg struct {
 	test    string
 	elapsed float64
