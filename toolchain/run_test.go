@@ -83,6 +83,11 @@ func TestRunToolWithInstaller(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			SetAtmosConfig(&schema.AtmosConfiguration{
+				Toolchain: schema.Toolchain{
+					ToolsDir: t.TempDir(),
+				},
+			})
 			// Setup mock
 			mockRunner := &MockToolRunner{
 				GetResolverFunc: func() ToolResolver {
@@ -122,11 +127,7 @@ func TestRunToolWithInstaller(t *testing.T) {
 				return exec.Command("false") // Mock failed command
 			}
 			defer func() { execCommand = originalExecCommand }()
-			SetAtmosConfig(&schema.AtmosConfiguration{
-				Toolchain: schema.Toolchain{
-					ToolsDir: t.TempDir(),
-				},
-			})
+
 			// Run the function
 			err := RunToolWithInstaller(mockRunner, tt.tool, tt.version, tt.args)
 
