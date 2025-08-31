@@ -28,7 +28,7 @@ func writeSummary(summary *TestSummary, format, outputFile string) error {
 	// Log success message for file outputs.
 	if outputPath != stdoutPath && outputPath != "" {
 		absPath, _ := filepath.Abs(outputPath)
-		fmt.Fprintf(os.Stderr, "✅ Test summary written to: %s\n", absPath)
+		fmt.Fprintf(os.Stderr, "%s Output markdown summary to %s\n", passStyle.Render(checkPass), absPath)
 	}
 	return nil
 }
@@ -45,7 +45,7 @@ func writeGitHubSummary(summary *TestSummary, outputFile string) error {
 		}()
 		writeMarkdownContent(githubWriter, summary, formatGitHub)
 		if githubPath != "" {
-			fmt.Fprintf(os.Stderr, "✅ GitHub Step Summary written\n")
+			fmt.Fprintf(os.Stderr, "%s Output GitHub step summary to %s\n", passStyle.Render(checkPass), githubPath)
 		}
 	}
 
@@ -63,7 +63,7 @@ func writeGitHubSummary(summary *TestSummary, outputFile string) error {
 
 	writeMarkdownContent(file, summary, formatGitHub)
 	absPath, _ := filepath.Abs(regularFile)
-	fmt.Fprintf(os.Stderr, "✅ Test summary written to: %s\n", absPath)
+	fmt.Fprintf(os.Stderr, "%s Output markdown summary to %s\n", passStyle.Render(checkPass), absPath)
 
 	return nil
 }
@@ -153,7 +153,6 @@ func openGitHubOutput(outputFile string) (io.Writer, string, error) {
 		return nil, "", fmt.Errorf("failed to create summary file: %w", err)
 	}
 	// Inform the user.
-	absPath, _ := filepath.Abs(defaultFile)
-	fmt.Fprintf(os.Stderr, "📝 GITHUB_STEP_SUMMARY not set (running locally). Writing summary to: %s\n", absPath)
+	fmt.Fprintf(os.Stderr, "- GITHUB_STEP_SUMMARY not set (skipped).\n")
 	return file, defaultFile, nil
 }
