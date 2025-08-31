@@ -73,19 +73,27 @@ func TestHandleMarkdownOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := handleMarkdownOutput(summary, tt.outputFile)
+			err := writeSummary(summary, formatMarkdown, tt.outputFile)
 			hasError := (err != nil)
 			if hasError != tt.wantError {
-				t.Errorf("handleMarkdownOutput() error = %v, wantError %v", err, tt.wantError)
+				t.Errorf("writeSummary() error = %v, wantError %v", err, tt.wantError)
 			}
 		})
 	}
 }
 
-func TestSetupUsage(t *testing.T) {
-	// Test that setupUsage function configures flag.Usage properly.
-	// We can't easily capture the output, but we can test that the function runs without error.
-	setupUsage()
+func TestWriteSummaryMarkdown(t *testing.T) {
+	// Test that writeSummary function works with markdown format
+	summary := &TestSummary{
+		Passed: []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
+		Coverage: "75.0%",
+	}
+
+	// Test markdown output
+	err := writeSummary(summary, formatMarkdown, "")
+	if err != nil {
+		t.Errorf("writeSummary(markdown) error = %v", err)
+	}
 
 	// Test that flag.Usage is not nil after setup.
 	if flag.Usage == nil {

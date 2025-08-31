@@ -1,74 +1,45 @@
 package main
 
 import (
-	"os"
 	"testing"
 )
 
-func TestMain_Integration(t *testing.T) {
-	// This test verifies the main function integration.
-	// We'll test by setting up args and capturing exit behavior.
-
-	tests := []struct {
-		name     string
-		args     []string
-		wantExit int
-	}{
-		{
-			name:     "invalid format",
-			args:     []string{"test-summary", "-format=invalid"},
-			wantExit: 1,
-		},
+// Test helper functions functionality
+func TestHelperFunctions(t *testing.T) {
+	// Test isValidShowFilter
+	validValues := []string{"all", "failed", "passed", "skipped"}
+	for _, value := range validValues {
+		if !isValidShowFilter(value) {
+			t.Errorf("isValidShowFilter(%q) should be true", value)
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original args.
-			oldArgs := os.Args
-			defer func() { os.Args = oldArgs }()
-
-			// Set test args.
-			os.Args = tt.args
-
-			// Test run function directly to avoid os.Exit.
-			exitCode := run("non-existent-file.json", "invalid", "", "", false)
-
-			if exitCode != tt.wantExit {
-				t.Errorf("run() exitCode = %v, want %v", exitCode, tt.wantExit)
-			}
-		})
+	if isValidShowFilter("invalid") {
+		t.Errorf("isValidShowFilter('invalid') should be false")
 	}
 }
 
-func TestRun_AdditionalCases(t *testing.T) {
-	tests := []struct {
-		name       string
-		inputFile  string
-		format     string
-		outputFile string
-		wantExit   int
-	}{
-		{
-			name:       "invalid input file",
-			inputFile:  "/non/existent/file.json",
-			format:     formatStdin,
-			outputFile: "",
-			wantExit:   1,
+// Test main functions that are called from the new architecture
+func TestRunStreamAndParseIntegration(t *testing.T) {
+	// Create a test summary for testing output functionality
+	summary := &TestSummary{
+		Passed: []TestResult{
+			{Package: "test/pkg", Test: "TestPass1", Status: "pass", Duration: 0.5},
 		},
-		{
-			name:       "valid console format with stdin",
-			inputFile:  "-",
-			format:     formatStdin,
-			outputFile: "",
-			wantExit:   0,
+		Failed: []TestResult{
+			{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0},
 		},
+		Coverage: "75.0%",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := run(tt.inputFile, tt.format, tt.outputFile, "", false)
-			if got != tt.wantExit {
-				t.Errorf("run() = %v, want %v", got, tt.wantExit)
+	// Test different output formats
+	formats := []string{formatStdin, formatMarkdown}
+	
+	for _, format := range formats {
+		t.Run("format_"+format, func(t *testing.T) {
+			err := handleOutput(summary, format, "")
+			if err != nil {
+				t.Errorf("handleOutput() with format %s failed: %v", format, err)
 			}
 		})
 	}
@@ -88,8 +59,8 @@ func TestHandleOutputWithFailedSummary(t *testing.T) {
 
 func TestConstants(t *testing.T) {
 	// Test that constants are properly defined.
-	if formatStdin != "console" {
-		t.Errorf("formatStdin = %v, want 'console'", formatStdin)
+	if formatStdin != "stdin" {
+		t.Errorf("formatStdin = %v, want 'stdin'", formatStdin)
 	}
 	if formatMarkdown != "markdown" {
 		t.Errorf("formatMarkdown = %v, want 'markdown'", formatMarkdown)
@@ -99,6 +70,9 @@ func TestConstants(t *testing.T) {
 	}
 	if formatBoth != "both" {
 		t.Errorf("formatBoth = %v, want 'both'", formatBoth)
+	}
+	if formatStream != "stream" {
+		t.Errorf("formatStream = %v, want 'stream'", formatStream)
 	}
 	if stdinMarker != "-" {
 		t.Errorf("stdinMarker = %v, want '-'", stdinMarker)

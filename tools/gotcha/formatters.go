@@ -177,6 +177,10 @@ func calculateFunctionCoverage(functions []CoverageFunction) (covered, total int
 
 // writeTestCoverageSection writes the test coverage section with table format.
 func writeTestCoverageSection(output io.Writer, coverageData *CoverageData) {
+	if coverageData == nil {
+		return
+	}
+
 	fmt.Fprintf(output, "# Test Coverage\n\n")
 
 	// Build statement coverage details.

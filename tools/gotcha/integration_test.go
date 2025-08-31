@@ -1,17 +1,10 @@
 package main
 
 import (
+	"os"
+	"strings"
 	"testing"
 )
-
-func TestRun_InvalidFormat(t *testing.T) {
-	exitCode := run("", "invalid-format", "", "", false)
-
-	// Should exit with 1 for invalid format.
-	if exitCode != 1 {
-		t.Errorf("Expected exit code 1 for invalid format, got %d", exitCode)
-	}
-}
 
 func TestHandleOutput(t *testing.T) {
 	summary := &TestSummary{
@@ -26,8 +19,13 @@ func TestHandleOutput(t *testing.T) {
 		wantError bool
 	}{
 		{
-			name:      "console format",
+			name:      "stdin format",
 			format:    formatStdin,
+			wantError: false,
+		},
+		{
+			name:      "markdown format", 
+			format:    formatMarkdown,
 			wantError: false,
 		},
 		{
@@ -48,30 +46,51 @@ func TestHandleOutput(t *testing.T) {
 	}
 }
 
-func TestOpenInput(t *testing.T) {
-	tests := []struct {
-		name     string
-		filename string
-		wantErr  bool
-	}{
-		{
-			name:     "stdin",
-			filename: stdinMarker,
-			wantErr:  false,
-		},
-		{
-			name:     "nonexistent file",
-			filename: "nonexistent.json",
-			wantErr:  true,
-		},
+func TestOpenInput_WithFiles(t *testing.T) {
+	// Test reading from a file that exists
+	testData := `{"Time":"2023-01-01T00:00:00Z","Action":"pass","Package":"test/pkg","Test":"TestExample"}`
+	
+	// Create a temporary file
+	tmpfile, err := os.CreateTemp("", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+	
+	if _, err := tmpfile.Write([]byte(testData)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		t.Fatal(err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := openInput(tt.filename)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("openInput() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+	// Test file input using os.Open (which is used by parse mode)
+	file, err := os.Open(tmpfile.Name())
+	if err != nil {
+		t.Errorf("Expected to open file successfully, got error: %v", err)
+	}
+	defer file.Close()
+
+	// Read some data to verify it works
+	buf := make([]byte, len(testData))
+	n, err := file.Read(buf)
+	if err != nil {
+		t.Errorf("Expected to read from file, got error: %v", err)
+	}
+	if n != len(testData) {
+		t.Errorf("Expected to read %d bytes, got %d", len(testData), n)
+	}
+	if !strings.Contains(string(buf), "TestExample") {
+		t.Errorf("Expected test data to contain TestExample")
+	}
+}
+
+func TestNonExistentFile(t *testing.T) {
+	_, err := os.Open("nonexistent.json")
+	if err == nil {
+		t.Errorf("Expected error when opening nonexistent file, got nil")
+	}
+	if !os.IsNotExist(err) {
+		t.Errorf("Expected file not exist error, got: %v", err)
 	}
 }

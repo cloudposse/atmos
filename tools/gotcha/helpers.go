@@ -13,7 +13,7 @@ import (
 
 // isValidShowFilter validates that the show filter is one of the allowed values
 func isValidShowFilter(show string) bool {
-	validFilters := []string{"all", "failed", "passed", "skipped"}
+	validFilters := []string{"all", "failed", "passed", "skipped", "collapsed", "none"}
 	for _, valid := range validFilters {
 		if show == valid {
 			return true

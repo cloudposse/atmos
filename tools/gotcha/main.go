@@ -101,7 +101,7 @@ step summaries and markdown reports.`,
 
 	// Add stream-specific flags to root command for direct usage
 	rootCmd.Flags().String("packages", "", "Space-separated packages to test (default: ./...)")
-	rootCmd.Flags().String("show", "all", "Filter displayed tests: all, failed, passed, skipped")
+	rootCmd.Flags().String("show", "all", "Filter displayed tests: all, failed, passed, skipped, collapsed, none")
 	rootCmd.Flags().String("timeout", "40m", "Test timeout duration")
 	rootCmd.Flags().String("output", "", "Output file for JSON results (default: gotcha-results.json)")
 	rootCmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
@@ -148,7 +148,7 @@ Pre-calculates total test count for accurate progress tracking.`,
 
 	// Add stream-specific flags
 	cmd.Flags().String("packages", "", "Space-separated packages to test (default: ./...)")
-	cmd.Flags().String("show", "all", "Filter displayed tests: all, failed, passed, skipped")
+	cmd.Flags().String("show", "all", "Filter displayed tests: all, failed, passed, skipped, collapsed, none")
 	cmd.Flags().String("timeout", "40m", "Test timeout duration")
 	cmd.Flags().String("output", "", "Output file for JSON results (default: gotcha-results.json)")
 	cmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
@@ -222,7 +222,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Validate show filter
 	if !isValidShowFilter(show) {
-		return fmt.Errorf("invalid show filter '%s'. Valid options: all, failed, passed, skipped", show)
+		return fmt.Errorf("invalid show filter '%s'. Valid options: all, failed, passed, skipped, collapsed, none", show)
 	}
 
 	// Set default output file if empty
@@ -274,6 +274,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	if isTTY() {
 		// Create and run the Bubble Tea program
 		model := newTestModel(testPackages, testArgsStr, output, coverprofile, show, totalTests)
+		// Use default Bubble Tea configuration
 		p := tea.NewProgram(model)
 
 		finalModel, err := p.Run()

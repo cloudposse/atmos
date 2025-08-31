@@ -14,7 +14,90 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/term"
 )
+
+// getTerminalWidth gets the current terminal width using golang.org/x/term
+func getTerminalWidth() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		// Fallback to a reasonable default if we can't detect
+		return 80
+	}
+	return width
+}
+
+// getDisplayWidth calculates the actual display width of a string, ignoring ANSI escape sequences
+func getDisplayWidth(s string) int {
+	width := 0
+	i := 0
+	runes := []rune(s)
+
+	for i < len(runes) {
+		r := runes[i]
+
+		switch r {
+		case '\033': // ESC character - start of ANSI escape sequence
+			// Skip the entire ANSI escape sequence
+			i = skipAnsiSequence(runes, i)
+		default:
+			// Count printable characters
+			if r >= 32 && r < 127 {
+				width++
+			} else if r > 127 {
+				// Basic handling for Unicode - most characters are width 1
+				width++
+			}
+			// Control characters (0-31) don't add to width
+			i++
+		}
+	}
+
+	return width
+}
+
+// skipAnsiSequence skips over ANSI escape sequences and returns the next index
+func skipAnsiSequence(runes []rune, start int) int {
+	if start >= len(runes) || runes[start] != '\033' {
+		return start + 1
+	}
+
+	i := start + 1
+	if i >= len(runes) {
+		return i
+	}
+
+	switch runes[i] {
+	case '[':
+		return skipCSISequence(runes, i)
+	case '(', ')':
+		return i + 2
+	default:
+		return i + 1
+	}
+}
+
+// skipCSISequence handles CSI (Control Sequence Introducer) sequences
+func skipCSISequence(runes []rune, start int) int {
+	i := start + 1 // skip '['
+
+	// Skip parameters until we find the final character
+	for i < len(runes) && isCSIParameter(runes[i]) {
+		i++
+	}
+
+	// Skip the final character if present
+	if i < len(runes) {
+		i++
+	}
+
+	return i
+}
+
+// isCSIParameter checks if a rune is a valid CSI parameter character
+func isCSIParameter(r rune) bool {
+	return (r >= '0' && r <= '9') || r == ';' || r == ' ' || r == '?' || r == '!'
+}
 
 type testModel struct {
 	// Test tracking
@@ -42,34 +125,29 @@ type testModel struct {
 	skipCount   int
 	testBuffers map[string][]string
 	bufferMu    sync.Mutex
-
+	
 	// JSON output
 	jsonFile *os.File
-
+	
 	// Streaming state - persistent across reads
 	scanner *bufio.Scanner
 	stdout  io.ReadCloser
 }
 
 // Bubble Tea messages
-type (
-	testStartMsg struct{ test string }
-	testPassMsg  struct {
-		test    string
-		elapsed float64
-	}
-)
-
+type testStartMsg struct{ test string }
+type testPassMsg struct {
+	test    string
+	elapsed float64
+}
 type testFailMsg struct {
 	test    string
 	elapsed float64
 	output  []string
 }
-type (
-	testSkipMsg  struct{ test string }
-	testsDoneMsg struct{}
-	testErrorMsg struct{ err error }
-)
+type testSkipMsg struct{ test string }
+type testsDoneMsg struct{}
+type testErrorMsg struct{ err error }
 
 // Message for when subprocess is initialized and ready to stream
 type subprocessReadyMsg struct {
@@ -141,7 +219,7 @@ func (m testModel) Init() tea.Cmd {
 	)
 }
 
-// startTestsCmd initializes and starts the test subprocess
+// startTestsCmd initializes and starts the test subprocess  
 func (m testModel) startTestsCmd() tea.Cmd {
 	return func() tea.Msg {
 		// Open JSON output file
@@ -178,20 +256,20 @@ func (m testModel) readNextLine() tea.Cmd {
 		// Use the scanner from the model - this persists across reads
 		if m.scanner != nil && m.scanner.Scan() {
 			line := m.scanner.Bytes()
-
+			
 			// Write to JSON file
 			if m.jsonFile != nil {
 				m.jsonFile.Write(line)
 				m.jsonFile.Write([]byte("\n"))
 			}
-
+			
 			// Make a copy since scanner reuses the buffer
 			lineCopy := make([]byte, len(line))
 			copy(lineCopy, line)
-
+			
 			return streamOutputMsg{line: lineCopy}
 		}
-
+		
 		// Scanner finished, close resources and signal completion
 		if m.stdout != nil {
 			m.stdout.Close()
@@ -206,6 +284,7 @@ func (m testModel) readNextLine() tea.Cmd {
 func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		// Store the size but we use our own terminal width detection
 		m.width, m.height = msg.Width, msg.Height
 		return m, nil
 
@@ -229,7 +308,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case subprocessReadyMsg:
 		// Store the streaming state in the model
 		m.scanner = msg.scanner
-		m.stdout = msg.stdout
+		m.stdout = msg.stdout  
 		m.jsonFile = msg.jsonFile
 		// Start reading the first line
 		return m, m.readNextLine()
@@ -242,6 +321,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.readNextLine(), m.spinner.Tick)
 		}
 
+
 		// Skip package-level events for most actions
 		if event.Test == "" {
 			return m, tea.Batch(m.readNextLine(), m.spinner.Tick) // Continue reading
@@ -249,7 +329,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Convert to appropriate test message and continue streaming
 		var nextCmd tea.Cmd = m.readNextLine()
-
+		
 		switch event.Action {
 		case "run":
 			m.currentTest = event.Test
@@ -259,7 +339,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Unlock()
 			// Batch next command with spinner tick to keep UI updating
 			return m, tea.Batch(nextCmd, m.spinner.Tick)
-
+			
 		case "output":
 			// Buffer the output for potential error display
 			m.bufferMu.Lock()
@@ -269,11 +349,11 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Unlock()
 			// Batch next command with spinner tick to keep UI updating
 			return m, tea.Batch(nextCmd, m.spinner.Tick)
-
+			
 		case "pass":
 			m.passCount++
 			m.currentIndex++
-
+			
 			// Update progress
 			var progressCmd tea.Cmd
 			if m.totalTests > 0 {
@@ -282,8 +362,11 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			var displayCmd tea.Cmd
 			// Only show if filter allows it
-			if m.shouldShowTest("pass") {
-				output := fmt.Sprintf("%s %s %s",
+			// Don't print passed tests immediately to avoid overwriting progress bar
+			// The progress bar shows the current status
+			if m.shouldShowTest("pass") && m.showFilter == "passed" {
+				// Only show passed tests if explicitly requested
+				output := fmt.Sprintf("%s %s %s\n",
 					passStyle.Render(checkPass),
 					testNameStyle.Render(event.Test),
 					durationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
@@ -294,7 +377,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Lock()
 			delete(m.testBuffers, event.Test)
 			m.bufferMu.Unlock()
-
+			
 			// Continue reading and optionally show progress/display
 			cmds := []tea.Cmd{nextCmd, m.spinner.Tick}
 			if progressCmd != nil {
@@ -304,7 +387,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, displayCmd)
 			}
 			return m, tea.Batch(cmds...)
-
+			
 		case "fail":
 			// Get buffered output for this test
 			m.bufferMu.Lock()
@@ -312,10 +395,10 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			output := make([]string, len(bufferedOutput))
 			copy(output, bufferedOutput)
 			m.bufferMu.Unlock()
-
+			
 			m.failCount++
 			m.currentIndex++
-
+			
 			// Update progress
 			var progressCmd tea.Cmd
 			if m.totalTests > 0 {
@@ -325,7 +408,8 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var displayCmd tea.Cmd
 			// Only show if filter allows it
 			if m.shouldShowTest("fail") {
-				displayOutput := fmt.Sprintf("%s %s %s",
+				// Start with newline to separate from progress bar
+				displayOutput := fmt.Sprintf("\n%s %s %s",
 					failStyle.Render(checkFail),
 					testNameStyle.Render(event.Test),
 					durationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
@@ -334,13 +418,13 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(output) > 0 {
 					displayOutput += "\n\n"
 					for _, line := range output {
-						if shouldShowErrorLine(line) {
-							displayOutput += "    " + line
-						}
+						// Show all error output
+						displayOutput += "    " + line
 					}
-					displayOutput += "\n"
 				}
-
+				// Single newline - test name line is the visual separator
+				displayOutput += "\n"
+				
 				displayCmd = tea.Printf("%s", displayOutput)
 			}
 
@@ -348,7 +432,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Lock()
 			delete(m.testBuffers, event.Test)
 			m.bufferMu.Unlock()
-
+			
 			// Continue reading and optionally show progress/display
 			cmds := []tea.Cmd{nextCmd, m.spinner.Tick}
 			if progressCmd != nil {
@@ -358,11 +442,11 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, displayCmd)
 			}
 			return m, tea.Batch(cmds...)
-
+			
 		case "skip":
 			m.skipCount++
 			m.currentIndex++
-
+			
 			// Update progress
 			var progressCmd tea.Cmd
 			if m.totalTests > 0 {
@@ -371,8 +455,10 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			var displayCmd tea.Cmd
 			// Only show if filter allows it
-			if m.shouldShowTest("skip") {
-				output := fmt.Sprintf("%s %s",
+			// Don't print skipped tests immediately to avoid overwriting progress bar
+			if m.shouldShowTest("skip") && m.showFilter == "skipped" {
+				// Only show skipped tests if explicitly requested
+				output := fmt.Sprintf("%s %s\n",
 					skipStyle.Render(checkSkip),
 					testNameStyle.Render(event.Test))
 				displayCmd = tea.Printf("%s", output)
@@ -382,7 +468,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Lock()
 			delete(m.testBuffers, event.Test)
 			m.bufferMu.Unlock()
-
+			
 			// Continue reading and optionally show progress/display
 			cmds := []tea.Cmd{nextCmd, m.spinner.Tick}
 			if progressCmd != nil {
@@ -392,7 +478,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, displayCmd)
 			}
 			return m, tea.Batch(cmds...)
-
+			
 		default:
 			return m, nextCmd
 		}
@@ -413,6 +499,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 		return m, tea.Quit
+
 
 	case testErrorMsg:
 		m.done = true
@@ -447,7 +534,7 @@ func (m testModel) View() string {
 
 	// Build the status line components
 	spin := m.spinner.View() + " "
-
+	
 	var info string
 	if m.currentTest != "" {
 		info = fmt.Sprintf("Running %s...", testNameStyle.Render(m.currentTest))
@@ -456,40 +543,52 @@ func (m testModel) View() string {
 	}
 
 	prog := m.progress.View()
-
+	
 	// Calculate elapsed time
 	elapsed := time.Since(m.startTime)
 	elapsedSeconds := int(elapsed.Seconds())
-
+	
+	// Calculate buffer size
+	bufferSizeKB := m.getBufferSizeKB()
+	
 	var count string
 	if m.totalTests > 0 {
-		count = fmt.Sprintf(" %d/%d      (%ds)", m.currentIndex, m.totalTests, elapsedSeconds)
+		count = fmt.Sprintf(" %d/%d (%ds) %.1fKB", m.currentIndex, m.totalTests, elapsedSeconds, bufferSizeKB)
 	} else {
-		count = fmt.Sprintf(" %d      (%ds)", m.currentIndex, elapsedSeconds)
+		count = fmt.Sprintf(" %d (%ds) %.1fKB", m.currentIndex, elapsedSeconds, bufferSizeKB)
 	}
 
-	// Calculate available space for the info section
-	usedWidth := len(spin) + len(prog) + len(count)
-	availableWidth := max(0, m.width-usedWidth)
-
-	// Truncate info if necessary
-	if len(info) > availableWidth {
-		if availableWidth > 3 {
+	// Use our own terminal width detection instead of Bubble Tea's
+	terminalWidth := getTerminalWidth()
+	// Use display width to ignore ANSI color codes
+	usedWidth := getDisplayWidth(spin) + getDisplayWidth(prog) + getDisplayWidth(count)
+	availableWidth := max(0, terminalWidth-usedWidth)
+	
+	// Truncate info if necessary, but always show something
+	if getDisplayWidth(info) > availableWidth {
+		if availableWidth > 10 {
 			info = info[:availableWidth-3] + "..."
+		} else if availableWidth > 3 {
+			// Show abbreviated version
+			info = "Run..."
 		} else {
-			info = ""
+			// Very narrow terminal, show minimal info
+			info = "..."
 		}
 	}
 
-	// Calculate gap
+	// Calculate gap using our terminal width
 	gap := ""
-	if m.width > 0 {
-		gapWidth := max(0, m.width-len(spin)-len(info)-len(prog)-len(count))
+	if terminalWidth > 0 {
+		gapWidth := max(0, terminalWidth-getDisplayWidth(spin)-getDisplayWidth(info)-getDisplayWidth(prog)-getDisplayWidth(count))
 		gap = strings.Repeat(" ", gapWidth)
 	}
 
-	return spin + info + gap + prog + count
+	return spin + info + gap + prog + count + "\n"
 }
+
+
+
 
 func max(a, b int) int {
 	if a > b {
@@ -509,6 +608,10 @@ func (m testModel) shouldShowTest(status string) bool {
 		return status == "pass"
 	case "skipped":
 		return status == "skip"
+	case "collapsed":
+		return true // In collapsed mode, we still check shouldShowTest but handle display differently
+	case "none":
+		return false // Show no test output, only final summary
 	}
 	return false // This should never be reached due to validation
 }
@@ -530,13 +633,13 @@ func (m testModel) generateFinalSummary() string {
 	githubSummary := os.Getenv("GITHUB_STEP_SUMMARY")
 	var summaryStatus string
 	var summaryPath string
-
+	
 	if githubSummary == "" {
 		summaryStatus = "- GITHUB_STEP_SUMMARY not set (skipped)."
 	} else {
 		summaryStatus = fmt.Sprintf("Output GitHub step summary to %s", githubSummary)
 	}
-
+	
 	// Check for markdown summary file
 	if _, err := os.Stat("test-summary.md"); err == nil {
 		summaryPath = fmt.Sprintf("%s Output markdown summary to test-summary.md", passStyle.Render(checkPass))
@@ -544,10 +647,10 @@ func (m testModel) generateFinalSummary() string {
 
 	// Calculate total tests and duration (approximate)
 	totalTests := m.passCount + m.failCount + m.skipCount
-
+	
 	// Build the summary box
 	border := strings.Repeat("─", 40)
-
+	
 	var output strings.Builder
 	output.WriteString("\n")
 	output.WriteString(summaryStatus)
@@ -566,6 +669,20 @@ func (m testModel) generateFinalSummary() string {
 	output.WriteString(fmt.Sprintf("  Total:    %d tests\n", totalTests))
 	output.WriteString(border)
 	output.WriteString("\n")
-
+	
 	return output.String()
+}
+
+// getBufferSizeKB calculates the total size of all test buffers in KB
+func (m testModel) getBufferSizeKB() float64 {
+	m.bufferMu.Lock()
+	defer m.bufferMu.Unlock()
+	
+	totalBytes := 0
+	for _, lines := range m.testBuffers {
+		for _, line := range lines {
+			totalBytes += len(line) + 1 // +1 for newline character
+		}
+	}
+	return float64(totalBytes) / 1024.0
 }
