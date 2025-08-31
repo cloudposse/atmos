@@ -125,29 +125,33 @@ type testModel struct {
 	skipCount   int
 	testBuffers map[string][]string
 	bufferMu    sync.Mutex
-	
+
 	// JSON output
 	jsonFile *os.File
-	
+
 	// Streaming state - persistent across reads
 	scanner *bufio.Scanner
 	stdout  io.ReadCloser
 }
 
 // Bubble Tea messages
-type testStartMsg struct{ test string }
-type testPassMsg struct {
-	test    string
-	elapsed float64
-}
+type (
+	testStartMsg struct{ test string }
+	testPassMsg  struct {
+		test    string
+		elapsed float64
+	}
+)
 type testFailMsg struct {
 	test    string
 	elapsed float64
 	output  []string
 }
-type testSkipMsg struct{ test string }
-type testsDoneMsg struct{}
-type testErrorMsg struct{ err error }
+type (
+	testSkipMsg  struct{ test string }
+	testsDoneMsg struct{}
+	testErrorMsg struct{ err error }
+)
 
 // Message for when subprocess is initialized and ready to stream
 type subprocessReadyMsg struct {
@@ -219,7 +223,7 @@ func (m testModel) Init() tea.Cmd {
 	)
 }
 
-// startTestsCmd initializes and starts the test subprocess  
+// startTestsCmd initializes and starts the test subprocess
 func (m testModel) startTestsCmd() tea.Cmd {
 	return func() tea.Msg {
 		// Open JSON output file
@@ -256,20 +260,20 @@ func (m testModel) readNextLine() tea.Cmd {
 		// Use the scanner from the model - this persists across reads
 		if m.scanner != nil && m.scanner.Scan() {
 			line := m.scanner.Bytes()
-			
+
 			// Write to JSON file
 			if m.jsonFile != nil {
 				m.jsonFile.Write(line)
 				m.jsonFile.Write([]byte("\n"))
 			}
-			
+
 			// Make a copy since scanner reuses the buffer
 			lineCopy := make([]byte, len(line))
 			copy(lineCopy, line)
-			
+
 			return streamOutputMsg{line: lineCopy}
 		}
-		
+
 		// Scanner finished, close resources and signal completion
 		if m.stdout != nil {
 			m.stdout.Close()
@@ -308,7 +312,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case subprocessReadyMsg:
 		// Store the streaming state in the model
 		m.scanner = msg.scanner
-		m.stdout = msg.stdout  
+		m.stdout = msg.stdout
 		m.jsonFile = msg.jsonFile
 		// Start reading the first line
 		return m, m.readNextLine()
@@ -321,7 +325,6 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.readNextLine(), m.spinner.Tick)
 		}
 
-
 		// Skip package-level events for most actions
 		if event.Test == "" {
 			return m, tea.Batch(m.readNextLine(), m.spinner.Tick) // Continue reading
@@ -329,7 +332,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Convert to appropriate test message and continue streaming
 		var nextCmd tea.Cmd = m.readNextLine()
-		
+
 		switch event.Action {
 		case "run":
 			m.currentTest = event.Test
@@ -339,7 +342,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Unlock()
 			// Batch next command with spinner tick to keep UI updating
 			return m, tea.Batch(nextCmd, m.spinner.Tick)
-			
+
 		case "output":
 			// Buffer the output for potential error display
 			m.bufferMu.Lock()
@@ -349,11 +352,11 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Unlock()
 			// Batch next command with spinner tick to keep UI updating
 			return m, tea.Batch(nextCmd, m.spinner.Tick)
-			
+
 		case "pass":
 			m.passCount++
 			m.currentIndex++
-			
+
 			// Update progress
 			var progressCmd tea.Cmd
 			if m.totalTests > 0 {
@@ -377,7 +380,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Lock()
 			delete(m.testBuffers, event.Test)
 			m.bufferMu.Unlock()
-			
+
 			// Continue reading and optionally show progress/display
 			cmds := []tea.Cmd{nextCmd, m.spinner.Tick}
 			if progressCmd != nil {
@@ -387,7 +390,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, displayCmd)
 			}
 			return m, tea.Batch(cmds...)
-			
+
 		case "fail":
 			// Get buffered output for this test
 			m.bufferMu.Lock()
@@ -395,10 +398,10 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			output := make([]string, len(bufferedOutput))
 			copy(output, bufferedOutput)
 			m.bufferMu.Unlock()
-			
+
 			m.failCount++
 			m.currentIndex++
-			
+
 			// Update progress
 			var progressCmd tea.Cmd
 			if m.totalTests > 0 {
@@ -424,7 +427,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Single newline - test name line is the visual separator
 				displayOutput += "\n"
-				
+
 				displayCmd = tea.Printf("%s", displayOutput)
 			}
 
@@ -432,7 +435,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Lock()
 			delete(m.testBuffers, event.Test)
 			m.bufferMu.Unlock()
-			
+
 			// Continue reading and optionally show progress/display
 			cmds := []tea.Cmd{nextCmd, m.spinner.Tick}
 			if progressCmd != nil {
@@ -442,11 +445,11 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, displayCmd)
 			}
 			return m, tea.Batch(cmds...)
-			
+
 		case "skip":
 			m.skipCount++
 			m.currentIndex++
-			
+
 			// Update progress
 			var progressCmd tea.Cmd
 			if m.totalTests > 0 {
@@ -468,7 +471,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Lock()
 			delete(m.testBuffers, event.Test)
 			m.bufferMu.Unlock()
-			
+
 			// Continue reading and optionally show progress/display
 			cmds := []tea.Cmd{nextCmd, m.spinner.Tick}
 			if progressCmd != nil {
@@ -478,7 +481,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, displayCmd)
 			}
 			return m, tea.Batch(cmds...)
-			
+
 		default:
 			return m, nextCmd
 		}
@@ -499,7 +502,6 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 		return m, tea.Quit
-
 
 	case testErrorMsg:
 		m.done = true
@@ -534,7 +536,7 @@ func (m testModel) View() string {
 
 	// Build the status line components
 	spin := m.spinner.View() + " "
-	
+
 	var info string
 	if m.currentTest != "" {
 		info = fmt.Sprintf("Running %s...", testNameStyle.Render(m.currentTest))
@@ -543,14 +545,14 @@ func (m testModel) View() string {
 	}
 
 	prog := m.progress.View()
-	
+
 	// Calculate elapsed time
 	elapsed := time.Since(m.startTime)
 	elapsedSeconds := int(elapsed.Seconds())
-	
+
 	// Calculate buffer size
 	bufferSizeKB := m.getBufferSizeKB()
-	
+
 	var count string
 	if m.totalTests > 0 {
 		count = fmt.Sprintf(" %d/%d (%ds) %.1fKB", m.currentIndex, m.totalTests, elapsedSeconds, bufferSizeKB)
@@ -563,7 +565,7 @@ func (m testModel) View() string {
 	// Use display width to ignore ANSI color codes
 	usedWidth := getDisplayWidth(spin) + getDisplayWidth(prog) + getDisplayWidth(count)
 	availableWidth := max(0, terminalWidth-usedWidth)
-	
+
 	// Truncate info if necessary, but always show something
 	if getDisplayWidth(info) > availableWidth {
 		if availableWidth > 10 {
@@ -586,9 +588,6 @@ func (m testModel) View() string {
 
 	return spin + info + gap + prog + count + "\n"
 }
-
-
-
 
 func max(a, b int) int {
 	if a > b {
@@ -633,13 +632,13 @@ func (m testModel) generateFinalSummary() string {
 	githubSummary := os.Getenv("GITHUB_STEP_SUMMARY")
 	var summaryStatus string
 	var summaryPath string
-	
+
 	if githubSummary == "" {
 		summaryStatus = "- GITHUB_STEP_SUMMARY not set (skipped)."
 	} else {
 		summaryStatus = fmt.Sprintf("Output GitHub step summary to %s", githubSummary)
 	}
-	
+
 	// Check for markdown summary file
 	if _, err := os.Stat("test-summary.md"); err == nil {
 		summaryPath = fmt.Sprintf("%s Output markdown summary to test-summary.md", passStyle.Render(checkPass))
@@ -647,10 +646,10 @@ func (m testModel) generateFinalSummary() string {
 
 	// Calculate total tests and duration (approximate)
 	totalTests := m.passCount + m.failCount + m.skipCount
-	
+
 	// Build the summary box
 	border := strings.Repeat("─", 40)
-	
+
 	var output strings.Builder
 	output.WriteString("\n")
 	output.WriteString(summaryStatus)
@@ -669,7 +668,7 @@ func (m testModel) generateFinalSummary() string {
 	output.WriteString(fmt.Sprintf("  Total:    %d tests\n", totalTests))
 	output.WriteString(border)
 	output.WriteString("\n")
-	
+
 	return output.String()
 }
 
@@ -677,7 +676,7 @@ func (m testModel) generateFinalSummary() string {
 func (m testModel) getBufferSizeKB() float64 {
 	m.bufferMu.Lock()
 	defer m.bufferMu.Unlock()
-	
+
 	totalBytes := 0
 	for _, lines := range m.testBuffers {
 		for _, line := range lines {

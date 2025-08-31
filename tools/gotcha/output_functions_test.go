@@ -85,7 +85,7 @@ func TestHandleMarkdownOutput(t *testing.T) {
 func TestWriteSummaryMarkdown(t *testing.T) {
 	// Test that writeSummary function works with markdown format
 	summary := &TestSummary{
-		Passed: []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
+		Passed:   []TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
 		Coverage: "75.0%",
 	}
 

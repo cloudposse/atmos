@@ -34,7 +34,7 @@ func TestRunStreamAndParseIntegration(t *testing.T) {
 
 	// Test different output formats
 	formats := []string{formatStdin, formatMarkdown}
-	
+
 	for _, format := range formats {
 		t.Run("format_"+format, func(t *testing.T) {
 			err := handleOutput(summary, format, "")

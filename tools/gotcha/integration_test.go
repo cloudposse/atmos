@@ -24,7 +24,7 @@ func TestHandleOutput(t *testing.T) {
 			wantError: false,
 		},
 		{
-			name:      "markdown format", 
+			name:      "markdown format",
 			format:    formatMarkdown,
 			wantError: false,
 		},
@@ -49,14 +49,14 @@ func TestHandleOutput(t *testing.T) {
 func TestOpenInput_WithFiles(t *testing.T) {
 	// Test reading from a file that exists
 	testData := `{"Time":"2023-01-01T00:00:00Z","Action":"pass","Package":"test/pkg","Test":"TestExample"}`
-	
+
 	// Create a temporary file
 	tmpfile, err := os.CreateTemp("", "test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(tmpfile.Name())
-	
+
 	if _, err := tmpfile.Write([]byte(testData)); err != nil {
 		t.Fatal(err)
 	}
