@@ -56,19 +56,18 @@ func initGlobalLogger() {
 func main() {
 	// Initialize global logger before any other operations
 	initGlobalLogger()
-	
+
 	if err := execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
 func execute() error {
-
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	// Create root command
-	var rootCmd = &cobra.Command{
+	rootCmd := &cobra.Command{
 		Use:   "gotcha [path]",
 		Short: "Advanced Go test runner with real-time progress tracking",
 		Long: `Gotcha is a sophisticated Go test runner that provides real-time progress tracking,
@@ -210,22 +209,22 @@ func newVersionCmd(logger *log.Logger) *cobra.Command {
 
 func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	logger.Info("Starting stream mode with real-time test execution")
-	
+
 	// Get flags
 	packages, _ := cmd.Flags().GetString("packages")
 	show, _ := cmd.Flags().GetString("show")
 	timeout, _ := cmd.Flags().GetString("timeout")
 	output, _ := cmd.Flags().GetString("output")
 	coverprofile, _ := cmd.Flags().GetString("coverprofile")
-	_, _ = cmd.Flags().GetBool("exclude-mocks")  // Not used in stream mode
+	_, _ = cmd.Flags().GetBool("exclude-mocks") // Not used in stream mode
 	include, _ := cmd.Flags().GetString("include")
 	exclude, _ := cmd.Flags().GetString("exclude")
-	
+
 	// Set default output file if empty
 	if output == "" {
 		output = "gotcha-results.json"
 	}
-	
+
 	// Get packages from flags or arguments
 	var testPackages []string
 	if packages != "" {
@@ -262,7 +261,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Prepare test arguments
 	testArgsStr := "-timeout " + timeout
-	
+
 	// Pre-calculate total test count for progress display
 	totalTests := getTestCount(testPackages, testArgsStr)
 
@@ -271,12 +270,12 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		// Create and run the Bubble Tea program
 		model := newTestModel(testPackages, testArgsStr, output, coverprofile, show, totalTests)
 		p := tea.NewProgram(model)
-		
+
 		finalModel, err := p.Run()
 		if err != nil {
 			return fmt.Errorf("failed to run test UI: %w", err)
 		}
-		
+
 		// Extract exit code from final model
 		if m, ok := finalModel.(testModel); ok {
 			exitCode := m.GetExitCode()
@@ -291,28 +290,28 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 			return fmt.Errorf("tests failed with exit code %d", exitCode)
 		}
 	}
-	
+
 	logger.Info("Stream mode completed successfully")
 	return nil
 }
 
 func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	logger.Info("Starting parse mode for JSON test results")
-	
+
 	// Get flags
 	input, _ := cmd.Flags().GetString("input")
 	format, _ := cmd.Flags().GetString("format")
 	output, _ := cmd.Flags().GetString("output")
 	coverprofile, _ := cmd.Flags().GetString("coverprofile")
 	excludeMocks, _ := cmd.Flags().GetBool("exclude-mocks")
-	
+
 	// Handle input source
 	var inputReader *os.File
 	var err error
 	if len(args) > 0 {
 		input = args[0]
 	}
-	
+
 	if input == "" || input == "-" {
 		inputReader = os.Stdin
 	} else {
@@ -334,10 +333,10 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	if err != nil {
 		return fmt.Errorf("error writing output: %w", err)
 	}
-	
+
 	// Silence unused variable warning
 	_ = excludeMocks
-	
+
 	logger.Info("Parse mode completed successfully")
 	return nil
 }

@@ -144,7 +144,6 @@ func getTestCount(testPackages []string, testArgs string) int {
 
 			return nil
 		})
-
 		if err != nil {
 			globalLogger.Warn("Failed to walk directory", "pkg", pkg, "error", err)
 		}
