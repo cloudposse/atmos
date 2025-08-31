@@ -2,7 +2,7 @@ package main
 
 import "errors"
 
-// Static errors for test-summary tool to comply with linting requirements.
+// Static errors for gotcha tool to comply with linting requirements.
 var (
 	// Coverage parsing errors.
 	ErrInvalidCoverageLineFormat     = errors.New("invalid coverage line format")

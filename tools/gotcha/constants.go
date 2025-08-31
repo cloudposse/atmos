@@ -2,7 +2,7 @@ package main
 
 const (
 	// Format constants.
-	formatConsole  = "console"
+	formatStdin    = "stdin"
 	formatMarkdown = "markdown"
 	formatGitHub   = "github"
 	formatBoth     = "both"

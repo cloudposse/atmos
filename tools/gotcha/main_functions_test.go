@@ -51,14 +51,14 @@ func TestRun_AdditionalCases(t *testing.T) {
 		{
 			name:       "invalid input file",
 			inputFile:  "/non/existent/file.json",
-			format:     formatConsole,
+			format:     formatStdin,
 			outputFile: "",
 			wantExit:   1,
 		},
 		{
 			name:       "valid console format with stdin",
 			inputFile:  "-",
-			format:     formatConsole,
+			format:     formatStdin,
 			outputFile: "",
 			wantExit:   0,
 		},
@@ -80,7 +80,7 @@ func TestHandleOutputWithFailedSummary(t *testing.T) {
 		Failed: []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
 	}
 
-	err := handleOutput(summary, formatConsole, "")
+	err := handleOutput(summary, formatStdin, "")
 	if err != nil {
 		t.Errorf("handleOutput() with failed tests = %v, want nil", err)
 	}
@@ -88,8 +88,8 @@ func TestHandleOutputWithFailedSummary(t *testing.T) {
 
 func TestConstants(t *testing.T) {
 	// Test that constants are properly defined.
-	if formatConsole != "console" {
-		t.Errorf("formatConsole = %v, want 'console'", formatConsole)
+	if formatStdin != "console" {
+		t.Errorf("formatStdin = %v, want 'console'", formatStdin)
 	}
 	if formatMarkdown != "markdown" {
 		t.Errorf("formatMarkdown = %v, want 'markdown'", formatMarkdown)

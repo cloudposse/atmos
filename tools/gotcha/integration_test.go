@@ -27,7 +27,7 @@ func TestHandleOutput(t *testing.T) {
 	}{
 		{
 			name:      "console format",
-			format:    formatConsole,
+			format:    formatStdin,
 			wantError: false,
 		},
 		{

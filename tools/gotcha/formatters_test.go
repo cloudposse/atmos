@@ -332,8 +332,8 @@ func TestWritePRFilteredUncoveredFunctions(t *testing.T) {
 		{
 			name: "write filtered uncovered functions",
 			functions: []CoverageFunction{
-				{Function: "func1", File: "tools/test-summary/coverage.go", Coverage: 0.0},
-				{Function: "func2", File: "tools/test-summary/formatters.go", Coverage: 0.0},
+				{Function: "func1", File: "tools/gotcha/coverage.go", Coverage: 0.0},
+				{Function: "func2", File: "tools/gotcha/formatters.go", Coverage: 0.0},
 			},
 			wantContains: []string{
 				"func1",

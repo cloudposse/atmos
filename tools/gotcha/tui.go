@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -24,6 +25,7 @@ type testModel struct {
 	height       int
 	done         bool
 	aborted      bool
+	startTime    time.Time
 
 	// UI components
 	spinner  spinner.Model
@@ -76,7 +78,7 @@ type streamOutputMsg struct {
 	line []byte
 }
 
-func newTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string) testModel {
+func newTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int) testModel {
 	// Create progress bar
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -113,10 +115,7 @@ func newTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 	// Create command
 	cmd := exec.Command("go", args...)
 	cmd.Stderr = os.Stderr
-	// Set working directory - if we're in tools/test-summary, go up two levels
-	if wd, err := os.Getwd(); err == nil && strings.HasSuffix(wd, "tools/test-summary") {
-		cmd.Dir = "../.."
-	}
+	// Command runs from current directory (which should be repo root)
 
 	return testModel{
 		cmd:         cmd,
@@ -125,6 +124,8 @@ func newTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		spinner:     s,
 		progress:    p,
 		testBuffers: make(map[string][]string),
+		totalTests:  totalTests,
+		startTime:   time.Now(),
 	}
 }
 
@@ -453,11 +454,15 @@ func (m testModel) View() string {
 
 	prog := m.progress.View()
 	
+	// Calculate elapsed time
+	elapsed := time.Since(m.startTime)
+	elapsedSeconds := int(elapsed.Seconds())
+	
 	var count string
 	if m.totalTests > 0 {
-		count = fmt.Sprintf(" %d/%d", m.currentIndex, m.totalTests)
+		count = fmt.Sprintf(" %d/%d      (%ds)", m.currentIndex, m.totalTests, elapsedSeconds)
 	} else {
-		count = fmt.Sprintf(" %d", m.currentIndex)
+		count = fmt.Sprintf(" %d      (%ds)", m.currentIndex, elapsedSeconds)
 	}
 
 	// Calculate available space for the info section
@@ -504,9 +509,8 @@ func (m testModel) shouldShowTest(status string) bool {
 		return status == "pass"
 	case "skipped":
 		return status == "skip"
-	default:
-		return true // Default to showing all
 	}
+	return false // This should never be reached due to validation
 }
 
 // GetExitCode returns the appropriate exit code based on test results.
