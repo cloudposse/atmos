@@ -123,7 +123,9 @@ func TestRunToolWithInstaller(t *testing.T) {
 			}
 			defer func() { execCommand = originalExecCommand }()
 			SetAtmosConfig(&schema.AtmosConfiguration{
-				Toolchain: schema.Toolchain{},
+				Toolchain: schema.Toolchain{
+					ToolsDir: t.TempDir(),
+				},
 			})
 			// Run the function
 			err := RunToolWithInstaller(mockRunner, tt.tool, tt.version, tt.args)
