@@ -1119,7 +1119,6 @@ func TestExtractAndInstallWithRawBinary(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "extract-test-")
-
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
