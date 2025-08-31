@@ -1119,6 +1119,7 @@ func TestExtractAndInstallWithRawBinary(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "extract-test-")
+
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -1139,7 +1140,8 @@ func TestExtractAndInstallWithRawBinary(t *testing.T) {
 		RepoName: "atmos",
 		Type:     "http",
 	}
-
+	di, _ := os.Getwd()
+	t.Log("tempDir", di)
 	// Test extractAndInstall with raw binary
 	binaryPath, err := installer.extractAndInstall(tool, rawBinaryPath, "1.0.0")
 	if err != nil {
