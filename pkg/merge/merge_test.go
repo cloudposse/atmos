@@ -23,6 +23,20 @@ func TestMergeBasic(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
+func TestMerge_NilAtmosConfigDefaultsToReplace(t *testing.T) {
+	// Nil atmosConfig should not panic and should default to Replace strategy
+	map1 := map[string]any{"list": []string{"1"}}
+	map2 := map[string]any{"list": []string{"2"}}
+	inputs := []map[string]any{map1, map2}
+
+	res, err := Merge(nil, inputs)
+	assert.NoError(t, err)
+
+	// Replace strategy should yield the latter list
+	expected := map[string]any{"list": []any{"2"}}
+	assert.Equal(t, expected, res)
+}
+
 func TestMergeBasicOverride(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 
