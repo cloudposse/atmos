@@ -69,29 +69,28 @@ testacc-coverage: testacc-cover
 
 # New target with test summary for local development
 testacc-summary: get
-	@cd tools/test-summary && go install .
-	@TESTPACKAGES=$$(go list ./... 2>/dev/null || echo "./..."); \
-		test-summary -format=stream \
-		-packages="$$TESTPACKAGES" \
-		-testargs="$(TESTARGS) -timeout 40m" \
-		-coverprofile=coverage.out \
-		-output=test-results.json
-	@test-summary -input=test-results.json -coverprofile=coverage.out -format=github
+	@cd tools/gotcha && go install .
+	@gotcha stream ./... \
+		--timeout=40m \
+		--coverprofile=coverage.out \
+		--output=gotcha-results.json \
+		-- $(TESTARGS)
+	@gotcha parse gotcha-results.json --format=github --coverprofile=coverage.out
 
 # CI target (alias for testacc-summary)
 testacc-ci: testacc-summary
 
 # View existing test results without re-running tests
 testacc-view-summary:
-	@if [ -f test-results.json ]; then \
-		if ! command -v test-summary >/dev/null 2>&1; then cd tools/test-summary && go install .; fi && \
-		test-summary -input=test-results.json -format=markdown; \
+	@if [ -f gotcha-results.json ]; then \
+		if ! command -v gotcha >/dev/null 2>&1; then cd tools/gotcha && go install .; fi && \
+		gotcha parse gotcha-results.json --format=markdown; \
 	else \
-		echo "No test-results.json found. Run 'make testacc-summary' first." >&2; \
+		echo "No gotcha-results.json found. Run 'make testacc-summary' first." >&2; \
 	fi
 
 # Clean test artifacts
 clean-test:
-	rm -f test-results.json test-summary.md coverage.out coverage.html
+	rm -f test-results.json test-summary.md coverage.out coverage.html gotcha-results.json
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-summary testacc-ci testacc-view-summary clean-test
