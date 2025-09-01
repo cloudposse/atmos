@@ -223,7 +223,7 @@ func emitAlert(enabled bool) {
 
 // runSimpleStream runs tests with simple non-interactive streaming output.
 func runSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int, alert bool) int {
-	fmt.Fprintf(os.Stderr, "Starting tests in non-TTY mode...\n")
+	globalLogger.Info("Starting tests in non-TTY mode")
 
 	// Build the go test command
 	args := []string{"test", "-json"}
@@ -272,20 +272,20 @@ func runTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	// Get stdout pipe
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to get stdout pipe: %v\n", err)
+		globalLogger.Error("Failed to get stdout pipe", "error", err)
 		return 1
 	}
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to start go test: %v\n", err)
+		globalLogger.Error("Failed to start go test", "error", err)
 		return 1
 	}
 
 	// Create JSON output file
 	jsonFile, err := os.Create(outputFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
+		globalLogger.Error("Failed to create output file", "error", err)
 		return 1
 	}
 	defer jsonFile.Close()
@@ -305,7 +305,7 @@ func runTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// Return processing error if any
 	if processErr != nil {
-		fmt.Fprintf(os.Stderr, "Stream processing error: %v\n", processErr)
+		globalLogger.Error("Stream processing error", "error", processErr)
 		return 1
 	}
 
