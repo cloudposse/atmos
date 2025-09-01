@@ -13,8 +13,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/spf13/viper"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 

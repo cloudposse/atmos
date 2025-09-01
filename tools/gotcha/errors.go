@@ -11,14 +11,14 @@ var (
 
 	// Format errors.
 	ErrUnsupportedFormat = errors.New("unsupported format")
-	
+
 	// Pattern errors.
 	ErrInvalidIncludePattern = errors.New("invalid include pattern")
 	ErrInvalidExcludePattern = errors.New("invalid exclude pattern")
-	
+
 	// Filter errors.
 	ErrInvalidShowFilter = errors.New("invalid show filter")
-	
+
 	// Test execution errors.
 	ErrTestsFailed = errors.New("tests failed")
 )
