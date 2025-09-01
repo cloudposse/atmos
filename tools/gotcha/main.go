@@ -15,10 +15,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Global logger instance with consistent styling
+// Global logger instance with consistent styling.
 var globalLogger *log.Logger
 
-// initGlobalLogger initializes the global logger with solid background colors
+// initGlobalLogger initializes the global logger with solid background colors.
 func initGlobalLogger() {
 	globalLogger = log.New(os.Stderr)
 	globalLogger.SetLevel(log.InfoLevel)
@@ -225,7 +225,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Validate show filter
 	if !isValidShowFilter(show) {
-		return fmt.Errorf("invalid show filter '%s'. Valid options: all, failed, passed, skipped, collapsed, none", show)
+		return fmt.Errorf("%w: '%s'. Valid options: all, failed, passed, skipped, collapsed, none", ErrInvalidShowFilter, show)
 	}
 
 	// Set default output file if empty
@@ -278,7 +278,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		// Create and run the Bubble Tea program
 		model := newTestModel(testPackages, testArgsStr, output, coverprofile, show, totalTests, alert)
 		// Use default Bubble Tea configuration
-		p := tea.NewProgram(model)
+		p := tea.NewProgram(&model)
 
 		finalModel, err := p.Run()
 		if err != nil {
@@ -286,17 +286,17 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		}
 
 		// Extract exit code from final model
-		if m, ok := finalModel.(testModel); ok {
+		if m, ok := finalModel.(*testModel); ok {
 			exitCode := m.GetExitCode()
 			if exitCode != 0 {
-				return fmt.Errorf("tests failed with exit code %d", exitCode)
+				return fmt.Errorf("%w with exit code %d", ErrTestsFailed, exitCode)
 			}
 		}
 	} else {
 		// Fallback to simple streaming for CI/non-TTY environments
 		exitCode := runSimpleStream(testPackages, testArgsStr, output, coverprofile, show, totalTests, alert)
 		if exitCode != 0 {
-			return fmt.Errorf("tests failed with exit code %d", exitCode)
+			return fmt.Errorf("%w with exit code %d", ErrTestsFailed, exitCode)
 		}
 	}
 

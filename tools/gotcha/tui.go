@@ -13,11 +13,12 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/spf13/viper"
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 )
 
-// getTerminalWidth gets the current terminal width using golang.org/x/term
+// getTerminalWidth gets the current terminal width using golang.org/x/term.
 func getTerminalWidth() int {
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
@@ -27,7 +28,7 @@ func getTerminalWidth() int {
 	return width
 }
 
-// getDisplayWidth calculates the actual display width of a string, ignoring ANSI escape sequences
+// getDisplayWidth calculates the actual display width of a string, ignoring ANSI escape sequences.
 func getDisplayWidth(s string) int {
 	width := 0
 	i := 0
@@ -56,7 +57,7 @@ func getDisplayWidth(s string) int {
 	return width
 }
 
-// skipAnsiSequence skips over ANSI escape sequences and returns the next index
+// skipAnsiSequence skips over ANSI escape sequences and returns the next index.
 func skipAnsiSequence(runes []rune, start int) int {
 	if start >= len(runes) || runes[start] != '\033' {
 		return start + 1
@@ -77,7 +78,7 @@ func skipAnsiSequence(runes []rune, start int) int {
 	}
 }
 
-// skipCSISequence handles CSI (Control Sequence Introducer) sequences
+// skipCSISequence handles CSI (Control Sequence Introducer) sequences.
 func skipCSISequence(runes []rune, start int) int {
 	i := start + 1 // skip '['
 
@@ -94,7 +95,7 @@ func skipCSISequence(runes []rune, start int) int {
 	return i
 }
 
-// isCSIParameter checks if a rune is a valid CSI parameter character
+// isCSIParameter checks if a rune is a valid CSI parameter character.
 func isCSIParameter(r rune) bool {
 	return (r >= '0' && r <= '9') || r == ';' || r == ' ' || r == '?' || r == '!'
 }
@@ -135,7 +136,7 @@ type testModel struct {
 	stdout  io.ReadCloser
 }
 
-// Bubble Tea messages
+// Bubble Tea messages.
 type (
 	testStartMsg struct{ test string }
 	testPassMsg  struct {
@@ -155,14 +156,14 @@ type (
 	testErrorMsg struct{ err error }
 )
 
-// Message for when subprocess is initialized and ready to stream
+// Message for when subprocess is initialized and ready to stream.
 type subprocessReadyMsg struct {
 	scanner  *bufio.Scanner
 	stdout   io.ReadCloser
 	jsonFile *os.File
 }
 
-// Message for streaming subprocess output
+// Message for streaming subprocess output.
 type streamOutputMsg struct {
 	line []byte
 }
@@ -219,15 +220,15 @@ func newTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 	}
 }
 
-func (m testModel) Init() tea.Cmd {
+func (m *testModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.startTestsCmd(),
 		m.spinner.Tick,
 	)
 }
 
-// startTestsCmd initializes and starts the test subprocess
-func (m testModel) startTestsCmd() tea.Cmd {
+// startTestsCmd initializes and starts the test subprocess.
+func (m *testModel) startTestsCmd() tea.Cmd {
 	return func() tea.Msg {
 		// Open JSON output file
 		jsonFile, err := os.Create(m.outputFile)
@@ -257,8 +258,8 @@ func (m testModel) startTestsCmd() tea.Cmd {
 	}
 }
 
-// readNextLine creates a command that reads one line using the persistent scanner
-func (m testModel) readNextLine() tea.Cmd {
+// readNextLine creates a command that reads one line using the persistent scanner.
+func (m *testModel) readNextLine() tea.Cmd {
 	return func() tea.Msg {
 		// Use the scanner from the model - this persists across reads
 		if m.scanner != nil && m.scanner.Scan() {
@@ -266,8 +267,8 @@ func (m testModel) readNextLine() tea.Cmd {
 
 			// Write to JSON file
 			if m.jsonFile != nil {
-				m.jsonFile.Write(line)
-				m.jsonFile.Write([]byte("\n"))
+				_, _ = m.jsonFile.Write(line)
+				_, _ = m.jsonFile.Write([]byte("\n"))
 			}
 
 			// Make a copy since scanner reuses the buffer
@@ -288,7 +289,7 @@ func (m testModel) readNextLine() tea.Cmd {
 	}
 }
 
-func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Store the size but we use our own terminal width detection
@@ -301,7 +302,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.aborted = true
 			m.done = true
 			if m.cmd != nil && m.cmd.Process != nil {
-				m.cmd.Process.Kill()
+				_ = m.cmd.Process.Kill()
 			}
 			if m.jsonFile != nil {
 				m.jsonFile.Close()
@@ -539,7 +540,7 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m testModel) View() string {
+func (m *testModel) View() string {
 	if m.done {
 		return ""
 	}
@@ -606,8 +607,8 @@ func max(a, b int) int {
 	return b
 }
 
-// shouldShowTest checks if a test should be displayed based on the show filter
-func (m testModel) shouldShowTest(status string) bool {
+// shouldShowTest checks if a test should be displayed based on the show filter.
+func (m *testModel) shouldShowTest(status string) bool {
 	switch m.showFilter {
 	case "all":
 		return true
@@ -626,7 +627,7 @@ func (m testModel) shouldShowTest(status string) bool {
 }
 
 // GetExitCode returns the appropriate exit code based on test results.
-func (m testModel) GetExitCode() int {
+func (m *testModel) GetExitCode() int {
 	if m.aborted {
 		return 130 // Standard exit code for SIGINT (Ctrl+C)
 	}
@@ -636,10 +637,11 @@ func (m testModel) GetExitCode() int {
 	return 0
 }
 
-// generateFinalSummary creates the formatted final summary output
-func (m testModel) generateFinalSummary() string {
+// generateFinalSummary creates the formatted final summary output.
+func (m *testModel) generateFinalSummary() string {
 	// Check GitHub step summary environment
-	githubSummary := os.Getenv("GITHUB_STEP_SUMMARY")
+	_ = viper.BindEnv("GOTCHA_GITHUB_STEP_SUMMARY", "GITHUB_STEP_SUMMARY")
+	githubSummary := viper.GetString("GOTCHA_GITHUB_STEP_SUMMARY")
 	var summaryStatus string
 	var summaryPath string
 
@@ -682,8 +684,8 @@ func (m testModel) generateFinalSummary() string {
 	return output.String()
 }
 
-// getBufferSizeKB calculates the total size of all test buffers in KB
-func (m testModel) getBufferSizeKB() float64 {
+// getBufferSizeKB calculates the total size of all test buffers in KB.
+func (m *testModel) getBufferSizeKB() float64 {
 	m.bufferMu.Lock()
 	defer m.bufferMu.Unlock()
 

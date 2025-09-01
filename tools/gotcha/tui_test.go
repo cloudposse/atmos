@@ -15,7 +15,8 @@ func TestNewTestModel(t *testing.T) {
 	showFilter := "failed"
 	totalTests := 42
 	
-	model := newTestModel(testPackages, testArgs, outputFile, coverProfile, showFilter, totalTests)
+	model := &testModel{}
+	*model = newTestModel(testPackages, testArgs, outputFile, coverProfile, showFilter, totalTests, false)
 	
 	// Check that model fields are set correctly
 	if model.outputFile != outputFile {
@@ -44,7 +45,8 @@ func TestNewTestModel(t *testing.T) {
 }
 
 func TestTestModelInit(t *testing.T) {
-	model := newTestModel([]string{"./pkg"}, "", "", "", "all", 10)
+	model := &testModel{}
+	*model = newTestModel([]string{"./pkg"}, "", "", "", "all", 10, false)
 	
 	cmd := model.Init()
 	

@@ -197,7 +197,7 @@ func TestRunSimpleStream(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := runSimpleStream(tt.testPackages, tt.testArgs, tt.outputFile, tt.coverProfile, tt.showFilter, tt.totalTests)
+			got := runSimpleStream(tt.testPackages, tt.testArgs, tt.outputFile, tt.coverProfile, tt.showFilter, tt.totalTests, false)
 			
 			if got != tt.wantExitCode {
 				t.Errorf("runSimpleStream() = %v, want %v", got, tt.wantExitCode)

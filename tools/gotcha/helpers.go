@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/spf13/viper"
 )
 
-// isValidShowFilter validates that the show filter is one of the allowed values
+// isValidShowFilter validates that the show filter is one of the allowed values.
 func isValidShowFilter(show string) bool {
 	validFilters := []string{"all", "failed", "passed", "skipped", "collapsed", "none"}
 	for _, valid := range validFilters {
@@ -22,7 +24,7 @@ func isValidShowFilter(show string) bool {
 	return false
 }
 
-// filterPackages applies include/exclude regex patterns to filter packages
+// filterPackages applies include/exclude regex patterns to filter packages.
 func filterPackages(packages []string, includePatterns, excludePatterns string) ([]string, error) {
 	// If no packages provided, return as-is
 	if len(packages) == 0 {
@@ -37,7 +39,7 @@ func filterPackages(packages []string, includePatterns, excludePatterns string) 
 			if pattern != "" {
 				regex, err := regexp.Compile(pattern)
 				if err != nil {
-					return nil, fmt.Errorf("invalid include pattern '%s': %v", pattern, err)
+					return nil, fmt.Errorf("%w: '%s': %v", ErrInvalidIncludePattern, pattern, err)
 				}
 				includeRegexes = append(includeRegexes, regex)
 			}
@@ -52,7 +54,7 @@ func filterPackages(packages []string, includePatterns, excludePatterns string) 
 			if pattern != "" {
 				regex, err := regexp.Compile(pattern)
 				if err != nil {
-					return nil, fmt.Errorf("invalid exclude pattern '%s': %v", pattern, err)
+					return nil, fmt.Errorf("%w: '%s': %v", ErrInvalidExcludePattern, pattern, err)
 				}
 				excludeRegexes = append(excludeRegexes, regex)
 			}
@@ -94,7 +96,7 @@ func filterPackages(packages []string, includePatterns, excludePatterns string) 
 	return filtered, nil
 }
 
-// getTestCount uses AST parsing to quickly count Test and Example functions
+// getTestCount uses AST parsing to quickly count Test and Example functions.
 func getTestCount(testPackages []string, testArgs string) int {
 	globalLogger.Info("Pre-calculating test count using AST parsing", "packages", len(testPackages))
 
@@ -164,15 +166,17 @@ func getTestCount(testPackages []string, testArgs string) int {
 	return totalTests
 }
 
-// isTTY checks if we're running in a terminal and Bubble Tea can actually use it
+// isTTY checks if we're running in a terminal and Bubble Tea can actually use it.
 func isTTY() bool {
 	// Provide an environment override
-	if os.Getenv("FORCE_NO_TTY") != "" {
+	_ = viper.BindEnv("GOTCHA_FORCE_NO_TTY", "FORCE_NO_TTY")
+	if viper.GetString("GOTCHA_FORCE_NO_TTY") != "" {
 		return false
 	}
 
 	// Debug: Force TTY mode for testing (but only if TTY is actually usable)
-	if os.Getenv("FORCE_TTY") != "" {
+	_ = viper.BindEnv("GOTCHA_FORCE_TTY", "FORCE_TTY")
+	if viper.GetString("GOTCHA_FORCE_TTY") != "" {
 		// Still check if we can actually open /dev/tty
 		if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
 			tty.Close()
@@ -205,14 +209,14 @@ func isTTY() bool {
 	return isStdoutTTY && isStdinTTY
 }
 
-// emitAlert outputs a terminal bell (\a) if alert is enabled
+// emitAlert outputs a terminal bell (\a) if alert is enabled.
 func emitAlert(enabled bool) {
 	if enabled {
 		fmt.Fprint(os.Stderr, "\a")
 	}
 }
 
-// runSimpleStream runs tests with simple non-interactive streaming output
+// runSimpleStream runs tests with simple non-interactive streaming output.
 func runSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int, alert bool) int {
 	// For now, return a placeholder implementation
 	// This would contain the full streaming implementation
@@ -223,7 +227,7 @@ func runSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, 
 	return 0
 }
 
-// handleOutput handles writing output in the specified format
+// handleOutput handles writing output in the specified format.
 func handleOutput(summary *TestSummary, format, outputFile string) error {
 	switch format {
 	case "stdin":
@@ -238,10 +242,10 @@ func handleOutput(summary *TestSummary, format, outputFile string) error {
 		}
 		return writeSummary(summary, "markdown", outputFile)
 	}
-	return fmt.Errorf("unsupported format: %s", format)
+	return fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
 }
 
-// handleConsoleOutput writes console-formatted output
+// handleConsoleOutput writes console-formatted output.
 func handleConsoleOutput(summary *TestSummary) error {
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
 
