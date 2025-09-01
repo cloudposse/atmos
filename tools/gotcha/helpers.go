@@ -444,7 +444,7 @@ func (p *StreamProcessor) printSummary() {
 	if total == 0 {
 		return
 	}
-	
+
 	fmt.Fprintf(os.Stderr, "\n")
 	fmt.Fprintf(os.Stderr, "%s\n", statsHeaderStyle.Render("Test Results:"))
 	fmt.Fprintf(os.Stderr, "  %s Passed:  %d\n", passStyle.Render(checkPass), p.passed)
