@@ -14,28 +14,27 @@ func TestNewTestModel(t *testing.T) {
 	coverProfile := "coverage.out"
 	showFilter := "failed"
 	totalTests := 42
-	
+
 	model := newTestModel(testPackages, testArgs, outputFile, coverProfile, showFilter, totalTests)
-	
+
 	// Check that model fields are set correctly
 	if model.outputFile != outputFile {
 		t.Errorf("newTestModel() outputFile = %v, want %v", model.outputFile, outputFile)
 	}
-	
-	
+
 	if model.showFilter != showFilter {
 		t.Errorf("newTestModel() showFilter = %v, want %v", model.showFilter, showFilter)
 	}
-	
+
 	if model.totalTests != totalTests {
 		t.Errorf("newTestModel() totalTests = %v, want %v", model.totalTests, totalTests)
 	}
-	
+
 	// Check that startTime is initialized
 	if model.startTime.IsZero() {
 		t.Error("newTestModel() should initialize startTime")
 	}
-	
+
 	// Check that time is recent (within last few seconds)
 	timeDiff := time.Since(model.startTime)
 	if timeDiff > 5*time.Second {
@@ -45,9 +44,9 @@ func TestNewTestModel(t *testing.T) {
 
 func TestTestModelInit(t *testing.T) {
 	model := newTestModel([]string{"./pkg"}, "", "", "", "all", 10)
-	
+
 	cmd := model.Init()
-	
+
 	// Init should return a command (spinner tick)
 	if cmd == nil {
 		t.Error("testModel.Init() should return a non-nil command")
@@ -163,7 +162,7 @@ func TestShouldShowTest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			model := testModel{showFilter: tt.showFilter}
 			got := model.shouldShowTest(tt.status)
-			
+
 			if got != tt.want {
 				t.Errorf("shouldShowTest(%v) with filter %v = %v, want %v", tt.status, tt.showFilter, got, tt.want)
 			}
@@ -193,7 +192,7 @@ func TestGetExitCode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			model := testModel{failCount: tt.failCount}
 			got := model.GetExitCode()
-			
+
 			if got != tt.want {
 				t.Errorf("GetExitCode() with failCount %v = %v, want %v", tt.failCount, got, tt.want)
 			}
@@ -210,20 +209,20 @@ func TestGenerateFinalSummary(t *testing.T) {
 		skipCount:  1,
 		startTime:  time.Now().Add(-5 * time.Second), // 5 seconds ago
 	}
-	
+
 	summary := model.generateFinalSummary()
-	
+
 	// Check that summary contains expected information
 	if summary == "" {
 		t.Error("generateFinalSummary() should return non-empty summary")
 	}
-	
+
 	// Summary should contain test counts
 	if !contains([]string{summary}, "8") { // pass count
 		t.Error("generateFinalSummary() should contain pass count")
 	}
-	
-	if !contains([]string{summary}, "1") { // fail count  
+
+	if !contains([]string{summary}, "1") { // fail count
 		t.Error("generateFinalSummary() should contain fail count")
 	}
 }
@@ -237,12 +236,12 @@ func TestView(t *testing.T) {
 		skipCount:  1,
 		startTime:  time.Now(),
 	}
-	
+
 	// Initialize required components
 	model.spinner.Spinner = model.spinner.Spinner // Ensure spinner is initialized
-	
+
 	view := model.View()
-	
+
 	// Check that view produces some output
 	if view == "" {
 		t.Error("View() should return non-empty view")
@@ -255,28 +254,28 @@ func TestUpdate(t *testing.T) {
 		totalTests: 10,
 		startTime:  time.Now(),
 	}
-	
+
 	// Test with spinner tick message
 	tickMsg := model.spinner.Tick()
 	newModel, cmd := model.Update(tickMsg)
-	
+
 	// Should return a model (converted back to testModel)
 	if newModel == nil {
 		t.Error("Update() should return non-nil model")
 	}
-	
+
 	// Should return a command
 	if cmd == nil {
 		t.Error("Update() should return non-nil command for spinner tick")
 	}
-	
+
 	// Test with key press message (Ctrl+C)
 	keyMsg := tea.KeyMsg{
 		Type: tea.KeyCtrlC,
 	}
-	
+
 	_, cmd = model.Update(keyMsg)
-	
+
 	// Should return quit command for Ctrl+C
 	if cmd == nil {
 		t.Error("Update() should return non-nil command for Ctrl+C")
@@ -288,19 +287,19 @@ func TestStartTestsCmd(t *testing.T) {
 	model := testModel{
 		totalTests: 10,
 	}
-	
+
 	// Test basic model properties
 	if model.totalTests != 10 {
 		t.Errorf("Expected totalTests to be 10, got %d", model.totalTests)
 	}
 }
 
-// Test readNextLine  
+// Test readNextLine
 func TestReadNextLine(t *testing.T) {
 	model := testModel{}
-	
+
 	cmd := model.readNextLine()
-	
+
 	// Should return a command
 	if cmd == nil {
 		t.Error("readNextLine() should return non-nil command")

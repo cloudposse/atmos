@@ -217,7 +217,7 @@ func runSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, 
 	// For now, return a placeholder implementation
 	// This would contain the full streaming implementation
 	fmt.Fprintf(os.Stderr, "Simple streaming not yet implemented\n")
-	
+
 	// Emit alert at completion
 	emitAlert(alert)
 	return 0

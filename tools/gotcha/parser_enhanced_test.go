@@ -8,11 +8,11 @@ import (
 
 func TestSortResults(t *testing.T) {
 	tests := []struct {
-		name        string
-		failed      []TestResult
-		skipped     []TestResult  
-		passed      []TestResult
-		wantOrder   string // Description of expected order
+		name      string
+		failed    []TestResult
+		skipped   []TestResult
+		passed    []TestResult
+		wantOrder string // Description of expected order
 	}{
 		{
 			name: "sort by duration descending",
@@ -32,10 +32,10 @@ func TestSortResults(t *testing.T) {
 			wantOrder: "slowest first",
 		},
 		{
-			name:     "empty results",
-			failed:   []TestResult{},
-			skipped:  []TestResult{},
-			passed:   []TestResult{},
+			name:      "empty results",
+			failed:    []TestResult{},
+			skipped:   []TestResult{},
+			passed:    []TestResult{},
 			wantOrder: "empty",
 		},
 		{
@@ -64,27 +64,27 @@ func TestSortResults(t *testing.T) {
 			copy(passed, tt.passed)
 
 			sortResults(&failed, &skipped, &passed)
-			
+
 			// Verify failed results are sorted by duration (descending)
 			for i := 1; i < len(failed); i++ {
 				if failed[i-1].Duration < failed[i].Duration {
-					t.Errorf("sortResults() failed tests not sorted by duration: %v should be >= %v", 
+					t.Errorf("sortResults() failed tests not sorted by duration: %v should be >= %v",
 						failed[i-1].Duration, failed[i].Duration)
 				}
 			}
-			
+
 			// Verify skipped results are sorted by duration (descending)
 			for i := 1; i < len(skipped); i++ {
 				if skipped[i-1].Duration < skipped[i].Duration {
-					t.Errorf("sortResults() skipped tests not sorted by duration: %v should be >= %v", 
+					t.Errorf("sortResults() skipped tests not sorted by duration: %v should be >= %v",
 						skipped[i-1].Duration, skipped[i].Duration)
 				}
 			}
-			
-			// Verify passed results are sorted by duration (descending)  
+
+			// Verify passed results are sorted by duration (descending)
 			for i := 1; i < len(passed); i++ {
 				if passed[i-1].Duration < passed[i].Duration {
-					t.Errorf("sortResults() passed tests not sorted by duration: %v should be >= %v", 
+					t.Errorf("sortResults() passed tests not sorted by duration: %v should be >= %v",
 						passed[i-1].Duration, passed[i].Duration)
 				}
 			}
@@ -145,8 +145,8 @@ invalid json line that should be skipped
 			},
 		},
 		{
-			name: "test with coverage file",
-			jsonInput: `{"Time":"2023-01-01T00:00:00Z","Action":"pass","Package":"example/pkg","Test":"TestWithCoverage"}`,
+			name:         "test with coverage file",
+			jsonInput:    `{"Time":"2023-01-01T00:00:00Z","Action":"pass","Package":"example/pkg","Test":"TestWithCoverage"}`,
 			coverProfile: "test.out", // Use our test coverage file
 			excludeMocks: true,
 			wantErr:      false,
@@ -178,14 +178,14 @@ invalid json line that should be skipped
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := strings.NewReader(tt.jsonInput)
-			
+
 			summary, err := parseTestJSON(reader, tt.coverProfile, tt.excludeMocks)
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseTestJSON() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if !tt.wantErr && tt.checkResult != nil {
 				if checkErr := tt.checkResult(summary); checkErr != nil {
 					t.Errorf("parseTestJSON() result validation failed: %v", checkErr)
@@ -232,9 +232,9 @@ func TestProcessLineEdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tests := make(map[string]TestResult)
-			
+
 			result := processLine(tt.line, tests)
-			
+
 			if result != tt.expected {
 				t.Errorf("processLine(%q) = %q, want %q", tt.line, result, tt.expected)
 			}
@@ -279,7 +279,7 @@ func TestExtractCoverageEdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := extractCoverage(tt.output)
-			
+
 			if result != tt.expected {
 				t.Errorf("extractCoverage(%q) = %q, want %q", tt.output, result, tt.expected)
 			}

@@ -99,18 +99,18 @@ func TestFilterPackages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := filterPackages(tt.packages, tt.includePatterns, tt.excludePatterns)
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("filterPackages() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if !tt.wantErr {
 				if len(got) != len(tt.want) {
 					t.Errorf("filterPackages() got %d packages, want %d", len(got), len(tt.want))
 					return
 				}
-				
+
 				for i, pkg := range got {
 					if pkg != tt.want[i] {
 						t.Errorf("filterPackages() got[%d] = %v, want %v", i, pkg, tt.want[i])
@@ -147,9 +147,9 @@ func TestGetTestCount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Initialize logger for the test
 			initGlobalLogger()
-			
+
 			got := getTestCount(tt.testPackages, tt.testArgs)
-			
+
 			if got < tt.wantMin {
 				t.Errorf("getTestCount() = %v, want at least %v", got, tt.wantMin)
 			}
@@ -161,12 +161,12 @@ func TestIsTTY(t *testing.T) {
 	// This function checks if we're running in a TTY environment
 	// We can test that it returns a boolean without error
 	result := isTTY()
-	
+
 	// The result should be either true or false
 	if result != true && result != false {
 		t.Errorf("isTTY() returned non-boolean value")
 	}
-	
+
 	// In CI environments, this is typically false
 	// In development with a real terminal, this might be true
 	// We just ensure it doesn't panic and returns a valid boolean
@@ -198,7 +198,7 @@ func TestRunSimpleStream(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := runSimpleStream(tt.testPackages, tt.testArgs, tt.outputFile, tt.coverProfile, tt.showFilter, tt.totalTests)
-			
+
 			if got != tt.wantExitCode {
 				t.Errorf("runSimpleStream() = %v, want %v", got, tt.wantExitCode)
 			}
@@ -243,17 +243,17 @@ func TestHandleConsoleOutput(t *testing.T) {
 			// Save original stdout
 			oldStdout := os.Stdout
 			defer func() { os.Stdout = oldStdout }()
-			
+
 			// Create a pipe to capture output
 			_, w, _ := os.Pipe()
 			os.Stdout = w
-			
+
 			err := handleConsoleOutput(tt.summary)
-			
+
 			// Close the pipe and restore stdout
 			w.Close()
 			os.Stdout = oldStdout
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("handleConsoleOutput() error = %v, wantErr %v", err, tt.wantErr)
 			}

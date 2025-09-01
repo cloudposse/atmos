@@ -14,23 +14,23 @@ func TestGetFunctionCoverage(t *testing.T) {
 		wantErr      bool
 	}{
 		{
-			name:        "non-existent file",
-			profileFile: "/non/existent/file.out",
+			name:         "non-existent file",
+			profileFile:  "/non/existent/file.out",
 			excludeMocks: true,
-			wantLen:     0,
-			wantErr:     true,
+			wantLen:      0,
+			wantErr:      true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := getFunctionCoverage(tt.profileFile, tt.excludeMocks)
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getFunctionCoverage() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if !tt.wantErr {
 				if len(got) != tt.wantLen {
 					t.Errorf("getFunctionCoverage() returned %d functions, want %d", len(got), tt.wantLen)
@@ -65,10 +65,10 @@ github.com/cloudposse/atmos/tools/gotcha/mock_service.go:4.20,6.2 1 0`
 	}
 
 	tests := []struct {
-		name         string
-		profileFile  string
-		excludeMocks bool
-		wantErr      bool
+		name          string
+		profileFile   string
+		excludeMocks  bool
+		wantErr       bool
 		checkCoverage bool
 	}{
 		{
@@ -90,19 +90,19 @@ github.com/cloudposse/atmos/tools/gotcha/mock_service.go:4.20,6.2 1 0`
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := parseCoverageProfile(tt.profileFile, tt.excludeMocks)
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseCoverageProfile() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if tt.checkCoverage && got != nil {
 				// Verify that statement coverage is calculated
 				if got.StatementCoverage == "" {
 					t.Error("parseCoverageProfile() should set StatementCoverage")
 				}
-				
-				// Verify function coverage data is parsed  
+
+				// Verify function coverage data is parsed
 				if len(got.FunctionCoverage) == 0 {
 					t.Error("parseCoverageProfile() should parse function coverage data")
 				}
@@ -114,10 +114,10 @@ github.com/cloudposse/atmos/tools/gotcha/mock_service.go:4.20,6.2 1 0`
 // Test with empty and malformed coverage files
 func TestParseCoverageProfileErrorCases(t *testing.T) {
 	tests := []struct {
-		name        string
-		content     string
+		name         string
+		content      string
 		excludeMocks bool
-		wantErr     bool
+		wantErr      bool
 	}{
 		{
 			name:         "empty file",
@@ -156,7 +156,7 @@ invalid line without proper format`,
 			}
 
 			_, err = parseCoverageProfile(tmpfile.Name(), tt.excludeMocks)
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseCoverageProfile() with %s: error = %v, wantErr %v", tt.name, err, tt.wantErr)
 			}

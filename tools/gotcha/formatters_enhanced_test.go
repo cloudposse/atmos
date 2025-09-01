@@ -13,8 +13,8 @@ func TestWritePassedTestsEnhanced(t *testing.T) {
 		wantText []string
 	}{
 		{
-			name:   "empty passed tests",
-			passed: []TestResult{},
+			name:     "empty passed tests",
+			passed:   []TestResult{},
 			wantText: []string{}, // Empty tests don't produce output
 		},
 		{
@@ -44,7 +44,7 @@ func TestWritePassedTestsEnhanced(t *testing.T) {
 			},
 		},
 		{
-			name: "passed tests with long list",
+			name:   "passed tests with long list",
 			passed: make([]TestResult, 300), // More than maxTotalTestsShown
 			wantText: []string{
 				"### ✅ Passed Tests (300)",
@@ -69,9 +69,9 @@ func TestWritePassedTestsEnhanced(t *testing.T) {
 
 			var buf bytes.Buffer
 			writePassedTests(&buf, tt.passed)
-			
+
 			output := buf.String()
-			
+
 			for _, wantText := range tt.wantText {
 				if !strings.Contains(output, wantText) {
 					t.Errorf("writePassedTests() output should contain %q, got:\n%s", wantText, output)
@@ -103,7 +103,7 @@ func TestWriteTestTableEnhanced(t *testing.T) {
 				"TestSlow",
 				"0.10s",
 				"2.50s",
-				"3.8%", // 0.1/2.6 * 100
+				"3.8%",  // 0.1/2.6 * 100
 				"96.2%", // 2.5/2.6 * 100
 			},
 		},
@@ -133,9 +133,9 @@ func TestWriteTestTableEnhanced(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			writeTestTable(&buf, tt.tests, tt.includeDuration, tt.totalDuration)
-			
+
 			output := buf.String()
-			
+
 			for _, wantText := range tt.wantText {
 				if !strings.Contains(output, wantText) {
 					t.Errorf("writeTestTable() output should contain %q, got:\n%s", wantText, output)
@@ -208,9 +208,9 @@ func TestWriteTestCoverageSectionEnhanced(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			writeTestCoverageSection(&buf, tt.coverageData)
-			
+
 			output := buf.String()
-			
+
 			for _, wantText := range tt.wantText {
 				if !strings.Contains(output, wantText) {
 					t.Errorf("writeTestCoverageSection() output should contain %q, got:\n%s", wantText, output)
@@ -269,16 +269,16 @@ func TestGetUncoveredFunctionsInPREnhanced(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotFunctions, gotCount := getUncoveredFunctionsInPR(tt.functions, tt.changedFiles)
-			
+
 			if gotCount != tt.wantCount {
 				t.Errorf("getUncoveredFunctionsInPR() count = %v, want %v", gotCount, tt.wantCount)
 			}
-			
+
 			if len(gotFunctions) != len(tt.wantFunctions) {
 				t.Errorf("getUncoveredFunctionsInPR() returned %d functions, want %d", len(gotFunctions), len(tt.wantFunctions))
 				return
 			}
-			
+
 			for i, wantFunc := range tt.wantFunctions {
 				if gotFunctions[i].Function != wantFunc {
 					t.Errorf("getUncoveredFunctionsInPR() function[%d] = %v, want %v", i, gotFunctions[i].Function, wantFunc)
