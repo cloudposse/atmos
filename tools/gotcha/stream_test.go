@@ -85,7 +85,7 @@ func TestShouldShowErrorLine(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := shouldShowErrorLine(tt.line)
-			
+
 			if got != tt.want {
 				t.Errorf("shouldShowErrorLine(%q) = %v, want %v", tt.line, got, tt.want)
 			}
@@ -97,7 +97,7 @@ func TestShouldShowErrorLineEdgeCases(t *testing.T) {
 	// Test case-insensitive matching
 	errorLines := []string{
 		"fail github.com/example/pkg",
-		"FAIL github.com/example/pkg", 
+		"FAIL github.com/example/pkg",
 		"Fail github.com/example/pkg",
 		"error: something went wrong",
 		"ERROR: something went wrong",
@@ -106,7 +106,7 @@ func TestShouldShowErrorLineEdgeCases(t *testing.T) {
 		"WARNING: deprecated",
 		"Warning: deprecated",
 		"PANIC: runtime error",
-		"panic: runtime error", 
+		"panic: runtime error",
 		"Panic: runtime error",
 	}
 

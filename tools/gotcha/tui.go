@@ -515,10 +515,10 @@ func (m *testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.jsonFile != nil {
 			m.jsonFile.Close()
 		}
-		
+
 		// Emit alert if enabled
 		emitAlert(m.alert)
-		
+
 		return m, tea.Sequence(
 			tea.Printf("%s Error: %v", failStyle.Render(checkFail), msg.err),
 			tea.Quit,
