@@ -81,7 +81,7 @@ func Merge(
 	if atmosConfig == nil {
 		return nil, fmt.Errorf("atmosConfig cannot be nil")
 	}
-	
+
 	if atmosConfig.Settings.ListMergeStrategy == "" {
 		atmosConfig.Settings.ListMergeStrategy = ListMergeStrategyReplace
 	}

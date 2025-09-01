@@ -380,9 +380,9 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 		p.passed++
 		// Show success with actual test name
 		if p.shouldShowTestEvent("pass") {
-			fmt.Fprintf(os.Stderr, " %s %s %s\n", 
-				passStyle.Render(checkPass), 
-				testNameStyle.Render(event.Test), 
+			fmt.Fprintf(os.Stderr, " %s %s %s\n",
+				passStyle.Render(checkPass),
+				testNameStyle.Render(event.Test),
 				durationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
 		}
 		// Clear buffer
@@ -392,9 +392,9 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 		// Track statistics
 		p.failed++
 		// Always show failures regardless of filter
-		fmt.Fprintf(os.Stderr, " %s FAILED: %s %s\n", 
-			failStyle.Render(checkFail), 
-			testNameStyle.Render(event.Test), 
+		fmt.Fprintf(os.Stderr, " %s FAILED: %s %s\n",
+			failStyle.Render(checkFail),
+			testNameStyle.Render(event.Test),
 			durationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
 
 		// Show buffered error output
@@ -413,8 +413,8 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 		p.skipped++
 		// Show skip with actual test name
 		if p.shouldShowTestEvent("skip") {
-			fmt.Fprintf(os.Stderr, " %s %s\n", 
-				skipStyle.Render(checkSkip), 
+			fmt.Fprintf(os.Stderr, " %s %s\n",
+				skipStyle.Render(checkSkip),
 				testNameStyle.Render(event.Test))
 		}
 		delete(p.buffers, event.Test)

@@ -9,14 +9,14 @@ const (
 	checkSkip = "⊘" // UTF-8 circled division slash
 
 	// Hex color constants
-	colorGreen      = "#2ECC40"  // Bright green for pass
-	colorRed        = "#DC143C"  // Crimson red for fail  
-	colorAmber      = "#FFB347"  // Peach orange for skip
-	colorLightGray  = "#D3D3D3"  // Light gray for test names
-	colorDarkGray   = "#666666"  // Dark gray for durations
-	colorBlue       = "#5DADE2"  // Blue for spinner
-	colorDarkRed    = "#B22222"  // Dark red for error background
-	colorWhite      = "#FFFFFF"  // White for error text
+	colorGreen     = "#2ECC40" // Bright green for pass
+	colorRed       = "#DC143C" // Crimson red for fail
+	colorAmber     = "#FFB347" // Peach orange for skip
+	colorLightGray = "#D3D3D3" // Light gray for test names
+	colorDarkGray  = "#666666" // Dark gray for durations
+	colorBlue      = "#5DADE2" // Blue for spinner
+	colorDarkRed   = "#B22222" // Dark red for error background
+	colorWhite     = "#FFFFFF" // White for error text
 )
 
 var (
