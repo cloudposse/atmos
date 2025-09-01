@@ -14,7 +14,7 @@ func TestNewTestModel(t *testing.T) {
 	coverProfile := "coverage.out"
 	showFilter := "failed"
 	totalTests := 42
-	
+
 	model := &testModel{}
 	*model = newTestModel(testPackages, testArgs, outputFile, coverProfile, showFilter, totalTests, false)
 	// Check that model fields are set correctly
