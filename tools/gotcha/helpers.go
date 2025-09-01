@@ -261,6 +261,10 @@ type StreamProcessor struct {
 	buffers    map[string][]string
 	jsonWriter io.Writer
 	showFilter string
+	// Statistics tracking
+	passed  int
+	failed  int
+	skipped int
 }
 
 // runTestsWithSimpleStreaming runs tests and processes output in real-time.
@@ -302,6 +306,9 @@ func runTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// Wait for command to complete
 	testErr := cmd.Wait()
+
+	// Print summary regardless of errors
+	processor.printSummary()
 
 	// Return processing error if any
 	if processErr != nil {
@@ -360,10 +367,7 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 	case "run":
 		// Initialize buffer for this test
 		p.buffers[event.Test] = []string{}
-		// Show test start based on filter
-		if p.shouldShowTestEvent("run") {
-			fmt.Fprintf(os.Stderr, "Running %s...\n", event.Test)
-		}
+		// Don't show "Running..." messages in non-TTY mode to avoid clutter
 
 	case "output":
 		// Buffer the output
@@ -372,6 +376,8 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 		}
 
 	case "pass":
+		// Track statistics
+		p.passed++
 		// Show success with actual test name
 		if p.shouldShowTestEvent("pass") {
 			fmt.Fprintf(os.Stderr, " ✔ %s (%.2fs)\n", event.Test, event.Elapsed)
@@ -380,6 +386,8 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 		delete(p.buffers, event.Test)
 
 	case "fail":
+		// Track statistics
+		p.failed++
 		// Always show failures regardless of filter
 		fmt.Fprintf(os.Stderr, " ✘ %s (%.2fs)\n", event.Test, event.Elapsed)
 
@@ -395,6 +403,8 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 		delete(p.buffers, event.Test)
 
 	case "skip":
+		// Track statistics
+		p.skipped++
 		// Show skip with actual test name
 		if p.shouldShowTestEvent("skip") {
 			fmt.Fprintf(os.Stderr, " ⏭ %s\n", event.Test)
@@ -418,6 +428,26 @@ func (p *StreamProcessor) shouldShowTestEvent(action string) bool {
 	default:
 		return true
 	}
+}
+
+// printSummary prints a final test summary with statistics.
+func (p *StreamProcessor) printSummary() {
+	total := p.passed + p.failed + p.skipped
+	if total == 0 {
+		return
+	}
+	
+	fmt.Fprintf(os.Stderr, "\n")
+	fmt.Fprintf(os.Stderr, "Test Results:\n")
+	fmt.Fprintf(os.Stderr, "  ✔ Passed:  %d\n", p.passed)
+	if p.failed > 0 {
+		fmt.Fprintf(os.Stderr, "  ✘ Failed:  %d\n", p.failed)
+	}
+	if p.skipped > 0 {
+		fmt.Fprintf(os.Stderr, "  ⏭ Skipped: %d\n", p.skipped)
+	}
+	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
+	fmt.Fprintf(os.Stderr, "\n")
 }
 
 // handleOutput handles writing output in the specified format.
