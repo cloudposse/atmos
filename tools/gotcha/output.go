@@ -72,7 +72,7 @@ func writeGitHubSummary(summary *TestSummary, outputFile string) error {
 func writeMarkdownContent(output io.Writer, summary *TestSummary, format string) {
 	// Add UUID magic comment to prevent duplicate GitHub comments.
 	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
-	if uuid := os.Getenv("TEST_SUMMARY_UUID"); uuid != "" {
+	if uuid := os.Getenv("GOTCHA_COMMENT_UUID"); uuid != "" {
 		fmt.Fprintf(output, "<!-- test-summary-uuid: %s -->\n\n", uuid)
 	}
 

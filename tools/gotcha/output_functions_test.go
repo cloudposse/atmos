@@ -340,10 +340,10 @@ func TestUUIDCommentInjection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up environment.
 			if tt.setEnv {
-				os.Setenv("TEST_SUMMARY_UUID", tt.uuid)
-				defer os.Unsetenv("TEST_SUMMARY_UUID")
+				os.Setenv("GOTCHA_COMMENT_UUID", tt.uuid)
+				defer os.Unsetenv("GOTCHA_COMMENT_UUID")
 			} else {
-				os.Unsetenv("TEST_SUMMARY_UUID")
+				os.Unsetenv("GOTCHA_COMMENT_UUID")
 			}
 
 			summary := &TestSummary{

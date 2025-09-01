@@ -75,7 +75,7 @@ testacc-summary: get
 		--coverprofile=coverage.out \
 		--output=gotcha-results.json \
 		-- $(TESTARGS)
-	@gotcha parse gotcha-results.json --format=github --coverprofile=coverage.out
+	@gotcha parse gotcha-results.json --format=github --coverprofile=coverage.out --post-comment
 
 # CI target (alias for testacc-summary)
 testacc-ci: testacc-summary

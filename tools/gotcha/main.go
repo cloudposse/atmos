@@ -13,6 +13,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+
+	gh "github.com/cloudposse/atmos/tools/gotcha/github"
 )
 
 // Global logger instance with consistent styling.
@@ -203,6 +205,9 @@ and console output with rich formatting.`,
 	cmd.Flags().String("output", "", "Output file (default: stdout for stdin/markdown)")
 	cmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
 	cmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
+	cmd.Flags().Bool("post-comment", false, "Post test summary as GitHub PR comment")
+	cmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
+	cmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
 	return cmd
 }
@@ -353,9 +358,133 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		return fmt.Errorf("error writing output: %w", err)
 	}
 
+	// Handle GitHub comment posting
+	postComment, _ := cmd.Flags().GetBool("post-comment")
+	if postComment {
+		if err := postGitHubComment(summary, cmd, logger); err != nil {
+			logger.Warn("Failed to post GitHub comment", "error", err)
+			// Don't fail the command, just warn
+		}
+	}
+
 	// Silence unused variable warning
 	_ = excludeMocks
 
 	logger.Info("Parse mode completed successfully")
 	return nil
+}
+
+// postGitHubComment posts test summary as a GitHub PR comment.
+func postGitHubComment(summary *TestSummary, cmd *cobra.Command, logger *log.Logger) error {
+	// Detect GitHub context
+	ctx, err := gh.DetectContext()
+	if err != nil {
+		logger.Info("Skipping GitHub comment posting", "reason", "not in GitHub Actions context")
+		return nil
+	}
+
+	if !ctx.IsSupported() {
+		logger.Info("Skipping GitHub comment posting",
+			"reason", "unsupported event type",
+			"event", ctx.EventName)
+		return nil
+	}
+
+	// Get token from flag or context
+	token, _ := cmd.Flags().GetString("github-token")
+	if token == "" {
+		token = ctx.Token
+	}
+
+	// Get UUID from flag or context
+	uuid, _ := cmd.Flags().GetString("comment-uuid")
+	if uuid == "" {
+		uuid = ctx.CommentUUID
+	}
+
+	if uuid == "" {
+		return fmt.Errorf("comment UUID is required (use --comment-uuid flag or GOTCHA_COMMENT_UUID env)")
+	}
+
+	logger.Info("Posting GitHub comment",
+		"owner", ctx.Owner,
+		"repo", ctx.Repo,
+		"pr", ctx.PRNumber,
+		"event", ctx.EventName)
+
+	// Create client and manager
+	client := gh.NewClient(token)
+	manager := gh.NewCommentManager(client, logger)
+
+	// Generate markdown with UUID marker
+	markdown := generateMarkdownWithUUID(summary, uuid)
+
+	// Post or update comment
+	return manager.PostOrUpdateComment(context.Background(), ctx, markdown)
+}
+
+// generateMarkdownWithUUID generates markdown content with UUID marker for GitHub comments.
+func generateMarkdownWithUUID(summary *TestSummary, uuid string) string {
+	var content strings.Builder
+
+	// Add UUID marker for comment identification
+	content.WriteString(fmt.Sprintf("<!-- test-summary-uuid: %s -->\n\n", uuid))
+
+	// Add timestamp for tracking
+	content.WriteString("# Test Results\n\n")
+
+	// Get test counts
+	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
+
+	// Display test results as shields.io badges
+	if total == 0 {
+		content.WriteString("[![No Tests](https://shields.io/badge/NO_TESTS-0-inactive?style=for-the-badge)](#user-content-no-tests)\n\n")
+	} else {
+		content.WriteString(fmt.Sprintf("[![Passed](https://shields.io/badge/PASSED-%d-success?style=for-the-badge)](#user-content-passed) ", len(summary.Passed)))
+		content.WriteString(fmt.Sprintf("[![Failed](https://shields.io/badge/FAILED-%d-critical?style=for-the-badge)](#user-content-failed) ", len(summary.Failed)))
+		content.WriteString(fmt.Sprintf("[![Skipped](https://shields.io/badge/SKIPPED-%d-inactive?style=for-the-badge)](#user-content-skipped)\n\n", len(summary.Skipped)))
+	}
+
+	// Add failed tests section if any
+	if len(summary.Failed) > 0 {
+		content.WriteString("## ❌ Failed Tests\n\n")
+		for _, test := range summary.Failed {
+			content.WriteString(fmt.Sprintf("- **%s** in `%s` (%.2fs)\n", test.Test, test.Package, test.Duration))
+		}
+		content.WriteString("\n")
+	}
+
+	// Add skipped tests section if any
+	if len(summary.Skipped) > 0 && len(summary.Skipped) <= 20 { // Don't show too many skipped tests
+		content.WriteString("## ⏭️ Skipped Tests\n\n")
+		for _, test := range summary.Skipped {
+			content.WriteString(fmt.Sprintf("- **%s** in `%s`\n", test.Test, test.Package))
+		}
+		content.WriteString("\n")
+	}
+
+	// Add coverage information if available
+	if summary.CoverageData != nil && summary.CoverageData.StatementCoverage != "" {
+		content.WriteString("## 📊 Test Coverage\n\n")
+		content.WriteString(fmt.Sprintf("**Statement Coverage**: %s\n\n", summary.CoverageData.StatementCoverage))
+
+		// Show function coverage if available
+		if len(summary.CoverageData.FunctionCoverage) > 0 {
+			content.WriteString("### Functions with Coverage:\n")
+			for _, fn := range summary.CoverageData.FunctionCoverage {
+				if fn.Coverage > 0 {
+					content.WriteString(fmt.Sprintf("- **%s** (%s): %.1f%%\n", fn.Function, fn.File, fn.Coverage))
+				}
+			}
+			content.WriteString("\n")
+		}
+	} else if summary.Coverage != "" {
+		content.WriteString(fmt.Sprintf("## 📊 Test Coverage\n\n%s\n\n", summary.Coverage))
+	}
+
+	// Add footer
+	content.WriteString("---\n")
+	content.WriteString("🤖 *This comment was automatically generated by [gotcha](https://github.com/cloudposse/atmos/tree/main/tools/gotcha)*\n")
+
+	return content.String()
 }

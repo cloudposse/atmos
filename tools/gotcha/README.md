@@ -131,10 +131,10 @@ go test -json -cover ./... > test-output.json
 
 ## Environment Variables
 
-### `TEST_SUMMARY_UUID`
+### `GOTCHA_COMMENT_UUID`
 Used for GitHub comment deduplication. When set, adds an invisible HTML comment to the output:
 ```html
-<!-- gotcha-uuid: your-uuid-here -->
+<!-- test-summary-uuid: your-uuid-here -->
 ```
 
 This allows GitHub Actions to update existing comments instead of creating new ones.
@@ -152,7 +152,7 @@ Example workflow usage:
 
 - name: Generate test summary
   env:
-    TEST_SUMMARY_UUID: "e7b3c8f2-4d5a-4c9b-8e1f-2a3b4c5d6e7f"
+    GOTCHA_COMMENT_UUID: "e7b3c8f2-4d5a-4c9b-8e1f-2a3b4c5d6e7f"
   run: |
     ./tools/gotcha/gotcha test-output.json \
       -output-file gotcha.md \

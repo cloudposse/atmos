@@ -1,6 +1,0 @@
-{"ImportPath":"./tools/gotcha/...","Action":"build-output","Output":"# ./tools/gotcha/...\n"}
-{"ImportPath":"./tools/gotcha/...","Action":"build-output","Output":"pattern ./tools/gotcha/...: lstat ./tools/gotcha/: no such file or directory\n"}
-{"ImportPath":"./tools/gotcha/...","Action":"build-fail"}
-{"Time":"2025-08-31T23:25:40.240663-05:00","Action":"start","Package":"./tools/gotcha/..."}
-{"Time":"2025-08-31T23:25:40.24074-05:00","Action":"output","Package":"./tools/gotcha/...","Output":"FAIL\t./tools/gotcha/... [setup failed]\n"}
-{"Time":"2025-08-31T23:25:40.240743-05:00","Action":"fail","Package":"./tools/gotcha/...","Elapsed":0,"FailedBuild":"./tools/gotcha/..."}
