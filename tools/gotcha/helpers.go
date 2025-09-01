@@ -380,7 +380,10 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 		p.passed++
 		// Show success with actual test name
 		if p.shouldShowTestEvent("pass") {
-			fmt.Fprintf(os.Stderr, " ✔ %s (%.2fs)\n", event.Test, event.Elapsed)
+			fmt.Fprintf(os.Stderr, " %s %s %s\n", 
+				passStyle.Render(checkPass), 
+				testNameStyle.Render(event.Test), 
+				durationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
 		}
 		// Clear buffer
 		delete(p.buffers, event.Test)
@@ -389,7 +392,10 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 		// Track statistics
 		p.failed++
 		// Always show failures regardless of filter
-		fmt.Fprintf(os.Stderr, " ✘ %s (%.2fs)\n", event.Test, event.Elapsed)
+		fmt.Fprintf(os.Stderr, " %s FAILED: %s %s\n", 
+			failStyle.Render(checkFail), 
+			testNameStyle.Render(event.Test), 
+			durationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
 
 		// Show buffered error output
 		if output, exists := p.buffers[event.Test]; exists {
@@ -407,7 +413,9 @@ func (p *StreamProcessor) processEvent(event *TestEvent) {
 		p.skipped++
 		// Show skip with actual test name
 		if p.shouldShowTestEvent("skip") {
-			fmt.Fprintf(os.Stderr, " ⏭ %s\n", event.Test)
+			fmt.Fprintf(os.Stderr, " %s %s\n", 
+				skipStyle.Render(checkSkip), 
+				testNameStyle.Render(event.Test))
 		}
 		delete(p.buffers, event.Test)
 	}
@@ -438,13 +446,13 @@ func (p *StreamProcessor) printSummary() {
 	}
 	
 	fmt.Fprintf(os.Stderr, "\n")
-	fmt.Fprintf(os.Stderr, "Test Results:\n")
-	fmt.Fprintf(os.Stderr, "  ✔ Passed:  %d\n", p.passed)
+	fmt.Fprintf(os.Stderr, "%s\n", statsHeaderStyle.Render("Test Results:"))
+	fmt.Fprintf(os.Stderr, "  %s Passed:  %d\n", passStyle.Render(checkPass), p.passed)
 	if p.failed > 0 {
-		fmt.Fprintf(os.Stderr, "  ✘ Failed:  %d\n", p.failed)
+		fmt.Fprintf(os.Stderr, "  %s Failed:  %d\n", failStyle.Render(checkFail), p.failed)
 	}
 	if p.skipped > 0 {
-		fmt.Fprintf(os.Stderr, "  ⏭ Skipped: %d\n", p.skipped)
+		fmt.Fprintf(os.Stderr, "  %s Skipped: %d\n", skipStyle.Render(checkSkip), p.skipped)
 	}
 	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
 	fmt.Fprintf(os.Stderr, "\n")

@@ -78,6 +78,10 @@ func Merge(
 	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
+	if atmosConfig == nil {
+		return nil, fmt.Errorf("atmosConfig cannot be nil")
+	}
+	
 	if atmosConfig.Settings.ListMergeStrategy == "" {
 		atmosConfig.Settings.ListMergeStrategy = ListMergeStrategyReplace
 	}

@@ -145,3 +145,13 @@ func TestMergeListMerge(t *testing.T) {
 	assert.Nil(t, err)
 	t.Log(yamlConfig)
 }
+
+func TestMergeWithNilConfig(t *testing.T) {
+	map1 := map[string]any{"foo": "bar"}
+	inputs := []map[string]any{map1}
+
+	result, err := Merge(nil, inputs)
+	assert.Nil(t, result)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "atmosConfig cannot be nil")
+}

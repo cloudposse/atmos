@@ -83,6 +83,11 @@ step summaries and markdown reports.`,
   gotcha stream --packages="./..." --show=failed
   gotcha stream --packages="./pkg/..." --timeout=5m
   
+  # Run specific tests using -run flag
+  gotcha -- -run TestConfigLoad
+  gotcha -- -run "TestConfig.*" -v
+  gotcha stream -- -run TestStackProcess -race
+  
   # Process existing JSON results  
   go test -json ./... | gotcha parse
   gotcha parse --input=test-results.json --format=markdown
@@ -141,7 +146,12 @@ Pre-calculates total test count for accurate progress tracking.`,
   gotcha stream --include=".*api.*" --exclude=".*mock.*"
   
   # Pass arguments to go test
-  gotcha stream -- -race -short -count=3`,
+  gotcha stream -- -race -short -count=3
+  
+  # Run specific tests using -run flag
+  gotcha stream -- -run TestConfigLoad
+  gotcha stream -- -run "TestConfig.*" -v
+  gotcha stream --show=failed -- -run "Test.*Load" -race`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStream(cmd, args, globalLogger)
 		},

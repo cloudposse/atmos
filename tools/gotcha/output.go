@@ -28,7 +28,7 @@ func writeSummary(summary *TestSummary, format, outputFile string) error {
 	// Log success message for file outputs.
 	if outputPath != stdoutPath && outputPath != "" {
 		absPath, _ := filepath.Abs(outputPath)
-		fmt.Fprintf(os.Stderr, "%s Output markdown summary to %s\n", passStyle.Render(checkPass), absPath)
+		fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s\n", passStyle.Render(checkPass), absPath)
 	}
 	return nil
 }
@@ -45,7 +45,7 @@ func writeGitHubSummary(summary *TestSummary, outputFile string) error {
 		}()
 		writeMarkdownContent(githubWriter, summary, formatGitHub)
 		if githubPath != "" {
-			fmt.Fprintf(os.Stderr, "%s Output GitHub step summary to %s\n", passStyle.Render(checkPass), githubPath)
+			fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s\n", passStyle.Render(checkPass), githubPath)
 		}
 	}
 
@@ -63,7 +63,7 @@ func writeGitHubSummary(summary *TestSummary, outputFile string) error {
 
 	writeMarkdownContent(file, summary, formatGitHub)
 	absPath, _ := filepath.Abs(regularFile)
-	fmt.Fprintf(os.Stderr, "%s Output markdown summary to %s\n", passStyle.Render(checkPass), absPath)
+	fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s\n", passStyle.Render(checkPass), absPath)
 
 	return nil
 }

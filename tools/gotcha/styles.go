@@ -3,32 +3,41 @@ package main
 import "github.com/charmbracelet/lipgloss"
 
 const (
+	// Unicode symbols
 	checkPass = "✔" // UTF-8 check mark
 	checkFail = "✘" // UTF-8 cross mark
 	checkSkip = "⊘" // UTF-8 circled division slash
+
+	// Hex color constants
+	colorGreen      = "#2ECC40"  // Bright green for pass
+	colorRed        = "#DC143C"  // Crimson red for fail  
+	colorAmber      = "#FFB347"  // Peach orange for skip
+	colorLightGray  = "#D3D3D3"  // Light gray for test names
+	colorDarkGray   = "#666666"  // Dark gray for durations
+	colorBlue       = "#5DADE2"  // Blue for spinner
+	colorDarkRed    = "#B22222"  // Dark red for error background
+	colorWhite      = "#FFFFFF"  // White for error text
 )
 
 var (
-	// Checkmarks with colors (NOT emoji)
-	passStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
-	failStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")) // Red
-	skipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214")) // Amber
+	// Test result styles
+	passStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
+	failStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed))
+	skipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAmber))
 
-	// Test name in light gray
-	testNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#D3D3D3"))
+	// Text styles
+	testNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray))
+	durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))
 
-	// Duration in darker gray
-	durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+	// UI element styles
+	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
 
-	// Spinner style
-	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
-
-	// Error with solid background
+	// Error display style
 	errorHeaderStyle = lipgloss.NewStyle().
 				SetString("ERROR").
 				Padding(0, 1, 0, 1).
-				Background(lipgloss.Color("204")).
-				Foreground(lipgloss.Color("255"))
+				Background(lipgloss.Color(colorDarkRed)).
+				Foreground(lipgloss.Color(colorWhite))
 
 	// Statistics styles
 	statsHeaderStyle = lipgloss.NewStyle().Bold(true)

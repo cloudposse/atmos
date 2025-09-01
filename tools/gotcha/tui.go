@@ -648,12 +648,12 @@ func (m *testModel) generateFinalSummary() string {
 	if githubSummary == "" {
 		summaryStatus = "- GITHUB_STEP_SUMMARY not set (skipped)."
 	} else {
-		summaryStatus = fmt.Sprintf("Output GitHub step summary to %s", githubSummary)
+		summaryStatus = fmt.Sprintf("GitHub step summary written to %s", githubSummary)
 	}
 
 	// Check for markdown summary file
 	if _, err := os.Stat("test-summary.md"); err == nil {
-		summaryPath = fmt.Sprintf("%s Output markdown summary to test-summary.md", passStyle.Render(checkPass))
+		summaryPath = fmt.Sprintf("%s Markdown summary written to test-summary.md", passStyle.Render(checkPass))
 	}
 
 	// Calculate total tests and duration (approximate)

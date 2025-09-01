@@ -50,6 +50,14 @@ gotcha stream --include=".*api.*" --exclude=".*mock.*"
 # Pass arguments to go test
 gotcha stream -- -race -short -count=3
 
+# Run specific tests using -run flag
+gotcha stream -- -run TestConfigLoad
+gotcha stream -- -run "TestConfig.*"
+gotcha stream -- -run TestStackProcess -race
+
+# Combine gotcha flags with go test flags
+gotcha stream --show=failed -- -run "Test.*Load" -v
+
 # Generate GitHub step summaries
 gotcha stream --format=github --output=step-summary.md
 ```
