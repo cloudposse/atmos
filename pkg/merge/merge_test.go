@@ -153,5 +153,5 @@ func TestMergeWithNilConfig(t *testing.T) {
 	result, err := Merge(nil, inputs)
 	assert.Nil(t, result)
 	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "atmosConfig cannot be nil")
+	assert.Contains(t, err.Error(), "atmos config is nil")
 }

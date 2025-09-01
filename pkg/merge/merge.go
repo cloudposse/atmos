@@ -6,6 +6,7 @@ import (
 	"dario.cat/mergo"
 	"github.com/fatih/color"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -18,7 +19,7 @@ const (
 )
 
 // MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
-// and returns a single map with the merged contents
+// and returns a single map with the merged contents.
 func MergeWithOptions(
 	inputs []map[string]any,
 	appendSlice bool,
@@ -73,15 +74,15 @@ func MergeWithOptions(
 	return merged, nil
 }
 
-// Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents
+// Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents.
 func Merge(
 	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
 	if atmosConfig == nil {
-		return nil, fmt.Errorf("atmosConfig cannot be nil")
+		return nil, fmt.Errorf("%w", errUtils.ErrAtmosConfigIsNil)
 	}
-	
+
 	if atmosConfig.Settings.ListMergeStrategy == "" {
 		atmosConfig.Settings.ListMergeStrategy = ListMergeStrategyReplace
 	}
@@ -89,8 +90,8 @@ func Merge(
 	if atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyReplace &&
 		atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyAppend &&
 		atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyMerge {
-		return nil, fmt.Errorf("invalid Atmos manifests list merge strategy '%s'.\n"+
-			"Supported list merge strategies are: %s.",
+		return nil, fmt.Errorf("%w: '%s'. Supported list merge strategies are: %s",
+			errUtils.ErrInvalidListMergeStrategy,
 			atmosConfig.Settings.ListMergeStrategy,
 			fmt.Sprintf("%s, %s, %s", ListMergeStrategyReplace, ListMergeStrategyAppend, ListMergeStrategyMerge))
 	}
@@ -98,9 +99,10 @@ func Merge(
 	sliceDeepCopy := false
 	appendSlice := false
 
-	if atmosConfig.Settings.ListMergeStrategy == ListMergeStrategyMerge {
+	switch atmosConfig.Settings.ListMergeStrategy {
+	case ListMergeStrategyMerge:
 		sliceDeepCopy = true
-	} else if atmosConfig.Settings.ListMergeStrategy == ListMergeStrategyAppend {
+	case ListMergeStrategyAppend:
 		appendSlice = true
 	}
 
