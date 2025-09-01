@@ -1,0 +1,14 @@
+# Go build artifacts
+gotcha
+*.exe
+*.test
+*.prof
+
+# Coverage files
+coverage.out
+coverage.html
+
+# Test output
+gotcha-results.json
+test-results.json
+*.out
