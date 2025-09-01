@@ -118,6 +118,7 @@ type testModel struct {
 	cmd        *exec.Cmd
 	outputFile string
 	showFilter string // "all", "failed", "passed", "skipped"
+	alert      bool   // whether to emit terminal bell on completion
 
 	// Results tracking
 	passCount   int
@@ -161,7 +162,7 @@ type streamOutputMsg struct {
 	line []byte
 }
 
-func newTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int) testModel {
+func newTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int, alert bool) testModel {
 	// Create progress bar
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -204,6 +205,7 @@ func newTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		cmd:         cmd,
 		outputFile:  outputFile,
 		showFilter:  showFilter,
+		alert:       alert,
 		spinner:     s,
 		progress:    p,
 		testBuffers: make(map[string][]string),
@@ -489,6 +491,9 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.jsonFile.Close()
 		}
 
+		// Emit alert if enabled
+		emitAlert(m.alert)
+
 		// Don't show final summary if aborted
 		if !m.aborted {
 			// Generate the final summary output
@@ -506,6 +511,10 @@ func (m testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.jsonFile != nil {
 			m.jsonFile.Close()
 		}
+		
+		// Emit alert if enabled
+		emitAlert(m.alert)
+		
 		return m, tea.Sequence(
 			tea.Printf("%s Error: %v", failStyle.Render(checkFail), msg.err),
 			tea.Quit,

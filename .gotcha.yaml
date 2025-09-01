@@ -23,6 +23,10 @@ coverprofile: coverage.out
 # Exclude mock files from coverage calculations
 exclude-mocks: true
 
+# Alert configuration
+# Emit a terminal bell (\a) sound when tests complete
+alert: false
+
 # Package filtering configuration
 filter:
   # Regex patterns to include packages (default: include all)

@@ -205,11 +205,21 @@ func isTTY() bool {
 	return isStdoutTTY && isStdinTTY
 }
 
+// emitAlert outputs a terminal bell (\a) if alert is enabled
+func emitAlert(enabled bool) {
+	if enabled {
+		fmt.Fprint(os.Stderr, "\a")
+	}
+}
+
 // runSimpleStream runs tests with simple non-interactive streaming output
-func runSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int) int {
+func runSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int, alert bool) int {
 	// For now, return a placeholder implementation
 	// This would contain the full streaming implementation
 	fmt.Fprintf(os.Stderr, "Simple streaming not yet implemented\n")
+	
+	// Emit alert at completion
+	emitAlert(alert)
 	return 0
 }
 

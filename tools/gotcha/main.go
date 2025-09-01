@@ -108,6 +108,7 @@ step summaries and markdown reports.`,
 	rootCmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
 	rootCmd.Flags().String("include", ".*", "Regex patterns to include packages (comma-separated)")
 	rootCmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
+	rootCmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 
 	// Add subcommands
 	rootCmd.AddCommand(newStreamCmd(globalLogger))
@@ -155,6 +156,7 @@ Pre-calculates total test count for accurate progress tracking.`,
 	cmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
 	cmd.Flags().String("include", ".*", "Regex patterns to include packages (comma-separated)")
 	cmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
+	cmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 
 	return cmd
 }
@@ -219,6 +221,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	_, _ = cmd.Flags().GetBool("exclude-mocks") // Not used in stream mode
 	include, _ := cmd.Flags().GetString("include")
 	exclude, _ := cmd.Flags().GetString("exclude")
+	alert, _ := cmd.Flags().GetBool("alert")
 
 	// Validate show filter
 	if !isValidShowFilter(show) {
@@ -273,7 +276,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Check if we have a TTY for interactive mode
 	if isTTY() {
 		// Create and run the Bubble Tea program
-		model := newTestModel(testPackages, testArgsStr, output, coverprofile, show, totalTests)
+		model := newTestModel(testPackages, testArgsStr, output, coverprofile, show, totalTests, alert)
 		// Use default Bubble Tea configuration
 		p := tea.NewProgram(model)
 
@@ -291,7 +294,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		}
 	} else {
 		// Fallback to simple streaming for CI/non-TTY environments
-		exitCode := runSimpleStream(testPackages, testArgsStr, output, coverprofile, show, totalTests)
+		exitCode := runSimpleStream(testPackages, testArgsStr, output, coverprofile, show, totalTests, alert)
 		if exitCode != 0 {
 			return fmt.Errorf("tests failed with exit code %d", exitCode)
 		}
