@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 )
@@ -218,13 +223,201 @@ func emitAlert(enabled bool) {
 
 // runSimpleStream runs tests with simple non-interactive streaming output.
 func runSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int, alert bool) int {
-	// For now, return a placeholder implementation
-	// This would contain the full streaming implementation
-	fmt.Fprintf(os.Stderr, "Simple streaming not yet implemented\n")
+	fmt.Fprintf(os.Stderr, "Starting tests in non-TTY mode...\n")
+
+	// Build the go test command
+	args := []string{"test", "-json"}
+
+	// Add coverage if requested
+	if coverProfile != "" {
+		args = append(args, fmt.Sprintf("-coverprofile=%s", coverProfile))
+		args = append(args, "-coverpkg=./...")
+	}
+
+	// Add verbose flag
+	args = append(args, "-v")
+
+	// Add timeout and other test arguments
+	if testArgs != "" {
+		// Parse testArgs string into individual arguments
+		extraArgs := strings.Fields(testArgs)
+		args = append(args, extraArgs...)
+	}
+
+	// Add packages to test
+	args = append(args, testPackages...)
+
+	// Run the tests
+	exitCode := runTestsWithSimpleStreaming(args, outputFile, showFilter)
 
 	// Emit alert at completion
 	emitAlert(alert)
+	return exitCode
+}
+
+// StreamProcessor handles real-time test output with buffering.
+type StreamProcessor struct {
+	mu         sync.Mutex
+	buffers    map[string][]string
+	jsonWriter io.Writer
+	showFilter string
+}
+
+// runTestsWithSimpleStreaming runs tests and processes output in real-time.
+func runTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter string) int {
+	// Create the command
+	cmd := exec.Command("go", testArgs...)
+	cmd.Stderr = os.Stderr // Pass through stderr
+
+	// Get stdout pipe
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get stdout pipe: %v\n", err)
+		return 1
+	}
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to start go test: %v\n", err)
+		return 1
+	}
+
+	// Create JSON output file
+	jsonFile, err := os.Create(outputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
+		return 1
+	}
+	defer jsonFile.Close()
+
+	// Create processor
+	processor := &StreamProcessor{
+		buffers:    make(map[string][]string),
+		jsonWriter: jsonFile,
+		showFilter: showFilter,
+	}
+
+	// Process the stream
+	processErr := processor.processStream(stdout)
+
+	// Wait for command to complete
+	testErr := cmd.Wait()
+
+	// Return processing error if any
+	if processErr != nil {
+		fmt.Fprintf(os.Stderr, "Stream processing error: %v\n", processErr)
+		return 1
+	}
+
+	// Handle test command exit code
+	if testErr != nil {
+		if exitErr, ok := testErr.(*exec.ExitError); ok {
+			// Exit code 1 means tests failed, which is expected
+			if exitErr.ExitCode() == 1 {
+				return 1
+			}
+			return exitErr.ExitCode()
+		}
+		return 1
+	}
+
 	return 0
+}
+
+func (p *StreamProcessor) processStream(input io.Reader) error {
+	scanner := bufio.NewScanner(input)
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+
+		// Write to JSON file
+		_, _ = p.jsonWriter.Write(line)
+		_, _ = p.jsonWriter.Write([]byte("\n"))
+
+		// Parse and process event
+		var event TestEvent
+		if err := json.Unmarshal(line, &event); err != nil {
+			// Skip non-JSON lines
+			continue
+		}
+
+		p.processEvent(&event)
+	}
+
+	return scanner.Err()
+}
+
+func (p *StreamProcessor) processEvent(event *TestEvent) {
+	// Skip package-level events
+	if event.Test == "" {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	switch event.Action {
+	case "run":
+		// Initialize buffer for this test
+		p.buffers[event.Test] = []string{}
+		// Show test start based on filter
+		if p.shouldShowTestEvent("run") {
+			fmt.Fprintf(os.Stderr, "Running %s...\n", event.Test)
+		}
+
+	case "output":
+		// Buffer the output
+		if p.buffers[event.Test] != nil {
+			p.buffers[event.Test] = append(p.buffers[event.Test], event.Output)
+		}
+
+	case "pass":
+		// Show success with actual test name
+		if p.shouldShowTestEvent("pass") {
+			fmt.Fprintf(os.Stderr, " ✔ %s (%.2fs)\n", event.Test, event.Elapsed)
+		}
+		// Clear buffer
+		delete(p.buffers, event.Test)
+
+	case "fail":
+		// Always show failures regardless of filter
+		fmt.Fprintf(os.Stderr, " ✘ %s (%.2fs)\n", event.Test, event.Elapsed)
+
+		// Show buffered error output
+		if output, exists := p.buffers[event.Test]; exists {
+			for _, line := range output {
+				// Filter to show only meaningful error lines
+				if shouldShowErrorLine(line) {
+					fmt.Fprint(os.Stderr, "    "+line)
+				}
+			}
+		}
+		delete(p.buffers, event.Test)
+
+	case "skip":
+		// Show skip with actual test name
+		if p.shouldShowTestEvent("skip") {
+			fmt.Fprintf(os.Stderr, " ⏭ %s\n", event.Test)
+		}
+		delete(p.buffers, event.Test)
+	}
+}
+
+func (p *StreamProcessor) shouldShowTestEvent(action string) bool {
+	switch p.showFilter {
+	case "all":
+		return true
+	case "failed":
+		return action == "fail"
+	case "passed":
+		return action == "pass"
+	case "skipped":
+		return action == "skip"
+	case "collapsed", "none":
+		return false
+	default:
+		return true
+	}
 }
 
 // handleOutput handles writing output in the specified format.
