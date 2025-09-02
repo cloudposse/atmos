@@ -1,10 +1,12 @@
 package merge
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -21,6 +23,22 @@ func TestMergeBasic(t *testing.T) {
 	result, err := Merge(&atmosConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
+}
+
+func TestMerge_NilAtmosConfigReturnsError(t *testing.T) {
+	// Nil atmosConfig should return an error to prevent panic
+	map1 := map[string]any{"list": []string{"1"}}
+	map2 := map[string]any{"list": []string{"2"}}
+	inputs := []map[string]any{map1, map2}
+
+	res, err := Merge(nil, inputs)
+	assert.Nil(t, res)
+	assert.NotNil(t, err)
+
+	// Verify the error is properly wrapped
+	assert.True(t, errors.Is(err, errUtils.ErrMerge), "Error should be wrapped with ErrMerge")
+	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil), "Error should be wrapped with ErrAtmosConfigIsNil")
+	assert.Contains(t, err.Error(), "atmos config is nil")
 }
 
 func TestMergeBasicOverride(t *testing.T) {
@@ -148,10 +166,89 @@ func TestMergeListMerge(t *testing.T) {
 
 func TestMergeWithNilConfig(t *testing.T) {
 	map1 := map[string]any{"foo": "bar"}
-	inputs := []map[string]any{map1}
+	map2 := map[string]any{"foo": "baz", "hello": "world"}
+	inputs := []map[string]any{map1, map2}
 
+	// Nil config should return an error
 	result, err := Merge(nil, inputs)
+	assert.NotNil(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "atmos config is nil")
+
+	// Verify proper error wrapping
+	assert.True(t, errors.Is(err, errUtils.ErrMerge))
+	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil))
+}
+
+func TestMergeWithInvalidStrategy(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "invalid-strategy",
+		},
+	}
+
+	map1 := map[string]any{"foo": "bar"}
+	map2 := map[string]any{"foo": "baz"}
+	inputs := []map[string]any{map1, map2}
+
+	result, err := Merge(&atmosConfig, inputs)
+	assert.Nil(t, result)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "invalid list merge strategy")
+	assert.Contains(t, err.Error(), "invalid-strategy")
+	assert.Contains(t, err.Error(), "replace, append, merge")
+
+	// Verify error wrapping - should be wrapped with both ErrMerge and ErrInvalidListMergeStrategy
+	assert.True(t, errors.Is(err, errUtils.ErrMerge), "Error should be wrapped with ErrMerge")
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidListMergeStrategy), "Error should be wrapped with ErrInvalidListMergeStrategy")
+}
+
+func TestMergeWithEmptyInputs(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: ListMergeStrategyReplace,
+		},
+	}
+
+	// Test with empty inputs slice
+	inputs := []map[string]any{}
+	result, err := Merge(&atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+
+	// Test with nil maps in inputs
+	inputs = []map[string]any{nil, nil}
+	result, err = Merge(&atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+
+	// Test with mix of empty and non-empty maps
+	inputs = []map[string]any{{}, {"foo": "bar"}, {}}
+	result, err = Merge(&atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "bar", result["foo"])
+}
+
+func TestMergeHandlesNilConfigWithoutPanic(t *testing.T) {
+	// This test verifies that Merge handles nil config gracefully
+	// Without the nil check in Merge, this test would panic when
+	// the function tries to access atmosConfig.Settings.ListMergeStrategy
+
+	inputs := []map[string]any{
+		{"key1": "value1"},
+		{"key2": "value2"},
+	}
+
+	// Call Merge with nil config - this would panic without our fix
+	// at the line: if atmosConfig.Settings.ListMergeStrategy != ""
+	result, err := Merge(nil, inputs)
+
+	// Verify it returns an error instead of panicking
 	assert.Nil(t, result)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "atmos config is nil")
+	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil))
 }

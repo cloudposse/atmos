@@ -65,4 +65,5 @@ var (
 
 	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
 	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
+	ErrMerge                    = errors.New("merge error")
 )
