@@ -332,14 +332,14 @@ func TestCoverageTableFormat(t *testing.T) {
 	assert.Contains(t, result, "| Metric | Coverage | Details |", "Comment should contain table headers")
 	assert.Contains(t, result, "| Statement Coverage |", "Comment should contain statement coverage row")
 	assert.Contains(t, result, "| Function Coverage |", "Comment should contain function coverage row")
-	
+
 	// Should contain coverage percentage
 	assert.Contains(t, result, "85.2%", "Comment should contain statement coverage percentage")
-	
+
 	// Should contain emoji and excluded files info
 	assert.Contains(t, result, "🟢", "Comment should contain coverage emoji for good coverage")
 	assert.Contains(t, result, "(excluded 2 mock files)", "Comment should show excluded files count")
-	
+
 	// Should contain function coverage info
 	assert.Contains(t, result, "1/2 functions covered", "Comment should show function coverage ratio")
 }

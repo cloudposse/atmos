@@ -212,34 +212,34 @@ func addCoverageWithLimit(output io.Writer, summary *TestSummary, maxBytes int) 
 	// Use the same table format as job summary.
 	if summary.CoverageData != nil && summary.CoverageData.StatementCoverage != "" {
 		fmt.Fprintf(output, "## 📊 Test Coverage\n\n")
-		
+
 		// Build statement coverage details with emoji.
 		coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(summary.CoverageData.StatementCoverage, "%"), 64)
 		statementEmoji := getCoverageEmoji(coverageFloat)
-		
+
 		statementDetails := statementEmoji
 		if len(summary.CoverageData.FilteredFiles) > 0 {
 			statementDetails += fmt.Sprintf(" (excluded %d mock files)", len(summary.CoverageData.FilteredFiles))
 		}
-		
+
 		// Calculate function coverage statistics.
 		coveredFunctions, totalFunctions, functionCoveragePercent := calculateFunctionCoverage(summary.CoverageData.FunctionCoverage)
 		funcEmoji := getCoverageEmoji(functionCoveragePercent)
 		functionDetails := fmt.Sprintf("%s %d/%d functions covered", funcEmoji, coveredFunctions, totalFunctions)
-		
+
 		// Write coverage table using same format as job summary.
 		fmt.Fprintf(output, "| Metric | Coverage | Details |\n")
 		fmt.Fprintf(output, "|--------|----------|----------|\n")
 		fmt.Fprintf(output, "| Statement Coverage | %s | %s |\n", summary.CoverageData.StatementCoverage, statementDetails)
 		fmt.Fprintf(output, "| Function Coverage | %.1f%% | %s |\n\n", functionCoveragePercent, functionDetails)
-		
+
 	} else if summary.Coverage != "" {
 		fmt.Fprintf(output, "## 📊 Test Coverage\n\n")
-		
+
 		// Legacy format with emoji.
 		coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(summary.Coverage, "%"), 64)
 		emoji := getCoverageEmoji(coverageFloat)
-		
+
 		fmt.Fprintf(output, "| Metric | Coverage | Details |\n")
 		fmt.Fprintf(output, "|--------|----------|----------|\n")
 		fmt.Fprintf(output, "| Statement Coverage | %s | %s |\n\n", summary.Coverage, emoji)
