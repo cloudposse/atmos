@@ -34,7 +34,7 @@ func TestMerge_NilAtmosConfigReturnsError(t *testing.T) {
 	res, err := Merge(nil, inputs)
 	assert.Nil(t, res)
 	assert.NotNil(t, err)
-	
+
 	// Verify the error is properly wrapped
 	assert.True(t, errors.Is(err, errUtils.ErrMerge), "Error should be wrapped with ErrMerge")
 	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil), "Error should be wrapped with ErrAtmosConfigIsNil")
@@ -174,7 +174,7 @@ func TestMergeWithNilConfig(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "atmos config is nil")
-	
+
 	// Verify proper error wrapping
 	assert.True(t, errors.Is(err, errUtils.ErrMerge))
 	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil))
@@ -235,7 +235,7 @@ func TestMergeWithEmptyInputs(t *testing.T) {
 func TestMergePreventsNilConfigPanic(t *testing.T) {
 	// This test demonstrates that without the nil check, accessing
 	// atmosConfig.Settings.ListMergeStrategy would cause a panic
-	
+
 	// Create a function that simulates what would happen without nil check
 	mergeWithoutNilCheck := func(atmosConfig *schema.AtmosConfiguration, inputs []map[string]any) (result map[string]any, panicOccurred bool) {
 		defer func() {
@@ -243,23 +243,23 @@ func TestMergePreventsNilConfigPanic(t *testing.T) {
 				panicOccurred = true
 			}
 		}()
-		
+
 		// This would panic if atmosConfig is nil
 		_ = atmosConfig.Settings.ListMergeStrategy
-		
+
 		return map[string]any{}, false
 	}
-	
+
 	// Test that accessing nil config would panic
 	_, wouldPanic := mergeWithoutNilCheck(nil, []map[string]any{{"foo": "bar"}})
 	assert.True(t, wouldPanic, "Accessing atmosConfig.Settings on nil should panic")
-	
+
 	// Test that our Merge function prevents this panic
 	result, err := Merge(nil, []map[string]any{{"foo": "bar"}})
 	assert.Nil(t, result)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "atmos config is nil")
-	
+
 	// Verify we can still use non-nil configs
 	validConfig := &schema.AtmosConfiguration{}
 	result, err = Merge(validConfig, []map[string]any{{"foo": "bar"}})
