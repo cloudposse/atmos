@@ -69,12 +69,13 @@ testacc-coverage: testacc-cover
 
 # Test target for CI with gotcha
 testacc-ci: get
-	@go run -C tools/gotcha . stream ../../... \
+	@go install -C tools/gotcha .
+	@gotcha stream ./... \
 		--timeout=40m \
-		--coverprofile=../../coverage.out \
-		--output=../../gotcha-results.json \
+		--coverprofile=coverage.out \
+		--output=gotcha-results.json \
 		-- $(TESTARGS)
-	@go run -C tools/gotcha . parse ../../gotcha-results.json --format=github --coverprofile=../../coverage.out --post-comment
+	@gotcha parse gotcha-results.json --format=github --coverprofile=coverage.out --post-comment
 
 # Clean test artifacts
 clean-test:
