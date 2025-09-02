@@ -1,3 +1,55 @@
+/*
+NOTES:
+
+The functions in this file are taken from https://github.com/hashicorp/go-getter/blob/main/get_git.go
+
+We upgrade `go-getter` from v1.7.8 to v1.7.9 because the dependency github.com/hashicorp/go-getter:v1.7.8 was vulnerable:
+CVE-2025-8959, Score: 7.5
+HashiCorp's go-getter library subdirectory download feature is vulnerable to symlink attacks leading to unauthorized
+read access beyond the designated directory boundaries. This vulnerability, identified as CVE-2025-8959,
+is fixed in go-getter 1.7.9.
+Read More: https://www.mend.io/vulnerability-database/CVE-2025-8959
+
+v1.7.9 completely disabled symlinks when downloading from Git repositories, which broke our code.
+In particular, the changes in this function:
+
+func (g *GitGetter) fetchSubmodules(ctx context.Context, dst, sshKeyFile string, depth int) error {
+	if g.client != nil {
+		g.client.DisableSymlinks = true
+	}
+}
+
+HashiCorp always sets `DisableSymlinks = true` regardless of the client configuration:
+
+type Client struct {
+	// Disable symlinks
+	DisableSymlinks bool
+}
+
+The `DisableSymlinks` field is configurable for any other protocols (http, https, s3), but not for `git`.
+
+We want it to be configurable because in many cases, a repo has some symlinks, and when `go-getter` downloads modules from
+the repo, it downloads the entire repo first into a temp directory, and then gets the requested module from it.
+Since `client.DisableSymlinks = true` is always set for the `git` protocol, the code breaks with the error:
+
+ERRO Failed to vendor github/stargazers: copying of symlinks has been disabled
+
+SUMMARY:
+
+- We are using the latest version v1.7.9 of `go-getter`
+- We copied the functions from `go-getter` into this file and removed the following code
+  (which always disabled symlinks for the `git` protocol):
+
+	if g.client != nil {
+	   g.client.DisableSymlinks = true
+	}
+
+- This allows us to configure `DisableSymlinks` in our code for the git` protocol
+- We'll monitor the progress of https://github.com/hashicorp/go-getter and update our code if HashiCorp makes any changes
+  or makes `DisableSymlinks` configurable for the `git` protocol (in which case, we will remove this file and use the native
+  `go-getter` functionality)
+*/
+
 package downloader
 
 import (
@@ -230,18 +282,6 @@ func findRemoteDefaultBranch(ctx context.Context, u *url.URL) string {
 	return matches[len(matches)-1]
 }
 
-// fetchSubmodules downloads any configured submodules recursively.
-func (g *CustomGitGetter) fetchSubmodules(ctx context.Context, dst, sshKeyFile string, depth int) error {
-	args := []string{"submodule", "update", "--init", "--recursive"}
-	if depth > 0 {
-		args = append(args, "--depth", strconv.Itoa(depth))
-	}
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dst
-	setupGitEnv(cmd, sshKeyFile)
-	return getRunCommand(cmd)
-}
-
 // checkGitVersion is used to check the version of git installed on the system
 // against a known minimum version. Returns an error if the installed version
 // is older than the given minimum.
@@ -392,6 +432,18 @@ func (g *CustomGitGetter) update(ctx context.Context, dst, sshKeyFile string, u 
 		cmd = exec.CommandContext(ctx, "git", "pull", "origin", "--ff-only", "--", ref)
 	}
 
+	cmd.Dir = dst
+	setupGitEnv(cmd, sshKeyFile)
+	return getRunCommand(cmd)
+}
+
+// fetchSubmodules downloads any configured submodules recursively.
+func (g *CustomGitGetter) fetchSubmodules(ctx context.Context, dst, sshKeyFile string, depth int) error {
+	args := []string{"submodule", "update", "--init", "--recursive"}
+	if depth > 0 {
+		args = append(args, "--depth", strconv.Itoa(depth))
+	}
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dst
 	setupGitEnv(cmd, sshKeyFile)
 	return getRunCommand(cmd)
