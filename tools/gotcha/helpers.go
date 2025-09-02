@@ -325,13 +325,13 @@ func runTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 			if processor.failed > 0 {
 				return 1
 			}
-			
+
 			// If go test failed for other reasons (build errors, etc.) but no test failures,
 			// we should still report those as errors for exit codes > 1
 			if exitErr.ExitCode() > 1 {
 				return exitErr.ExitCode()
 			}
-			
+
 			// go test exited with 1 but no actual test failures - return success
 			return 0
 		}
