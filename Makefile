@@ -69,7 +69,7 @@ testacc-coverage: testacc-cover
 
 # Test target for CI with gotcha
 testacc-ci: get
-	@if ! command -v gotcha >/dev/null 2>&1; then cd tools/gotcha && go install .; fi
+	@if ! command -v gotcha >/dev/null 2>&1; then go install -C tools/gotcha .; fi
 	@gotcha stream ./... \
 		--timeout=40m \
 		--coverprofile=coverage.out \
