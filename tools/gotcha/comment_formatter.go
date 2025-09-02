@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // CommentSizeLimit represents GitHub's comment size limit.
@@ -201,19 +203,46 @@ func addPassedTestsWithLimit(output io.Writer, passed []TestResult, maxBytes int
 	fmt.Fprintf(output, "\n")
 }
 
-// addCoverageWithLimit adds coverage information if there's enough space.
+// addCoverageWithLimit adds coverage information if there's enough space using job summary format.
 func addCoverageWithLimit(output io.Writer, summary *TestSummary, maxBytes int) {
-	if maxBytes < 50 { // Need at least 50 bytes for basic coverage info.
+	if maxBytes < 200 { // Need at least 200 bytes for coverage table format.
 		return
 	}
 	
-	// Very minimal coverage summary for comments - no function details.
+	// Use the same table format as job summary.
 	if summary.CoverageData != nil && summary.CoverageData.StatementCoverage != "" {
 		fmt.Fprintf(output, "## 📊 Test Coverage\n\n")
-		fmt.Fprintf(output, "**Statement Coverage**: %s\n\n", summary.CoverageData.StatementCoverage)
+		
+		// Build statement coverage details with emoji.
+		coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(summary.CoverageData.StatementCoverage, "%"), 64)
+		statementEmoji := getCoverageEmoji(coverageFloat)
+		
+		statementDetails := statementEmoji
+		if len(summary.CoverageData.FilteredFiles) > 0 {
+			statementDetails += fmt.Sprintf(" (excluded %d mock files)", len(summary.CoverageData.FilteredFiles))
+		}
+		
+		// Calculate function coverage statistics.
+		coveredFunctions, totalFunctions, functionCoveragePercent := calculateFunctionCoverage(summary.CoverageData.FunctionCoverage)
+		funcEmoji := getCoverageEmoji(functionCoveragePercent)
+		functionDetails := fmt.Sprintf("%s %d/%d functions covered", funcEmoji, coveredFunctions, totalFunctions)
+		
+		// Write coverage table using same format as job summary.
+		fmt.Fprintf(output, "| Metric | Coverage | Details |\n")
+		fmt.Fprintf(output, "|--------|----------|----------|\n")
+		fmt.Fprintf(output, "| Statement Coverage | %s | %s |\n", summary.CoverageData.StatementCoverage, statementDetails)
+		fmt.Fprintf(output, "| Function Coverage | %.1f%% | %s |\n\n", functionCoveragePercent, functionDetails)
+		
 	} else if summary.Coverage != "" {
 		fmt.Fprintf(output, "## 📊 Test Coverage\n\n")
-		fmt.Fprintf(output, "**Statement Coverage**: %s\n\n", summary.Coverage)
+		
+		// Legacy format with emoji.
+		coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(summary.Coverage, "%"), 64)
+		emoji := getCoverageEmoji(coverageFloat)
+		
+		fmt.Fprintf(output, "| Metric | Coverage | Details |\n")
+		fmt.Fprintf(output, "|--------|----------|----------|\n")
+		fmt.Fprintf(output, "| Statement Coverage | %s | %s |\n\n", summary.Coverage, emoji)
 	}
 }
 

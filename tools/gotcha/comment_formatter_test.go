@@ -309,3 +309,37 @@ func generateManyCoverageFunctions(count int) []CoverageFunction {
 	}
 	return functions
 }
+
+func TestCoverageTableFormat(t *testing.T) {
+	summary := &TestSummary{
+		Failed:  []TestResult{},
+		Skipped: []TestResult{},
+		Passed:  []TestResult{},
+		CoverageData: &CoverageData{
+			StatementCoverage: "85.2%",
+			FunctionCoverage: []CoverageFunction{
+				{File: "file1.go", Function: "func1", Coverage: 100.0},
+				{File: "file2.go", Function: "func2", Coverage: 0.0},
+			},
+			FilteredFiles: []string{"mock1.go", "mock2.go"},
+		},
+	}
+
+	result := generateCommentContent(summary, "test-uuid")
+
+	// Should contain coverage table headers
+	assert.Contains(t, result, "## 📊 Test Coverage", "Comment should contain coverage section")
+	assert.Contains(t, result, "| Metric | Coverage | Details |", "Comment should contain table headers")
+	assert.Contains(t, result, "| Statement Coverage |", "Comment should contain statement coverage row")
+	assert.Contains(t, result, "| Function Coverage |", "Comment should contain function coverage row")
+	
+	// Should contain coverage percentage
+	assert.Contains(t, result, "85.2%", "Comment should contain statement coverage percentage")
+	
+	// Should contain emoji and excluded files info
+	assert.Contains(t, result, "🟢", "Comment should contain coverage emoji for good coverage")
+	assert.Contains(t, result, "(excluded 2 mock files)", "Comment should show excluded files count")
+	
+	// Should contain function coverage info
+	assert.Contains(t, result, "1/2 functions covered", "Comment should show function coverage ratio")
+}
