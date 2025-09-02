@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -148,9 +149,19 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 
 	// Print the diff
 	if hasDiff {
-		fmt.Fprintln(os.Stdout, "\nDiff Output")
-		fmt.Fprintln(os.Stdout, "===========")
-		fmt.Fprintln(os.Stdout, "")
+		styles := theme.GetCurrentStyles()
+		if styles != nil {
+			// Use themed header
+			fmt.Fprintln(os.Stdout, "")
+			fmt.Fprintln(os.Stdout, styles.Diff.Header.Render("Diff Output"))
+			fmt.Fprintln(os.Stdout, styles.Diff.Header.Render("==========="))
+			fmt.Fprintln(os.Stdout, "")
+		} else {
+			// Fallback to plain text
+			fmt.Fprintln(os.Stdout, "\nDiff Output")
+			fmt.Fprintln(os.Stdout, "===========")
+			fmt.Fprintln(os.Stdout, "")
+		}
 		fmt.Fprintln(os.Stdout, diff)
 
 		// Print the error message
@@ -161,7 +172,12 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		return nil // This line will never be reached
 	}
 
-	fmt.Fprintln(os.Stdout, "The planfiles are identical")
+	styles := theme.GetCurrentStyles()
+	if styles != nil {
+		fmt.Fprintln(os.Stdout, styles.Success.Render("The planfiles are identical"))
+	} else {
+		fmt.Fprintln(os.Stdout, "The planfiles are identical")
+	}
 	return nil
 }
 

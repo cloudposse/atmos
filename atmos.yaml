@@ -354,6 +354,7 @@ settings:
     max_width: 120          # Maximum width for terminal output
     pager: true             # Pager setting for all terminal output
     unicode: true           # Use unicode characters
+    theme: "default"         # Terminal color theme for markdown rendering
 
     syntax_highlighting:
       enabled: true

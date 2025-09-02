@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -201,7 +202,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	return folders, nil
 }
 
-// get stack terraform state files
+// get stack terraform state files.
 func getStackTerraformStateFolder(componentPath string, stack string) ([]Directory, error) {
 	tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d")
 	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack)
@@ -254,11 +255,34 @@ func getRelativePath(basePath, componentPath string) (string, error) {
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
 	t := huh.ThemeCharm()
-	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
-	purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
-	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
-	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
-	t.Blurred.Title = t.Blurred.Title.Foreground(purple)
+
+	// Apply theme colors to huh form
+	themeName := "default"
+	if theme.GetCurrentStyles() != nil {
+		// Get the actual active theme name
+		_ = viper.BindEnv("ATMOS_THEME")
+		themeName = viper.GetString("ATMOS_THEME")
+		if themeName == "" {
+			themeName = "default"
+		}
+	}
+	scheme, err := theme.GetColorSchemeForTheme(themeName)
+	if err == nil && scheme != nil {
+		// Use theme colors for the form
+		primaryColor := lipgloss.Color(scheme.Primary)
+		backgroundColor := lipgloss.Color(scheme.Background)
+		t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(backgroundColor).Background(primaryColor)
+		t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(primaryColor)
+		t.Blurred.Title = t.Blurred.Title.Foreground(primaryColor)
+	} else {
+		// Fallback to default colors
+		cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
+		purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
+		t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
+		t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
+		t.Blurred.Title = t.Blurred.Title.Foreground(purple)
+	}
+
 	confirmPrompt := huh.NewConfirm().
 		Title(message).
 		Affirmative("Yes!").
@@ -274,12 +298,16 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	return confirm, nil
 }
 
-// DeletePathTerraform deletes the specified file or folder. with a checkmark or xmark
+// DeletePathTerraform deletes the specified file or folder with a checkmark or xmark.
 func DeletePathTerraform(fullPath string, objectName string) error {
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
-		xMark := theme.Styles.XMark
-		fmt.Printf("%s Cannot delete %s: path does not exist", xMark, objectName)
+		styles := theme.GetCurrentStyles()
+		if styles != nil {
+			fmt.Printf("%s Cannot delete %s: path does not exist", styles.XMark, objectName)
+		} else {
+			fmt.Printf("✗ Cannot delete %s: path does not exist", objectName)
+		}
 		fmt.Println()
 		return err
 	}
@@ -289,13 +317,21 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 	// Proceed with deletion
 	err = os.RemoveAll(fullPath)
 	if err != nil {
-		xMark := theme.Styles.XMark
-		fmt.Printf("%s Error deleting %s", xMark, objectName)
+		styles := theme.GetCurrentStyles()
+		if styles != nil {
+			fmt.Printf("%s Error deleting %s", styles.XMark, objectName)
+		} else {
+			fmt.Printf("✗ Error deleting %s", objectName)
+		}
 		fmt.Println()
 		return err
 	}
-	checkMark := theme.Styles.Checkmark
-	fmt.Printf("%s Deleted %s", checkMark, objectName)
+	styles := theme.GetCurrentStyles()
+	if styles != nil {
+		fmt.Printf("%s Deleted %s", styles.Checkmark, objectName)
+	} else {
+		fmt.Printf("✓ Deleted %s", objectName)
+	}
 	fmt.Println()
 	return nil
 }
@@ -353,7 +389,8 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig *schema
 
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
 func handleTFDataDir(componentPath string, relativePath string) {
-	tfDataDir := os.Getenv("TF_DATA_DIR")
+	_ = viper.BindEnv("TF_DATA_DIR")
+	tfDataDir := viper.GetString("TF_DATA_DIR")
 	if tfDataDir == "" {
 		return
 	}
@@ -468,7 +505,8 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			folders = append(folders, stackFolders...)
 		}
 	}
-	tfDataDir := os.Getenv("TF_DATA_DIR")
+	_ = viper.BindEnv("TF_DATA_DIR")
+	tfDataDir := viper.GetString("TF_DATA_DIR")
 
 	var tfDataDirFolders []Directory
 	if tfDataDir != "" {

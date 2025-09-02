@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -171,23 +169,8 @@ func formatComplexValue(val interface{}) string {
 
 // createStyledTable creates a styled table with headers and rows.
 func CreateStyledTable(header []string, rows [][]string) string {
-	t := table.New().
-		Border(lipgloss.ThickBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-			if row == -1 {
-				return style.
-					Foreground(lipgloss.Color(theme.ColorGreen)).
-					Bold(true).
-					Align(lipgloss.Center)
-			}
-			return style.Inherit(theme.Styles.Description)
-		}).
-		Headers(header...).
-		Rows(rows...)
-
-	return t.String() + utils.GetLineEnding()
+	// Use the new minimal table style from theme package
+	return theme.CreateMinimalTable(header, rows) + utils.GetLineEnding()
 }
 
 // Format implements the Formatter interface for TableFormatter.

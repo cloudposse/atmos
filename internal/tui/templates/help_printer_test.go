@@ -44,7 +44,7 @@ func TestPrintHelpFlagPrinter_PrintHelpFlag(t *testing.T) {
 				Value:     &stringValue{value: "out.txt"},
 				DefValue:  "out.txt",
 			},
-			expectedOutput: "    -o, --output string output file path (default out.txt)\n\n",
+			expectedOutput: "    -o, --output string    output file path (default out.txt)\n\n",
 		},
 		{
 			name: "bool flag without type",

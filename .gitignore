@@ -51,3 +51,7 @@ internal/exec/output.*
 # Coverage files
 coverage.out
 coverage.html
+
+# Test output files
+tests/test_output.log
+test-atmos.yaml

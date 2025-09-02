@@ -15,33 +15,63 @@ import (
 	"golang.org/x/term"
 )
 
+// Terminal width constants for readability.
+const (
+	maxTerminalWidth = 100
+	readableWidth    = 80
+	minTerminalWidth = 40
+	widthMargin      = 4
+)
+
 // Templater handles the generation and management of command usage templates.
 type Templater struct {
 	UsageTemplate string
 }
 
-// commandStyle defines the styles for command formatting
-var (
-	commandNameStyle = theme.Styles.CommandName
-	commandDescStyle = theme.Styles.Description
+// CommandStyles holds all command-related styles.
+type CommandStyles struct {
+	NameStyle            lipgloss.Style
+	DescStyle            lipgloss.Style
+	UnsupportedNameStyle lipgloss.Style
+	UnsupportedDescStyle lipgloss.Style
+}
 
-	commandUnsupportedNameStyle = theme.Styles.CommandName.
-					Foreground(lipgloss.Color(theme.ColorGray)).
-					Bold(true)
-	commandUnsupportedDescStyle = theme.Styles.Description.
-					Foreground(lipgloss.Color(theme.ColorGray))
-)
+// getCommandStyles returns theme-aware styles for command formatting.
+func getCommandStyles() CommandStyles {
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		// Fallback to unstyled if theme is not available
+		return CommandStyles{
+			NameStyle:            lipgloss.NewStyle(),
+			DescStyle:            lipgloss.NewStyle(),
+			UnsupportedNameStyle: lipgloss.NewStyle(),
+			UnsupportedDescStyle: lipgloss.NewStyle(),
+		}
+	}
+
+	return CommandStyles{
+		NameStyle: styles.Help.CommandName,
+		DescStyle: styles.Help.CommandDesc,
+		UnsupportedNameStyle: styles.Help.CommandName.
+			Foreground(lipgloss.Color(theme.ColorGray)).
+			Bold(true),
+		UnsupportedDescStyle: styles.Help.CommandDesc.
+			Foreground(lipgloss.Color(theme.ColorGray)),
+	}
+}
 
 // formatCommand returns a styled string for a command and its description
 func formatCommand(name string, desc string, padding int, IsNotSupported bool) string {
 	paddedName := fmt.Sprintf("%-*s", padding, name)
+	cmdStyles := getCommandStyles()
+
 	if IsNotSupported {
-		styledName := commandUnsupportedNameStyle.Render(paddedName)
-		styledDesc := commandUnsupportedDescStyle.Render(desc + " [unsupported]")
+		styledName := cmdStyles.UnsupportedNameStyle.Render(paddedName)
+		styledDesc := cmdStyles.UnsupportedDescStyle.Render(desc + " [unsupported]")
 		return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 	}
-	styledName := commandNameStyle.Render(paddedName)
-	styledDesc := commandDescStyle.Render(desc)
+	styledName := cmdStyles.NameStyle.Render(paddedName)
+	styledDesc := cmdStyles.DescStyle.Render(desc)
 	return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 }
 
@@ -109,11 +139,45 @@ func isAliasesPresent(cmds []*cobra.Command) bool {
 }
 
 func headingStyle(s string) string {
-	if theme.Styles.Help.Headings != nil {
-		ch := theme.Styles.Help.Headings
-		return ch.Sprint(s)
+	styles := theme.GetCurrentStyles()
+	if styles != nil {
+		// Transform to uppercase and remove underscores
+		transformed := strings.ToUpper(strings.ReplaceAll(s, "_", " "))
+		return styles.Help.Heading.Render(transformed)
 	}
 	return s
+}
+
+// usageBlock wraps usage content in a styled block.
+func usageBlock(content string) string {
+	styles := theme.GetCurrentStyles()
+	if styles != nil {
+		// Calculate width for consistent box sizing
+		width := GetTerminalWidth()
+		if width > maxTerminalWidth {
+			width = readableWidth // Cap at 80 for readability
+		} else if width > minTerminalWidth {
+			width -= widthMargin // Leave some margin
+		}
+		return styles.Help.UsageBlock.Width(width).Render(strings.TrimSpace(content))
+	}
+	return content
+}
+
+// exampleBlock wraps example content in a styled block.
+func exampleBlock(content string) string {
+	styles := theme.GetCurrentStyles()
+	if styles != nil {
+		// Calculate width for consistent box sizing
+		width := GetTerminalWidth()
+		if width > maxTerminalWidth {
+			width = readableWidth // Cap at 80 for readability
+		} else if width > minTerminalWidth {
+			width -= widthMargin // Leave some margin
+		}
+		return styles.Help.ExampleBlock.Width(width).Render(strings.TrimSpace(content))
+	}
+	return content
 }
 
 func renderMarkdown(example string) string {
@@ -234,6 +298,8 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	cobra.AddTemplateFunc("renderMarkdown", renderMarkdown)
 	cobra.AddTemplateFunc("renderHelpMarkdown", renderHelpMarkdown)
 	cobra.AddTemplateFunc("HeadingStyle", headingStyle)
+	cobra.AddTemplateFunc("UsageBlock", usageBlock)
+	cobra.AddTemplateFunc("ExampleBlock", exampleBlock)
 
 	return nil
 }
