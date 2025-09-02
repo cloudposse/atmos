@@ -221,7 +221,7 @@ func getAccountRoles(ctx context.Context, client *sso.Client, token, accountID s
 func (i *awsIamIdentityCenter) SetEnvVars(info *schema.ConfigAndStacksInfo) error {
 	log.Info("Setting AWS environment variables")
 
-	err := CreateAwsFilesAndUpdateEnvVars(info, i.Identity.Identity, i.Common.Profile,  i.Provider, i.Common.Region, i.RoleArnToAssume)
+	err := CreateAwsFilesAndUpdateEnvVars(info, i.Identity.Identity, i.Common.Profile, i.Provider, i.Common.Region, i.RoleArnToAssume)
 	if err != nil {
 		return err
 	}
