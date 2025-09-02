@@ -3,6 +3,8 @@ package utils
 import (
 	"fmt"
 	"os"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ConvertEnvVars converts ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...].
@@ -27,4 +29,14 @@ func EnvironToMap() map[string]string {
 		envMap[k] = v
 	}
 	return envMap
+}
+
+// EnvToMap converts a slice of CommandEnv to a map of string string.
+// Keys are taken from the `Key` field, values are taken from the `Value` field.
+func CommandEnvToMap(envs []schema.CommandEnv) map[string]string {
+	m := make(map[string]string)
+	for _, e := range envs {
+		m[e.Key] = e.Value
+	}
+	return m
 }

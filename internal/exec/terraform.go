@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudposse/atmos/internal/auth"
+
 	log "github.com/charmbracelet/log"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -226,6 +228,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			ErrComponentNotValid,
 			info.ComponentFromArg,
 		)
+	}
+
+	err = auth.TerraformPreHook(atmosConfig, &info)
+	if err != nil {
+		return err
 	}
 
 	// Component working directory

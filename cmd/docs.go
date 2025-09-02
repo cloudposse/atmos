@@ -3,9 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
@@ -15,6 +13,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -120,25 +119,9 @@ var docsCmd = &cobra.Command{
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
-		var err error
-
-		if os.Getenv("GO_TEST") == "1" {
-			log.Debug("Skipping browser launch in test environment")
-		} else {
-			switch runtime.GOOS {
-			case "linux":
-				err = exec.Command("xdg-open", atmosDocsURL).Start()
-			case "windows":
-				err = exec.Command("rundll32", "url.dll,FileProtocolHandler", atmosDocsURL).Start()
-			case "darwin":
-				err = exec.Command("open", atmosDocsURL).Start()
-			default:
-				err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-			}
-
-			if err != nil {
-				return err
-			}
+		err := utils.OpenUrl(atmosDocsURL)
+		if err != nil {
+			return err
 		}
 
 		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
