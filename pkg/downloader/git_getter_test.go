@@ -1,10 +1,16 @@
 package downloader
 
 import (
+	"context"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/hashicorp/go-getter"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // trySymlink attempts to create a symlink and returns a skip reason if unsupported.
@@ -125,4 +131,84 @@ func TestRemoveSymlinks_WalkError_Propagates(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error due to unreadable directory")
 	}
+}
+
+type mockGitGetter struct {
+	client    *getter.Client
+	err       error
+	getCalled bool
+	getCustom func(dst string, u *url.URL) error
+}
+
+// Ensure all required methods are implemented (note: Getter, not GitGetter).
+var _ getter.Getter = (*mockGitGetter)(nil)
+
+func (m *mockGitGetter) Get(dst string, u *url.URL) error {
+	m.getCalled = true
+	if m.getCustom != nil {
+		return m.getCustom(dst, u)
+	}
+	return m.err
+}
+
+func (m *mockGitGetter) GetFile(dst string, u *url.URL) error {
+	m.getCalled = true
+	if m.getCustom != nil {
+		return m.getCustom(dst, u)
+	}
+	return m.err
+}
+
+func (m *mockGitGetter) ClientMode(_ *url.URL) (getter.ClientMode, error) {
+	return getter.ClientModeDir, nil
+}
+
+func (m *mockGitGetter) SetClient(c *getter.Client) { m.client = c }
+
+// Context needed by our gitGetter interface.
+func (m *mockGitGetter) Context() context.Context { return context.Background() }
+
+// Helper used by tests if you want a direct hook.
+func (m *mockGitGetter) GetCustom(dst string, u *url.URL) error {
+	m.getCalled = true
+	if m.getCustom != nil {
+		return m.getCustom(dst, u)
+	}
+	return m.err
+}
+
+func TestCustomGitGetter_Get_RemoveSymlinkError(t *testing.T) {
+	// This test is similar to the success case, but we'll use a read-only directory
+	// to force a permission error during symlink removal
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping read-only directory test on Windows")
+	}
+
+	// Create a read-only directory
+	parentDir := t.TempDir()
+	tempDir := filepath.Join(parentDir, "readonly")
+	require.NoError(t, os.Mkdir(tempDir, 0o555)) // Read-only directory
+	t.Cleanup(func() {
+		_ = os.Chmod(tempDir, 0o755) // Cleanup: make directory writable for cleanup
+	})
+
+	// Create a symlink in the read-only directory (this works because the parent is writable)
+	linkPath := filepath.Join(tempDir, "test.link")
+	if !trySymlink(t, "target", linkPath) {
+		return
+	}
+
+	// Create a mock that simulates successful git operation
+	mock := &mockGitGetter{}
+
+	// Call the method under test
+	testURL, err := url.Parse("git::https://example.com/repo.git")
+	require.NoError(t, err)
+
+	err = mock.Get(tempDir, testURL)
+
+	// Verify we get an error about not being able to remove symlinks
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error removing symlinks")
+	assert.True(t, mock.getCalled, "expected base Get to be called")
 }
