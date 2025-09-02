@@ -63,5 +63,7 @@ var (
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
 
-	ErrAtmosConfigIsNil = errors.New("atmos config is nil")
+	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
+	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
+	ErrMerge                    = errors.New("merge error")
 )
