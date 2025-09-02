@@ -56,6 +56,7 @@ coverage.out.tmp
 # Test artifacts
 test-results.json
 test-summary.md
+gotcha-results.json
 
 # Gotcha binary
 gotcha

@@ -1,6 +1,0 @@
-{"ImportPath":"./non-existent-path","Action":"build-output","Output":"# ./non-existent-path\n"}
-{"ImportPath":"./non-existent-path","Action":"build-output","Output":"stat /Users/erik/Dev/cloudposse/tools/atmos/.conductor/testacc-job-summary/non-existent-path: directory not found\n"}
-{"ImportPath":"./non-existent-path","Action":"build-fail"}
-{"Time":"2025-09-01T21:22:42.154945-05:00","Action":"start","Package":"./non-existent-path"}
-{"Time":"2025-09-01T21:22:42.155638-05:00","Action":"output","Package":"./non-existent-path","Output":"FAIL\t./non-existent-path [setup failed]\n"}
-{"Time":"2025-09-01T21:22:42.155645-05:00","Action":"fail","Package":"./non-existent-path","Elapsed":0.001,"FailedBuild":"./non-existent-path"}
