@@ -79,9 +79,14 @@ func Merge(
 	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
-	// Default to replace strategy if atmosConfig is nil or strategy is empty
+	// Check for nil config to prevent panic
+	if atmosConfig == nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
+	}
+
+	// Default to replace strategy if strategy is empty
 	strategy := ListMergeStrategyReplace
-	if atmosConfig != nil && atmosConfig.Settings.ListMergeStrategy != "" {
+	if atmosConfig.Settings.ListMergeStrategy != "" {
 		strategy = atmosConfig.Settings.ListMergeStrategy
 	}
 

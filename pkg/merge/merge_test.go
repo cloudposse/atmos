@@ -25,18 +25,20 @@ func TestMergeBasic(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
-func TestMerge_NilAtmosConfigDefaultsToReplace(t *testing.T) {
-	// Nil atmosConfig should not panic and should default to Replace strategy
+func TestMerge_NilAtmosConfigReturnsError(t *testing.T) {
+	// Nil atmosConfig should return an error to prevent panic
 	map1 := map[string]any{"list": []string{"1"}}
 	map2 := map[string]any{"list": []string{"2"}}
 	inputs := []map[string]any{map1, map2}
 
 	res, err := Merge(nil, inputs)
-	assert.NoError(t, err)
-
-	// Replace strategy should yield the latter list
-	expected := map[string]any{"list": []any{"2"}}
-	assert.Equal(t, expected, res)
+	assert.Nil(t, res)
+	assert.NotNil(t, err)
+	
+	// Verify the error is properly wrapped
+	assert.True(t, errors.Is(err, errUtils.ErrMerge), "Error should be wrapped with ErrMerge")
+	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil), "Error should be wrapped with ErrAtmosConfigIsNil")
+	assert.Contains(t, err.Error(), "atmos config is nil")
 }
 
 func TestMergeBasicOverride(t *testing.T) {
@@ -167,12 +169,15 @@ func TestMergeWithNilConfig(t *testing.T) {
 	map2 := map[string]any{"foo": "baz", "hello": "world"}
 	inputs := []map[string]any{map1, map2}
 
-	// Nil config should default to replace strategy
+	// Nil config should return an error
 	result, err := Merge(nil, inputs)
-	assert.Nil(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, "baz", result["foo"])
-	assert.Equal(t, "world", result["hello"])
+	assert.NotNil(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "atmos config is nil")
+	
+	// Verify proper error wrapping
+	assert.True(t, errors.Is(err, errUtils.ErrMerge))
+	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil))
 }
 
 func TestMergeWithInvalidStrategy(t *testing.T) {
@@ -222,6 +227,42 @@ func TestMergeWithEmptyInputs(t *testing.T) {
 	// Test with mix of empty and non-empty maps
 	inputs = []map[string]any{{}, {"foo": "bar"}, {}}
 	result, err = Merge(&atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "bar", result["foo"])
+}
+
+func TestMergePreventsNilConfigPanic(t *testing.T) {
+	// This test demonstrates that without the nil check, accessing
+	// atmosConfig.Settings.ListMergeStrategy would cause a panic
+	
+	// Create a function that simulates what would happen without nil check
+	mergeWithoutNilCheck := func(atmosConfig *schema.AtmosConfiguration, inputs []map[string]any) (result map[string]any, panicOccurred bool) {
+		defer func() {
+			if r := recover(); r != nil {
+				panicOccurred = true
+			}
+		}()
+		
+		// This would panic if atmosConfig is nil
+		_ = atmosConfig.Settings.ListMergeStrategy
+		
+		return map[string]any{}, false
+	}
+	
+	// Test that accessing nil config would panic
+	_, wouldPanic := mergeWithoutNilCheck(nil, []map[string]any{{"foo": "bar"}})
+	assert.True(t, wouldPanic, "Accessing atmosConfig.Settings on nil should panic")
+	
+	// Test that our Merge function prevents this panic
+	result, err := Merge(nil, []map[string]any{{"foo": "bar"}})
+	assert.Nil(t, result)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "atmos config is nil")
+	
+	// Verify we can still use non-nil configs
+	validConfig := &schema.AtmosConfiguration{}
+	result, err = Merge(validConfig, []map[string]any{{"foo": "bar"}})
 	assert.Nil(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, "bar", result["foo"])
