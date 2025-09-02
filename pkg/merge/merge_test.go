@@ -236,16 +236,16 @@ func TestMergeHandlesNilConfigWithoutPanic(t *testing.T) {
 	// This test verifies that Merge handles nil config gracefully
 	// Without the nil check in Merge, this test would panic when
 	// the function tries to access atmosConfig.Settings.ListMergeStrategy
-	
+
 	inputs := []map[string]any{
 		{"key1": "value1"},
 		{"key2": "value2"},
 	}
-	
+
 	// Call Merge with nil config - this would panic without our fix
 	// at the line: if atmosConfig.Settings.ListMergeStrategy != ""
 	result, err := Merge(nil, inputs)
-	
+
 	// Verify it returns an error instead of panicking
 	assert.Nil(t, result)
 	assert.NotNil(t, err)
