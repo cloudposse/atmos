@@ -172,3 +172,51 @@ func TestMergeWithNilConfig(t *testing.T) {
 	assert.Equal(t, "baz", result["foo"])
 	assert.Equal(t, "world", result["hello"])
 }
+
+func TestMergeWithInvalidStrategy(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "invalid-strategy",
+		},
+	}
+
+	map1 := map[string]any{"foo": "bar"}
+	map2 := map[string]any{"foo": "baz"}
+	inputs := []map[string]any{map1, map2}
+
+	result, err := Merge(&atmosConfig, inputs)
+	assert.Nil(t, result)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "invalid list merge strategy")
+	assert.Contains(t, err.Error(), "invalid-strategy")
+	assert.Contains(t, err.Error(), "replace, append, merge")
+}
+
+func TestMergeWithEmptyInputs(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: ListMergeStrategyReplace,
+		},
+	}
+
+	// Test with empty inputs slice
+	inputs := []map[string]any{}
+	result, err := Merge(&atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+
+	// Test with nil maps in inputs
+	inputs = []map[string]any{nil, nil}
+	result, err = Merge(&atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+
+	// Test with mix of empty and non-empty maps
+	inputs = []map[string]any{{}, {"foo": "bar"}, {}}
+	result, err = Merge(&atmosConfig, inputs)
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "bar", result["foo"])
+}
