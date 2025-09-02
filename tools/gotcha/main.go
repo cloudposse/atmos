@@ -68,6 +68,9 @@ func main() {
 	// Initialize global logger before any other operations
 	initGlobalLogger()
 
+	// Configure colors again now that logger exists to set its color profile
+	configureColors()
+
 	if err := execute(); err != nil {
 		os.Exit(1)
 	}

@@ -81,8 +81,9 @@ func configureColors() {
 	profile := detectColorProfile()
 	lipgloss.SetColorProfile(profile)
 
-	// Only log if logger is initialized (avoid panic in tests)
+	// Configure the logger's color profile if it exists
 	if globalLogger != nil {
+		globalLogger.SetColorProfile(profile)
 		globalLogger.Debug("Color profile configured",
 			"profile", profileName(profile),
 			"github_actions", isGitHubActions(),
