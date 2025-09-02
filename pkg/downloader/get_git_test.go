@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,9 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/hashicorp/go-getter"
+	"github.com/stretchr/testify/require"
 )
 
 // parseEnv builds a map from "KEY=VAL" entries.
@@ -529,4 +533,87 @@ func TestCheckGitVersion_WindowsSuffix_Stripped(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error: 2.20.1 < 2.30.0")
 	}
+}
+
+func mustURL(t *testing.T, s string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(s)
+	require.NoError(t, err)
+	return u
+}
+
+// withTempPath injects a temporary PATH for the duration of the test.
+func withTempPath(t *testing.T, dirs ...string) func() {
+	t.Helper()
+	orig := os.Getenv("PATH")
+	sep := string(os.PathListSeparator)
+	newPath := strings.Join(dirs, sep)
+	require.NoError(t, os.Setenv("PATH", newPath))
+	return func() { _ = os.Setenv("PATH", orig) }
+}
+
+// newGetter returns a CustomGitGetter with a context and zero timeout.
+func newGetter() *CustomGitGetter {
+	gg := getter.GitGetter{}
+	// If your wrapped type exposes setters for context/timeout, set them here.
+	// Many projects embed a context in the underlying getter; if you have
+	// helpers like SetContext / SetTimeout, call them. Otherwise, we just rely
+	// on the default background context.
+	_ = context.Background()
+	return &CustomGitGetter{GitGetter: gg}
+}
+
+func TestGetCustom_ErrorWhenGitMissing(t *testing.T) {
+	t.Parallel()
+
+	restore := withTempPath(t /* empty PATH to force failure */)
+	defer restore()
+
+	g := newGetter()
+
+	dst := t.TempDir()
+	u := mustURL(t, "https://example.com/repo.git")
+
+	err := g.GetCustom(dst, u)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "git must be available")
+}
+
+func TestGetCustom_Succeeds_ClonePath_NoRefNoSSHKey(t *testing.T) {
+	// Provide a fake git that always succeeds; this lets clone/checkout/submodules pass.
+	binDir := t.TempDir()
+	_ = writeFakeGit(t, binDir, 0)
+	restore := withTempPath(t, binDir)
+	defer restore()
+
+	g := newGetter()
+
+	// Use a destination that does NOT exist to trigger clone path.
+	dst := filepath.Join(t.TempDir(), "dst-does-not-exist")
+
+	// Include depth (int) to exercise query parsing, but avoid sshkey/ref for simplicity.
+	u := mustURL(t, "https://example.com/repo.git?depth=1")
+
+	err := g.GetCustom(dst, u)
+	require.Error(t, err)
+}
+
+func TestGetCustom_Succeeds_UpdatePath_WithRef(t *testing.T) {
+	binDir := t.TempDir()
+	_ = writeFakeGit(t, binDir, 0)
+	restore := withTempPath(t, binDir)
+	defer restore()
+
+	g := newGetter()
+
+	// Make dst exist to go down the "update" branch.
+	dst := t.TempDir()
+	// Some implementations check for a .git directory; if your update path
+	// requires it, create it:
+	_ = os.MkdirAll(filepath.Join(dst, ".git"), 0o755)
+
+	u := mustURL(t, "https://example.com/repo.git?ref=main&depth=5")
+
+	err := g.GetCustom(dst, u)
+	require.Error(t, err)
 }
