@@ -232,38 +232,23 @@ func TestMergeWithEmptyInputs(t *testing.T) {
 	assert.Equal(t, "bar", result["foo"])
 }
 
-func TestMergePreventsNilConfigPanic(t *testing.T) {
-	// This test demonstrates that without the nil check, accessing
-	// atmosConfig.Settings.ListMergeStrategy would cause a panic
-
-	// Create a function that simulates what would happen without nil check
-	mergeWithoutNilCheck := func(atmosConfig *schema.AtmosConfiguration, inputs []map[string]any) (result map[string]any, panicOccurred bool) {
-		defer func() {
-			if r := recover(); r != nil {
-				panicOccurred = true
-			}
-		}()
-
-		// This would panic if atmosConfig is nil
-		_ = atmosConfig.Settings.ListMergeStrategy
-
-		return map[string]any{}, false
+func TestMergeHandlesNilConfigWithoutPanic(t *testing.T) {
+	// This test verifies that Merge handles nil config gracefully
+	// Without the nil check in Merge, this test would panic when
+	// the function tries to access atmosConfig.Settings.ListMergeStrategy
+	
+	inputs := []map[string]any{
+		{"key1": "value1"},
+		{"key2": "value2"},
 	}
-
-	// Test that accessing nil config would panic
-	_, wouldPanic := mergeWithoutNilCheck(nil, []map[string]any{{"foo": "bar"}})
-	assert.True(t, wouldPanic, "Accessing atmosConfig.Settings on nil should panic")
-
-	// Test that our Merge function prevents this panic
-	result, err := Merge(nil, []map[string]any{{"foo": "bar"}})
+	
+	// Call Merge with nil config - this would panic without our fix
+	// at the line: if atmosConfig.Settings.ListMergeStrategy != ""
+	result, err := Merge(nil, inputs)
+	
+	// Verify it returns an error instead of panicking
 	assert.Nil(t, result)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "atmos config is nil")
-
-	// Verify we can still use non-nil configs
-	validConfig := &schema.AtmosConfiguration{}
-	result, err = Merge(validConfig, []map[string]any{{"foo": "bar"}})
-	assert.Nil(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, "bar", result["foo"])
+	assert.True(t, errors.Is(err, errUtils.ErrAtmosConfigIsNil))
 }
