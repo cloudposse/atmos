@@ -159,3 +159,16 @@ func TestMergeListMerge(t *testing.T) {
 	assert.Nil(t, err)
 	t.Log(yamlConfig)
 }
+
+func TestMergeWithNilConfig(t *testing.T) {
+	map1 := map[string]any{"foo": "bar"}
+	map2 := map[string]any{"foo": "baz", "hello": "world"}
+	inputs := []map[string]any{map1, map2}
+
+	// Nil config should default to replace strategy
+	result, err := Merge(nil, inputs)
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "baz", result["foo"])
+	assert.Equal(t, "world", result["hello"])
+}
