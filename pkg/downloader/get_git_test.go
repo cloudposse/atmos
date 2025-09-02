@@ -307,7 +307,7 @@ func TestGetRunCommand_StartError_NotExitErrorPath(t *testing.T) {
 func TestRemoveCaseInsensitiveGitDirectory_NoGitDir(t *testing.T) {
 	tmp := t.TempDir()
 	// Just create a regular file
-	if err := os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte("data"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "normal.txt"), []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -325,11 +325,11 @@ func TestRemoveCaseInsensitiveGitDirectory_NoGitDir(t *testing.T) {
 func TestRemoveCaseInsensitiveGitDirectory_RemovesDotGit(t *testing.T) {
 	tmp := t.TempDir()
 	gitDir := filepath.Join(tmp, ".git")
-	if err := os.Mkdir(gitDir, 0755); err != nil {
+	if err := os.Mkdir(gitDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// Add a dummy file in .git
-	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte("dummy"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte("dummy"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -347,7 +347,7 @@ func TestRemoveCaseInsensitiveGitDirectory_RemovesDotGit(t *testing.T) {
 func TestRemoveCaseInsensitiveGitDirectory_RemovesCaseVariant(t *testing.T) {
 	tmp := t.TempDir()
 	gitDir := filepath.Join(tmp, ".GIT") // uppercase variant
-	if err := os.Mkdir(gitDir, 0755); err != nil {
+	if err := os.Mkdir(gitDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -373,7 +373,7 @@ func TestRemoveCaseInsensitiveGitDirectory_RemoveError(t *testing.T) {
 	tmp := t.TempDir()
 	// Create a regular file named ".git" (not a dir)
 	gitFile := filepath.Join(tmp, ".git")
-	if err := os.WriteFile(gitFile, []byte("not a dir"), 0444); err != nil {
+	if err := os.WriteFile(gitFile, []byte("not a dir"), 0o444); err != nil {
 		t.Fatal(err)
 	}
 
