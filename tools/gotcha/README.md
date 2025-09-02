@@ -21,7 +21,13 @@ gotcha provides two main modes:
 
 ## Installation
 
-Build the tool from the project root:
+### Via go install (Recommended)
+
+```bash
+go install github.com/cloudposse/atmos/tools/gotcha@latest
+```
+
+### Build from source (Development)
 
 ```bash
 cd tools/gotcha

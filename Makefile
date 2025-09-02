@@ -67,9 +67,9 @@ testacc-cover: get
 testacc-coverage: testacc-cover
 	go tool cover -html=coverage.out -o coverage.html
 
-# New target with test summary for local development
-testacc-summary: get
-	@cd tools/gotcha && go install .
+# Test target for CI with gotcha
+testacc-ci: get
+	@if ! command -v gotcha >/dev/null 2>&1; then go install github.com/cloudposse/atmos/tools/gotcha@latest; fi
 	@gotcha stream ./... \
 		--timeout=40m \
 		--coverprofile=coverage.out \
@@ -77,20 +77,8 @@ testacc-summary: get
 		-- $(TESTARGS)
 	@gotcha parse gotcha-results.json --format=github --coverprofile=coverage.out --post-comment
 
-# CI target (alias for testacc-summary)
-testacc-ci: testacc-summary
-
-# View existing test results without re-running tests
-testacc-view-summary:
-	@if [ -f gotcha-results.json ]; then \
-		if ! command -v gotcha >/dev/null 2>&1; then cd tools/gotcha && go install .; fi && \
-		gotcha parse gotcha-results.json --format=markdown; \
-	else \
-		echo "No gotcha-results.json found. Run 'make testacc-summary' first." >&2; \
-	fi
-
 # Clean test artifacts
 clean-test:
 	rm -f test-results.json test-summary.md coverage.out coverage.html gotcha-results.json
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-summary testacc-ci testacc-view-summary clean-test
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-ci clean-test
