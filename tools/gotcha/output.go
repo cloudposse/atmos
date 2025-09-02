@@ -28,7 +28,11 @@ func writeSummary(summary *TestSummary, format, outputFile string) error {
 	// Log success message for file outputs.
 	if outputPath != stdoutPath && outputPath != "" {
 		absPath, _ := filepath.Abs(outputPath)
-		fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s\n", passStyle.Render(checkPass), absPath)
+		if fileInfo, err := os.Stat(outputPath); err == nil {
+			fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s (%d bytes)\n", passStyle.Render(checkPass), absPath, fileInfo.Size())
+		} else {
+			fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s\n", passStyle.Render(checkPass), absPath)
+		}
 	}
 	return nil
 }
@@ -45,7 +49,11 @@ func writeGitHubSummary(summary *TestSummary, outputFile string) error {
 		}()
 		writeMarkdownContent(githubWriter, summary, formatGitHub)
 		if githubPath != "" {
-			fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s\n", passStyle.Render(checkPass), githubPath)
+			if fileInfo, err := os.Stat(githubPath); err == nil {
+				fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s (%d bytes)\n", passStyle.Render(checkPass), githubPath, fileInfo.Size())
+			} else {
+				fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s\n", passStyle.Render(checkPass), githubPath)
+			}
 		}
 	}
 
@@ -63,7 +71,11 @@ func writeGitHubSummary(summary *TestSummary, outputFile string) error {
 
 	writeMarkdownContent(file, summary, formatGitHub)
 	absPath, _ := filepath.Abs(regularFile)
-	fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s\n", passStyle.Render(checkPass), absPath)
+	if fileInfo, err := os.Stat(regularFile); err == nil {
+		fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s (%d bytes)\n", passStyle.Render(checkPass), absPath, fileInfo.Size())
+	} else {
+		fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s\n", passStyle.Render(checkPass), absPath)
+	}
 
 	return nil
 }

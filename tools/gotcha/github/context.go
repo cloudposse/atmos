@@ -36,18 +36,18 @@ func DetectContext() (*Context, error) {
 	isActions := viper.GetString("GITHUB_ACTIONS") != ""
 
 	if !isActions {
-		return nil, fmt.Errorf("not running in GitHub Actions environment")
+		return nil, ErrNotGitHubActions
 	}
 
 	// Parse repository (format: owner/repo)
 	repository := viper.GetString("GITHUB_REPOSITORY")
 	if repository == "" {
-		return nil, fmt.Errorf("GITHUB_REPOSITORY environment variable not set")
+		return nil, ErrRepositoryNotSet
 	}
 
 	parts := strings.Split(repository, "/")
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid GITHUB_REPOSITORY format: %s (expected owner/repo)", repository)
+		return nil, fmt.Errorf("%w: %s (expected owner/repo)", ErrInvalidRepositoryFormat, repository)
 	}
 
 	owner := parts[0]
@@ -56,7 +56,7 @@ func DetectContext() (*Context, error) {
 	// Get event information
 	eventName := viper.GetString("GITHUB_EVENT_NAME")
 	if eventName == "" {
-		return nil, fmt.Errorf("GITHUB_EVENT_NAME environment variable not set")
+		return nil, ErrEventNameNotSet
 	}
 
 	// Get PR number from event payload
@@ -68,13 +68,13 @@ func DetectContext() (*Context, error) {
 	// Get comment UUID
 	commentUUID := viper.GetString("GOTCHA_COMMENT_UUID")
 	if commentUUID == "" {
-		return nil, fmt.Errorf("GOTCHA_COMMENT_UUID environment variable not set")
+		return nil, ErrCommentUUIDNotSet
 	}
 
 	// Get GitHub token
 	token := viper.GetString("GOTCHA_GITHUB_TOKEN")
 	if token == "" {
-		return nil, fmt.Errorf("GitHub token not available (GOTCHA_GITHUB_TOKEN or GITHUB_TOKEN)")
+		return nil, ErrGitHubTokenNotAvailable
 	}
 
 	return &Context{
@@ -98,14 +98,14 @@ func extractPRNumber(eventName string) (int, error) {
 	// For push events, we need to check if there's a PR associated
 	// This is more complex and might require additional API calls
 	// For now, return an error for non-PR events
-	return 0, fmt.Errorf("event type '%s' is not supported for PR comments", eventName)
+	return 0, fmt.Errorf("%w: '%s'", ErrUnsupportedEventType, eventName)
 }
 
 // getPRNumberFromEventPayload reads the GitHub event payload and extracts PR number.
 func getPRNumberFromEventPayload() (int, error) {
 	eventPath := viper.GetString("GITHUB_EVENT_PATH")
 	if eventPath == "" {
-		return 0, fmt.Errorf("GITHUB_EVENT_PATH not set")
+		return 0, ErrEventPathNotSet
 	}
 
 	file, err := os.Open(eventPath)
@@ -140,7 +140,7 @@ func getPRNumberFromEventPayload() (int, error) {
 		return payload.Number, nil
 	}
 
-	return 0, fmt.Errorf("no PR number found in event payload")
+	return 0, ErrNoPRNumberInEvent
 }
 
 // IsSupported checks if the current GitHub context supports PR comments.
@@ -176,12 +176,13 @@ func GetPRNumberFromEnv() (int, error) {
 	}
 
 	for _, envVar := range envVars {
-		if value := os.Getenv(envVar); value != "" {
+		_ = viper.BindEnv(envVar)
+		if value := viper.GetString(envVar); value != "" {
 			if num, err := strconv.Atoi(value); err == nil && num > 0 {
 				return num, nil
 			}
 		}
 	}
 
-	return 0, fmt.Errorf("no PR number found in environment variables")
+	return 0, ErrNoPRNumberInEnv
 }

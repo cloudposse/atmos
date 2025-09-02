@@ -2,9 +2,9 @@ package github
 
 import (
 	"context"
-	"os"
 
 	"github.com/google/go-github/v59/github"
+	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 )
 
@@ -23,7 +23,8 @@ type RealClient struct {
 // NewClient creates a new GitHub client with authentication.
 func NewClient(token string) Client {
 	if token == "" {
-		token = os.Getenv("GITHUB_TOKEN")
+		_ = viper.BindEnv("GITHUB_TOKEN")
+		token = viper.GetString("GITHUB_TOKEN")
 	}
 
 	if token == "" {

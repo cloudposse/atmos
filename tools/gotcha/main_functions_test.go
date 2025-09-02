@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// Test helper functions functionality
+// Test helper functions functionality.
 func TestHelperFunctions(t *testing.T) {
 	// Test isValidShowFilter
 	validValues := []string{"all", "failed", "passed", "skipped"}
@@ -19,7 +19,7 @@ func TestHelperFunctions(t *testing.T) {
 	}
 }
 
-// Test main functions that are called from the new architecture
+// Test main functions that are called from the new architecture.
 func TestRunStreamAndParseIntegration(t *testing.T) {
 	// Create a test summary for testing output functionality
 	summary := &TestSummary{

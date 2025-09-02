@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 )
 
@@ -87,7 +87,7 @@ func TestNewVersionCmd(t *testing.T) {
 	}
 }
 
-// Test command execution with invalid parameters
+// Test command execution with invalid parameters.
 func TestRunStreamInvalidShow(t *testing.T) {
 	// Create a mock command with invalid show parameter
 	cmd := &cobra.Command{}
@@ -132,7 +132,7 @@ func TestRunParseWithInvalidInput(t *testing.T) {
 	}
 }
 
-// Test the mock service function
+// Test the mock service function.
 func TestMockService(t *testing.T) {
 	result := MockService()
 

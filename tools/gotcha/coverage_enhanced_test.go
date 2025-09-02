@@ -111,7 +111,7 @@ github.com/cloudposse/atmos/tools/gotcha/mock_service.go:4.20,6.2 1 0`
 	}
 }
 
-// Test with empty and malformed coverage files
+// Test with empty and malformed coverage files.
 func TestParseCoverageProfileErrorCases(t *testing.T) {
 	tests := []struct {
 		name         string

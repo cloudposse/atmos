@@ -3,12 +3,12 @@ package main
 import "github.com/charmbracelet/lipgloss"
 
 const (
-	// Unicode symbols
+	// Unicode symbols.
 	checkPass = "✔" // UTF-8 check mark
 	checkFail = "✘" // UTF-8 cross mark
 	checkSkip = "⊘" // UTF-8 circled division slash
 
-	// Hex color constants
+	// Hex color constants.
 	colorGreen     = "#2ECC40" // Bright green for pass
 	colorRed       = "#DC143C" // Crimson red for fail
 	colorAmber     = "#FFB347" // Peach orange for skip
@@ -20,25 +20,25 @@ const (
 )
 
 var (
-	// Test result styles
+	// Test result styles.
 	passStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
 	failStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed))
 	skipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAmber))
 
-	// Text styles
+	// Text styles.
 	testNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray))
 	durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))
 
-	// UI element styles
+	// UI element styles.
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
 
-	// Error display style
+	// Error display style.
 	errorHeaderStyle = lipgloss.NewStyle().
 				SetString("ERROR").
 				Padding(0, 1, 0, 1).
 				Background(lipgloss.Color(colorDarkRed)).
 				Foreground(lipgloss.Color(colorWhite))
 
-	// Statistics styles
+		// Statistics styles.
 	statsHeaderStyle = lipgloss.NewStyle().Bold(true)
 )

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/google/go-github/v59/github"
 )
 
@@ -39,7 +39,7 @@ func NewCommentManager(client Client, logger *log.Logger) *CommentManager {
 // It handles pagination to search through all comments on the PR.
 func (m *CommentManager) FindExistingComment(ctx context.Context, owner, repo string, prNumber int, uuid string) (*github.IssueComment, error) {
 	if uuid == "" {
-		return nil, fmt.Errorf("UUID cannot be empty")
+		return nil, ErrUUIDCannotBeEmpty
 	}
 
 	marker := fmt.Sprintf("<!-- test-summary-uuid: %s -->", uuid)
@@ -102,19 +102,25 @@ func (m *CommentManager) FindExistingComment(ctx context.Context, owner, repo st
 // PostOrUpdateComment creates a new comment or updates an existing one.
 func (m *CommentManager) PostOrUpdateComment(ctx context.Context, ghCtx *Context, markdown string) error {
 	if ghCtx == nil {
-		return fmt.Errorf("GitHub context cannot be nil")
+		return ErrGitHubContextIsNil
 	}
 
 	if !ghCtx.IsSupported() {
-		return fmt.Errorf("event type '%s' is not supported for PR comments", ghCtx.EventName)
+		return fmt.Errorf("%w: '%s'", ErrUnsupportedEventType, ghCtx.EventName)
 	}
 
-	// Validate comment size
+	// Log comment size for debugging
 	if len(markdown) > MaxCommentSize {
-		m.logger.Warn("Comment content exceeds GitHub limit, truncating",
+		m.logger.Warn("Comment content exceeds GitHub limit but should be pre-sized",
 			"size", len(markdown),
 			"limit", MaxCommentSize)
+		// The generateCommentContent function should have handled sizing,
+		// but if we're still over the limit, fall back to simple truncation.
 		markdown = truncateComment(markdown, MaxCommentSize)
+	} else {
+		m.logger.Debug("Comment size within limits",
+			"size", len(markdown),
+			"limit", MaxCommentSize)
 	}
 
 	// Search for existing comment

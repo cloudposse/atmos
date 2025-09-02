@@ -124,7 +124,7 @@ func (m *MockClient) UpdateComment(ctx context.Context, owner, repo string, comm
 		}
 	}
 
-	return nil, &github.Response{}, fmt.Errorf("comment with ID %d not found", commentID)
+	return nil, &github.Response{}, fmt.Errorf("%w: comment with ID %d", ErrCommentNotFound, commentID)
 }
 
 // AddComment adds a comment to the mock for testing.

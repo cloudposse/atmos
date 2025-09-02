@@ -238,7 +238,7 @@ func TestView(t *testing.T) {
 	}
 
 	// Initialize required components
-	model.spinner.Spinner = model.spinner.Spinner // Ensure spinner is initialized
+	// Ensure spinner is initialized
 
 	view := model.View()
 
@@ -248,7 +248,7 @@ func TestView(t *testing.T) {
 	}
 }
 
-// Test Update with various message types
+// Test Update with various message types.
 func TestUpdate(t *testing.T) {
 	model := testModel{
 		totalTests: 10,
@@ -282,7 +282,7 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
-// Test that model initialization doesn't crash
+// Test that model initialization doesn't crash.
 func TestStartTestsCmd(t *testing.T) {
 	model := testModel{
 		totalTests: 10,
@@ -294,7 +294,7 @@ func TestStartTestsCmd(t *testing.T) {
 	}
 }
 
-// Test readNextLine
+// Test readNextLine.
 func TestReadNextLine(t *testing.T) {
 	model := testModel{}
 

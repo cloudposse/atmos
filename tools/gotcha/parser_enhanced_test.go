@@ -195,7 +195,7 @@ invalid json line that should be skipped
 	}
 }
 
-// Test edge cases in processLine
+// Test edge cases in processLine.
 func TestProcessLineEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -242,7 +242,7 @@ func TestProcessLineEdgeCases(t *testing.T) {
 	}
 }
 
-// Test edge cases in extractCoverage
+// Test edge cases in extractCoverage.
 func TestExtractCoverageEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string

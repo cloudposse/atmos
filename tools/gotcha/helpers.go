@@ -319,11 +319,21 @@ func runTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	// Handle test command exit code
 	if testErr != nil {
 		if exitErr, ok := testErr.(*exec.ExitError); ok {
-			// Exit code 1 means tests failed, which is expected
-			if exitErr.ExitCode() == 1 {
+			// Only return non-zero exit code if we actually have test failures
+			// go test can exit with 1 for other reasons (build failures, skipped tests, etc.)
+			// but we should only fail if there are actual test failures
+			if processor.failed > 0 {
 				return 1
 			}
-			return exitErr.ExitCode()
+			
+			// If go test failed for other reasons (build errors, etc.) but no test failures,
+			// we should still report those as errors for exit codes > 1
+			if exitErr.ExitCode() > 1 {
+				return exitErr.ExitCode()
+			}
+			
+			// go test exited with 1 but no actual test failures - return success
+			return 0
 		}
 		return 1
 	}

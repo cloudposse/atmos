@@ -335,7 +335,7 @@ func (m *testModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Convert to appropriate test message and continue streaming
-		var nextCmd tea.Cmd = m.readNextLine()
+		nextCmd := m.readNextLine()
 
 		switch event.Action {
 		case "run":
