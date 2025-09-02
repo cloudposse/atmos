@@ -192,7 +192,7 @@ func TestMergeWithInvalidStrategy(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid list merge strategy")
 	assert.Contains(t, err.Error(), "invalid-strategy")
 	assert.Contains(t, err.Error(), "replace, append, merge")
-	
+
 	// Verify error wrapping - should be wrapped with both ErrMerge and ErrInvalidListMergeStrategy
 	assert.True(t, errors.Is(err, errUtils.ErrMerge), "Error should be wrapped with ErrMerge")
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidListMergeStrategy), "Error should be wrapped with ErrInvalidListMergeStrategy")
