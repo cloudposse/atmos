@@ -78,25 +78,26 @@ func Merge(
 	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
-	if atmosConfig.Settings.ListMergeStrategy == "" {
-		atmosConfig.Settings.ListMergeStrategy = ListMergeStrategyReplace
+	strategy := ListMergeStrategyReplace
+	if atmosConfig != nil && atmosConfig.Settings.ListMergeStrategy != "" {
+		strategy = atmosConfig.Settings.ListMergeStrategy
 	}
 
-	if atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyReplace &&
-		atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyAppend &&
-		atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyMerge {
+	if strategy != ListMergeStrategyReplace &&
+		strategy != ListMergeStrategyAppend &&
+		strategy != ListMergeStrategyMerge {
 		return nil, fmt.Errorf("invalid Atmos manifests list merge strategy '%s'.\n"+
 			"Supported list merge strategies are: %s.",
-			atmosConfig.Settings.ListMergeStrategy,
+			strategy,
 			fmt.Sprintf("%s, %s, %s", ListMergeStrategyReplace, ListMergeStrategyAppend, ListMergeStrategyMerge))
 	}
 
 	sliceDeepCopy := false
 	appendSlice := false
 
-	if atmosConfig.Settings.ListMergeStrategy == ListMergeStrategyMerge {
+	if strategy == ListMergeStrategyMerge {
 		sliceDeepCopy = true
-	} else if atmosConfig.Settings.ListMergeStrategy == ListMergeStrategyAppend {
+	} else if strategy == ListMergeStrategyAppend {
 		appendSlice = true
 	}
 
