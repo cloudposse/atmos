@@ -63,7 +63,7 @@ func TestSetupGitEnv_AddsWhenMissing(t *testing.T) {
 	var cmd exec.Cmd
 	setupGitEnv(&cmd, keyPath)
 
-	if cmd.Env == nil || len(cmd.Env) == 0 {
+	if len(cmd.Env) == 0 {
 		t.Fatalf("expected cmd.Env to be populated")
 	}
 
@@ -120,7 +120,7 @@ func TestSetupGitEnv_AppendsToExisting(t *testing.T) {
 	var cmd exec.Cmd
 	setupGitEnv(&cmd, keyPath)
 
-	if cmd.Env == nil || len(cmd.Env) == 0 {
+	if len(cmd.Env) == 0 {
 		t.Fatalf("expected cmd.Env to be populated")
 	}
 
