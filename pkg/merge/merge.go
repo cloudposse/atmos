@@ -42,13 +42,13 @@ func MergeWithOptions(
 		yamlCurrent, err := u.ConvertToYAML(current)
 		if err != nil {
 			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
-			return nil, err
+			return nil, fmt.Errorf("%w: failed to convert to YAML: %v", errUtils.ErrMerge, err)
 		}
 
 		dataCurrent, err := u.UnmarshalYAML[any](yamlCurrent)
 		if err != nil {
 			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
-			return nil, err
+			return nil, fmt.Errorf("%w: failed to unmarshal YAML: %v", errUtils.ErrMerge, err)
 		}
 
 		var opts []func(*mergo.Config)
@@ -67,7 +67,7 @@ func MergeWithOptions(
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
 			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
-			return nil, err
+			return nil, fmt.Errorf("%w: mergo merge failed: %v", errUtils.ErrMerge, err)
 		}
 	}
 
@@ -88,7 +88,8 @@ func Merge(
 	if strategy != ListMergeStrategyReplace &&
 		strategy != ListMergeStrategyAppend &&
 		strategy != ListMergeStrategyMerge {
-		return nil, fmt.Errorf("%w: '%s'. Supported list merge strategies are: %s",
+		return nil, fmt.Errorf("%w: %w: '%s'. Supported list merge strategies are: %s",
+			errUtils.ErrMerge,
 			errUtils.ErrInvalidListMergeStrategy,
 			strategy,
 			fmt.Sprintf("%s, %s, %s", ListMergeStrategyReplace, ListMergeStrategyAppend, ListMergeStrategyMerge))
