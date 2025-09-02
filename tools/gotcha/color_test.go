@@ -129,7 +129,7 @@ func TestColorOutput(t *testing.T) {
 				"CI": "true",
 			},
 			expectColorSeq: true,
-			description: "CI environments typically support ANSI colors",
+			description:    "CI environments typically support ANSI colors",
 		},
 		{
 			name: "NO_COLOR should disable colors",
@@ -155,7 +155,7 @@ func TestColorOutput(t *testing.T) {
 			// Store and clean environment
 			originalEnv := make(map[string]string)
 			envVarsToCheck := []string{"GITHUB_ACTIONS", "CI", "TERM", "COLORTERM", "FORCE_COLOR", "NO_COLOR"}
-			
+
 			for _, key := range envVarsToCheck {
 				originalEnv[key] = os.Getenv(key)
 				os.Unsetenv(key)
@@ -171,7 +171,7 @@ func TestColorOutput(t *testing.T) {
 
 			// Test color rendering
 			coloredText := passStyle.Render("✔ TEST")
-			
+
 			if tt.expectColorSeq {
 				// Should contain ANSI escape sequences
 				assert.Contains(t, coloredText, "\033[", "Expected ANSI color codes in output: %s", tt.description)
@@ -232,7 +232,7 @@ func TestGitHubActionsDetection(t *testing.T) {
 			// Store original environment
 			originalGHA := os.Getenv("GITHUB_ACTIONS")
 			originalCI := os.Getenv("CI")
-			
+
 			// Clean environment
 			os.Unsetenv("GITHUB_ACTIONS")
 			os.Unsetenv("CI")

@@ -431,4 +431,3 @@ func postGitHubComment(summary *TestSummary, cmd *cobra.Command, logger *log.Log
 	// Post or update comment
 	return manager.PostOrUpdateComment(context.Background(), ctx, markdown)
 }
-

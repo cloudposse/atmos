@@ -13,12 +13,12 @@ func TestGenerateCommentContent(t *testing.T) {
 		summary  *TestSummary
 		uuid     string
 		expected struct {
-			hasUUID           bool
-			hasBadges         bool
-			hasFailedTests    bool
-			hasSkippedTests   bool
-			withinSizeLimit   bool
-			preservesCore     bool
+			hasUUID         bool
+			hasBadges       bool
+			hasFailedTests  bool
+			hasSkippedTests bool
+			withinSizeLimit bool
+			preservesCore   bool
 		}
 	}{
 		{
@@ -30,12 +30,12 @@ func TestGenerateCommentContent(t *testing.T) {
 			},
 			uuid: "test-uuid-123",
 			expected: struct {
-				hasUUID           bool
-				hasBadges         bool
-				hasFailedTests    bool
-				hasSkippedTests   bool
-				withinSizeLimit   bool
-				preservesCore     bool
+				hasUUID         bool
+				hasBadges       bool
+				hasFailedTests  bool
+				hasSkippedTests bool
+				withinSizeLimit bool
+				preservesCore   bool
 			}{
 				hasUUID:         true,
 				hasBadges:       true,
@@ -62,12 +62,12 @@ func TestGenerateCommentContent(t *testing.T) {
 			},
 			uuid: "test-uuid-456",
 			expected: struct {
-				hasUUID           bool
-				hasBadges         bool
-				hasFailedTests    bool
-				hasSkippedTests   bool
-				withinSizeLimit   bool
-				preservesCore     bool
+				hasUUID         bool
+				hasBadges       bool
+				hasFailedTests  bool
+				hasSkippedTests bool
+				withinSizeLimit bool
+				preservesCore   bool
 			}{
 				hasUUID:         true,
 				hasBadges:       true,
@@ -86,12 +86,12 @@ func TestGenerateCommentContent(t *testing.T) {
 			},
 			uuid: "test-uuid-789",
 			expected: struct {
-				hasUUID           bool
-				hasBadges         bool
-				hasFailedTests    bool
-				hasSkippedTests   bool
-				withinSizeLimit   bool
-				preservesCore     bool
+				hasUUID         bool
+				hasBadges       bool
+				hasFailedTests  bool
+				hasSkippedTests bool
+				withinSizeLimit bool
+				preservesCore   bool
 			}{
 				hasUUID:         true,
 				hasBadges:       true,
@@ -146,9 +146,9 @@ func TestGenerateCommentContent(t *testing.T) {
 
 func TestTruncateToEssentials(t *testing.T) {
 	summary := &TestSummary{
-		Failed: generateManyTests(50), // Many failed tests
-		Skipped: generateManyTests(30), // Many skipped tests
-		Passed: generateManyTests(100), // Many passed tests
+		Failed:  generateManyTests(50),  // Many failed tests
+		Skipped: generateManyTests(30),  // Many skipped tests
+		Passed:  generateManyTests(100), // Many passed tests
 	}
 
 	result := truncateToEssentials(summary, "test-uuid")
@@ -216,9 +216,9 @@ func TestAddPassedTestsWithLimit(t *testing.T) {
 
 func TestAddCoverageWithLimit(t *testing.T) {
 	tests := []struct {
-		name         string
-		summary      *TestSummary
-		maxBytes     int
+		name           string
+		summary        *TestSummary
+		maxBytes       int
 		expectCoverage bool
 	}{
 		{
@@ -263,7 +263,7 @@ func TestCommentSizeHandling(t *testing.T) {
 	// Create a summary that would normally exceed the size limit
 	hugeSummary := &TestSummary{
 		Failed:  generateManyTests(200), // Many failed tests
-		Skipped: generateManyTests(100), // Many skipped tests  
+		Skipped: generateManyTests(100), // Many skipped tests
 		Passed:  generateManyTests(500), // Many passed tests
 		CoverageData: &CoverageData{
 			StatementCoverage: "85.2%",
