@@ -32,7 +32,7 @@ func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
 	if err := security.ValidateSymlinks(dst, policy); err != nil {
 		return fmt.Errorf("symlink validation failed for %s at %s: %w", url, dst, err)
 	}
-	
+
 	return nil
 }
 
