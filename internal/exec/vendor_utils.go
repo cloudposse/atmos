@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/security"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -460,12 +461,15 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 }
 
-func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
+func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string, atmosConfig *schema.AtmosConfiguration) error {
+	// Get the symlink policy from config
+	policy := security.GetPolicyFromConfig(atmosConfig)
+	
 	copyOptions := cp.Options{
 		Skip:          generateSkipFunction(tempDir, s),
 		PreserveTimes: false,
 		PreserveOwner: false,
-		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
+		OnSymlink:     security.CreateSymlinkHandler(tempDir, policy),
 	}
 
 	// Adjust the target path if it's a local file with no extension
