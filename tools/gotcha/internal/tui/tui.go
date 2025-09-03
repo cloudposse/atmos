@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
@@ -704,8 +704,7 @@ func (m *TestModel) generateFinalSummary() string {
 
 	if githubSummary == "" {
 		// Log the skipped status using the logger
-		logger := log.New(os.Stderr)
-		logger.Info("GITHUB_STEP_SUMMARY not set (skipped)")
+		logger.GetLogger().Info("GITHUB_STEP_SUMMARY not set (skipped)")
 		summaryStatus = "" // Don't include in the summary output string
 	} else {
 		summaryStatus = fmt.Sprintf("GitHub step summary written to %s", githubSummary)

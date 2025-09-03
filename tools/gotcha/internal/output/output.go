@@ -6,8 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
-
+	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
@@ -128,8 +127,7 @@ func openGitHubOutput(outputFile string) (io.Writer, string, error) {
 		return nil, "", fmt.Errorf("failed to create summary file: %w", err)
 	}
 	// Inform the user.
-	logger := log.New(os.Stderr)
-	logger.Info("GITHUB_STEP_SUMMARY not set (skipped)")
+	logger.GetLogger().Info("GITHUB_STEP_SUMMARY not set (skipped)")
 	return file, defaultFile, nil
 }
 

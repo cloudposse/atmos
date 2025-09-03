@@ -12,11 +12,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/fang"
-	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
@@ -39,7 +39,7 @@ var configFile string
 
 // initGlobalLogger initializes the global logger with solid background colors per PRD spec.
 func initGlobalLogger() {
-	globalLogger = log.New(os.Stderr)
+	globalLogger = logger.NewStyledLogger()
 
 	// Get log level from configuration (flag > env > config > default)
 	logLevelStr := viper.GetString("log.level")
@@ -66,35 +66,9 @@ func initGlobalLogger() {
 	}
 
 	globalLogger.SetLevel(logLevel)
-	globalLogger.SetStyles(&log.Styles{
-		Levels: map[log.Level]lipgloss.Style{
-			log.DebugLevel: lipgloss.NewStyle().
-				SetString("DEBUG").
-				Background(lipgloss.Color("#3F51B5")). // Indigo background
-				Foreground(lipgloss.Color("#000000")). // Black foreground
-				Padding(0, 1),
-			log.InfoLevel: lipgloss.NewStyle().
-				SetString("INFO").
-				Background(lipgloss.Color("#4CAF50")). // Green background
-				Foreground(lipgloss.Color("#000000")). // Black foreground
-				Padding(0, 1),
-			log.WarnLevel: lipgloss.NewStyle().
-				SetString("WARN").
-				Background(lipgloss.Color("#FF9800")). // Orange background
-				Foreground(lipgloss.Color("#000000")). // Black foreground
-				Padding(0, 1),
-			log.ErrorLevel: lipgloss.NewStyle().
-				SetString("ERROR").
-				Background(lipgloss.Color("#F44336")). // Red background
-				Foreground(lipgloss.Color("#000000")). // Black foreground
-				Padding(0, 1),
-			log.FatalLevel: lipgloss.NewStyle().
-				SetString("FATAL").
-				Background(lipgloss.Color("#F44336")). // Red background
-				Foreground(lipgloss.Color("#FFFFFF")). // White foreground
-				Padding(0, 1),
-		},
-	})
+	
+	// Set the global logger in the logger package for use by other packages
+	logger.SetLogger(globalLogger)
 }
 
 // initConfig reads in config file and ENV variables if set.
