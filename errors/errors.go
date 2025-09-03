@@ -48,9 +48,21 @@ var (
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
 	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
-	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
-	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
-	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
+
+	ErrLoadAwsConfig    = errors.New("failed to load AWS config")
+	ErrGetObjectFromS3  = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody = errors.New("failed to read S3 object body")
+
+	// Git-related errors.
+	ErrGitNotAvailable     = errors.New("git must be available and on the PATH")
+	ErrInvalidGitPort      = errors.New("invalid port number")
+	ErrSSHKeyUsage         = errors.New("error using ssh key")
+	ErrGitCommandExited    = errors.New("git command exited with error")
+	ErrGitCommandFailed    = errors.New("error running git command")
+	ErrReadDestDir         = errors.New("failed to read the destination directory during git update")
+	ErrRemoveGitDir        = errors.New("failed to remove the .git directory in the destination directory during git update")
+	ErrUnexpectedGitOutput = errors.New("unexpected 'git version' output")
+	ErrGitVersionMismatch  = errors.New("git version requirement not met")
 
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
