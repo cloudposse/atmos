@@ -464,7 +464,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string, atmosConfig *schema.AtmosConfiguration) error {
 	// Get the symlink policy from config
 	policy := security.GetPolicyFromConfig(atmosConfig)
-	
+
 	copyOptions := cp.Options{
 		Skip:          generateSkipFunction(tempDir, s),
 		PreserveTimes: false,

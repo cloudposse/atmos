@@ -4,7 +4,7 @@ import (
 	"net/url"
 
 	"github.com/hashicorp/go-getter"
-	
+
 	"github.com/cloudposse/atmos/pkg/security"
 )
 
@@ -21,13 +21,13 @@ func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
 	if err := c.GetCustom(dst, url); err != nil {
 		return err
 	}
-	
+
 	// Validate symlinks based on policy (default to allow_safe if not configured)
 	policy := c.Policy
 	if policy == "" {
 		policy = security.PolicyAllowSafe
 	}
-	
+
 	return security.ValidateSymlinks(dst, policy)
 }
 

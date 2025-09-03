@@ -127,7 +127,7 @@ func ExecuteStackVendorInternal(
 func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec, sourceIsLocalFile bool, uri string, atmosConfig *schema.AtmosConfiguration) error {
 	// Get the symlink policy from config
 	policy := security.GetPolicyFromConfig(atmosConfig)
-	
+
 	// Copy from the temp folder to the destination folder and skip the excluded files
 	copyOptions := cp.Options{
 		// Skip specifies which files should be skipped
@@ -484,7 +484,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) error {
 	// Get the symlink policy from config
 	policy := security.GetPolicyFromConfig(atmosConfig)
-	
+
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
@@ -537,7 +537,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	// Get the symlink policy from config
 	policy := security.GetPolicyFromConfig(atmosConfig)
-	
+
 	// Copy from the temp folder to the destination folder
 	copyOptions := cp.Options{
 		// Preserve the atime and the mtime of the entries

@@ -55,19 +55,19 @@ func TestIsSymlinkSafe(t *testing.T) {
 
 	// Create temporary test directory structure.
 	tempDir := t.TempDir()
-	
+
 	// Create subdirectories.
 	subDir := filepath.Join(tempDir, "subdir")
-	require.NoError(t, os.Mkdir(subDir, 0755))
-	
+	require.NoError(t, os.Mkdir(subDir, 0o755))
+
 	// Create a file in the subdirectory.
 	testFile := filepath.Join(subDir, "test.txt")
-	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0644))
-	
+	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0o644))
+
 	// Create external directory and file.
 	externalDir := t.TempDir()
 	externalFile := filepath.Join(externalDir, "external.txt")
-	require.NoError(t, os.WriteFile(externalFile, []byte("external"), 0644))
+	require.NoError(t, os.WriteFile(externalFile, []byte("external"), 0o644))
 
 	tests := []struct {
 		name       string
@@ -140,7 +140,7 @@ func TestIsSymlinkSafe_BrokenSymlink(t *testing.T) {
 
 	tempDir := t.TempDir()
 	brokenLink := filepath.Join(tempDir, "broken.txt")
-	
+
 	// Create a symlink to a non-existent file.
 	createTestSymlink(t, "nonexistent.txt", brokenLink)
 	defer os.Remove(brokenLink)
@@ -158,61 +158,61 @@ func TestCreateSymlinkHandler(t *testing.T) {
 
 	tempDir := t.TempDir()
 	subDir := filepath.Join(tempDir, "subdir")
-	require.NoError(t, os.Mkdir(subDir, 0755))
-	
+	require.NoError(t, os.Mkdir(subDir, 0o755))
+
 	// Create test file.
 	testFile := filepath.Join(subDir, "test.txt")
-	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0644))
-	
+	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0o644))
+
 	// Create safe and unsafe symlinks.
 	safeLink := filepath.Join(tempDir, "safe_link.txt")
 	createTestSymlink(t, "subdir/test.txt", safeLink)
 	defer os.Remove(safeLink)
-	
+
 	unsafeLink := filepath.Join(tempDir, "unsafe_link.txt")
 	createTestSymlink(t, "/etc/passwd", unsafeLink)
 	defer os.Remove(unsafeLink)
 
 	tests := []struct {
-		name         string
-		policy       SymlinkPolicy
-		symlink      string
+		name           string
+		policy         SymlinkPolicy
+		symlink        string
 		expectedAction cp.SymlinkAction
 	}{
 		{
-			name:         "allow_safe with safe symlink",
-			policy:       PolicyAllowSafe,
-			symlink:      safeLink,
+			name:           "allow_safe with safe symlink",
+			policy:         PolicyAllowSafe,
+			symlink:        safeLink,
 			expectedAction: cp.Deep,
 		},
 		{
-			name:         "allow_safe with unsafe symlink",
-			policy:       PolicyAllowSafe,
-			symlink:      unsafeLink,
+			name:           "allow_safe with unsafe symlink",
+			policy:         PolicyAllowSafe,
+			symlink:        unsafeLink,
 			expectedAction: cp.Skip,
 		},
 		{
-			name:         "reject_all with safe symlink",
-			policy:       PolicyRejectAll,
-			symlink:      safeLink,
+			name:           "reject_all with safe symlink",
+			policy:         PolicyRejectAll,
+			symlink:        safeLink,
 			expectedAction: cp.Skip,
 		},
 		{
-			name:         "reject_all with unsafe symlink",
-			policy:       PolicyRejectAll,
-			symlink:      unsafeLink,
+			name:           "reject_all with unsafe symlink",
+			policy:         PolicyRejectAll,
+			symlink:        unsafeLink,
 			expectedAction: cp.Skip,
 		},
 		{
-			name:         "allow_all with safe symlink",
-			policy:       PolicyAllowAll,
-			symlink:      safeLink,
+			name:           "allow_all with safe symlink",
+			policy:         PolicyAllowAll,
+			symlink:        safeLink,
 			expectedAction: cp.Deep,
 		},
 		{
-			name:         "allow_all with unsafe symlink",
-			policy:       PolicyAllowAll,
-			symlink:      unsafeLink,
+			name:           "allow_all with unsafe symlink",
+			policy:         PolicyAllowAll,
+			symlink:        unsafeLink,
 			expectedAction: cp.Deep,
 		},
 	}
@@ -233,48 +233,48 @@ func TestValidateSymlinks(t *testing.T) {
 
 	tempDir := t.TempDir()
 	subDir := filepath.Join(tempDir, "subdir")
-	require.NoError(t, os.Mkdir(subDir, 0755))
-	
+	require.NoError(t, os.Mkdir(subDir, 0o755))
+
 	// Create test file.
 	testFile := filepath.Join(subDir, "test.txt")
-	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0644))
-	
+	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0o644))
+
 	// Create various symlinks.
 	safeLink := filepath.Join(tempDir, "safe_link.txt")
 	createTestSymlink(t, "subdir/test.txt", safeLink)
-	
+
 	unsafeLink := filepath.Join(tempDir, "unsafe_link.txt")
 	createTestSymlink(t, "/etc/passwd", unsafeLink)
-	
+
 	internalLink := filepath.Join(subDir, "internal_link.txt")
 	createTestSymlink(t, "test.txt", internalLink)
 
 	tests := []struct {
-		name              string
-		policy            SymlinkPolicy
-		expectSafeLink    bool
-		expectUnsafeLink  bool
+		name               string
+		policy             SymlinkPolicy
+		expectSafeLink     bool
+		expectUnsafeLink   bool
 		expectInternalLink bool
 	}{
 		{
-			name:              "PolicyAllowAll keeps all symlinks",
-			policy:            PolicyAllowAll,
-			expectSafeLink:    true,
-			expectUnsafeLink:  true,
+			name:               "PolicyAllowAll keeps all symlinks",
+			policy:             PolicyAllowAll,
+			expectSafeLink:     true,
+			expectUnsafeLink:   true,
 			expectInternalLink: true,
 		},
 		{
-			name:              "PolicyRejectAll removes all symlinks",
-			policy:            PolicyRejectAll,
-			expectSafeLink:    false,
-			expectUnsafeLink:  false,
+			name:               "PolicyRejectAll removes all symlinks",
+			policy:             PolicyRejectAll,
+			expectSafeLink:     false,
+			expectUnsafeLink:   false,
 			expectInternalLink: false,
 		},
 		{
-			name:              "PolicyAllowSafe keeps safe, removes unsafe",
-			policy:            PolicyAllowSafe,
-			expectSafeLink:    true,
-			expectUnsafeLink:  false,
+			name:               "PolicyAllowSafe keeps safe, removes unsafe",
+			policy:             PolicyAllowSafe,
+			expectSafeLink:     true,
+			expectUnsafeLink:   false,
 			expectInternalLink: true,
 		},
 	}
@@ -324,7 +324,7 @@ func TestCVE_2025_8959_Protection(t *testing.T) {
 	// Create a structure simulating a malicious repository.
 	maliciousRepo := t.TempDir()
 	componentsDir := filepath.Join(maliciousRepo, "components")
-	require.NoError(t, os.Mkdir(componentsDir, 0755))
+	require.NoError(t, os.Mkdir(componentsDir, 0o755))
 
 	// Create attack symlinks.
 	attacks := []struct {
@@ -357,7 +357,7 @@ func TestCVE_2025_8959_Protection(t *testing.T) {
 	t.Run("PolicyAllowSafe_blocks_attacks", func(t *testing.T) {
 		err := ValidateSymlinks(maliciousRepo, PolicyAllowSafe)
 		require.NoError(t, err)
-		
+
 		// All attack symlinks should be removed.
 		for _, attack := range attacks {
 			_, err := os.Lstat(attack.link)
@@ -375,7 +375,7 @@ func TestCVE_2025_8959_Protection(t *testing.T) {
 	t.Run("PolicyRejectAll_blocks_attacks", func(t *testing.T) {
 		err := ValidateSymlinks(maliciousRepo, PolicyRejectAll)
 		require.NoError(t, err)
-		
+
 		// All symlinks should be removed.
 		for _, attack := range attacks {
 			_, err := os.Lstat(attack.link)

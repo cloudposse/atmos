@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	cp "github.com/otiai10/copy"
-	
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -166,10 +166,10 @@ func GetPolicyFromConfig(atmosConfig *schema.AtmosConfiguration) SymlinkPolicy {
 	if atmosConfig == nil {
 		return PolicyAllowSafe
 	}
-	
+
 	if atmosConfig.Vendor.Policy.Symlinks == "" {
 		return PolicyAllowSafe
 	}
-	
+
 	return ParsePolicy(atmosConfig.Vendor.Policy.Symlinks)
 }
