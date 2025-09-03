@@ -14,6 +14,29 @@ import (
 	"github.com/cloudposse/atmos/pkg/security"
 )
 
+// checkSymlinkPresence is a helper function to verify if a symlink exists or not.
+func checkSymlinkPresence(t *testing.T, dir, filename string, shouldExist bool, testName string) {
+	path := filepath.Join(dir, filename)
+	_, err := os.Lstat(path)
+	if shouldExist {
+		assert.NoError(t, err, "%s should be present for %s", filename, testName)
+	} else {
+		assert.True(t, os.IsNotExist(err), "%s should not be present for %s", filename, testName)
+	}
+}
+
+// verifyLegitimateContent checks that legitimate symlink content was copied correctly.
+func verifyLegitimateContent(t *testing.T, path string, policy security.SymlinkPolicy) {
+	if policy == security.PolicyRejectAll {
+		return
+	}
+	content, err := os.ReadFile(path)
+	if err == nil {
+		assert.Equal(t, "LEGITIMATE DATA", string(content),
+			"Content should match for legitimate symlink")
+	}
+}
+
 // TestCVE_2025_8959_VendorProtection tests protection against CVE-2025-8959.
 // This test verifies that the symlink security feature prevents unauthorized
 // access to files outside vendor boundaries during vendor operations.
@@ -132,15 +155,9 @@ func TestCVE_2025_8959_VendorProtection(t *testing.T) {
 			if tc.expectLegitimateOK {
 				assert.NoError(t, err,
 					"Legitimate symlink should work with policy %s", tc.policy)
-
-				// If it's a deep copy, check the content.
-				if tc.policy != security.PolicyRejectAll {
-					content, err := os.ReadFile(destLegitimate)
-					if err == nil {
-						assert.Equal(t, "LEGITIMATE DATA", string(content),
-							"Content should match for legitimate symlink")
-					}
-				}
+				
+				// For non-reject policies, verify content was copied correctly.
+				verifyLegitimateContent(t, destLegitimate, tc.policy)
 			} else {
 				assert.True(t, os.IsNotExist(err),
 					"Legitimate symlink should be blocked with policy %s", tc.policy)
@@ -252,26 +269,10 @@ func TestVendorSymlinkPolicyIntegration(t *testing.T) {
 			require.NoError(t, err)
 
 			// Check internal symlink.
-			internalDest := filepath.Join(testTarget, "internal_link.txt")
-			_, err = os.Stat(internalDest)
-			if cfg.expectInternal {
-				assert.NoError(t, err,
-					"Internal symlink should be present for %s", cfg.name)
-			} else {
-				assert.True(t, os.IsNotExist(err),
-					"Internal symlink should not be present for %s", cfg.name)
-			}
-
+			checkSymlinkPresence(t, testTarget, "internal_link.txt", cfg.expectInternal, cfg.name)
+			
 			// Check external symlink.
-			externalDest := filepath.Join(testTarget, "external_link.txt")
-			_, err = os.Lstat(externalDest)
-			if cfg.expectExternal {
-				assert.NoError(t, err,
-					"External symlink should be present for %s", cfg.name)
-			} else {
-				assert.True(t, os.IsNotExist(err),
-					"External symlink should not be present for %s", cfg.name)
-			}
+			checkSymlinkPresence(t, testTarget, "external_link.txt", cfg.expectExternal, cfg.name)
 		})
 	}
 }

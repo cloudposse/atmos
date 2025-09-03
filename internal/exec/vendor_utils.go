@@ -10,13 +10,11 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	log "github.com/charmbracelet/log"
-	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/security"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -459,27 +457,6 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	}
 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
-}
-
-func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string, atmosConfig *schema.AtmosConfiguration) error {
-	// Get the symlink policy from config
-	policy := security.GetPolicyFromConfig(atmosConfig)
-
-	copyOptions := cp.Options{
-		Skip:          generateSkipFunction(tempDir, s),
-		PreserveTimes: false,
-		PreserveOwner: false,
-		OnSymlink:     security.CreateSymlinkHandler(tempDir, policy),
-	}
-
-	// Adjust the target path if it's a local file with no extension
-	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := SanitizeFileName(uri)
-		targetPath = filepath.Join(targetPath, sanitizedBase)
-	}
-
-	return cp.Copy(tempDir, targetPath, copyOptions)
 }
 
 // GenerateSkipFunction creates a function that determines whether to skip files during copying.
