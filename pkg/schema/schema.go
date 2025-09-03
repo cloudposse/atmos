@@ -971,36 +971,106 @@ type ListColumnConfig struct {
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }
 
+// AuthConfig defines the authentication configuration structure
 type AuthConfig struct {
-	Providers      map[string]interface{} `yaml:"providers" json:"providers" mapstructure:"providers"`
-	Identities     map[string]interface{} `yaml:"identities" json:"identities" mapstructure:"identities"`
-	DefaultRegion  string                 `yaml:"default_region" json:"default_region" mapstructure:"default_region"`
-	DefaultProfile string                 `yaml:"default_profile" json:"default_profile" mapstructure:"default_profile"`
+	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
+	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
 }
 
-// ProviderDefaultConfig defines the default configuration for an identity provider, this is shared amongst all providers
-
-type ProviderDefaultConfig struct {
-	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type,omitempty"`
-	Url  string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url,omitempty"`
-	// AWS Specific
-	Region  string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region,omitempty"`
-	Profile string `yaml:"profile,omitempty" json:"profile,omitempty" mapstructure:"profile,omitempty"`
+// Provider defines an authentication provider configuration
+type Provider struct {
+	Kind      string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
+	StartURL  string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
+	Region    string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+	Session   *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	Default   bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Spec      map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
 }
 
+// SessionConfig defines session configuration for providers
+type SessionConfig struct {
+	Duration string `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
+}
+
+// Identity defines an authentication identity configuration
 type Identity struct {
-	Identity string
+	Kind        string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Default     bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
+	Spec        map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
+	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
+	Environment []EnvironmentVariable  `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+}
 
-	Default           bool          `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default,omitempty"`
-	Enabled           bool          `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
-	Provider          string        `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider,omitempty"`
-	RequestedDuration time.Duration `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration,omitempty"`
-	// AWS Specific
-	RoleArnToAssume string `yaml:"role_arn_to_assume,omitempty" json:"role_arn_to_assume,omitempty" mapstructure:"role_arn_to_assume,omitempty"`
-	// Env allows specifying environment variables to set when this identity is used.
-	// Preserves key casing:
-	//   env:
-	//     - key: AWS_PROFILE
-	//       value: acme-identity
-	Env []CommandEnv `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+// IdentityVia defines how an identity connects to a provider or other identity
+type IdentityVia struct {
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+}
+
+// EnvironmentVariable defines an environment variable with preserved case sensitivity
+type EnvironmentVariable struct {
+	Key   string `yaml:"key" json:"key" mapstructure:"key"`
+	Value string `yaml:"value" json:"value" mapstructure:"value"`
+}
+
+// ComponentAuthConfig defines auth configuration at the component level
+type ComponentAuthConfig struct {
+	Providers  map[string]Provider `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
+	Identities map[string]Identity `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
+}
+
+// HookConfig defines configuration for authentication hooks
+type HookConfig struct {
+	Terraform *TerraformHookConfig `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
+}
+
+// TerraformHookConfig defines Terraform-specific hook configuration
+type TerraformHookConfig struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+}
+
+// Credentials defines credential storage configuration
+type Credentials struct {
+	AWS   *AWSCredentials   `yaml:"aws,omitempty" json:"aws,omitempty" mapstructure:"aws"`
+	Azure *AzureCredentials `yaml:"azure,omitempty" json:"azure,omitempty" mapstructure:"azure"`
+	GCP   *GCPCredentials   `yaml:"gcp,omitempty" json:"gcp,omitempty" mapstructure:"gcp"`
+}
+
+// AWSCredentials defines AWS-specific credential fields
+type AWSCredentials struct {
+	AccessKeyID     string `json:"access_key_id,omitempty"`
+	SecretAccessKey string `json:"secret_access_key,omitempty"`
+	SessionToken    string `json:"session_token,omitempty"`
+	Region          string `json:"region,omitempty"`
+	Expiration      string `json:"expiration,omitempty"`
+}
+
+// AzureCredentials defines Azure-specific credential fields
+type AzureCredentials struct {
+	AccessToken  string `json:"access_token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	TenantID     string `json:"tenant_id,omitempty"`
+	Expiration   string `json:"expiration,omitempty"`
+}
+
+// GCPCredentials defines GCP-specific credential fields
+type GCPCredentials struct {
+	AccessToken  string `json:"access_token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	ProjectID    string `json:"project_id,omitempty"`
+	Expiration   string `json:"expiration,omitempty"`
+}
+
+// WhoamiInfo represents the current effective authentication principal
+type WhoamiInfo struct {
+	Provider     string            `json:"provider"`
+	Identity     string            `json:"identity"`
+	Principal    string            `json:"principal"`
+	Account      string            `json:"account,omitempty"`
+	Region       string            `json:"region,omitempty"`
+	Expiration   *time.Time        `json:"expiration,omitempty"`
+	Environment  map[string]string `json:"environment,omitempty"`
+	Credentials  *Credentials      `json:"credentials,omitempty"`
+	LastUpdated  time.Time         `json:"last_updated"`
 }

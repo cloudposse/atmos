@@ -2,60 +2,57 @@ package authstore
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/zalando/go-keyring"
 )
 
-// Constants
-const service = "atmos-auth"
+const (
+	keyringService = "atmos-auth"
+)
 
-// AuthCredential holds the authentication token and metadata
-type AuthCredential struct {
-	Method      string    `json:"method"`
-	Token       string    `json:"token"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	LastUpdated time.Time `json:"last_updated"`
-}
-
-// GenericStore provides generic JSON storage to/from the OS keyring.
-// Use SetAny to store any struct as JSON, and GetInto to populate a provided struct.
-type GenericStore interface {
-	// GetInto retrieves the JSON for alias and unmarshals it into out (which must be a pointer).
-	GetInto(alias string, out any) error
-	// SetAny marshals v to JSON and stores it under alias.
-	SetAny(alias string, v any) error
-	// Delete removes the entry for alias.
-	Delete(alias string) error
-}
-
-// KeyringAuthStore implements a generic JSON store using the OS keyring
+// KeyringAuthStore provides a simple keyring-based storage for backward compatibility
 type KeyringAuthStore struct{}
 
+// NewKeyringAuthStore creates a new keyring auth store
 func NewKeyringAuthStore() *KeyringAuthStore {
 	return &KeyringAuthStore{}
 }
 
-// Delete removes the entry from the keyring
-func (k *KeyringAuthStore) Delete(alias string) error {
-	return keyring.Delete(service, alias)
+// SetAny stores any serializable data in the keyring
+func (s *KeyringAuthStore) SetAny(key string, data interface{}) error {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data: %w", err)
+	}
+
+	if err := keyring.Set(keyringService, key, string(jsonData)); err != nil {
+		return fmt.Errorf("failed to store data in keyring: %w", err)
+	}
+
+	return nil
 }
 
-// GetInto retrieves the JSON blob stored for alias and unmarshals it into out.
-// out must be a pointer to the destination struct.
-func (k *KeyringAuthStore) GetInto(alias string, out any) error {
-	secret, err := keyring.Get(service, alias)
+// GetAny retrieves and unmarshals data from the keyring
+func (s *KeyringAuthStore) GetAny(key string, target interface{}) error {
+	data, err := keyring.Get(keyringService, key)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to retrieve data from keyring: %w", err)
 	}
-	return json.Unmarshal([]byte(secret), out)
+
+	if err := json.Unmarshal([]byte(data), target); err != nil {
+		return fmt.Errorf("failed to unmarshal data: %w", err)
+	}
+
+	return nil
 }
 
-// SetAny marshals v to JSON and stores it under alias.
-func (k *KeyringAuthStore) SetAny(alias string, v any) error {
-	bytes, err := json.Marshal(v)
-	if err != nil {
-		return err
+// Delete removes data from the keyring
+func (s *KeyringAuthStore) Delete(key string) error {
+	if err := keyring.Delete(keyringService, key); err != nil {
+		return fmt.Errorf("failed to delete data from keyring: %w", err)
 	}
-	return keyring.Set(service, alias, string(bytes))
+
+	return nil
 }

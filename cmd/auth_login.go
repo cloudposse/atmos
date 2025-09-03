@@ -1,7 +1,16 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/cloudposse/atmos/internal/auth"
+	"github.com/cloudposse/atmos/internal/auth/config"
+	"github.com/cloudposse/atmos/internal/auth/credentials"
+	"github.com/cloudposse/atmos/internal/auth/environment"
+	"github.com/cloudposse/atmos/internal/auth/validation"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -14,12 +23,59 @@ var authLoginCmd = &cobra.Command{
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	Run: func(cmd *cobra.Command, args []string) {
-		err := auth.ExecuteAuthLoginCommand(cmd, args)
-		if err != nil {
-			u.PrintfMarkdown("%v", err)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return executeAuthLoginCommand(cmd, args)
 	},
+}
+
+func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
+	// Load atmos config
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return fmt.Errorf("failed to load atmos config: %w", err)
+	}
+
+	// Create auth manager
+	authManager, err := createAuthManager(&atmosConfig.Auth)
+	if err != nil {
+		return fmt.Errorf("failed to create auth manager: %w", err)
+	}
+
+	// Get identity from flag or use default
+	identityName, _ := cmd.Flags().GetString("identity")
+
+	// Perform authentication
+	ctx := context.Background()
+	whoami, err := authManager.Authenticate(ctx, identityName)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+
+	// Display success message
+	u.PrintfMarkdown("**Authentication successful!**\n")
+	u.PrintfMarkdown("Provider: %s\n", whoami.Provider)
+	u.PrintfMarkdown("Identity: %s\n", whoami.Identity)
+	if whoami.Account != "" {
+		u.PrintfMarkdown("Account: %s\n", whoami.Account)
+	}
+	if whoami.Region != "" {
+		u.PrintfMarkdown("Region: %s\n", whoami.Region)
+	}
+	if whoami.Expiration != nil {
+		u.PrintfMarkdown("Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
+	}
+
+	return nil
+}
+
+// createAuthManager creates a new auth manager with all required dependencies
+func createAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
+	credStore := credentials.NewKeyringCredentialStore()
+	awsFileManager := environment.NewAWSFileManager()
+	configMerger := config.NewConfigMerger()
+	validator := validation.NewValidator()
+
+	return auth.NewAuthManager(authConfig, credStore, awsFileManager, configMerger, validator)
 }
 
 func init() {
