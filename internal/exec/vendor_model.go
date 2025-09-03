@@ -375,7 +375,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 	case pkgTypeLocal:
 		// Get the symlink policy from config
 		policy := security.GetPolicyFromConfig(atmosConfig)
-		
+
 		// Copy from local file system
 		copyOptions := cp.Options{
 			PreserveTimes: false,
