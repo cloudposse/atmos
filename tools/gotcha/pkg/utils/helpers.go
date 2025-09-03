@@ -352,8 +352,10 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 	switch event.Action {
 	case "run":
-		// Initialize buffer for this test
-		p.buffers[event.Test] = []string{}
+		// Initialize buffer for this test (only if doesn't exist to preserve early output)
+		if p.buffers[event.Test] == nil {
+			p.buffers[event.Test] = []string{}
+		}
 		// Don't show "Running..." messages in non-TTY mode to avoid clutter
 
 	case "output":

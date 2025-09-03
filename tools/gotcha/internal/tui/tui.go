@@ -346,7 +346,10 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentTest = event.Test
 			m.totalTests++
 			m.bufferMu.Lock()
-			m.testBuffers[event.Test] = []string{}
+			// Only initialize if buffer doesn't exist (to preserve early output)
+			if m.testBuffers[event.Test] == nil {
+				m.testBuffers[event.Test] = []string{}
+			}
 			m.bufferMu.Unlock()
 			// Batch next command with spinner tick to keep UI updating
 			return m, tea.Batch(nextCmd, m.spinner.Tick)
