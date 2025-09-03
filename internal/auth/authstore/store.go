@@ -3,7 +3,6 @@ package authstore
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/zalando/go-keyring"
 )

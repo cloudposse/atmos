@@ -5,11 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cloudposse/atmos/internal/auth"
-	"github.com/cloudposse/atmos/internal/auth/config"
-	"github.com/cloudposse/atmos/internal/auth/credentials"
-	"github.com/cloudposse/atmos/internal/auth/environment"
-	"github.com/cloudposse/atmos/internal/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"

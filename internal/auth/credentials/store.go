@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cloudposse/atmos/internal/auth"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/zalando/go-keyring"
+
+	"github.com/cloudposse/atmos/internal/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -17,8 +18,8 @@ const (
 // keyringStore implements the CredentialStore interface using the system keyring
 type keyringStore struct{}
 
-// NewKeyringCredentialStore creates a new keyring-based credential store
-func NewKeyringCredentialStore() auth.CredentialStore {
+// NewCredentialStore creates a new credential store instance
+func NewCredentialStore() types.CredentialStore {
 	return &keyringStore{}
 }
 

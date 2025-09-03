@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudposse/atmos/internal/auth"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // validator implements the Validator interface
 type validator struct{}
 
-// NewValidator creates a new configuration validator
-func NewValidator() auth.Validator {
+// NewValidator creates a new validator instance
+func NewValidator() types.Validator {
 	return &validator{}
 }
 

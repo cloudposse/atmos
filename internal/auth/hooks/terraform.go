@@ -1,22 +1,46 @@
-package hooks
+package auth
 
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
-	"github.com/cloudposse/atmos/internal/auth"
+	auth "github.com/cloudposse/atmos/internal/auth"
+	"github.com/cloudposse/atmos/internal/auth/config"
+	"github.com/cloudposse/atmos/internal/auth/credentials"
+	"github.com/cloudposse/atmos/internal/auth/environment"
+	"github.com/cloudposse/atmos/internal/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TerraformPreHook performs authentication before Terraform commands
-func TerraformPreHook(ctx context.Context, authManager auth.AuthManager, componentConfig *schema.ComponentAuthConfig) error {
-	// Check if authentication is needed
-	if authManager == nil {
-		return nil // No auth manager configured
+// TerraformPreHook runs before Terraform commands to set up authentication
+func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
+	// Skip if no auth config
+	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
+		return nil
+	}
+
+	// Create auth manager components
+	credStore := credentials.NewCredentialStore()
+	awsFileManager := environment.NewAWSFileManager()
+	configMerger := config.NewConfigMerger()
+	validator := validation.NewValidator()
+
+	// Create auth manager
+	authManager, err := auth.NewAuthManager(
+		&atmosConfig.Auth,
+		credStore,
+		awsFileManager,
+		configMerger,
+		validator,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create auth manager: %w", err)
 	}
 
 	// Try to get current session
+	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx)
 	if err == nil && whoami != nil {
 		// Check if credentials are still valid (at least 5 minutes remaining)
@@ -24,31 +48,39 @@ func TerraformPreHook(ctx context.Context, authManager auth.AuthManager, compone
 			// Set environment variables for existing session
 			if whoami.Environment != nil {
 				for key, value := range whoami.Environment {
-					if err := setEnvVar(key, value); err != nil {
+					if err := os.Setenv(key, value); err != nil {
 						return fmt.Errorf("failed to set environment variable %s: %w", key, err)
 					}
 				}
 			}
-			return nil // Session is still valid
+			return nil // Already authenticated
 		}
 	}
 
-	// Need to authenticate - get default identity
-	defaultIdentity, err := authManager.GetDefaultIdentity()
+	// Need to authenticate - find default identity
+	defaultIdentityName, err := authManager.GetDefaultIdentity()
 	if err != nil {
-		return fmt.Errorf("no default identity configured for automatic authentication: %w", err)
+		return fmt.Errorf("failed to get default identity: %w", err)
+	}
+	if defaultIdentityName == "" {
+		return fmt.Errorf("no default identity configured for authentication")
 	}
 
-	// Perform authentication
-	whoami, err = authManager.Authenticate(ctx, defaultIdentity)
+	// Authenticate with default identity
+	_, err = authManager.Authenticate(ctx, defaultIdentityName)
 	if err != nil {
-		return fmt.Errorf("failed to authenticate with default identity %q: %w", defaultIdentity, err)
+		return fmt.Errorf("failed to authenticate with default identity: %w", err)
 	}
 
-	// Set environment variables
+	// Get updated session info and set environment variables
+	whoami, err = authManager.Whoami(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get session info after authentication: %w", err)
+	}
+
 	if whoami.Environment != nil {
 		for key, value := range whoami.Environment {
-			if err := setEnvVar(key, value); err != nil {
+			if err := os.Setenv(key, value); err != nil {
 				return fmt.Errorf("failed to set environment variable %s: %w", key, err)
 			}
 		}
@@ -57,7 +89,6 @@ func TerraformPreHook(ctx context.Context, authManager auth.AuthManager, compone
 	return nil
 }
 
-// setEnvVar sets an environment variable (placeholder - actual implementation would use os.Setenv)
 func setEnvVar(key, value string) error {
 	// In a real implementation, this would set the environment variable
 	// for the current process and potentially for child processes

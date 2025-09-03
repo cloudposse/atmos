@@ -70,7 +70,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 
 // createAuthManager creates a new auth manager with all required dependencies
 func createAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
-	credStore := credentials.NewKeyringCredentialStore()
+	credStore := credentials.NewCredentialStore()
 	awsFileManager := environment.NewAWSFileManager()
 	configMerger := config.NewConfigMerger()
 	validator := validation.NewValidator()

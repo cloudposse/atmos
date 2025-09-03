@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
-	"github.com/cloudposse/atmos/internal/auth"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -19,7 +19,7 @@ type permissionSetIdentity struct {
 }
 
 // NewPermissionSetIdentity creates a new AWS permission set identity
-func NewPermissionSetIdentity(name string, config *schema.Identity) (auth.Identity, error) {
+func NewPermissionSetIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	if config.Kind != "aws/permission-set" {
 		return nil, fmt.Errorf("invalid identity kind for permission set: %s", config.Kind)
 	}
@@ -158,7 +158,7 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 }
 
 // Merge merges this identity configuration with component-level overrides
-func (i *permissionSetIdentity) Merge(component *schema.Identity) auth.Identity {
+func (i *permissionSetIdentity) Merge(component *schema.Identity) types.Identity {
 	merged := &permissionSetIdentity{
 		name: i.name,
 		config: &schema.Identity{

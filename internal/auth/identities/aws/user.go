@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cloudposse/atmos/internal/auth"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -15,7 +15,7 @@ type userIdentity struct {
 }
 
 // NewUserIdentity creates a new AWS user identity
-func NewUserIdentity(name string, config *schema.Identity) (auth.Identity, error) {
+func NewUserIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	if config.Kind != "aws/user" {
 		return nil, fmt.Errorf("invalid identity kind for user: %s", config.Kind)
 	}
@@ -61,7 +61,7 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 }
 
 // Merge merges this identity configuration with component-level overrides
-func (i *userIdentity) Merge(component *schema.Identity) auth.Identity {
+func (i *userIdentity) Merge(component *schema.Identity) types.Identity {
 	merged := &userIdentity{
 		name: i.name,
 		config: &schema.Identity{

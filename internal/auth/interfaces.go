@@ -1,130 +1,101 @@
 package auth
 
+// Re-export types from the types package to maintain backward compatibility
+// This allows existing code to continue using auth.Provider, auth.Identity, etc.
+
 import (
 	"context"
+	"fmt"
+	"os"
+	"time"
 
+	"github.com/cloudposse/atmos/internal/auth/config"
+	"github.com/cloudposse/atmos/internal/auth/credentials"
+	"github.com/cloudposse/atmos/internal/auth/environment"
+	"github.com/cloudposse/atmos/internal/auth/types"
+	"github.com/cloudposse/atmos/internal/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Provider defines the interface that all authentication providers must implement
-type Provider interface {
-	// Kind returns the provider kind (e.g., "aws/iam-identity-center")
-	Kind() string
+type Provider = types.Provider
+type Identity = types.Identity
+type AuthManager = types.AuthManager
+type CredentialStore = types.CredentialStore
+type AWSFileManager = types.AWSFileManager
+type ConfigMerger = types.ConfigMerger
+type Validator = types.Validator
 
-	// Authenticate performs the authentication process and returns credentials
-	Authenticate(ctx context.Context) (*schema.Credentials, error)
+// TerraformPreHook runs before Terraform commands to set up authentication
+func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
+	// Skip if no auth config
+	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
+		return nil
+	}
 
-	// Validate validates the provider configuration
-	Validate() error
+	// Create auth manager components
+	credStore := credentials.NewCredentialStore()
+	awsFileManager := environment.NewAWSFileManager()
+	configMerger := config.NewConfigMerger()
+	validator := validation.NewValidator()
 
-	// Environment returns environment variables that should be set for this provider
-	Environment() (map[string]string, error)
-}
+	// Create auth manager
+	authManager, err := NewAuthManager(
+		&atmosConfig.Auth,
+		credStore,
+		awsFileManager,
+		configMerger,
+		validator,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create auth manager: %w", err)
+	}
 
-// Identity defines the interface that all authentication identities must implement
-type Identity interface {
-	// Kind returns the identity kind (e.g., "aws/permission-set")
-	Kind() string
+	// Try to get current session
+	ctx := context.Background()
+	whoami, err := authManager.Whoami(ctx)
+	if err == nil && whoami != nil {
+		// Check if credentials are still valid (at least 5 minutes remaining)
+		if whoami.Expiration != nil && whoami.Expiration.After(time.Now().Add(5*time.Minute)) {
+			// Set environment variables for existing session
+			if whoami.Environment != nil {
+				for key, value := range whoami.Environment {
+					if err := os.Setenv(key, value); err != nil {
+						return fmt.Errorf("failed to set environment variable %s: %w", key, err)
+					}
+				}
+			}
+			return nil // Already authenticated
+		}
+	}
 
-	// Authenticate performs authentication using the provided base credentials
-	Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error)
+	// Need to authenticate - find default identity
+	defaultIdentityName, err := authManager.GetDefaultIdentity()
+	if err != nil {
+		return fmt.Errorf("failed to get default identity: %w", err)
+	}
+	if defaultIdentityName == "" {
+		return fmt.Errorf("no default identity configured for authentication")
+	}
 
-	// Validate validates the identity configuration
-	Validate() error
+	// Authenticate with default identity
+	_, err = authManager.Authenticate(ctx, defaultIdentityName)
+	if err != nil {
+		return fmt.Errorf("failed to authenticate with default identity: %w", err)
+	}
 
-	// Environment returns environment variables that should be set for this identity
-	Environment() (map[string]string, error)
+	// Get updated session info and set environment variables
+	whoami, err = authManager.Whoami(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get session info after authentication: %w", err)
+	}
 
-	// Merge merges this identity configuration with component-level overrides
-	Merge(component *schema.Identity) Identity
-}
+	if whoami.Environment != nil {
+		for key, value := range whoami.Environment {
+			if err := os.Setenv(key, value); err != nil {
+				return fmt.Errorf("failed to set environment variable %s: %w", key, err)
+			}
+		}
+	}
 
-// AuthManager manages the overall authentication process
-type AuthManager interface {
-	// Authenticate performs authentication for the specified identity
-	Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error)
-
-	// Whoami returns information about the current effective principal
-	Whoami(ctx context.Context) (*schema.WhoamiInfo, error)
-
-	// Validate validates the entire auth configuration
-	Validate() error
-
-	// SetupAWSFiles writes AWS credentials and config files for the specified provider
-	SetupAWSFiles(ctx context.Context, providerName string, creds *schema.Credentials) error
-
-	// GetDefaultIdentity returns the name of the default identity, if any
-	GetDefaultIdentity() (string, error)
-
-	// ListIdentities returns all available identity names
-	ListIdentities() []string
-
-	// ListProviders returns all available provider names
-	ListProviders() []string
-}
-
-// CredentialStore defines the interface for storing and retrieving credentials
-type CredentialStore interface {
-	// Store stores credentials for the given alias
-	Store(alias string, creds *schema.Credentials) error
-
-	// Retrieve retrieves credentials for the given alias
-	Retrieve(alias string) (*schema.Credentials, error)
-
-	// Delete deletes credentials for the given alias
-	Delete(alias string) error
-
-	// List returns all stored credential aliases
-	List() ([]string, error)
-
-	// IsExpired checks if credentials for the given alias are expired
-	IsExpired(alias string) (bool, error)
-}
-
-// AWSFileManager defines the interface for managing AWS credentials and config files
-type AWSFileManager interface {
-	// WriteCredentials writes AWS credentials to the provider-specific file
-	WriteCredentials(providerName string, creds *schema.AWSCredentials) error
-
-	// WriteConfig writes AWS config to the provider-specific file
-	WriteConfig(providerName string, region string) error
-
-	// GetCredentialsPath returns the path to the credentials file for the provider
-	GetCredentialsPath(providerName string) string
-
-	// GetConfigPath returns the path to the config file for the provider
-	GetConfigPath(providerName string) string
-
-	// SetEnvironmentVariables sets the AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE environment variables
-	SetEnvironmentVariables(providerName string) error
-
-	// Cleanup removes AWS files for the provider
-	Cleanup(providerName string) error
-}
-
-// ConfigMerger defines the interface for merging auth configurations
-type ConfigMerger interface {
-	// MergeAuthConfig merges component auth config with global auth config
-	MergeAuthConfig(global *schema.AuthConfig, component *schema.ComponentAuthConfig) (*schema.AuthConfig, error)
-
-	// MergeIdentity merges component identity config with global identity config
-	MergeIdentity(global *schema.Identity, component *schema.Identity) *schema.Identity
-
-	// MergeProvider merges component provider config with global provider config
-	MergeProvider(global *schema.Provider, component *schema.Provider) *schema.Provider
-}
-
-// Validator defines the interface for validating auth configurations
-type Validator interface {
-	// ValidateAuthConfig validates the entire auth configuration
-	ValidateAuthConfig(config *schema.AuthConfig) error
-
-	// ValidateProvider validates a provider configuration
-	ValidateProvider(name string, provider *schema.Provider) error
-
-	// ValidateIdentity validates an identity configuration
-	ValidateIdentity(name string, identity *schema.Identity, providers map[string]*schema.Provider) error
-
-	// ValidateChains validates identity chains for cycles and invalid references
-	ValidateChains(identities map[string]*schema.Identity, providers map[string]*schema.Provider) error
+	return nil
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/cloudposse/atmos/internal/auth"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -19,7 +19,7 @@ type assumeRoleIdentity struct {
 }
 
 // NewAssumeRoleIdentity creates a new AWS assume role identity
-func NewAssumeRoleIdentity(name string, config *schema.Identity) (auth.Identity, error) {
+func NewAssumeRoleIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	if config.Kind != "aws/assume-role" {
 		return nil, fmt.Errorf("invalid identity kind for assume role: %s", config.Kind)
 	}
@@ -133,7 +133,7 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 }
 
 // Merge merges this identity configuration with component-level overrides
-func (i *assumeRoleIdentity) Merge(component *schema.Identity) auth.Identity {
+func (i *assumeRoleIdentity) Merge(component *schema.Identity) types.Identity {
 	merged := &assumeRoleIdentity{
 		name: i.name,
 		config: &schema.Identity{

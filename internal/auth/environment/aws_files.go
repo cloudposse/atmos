@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cloudposse/atmos/internal/auth"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -14,8 +14,8 @@ type awsFileManager struct {
 	baseDir string
 }
 
-// NewAWSFileManager creates a new AWS file manager
-func NewAWSFileManager() auth.AWSFileManager {
+// NewAWSFileManager creates a new AWS file manager instance
+func NewAWSFileManager() types.AWSFileManager {
 	homeDir, _ := os.UserHomeDir()
 	return &awsFileManager{
 		baseDir: filepath.Join(homeDir, ".aws", "atmos"),

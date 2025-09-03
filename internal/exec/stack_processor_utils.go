@@ -2073,10 +2073,16 @@ func processIdentities(atmosConfig *schema.AtmosConfiguration, componentIdentiti
 
 	// Deep-merge component identities with global identities from atmos.yaml
 	// Component identities take precedence over global identities
+	// Convert schema.Identity map to map[string]any
+	globalIdentities := make(map[string]any)
+	for k, v := range atmosConfig.Auth.Identities {
+		globalIdentities[k] = v
+	}
+	
 	mergedIdentities, err := m.Merge(
 		atmosConfig,
 		[]map[string]any{
-			atmosConfig.Auth.Identities,
+			globalIdentities,
 			componentIdentities,
 		})
 	if err != nil {

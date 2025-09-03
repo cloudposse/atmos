@@ -3,15 +3,15 @@ package config
 import (
 	"fmt"
 
-	"github.com/cloudposse/atmos/internal/auth"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // merger implements the ConfigMerger interface
 type merger struct{}
 
-// NewConfigMerger creates a new configuration merger
-func NewConfigMerger() auth.ConfigMerger {
+// NewConfigMerger creates a new config merger instance
+func NewConfigMerger() types.ConfigMerger {
 	return &merger{}
 }
 

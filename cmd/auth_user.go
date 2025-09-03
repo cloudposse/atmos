@@ -6,11 +6,11 @@ import (
 
 	"github.com/charmbracelet/huh"
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/internal/auth"
+
 	"github.com/cloudposse/atmos/internal/auth/authstore"
-	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -34,12 +34,8 @@ var authUserConfigureCmd = &cobra.Command{
 		// Gather identities that use a provider of type aws/user
 		var selectable []string
 		for ident := range atmosConfig.Auth.Identities {
-			idp, err := auth.GetIdp(ident, atmosConfig.Auth)
-			if err != nil {
-				continue
-			}
-			typeVal, err := auth.GetType(idp, atmosConfig.Auth)
-			if err == nil && typeVal == "aws/user" {
+			identity := atmosConfig.Auth.Identities[ident]
+			if identity.Kind == "aws/user" {
 				selectable = append(selectable, ident)
 			}
 		}
@@ -59,9 +55,10 @@ var authUserConfigureCmd = &cobra.Command{
 		}
 
 		// Resolve provider and compute alias <provider>/<identity>
-		providerName, err := auth.GetIdp(choice, atmosConfig.Auth)
-		if err != nil {
-			return err
+		identity := atmosConfig.Auth.Identities[choice]
+		providerName := identity.Via.Provider
+		if providerName == "" {
+			return fmt.Errorf("identity %s does not specify a provider", choice)
 		}
 		alias := fmt.Sprintf("%s/%s", providerName, choice)
 

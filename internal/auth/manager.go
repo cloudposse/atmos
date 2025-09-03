@@ -5,36 +5,37 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // manager implements the AuthManager interface
 type manager struct {
 	config           *schema.AuthConfig
-	providers        map[string]Provider
-	identities       map[string]Identity
-	credentialStore  CredentialStore
-	awsFileManager   AWSFileManager
-	configMerger     ConfigMerger
-	validator        Validator
+	providers        map[string]types.Provider
+	identities       map[string]types.Identity
+	credentialStore  types.CredentialStore
+	awsFileManager   types.AWSFileManager
+	configMerger     types.ConfigMerger
+	validator        types.Validator
 }
 
 // NewAuthManager creates a new AuthManager instance
 func NewAuthManager(
 	config *schema.AuthConfig,
-	credentialStore CredentialStore,
-	awsFileManager AWSFileManager,
-	configMerger ConfigMerger,
-	validator Validator,
-) (AuthManager, error) {
+	credentialStore types.CredentialStore,
+	awsFileManager types.AWSFileManager,
+	configMerger types.ConfigMerger,
+	validator types.Validator,
+) (types.AuthManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("auth config cannot be nil")
 	}
 
 	m := &manager{
 		config:          config,
-		providers:       make(map[string]Provider),
-		identities:      make(map[string]Identity),
+		providers:       make(map[string]types.Provider),
+		identities:      make(map[string]types.Identity),
 		credentialStore: credentialStore,
 		awsFileManager:  awsFileManager,
 		configMerger:    configMerger,
