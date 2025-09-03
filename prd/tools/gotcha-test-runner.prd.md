@@ -116,15 +116,45 @@ globalLogger.SetColorProfile(profile)
 
 #### Color Constants
 ```go
-colorGreen     = "#2ECC40" // Bright green for pass
-colorRed       = "#DC143C" // Crimson red for fail  
-colorAmber     = "#FFB347" // Peach orange for skip
-colorLightGray = "#D3D3D3" // Light gray for test names
-colorDarkGray  = "#666666" // Dark gray for durations
-colorBlue      = "#5DADE2" // Blue for spinner
-colorDarkRed   = "#B22222" // Dark red for error background
-colorWhite     = "#FFFFFF" // White for error text
+colorGreen     = "#2ECC40" // Bright green for pass symbols (✔)
+colorRed       = "#DC143C" // Crimson red for fail symbols (✘)
+colorAmber     = "#FFB347" // Peach orange for skip symbols (⊘)
+colorLightGray = "#D3D3D3" // Light gray for test names (primary text)
+colorDarkGray  = "#666666" // Dark gray for durations (de-emphasized)
+colorBlue      = "#5DADE2" // Blue for spinner animations
+colorDarkRed   = "#B22222" // Dark red for error backgrounds
+colorWhite     = "#FFFFFF" // White for error text on dark backgrounds
 ```
+
+#### Visual Hierarchy Requirements
+
+The visual hierarchy MUST follow these strict requirements to ensure optimal readability:
+
+1. **Test Status Symbols** (Highest Visual Priority)
+   - ✔ Pass: `colorGreen` (#2ECC40) - Immediately visible success indicator
+   - ✘ Fail: `colorRed` (#DC143C) - Immediately visible failure indicator
+   - ⊘ Skip: `colorAmber` (#FFB347) - Immediately visible skip indicator
+
+2. **Test Names** (Secondary Visual Priority)
+   - Color: `colorLightGray` (#D3D3D3)
+   - Purpose: Readable and clear, but doesn't compete with status symbols
+   - Example: `TestNewSSMStore/valid_options_with_all_fields`
+
+3. **Duration/Metadata** (Tertiary Visual Priority)
+   - Color: `colorDarkGray` (#666666)
+   - Purpose: Available when needed but de-emphasized
+   - Example: `(0.03s)`
+
+#### Example Output Display
+```
+✔ TestPasses (0.01s)
+✘ TestFails (0.02s)
+⊘ TestSkipped (0.00s)
+```
+Where:
+- ✔/✘/⊘ are colored per status (green/red/amber)
+- Test names are light gray for readability
+- Durations in parentheses are dark gray for de-emphasis
 
 #### Visual Elements
 - **Unicode symbols**: ✔ (pass), ✘ (fail), ⊘ (skip)
@@ -409,6 +439,7 @@ Existing tools failed to provide:
 ### Output Quality
 - ✅ **Visual consistency**: All output uses consistent Charm ecosystem styling
 - ✅ **Information hierarchy**: Important information (failures) prominently displayed
+- ✅ **Visual hierarchy colors**: Test symbols use status colors (green/red/amber), test names use light gray, durations use dark gray
 - ✅ **Performance**: Tool completes processing within reasonable time limits
 - ✅ **Accessibility**: Output readable in various terminal configurations
 
