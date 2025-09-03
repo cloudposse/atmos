@@ -40,7 +40,32 @@ var configFile string
 // initGlobalLogger initializes the global logger with solid background colors per PRD spec.
 func initGlobalLogger() {
 	globalLogger = log.New(os.Stderr)
-	globalLogger.SetLevel(log.InfoLevel)
+	
+	// Get log level from configuration (flag > env > config > default)
+	logLevelStr := viper.GetString("log.level")
+	if logLevelStr == "" {
+		logLevelStr = "info" // Default to info level
+	}
+	
+	// Parse and set log level
+	var logLevel log.Level
+	switch strings.ToLower(logLevelStr) {
+	case "debug":
+		logLevel = log.DebugLevel
+	case "info":
+		logLevel = log.InfoLevel
+	case "warn", "warning":
+		logLevel = log.WarnLevel
+	case "error":
+		logLevel = log.ErrorLevel
+	case "fatal":
+		logLevel = log.FatalLevel
+	default:
+		logLevel = log.InfoLevel
+		// Can't log warning yet as logger is being initialized
+	}
+	
+	globalLogger.SetLevel(logLevel)
 	globalLogger.SetStyles(&log.Styles{
 		Levels: map[log.Level]lipgloss.Style{
 			log.DebugLevel: lipgloss.NewStyle().
@@ -94,6 +119,9 @@ func initConfig() {
 	// Bind environment variables
 	viper.SetEnvPrefix("GOTCHA")
 	viper.AutomaticEnv()
+	
+	// Explicitly bind log.level to GOTCHA_LOG_LEVEL environment variable
+	_ = viper.BindEnv("log.level", "GOTCHA_LOG_LEVEL")
 
 	// Read config file if it exists (silently, logging happens after logger init)
 	_ = viper.ReadInConfig()
@@ -101,22 +129,34 @@ func initConfig() {
 
 // Execute is the main entry point for the cobra commands.
 func Execute() error {
-	// Pre-parse to get the config flag before full command execution
-	// This allows us to load the config file before other flag processing
+	// Pre-parse to get the config and log-level flags before full command execution
+	// This allows us to load the config file and set log level before other processing
+	var logLevel string
 	for i, arg := range os.Args {
 		if arg == "--config" && i+1 < len(os.Args) {
 			configFile = os.Args[i+1]
-			break
 		}
 		// Also check for --config=value format
 		if strings.HasPrefix(arg, "--config=") {
 			configFile = strings.TrimPrefix(arg, "--config=")
-			break
+		}
+		// Check for log-level flag
+		if arg == "--log-level" && i+1 < len(os.Args) {
+			logLevel = os.Args[i+1]
+		}
+		// Also check for --log-level=value format
+		if strings.HasPrefix(arg, "--log-level=") {
+			logLevel = strings.TrimPrefix(arg, "--log-level=")
 		}
 	}
 
 	// Initialize viper configuration
 	initConfig()
+	
+	// Set log level from flag if provided (highest priority)
+	if logLevel != "" {
+		viper.Set("log.level", logLevel)
+	}
 
 	// Configure colors for lipgloss based on environment (GitHub Actions, CI, etc.)
 	tui.ConfigureColors()
@@ -177,14 +217,47 @@ step summaries and markdown reports.`,
   # Advanced filtering and configuration
   gotcha stream --include=".*api.*" --exclude=".*mock.*" -- -race -short`,
 		Args: cobra.MaximumNArgs(1),
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Bind the log-level flag to viper after Cobra has parsed it
+			// Look in both local and persistent flags
+			if flag := cmd.Flags().Lookup("log-level"); flag != nil {
+				_ = viper.BindPFlag("log.level", flag)
+			} else if flag := cmd.Root().PersistentFlags().Lookup("log-level"); flag != nil {
+				_ = viper.BindPFlag("log.level", flag)
+			}
+			
+			// Re-apply log level if it was set via flag
+			if logLevelStr := viper.GetString("log.level"); logLevelStr != "" {
+				var logLevel log.Level
+				switch strings.ToLower(logLevelStr) {
+				case "debug":
+					logLevel = log.DebugLevel
+				case "info":
+					logLevel = log.InfoLevel
+				case "warn", "warning":
+					logLevel = log.WarnLevel
+				case "error":
+					logLevel = log.ErrorLevel
+				case "fatal":
+					logLevel = log.FatalLevel
+				default:
+					logLevel = log.InfoLevel
+					globalLogger.Warn("Invalid log level, using default", "level", logLevelStr, "default", "info")
+				}
+				globalLogger.SetLevel(logLevel)
+				globalLogger.Debug("Log level updated", "level", logLevelStr)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Default to stream mode for zero-argument execution
 			return runStream(cmd, args, globalLogger)
 		},
 	}
 
-	// Add persistent flag for config file (available to all subcommands)
+	// Add persistent flags (available to all subcommands)
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "Config file path (default: .gotcha.yaml)")
+	rootCmd.PersistentFlags().String("log-level", "", "Log level: debug, info, warn, error, fatal (default: info)")
 
 	// Add stream-specific flags to root command for direct usage
 	rootCmd.Flags().String("packages", "", "Space-separated packages to test (default: ./...)")

@@ -91,6 +91,14 @@ globalLogger.SetLevel(log.InfoLevel)
 globalLogger.SetColorProfile(profile)
 ```
 
+#### Log Level Configuration
+- **CLI Flag**: `--log-level` (persistent flag available to all commands)
+- **Environment Variable**: `GOTCHA_LOG_LEVEL`
+- **Configuration File**: `log.level` in `.gotcha.yaml`
+- **Supported Levels**: `debug`, `info`, `warn`, `error`, `fatal`
+- **Default Level**: `info`
+- **Precedence**: CLI flag > Environment variable > Config file > Default
+
 #### Log Level Styling with Hex Colors
 - **DEBUG**: Background color `#3F51B5` (indigo), black foreground
 - **INFO**: Background color `#4CAF50` (green), black foreground  
@@ -102,6 +110,7 @@ globalLogger.SetColorProfile(profile)
 - Structured logging for programmatic parsing
 - Human-readable formatting for terminal display
 - Color profile detection for different environments
+- Dynamic log level adjustment at runtime
 
 ### Terminal Styling (Lipgloss with Hex Colors)
 
@@ -157,6 +166,7 @@ globalLogger.SetColorProfile(profile)
 
 #### Environment Variable Bindings
 ```go
+viper.BindEnv("GOTCHA_LOG_LEVEL", "LOG_LEVEL")
 viper.BindEnv("GOTCHA_FORCE_NO_TTY", "FORCE_NO_TTY")
 viper.BindEnv("GOTCHA_FORCE_TTY", "FORCE_TTY")
 viper.BindEnv("GOTCHA_TIMEOUT", "TIMEOUT")
@@ -165,6 +175,10 @@ viper.BindEnv("GOTCHA_OUTPUT", "OUTPUT")
 
 #### Configuration File Format (.gotcha.yaml)
 ```yaml
+# Logging configuration
+log:
+  level: info  # Log level: debug, info, warn, error, fatal
+
 # Output format: stream, markdown, github
 format: stream
 
@@ -193,6 +207,11 @@ filter:
     - ".*"
   exclude: []
 ```
+
+#### Custom Configuration File
+- **Flag**: `--config` to specify custom configuration file path
+- **Example**: `gotcha stream --config=/path/to/config.yaml`
+- **Discovery**: Searches `.gotcha.yaml` in current and parent directories (up to 3 levels)
 
 ### TUI Framework (Bubble Tea)
 
