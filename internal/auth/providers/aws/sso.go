@@ -2,11 +2,13 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -75,35 +77,46 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 	}
 
 	// Display user code and verification URI
-	fmt.Printf("Please visit %s and enter the code: %s\n", 
-		aws.ToString(authResp.VerificationUriComplete), 
+	fmt.Printf("Please visit %s and enter the code: %s\n",
+		aws.ToString(authResp.VerificationUriComplete),
 		aws.ToString(authResp.UserCode))
 
 	// Poll for token
 	var accessToken string
 	expiresIn := authResp.ExpiresIn
 	interval := authResp.Interval
-	
+
+	// Add initial delay before first poll
+	time.Sleep(time.Duration(interval) * time.Second)
+
 	for i := 0; i < int(expiresIn/interval); i++ {
-		time.Sleep(time.Duration(interval) * time.Second)
-		
 		tokenResp, err := oidcClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
 			ClientId:     registerResp.ClientId,
 			ClientSecret: registerResp.ClientSecret,
 			DeviceCode:   authResp.DeviceCode,
 			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
 		})
-		
+
 		if err == nil {
 			accessToken = aws.ToString(tokenResp.AccessToken)
 			break
 		}
-		
-		// Continue polling if authorization is pending
-		if err.Error() == "authorization_pending" {
+
+		// Check for specific AWS error types
+		var authPendingErr *types.AuthorizationPendingException
+		var slowDownErr *types.SlowDownException
+
+		if errors.As(err, &authPendingErr) {
+			// Authorization is still pending, continue polling
+			time.Sleep(time.Duration(interval) * time.Second)
+			continue
+		} else if errors.As(err, &slowDownErr) {
+			// Slow down polling as requested by AWS
+			time.Sleep(time.Duration(interval*2) * time.Second)
 			continue
 		}
-		
+
+		// Any other error is terminal
 		return nil, fmt.Errorf("failed to create token: %w", err)
 	}
 
@@ -116,9 +129,9 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 
 	return &schema.Credentials{
 		AWS: &schema.AWSCredentials{
-			AccessKeyID:  accessToken, // This will be used by identities to get actual credentials
-			Region:       p.region,
-			Expiration:   expiration.Format(time.RFC3339),
+			AccessKeyID: accessToken, // This will be used by identities to get actual credentials
+			Region:      p.region,
+			Expiration:  expiration.Format(time.RFC3339),
 		},
 	}, nil
 }
