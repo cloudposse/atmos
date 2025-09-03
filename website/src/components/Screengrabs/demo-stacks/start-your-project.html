@@ -22,7 +22,7 @@
 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Customize how to organize environments in the atmos.yaml file.
-<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Pay special attention to the name_pattern, which is how Atmos knows
+<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Pay special attention to the name_template, which is how Atmos knows
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # where to find the stacks.
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat atmos.yaml
@@ -45,7 +45,7 @@
 <span style="color:#404040;">  14</span> <span style="color:#2a2a2a;">    </span><span style="color:#2a2a2a;">-</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">deploy/**/*</span><span style="color:#005f87;">&quot;</span>
 <span style="color:#404040;">  15</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">excluded_paths</span><span style="color:#2a2a2a;">:</span>
 <span style="color:#404040;">  16</span> <span style="color:#2a2a2a;">    </span><span style="color:#2a2a2a;">-</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">**/_defaults.yaml</span><span style="color:#005f87;">&quot;</span>
-<span style="color:#404040;">  17</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">name_pattern</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">{stage}</span><span style="color:#005f87;">&quot;</span>
+<span style="color:#404040;">  17</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">name_template</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">{stage}</span><span style="color:#005f87;">&quot;</span>
 <span style="color:#404040;">  18</span> 
 <span style="color:#404040;">  19</span> <span style="color:#5faf5f;">logs</span><span style="color:#2a2a2a;">:</span>
 <span style="color:#404040;">  20</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">file</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">/dev/stdout</span><span style="color:#005f87;">&quot;</span>
