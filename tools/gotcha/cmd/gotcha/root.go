@@ -40,13 +40,13 @@ var configFile string
 // initGlobalLogger initializes the global logger with solid background colors per PRD spec.
 func initGlobalLogger() {
 	globalLogger = log.New(os.Stderr)
-	
+
 	// Get log level from configuration (flag > env > config > default)
 	logLevelStr := viper.GetString("log.level")
 	if logLevelStr == "" {
 		logLevelStr = "info" // Default to info level
 	}
-	
+
 	// Parse and set log level
 	var logLevel log.Level
 	switch strings.ToLower(logLevelStr) {
@@ -64,7 +64,7 @@ func initGlobalLogger() {
 		logLevel = log.InfoLevel
 		// Can't log warning yet as logger is being initialized
 	}
-	
+
 	globalLogger.SetLevel(logLevel)
 	globalLogger.SetStyles(&log.Styles{
 		Levels: map[log.Level]lipgloss.Style{
@@ -119,7 +119,7 @@ func initConfig() {
 	// Bind environment variables
 	viper.SetEnvPrefix("GOTCHA")
 	viper.AutomaticEnv()
-	
+
 	// Explicitly bind log.level to GOTCHA_LOG_LEVEL environment variable
 	_ = viper.BindEnv("log.level", "GOTCHA_LOG_LEVEL")
 
@@ -152,7 +152,7 @@ func Execute() error {
 
 	// Initialize viper configuration
 	initConfig()
-	
+
 	// Set log level from flag if provided (highest priority)
 	if logLevel != "" {
 		viper.Set("log.level", logLevel)
@@ -225,7 +225,7 @@ step summaries and markdown reports.`,
 			} else if flag := cmd.Root().PersistentFlags().Lookup("log-level"); flag != nil {
 				_ = viper.BindPFlag("log.level", flag)
 			}
-			
+
 			// Re-apply log level if it was set via flag
 			if logLevelStr := viper.GetString("log.level"); logLevelStr != "" {
 				var logLevel log.Level
