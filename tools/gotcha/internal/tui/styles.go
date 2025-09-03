@@ -12,8 +12,8 @@ const (
 	colorGreen     = "2"  // Bright green for pass (ANSI)
 	colorRed       = "1"  // Bright red for fail (ANSI)
 	colorAmber     = "3"  // Yellow/amber for skip (ANSI)
-	colorLightGray = "7"  // Light gray for test names (ANSI)
-	colorDarkGray  = "8"  // Dark gray for durations (ANSI)
+	colorLightGray = "7"  // Light gray for durations (ANSI)
+	colorDarkGray  = "8"  // Dark gray for test names (ANSI)
 	colorBlue      = "4"  // Blue for spinner (ANSI)
 	colorDarkRed   = "88" // Dark red for error background (256 color)
 	colorWhite     = "15" // White for error text (ANSI)
@@ -26,8 +26,8 @@ var (
 	SkipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAmber))
 
 	// Text styles.
-	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray))
-	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))
+	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))  // Darker for test names
+	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray)) // Lighter for durations
 
 	// UI element styles.
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
@@ -50,8 +50,8 @@ func InitStyles() {
 	PassStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
 	FailStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed))
 	SkipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAmber))
-	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray))
-	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))
+	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))  // Darker for test names
+	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray)) // Lighter for durations
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
 	errorHeaderStyle = lipgloss.NewStyle().
 		SetString("ERROR").

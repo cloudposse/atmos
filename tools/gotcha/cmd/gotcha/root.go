@@ -370,14 +370,14 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	}
 	testPackages = filteredPackages
 
-	// Log test discovery
-	logger.Info("Test discovery completed", "packages", len(testPackages))
-
 	// Prepare test arguments
 	testArgsStr := "-timeout " + timeout
 
 	// Pre-calculate total test count for progress display
 	totalTests := utils.GetTestCount(testPackages, testArgsStr)
+	
+	// Log test discovery with both package and test counts
+	logger.Info("Test discovery completed", "packages", len(testPackages), "tests", totalTests)
 
 	// Check if we have a TTY for interactive mode
 	if utils.IsTTY() {
