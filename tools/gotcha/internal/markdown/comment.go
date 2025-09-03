@@ -1,4 +1,4 @@
-package formatter
+package markdown
 
 import (
 	"bytes"
@@ -17,8 +17,8 @@ const CommentSizeLimit = 65536
 // generateCommentContent creates markdown content specifically for GitHub comments.
 // It strategically resizes content to fit within GitHub's size limits while preserving
 // the core intent: show failed & skipped tests and keep badges.
-// GenerateCommentContent creates markdown content for GitHub comments.
-func GenerateCommentContent(summary *types.TestSummary, uuid string) string {
+// GenerateGitHubComment creates markdown content for GitHub PR comments.
+func GenerateGitHubComment(summary *types.TestSummary, uuid string) string {
 	var content bytes.Buffer
 
 	// Add UUID magic comment to prevent duplicate GitHub comments.

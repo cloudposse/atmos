@@ -1,4 +1,4 @@
-package formatter
+package markdown
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestWritePassedTestsEnhanced(t *testing.T) {
+func TestWritePassedTestsTableEnhanced(t *testing.T) {
 	tests := []struct {
 		name     string
 		passed   []TestResult
@@ -145,7 +145,7 @@ func TestWriteTestTableEnhanced(t *testing.T) {
 	}
 }
 
-func TestWriteTestCoverageSectionEnhanced(t *testing.T) {
+func TestWriteDetailedCoverageEnhanced(t *testing.T) {
 	tests := []struct {
 		name         string
 		coverageData *CoverageData

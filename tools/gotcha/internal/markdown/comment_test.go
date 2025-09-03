@@ -1,4 +1,4 @@
-package formatter
+package markdown
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGenerateCommentContent(t *testing.T) {
+func TestGenerateGitHubComment(t *testing.T) {
 	tests := []struct {
 		name     string
 		summary  *TestSummary

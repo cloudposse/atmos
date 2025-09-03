@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -300,12 +301,12 @@ func TestWriteMarkdownContent(t *testing.T) {
 				os.Unsetenv("GITHUB_STEP_SUMMARY")
 			}
 
-			writeMarkdownContent(&buf, tt.summary, tt.format)
+			markdown.WriteContent(&buf, tt.summary, tt.format)
 
 			output := buf.String()
 			for _, want := range tt.want {
 				if !strings.Contains(output, want) {
-					t.Errorf("writeMarkdownContent() missing expected content: %s\nGot:\n%s", want, output)
+					t.Errorf("markdown.WriteContent() missing expected content: %s\nGot:\n%s", want, output)
 				}
 			}
 		})
@@ -354,7 +355,7 @@ func TestUUIDCommentInjection(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			writeMarkdownContent(&buf, summary, constants.FormatMarkdown)
+			markdown.WriteContent(&buf, summary, constants.FormatMarkdown)
 			output := buf.String()
 
 			expectedComment := "<!-- test-summary-uuid: " + tt.uuid + " -->"

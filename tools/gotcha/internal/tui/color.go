@@ -44,7 +44,7 @@ func detectColorProfile() termenv.Profile {
 	}
 
 	// Special handling for GitHub Actions and other CI environments
-	if isGitHubActions() {
+	if IsGitHubActions() {
 		// GitHub Actions supports ANSI colors
 		// Check if TERM suggests 256 color support
 		if term := viper.GetString("TERM"); term == "xterm-256color" || term == "screen-256color" {
@@ -54,7 +54,7 @@ func detectColorProfile() termenv.Profile {
 	}
 
 	// Generic CI detection - most CI environments support at least ANSI colors
-	if isCI() {
+	if IsCI() {
 		return termenv.ANSI
 	}
 
@@ -86,8 +86,8 @@ func ConfigureColors() termenv.Profile {
 	return profile
 }
 
-// profileName returns a human-readable name for the color profile.
-func profileName(profile termenv.Profile) string {
+// ProfileName returns a human-readable name for the color profile.
+func ProfileName(profile termenv.Profile) string {
 	switch profile {
 	case termenv.Ascii:
 		return "ASCII (no color)"
@@ -102,13 +102,13 @@ func profileName(profile termenv.Profile) string {
 	}
 }
 
-// isGitHubActions detects if we're running in GitHub Actions.
-func isGitHubActions() bool {
+// IsGitHubActions detects if we're running in GitHub Actions.
+func IsGitHubActions() bool {
 	return viper.GetString("GITHUB_ACTIONS") != ""
 }
 
-// isCI detects if we're running in any CI environment.
-func isCI() bool {
+// IsCI detects if we're running in any CI environment.
+func IsCI() bool {
 	// Check common CI environment variables
 	ciVars := []string{
 		"CI",

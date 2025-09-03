@@ -1,4 +1,4 @@
-package formatter
+package markdown
 
 import (
 	"fmt"
@@ -13,8 +13,8 @@ import (
 )
 
 // writeFailedTests writes the failed tests section.
-// WriteFailedTests writes failed test results.
-func WriteFailedTests(output io.Writer, failed []types.TestResult) {
+// WriteFailedTestsTable writes failed test results as a Markdown table.
+func WriteFailedTestsTable(output io.Writer, failed []types.TestResult) {
 	if len(failed) == 0 {
 		return // Hide entire section when no failures
 	}
@@ -38,8 +38,8 @@ func WriteFailedTests(output io.Writer, failed []types.TestResult) {
 }
 
 // writeSkippedTests writes the skipped tests section.
-// WriteSkippedTests writes skipped test results.
-func WriteSkippedTests(output io.Writer, skipped []types.TestResult) {
+// WriteSkippedTestsTable writes skipped test results as a Markdown table.
+func WriteSkippedTestsTable(output io.Writer, skipped []types.TestResult) {
 	if len(skipped) == 0 {
 		return
 	}
@@ -56,8 +56,8 @@ func WriteSkippedTests(output io.Writer, skipped []types.TestResult) {
 }
 
 // writePassedTests writes the passed tests section with hybrid strategy.
-// WritePassedTests writes passed test results.
-func WritePassedTests(output io.Writer, passed []types.TestResult) {
+// WritePassedTestsTable writes passed test results as a Markdown table.
+func WritePassedTestsTable(output io.Writer, passed []types.TestResult) {
 	if len(passed) == 0 {
 		return
 	}
@@ -184,8 +184,8 @@ func calculateFunctionCoverage(functions []types.CoverageFunction) (covered, tot
 }
 
 // writeTestCoverageSection writes the test coverage section with table format.
-// WriteTestCoverageSection writes test coverage section.
-func WriteTestCoverageSection(output io.Writer, coverageData *types.CoverageData) {
+// WriteDetailedCoverage writes detailed test coverage section with function coverage.
+func WriteDetailedCoverage(output io.Writer, coverageData *types.CoverageData) {
 	if coverageData == nil {
 		return
 	}
@@ -273,8 +273,8 @@ func writeUncoveredFunctionsTable(output io.Writer, functions []types.CoverageFu
 }
 
 // writeLegacyCoverageSection writes coverage in the legacy table format.
-// WriteLegacyCoverageSection writes legacy coverage section.
-func WriteLegacyCoverageSection(output io.Writer, coverage string) {
+// WriteBasicCoverage writes basic coverage section with just percentage.
+func WriteBasicCoverage(output io.Writer, coverage string) {
 	fmt.Fprintf(output, "# Test Coverage\n\n")
 	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverage, "%"), constants.Base10BitSize)
 	emoji := "🔴" // red for < 40%.

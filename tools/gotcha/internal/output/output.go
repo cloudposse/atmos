@@ -5,11 +5,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"time"
 
 	log "github.com/charmbracelet/log"
 
-	"github.com/cloudposse/atmos/tools/gotcha/internal/formatter"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -31,7 +30,7 @@ func WriteSummary(summary *types.TestSummary, format, outputFile string) error {
 		defer closer.Close()
 	}
 	// Write the markdown content.
-	writeMarkdownContent(output, summary, format)
+	markdown.WriteContent(output, summary, format)
 	// Log success message for file outputs.
 	if outputPath != constants.StdoutPath && outputPath != "" {
 		absPath, _ := filepath.Abs(outputPath)
@@ -54,7 +53,7 @@ func writeGitHubSummary(summary *types.TestSummary, outputFile string) error {
 				closer.Close()
 			}
 		}()
-		writeMarkdownContent(githubWriter, summary, constants.FormatGitHub)
+		markdown.WriteContent(githubWriter, summary, constants.FormatGitHub)
 		if githubPath != "" {
 			if fileInfo, err := os.Stat(githubPath); err == nil {
 				fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s (%d bytes)\n", tui.PassStyle.Render(tui.CheckPass), githubPath, fileInfo.Size())
@@ -76,7 +75,7 @@ func writeGitHubSummary(summary *types.TestSummary, outputFile string) error {
 	}
 	defer file.Close()
 
-	writeMarkdownContent(file, summary, constants.FormatGitHub)
+	markdown.WriteContent(file, summary, constants.FormatGitHub)
 	absPath, _ := filepath.Abs(regularFile)
 	if fileInfo, err := os.Stat(regularFile); err == nil {
 		fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s (%d bytes)\n", tui.PassStyle.Render(tui.CheckPass), absPath, fileInfo.Size())
@@ -85,49 +84,6 @@ func writeGitHubSummary(summary *types.TestSummary, outputFile string) error {
 	}
 
 	return nil
-}
-
-// writeMarkdownContent writes the markdown content for test results.
-func writeMarkdownContent(output io.Writer, summary *types.TestSummary, format string) {
-	// Add UUID magic comment to prevent duplicate GitHub comments.
-	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
-	if uuid := os.Getenv("GOTCHA_COMMENT_UUID"); uuid != "" {
-		fmt.Fprintf(output, "<!-- test-summary-uuid: %s -->\n\n", uuid)
-	}
-
-	// Add timestamp for local GitHub format runs.
-	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
-	if format == constants.FormatGitHub && os.Getenv("GITHUB_STEP_SUMMARY") == "" {
-		fmt.Fprintf(output, "_Generated: %s_\n\n", time.Now().Format("2006-01-02 15:04:05"))
-	}
-
-	// Test Results section (h1).
-	fmt.Fprintf(output, "# Test Results\n\n")
-
-	// Get test counts.
-	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
-
-	// Display test results as shields.io badges - always show all badges.
-	if total == 0 {
-		fmt.Fprintf(output, "[![No Tests](https://shields.io/badge/NO_TESTS-0-inactive?style=for-the-badge)](#user-content-no-tests)")
-	} else {
-		fmt.Fprintf(output, "[![Passed](https://shields.io/badge/PASSED-%d-success?style=for-the-badge)](#user-content-passed) ", len(summary.Passed))
-		fmt.Fprintf(output, "[![Failed](https://shields.io/badge/FAILED-%d-critical?style=for-the-badge)](#user-content-failed) ", len(summary.Failed))
-		fmt.Fprintf(output, "[![Skipped](https://shields.io/badge/SKIPPED-%d-inactive?style=for-the-badge)](#user-content-skipped) ", len(summary.Skipped))
-	}
-	fmt.Fprintf(output, "\n\n")
-
-	// Write test sections.
-	formatter.WriteFailedTests(output, summary.Failed)
-	formatter.WriteSkippedTests(output, summary.Skipped)
-	formatter.WritePassedTests(output, summary.Passed)
-
-	// Test Coverage section (h1) - moved after test results.
-	if summary.CoverageData != nil {
-		formatter.WriteTestCoverageSection(output, summary.CoverageData)
-	} else if summary.Coverage != "" {
-		formatter.WriteLegacyCoverageSection(output, summary.Coverage)
-	}
 }
 
 // openOutput opens the appropriate output destination.

@@ -1,4 +1,4 @@
-package formatter
+package markdown
 
 import (
 	"bytes"
@@ -144,7 +144,7 @@ func TestCalculateFunctionCoverage(t *testing.T) {
 	}
 }
 
-func TestWriteTestCoverageSection(t *testing.T) {
+func TestWriteDetailedCoverage(t *testing.T) {
 	tests := []struct {
 		name         string
 		coverageData *CoverageData

@@ -16,7 +16,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/tools/gotcha/internal/formatter"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
@@ -80,6 +80,10 @@ func Execute() error {
 	profile := tui.ConfigureColors()
 	if globalLogger != nil {
 		globalLogger.SetColorProfile(profile)
+		globalLogger.Debug("Color profile configured",
+			"profile", tui.ProfileName(profile),
+			"github_actions", tui.IsGitHubActions(),
+			"ci", tui.IsCI())
 	}
 
 	// Reinitialize styles after color profile is set
@@ -439,8 +443,8 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	manager := gh.NewCommentManager(client, logger)
 
 	// Generate markdown with UUID marker, using strategic resizing
-	markdown := formatter.GenerateCommentContent(summary, uuid)
+	markdownContent := markdown.GenerateGitHubComment(summary, uuid)
 
 	// Post or update comment
-	return manager.PostOrUpdateComment(context.Background(), ctx, markdown)
+	return manager.PostOrUpdateComment(context.Background(), ctx, markdownContent)
 }

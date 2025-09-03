@@ -244,7 +244,7 @@ func TestGitHubActionsDetection(t *testing.T) {
 			}
 
 			// Test detection
-			isGHA := isGitHubActions()
+			isGHA := IsGitHubActions()
 			assert.Equal(t, tt.expectGHA, isGHA, "GitHub Actions detection should match expected")
 
 			// Restore environment
