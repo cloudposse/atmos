@@ -62,6 +62,15 @@ func NewStyledLogger() *log.Logger {
 				Foreground(lipgloss.Color("#FFFFFF")). // White foreground
 				Padding(0, 1),
 		},
+		// Style the keys with a darker gray color
+		Key: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#666666")). // Dark gray for keys
+			Bold(true),
+		// Values stay with their default styling (no change)
+		Value: lipgloss.NewStyle(),
+		// Optional: style the separator between key and value
+		Separator: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#999999")), // Medium gray for separator
 	})
 	return logger
 }
