@@ -375,7 +375,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Pre-calculate total test count for progress display
 	totalTests := utils.GetTestCount(testPackages, testArgsStr)
-	
+
 	// Log test discovery with both package and test counts
 	logger.Info("Test discovery completed", "packages", len(testPackages), "tests", totalTests)
 
