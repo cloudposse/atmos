@@ -13,8 +13,8 @@ const (
 	colorGreen     = "#2ECC40" // Bright green for pass (maps to ANSI green)
 	colorRed       = "#DC143C" // Crimson red for fail (maps to ANSI red)
 	colorAmber     = "#FFB347" // Peach orange for skip (maps to ANSI yellow)
-	colorLightGray = "#D3D3D3" // Light gray for durations
-	colorDarkGray  = "#666666" // Dark gray for test names
+	colorLightGray = "#D3D3D3" // Light gray for test names
+	colorDarkGray  = "#666666" // Dark gray for durations
 	colorBlue      = "#5DADE2" // Blue for spinner
 	colorDarkRed   = "#B22222" // Dark red for error background
 	colorWhite     = "#FFFFFF" // White for error text
@@ -27,8 +27,8 @@ var (
 	SkipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAmber))
 
 	// Text styles.
-	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))  // Darker for test names
-	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray)) // Lighter for durations
+	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray))  // Light gray for test names
+	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray)) // Dark gray for durations
 
 	// UI element styles.
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
@@ -51,8 +51,8 @@ func InitStyles() {
 	PassStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
 	FailStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed))
 	SkipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAmber))
-	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))  // Darker for test names
-	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray)) // Lighter for durations
+	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray))  // Light gray for test names
+	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray)) // Dark gray for durations
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
 	errorHeaderStyle = lipgloss.NewStyle().
 		SetString("ERROR").
