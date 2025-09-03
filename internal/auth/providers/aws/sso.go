@@ -9,7 +9,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
+	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ssoProvider implements AWS IAM Identity Center authentication
@@ -77,10 +79,11 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 	}
 
 	// Display user code and verification URI
-	fmt.Printf("Please visit %s and enter the code: %s\n",
-		aws.ToString(authResp.VerificationUriComplete),
-		aws.ToString(authResp.UserCode))
-
+	err = utils.OpenUrl(*authResp.VerificationUriComplete)
+	if err != nil {
+		log.Debug(err)
+		utils.PrintfMarkdown("🔐 Please visit %s and enter code: %s", *authResp.VerificationUriComplete, *authResp.UserCode)
+	}
 	// Poll for token
 	var accessToken string
 	expiresIn := authResp.ExpiresIn
