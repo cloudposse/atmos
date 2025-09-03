@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/security"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -346,7 +347,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 		if err := p.installer(&tempDir, atmosConfig); err != nil {
 			return newInstallError(err, p.name)
 		}
-		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile); err != nil {
+		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, atmosConfig); err != nil {
 			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
 		return installedPkgMsg{
@@ -372,11 +373,14 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 		}
 
 	case pkgTypeLocal:
+		// Get the symlink policy from config
+		policy := security.GetPolicyFromConfig(atmosConfig)
+		
 		// Copy from local file system
 		copyOptions := cp.Options{
 			PreserveTimes: false,
 			PreserveOwner: false,
-			OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
+			OnSymlink:     security.CreateSymlinkHandler(p.uri, policy),
 		}
 		if p.sourceIsLocalFile {
 			*tempDir = filepath.Join(*tempDir, SanitizeFileName(p.uri))

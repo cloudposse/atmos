@@ -9,6 +9,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/security"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	cp "github.com/otiai10/copy" // Using the optimized copy library when no filtering is required.
 )
@@ -409,6 +410,7 @@ func copyToTargetWithPatterns(
 	sourceDir, targetPath string,
 	s *schema.AtmosVendorSource,
 	sourceIsLocalFile bool,
+	atmosConfig *schema.AtmosConfiguration,
 ) error {
 	finalTarget, err := initFinalTarget(sourceDir, targetPath, sourceIsLocalFile)
 	if err != nil {
@@ -421,7 +423,12 @@ func copyToTargetWithPatterns(
 	// If no inclusion or exclusion patterns are defined, use the cp library.
 	if len(s.IncludedPaths) == 0 && len(s.ExcludedPaths) == 0 {
 		log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy")
-		return cp.Copy(sourceDir, finalTarget)
+		// Get the symlink policy from config
+		policy := security.GetPolicyFromConfig(atmosConfig)
+		copyOptions := cp.Options{
+			OnSymlink: security.CreateSymlinkHandler(sourceDir, policy),
+		}
+		return cp.Copy(sourceDir, finalTarget, copyOptions)
 	}
 	// Process each inclusion pattern.
 	for _, pattern := range s.IncludedPaths {
