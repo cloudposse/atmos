@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"os"
 	"testing"
 )
 
@@ -48,34 +47,34 @@ func TestFilterPackages(t *testing.T) {
 		},
 		{
 			name:            "multiple include patterns",
-			packages:        []string{"api/v1", "cmd/main", "internal/config", "pkg/utils"},
+			packages:        []string{"api/v1", "api/v2", "cmd/main", "internal/config"},
 			includePatterns: "api/.*,cmd/.*",
 			excludePatterns: "",
-			want:            []string{"api/v1", "cmd/main"},
+			want:            []string{"api/v1", "api/v2", "cmd/main"},
 			wantErr:         false,
 		},
 		{
 			name:            "multiple exclude patterns",
-			packages:        []string{"api/v1", "api/mock", "cmd/mock", "pkg/utils"},
+			packages:        []string{"pkg/main", "pkg/mock", "pkg/test", "pkg/fake"},
 			includePatterns: ".*",
-			excludePatterns: "mock,utils",
-			want:            []string{"api/v1"},
+			excludePatterns: "mock,fake",
+			want:            []string{"pkg/main", "pkg/test"},
 			wantErr:         false,
 		},
 		{
-			name:            "no matches",
-			packages:        []string{"pkg1", "pkg2"},
-			includePatterns: "nonexistent",
-			excludePatterns: "",
-			want:            []string{},
-			wantErr:         false,
-		},
-		{
-			name:            "empty packages list",
+			name:            "empty packages",
 			packages:        []string{},
 			includePatterns: ".*",
 			excludePatterns: "",
 			want:            []string{},
+			wantErr:         false,
+		},
+		{
+			name:            "no patterns",
+			packages:        []string{"pkg1", "pkg2"},
+			includePatterns: "",
+			excludePatterns: "",
+			want:            []string{"pkg1", "pkg2"},
 			wantErr:         false,
 		},
 		{
@@ -98,22 +97,22 @@ func TestFilterPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := filterPackages(tt.packages, tt.includePatterns, tt.excludePatterns)
+			got, err := FilterPackages(tt.packages, tt.includePatterns, tt.excludePatterns)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("filterPackages() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("FilterPackages() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if !tt.wantErr {
 				if len(got) != len(tt.want) {
-					t.Errorf("filterPackages() got %d packages, want %d", len(got), len(tt.want))
+					t.Errorf("FilterPackages() got %d packages, want %d", len(got), len(tt.want))
 					return
 				}
 
 				for i, pkg := range got {
 					if pkg != tt.want[i] {
-						t.Errorf("filterPackages() got[%d] = %v, want %v", i, pkg, tt.want[i])
+						t.Errorf("FilterPackages() got[%d] = %v, want %v", i, pkg, tt.want[i])
 					}
 				}
 			}
@@ -121,141 +120,28 @@ func TestFilterPackages(t *testing.T) {
 	}
 }
 
-func TestGetTestCount(t *testing.T) {
-	// This function uses AST parsing to count tests, so we need to test it with actual Go files
+func TestIsValidShowFilter(t *testing.T) {
 	tests := []struct {
-		name         string
-		testPackages []string
-		testArgs     string
-		wantMin      int // minimum expected tests (since we can't predict exact count)
+		name  string
+		show  string
+		valid bool
 	}{
-		{
-			name:         "current package",
-			testPackages: []string{"."},
-			testArgs:     "",
-			wantMin:      1, // At least this test should be counted
-		},
-		{
-			name:         "empty packages",
-			testPackages: []string{},
-			testArgs:     "",
-			wantMin:      0,
-		},
+		{"valid all", "all", true},
+		{"valid failed", "failed", true},
+		{"valid passed", "passed", true},
+		{"valid skipped", "skipped", true},
+		{"valid collapsed", "collapsed", true},
+		{"valid none", "none", true},
+		{"invalid filter", "invalid", false},
+		{"empty string", "", false},
+		{"case sensitive", "ALL", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Initialize logger for the test
-			initGlobalLogger()
-
-			got := getTestCount(tt.testPackages, tt.testArgs)
-
-			if got < tt.wantMin {
-				t.Errorf("getTestCount() = %v, want at least %v", got, tt.wantMin)
-			}
-		})
-	}
-}
-
-func TestIsTTY(t *testing.T) {
-	// This function checks if we're running in a TTY environment
-	// We can test that it returns a boolean without error
-	result := isTTY()
-
-	// The result should be either true or false
-	if result != true && result != false {
-		t.Errorf("isTTY() returned non-boolean value")
-	}
-
-	// In CI environments, this is typically false
-	// In development with a real terminal, this might be true
-	// We just ensure it doesn't panic and returns a valid boolean
-}
-
-func TestRunSimpleStream(t *testing.T) {
-	tests := []struct {
-		name         string
-		testPackages []string
-		testArgs     string
-		outputFile   string
-		coverProfile string
-		showFilter   string
-		totalTests   int
-		wantExitCode int
-	}{
-		{
-			name:         "placeholder function",
-			testPackages: []string{},
-			testArgs:     "",
-			outputFile:   "",
-			coverProfile: "",
-			showFilter:   "all",
-			totalTests:   0,
-			wantExitCode: 0, // Placeholder currently returns 0
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := runSimpleStream(tt.testPackages, tt.testArgs, tt.outputFile, tt.coverProfile, tt.showFilter, tt.totalTests, false)
-
-			if got != tt.wantExitCode {
-				t.Errorf("runSimpleStream() = %v, want %v", got, tt.wantExitCode)
-			}
-		})
-	}
-}
-
-func TestHandleConsoleOutput(t *testing.T) {
-	tests := []struct {
-		name    string
-		summary *TestSummary
-		wantErr bool
-	}{
-		{
-			name: "valid summary with passed tests",
-			summary: &TestSummary{
-				Passed:   []TestResult{{Package: "pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},
-				Coverage: "75.0%",
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid summary with failed tests",
-			summary: &TestSummary{
-				Failed:   []TestResult{{Package: "pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
-				Coverage: "50.0%",
-			},
-			wantErr: false,
-		},
-		{
-			name: "empty summary",
-			summary: &TestSummary{
-				Coverage: "0.0%",
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Capture stdout to avoid cluttering test output
-			// Save original stdout
-			oldStdout := os.Stdout
-			defer func() { os.Stdout = oldStdout }()
-
-			// Create a pipe to capture output
-			_, w, _ := os.Pipe()
-			os.Stdout = w
-
-			err := handleConsoleOutput(tt.summary)
-
-			// Close the pipe and restore stdout
-			w.Close()
-			os.Stdout = oldStdout
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("handleConsoleOutput() error = %v, wantErr %v", err, tt.wantErr)
+			got := IsValidShowFilter(tt.show)
+			if got != tt.valid {
+				t.Errorf("IsValidShowFilter(%q) = %v, want %v", tt.show, got, tt.valid)
 			}
 		})
 	}

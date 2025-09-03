@@ -4,28 +4,30 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 func TestSortResults(t *testing.T) {
 	tests := []struct {
 		name      string
-		failed    []TestResult
-		skipped   []TestResult
-		passed    []TestResult
+		failed    []types.TestResult
+		skipped   []types.TestResult
+		passed    []types.TestResult
 		wantOrder string // Description of expected order
 	}{
 		{
 			name: "sort by duration descending",
-			failed: []TestResult{
+			failed: []types.TestResult{
 				{Test: "TestFast", Duration: 0.1},
 				{Test: "TestSlow", Duration: 2.0},
 				{Test: "TestMedium", Duration: 0.5},
 			},
-			skipped: []TestResult{
+			skipped: []types.TestResult{
 				{Test: "TestSkippedSlow", Duration: 1.0},
 				{Test: "TestSkippedFast", Duration: 0.2},
 			},
-			passed: []TestResult{
+			passed: []types.TestResult{
 				{Test: "TestPassedSlow", Duration: 3.0},
 				{Test: "TestPassedFast", Duration: 0.3},
 			},

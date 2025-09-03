@@ -4,22 +4,24 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 func TestWritePassedTestsTableEnhanced(t *testing.T) {
 	tests := []struct {
 		name     string
-		passed   []TestResult
+		passed   []types.TestResult
 		wantText []string
 	}{
 		{
 			name:     "empty passed tests",
-			passed:   []TestResult{},
+			passed:   []types.TestResult{},
 			wantText: []string{}, // Empty tests don't produce output
 		},
 		{
 			name: "single passed test",
-			passed: []TestResult{
+			passed: []types.TestResult{
 				{Package: "pkg/utils", Test: "TestHelper", Status: "pass", Duration: 0.5},
 			},
 			wantText: []string{
@@ -32,7 +34,7 @@ func TestWritePassedTestsTableEnhanced(t *testing.T) {
 		},
 		{
 			name: "multiple passed tests",
-			passed: []TestResult{
+			passed: []types.TestResult{
 				{Package: "pkg/utils", Test: "TestHelper1", Status: "pass", Duration: 0.3},
 				{Package: "pkg/main", Test: "TestMain", Status: "pass", Duration: 0.8},
 			},
@@ -45,7 +47,7 @@ func TestWritePassedTestsTableEnhanced(t *testing.T) {
 		},
 		{
 			name:   "passed tests with long list",
-			passed: make([]TestResult, 300), // More than maxTotalTestsShown
+			passed: make([]types.TestResult, 300), // More than maxTotalTestsShown
 			wantText: []string{
 				"### ✅ Passed Tests (300)",
 				"Showing", // Should mention how many tests are shown
@@ -58,7 +60,7 @@ func TestWritePassedTestsTableEnhanced(t *testing.T) {
 			// Fill test data for long list test
 			if len(tt.passed) == 300 {
 				for i := range tt.passed {
-					tt.passed[i] = TestResult{
+					tt.passed[i] = types.TestResult{
 						Package:  "pkg/test",
 						Test:     "TestExample" + string(rune('A'+i%26)),
 						Status:   "pass",
@@ -68,7 +70,7 @@ func TestWritePassedTestsTableEnhanced(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			writePassedTests(&buf, tt.passed)
+			WritePassedTestsTable(&buf, tt.passed)
 
 			output := buf.String()
 
@@ -84,14 +86,14 @@ func TestWritePassedTestsTableEnhanced(t *testing.T) {
 func TestWriteTestTableEnhanced(t *testing.T) {
 	tests := []struct {
 		name            string
-		tests           []TestResult
+		tests           []types.TestResult
 		includeDuration bool
 		totalDuration   float64
 		wantText        []string
 	}{
 		{
 			name: "table with duration included",
-			tests: []TestResult{
+			tests: []types.TestResult{
 				{Package: "pkg/utils", Test: "TestFast", Status: "pass", Duration: 0.1},
 				{Package: "pkg/main", Test: "TestSlow", Status: "fail", Duration: 2.5},
 			},
@@ -109,7 +111,7 @@ func TestWriteTestTableEnhanced(t *testing.T) {
 		},
 		{
 			name: "table without duration",
-			tests: []TestResult{
+			tests: []types.TestResult{
 				{Package: "pkg/utils", Test: "TestExample", Status: "fail", Duration: 0.5},
 			},
 			includeDuration: false,
@@ -122,7 +124,7 @@ func TestWriteTestTableEnhanced(t *testing.T) {
 		},
 		{
 			name:            "empty tests table",
-			tests:           []TestResult{},
+			tests:           []types.TestResult{},
 			includeDuration: true,
 			totalDuration:   0.0,
 			wantText:        []string{}, // Should produce minimal output
@@ -132,7 +134,7 @@ func TestWriteTestTableEnhanced(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writeTestTable(&buf, tt.tests, tt.includeDuration, tt.totalDuration)
+			WriteTestTable(&buf, tt.tests, tt.includeDuration, tt.totalDuration)
 
 			output := buf.String()
 
@@ -148,14 +150,14 @@ func TestWriteTestTableEnhanced(t *testing.T) {
 func TestWriteDetailedCoverageEnhanced(t *testing.T) {
 	tests := []struct {
 		name         string
-		coverageData *CoverageData
+		coverageData *types.CoverageData
 		wantText     []string
 	}{
 		{
 			name: "comprehensive coverage data",
-			coverageData: &CoverageData{
+			coverageData: &types.CoverageData{
 				StatementCoverage: "85.5%",
-				FunctionCoverage: []CoverageFunction{
+				FunctionCoverage: []types.CoverageFunction{
 					{Function: "main", File: "main.go", Coverage: 100.0},
 					{Function: "helper", File: "utils.go", Coverage: 0.0},
 				},
@@ -170,9 +172,9 @@ func TestWriteDetailedCoverageEnhanced(t *testing.T) {
 		},
 		{
 			name: "medium coverage data",
-			coverageData: &CoverageData{
+			coverageData: &types.CoverageData{
 				StatementCoverage: "65.0%",
-				FunctionCoverage: []CoverageFunction{
+				FunctionCoverage: []types.CoverageFunction{
 					{Function: "test1", File: "test.go", Coverage: 50.0},
 					{Function: "test2", File: "test.go", Coverage: 80.0},
 				},
@@ -185,9 +187,9 @@ func TestWriteDetailedCoverageEnhanced(t *testing.T) {
 		},
 		{
 			name: "low coverage data",
-			coverageData: &CoverageData{
+			coverageData: &types.CoverageData{
 				StatementCoverage: "25.0%",
-				FunctionCoverage: []CoverageFunction{
+				FunctionCoverage: []types.CoverageFunction{
 					{Function: "uncovered", File: "test.go", Coverage: 0.0},
 				},
 			},
@@ -207,7 +209,7 @@ func TestWriteDetailedCoverageEnhanced(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writeTestCoverageSection(&buf, tt.coverageData)
+			WriteDetailedCoverage(&buf, tt.coverageData)
 
 			output := buf.String()
 
@@ -223,14 +225,14 @@ func TestWriteDetailedCoverageEnhanced(t *testing.T) {
 func TestGetUncoveredFunctionsInPREnhanced(t *testing.T) {
 	tests := []struct {
 		name          string
-		functions     []CoverageFunction
+		functions     []types.CoverageFunction
 		changedFiles  []string
 		wantCount     int
 		wantFunctions []string
 	}{
 		{
 			name: "functions in changed files",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "ChangedFunc", File: "changed.go", Coverage: 0.0},
 				{Function: "UnchangedFunc", File: "unchanged.go", Coverage: 0.0},
 				{Function: "CoveredFunc", File: "changed.go", Coverage: 100.0},
@@ -241,7 +243,7 @@ func TestGetUncoveredFunctionsInPREnhanced(t *testing.T) {
 		},
 		{
 			name: "no changed files",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "Func1", File: "test.go", Coverage: 0.0},
 			},
 			changedFiles:  []string{},
@@ -250,7 +252,7 @@ func TestGetUncoveredFunctionsInPREnhanced(t *testing.T) {
 		},
 		{
 			name: "all functions covered",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "CoveredFunc", File: "changed.go", Coverage: 100.0},
 			},
 			changedFiles:  []string{"changed.go"},
@@ -259,7 +261,7 @@ func TestGetUncoveredFunctionsInPREnhanced(t *testing.T) {
 		},
 		{
 			name:          "empty functions list",
-			functions:     []CoverageFunction{},
+			functions:     []types.CoverageFunction{},
 			changedFiles:  []string{"changed.go"},
 			wantCount:     0,
 			wantFunctions: []string{},
@@ -268,7 +270,7 @@ func TestGetUncoveredFunctionsInPREnhanced(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFunctions, gotCount := getUncoveredFunctionsInPR(tt.functions, tt.changedFiles)
+			gotFunctions, gotCount := GetUncoveredFunctionsInPR(tt.functions, tt.changedFiles)
 
 			if gotCount != tt.wantCount {
 				t.Errorf("getUncoveredFunctionsInPR() count = %v, want %v", gotCount, tt.wantCount)

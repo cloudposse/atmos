@@ -4,13 +4,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestGenerateGitHubComment(t *testing.T) {
 	tests := []struct {
 		name     string
-		summary  *TestSummary
+		summary  *types.TestSummary
 		uuid     string
 		expected struct {
 			hasUUID         bool
@@ -23,10 +24,10 @@ func TestGenerateGitHubComment(t *testing.T) {
 	}{
 		{
 			name: "Empty test results",
-			summary: &TestSummary{
-				Failed:  []TestResult{},
-				Skipped: []TestResult{},
-				Passed:  []TestResult{},
+			summary: &types.TestSummary{
+				Failed:  []types.TestResult{},
+				Skipped: []types.TestResult{},
+				Passed:  []types.TestResult{},
 			},
 			uuid: "test-uuid-123",
 			expected: struct {
@@ -47,15 +48,15 @@ func TestGenerateGitHubComment(t *testing.T) {
 		},
 		{
 			name: "Small number of tests",
-			summary: &TestSummary{
-				Failed: []TestResult{
+			summary: &types.TestSummary{
+				Failed: []types.TestResult{
 					{Package: "pkg/test", Test: "TestFailed1", Duration: 1.5},
 					{Package: "pkg/test", Test: "TestFailed2", Duration: 2.0},
 				},
-				Skipped: []TestResult{
+				Skipped: []types.TestResult{
 					{Package: "pkg/test", Test: "TestSkipped1"},
 				},
-				Passed: []TestResult{
+				Passed: []types.TestResult{
 					{Package: "pkg/test", Test: "TestPassed1", Duration: 0.1},
 					{Package: "pkg/test", Test: "TestPassed2", Duration: 0.2},
 				},
@@ -79,9 +80,9 @@ func TestGenerateGitHubComment(t *testing.T) {
 		},
 		{
 			name: "Large number of passed tests should be limited",
-			summary: &TestSummary{
-				Failed:  []TestResult{},
-				Skipped: []TestResult{},
+			summary: &types.TestSummary{
+				Failed:  []types.TestResult{},
+				Skipped: []types.TestResult{},
 				Passed:  generateManyTests(1000), // This should trigger size limiting
 			},
 			uuid: "test-uuid-789",
@@ -105,7 +106,7 @@ func TestGenerateGitHubComment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateCommentContent(tt.summary, tt.uuid)
+			result := GenerateGitHubComment(tt.summary, tt.uuid)
 
 			// Check UUID presence
 			if tt.expected.hasUUID {
@@ -145,7 +146,7 @@ func TestGenerateGitHubComment(t *testing.T) {
 }
 
 func TestTruncateToEssentials(t *testing.T) {
-	summary := &TestSummary{
+	summary := &types.TestSummary{
 		Failed:  generateManyTests(50),  // Many failed tests
 		Skipped: generateManyTests(30),  // Many skipped tests
 		Passed:  generateManyTests(100), // Many passed tests
@@ -172,7 +173,7 @@ func TestTruncateToEssentials(t *testing.T) {
 func TestAddPassedTestsWithLimit(t *testing.T) {
 	tests := []struct {
 		name        string
-		passed      []TestResult
+		passed      []types.TestResult
 		maxBytes    int
 		expectTests bool
 	}{
@@ -217,13 +218,13 @@ func TestAddPassedTestsWithLimit(t *testing.T) {
 func TestAddCoverageWithLimit(t *testing.T) {
 	tests := []struct {
 		name           string
-		summary        *TestSummary
+		summary        *types.TestSummary
 		maxBytes       int
 		expectCoverage bool
 	}{
 		{
 			name: "No space for coverage",
-			summary: &TestSummary{
+			summary: &types.TestSummary{
 				Coverage: "85.2%",
 			},
 			maxBytes:       100, // Too small
@@ -231,8 +232,8 @@ func TestAddCoverageWithLimit(t *testing.T) {
 		},
 		{
 			name: "Space for coverage",
-			summary: &TestSummary{
-				CoverageData: &CoverageData{
+			summary: &types.TestSummary{
+				CoverageData: &types.CoverageData{
 					StatementCoverage: "78.5%",
 				},
 			},
@@ -261,17 +262,17 @@ func TestAddCoverageWithLimit(t *testing.T) {
 
 func TestCommentSizeHandling(t *testing.T) {
 	// Create a summary that would normally exceed the size limit
-	hugeSummary := &TestSummary{
+	hugeSummary := &types.TestSummary{
 		Failed:  generateManyTests(200), // Many failed tests
 		Skipped: generateManyTests(100), // Many skipped tests
 		Passed:  generateManyTests(500), // Many passed tests
-		CoverageData: &CoverageData{
+		CoverageData: &types.CoverageData{
 			StatementCoverage: "85.2%",
 			FunctionCoverage:  generateManyCoverageFunctions(100),
 		},
 	}
 
-	result := generateCommentContent(hugeSummary, "size-test-uuid")
+	result := GenerateGitHubComment(hugeSummary, "size-test-uuid")
 
 	// Should be within the size limit
 	assert.LessOrEqual(t, len(result), CommentSizeLimit,
@@ -285,10 +286,10 @@ func TestCommentSizeHandling(t *testing.T) {
 }
 
 // Helper function to generate many test results for testing
-func generateManyTests(count int) []TestResult {
-	tests := make([]TestResult, count)
+func generateManyTests(count int) []types.TestResult {
+	tests := make([]types.TestResult, count)
 	for i := 0; i < count; i++ {
-		tests[i] = TestResult{
+		tests[i] = types.TestResult{
 			Package:  "github.com/example/package/very/long/path/name",
 			Test:     "TestGeneratedTestWithVeryLongNameThatTakesUpSpace" + string(rune('A'+i%26)),
 			Duration: float64(i%10) * 0.1,
@@ -298,10 +299,10 @@ func generateManyTests(count int) []TestResult {
 }
 
 // Helper function to generate many coverage functions for testing
-func generateManyCoverageFunctions(count int) []CoverageFunction {
-	functions := make([]CoverageFunction, count)
+func generateManyCoverageFunctions(count int) []types.CoverageFunction {
+	functions := make([]types.CoverageFunction, count)
 	for i := 0; i < count; i++ {
-		functions[i] = CoverageFunction{
+		functions[i] = types.CoverageFunction{
 			File:     "github.com/example/package/very/long/file/path.go",
 			Function: "VeryLongFunctionNameThatTakesUpSpaceInTheComment" + string(rune('A'+i%26)),
 			Coverage: float64(i % 100),
@@ -311,13 +312,13 @@ func generateManyCoverageFunctions(count int) []CoverageFunction {
 }
 
 func TestCoverageTableFormat(t *testing.T) {
-	summary := &TestSummary{
-		Failed:  []TestResult{},
-		Skipped: []TestResult{},
-		Passed:  []TestResult{},
-		CoverageData: &CoverageData{
+	summary := &types.TestSummary{
+		Failed:  []types.TestResult{},
+		Skipped: []types.TestResult{},
+		Passed:  []types.TestResult{},
+		CoverageData: &types.CoverageData{
 			StatementCoverage: "85.2%",
-			FunctionCoverage: []CoverageFunction{
+			FunctionCoverage: []types.CoverageFunction{
 				{File: "file1.go", Function: "func1", Coverage: 100.0},
 				{File: "file2.go", Function: "func2", Coverage: 0.0},
 			},
@@ -325,7 +326,7 @@ func TestCoverageTableFormat(t *testing.T) {
 		},
 	}
 
-	result := generateCommentContent(summary, "test-uuid")
+	result := GenerateGitHubComment(summary, "test-uuid")
 
 	// Should contain coverage table headers
 	assert.Contains(t, result, "## 📊 Test Coverage", "Comment should contain coverage section")
