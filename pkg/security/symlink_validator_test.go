@@ -154,7 +154,7 @@ func TestIsSymlinkSafe_BrokenSymlink(t *testing.T) {
 
 func TestIsSymlinkSafe_IntermediateDirectorySymlink(t *testing.T) {
 	t.Skip("TODO: Implement detection of intermediate directory symlinks - requires path traversal validation")
-	
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping symlink test on Windows")
 	}
@@ -162,26 +162,26 @@ func TestIsSymlinkSafe_IntermediateDirectorySymlink(t *testing.T) {
 	// Create test directories.
 	tempDir := t.TempDir()
 	externalDir := t.TempDir()
-	
+
 	// Create a file in the external directory.
 	externalFile := filepath.Join(externalDir, "external.txt")
 	require.NoError(t, os.WriteFile(externalFile, []byte("sensitive data"), 0o644))
-	
+
 	// Create a directory symlink inside the boundary that points to externalDir.
 	dirLink := filepath.Join(tempDir, "outdir")
 	createTestSymlink(t, externalDir, dirLink)
 	defer os.Remove(dirLink)
-	
+
 	// Create a file symlink whose target is the file inside that dir-symlink path.
 	// This attempts to escape the boundary via an intermediate directory symlink.
 	fileLink := filepath.Join(tempDir, "escape.txt")
 	createTestSymlink(t, filepath.Join("outdir", "external.txt"), fileLink)
 	defer os.Remove(fileLink)
-	
+
 	// The file symlink should be detected as unsafe because it escapes via the directory symlink.
 	result := IsSymlinkSafe(fileLink, tempDir)
 	assert.False(t, result, "Symlink escaping via intermediate directory symlink should be unsafe")
-	
+
 	// Also test the directory symlink itself.
 	dirResult := IsSymlinkSafe(dirLink, tempDir)
 	assert.False(t, dirResult, "Directory symlink pointing outside boundary should be unsafe")
