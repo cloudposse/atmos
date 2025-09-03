@@ -346,7 +346,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch event.Action {
 		case "run":
 			m.currentTest = event.Test
-			m.totalTests++
+			// Don't increment totalTests - it's already set from test discovery
 			m.bufferMu.Lock()
 			// Only initialize if buffer doesn't exist (to preserve early output)
 			if m.testBuffers[event.Test] == nil {
@@ -370,7 +370,10 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "pass":
 			m.passCount++
-			m.currentIndex++
+			// Only increment currentIndex for top-level tests, not subtests
+			if !strings.Contains(event.Test, "/") {
+				m.currentIndex++
+			}
 
 			// Update progress
 			var progressCmd tea.Cmd
@@ -446,7 +449,10 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Unlock()
 
 			m.failCount++
-			m.currentIndex++
+			// Only increment currentIndex for top-level tests, not subtests
+			if !strings.Contains(event.Test, "/") {
+				m.currentIndex++
+			}
 
 			// Update progress
 			var progressCmd tea.Cmd
@@ -501,7 +507,10 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "skip":
 			m.skipCount++
-			m.currentIndex++
+			// Only increment currentIndex for top-level tests, not subtests
+			if !strings.Contains(event.Test, "/") {
+				m.currentIndex++
+			}
 
 			// Update progress
 			var progressCmd tea.Cmd
