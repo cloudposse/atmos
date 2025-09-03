@@ -75,7 +75,7 @@ PRDs should explicitly document:
 ### Example PRDs in Repository
 
 - **`prd/labels/label-selection.prd.md`** - Label-based stack and component selection enhancement
-- **`prd/gotcha-test-runner.prd.md`** - Go test runner with Charm ecosystem integration and GitHub Actions support
+- **`prd/tools/gotcha-test-runner.prd.md`** - Go test runner with Charm ecosystem integration and GitHub Actions support
 
 ### Implementation Verification
 
