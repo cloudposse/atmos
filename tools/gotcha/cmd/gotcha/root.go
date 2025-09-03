@@ -81,7 +81,7 @@ func Execute() error {
 	if globalLogger != nil {
 		globalLogger.SetColorProfile(profile)
 	}
-	
+
 	// Reinitialize styles after color profile is set
 	tui.InitStyles()
 

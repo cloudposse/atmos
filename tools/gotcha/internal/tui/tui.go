@@ -660,7 +660,6 @@ func (m *TestModel) generateFinalSummary() string {
 		summaryStatus = fmt.Sprintf("GitHub step summary written to %s", githubSummary)
 	}
 
-
 	// Calculate total tests and duration (approximate)
 	totalTests := m.passCount + m.failCount + m.skipCount
 

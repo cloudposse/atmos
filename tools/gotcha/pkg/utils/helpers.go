@@ -107,7 +107,6 @@ func FilterPackages(packages []string, includePatterns, excludePatterns string) 
 
 // getTestCount uses AST parsing to quickly count Test and Example functions.
 func GetTestCount(testPackages []string, testArgs string) int {
-
 	totalTests := 0
 	fset := token.NewFileSet()
 
@@ -222,7 +221,6 @@ func EmitAlert(enabled bool) {
 
 // runSimpleStream runs tests with simple non-interactive streaming output.
 func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int, alert bool) int {
-
 	// Build the go test command
 	args := []string{"test", "-json"}
 

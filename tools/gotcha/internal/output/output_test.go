@@ -135,7 +135,7 @@ func TestHandleOutputWithGenerateSummary(t *testing.T) {
 		},
 		{
 			name:            "markdown with generate-summary false",
-			format:          "markdown", 
+			format:          "markdown",
 			generateSummary: false,
 			wantFile:        false,
 		},
@@ -164,7 +164,7 @@ func TestHandleOutputWithGenerateSummary(t *testing.T) {
 			// Create temp directory for test
 			tempDir := t.TempDir()
 			outputFile := filepath.Join(tempDir, "test-output.md")
-			
+
 			// Only provide output file when we expect a file to be created
 			var testOutputFile string
 			if tt.wantFile {

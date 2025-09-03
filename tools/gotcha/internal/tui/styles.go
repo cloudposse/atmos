@@ -10,7 +10,7 @@ const (
 
 	// ANSI color constants for better CI/terminal compatibility.
 	colorGreen     = "2"  // Bright green for pass (ANSI)
-	colorRed       = "1"  // Bright red for fail (ANSI) 
+	colorRed       = "1"  // Bright red for fail (ANSI)
 	colorAmber     = "3"  // Yellow/amber for skip (ANSI)
 	colorLightGray = "7"  // Light gray for test names (ANSI)
 	colorDarkGray  = "8"  // Dark gray for durations (ANSI)
