@@ -132,7 +132,7 @@ The visual hierarchy MUST follow these strict requirements to ensure optimal rea
 
 1. **Test Status Symbols** (Highest Visual Priority)
    - ✔ Pass: `colorGreen` (#2ECC40) - Immediately visible success indicator
-   - ✘ Fail: `colorRed` (#DC143C) - Immediately visible failure indicator
+   - ✘ Fail: `colorRed` (#FF0000) - Immediately visible failure indicator (updated for proper ANSI mapping)
    - ⊘ Skip: `colorAmber` (#FFB347) - Immediately visible skip indicator
 
 2. **Test Names** (Secondary Visual Priority)
@@ -145,22 +145,82 @@ The visual hierarchy MUST follow these strict requirements to ensure optimal rea
    - Purpose: Available when needed but de-emphasized
    - Example: `(0.03s)`
 
+4. **Subtest Summary** (Inline with Parent Test)
+   - Format: `[X/Y passed]` where X is passed subtests, Y is total subtests
+   - Color: Matches parent test status color
+   - Purpose: Quick overview of subtest results without overwhelming display
+   - Example: `✘ TestWithSubtests (1.23s) [2/5 passed]`
+
 #### Example Output Display
 ```
 ✔ TestPasses (0.01s)
 ✘ TestFails (0.02s)
 ⊘ TestSkipped (0.00s)
+✘ TestWithSubtests (1.23s) [2/5 passed]
 ```
 Where:
 - ✔/✘/⊘ are colored per status (green/red/amber)
 - Test names are light gray for readability
 - Durations in parentheses are dark gray for de-emphasis
+- Subtest summaries show inline pass/fail counts
 
 #### Visual Elements
 - **Unicode symbols**: ✔ (pass), ✘ (fail), ⊘ (skip)
 - **Progress indicators**: Animated spinners and progress bars
+- **Mini progress indicators**: Visual test progress using filled/unfilled dots (●○) format
+  - Format: `[●●●○○]` where ● represents completed tests and ○ represents pending tests
+  - Display alongside test execution for quick visual progress feedback
+  - Update in real-time as tests complete
+  - Show 5 dots total, with each dot representing 20% of test completion
 - **Test result styling**: Color-coded output with consistent formatting
 - **Error highlighting**: High-contrast error displays with background colors
+- **Subtest visualization**: Inline summary with detailed breakdown on failure
+
+### Enhanced Subtest Visualization
+
+#### Subtest Statistics Tracking
+- **Real-time tracking**: Monitor pass/fail/skip counts for each parent test's subtests
+- **Inline summary display**: Show `[X/Y passed]` format alongside parent test
+- **Detailed breakdown**: Display comprehensive subtest results for failed parent tests
+
+#### Display Formats
+
+##### Successful Parent Test with All Subtests Passing
+```
+✔ TestWithSubtests (0.45s) [5/5 passed]
+```
+
+##### Failed Parent Test with Mixed Results
+```
+✘ TestWithSubtests (1.23s) [2/5 passed]
+  Passed:
+    • ValidInput
+    • EdgeCase
+  Failed:
+    • InvalidInput
+    • EmptyInput
+  Skipped:
+    • ConditionalTest
+```
+
+##### Parent Test Failed (Not Due to Subtests)
+```
+✘ TestSetupFailure (0.01s)
+  (Test failed during setup/teardown)
+```
+
+#### Implementation Requirements
+- **Data Structure**: Track subtest results in a map keyed by parent test name
+- **Event Processing**: Capture subtest events and associate with parent tests
+- **Display Logic**: Show detailed breakdown only for tests with failed/skipped subtests
+- **Progress Tracking**: Only count top-level tests for progress bar calculations
+- **Both Modes**: Support identical visualization in both TUI and simple (non-TTY) modes
+
+#### Logger Key Styling
+- **Log Keys**: Style with dark gray (#666666) and bold formatting
+- **Log Values**: Keep unstyled or use appropriate color based on context
+- **Separator**: Use consistent separator character (`:` or `=`) between keys and values
+- **Example**: `level=INFO msg="Starting test execution" mode=stream`
 
 ### Color Support in CI Environments
 
@@ -265,6 +325,7 @@ filter:
 - **Test result filtering** by status (all, failed, passed, skipped)
 - **Interactive TUI** with Bubble Tea components
 - **JSON output** to configurable file (default: `gotcha-results.json`)
+- **Subtest tracking** with real-time pass/fail/skip statistics
 
 #### Configuration Options
 - **Timeout control**: Configurable test timeout (default: 40m)
@@ -289,6 +350,7 @@ filter:
 - **Test categorization**: Group results by package and status
 - **Error extraction**: Highlight and format test failures
 - **Statistics generation**: Comprehensive test run metrics
+- **Subtest analysis**: Detailed breakdown of subtest results with pass/fail counts
 
 ### GitHub Actions Integration
 
@@ -442,6 +504,7 @@ Existing tools failed to provide:
 - ✅ **Visual hierarchy colors**: Test symbols use status colors (green/red/amber), test names use light gray, durations use dark gray
 - ✅ **Performance**: Tool completes processing within reasonable time limits
 - ✅ **Accessibility**: Output readable in various terminal configurations
+- ✅ **Subtest visualization**: Tests with subtests display inline summary `[X/Y passed]` and detailed breakdown on failure
 
 ### Configuration Management
 - ✅ **YAML config**: `.gotcha.yaml` files loaded and applied correctly

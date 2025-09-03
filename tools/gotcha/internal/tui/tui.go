@@ -718,12 +718,12 @@ func (m *TestModel) View() string {
 	// Calculate buffer size
 	bufferSizeKB := m.getBufferSizeKB()
 
+	// Create mini progress indicator
+	miniProgress := m.generateMiniProgress()
+	
+	// Always show current test count without a total since we don't know the actual total
 	var count string
-	if m.totalTests > 0 {
-		count = fmt.Sprintf(" %d/%d (%ds) %.1fKB", m.currentIndex, m.totalTests, elapsedSeconds, bufferSizeKB)
-	} else {
-		count = fmt.Sprintf(" %d (%ds) %.1fKB", m.currentIndex, elapsedSeconds, bufferSizeKB)
-	}
+	count = fmt.Sprintf(" %s %d tests (%ds) %.1fKB", miniProgress, m.currentIndex, elapsedSeconds, bufferSizeKB)
 
 	// Use our own terminal width detection instead of Bubble Tea's
 	terminalWidth := getTerminalWidth()
@@ -793,6 +793,49 @@ func (m *TestModel) GetExitCode() int {
 }
 
 // generateFinalSummary creates the formatted final summary output.
+// generateMiniProgress creates a visual progress indicator using dots.
+func (m *TestModel) generateMiniProgress() string {
+	const totalDots = 5
+	if m.totalTests <= 0 {
+		// If we don't know the total, show an indeterminate spinner pattern
+		patterns := []string{
+			"[●○○○○]",
+			"[○●○○○]",
+			"[○○●○○]",
+			"[○○○●○]",
+			"[○○○○●]",
+			"[○○○●○]",
+			"[○○●○○]",
+			"[○●○○○]",
+		}
+		// Use currentIndex to cycle through patterns
+		return patterns[m.currentIndex%len(patterns)]
+	}
+	
+	// Calculate progress percentage
+	progress := float64(m.currentIndex) / float64(m.totalTests)
+	if progress > 1.0 {
+		progress = 1.0
+	}
+	
+	// Calculate how many dots should be filled
+	filledDots := int(progress * float64(totalDots))
+	
+	// Build the indicator
+	var indicator strings.Builder
+	indicator.WriteString("[")
+	for i := 0; i < totalDots; i++ {
+		if i < filledDots {
+			indicator.WriteString("●")
+		} else {
+			indicator.WriteString("○")
+		}
+	}
+	indicator.WriteString("]")
+	
+	return indicator.String()
+}
+
 func (m *TestModel) generateFinalSummary() string {
 	// Check GitHub step summary environment
 	_ = viper.BindEnv("GOTCHA_GITHUB_STEP_SUMMARY", "GITHUB_STEP_SUMMARY")
