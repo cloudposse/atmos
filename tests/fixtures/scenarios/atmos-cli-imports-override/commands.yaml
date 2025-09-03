@@ -1,0 +1,5 @@
+commands:
+  - name: "bar"
+    description: "Run bar"
+    steps:
+      - echo "bar"
