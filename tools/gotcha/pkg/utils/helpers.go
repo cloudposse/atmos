@@ -358,9 +358,11 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 	case "output":
 		// Buffer the output
-		if p.buffers[event.Test] != nil {
-			p.buffers[event.Test] = append(p.buffers[event.Test], event.Output)
+		// Create buffer if it doesn't exist (can happen with subtests or out-of-order events)
+		if p.buffers[event.Test] == nil {
+			p.buffers[event.Test] = []string{}
 		}
+		p.buffers[event.Test] = append(p.buffers[event.Test], event.Output)
 
 	case "pass":
 		// Track statistics
@@ -385,14 +387,27 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
 
 		// Show buffered error output
-		if output, exists := p.buffers[event.Test]; exists {
-			for _, line := range output {
-				// Filter to show only meaningful error lines
-				if parser.ShouldShowErrorLine(line) {
-					fmt.Fprint(os.Stderr, "    "+line)
+		output, exists := p.buffers[event.Test]
+		
+		// If no output found, check for subtest output (parent test might have no direct output)
+		if !exists || len(output) == 0 {
+			testPrefix := event.Test + "/"
+			for testName, testOutput := range p.buffers {
+				if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
+					// Found subtest output, append it
+					output = append(output, testOutput...)
 				}
 			}
 		}
+		
+		// Display the output
+		for _, line := range output {
+			// Filter to show only meaningful error lines
+			if parser.ShouldShowErrorLine(line) {
+				fmt.Fprint(os.Stderr, "    "+line)
+			}
+		}
+		
 		delete(p.buffers, event.Test)
 
 	case "skip":

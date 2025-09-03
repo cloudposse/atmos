@@ -354,9 +354,11 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "output":
 			// Buffer the output for potential error display
 			m.bufferMu.Lock()
-			if m.testBuffers[event.Test] != nil {
-				m.testBuffers[event.Test] = append(m.testBuffers[event.Test], event.Output)
+			// Create buffer if it doesn't exist (can happen with subtests or out-of-order events)
+			if m.testBuffers[event.Test] == nil {
+				m.testBuffers[event.Test] = []string{}
 			}
+			m.testBuffers[event.Test] = append(m.testBuffers[event.Test], event.Output)
 			m.bufferMu.Unlock()
 			// Batch next command with spinner tick to keep UI updating
 			return m, tea.Batch(nextCmd, m.spinner.Tick)
@@ -405,6 +407,17 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			bufferedOutput := m.testBuffers[event.Test]
 			output := make([]string, len(bufferedOutput))
 			copy(output, bufferedOutput)
+			
+			// If no output found, check for subtest output (parent test might have no direct output)
+			if len(output) == 0 {
+				testPrefix := event.Test + "/"
+				for testName, testOutput := range m.testBuffers {
+					if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
+						// Found subtest output, use it
+						output = append(output, testOutput...)
+					}
+				}
+			}
 			m.bufferMu.Unlock()
 
 			m.failCount++
