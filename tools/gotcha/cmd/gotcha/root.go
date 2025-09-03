@@ -81,20 +81,20 @@ func initConfig() {
 		// Set config file name (without extension)
 		viper.SetConfigName(".gotcha")
 		viper.SetConfigType("yaml")
-		
+
 		// Search for config file in current directory
 		viper.AddConfigPath(".")
-		
+
 		// Also search in parent directories
 		viper.AddConfigPath("..")
 		viper.AddConfigPath("../..")
 		viper.AddConfigPath("../../..")
 	}
-	
+
 	// Bind environment variables
 	viper.SetEnvPrefix("GOTCHA")
 	viper.AutomaticEnv()
-	
+
 	// Read config file if it exists (silently, logging happens after logger init)
 	_ = viper.ReadInConfig()
 }
@@ -114,10 +114,10 @@ func Execute() error {
 			break
 		}
 	}
-	
+
 	// Initialize viper configuration
 	initConfig()
-	
+
 	// Configure colors for lipgloss based on environment (GitHub Actions, CI, etc.)
 	tui.ConfigureColors()
 
@@ -132,7 +132,7 @@ func Execute() error {
 			"profile", tui.ProfileName(profile),
 			"github_actions", tui.IsGitHubActions(),
 			"ci", tui.IsCI())
-		
+
 		// Log config file if one was loaded
 		if viper.ConfigFileUsed() != "" {
 			globalLogger.Debug("Loaded config file", "file", viper.ConfigFileUsed())
@@ -185,7 +185,7 @@ step summaries and markdown reports.`,
 
 	// Add persistent flag for config file (available to all subcommands)
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "Config file path (default: .gotcha.yaml)")
-	
+
 	// Add stream-specific flags to root command for direct usage
 	rootCmd.Flags().String("packages", "", "Space-separated packages to test (default: ./...)")
 	rootCmd.Flags().String("show", "all", "Filter displayed tests: all, failed, passed, skipped, collapsed, none")
@@ -460,7 +460,7 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Bind flag to viper
 	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
-	
+
 	// Handle GitHub comment posting
 	postComment := viper.GetBool("post-comment")
 	if postComment {

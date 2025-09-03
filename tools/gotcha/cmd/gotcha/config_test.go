@@ -52,7 +52,7 @@ show: failed`,
 			tmpDir := t.TempDir()
 			configPath := filepath.Join(tmpDir, ".gotcha.yaml")
 			if tt.configContent != "" {
-				err := os.WriteFile(configPath, []byte(tt.configContent), 0644)
+				err := os.WriteFile(configPath, []byte(tt.configContent), 0o644)
 				require.NoError(t, err)
 			}
 
@@ -90,8 +90,8 @@ func TestConfigPrecedence(t *testing.T) {
 show: failed
 timeout: 5s
 alert: false`
-	
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Test 1: Config file values
@@ -109,18 +109,18 @@ alert: false`
 	os.Setenv("GOTCHA_SHOW", "all")
 	defer os.Unsetenv("GOTCHA_OUTPUT")
 	defer os.Unsetenv("GOTCHA_SHOW")
-	
+
 	configFile = configPath
 	initConfig()
 	assert.Equal(t, "env-output.json", viper.GetString("output"))
 	assert.Equal(t, "all", viper.GetString("show"))
 	assert.Equal(t, "5s", viper.GetString("timeout")) // Still from config
-	assert.Equal(t, false, viper.GetBool("alert"))   // Still from config
+	assert.Equal(t, false, viper.GetBool("alert"))    // Still from config
 
 	// Test 3: Flags override everything (simulated by viper.Set)
 	viper.Set("output", "flag-output.json")
 	assert.Equal(t, "flag-output.json", viper.GetString("output"))
-	assert.Equal(t, "all", viper.GetString("show")) // Still from env
+	assert.Equal(t, "all", viper.GetString("show"))   // Still from env
 	assert.Equal(t, "5s", viper.GetString("timeout")) // Still from config
 }
 
@@ -129,13 +129,13 @@ func TestCustomConfigFile(t *testing.T) {
 
 	// Create two config files
 	tmpDir := t.TempDir()
-	
+
 	defaultConfig := filepath.Join(tmpDir, ".gotcha.yaml")
-	err := os.WriteFile(defaultConfig, []byte(`output: default.json`), 0644)
+	err := os.WriteFile(defaultConfig, []byte(`output: default.json`), 0o644)
 	require.NoError(t, err)
 
 	customConfig := filepath.Join(tmpDir, "custom.yaml")
-	err = os.WriteFile(customConfig, []byte(`output: custom.json`), 0644)
+	err = os.WriteFile(customConfig, []byte(`output: custom.json`), 0o644)
 	require.NoError(t, err)
 
 	// Test loading custom config
@@ -150,7 +150,7 @@ func TestMissingConfigFile(t *testing.T) {
 
 	// Point to non-existent config
 	configFile = "/non/existent/config.yaml"
-	
+
 	// Should not panic, just use defaults
 	assert.NotPanics(t, func() {
 		initConfig()
@@ -159,7 +159,7 @@ func TestMissingConfigFile(t *testing.T) {
 	// Can still set via environment
 	os.Setenv("GOTCHA_OUTPUT", "env-output.json")
 	defer os.Unsetenv("GOTCHA_OUTPUT")
-	
+
 	viper.Reset()
 	initConfig()
 	assert.Equal(t, "env-output.json", viper.GetString("output"))
