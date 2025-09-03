@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -392,12 +393,31 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 		output, exists := p.buffers[event.Test]
 
 		// If no output found, check for subtest output (parent test might have no direct output)
+		hasSubtests := false
 		if !exists || len(output) == 0 {
 			testPrefix := event.Test + "/"
+			subtestNames := []string{}
 			for testName, testOutput := range p.buffers {
 				if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
-					// Found subtest output, append it
+					// Found subtest output
+					hasSubtests = true
+					// Extract subtest name (remove parent prefix)
+					subtestName := strings.TrimPrefix(testName, testPrefix)
+					subtestNames = append(subtestNames, subtestName)
 					output = append(output, testOutput...)
+				}
+			}
+			
+			// If we found subtests, add a header to clarify
+			if hasSubtests && len(subtestNames) > 0 {
+				// Sort subtest names for consistent output
+				sort.Strings(subtestNames)
+				fmt.Fprintf(os.Stderr, "\n    Failed subtests:\n")
+				for _, name := range subtestNames {
+					fmt.Fprintf(os.Stderr, "      • %s\n", name)
+				}
+				if len(output) > 0 {
+					fmt.Fprintf(os.Stderr, "\n    Subtest output:\n")
 				}
 			}
 		}
