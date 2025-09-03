@@ -77,6 +77,58 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - `atmos auth validate` for configuration validation
 - **Priority**: P0 (Must Have)
 
+#### FR-006: Terraform Integration
+
+- **Description**: Seamless Terraform workflow integration with pre-hooks
+- **Acceptance Criteria**:
+  - Terraform prehook runs before any Terraform command
+  - Automatic authentication with default profile if found
+  - Authentication occurs transparently before Terraform execution
+  - Support for component-specific identity overrides
+- **Priority**: P0 (Must Have)
+
+#### FR-007: Component Configuration Integration
+
+- **Description**: Auth configuration merges with component configuration
+- **Acceptance Criteria**:
+  - Components can override identities defined in atmos.yaml
+  - Components can override providers defined in atmos.yaml
+  - Component-level auth configuration takes precedence
+  - Merged configuration is validated at runtime
+- **Priority**: P0 (Must Have)
+
+#### FR-008: Component Description Enhancement
+
+- **Description**: Enhanced component description with auth information
+- **Acceptance Criteria**:
+  - `atmos describe component <component> -s <stack>` shows all identities
+  - `atmos describe component <component> -s <stack> -q .identities` filters to identities
+  - `atmos describe component <component> -s <stack> -q .providers` shows providers
+  - Shows merged configuration from atmos.yaml and component overrides
+- **Priority**: P0 (Must Have)
+
+#### FR-009: Identity Environment Variables
+
+- **Description**: Support environment variable injection from identities
+- **Acceptance Criteria**:
+  - Identities support `environment` block with array of key-value objects
+  - Environment variables are set before Terraform execution
+  - Variables are available to Terraform and other tools
+  - Support for case-sensitive environment variable names
+- **Priority**: P0 (Must Have)
+
+#### FR-010: AWS Credentials and Config File Management
+
+- **Description**: Manage isolated AWS credentials and config files for Atmos
+- **Acceptance Criteria**:
+  - Write AWS credentials to `~/.aws/atmos/<provider>/credentials`
+  - Write AWS config to `~/.aws/atmos/<provider>/config`
+  - Set `AWS_SHARED_CREDENTIALS_FILE` and `AWS_CONFIG_FILE` environment variables
+  - Credential files are written during Terraform prehook
+  - User's existing AWS files remain unmodified
+  - Provider-specific isolation prevents credential conflicts
+- **Priority**: P0 (Must Have)
+
 ### 2.2 Non-Functional Requirements
 
 #### NFR-001: Security
@@ -114,6 +166,28 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Intuitive YAML configuration structure
   - Comprehensive documentation and examples
   - IDE support with schema validation
+  - Use Charm Bracelet's huh library for interactive UI elements
+  - Use Charm Bracelet's logging framework throughout
+- **Priority**: P1 (Should Have)
+
+#### NFR-005: UI Framework
+
+- **Description**: Consistent and modern CLI user interface
+- **Requirements**:
+  - Use Charm Bracelet's huh library for all pickers and selections
+  - Consistent styling and interaction patterns
+  - Accessible and keyboard-friendly interface
+  - Support for both interactive and non-interactive modes
+- **Priority**: P1 (Should Have)
+
+#### NFR-006: Logging Framework
+
+- **Description**: Structured and consistent logging
+- **Requirements**:
+  - Use Charm Bracelet's logging framework across all components
+  - Structured logging with consistent format
+  - Configurable log levels and output formats
+  - Integration with audit logging requirements
 - **Priority**: P1 (Should Have)
 
 ## 3. Use Cases & User Stories
@@ -188,6 +262,48 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 - Enhanced logging for break-glass usage
 - Time-limited emergency access
 
+#### UC-005: Terraform Workflow with Auto-Authentication
+
+**Actor**: DevOps Engineer  
+**Goal**: Run Terraform commands with automatic authentication  
+**Scenario**:
+
+1. Engineer runs `atmos terraform plan vpc -s plat-ue2-sandbox`
+2. Terraform prehook detects default identity configuration
+3. System automatically authenticates using default profile
+4. AWS credentials written to `~/.aws/atmos/<provider>/credentials`
+5. AWS config written to `~/.aws/atmos/<provider>/config`
+6. Environment variables set to point to Atmos-managed AWS files
+7. Terraform command executes with proper credentials
+8. User's existing AWS files remain unmodified
+
+**Acceptance Criteria**:
+
+- Seamless authentication without manual login
+- Component-specific identity overrides work correctly
+- Environment variables are properly injected
+- AWS credentials isolated from user's existing files
+- Clear error messages if authentication fails
+
+#### UC-006: Component-Specific Identity Override
+
+**Actor**: Security Engineer  
+**Goal**: Use different identity for sensitive components  
+**Scenario**:
+
+1. Engineer needs to deploy security-critical component
+2. Component configuration overrides default identity with elevated permissions
+3. System uses component-specific identity for authentication
+4. `atmos describe component` shows the effective identity configuration
+5. Deployment proceeds with appropriate permissions
+
+**Acceptance Criteria**:
+
+- Component-level auth configuration takes precedence
+- Merged configuration is visible via describe command
+- Validation ensures component overrides are valid
+- Audit trail shows which identity was used
+
 ### 3.2 Edge Cases
 
 #### EC-001: Credential Expiration During Long Operations
@@ -236,6 +352,11 @@ identities:
     spec:
       name: DeveloperAccess
       account.name: development
+    environment:
+      - key: AWS_PROFILE
+        value: dev-admin
+      - key: TERRAFORM_WORKSPACE
+        value: development
 ```
 
 **Responsibilities**:
@@ -347,6 +468,68 @@ providers:
 
 ### 5.2 Identity Types
 
+#### Environment Variable Support
+
+All identity types support an `environment` block for injecting environment variables:
+
+```yaml
+identities:
+  managers:
+    kind: aws/permission-set
+    default: true
+    via: { provider: cplive-sso }
+    spec:
+      name: IdentityManagersTeamAccess
+      account:
+        name: core-identity
+    alias: managers-core
+    environment:
+      - key: AWS_PROFILE
+        value: managers-core
+      - key: TEAM_ROLE
+        value: managers
+      - key: DEPLOYMENT_ENVIRONMENT
+        value: production
+```
+
+**Environment Variable Behavior**:
+- Variables are set before Terraform execution
+- Array format preserves case-sensitive keys (required due to Viper limitations)
+- Variables are available to all tools executed under the identity
+- Component environment section inherits these variables
+- AWS-specific environment variables are automatically set for credential file paths
+
+#### AWS Credentials and Config File Management
+
+For AWS providers, Atmos manages isolated credential and config files:
+
+```yaml
+identities:
+  prod-admin:
+    kind: aws/permission-set
+    via: { provider: aws-sso }
+    spec:
+      name: ProductionAdmin
+      account:
+        name: production
+    environment:
+      - key: AWS_PROFILE
+        value: prod-admin
+      - key: ENVIRONMENT
+        value: production
+    # AWS files automatically managed:
+    # ~/.aws/atmos/aws-sso/credentials
+    # ~/.aws/atmos/aws-sso/config
+```
+
+**AWS File Management Behavior**:
+- Credentials written to `~/.aws/atmos/<provider>/credentials` during prehook
+- Config written to `~/.aws/atmos/<provider>/config` during prehook
+- `AWS_SHARED_CREDENTIALS_FILE` points to Atmos-managed credentials file
+- `AWS_CONFIG_FILE` points to Atmos-managed config file
+- User's existing `~/.aws/credentials` and `~/.aws/config` remain untouched
+- Provider isolation prevents conflicts between different auth providers
+
 #### AWS Permission Set
 
 ```yaml
@@ -358,6 +541,11 @@ identities:
       name: DeveloperAccess
       account.name: development
     alias: dev
+    environment:
+      - key: AWS_PROFILE
+        value: dev-access
+      - key: ENVIRONMENT
+        value: development
 ```
 
 #### AWS Assume Role
@@ -419,6 +607,90 @@ identities:
     spec:
       app: datadog-admin
     alias: monitoring
+```
+
+### 5.3 Component-Level Auth Configuration
+
+Components can override auth configuration defined in `atmos.yaml`:
+
+```yaml
+# In component configuration
+components:
+  terraform:
+    vpc:
+      # Component-specific auth overrides
+      auth:
+        identities:
+          vpc-admin:
+            kind: aws/permission-set
+            via: { provider: company-sso }
+            spec:
+              name: NetworkAdminAccess
+              account:
+                name: networking
+            environment:
+              - key: VPC_DEPLOYMENT_MODE
+                value: secure
+        providers:
+          company-sso:
+            session:
+              duration: 30m  # Override default duration
+      
+      # Regular component configuration
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+```
+
+**Component Auth Merging Rules**:
+1. Component identities override global identities with same name
+2. Component providers override global providers with same name
+3. New identities/providers in components are added to available options
+4. Component environment variables are merged with identity environment variables
+5. AWS credential file paths are automatically set based on active provider
+6. Validation occurs on the merged configuration
+
+### 5.4 Component Description Output
+
+The `atmos describe component` command shows merged auth configuration:
+
+```bash
+# Show all component information including auth
+atmos describe component vpc -s plat-ue2-sandbox
+
+# Filter to show only identities
+atmos describe component vpc -s plat-ue2-sandbox -q .identities
+
+# Filter to show only providers
+atmos describe component vpc -s plat-ue2-sandbox -q .providers
+```
+
+**Expected Output for Identities**:
+```yaml
+identities:
+  managers:
+    kind: aws/permission-set
+    default: true
+    via: { provider: cplive-sso }
+    spec:
+      name: IdentityManagersTeamAccess
+      account:
+        name: core-identity
+    alias: managers-core
+    environment:
+      - key: AWS_PROFILE
+        value: managers-core
+      - key: TEAM_ROLE
+        value: managers
+  vpc-admin:  # Component-specific override
+    kind: aws/permission-set
+    via: { provider: company-sso }
+    spec:
+      name: NetworkAdminAccess
+      account:
+        name: networking
+    environment:
+      - key: VPC_DEPLOYMENT_MODE
+        value: secure
 ```
 
 ## 6. Best Practices
@@ -693,19 +965,24 @@ func TestE2EAuthentication(t *testing.T) {
 - Provider interface definition
 - AWS IAM Identity Center provider
 - Basic CLI commands (`login`, `whoami`)
+- Charm Bracelet huh and logging integration
 
-#### Phase 2: Identity Management (3 weeks)
+#### Phase 2: Identity Management (4 weeks)
 
 - **Week 1**: AWS identity types (permission-set, assume-role, user)
 - **Week 2**: Identity chaining and validation
-- **Week 3**: Credential caching and refresh
+- **Week 3**: Environment variable support and component configuration merging
+- **Week 4**: Terraform prehook integration and credential caching
 
 **Deliverables**:
 
-- All AWS identity types
+- All AWS identity types with environment variable support
 - Chain validation logic
+- Component-level auth configuration merging
+- Terraform prehook implementation
 - Secure credential storage
 - Enhanced CLI (`env`, `exec`)
+- Component description enhancements
 
 #### Phase 3: Multi-Cloud Support (4 weeks)
 
@@ -766,11 +1043,24 @@ internal/auth/
 ├── config/             # Configuration management
 │   ├── parser.go       # YAML parsing
 │   ├── validator.go    # Schema validation
+│   ├── merger.go       # Component config merging
 │   └── schema.json     # JSON Schema
 ├── credentials/        # Credential management
 │   ├── store.go        # Credential storage
 │   ├── cache.go        # Caching logic
 │   └── crypto.go       # Encryption/decryption
+├── hooks/             # Integration hooks
+│   ├── terraform.go   # Terraform prehook
+│   ├── aws_setup.go   # AWS file setup during prehook
+│   └── interface.go   # Hook interface
+├── environment/       # Environment variable management
+│   ├── injector.go    # Environment variable injection
+│   ├── merger.go      # Environment merging logic
+│   └── aws_files.go   # AWS credentials/config file management
+├── ui/                # User interface components
+│   ├── picker.go      # huh-based pickers
+│   ├── prompts.go     # Interactive prompts
+│   └── logger.go      # Charm logging setup
 ├── cli/               # CLI commands
 │   ├── login.go
 │   ├── whoami.go
@@ -815,6 +1105,12 @@ type Identity interface {
 
     // Chain returns the identity or provider this identity chains from
     Chain() *Via
+
+    // Environment returns the environment variables for this identity
+    Environment() []EnvironmentVariable
+
+    // Merge merges this identity with component-level overrides
+    Merge(override *Identity) *Identity
 }
 ```
 
@@ -835,6 +1131,51 @@ type Credentials struct {
     Provider        string            `json:"provider"`
     Identity        string            `json:"identity,omitempty"`
     Metadata        map[string]string `json:"metadata,omitempty"`
+}
+
+// EnvironmentVariable represents a key-value pair for environment injection
+type EnvironmentVariable struct {
+    Key   string `json:"key" yaml:"key"`
+    Value string `json:"value" yaml:"value"`
+}
+
+// AWSFileConfig represents AWS credential and config file paths
+type AWSFileConfig struct {
+    CredentialsPath string `json:"credentials_path"`
+    ConfigPath      string `json:"config_path"`
+    ProfileName     string `json:"profile_name"`
+}
+
+// AWSFileManager handles AWS credential and config file operations
+type AWSFileManager interface {
+    // WriteCredentials writes AWS credentials to provider-specific file
+    WriteCredentials(provider string, creds *Credentials) error
+    
+    // WriteConfig writes AWS config to provider-specific file
+    WriteConfig(provider string, config *AWSConfig) error
+    
+    // GetFilePaths returns the paths for AWS credentials and config files
+    GetFilePaths(provider string) *AWSFileConfig
+    
+    // SetEnvironmentVariables sets AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE
+    SetEnvironmentVariables(provider string) []EnvironmentVariable
+    
+    // Cleanup removes temporary AWS files
+    Cleanup(provider string) error
+}
+
+// AuthConfig represents the complete auth configuration after merging
+type AuthConfig struct {
+    Providers  map[string]Provider  `json:"providers" yaml:"providers"`
+    Identities map[string]Identity  `json:"identities" yaml:"identities"`
+    Default    string              `json:"default,omitempty" yaml:"default,omitempty"`
+}
+
+// ComponentAuthConfig represents component-level auth overrides
+type ComponentAuthConfig struct {
+    Providers  map[string]Provider  `json:"providers,omitempty" yaml:"providers,omitempty"`
+    Identities map[string]Identity  `json:"identities,omitempty" yaml:"identities,omitempty"`
+    Default    string              `json:"default,omitempty" yaml:"default,omitempty"`
 }
 ```
 
@@ -885,6 +1226,9 @@ type Credentials struct {
 
 - **Login time**: < 5 seconds for any authentication flow
 - **Credential refresh**: < 2 seconds for cached credential refresh
+- **Terraform prehook**: < 3 seconds for automatic authentication
+- **AWS file operations**: < 1 second for credential/config file writing
+- **Component description**: < 1 second for auth information display
 - **Availability**: 99.9% uptime for authentication services
 
 #### Security Compliance
