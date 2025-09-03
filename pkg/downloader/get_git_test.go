@@ -397,7 +397,7 @@ func TestRemoveCaseInsensitiveGitDirectory_RemoveError(t *testing.T) {
 
 // writeFakeGit creates a fake `git` earlier on PATH that prints `stdout` and exits with `code`.
 // On Unix it creates an executable file named "git"; on Windows it creates "git.bat".
-func writeFakeGit(t *testing.T, stdout string, code int) string {
+func writeFakeGit(t *testing.T, stdout string, code int) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -436,7 +436,6 @@ func writeFakeGit(t *testing.T, stdout string, code int) string {
 		newPath = dir + string(os.PathListSeparator) + oldPath
 	}
 	t.Setenv("PATH", newPath)
-	return fname
 }
 
 func itoa(i int) string {
@@ -584,10 +583,7 @@ func TestGetCustom_ErrorWhenGitMissing(t *testing.T) {
 
 func TestGetCustom_Succeeds_ClonePath_NoRefNoSSHKey(t *testing.T) {
 	// Provide a fake git that always succeeds; this lets clone/checkout/submodules pass.
-	binDir := t.TempDir()
-	_ = writeFakeGit(t, binDir, 0)
-	restore := withTempPath(t, binDir)
-	defer restore()
+	writeFakeGit(t, "", 0)
 
 	g := newGetter()
 
@@ -602,10 +598,7 @@ func TestGetCustom_Succeeds_ClonePath_NoRefNoSSHKey(t *testing.T) {
 }
 
 func TestGetCustom_Succeeds_UpdatePath_WithRef(t *testing.T) {
-	binDir := t.TempDir()
-	_ = writeFakeGit(t, binDir, 0)
-	restore := withTempPath(t, binDir)
-	defer restore()
+	writeFakeGit(t, "", 0)
 
 	g := newGetter()
 
@@ -618,7 +611,7 @@ func TestGetCustom_Succeeds_UpdatePath_WithRef(t *testing.T) {
 	u := mustURL(t, "https://example.com/repo.git?ref=main&depth=5")
 
 	err := g.GetCustom(dst, u)
-	require.Error(t, err)
+	require.NoError(t, err)
 }
 
 // Test GetCustom with invalid port number.
@@ -626,16 +619,16 @@ func TestGetCustom_InvalidPort(t *testing.T) {
 	g := newGetter()
 	dst := t.TempDir()
 
-	// Create URL with invalid port directly - url.Parse will return nil on bad URLs
-	// So we need to use a parseable URL with a non-numeric port
-	u, err := url.Parse("git://git@github.com:abc123/repo.git")
-	if err != nil || u == nil {
-		t.Skip("Cannot create test URL with invalid port")
-	}
+	// Create a URL with an invalid port programmatically to avoid staticcheck warning.
+	// Port 999999 is out of range for a 16-bit integer (max 65535).
+	u, err := url.Parse("ssh://github.com:999999/repo.git")
+	require.NoError(t, err)
+	require.NotNil(t, u)
 
 	err = g.GetCustom(dst, u)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid port")
+	// Port 999999 exceeds the 16-bit integer range, so ParseUint will fail.
+	require.Contains(t, err.Error(), "invalid port number")
 }
 
 // Test GetCustom with malformed SSH key.
@@ -743,7 +736,15 @@ func TestClone(t *testing.T) {
 			dst := filepath.Join(t.TempDir(), "clone-dest")
 			u := mustURL(t, "https://example.com/repo.git")
 
-			err := g.clone(context.Background(), dst, "", u, tt.ref, tt.depth)
+			params := gitOperationParams{
+				ctx:        context.Background(),
+				dst:        dst,
+				sshKeyFile: "",
+				u:          u,
+				ref:        tt.ref,
+				depth:      tt.depth,
+			}
+			err := g.clone(&params)
 			if tt.wantError {
 				require.Error(t, err)
 				if tt.depth > 0 && tt.ref == "abc1234567" {
@@ -803,7 +804,15 @@ func TestUpdate(t *testing.T) {
 
 			u := mustURL(t, "https://example.com/repo.git")
 
-			err := g.update(context.Background(), dst, "", u, tt.ref, tt.depth)
+			params := gitOperationParams{
+				ctx:        context.Background(),
+				dst:        dst,
+				sshKeyFile: "",
+				u:          u,
+				ref:        tt.ref,
+				depth:      tt.depth,
+			}
+			err := g.update(&params)
 			if tt.wantError {
 				require.Error(t, err)
 			} else {
