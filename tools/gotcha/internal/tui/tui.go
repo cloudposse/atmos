@@ -126,12 +126,12 @@ type TestModel struct {
 	alert      bool   // whether to emit terminal bell on completion
 
 	// Results tracking
-	passCount   int
-	failCount   int
-	skipCount   int
-	testBuffers     map[string][]string
-	subtestOutputs  map[string][]string // Persistent storage for subtest output
-	bufferMu        sync.Mutex
+	passCount      int
+	failCount      int
+	skipCount      int
+	testBuffers    map[string][]string
+	subtestOutputs map[string][]string // Persistent storage for subtest output
+	bufferMu       sync.Mutex
 
 	// JSON output
 	jsonFile *os.File
@@ -213,16 +213,16 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 	// Command runs from current directory (which should be repo root)
 
 	return TestModel{
-		cmd:         cmd,
-		outputFile:  outputFile,
-		showFilter:  showFilter,
-		alert:       alert,
-		spinner:     s,
-		progress:    p,
+		cmd:            cmd,
+		outputFile:     outputFile,
+		showFilter:     showFilter,
+		alert:          alert,
+		spinner:        s,
+		progress:       p,
 		testBuffers:    make(map[string][]string),
 		subtestOutputs: make(map[string][]string),
 		totalTests:     totalTests,
-		startTime:   time.Now(),
+		startTime:      time.Now(),
 	}
 }
 

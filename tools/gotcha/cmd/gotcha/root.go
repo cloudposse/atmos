@@ -343,7 +343,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Everything after "--" should be passed directly to go test
 	var testPackages []string
 	var passthroughArgs []string
-	
+
 	// Check if cmd.ArgsLenAtDash() is set (indicates position of -- separator)
 	dashPos := cmd.ArgsLenAtDash()
 	if dashPos >= 0 {
@@ -397,7 +397,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Prepare test arguments
 	testArgsStr := "-timeout " + timeout
-	
+
 	// Add pass-through arguments
 	if len(passthroughArgs) > 0 {
 		testArgsStr += " " + strings.Join(passthroughArgs, " ")
