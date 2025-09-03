@@ -68,8 +68,9 @@ import (
 	"strings"
 	"syscall"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/hashicorp/go-version"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 var lsRemoteSymRefRegexp = regexp.MustCompile(`ref: refs/heads/([^\s]+).*`)

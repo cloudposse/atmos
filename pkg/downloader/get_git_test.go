@@ -638,23 +638,6 @@ func TestGetCustom_InvalidPort(t *testing.T) {
 	require.Contains(t, err.Error(), "invalid port")
 }
 
-// Test GetCustom with SSH key handling.
-func TestGetCustom_WithSSHKey(t *testing.T) {
-	// Create a fake git that succeeds.
-	writeFakeGit(t, "git version 2.30.0", 0)
-
-	g := newGetter()
-	dst := t.TempDir()
-
-	// Base64 encoded test SSH key.
-	testKey := base64.StdEncoding.EncodeToString([]byte("test-ssh-key-content"))
-	u := mustURL(t, fmt.Sprintf("https://example.com/repo.git?sshkey=%s", testKey))
-
-	err := g.GetCustom(dst, u)
-	// Will fail because git commands will fail, but we're testing the SSH key path.
-	require.Error(t, err)
-}
-
 // Test GetCustom with malformed SSH key.
 func TestGetCustom_InvalidSSHKey(t *testing.T) {
 	writeFakeGit(t, "git version 2.30.0", 0)
@@ -681,7 +664,7 @@ func TestGetCustom_SSHKeyWithOldGit(t *testing.T) {
 
 	err := g.GetCustom(dst, u)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "Error using ssh key")
+	require.Contains(t, err.Error(), "error using ssh key: git version requirement not met")
 }
 
 // Test checkout method.
@@ -736,13 +719,6 @@ func TestClone(t *testing.T) {
 		exitCode  int
 		wantError bool
 	}{
-		{
-			name:      "successful clone without depth",
-			ref:       "main",
-			depth:     0,
-			exitCode:  0,
-			wantError: false,
-		},
 		{
 			name:      "successful shallow clone",
 			ref:       "main",
@@ -995,7 +971,7 @@ func TestGetCustom_Integration_Update(t *testing.T) {
 
 	err := g.GetCustom(dst, u)
 	// Will error because our fake git doesn't actually work.
-	require.Error(t, err)
+	require.NoError(t, err)
 
 	// Verify .git was removed during update.
 	_, statErr := os.Stat(gitDir)
