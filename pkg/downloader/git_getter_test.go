@@ -311,7 +311,7 @@ func TestCustomGitGetter_Get_RemovesSymlinksAfterClone(t *testing.T) {
 }
 
 // Helper function for tests - creates a fake git command.
-func writeFakeGitHelper(t *testing.T, stdout string, code int) string {
+func writeFakeGitHelper(t *testing.T, stdout string, code int) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -345,5 +345,4 @@ func writeFakeGitHelper(t *testing.T, stdout string, code int) string {
 		newPath = dir + string(os.PathListSeparator) + oldPath
 	}
 	t.Setenv("PATH", newPath)
-	return fname
 }

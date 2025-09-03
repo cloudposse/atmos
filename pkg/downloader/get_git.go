@@ -57,7 +57,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -72,6 +71,29 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+// Constants for git operations.
+const (
+	// Numeric constants.
+	base10         = 10
+	portBitSize    = 16
+	sshKeyFileMode = 0o600
+
+	// String constants for git commands.
+	gitCommand      = "git"
+	originRemote    = "origin"
+	gitArgSeparator = "--"
+)
+
+// gitOperationParams holds parameters for git operations to reduce function arguments.
+type gitOperationParams struct {
+	ctx        context.Context
+	dst        string
+	sshKeyFile string
+	u          *url.URL
+	ref        string
+	depth      int
+}
 
 var lsRemoteSymRefRegexp = regexp.MustCompile(`ref: refs/heads/([^\s]+).*`)
 
@@ -94,7 +116,7 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 		defer cancel()
 	}
 
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, err := exec.LookPath(gitCommand); err != nil {
 		return errUtils.ErrGitNotAvailable
 	}
 
@@ -105,7 +127,7 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 	// This is not necessary in versions of Go which have patched
 	// CVE-2019-14809 (e.g. Go 1.12.8+)
 	if portStr := u.Port(); portStr != "" {
-		if _, err := strconv.ParseUint(portStr, 10, 16); err != nil {
+		if _, err := strconv.ParseUint(portStr, base10, portBitSize); err != nil {
 			return fmt.Errorf("%w %q; if using the \"scp-like\" git address scheme where a colon introduces the path instead, remove the ssh:// portion and use just the git:: prefix", errUtils.ErrInvalidGitPort, portStr)
 		}
 	}
@@ -146,7 +168,7 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 		}
 
 		// Create a temp file for the key and ensure it is removed.
-		fh, err := ioutil.TempFile("", "go-getter")
+		fh, err := os.CreateTemp("", "go-getter")
 		if err != nil {
 			return err
 		}
@@ -154,7 +176,7 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 		defer func() { _ = os.Remove(sshKeyFile) }()
 
 		// Set the permissions prior to writing the key material.
-		if err := os.Chmod(sshKeyFile, 0o600); err != nil {
+		if err := os.Chmod(sshKeyFile, sshKeyFileMode); err != nil {
 			return err
 		}
 
@@ -171,10 +193,19 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	params := gitOperationParams{
+		ctx:        ctx,
+		dst:        dst,
+		sshKeyFile: sshKeyFile,
+		u:          u,
+		ref:        ref,
+		depth:      depth,
+	}
+
 	if err == nil {
-		err = g.update(ctx, dst, sshKeyFile, u, ref, depth)
+		err = g.update(&params)
 	} else {
-		err = g.clone(ctx, dst, sshKeyFile, u, ref, depth)
+		err = g.clone(&params)
 	}
 	if err != nil {
 		return err
@@ -274,7 +305,8 @@ func removeCaseInsensitiveGitDirectory(dst string) error {
 // findRemoteDefaultBranch checks the remote repo's HEAD symref to return the remote repo's default branch. "master" is returned if no HEAD symref exists.
 func findRemoteDefaultBranch(ctx context.Context, u *url.URL) string {
 	var stdoutbuf bytes.Buffer
-	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--symref", "--", u.String(), "HEAD")
+	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
+	cmd := exec.CommandContext(ctx, gitCommand, "ls-remote", "--symref", gitArgSeparator, u.String(), "HEAD")
 	cmd.Stdout = &stdoutbuf
 	err := cmd.Run()
 	matches := lsRemoteSymRefRegexp.FindStringSubmatch(stdoutbuf.String())
@@ -293,7 +325,7 @@ func checkGitVersion(ctx context.Context, min string) error {
 		return err
 	}
 
-	out, err := exec.CommandContext(ctx, "git", "version").Output()
+	out, err := exec.CommandContext(ctx, gitCommand, "version").Output()
 	if err != nil {
 		return err
 	}
@@ -309,7 +341,9 @@ func checkGitVersion(ctx context.Context, min string) error {
 		// Which does not follow the semantic versionning specs
 		// https://semver.org. We remove that part in order for
 		// go-version to not error.
-		v = v[:strings.Index(v, ".windows.")]
+		if idx := strings.Index(v, ".windows."); idx != -1 {
+			v = v[:idx]
+		}
 	}
 
 	have, err := version.NewVersion(v)
@@ -325,12 +359,19 @@ func checkGitVersion(ctx context.Context, min string) error {
 }
 
 func (g *CustomGitGetter) checkout(ctx context.Context, dst string, ref string) error {
-	cmd := exec.CommandContext(ctx, "git", "checkout", ref)
+	cmd := exec.CommandContext(ctx, gitCommand, "checkout", ref)
 	cmd.Dir = dst
 	return getRunCommand(cmd)
 }
 
-func (g *CustomGitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.URL, ref string, depth int) error {
+func (g *CustomGitGetter) clone(params *gitOperationParams) error {
+	ctx := params.ctx
+	dst := params.dst
+	sshKeyFile := params.sshKeyFile
+	u := params.u
+	ref := params.ref
+	depth := params.depth
+
 	args := []string{"clone"}
 
 	originalRef := ref // we handle an unspecified ref differently than explicitly selecting the default branch below
@@ -341,9 +382,9 @@ func (g *CustomGitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *
 		args = append(args, "--depth", strconv.Itoa(depth))
 		args = append(args, "--branch", ref)
 	}
-	args = append(args, "--", u.String(), dst)
+	args = append(args, gitArgSeparator, u.String(), dst)
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, gitCommand, args...)
 	setupGitEnv(cmd, sshKeyFile)
 	err := getRunCommand(cmd)
 	if err != nil {
@@ -374,7 +415,14 @@ func (g *CustomGitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *
 	return nil
 }
 
-func (g *CustomGitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.URL, ref string, depth int) error {
+func (g *CustomGitGetter) update(params *gitOperationParams) error {
+	ctx := params.ctx
+	dst := params.dst
+	sshKeyFile := params.sshKeyFile
+	u := params.u
+	ref := params.ref
+	depth := params.depth
+
 	// Remove all variations of .git directories
 	err := removeCaseInsensitiveGitDirectory(dst)
 	if err != nil {
@@ -382,7 +430,7 @@ func (g *CustomGitGetter) update(ctx context.Context, dst, sshKeyFile string, u 
 	}
 
 	// Initialize the git repository
-	cmd := exec.CommandContext(ctx, "git", "init")
+	cmd := exec.CommandContext(ctx, gitCommand, "init")
 	cmd.Dir = dst
 	err = getRunCommand(cmd)
 	if err != nil {
@@ -390,7 +438,8 @@ func (g *CustomGitGetter) update(ctx context.Context, dst, sshKeyFile string, u 
 	}
 
 	// Add the git remote
-	cmd = exec.CommandContext(ctx, "git", "remote", "add", "origin", "--", u.String())
+	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
+	cmd = exec.CommandContext(ctx, gitCommand, "remote", "add", originRemote, gitArgSeparator, u.String())
 	cmd.Dir = dst
 	err = getRunCommand(cmd)
 	if err != nil {
@@ -398,7 +447,7 @@ func (g *CustomGitGetter) update(ctx context.Context, dst, sshKeyFile string, u 
 	}
 
 	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, "git", "fetch", "--tags")
+	cmd = exec.CommandContext(ctx, gitCommand, "fetch", "--tags")
 	cmd.Dir = dst
 	err = getRunCommand(cmd)
 	if err != nil {
@@ -406,7 +455,7 @@ func (g *CustomGitGetter) update(ctx context.Context, dst, sshKeyFile string, u 
 	}
 
 	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, "git", "fetch", "origin", "--", ref)
+	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, ref)
 	cmd.Dir = dst
 	err = getRunCommand(cmd)
 	if err != nil {
@@ -414,7 +463,7 @@ func (g *CustomGitGetter) update(ctx context.Context, dst, sshKeyFile string, u 
 	}
 
 	// Reset the branch to the fetched ref
-	cmd = exec.CommandContext(ctx, "git", "reset", "--hard", "FETCH_HEAD")
+	cmd = exec.CommandContext(ctx, gitCommand, "reset", "--hard", "FETCH_HEAD")
 	cmd.Dir = dst
 	err = getRunCommand(cmd)
 	if err != nil {
@@ -429,9 +478,10 @@ func (g *CustomGitGetter) update(ctx context.Context, dst, sshKeyFile string, u 
 
 	// Pull the latest changes from the ref branch
 	if depth > 0 {
-		cmd = exec.CommandContext(ctx, "git", "pull", "origin", "--depth", strconv.Itoa(depth), "--ff-only", "--", ref)
+		// #nosec G204 -- The ref is from query parameters and we use "--" separator to prevent command injection.
+		cmd = exec.CommandContext(ctx, gitCommand, "pull", originRemote, "--depth", strconv.Itoa(depth), "--ff-only", gitArgSeparator, ref)
 	} else {
-		cmd = exec.CommandContext(ctx, "git", "pull", "origin", "--ff-only", "--", ref)
+		cmd = exec.CommandContext(ctx, gitCommand, "pull", originRemote, "--ff-only", gitArgSeparator, ref)
 	}
 
 	cmd.Dir = dst
@@ -445,7 +495,7 @@ func (g *CustomGitGetter) fetchSubmodules(ctx context.Context, dst, sshKeyFile s
 	if depth > 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, gitCommand, args...)
 	cmd.Dir = dst
 	setupGitEnv(cmd, sshKeyFile)
 	return getRunCommand(cmd)
