@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 
@@ -251,12 +250,20 @@ func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, 
 	return exitCode
 }
 
+// SubtestStats tracks statistics for subtests of a parent test.
+type SubtestStats struct {
+	passed  []string // names of passed subtests
+	failed  []string // names of failed subtests
+	skipped []string // names of skipped subtests
+}
+
 // StreamProcessor handles real-time test output with buffering.
 type StreamProcessor struct {
-	mu         sync.Mutex
-	buffers    map[string][]string
-	jsonWriter io.Writer
-	showFilter string
+	mu           sync.Mutex
+	buffers      map[string][]string
+	subtestStats map[string]*SubtestStats // Track subtest statistics per parent test
+	jsonWriter   io.Writer
+	showFilter   string
 	// Statistics tracking
 	passed  int
 	failed  int
@@ -289,9 +296,10 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// Create processor
 	processor := &StreamProcessor{
-		buffers:    make(map[string][]string),
-		jsonWriter: jsonFile,
-		showFilter: showFilter,
+		buffers:      make(map[string][]string),
+		subtestStats: make(map[string]*SubtestStats),
+		jsonWriter:   jsonFile,
+		showFilter:   showFilter,
 	}
 
 	// Process the stream
@@ -370,6 +378,20 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	case "pass":
 		// Track statistics
 		p.passed++
+		
+		// Track subtest statistics
+		if strings.Contains(event.Test, "/") {
+			// This is a subtest - update parent's stats
+			parts := strings.SplitN(event.Test, "/", 2)
+			parentTest := parts[0]
+			subtestName := parts[1]
+			
+			if p.subtestStats[parentTest] == nil {
+				p.subtestStats[parentTest] = &SubtestStats{}
+			}
+			p.subtestStats[parentTest].passed = append(p.subtestStats[parentTest].passed, subtestName)
+		}
+		
 		// Show success with actual test name
 		if p.shouldShowTestEvent("pass") {
 			fmt.Fprintf(os.Stderr, " %s %s %s\n",
@@ -383,50 +405,92 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	case "fail":
 		// Track statistics
 		p.failed++
-		// Always show failures regardless of filter
-		fmt.Fprintf(os.Stderr, " %s %s %s\n",
-			tui.FailStyle.Render(tui.CheckFail),
-			tui.TestNameStyle.Render(event.Test),
-			tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
-
-		// Show buffered error output
-		output, exists := p.buffers[event.Test]
-
-		// If no output found, check for subtest output (parent test might have no direct output)
-		hasSubtests := false
-		if !exists || len(output) == 0 {
-			testPrefix := event.Test + "/"
-			subtestNames := []string{}
-			for testName, testOutput := range p.buffers {
-				if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
-					// Found subtest output
-					hasSubtests = true
-					// Extract subtest name (remove parent prefix)
-					subtestName := strings.TrimPrefix(testName, testPrefix)
-					subtestNames = append(subtestNames, subtestName)
-					output = append(output, testOutput...)
-				}
-			}
+		
+		// Track subtest statistics
+		if strings.Contains(event.Test, "/") {
+			// This is a subtest - update parent's stats
+			parts := strings.SplitN(event.Test, "/", 2)
+			parentTest := parts[0]
+			subtestName := parts[1]
 			
-			// If we found subtests, add a header to clarify
-			if hasSubtests && len(subtestNames) > 0 {
-				// Sort subtest names for consistent output
-				sort.Strings(subtestNames)
-				fmt.Fprintf(os.Stderr, "\n    Failed subtests:\n")
-				for _, name := range subtestNames {
-					fmt.Fprintf(os.Stderr, "      • %s\n", name)
+			if p.subtestStats[parentTest] == nil {
+				p.subtestStats[parentTest] = &SubtestStats{}
+			}
+			p.subtestStats[parentTest].failed = append(p.subtestStats[parentTest].failed, subtestName)
+		}
+		
+		// Check if this is a parent test with subtests
+		if !strings.Contains(event.Test, "/") && p.subtestStats[event.Test] != nil {
+			stats := p.subtestStats[event.Test]
+			totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
+			
+			// Display parent test with subtest summary in line
+			fmt.Fprintf(os.Stderr, " %s %s %s [%d/%d passed]\n",
+				tui.FailStyle.Render(tui.CheckFail),
+				tui.TestNameStyle.Render(event.Test),
+				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
+				len(stats.passed), totalSubtests)
+			
+			// Add detailed subtest summary
+			if totalSubtests > 0 {
+				fmt.Fprintf(os.Stderr, "\n    Subtest Summary: %d passed, %d failed of %d total\n",
+					len(stats.passed), len(stats.failed), totalSubtests)
+				
+				// Show passed subtests
+				if len(stats.passed) > 0 {
+					fmt.Fprintf(os.Stderr, "\n    %s Passed (%d):\n", 
+						tui.PassStyle.Render("✔"), len(stats.passed))
+					for _, name := range stats.passed {
+						fmt.Fprintf(os.Stderr, "      • %s\n", name)
+					}
 				}
-				if len(output) > 0 {
-					fmt.Fprintf(os.Stderr, "\n    Subtest output:\n")
+				
+				// Show failed subtests
+				if len(stats.failed) > 0 {
+					fmt.Fprintf(os.Stderr, "\n    %s Failed (%d):\n",
+						tui.FailStyle.Render("✘"), len(stats.failed))
+					for _, name := range stats.failed {
+						fmt.Fprintf(os.Stderr, "      • %s\n", name)
+					}
+				}
+				
+				// Show skipped subtests if any
+				if len(stats.skipped) > 0 {
+					fmt.Fprintf(os.Stderr, "\n    %s Skipped (%d):\n",
+						tui.SkipStyle.Render("⊘"), len(stats.skipped))
+					for _, name := range stats.skipped {
+						fmt.Fprintf(os.Stderr, "      • %s\n", name)
+					}
 				}
 			}
+		} else {
+			// Regular test or subtest - display normally
+			fmt.Fprintf(os.Stderr, " %s %s %s\n",
+				tui.FailStyle.Render(tui.CheckFail),
+				tui.TestNameStyle.Render(event.Test),
+				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
 		}
 
-		// Display the output
-		for _, line := range output {
-			// Filter to show only meaningful error lines
-			if parser.ShouldShowErrorLine(line) {
-				fmt.Fprint(os.Stderr, "    "+line)
+		// Show buffered error output (only for tests without subtests or subtests themselves)
+		if strings.Contains(event.Test, "/") || p.subtestStats[event.Test] == nil {
+			output, exists := p.buffers[event.Test]
+
+			// If no output found, check for subtest output (parent test might have no direct output)
+			if !exists || len(output) == 0 {
+				testPrefix := event.Test + "/"
+				for testName, testOutput := range p.buffers {
+					if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
+						output = append(output, testOutput...)
+					}
+				}
+			}
+
+			// Display the output
+			for _, line := range output {
+				// Filter to show only meaningful error lines
+				if parser.ShouldShowErrorLine(line) {
+					fmt.Fprint(os.Stderr, "    "+line)
+				}
 			}
 		}
 
@@ -435,6 +499,20 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	case "skip":
 		// Track statistics
 		p.skipped++
+		
+		// Track subtest statistics
+		if strings.Contains(event.Test, "/") {
+			// This is a subtest - update parent's stats
+			parts := strings.SplitN(event.Test, "/", 2)
+			parentTest := parts[0]
+			subtestName := parts[1]
+			
+			if p.subtestStats[parentTest] == nil {
+				p.subtestStats[parentTest] = &SubtestStats{}
+			}
+			p.subtestStats[parentTest].skipped = append(p.subtestStats[parentTest].skipped, subtestName)
+		}
+		
 		// Show skip with actual test name
 		if p.shouldShowTestEvent("skip") {
 			fmt.Fprintf(os.Stderr, " %s %s\n",

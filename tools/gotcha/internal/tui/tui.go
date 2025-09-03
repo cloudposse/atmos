@@ -103,6 +103,13 @@ func isCSIParameter(r rune) bool {
 	return (r >= '0' && r <= '9') || r == ';' || r == ' ' || r == '?' || r == '!'
 }
 
+// SubtestStats tracks statistics for subtests of a parent test.
+type SubtestStats struct {
+	passed  []string // names of passed subtests
+	failed  []string // names of failed subtests
+	skipped []string // names of skipped subtests
+}
+
 // TestModel represents the test UI model.
 type TestModel struct {
 	// Test tracking
@@ -130,7 +137,8 @@ type TestModel struct {
 	failCount      int
 	skipCount      int
 	testBuffers    map[string][]string
-	subtestOutputs map[string][]string // Persistent storage for subtest output
+	subtestOutputs map[string][]string          // Persistent storage for subtest output
+	subtestStats   map[string]*SubtestStats     // Track subtest statistics per parent test
 	bufferMu       sync.Mutex
 
 	// JSON output
@@ -221,6 +229,7 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		progress:       p,
 		testBuffers:    make(map[string][]string),
 		subtestOutputs: make(map[string][]string),
+		subtestStats:   make(map[string]*SubtestStats),
 		totalTests:     totalTests,
 		startTime:      time.Now(),
 	}
@@ -370,8 +379,19 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "pass":
 			m.passCount++
-			// Only increment currentIndex for top-level tests, not subtests
-			if !strings.Contains(event.Test, "/") {
+			// Track subtest statistics
+			if strings.Contains(event.Test, "/") {
+				// This is a subtest - update parent's stats
+				parts := strings.SplitN(event.Test, "/", 2)
+				parentTest := parts[0]
+				subtestName := parts[1]
+				
+				if m.subtestStats[parentTest] == nil {
+					m.subtestStats[parentTest] = &SubtestStats{}
+				}
+				m.subtestStats[parentTest].passed = append(m.subtestStats[parentTest].passed, subtestName)
+			} else {
+				// Only increment currentIndex for top-level tests, not subtests
 				m.currentIndex++
 			}
 
@@ -449,8 +469,19 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Unlock()
 
 			m.failCount++
-			// Only increment currentIndex for top-level tests, not subtests
-			if !strings.Contains(event.Test, "/") {
+			// Track subtest statistics
+			if strings.Contains(event.Test, "/") {
+				// This is a subtest - update parent's stats
+				parts := strings.SplitN(event.Test, "/", 2)
+				parentTest := parts[0]
+				subtestName := parts[1]
+				
+				if m.subtestStats[parentTest] == nil {
+					m.subtestStats[parentTest] = &SubtestStats{}
+				}
+				m.subtestStats[parentTest].failed = append(m.subtestStats[parentTest].failed, subtestName)
+			} else {
+				// Only increment currentIndex for top-level tests, not subtests
 				m.currentIndex++
 			}
 
@@ -463,14 +494,61 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var displayCmd tea.Cmd
 			// Only show if filter allows it
 			if m.shouldShowTest("fail") {
-				// Start with newline to separate from progress bar
-				displayOutput := fmt.Sprintf("\n%s %s %s",
-					FailStyle.Render(CheckFail),
-					TestNameStyle.Render(event.Test),
-					DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
+				// Check if this is a parent test with subtests
+				var displayOutput string
+				if !strings.Contains(event.Test, "/") && m.subtestStats[event.Test] != nil {
+					stats := m.subtestStats[event.Test]
+					totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
+					
+					// Display parent test with subtest summary in line
+					displayOutput = fmt.Sprintf("\n%s %s %s [%d/%d passed]",
+						FailStyle.Render(CheckFail),
+						TestNameStyle.Render(event.Test),
+						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
+						len(stats.passed), totalSubtests)
+					
+					// Add detailed subtest summary
+					if totalSubtests > 0 {
+						displayOutput += fmt.Sprintf("\n\n    Subtest Summary: %d passed, %d failed of %d total\n",
+							len(stats.passed), len(stats.failed), totalSubtests)
+						
+						// Show passed subtests
+						if len(stats.passed) > 0 {
+							displayOutput += fmt.Sprintf("\n    %s Passed (%d):\n", 
+								PassStyle.Render("✔"), len(stats.passed))
+							for _, name := range stats.passed {
+								displayOutput += fmt.Sprintf("      • %s\n", name)
+							}
+						}
+						
+						// Show failed subtests
+						if len(stats.failed) > 0 {
+							displayOutput += fmt.Sprintf("\n    %s Failed (%d):\n",
+								FailStyle.Render("✘"), len(stats.failed))
+							for _, name := range stats.failed {
+								displayOutput += fmt.Sprintf("      • %s\n", name)
+							}
+						}
+						
+						// Show skipped subtests if any
+						if len(stats.skipped) > 0 {
+							displayOutput += fmt.Sprintf("\n    %s Skipped (%d):\n",
+								SkipStyle.Render("⊘"), len(stats.skipped))
+							for _, name := range stats.skipped {
+								displayOutput += fmt.Sprintf("      • %s\n", name)
+							}
+						}
+					}
+				} else {
+					// Regular test or subtest - display normally
+					displayOutput = fmt.Sprintf("\n%s %s %s",
+						FailStyle.Render(CheckFail),
+						TestNameStyle.Render(event.Test),
+						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
+				}
 
-				// Add error details if present
-				if len(output) > 0 {
+				// Add error details if present (only for tests without subtests or if explicitly needed)
+				if len(output) > 0 && (strings.Contains(event.Test, "/") || m.subtestStats[event.Test] == nil) {
 					displayOutput += "\n\n"
 					for _, line := range output {
 						// Show all error output
@@ -507,8 +585,19 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "skip":
 			m.skipCount++
-			// Only increment currentIndex for top-level tests, not subtests
-			if !strings.Contains(event.Test, "/") {
+			// Track subtest statistics
+			if strings.Contains(event.Test, "/") {
+				// This is a subtest - update parent's stats
+				parts := strings.SplitN(event.Test, "/", 2)
+				parentTest := parts[0]
+				subtestName := parts[1]
+				
+				if m.subtestStats[parentTest] == nil {
+					m.subtestStats[parentTest] = &SubtestStats{}
+				}
+				m.subtestStats[parentTest].skipped = append(m.subtestStats[parentTest].skipped, subtestName)
+			} else {
+				// Only increment currentIndex for top-level tests, not subtests
 				m.currentIndex++
 			}
 
