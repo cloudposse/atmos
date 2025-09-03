@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	cp "github.com/otiai10/copy"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -23,6 +23,10 @@ const (
 
 	// PolicyAllowAll follows all symlinks without validation (legacy behavior).
 	PolicyAllowAll SymlinkPolicy = "allow_all"
+
+	// Log field constants.
+	logFieldSrc      = "src"
+	logFieldBoundary = "boundary"
 )
 
 // CreateSymlinkHandler creates an OnSymlink callback based on the security policy.
@@ -31,21 +35,21 @@ func CreateSymlinkHandler(baseDir string, policy SymlinkPolicy) func(string) cp.
 	return func(src string) cp.SymlinkAction {
 		switch policy {
 		case PolicyRejectAll:
-			log.Debug("Symlink rejected by policy", "src", src, "policy", "reject_all")
+			log.Debug("Symlink rejected by policy", logFieldSrc, src, "policy", "reject_all")
 			return cp.Skip
 
 		case PolicyAllowAll:
-			log.Debug("Symlink allowed without validation", "src", src, "policy", "allow_all")
+			log.Debug("Symlink allowed without validation", logFieldSrc, src, "policy", "allow_all")
 			return cp.Deep
 
 		case PolicyAllowSafe:
 			fallthrough
 		default:
 			if IsSymlinkSafe(src, baseDir) {
-				log.Debug("Symlink validated and allowed", "src", src)
+				log.Debug("Symlink validated and allowed", logFieldSrc, src)
 				return cp.Deep
 			}
-			log.Warn("Symlink rejected - target outside boundary", "src", src, "boundary", baseDir)
+			log.Warn("Symlink rejected - target outside boundary", logFieldSrc, src, logFieldBoundary, baseDir)
 			return cp.Skip
 		}
 	}
@@ -89,7 +93,7 @@ func IsSymlinkSafe(symlink, boundary string) bool {
 
 	// If relative path starts with ".." or is absolute, it's outside boundary.
 	if strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-		log.Debug("Symlink target outside boundary", "target", cleanTarget, "boundary", cleanBoundary, "rel", rel)
+		log.Debug("Symlink target outside boundary", "target", cleanTarget, logFieldBoundary, cleanBoundary, "rel", rel)
 		return false
 	}
 

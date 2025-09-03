@@ -124,14 +124,24 @@ func ExecuteStackVendorInternal(
 	return ErrStackPullNotSupported
 }
 
-func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec, sourceIsLocalFile bool, uri string, atmosConfig *schema.AtmosConfiguration) error {
+// copyComponentParams holds parameters for copyComponentToDestination function.
+type copyComponentParams struct {
+	tempDir             string
+	componentPath       string
+	vendorComponentSpec *schema.VendorComponentSpec
+	sourceIsLocalFile   bool
+	uri                 string
+	atmosConfig         *schema.AtmosConfiguration
+}
+
+func copyComponentToDestination(params copyComponentParams) error {
 	// Get the symlink policy from config
-	policy := security.GetPolicyFromConfig(atmosConfig)
+	policy := security.GetPolicyFromConfig(params.atmosConfig)
 
 	// Copy from the temp folder to the destination folder and skip the excluded files
 	copyOptions := cp.Options{
 		// Skip specifies which files should be skipped
-		Skip: createComponentSkipFunc(tempDir, vendorComponentSpec),
+		Skip: createComponentSkipFunc(params.tempDir, params.vendorComponentSpec),
 
 		// Preserve the atime and the mtime of the entries
 		// On linux we can preserve only up to 1 millisecond accuracy
@@ -141,17 +151,17 @@ func copyComponentToDestination(tempDir, componentPath string, vendorComponentSp
 		PreserveOwner: false,
 
 		// OnSymlink specifies what to do on symlink based on security policy
-		OnSymlink: security.CreateSymlinkHandler(tempDir, policy),
+		OnSymlink: security.CreateSymlinkHandler(params.tempDir, policy),
 	}
 
-	componentPath2 := componentPath
-	if sourceIsLocalFile {
-		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
+	componentPath2 := params.componentPath
+	if params.sourceIsLocalFile {
+		if filepath.Ext(params.componentPath) == "" {
+			componentPath2 = filepath.Join(params.componentPath, SanitizeFileName(params.uri))
 		}
 	}
 
-	if err := cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
+	if err := cp.Copy(params.tempDir, componentPath2, copyOptions); err != nil {
 		return err
 	}
 	return nil
@@ -474,7 +484,14 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	default:
 		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
-	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri, atmosConfig); err != nil {
+	if err := copyComponentToDestination(copyComponentParams{
+		tempDir:             tempDir,
+		componentPath:       p.componentPath,
+		vendorComponentSpec: p.vendorComponentSpec,
+		sourceIsLocalFile:   p.sourceIsLocalFile,
+		uri:                 p.uri,
+		atmosConfig:         atmosConfig,
+	}); err != nil {
 		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
 	}
 
