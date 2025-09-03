@@ -115,43 +115,46 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 
 // Whoami returns information about the current effective principal
 func (m *manager) Whoami(ctx context.Context) (*schema.WhoamiInfo, error) {
-	// Try to find the most recently used identity
-	aliases, err := m.credentialStore.List()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list stored credentials: %w", err)
-	}
-
-	var mostRecentAlias string
+	// Since keyring doesn't support listing, we'll check each configured identity
+	// to find the most recent valid credentials
+	var mostRecentInfo *schema.WhoamiInfo
 	var mostRecentTime time.Time
 
-	for _, alias := range aliases {
-		if expired, err := m.credentialStore.IsExpired(alias); err == nil && !expired {
-			if creds, err := m.credentialStore.Retrieve(alias); err == nil {
-				if creds.AWS != nil {
-					// Parse expiration time and compare
-					if expTime, err := time.Parse(time.RFC3339, creds.AWS.Expiration); err == nil {
-						if expTime.After(mostRecentTime) {
-							mostRecentTime = expTime
-							mostRecentAlias = alias
-						}
-					}
+	for identityName := range m.config.Identities {
+		providerName := m.getProviderForIdentity(identityName)
+		if providerName == "" {
+			continue
+		}
+		
+		alias := fmt.Sprintf("%s/%s", providerName, identityName)
+		
+		// Try to retrieve credentials for this identity
+		creds, err := m.credentialStore.Retrieve(alias)
+		if err != nil {
+			continue // No credentials stored for this identity
+		}
+		
+		// Check if credentials are expired
+		if expired, err := m.credentialStore.IsExpired(alias); err != nil || expired {
+			continue // Credentials are expired or can't check expiration
+		}
+		
+		// Parse expiration time to find the most recent
+		if creds.AWS != nil && creds.AWS.Expiration != "" {
+			if expTime, err := time.Parse(time.RFC3339, creds.AWS.Expiration); err == nil {
+				if expTime.After(mostRecentTime) {
+					mostRecentTime = expTime
+					mostRecentInfo = m.buildWhoamiInfo(identityName, creds)
 				}
 			}
 		}
 	}
 
-	if mostRecentAlias == "" {
+	if mostRecentInfo == nil {
 		return nil, fmt.Errorf("no active authentication session found")
 	}
 
-	creds, err := m.credentialStore.Retrieve(mostRecentAlias)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve credentials: %w", err)
-	}
-
-	// Extract identity name from alias (format: provider/identity)
-	identityName := extractIdentityFromAlias(mostRecentAlias)
-	return m.buildWhoamiInfo(identityName, creds), nil
+	return mostRecentInfo, nil
 }
 
 // Validate validates the entire auth configuration
