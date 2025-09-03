@@ -68,6 +68,7 @@ import (
 	"strings"
 	"syscall"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/hashicorp/go-version"
 )
 
@@ -93,7 +94,7 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 	}
 
 	if _, err := exec.LookPath("git"); err != nil {
-		return fmt.Errorf("git must be available and on the PATH")
+		return errUtils.ErrGitNotAvailable
 	}
 
 	// The port number must be parseable as an integer. If not, the user
@@ -104,7 +105,7 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 	// CVE-2019-14809 (e.g. Go 1.12.8+)
 	if portStr := u.Port(); portStr != "" {
 		if _, err := strconv.ParseUint(portStr, 10, 16); err != nil {
-			return fmt.Errorf("invalid port number %q; if using the \"scp-like\" git address scheme where a colon introduces the path instead, remove the ssh:// portion and use just the git:: prefix", portStr)
+			return fmt.Errorf("%w %q; if using the \"scp-like\" git address scheme where a colon introduces the path instead, remove the ssh:// portion and use just the git:: prefix", errUtils.ErrInvalidGitPort, portStr)
 		}
 	}
 
@@ -134,7 +135,7 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 	if sshKey != "" {
 		// Check that the git version is sufficiently new.
 		if err := checkGitVersion(ctx, "2.3"); err != nil {
-			return fmt.Errorf("Error using ssh key: %v", err)
+			return fmt.Errorf("%w: %v", errUtils.ErrSSHKeyUsage, err)
 		}
 
 		// We have an SSH key - decode it.
@@ -228,8 +229,7 @@ func setupGitEnv(cmd *exec.Cmd, sshKeyFile string) {
 	cmd.Env = env
 }
 
-// getRunCommand is a helper that will run a command and capture the output.
-// in the case an error happens.
+// In the case an error happens.
 func getRunCommand(cmd *exec.Cmd) error {
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
@@ -242,27 +242,28 @@ func getRunCommand(cmd *exec.Cmd) error {
 		// The program has exited with an exit code != 0
 		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 			return fmt.Errorf(
-				"%s exited with %d: %s",
+				"%w: %s exited with %d: %s",
+				errUtils.ErrGitCommandExited,
 				cmd.Path,
 				status.ExitStatus(),
 				buf.String())
 		}
 	}
 
-	return fmt.Errorf("error running %s: %s", cmd.Path, buf.String())
+	return fmt.Errorf("%w: %s: %s", errUtils.ErrGitCommandFailed, cmd.Path, buf.String())
 }
 
 // removeCaseInsensitiveGitDirectory removes all .git directory variations.
 func removeCaseInsensitiveGitDirectory(dst string) error {
 	files, err := os.ReadDir(dst)
 	if err != nil {
-		return fmt.Errorf("failed to read the destination directory %s during git update", dst)
+		return fmt.Errorf("%w: %s", errUtils.ErrReadDestDir, dst)
 	}
 	for _, f := range files {
 		if strings.EqualFold(f.Name(), ".git") && f.IsDir() {
 			err := os.RemoveAll(filepath.Join(dst, f.Name()))
 			if err != nil {
-				return fmt.Errorf("failed to remove the .git directory in the destination directory %s during git update", dst)
+				return fmt.Errorf("%w: %s", errUtils.ErrRemoveGitDir, dst)
 			}
 		}
 	}
@@ -298,7 +299,7 @@ func checkGitVersion(ctx context.Context, min string) error {
 
 	fields := strings.Fields(string(out))
 	if len(fields) < 3 {
-		return fmt.Errorf("unexpected 'git version' output: %q", string(out))
+		return fmt.Errorf("%w: %q", errUtils.ErrUnexpectedGitOutput, string(out))
 	}
 	v := fields[2]
 	if runtime.GOOS == "windows" && strings.Contains(v, ".windows.") {
@@ -316,7 +317,7 @@ func checkGitVersion(ctx context.Context, min string) error {
 	}
 
 	if have.LessThan(want) {
-		return fmt.Errorf("required git version = %s, have %s", want, have)
+		return fmt.Errorf("%w: required git version = %s, have %s", errUtils.ErrGitVersionMismatch, want, have)
 	}
 
 	return nil

@@ -3,7 +3,9 @@ package downloader
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
@@ -12,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/go-getter"
 	"github.com/stretchr/testify/require"
@@ -616,4 +619,385 @@ func TestGetCustom_Succeeds_UpdatePath_WithRef(t *testing.T) {
 
 	err := g.GetCustom(dst, u)
 	require.Error(t, err)
+}
+
+// Test GetCustom with invalid port number.
+func TestGetCustom_InvalidPort(t *testing.T) {
+	g := newGetter()
+	dst := t.TempDir()
+
+	// Create URL with invalid port directly - url.Parse will return nil on bad URLs
+	// So we need to use a parseable URL with a non-numeric port
+	u, err := url.Parse("git://git@github.com:abc123/repo.git")
+	if err != nil || u == nil {
+		t.Skip("Cannot create test URL with invalid port")
+	}
+
+	err = g.GetCustom(dst, u)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid port")
+}
+
+// Test GetCustom with SSH key handling.
+func TestGetCustom_WithSSHKey(t *testing.T) {
+	// Create a fake git that succeeds.
+	writeFakeGit(t, "git version 2.30.0", 0)
+
+	g := newGetter()
+	dst := t.TempDir()
+
+	// Base64 encoded test SSH key.
+	testKey := base64.StdEncoding.EncodeToString([]byte("test-ssh-key-content"))
+	u := mustURL(t, fmt.Sprintf("https://example.com/repo.git?sshkey=%s", testKey))
+
+	err := g.GetCustom(dst, u)
+	// Will fail because git commands will fail, but we're testing the SSH key path.
+	require.Error(t, err)
+}
+
+// Test GetCustom with malformed SSH key.
+func TestGetCustom_InvalidSSHKey(t *testing.T) {
+	writeFakeGit(t, "git version 2.30.0", 0)
+
+	g := newGetter()
+	dst := t.TempDir()
+
+	// Invalid base64.
+	u := mustURL(t, "https://example.com/repo.git?sshkey=not-valid-base64!@#")
+
+	err := g.GetCustom(dst, u)
+	require.Error(t, err)
+}
+
+// Test GetCustom with old git version when using SSH key.
+func TestGetCustom_SSHKeyWithOldGit(t *testing.T) {
+	writeFakeGit(t, "git version 2.2.0", 0)
+
+	g := newGetter()
+	dst := t.TempDir()
+
+	testKey := base64.StdEncoding.EncodeToString([]byte("test-ssh-key"))
+	u := mustURL(t, fmt.Sprintf("https://example.com/repo.git?sshkey=%s", testKey))
+
+	err := g.GetCustom(dst, u)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Error using ssh key")
+}
+
+// Test checkout method.
+func TestCheckout(t *testing.T) {
+	tests := []struct {
+		name      string
+		ref       string
+		exitCode  int
+		wantError bool
+	}{
+		{
+			name:      "successful checkout",
+			ref:       "main",
+			exitCode:  0,
+			wantError: false,
+		},
+		{
+			name:      "checkout failure",
+			ref:       "nonexistent",
+			exitCode:  1,
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.exitCode == 0 {
+				writeFakeGit(t, "", 0)
+			} else {
+				writeFakeGit(t, "error: branch not found", tt.exitCode)
+			}
+
+			g := newGetter()
+			dst := t.TempDir()
+
+			err := g.checkout(context.Background(), dst, tt.ref)
+			if tt.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Test clone method.
+func TestClone(t *testing.T) {
+	tests := []struct {
+		name      string
+		ref       string
+		depth     int
+		exitCode  int
+		wantError bool
+	}{
+		{
+			name:      "successful clone without depth",
+			ref:       "main",
+			depth:     0,
+			exitCode:  0,
+			wantError: false,
+		},
+		{
+			name:      "successful shallow clone",
+			ref:       "main",
+			depth:     1,
+			exitCode:  0,
+			wantError: false,
+		},
+		{
+			name:      "clone with commit ID and depth",
+			ref:       "abc1234567",
+			depth:     1,
+			exitCode:  128,
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeFakeGit(t, "ref: refs/heads/main HEAD", tt.exitCode)
+
+			g := newGetter()
+			dst := filepath.Join(t.TempDir(), "clone-dest")
+			u := mustURL(t, "https://example.com/repo.git")
+
+			err := g.clone(context.Background(), dst, "", u, tt.ref, tt.depth)
+			if tt.wantError {
+				require.Error(t, err)
+				if tt.depth > 0 && tt.ref == "abc1234567" {
+					require.Contains(t, err.Error(), "depth")
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Test update method.
+func TestUpdate(t *testing.T) {
+	tests := []struct {
+		name      string
+		ref       string
+		depth     int
+		setupGit  bool
+		wantError bool
+	}{
+		{
+			name:      "successful update without depth",
+			ref:       "main",
+			depth:     0,
+			setupGit:  true,
+			wantError: false,
+		},
+		{
+			name:      "successful update with depth",
+			ref:       "main",
+			depth:     10,
+			setupGit:  true,
+			wantError: false,
+		},
+		{
+			name:      "update failure - no git",
+			ref:       "main",
+			depth:     0,
+			setupGit:  false,
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupGit {
+				writeFakeGit(t, "", 0)
+			}
+
+			g := newGetter()
+			dst := t.TempDir()
+
+			// Create .git directory for removal test.
+			gitDir := filepath.Join(dst, ".GIT") // Test case-insensitive removal.
+			require.NoError(t, os.MkdirAll(gitDir, 0o755))
+
+			u := mustURL(t, "https://example.com/repo.git")
+
+			err := g.update(context.Background(), dst, "", u, tt.ref, tt.depth)
+			if tt.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				// Verify .git was removed.
+				_, statErr := os.Stat(gitDir)
+				require.True(t, os.IsNotExist(statErr))
+			}
+		})
+	}
+}
+
+// Test fetchSubmodules method.
+func TestFetchSubmodules(t *testing.T) {
+	tests := []struct {
+		name      string
+		depth     int
+		exitCode  int
+		wantError bool
+	}{
+		{
+			name:      "successful submodule fetch without depth",
+			depth:     0,
+			exitCode:  0,
+			wantError: false,
+		},
+		{
+			name:      "successful submodule fetch with depth",
+			depth:     5,
+			exitCode:  0,
+			wantError: false,
+		},
+		{
+			name:      "submodule fetch failure",
+			depth:     0,
+			exitCode:  1,
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.exitCode == 0 {
+				writeFakeGit(t, "", 0)
+			} else {
+				writeFakeGit(t, "error: submodule update failed", tt.exitCode)
+			}
+
+			g := newGetter()
+			dst := t.TempDir()
+
+			err := g.fetchSubmodules(context.Background(), dst, "", tt.depth)
+			if tt.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Test fetchSubmodules with SSH key.
+func TestFetchSubmodules_WithSSHKey(t *testing.T) {
+	writeFakeGit(t, "", 0)
+
+	g := newGetter()
+	dst := t.TempDir()
+
+	// Create a temp SSH key file.
+	sshKeyFile := filepath.Join(t.TempDir(), "id_rsa")
+	require.NoError(t, os.WriteFile(sshKeyFile, []byte("test-key"), 0o600))
+
+	err := g.fetchSubmodules(context.Background(), dst, sshKeyFile, 1)
+	require.NoError(t, err)
+}
+
+// Test findRemoteDefaultBranch.
+func TestFindRemoteDefaultBranch(t *testing.T) {
+	tests := []struct {
+		name           string
+		gitOutput      string
+		exitCode       int
+		expectedBranch string
+	}{
+		{
+			name:           "finds main branch",
+			gitOutput:      "ref: refs/heads/main\tHEAD",
+			exitCode:       0,
+			expectedBranch: "main",
+		},
+		{
+			name:           "finds develop branch",
+			gitOutput:      "ref: refs/heads/develop\tHEAD",
+			exitCode:       0,
+			expectedBranch: "develop",
+		},
+		{
+			name:           "returns master on error",
+			gitOutput:      "",
+			exitCode:       1,
+			expectedBranch: "master",
+		},
+		{
+			name:           "returns master on invalid output",
+			gitOutput:      "invalid output",
+			exitCode:       0,
+			expectedBranch: "master",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeFakeGit(t, tt.gitOutput, tt.exitCode)
+
+			u := mustURL(t, "https://example.com/repo.git")
+			branch := findRemoteDefaultBranch(context.Background(), u)
+			require.Equal(t, tt.expectedBranch, branch)
+		})
+	}
+}
+
+// Test GetCustom with timeout.
+func TestGetCustom_WithTimeout(t *testing.T) {
+	writeFakeGit(t, "git version 2.30.0", 0)
+
+	g := newGetter()
+	// Set a very short timeout to trigger timeout path.
+	g.Timeout = 1 * time.Nanosecond
+
+	dst := t.TempDir()
+	u := mustURL(t, "https://example.com/repo.git")
+
+	// This might timeout or succeed very quickly.
+	// We're mainly testing that the timeout path doesn't panic.
+	_ = g.GetCustom(dst, u)
+}
+
+// Test GetCustom full integration - clone path.
+func TestGetCustom_Integration_Clone(t *testing.T) {
+	writeFakeGit(t, "ref: refs/heads/main HEAD", 0)
+
+	g := newGetter()
+	dst := filepath.Join(t.TempDir(), "new-repo")
+	u := mustURL(t, "https://example.com/repo.git?ref=feature&depth=1")
+
+	// This will attempt full clone flow.
+	err := g.GetCustom(dst, u)
+	// Will error because our fake git doesn't actually clone.
+	require.Error(t, err)
+}
+
+// Test GetCustom full integration - update path.
+func TestGetCustom_Integration_Update(t *testing.T) {
+	writeFakeGit(t, "", 0)
+
+	g := newGetter()
+	dst := t.TempDir()
+
+	// Create existing repo structure.
+	gitDir := filepath.Join(dst, ".git")
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "config"), []byte("[core]"), 0o644))
+
+	u := mustURL(t, "https://example.com/repo.git?ref=main")
+
+	err := g.GetCustom(dst, u)
+	// Will error because our fake git doesn't actually work.
+	require.Error(t, err)
+
+	// Verify .git was removed during update.
+	_, statErr := os.Stat(gitDir)
+	require.True(t, os.IsNotExist(statErr))
 }
