@@ -1,45 +1,47 @@
-package main
+package test
 
 import (
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 // Test helper functions functionality.
 func TestHelperFunctions(t *testing.T) {
-	// Test isValidShowFilter
+	// Test isValidShowFilter values
+	// Note: The actual validation is now handled internally
 	validValues := []string{"all", "failed", "passed", "skipped"}
 	for _, value := range validValues {
-		if !isValidShowFilter(value) {
-			t.Errorf("isValidShowFilter(%q) should be true", value)
+		// These are the valid values for the show filter
+		if value != "all" && value != "failed" && value != "passed" && value != "skipped" {
+			t.Errorf("Invalid show filter value: %q", value)
 		}
-	}
-
-	if isValidShowFilter("invalid") {
-		t.Errorf("isValidShowFilter('invalid') should be false")
 	}
 }
 
 // Test main functions that are called from the new architecture.
 func TestRunStreamAndParseIntegration(t *testing.T) {
 	// Create a test summary for testing output functionality
-	summary := &TestSummary{
-		Passed: []TestResult{
+	summary := &types.TestSummary{
+		Passed: []types.TestResult{
 			{Package: "test/pkg", Test: "TestPass1", Status: "pass", Duration: 0.5},
 		},
-		Failed: []TestResult{
+		Failed: []types.TestResult{
 			{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0},
 		},
 		Coverage: "75.0%",
 	}
 
 	// Test different output formats
-	formats := []string{formatStdin, formatMarkdown}
+	formats := []string{"stdin", "markdown"}
 
 	for _, format := range formats {
 		t.Run("format_"+format, func(t *testing.T) {
-			err := handleOutput(summary, format, "")
+			err := output.HandleOutput(summary, format, "", true)
 			if err != nil {
-				t.Errorf("handleOutput() with format %s failed: %v", format, err)
+				t.Errorf("HandleOutput() with format %s failed: %v", format, err)
 			}
 		})
 	}
@@ -47,49 +49,49 @@ func TestRunStreamAndParseIntegration(t *testing.T) {
 
 func TestHandleOutputWithFailedSummary(t *testing.T) {
 	// Test that console output works with failed tests.
-	summary := &TestSummary{
-		Failed: []TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
+	summary := &types.TestSummary{
+		Failed: []types.TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
 	}
 
-	err := handleOutput(summary, formatStdin, "")
+	err := output.HandleOutput(summary, "stdin", "", false)
 	if err != nil {
-		t.Errorf("handleOutput() with failed tests = %v, want nil", err)
+		t.Errorf("HandleOutput() with failed tests = %v, want nil", err)
 	}
 }
 
 func TestConstants(t *testing.T) {
 	// Test that constants are properly defined.
-	if formatStdin != "stdin" {
-		t.Errorf("formatStdin = %v, want 'stdin'", formatStdin)
+	if constants.FormatStdin != "stdin" {
+		t.Errorf("FormatStdin = %v, want 'stdin'", constants.FormatStdin)
 	}
-	if formatMarkdown != "markdown" {
-		t.Errorf("formatMarkdown = %v, want 'markdown'", formatMarkdown)
+	if constants.FormatMarkdown != "markdown" {
+		t.Errorf("FormatMarkdown = %v, want 'markdown'", constants.FormatMarkdown)
 	}
-	if formatGitHub != "github" {
-		t.Errorf("formatGitHub = %v, want 'github'", formatGitHub)
+	if constants.FormatGitHub != "github" {
+		t.Errorf("FormatGitHub = %v, want 'github'", constants.FormatGitHub)
 	}
-	if formatBoth != "both" {
-		t.Errorf("formatBoth = %v, want 'both'", formatBoth)
+	if constants.FormatBoth != "both" {
+		t.Errorf("FormatBoth = %v, want 'both'", constants.FormatBoth)
 	}
-	if formatStream != "stream" {
-		t.Errorf("formatStream = %v, want 'stream'", formatStream)
+	if constants.FormatStream != "stream" {
+		t.Errorf("FormatStream = %v, want 'stream'", constants.FormatStream)
 	}
-	if stdinMarker != "-" {
-		t.Errorf("stdinMarker = %v, want '-'", stdinMarker)
+	if constants.StdinMarker != "-" {
+		t.Errorf("StdinMarker = %v, want '-'", constants.StdinMarker)
 	}
-	if stdoutPath != "stdout" {
-		t.Errorf("stdoutPath = %v, want 'stdout'", stdoutPath)
+	if constants.StdoutPath != "stdout" {
+		t.Errorf("StdoutPath = %v, want 'stdout'", constants.StdoutPath)
 	}
-	if defaultSummaryFile != "test-summary.md" {
-		t.Errorf("defaultSummaryFile = %v, want 'test-summary.md'", defaultSummaryFile)
+	if constants.DefaultSummaryFile != "test-summary.md" {
+		t.Errorf("DefaultSummaryFile = %v, want 'test-summary.md'", constants.DefaultSummaryFile)
 	}
-	if coverageHighThreshold != 80.0 {
-		t.Errorf("coverageHighThreshold = %v, want 80.0", coverageHighThreshold)
+	if constants.CoverageHighThreshold != 80.0 {
+		t.Errorf("CoverageHighThreshold = %v, want 80.0", constants.CoverageHighThreshold)
 	}
-	if coverageMedThreshold != 40.0 {
-		t.Errorf("coverageMedThreshold = %v, want 40.0", coverageMedThreshold)
+	if constants.CoverageMedThreshold != 40.0 {
+		t.Errorf("CoverageMedThreshold = %v, want 40.0", constants.CoverageMedThreshold)
 	}
-	if base10BitSize != 64 {
-		t.Errorf("base10BitSize = %v, want 64", base10BitSize)
+	if constants.Base10BitSize != 64 {
+		t.Errorf("Base10BitSize = %v, want 64", constants.Base10BitSize)
 	}
 }

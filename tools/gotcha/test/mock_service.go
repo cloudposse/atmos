@@ -1,6 +1,6 @@
-package main
+package test
 
-// Mock service for testing.
+// MockService is a mock service for testing.
 func MockService() bool {
 	return true
 }

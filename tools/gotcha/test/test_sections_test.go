@@ -1,25 +1,28 @@
-package main
+package test
 
 import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
-func TestWriteFailedTests(t *testing.T) {
+func TestWriteFailedTestsTable(t *testing.T) {
 	tests := []struct {
 		name   string
-		failed []TestResult
+		failed []types.TestResult
 		want   []string
 	}{
 		{
 			name:   "no failed tests",
-			failed: []TestResult{},
+			failed: []types.TestResult{},
 			want:   []string{}, // Empty section should be hidden
 		},
 		{
 			name: "single failed test",
-			failed: []TestResult{
+			failed: []types.TestResult{
 				{Package: "github.com/test/pkg", Test: "TestExample", Status: "fail", Duration: 1.5},
 			},
 			want: []string{
@@ -32,7 +35,7 @@ func TestWriteFailedTests(t *testing.T) {
 		},
 		{
 			name: "multiple failed tests",
-			failed: []TestResult{
+			failed: []types.TestResult{
 				{Package: "github.com/test/pkg1", Test: "TestA", Status: "fail", Duration: 0.5},
 				{Package: "github.com/test/pkg2", Test: "TestB", Status: "fail", Duration: 2.0},
 			},
@@ -49,7 +52,7 @@ func TestWriteFailedTests(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writeFailedTests(&buf, tt.failed)
+			markdown.WriteFailedTestsTable(&buf, tt.failed)
 			output := buf.String()
 
 			if len(tt.want) == 0 {
@@ -61,27 +64,27 @@ func TestWriteFailedTests(t *testing.T) {
 
 			for _, want := range tt.want {
 				if !strings.Contains(output, want) {
-					t.Errorf("writeFailedTests() missing expected content: %s\nGot:\n%s", want, output)
+					t.Errorf("WriteFailedTestsTable() missing expected content: %s\nGot:\n%s", want, output)
 				}
 			}
 		})
 	}
 }
 
-func TestWriteSkippedTests(t *testing.T) {
+func TestWriteSkippedTestsTable(t *testing.T) {
 	tests := []struct {
 		name    string
-		skipped []TestResult
+		skipped []types.TestResult
 		want    []string
 	}{
 		{
 			name:    "no skipped tests",
-			skipped: []TestResult{},
+			skipped: []types.TestResult{},
 			want:    []string{},
 		},
 		{
 			name: "single skipped test",
-			skipped: []TestResult{
+			skipped: []types.TestResult{
 				{Package: "github.com/test/pkg", Test: "TestSkipped", Status: "skip"},
 			},
 			want: []string{
@@ -92,7 +95,7 @@ func TestWriteSkippedTests(t *testing.T) {
 		},
 		{
 			name: "multiple skipped tests",
-			skipped: []TestResult{
+			skipped: []types.TestResult{
 				{Package: "github.com/test/pkg1", Test: "TestSkipA", Status: "skip"},
 				{Package: "github.com/test/pkg2", Test: "TestSkipB", Status: "skip"},
 			},
@@ -107,7 +110,7 @@ func TestWriteSkippedTests(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writeSkippedTests(&buf, tt.skipped)
+			markdown.WriteSkippedTestsTable(&buf, tt.skipped)
 			output := buf.String()
 
 			if len(tt.want) == 0 {
@@ -119,27 +122,27 @@ func TestWriteSkippedTests(t *testing.T) {
 
 			for _, want := range tt.want {
 				if !strings.Contains(output, want) {
-					t.Errorf("writeSkippedTests() missing expected content: %s\nGot:\n%s", want, output)
+					t.Errorf("WriteSkippedTestsTable() missing expected content: %s\nGot:\n%s", want, output)
 				}
 			}
 		})
 	}
 }
 
-func TestWritePassedTests(t *testing.T) {
+func TestWritePassedTestsTable(t *testing.T) {
 	tests := []struct {
 		name   string
-		passed []TestResult
+		passed []types.TestResult
 		want   []string
 	}{
 		{
 			name:   "no passed tests",
-			passed: []TestResult{},
+			passed: []types.TestResult{},
 			want:   []string{},
 		},
 		{
 			name: "single passed test",
-			passed: []TestResult{
+			passed: []types.TestResult{
 				{Package: "github.com/test/pkg", Test: "TestPassed", Status: "pass", Duration: 0.3},
 			},
 			want: []string{
@@ -153,7 +156,7 @@ func TestWritePassedTests(t *testing.T) {
 		},
 		{
 			name: "multiple passed tests",
-			passed: []TestResult{
+			passed: []types.TestResult{
 				{Package: "github.com/test/pkg1", Test: "TestPassA", Status: "pass", Duration: 0.1},
 				{Package: "github.com/test/pkg2", Test: "TestPassB", Status: "pass", Duration: 0.8},
 			},
@@ -168,7 +171,7 @@ func TestWritePassedTests(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writePassedTests(&buf, tt.passed)
+			markdown.WritePassedTestsTable(&buf, tt.passed)
 			output := buf.String()
 
 			if len(tt.want) == 0 {
@@ -180,11 +183,11 @@ func TestWritePassedTests(t *testing.T) {
 
 			for _, want := range tt.want {
 				if !strings.Contains(output, want) {
-					t.Errorf("writePassedTests() missing expected content: %s\nGot:\n%s", want, output)
+					t.Errorf("WritePassedTestsTable() missing expected content: %s\nGot:\n%s", want, output)
 				}
 			}
 		})
 	}
 }
 
-// Note: TestWriteCoverageSection and TestShortPackage already exist in output_test.go.
+// Note: Coverage tests are in the markdown package tests.
