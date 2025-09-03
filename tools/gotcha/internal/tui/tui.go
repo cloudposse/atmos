@@ -129,8 +129,9 @@ type TestModel struct {
 	passCount   int
 	failCount   int
 	skipCount   int
-	testBuffers map[string][]string
-	bufferMu    sync.Mutex
+	testBuffers     map[string][]string
+	subtestOutputs  map[string][]string // Persistent storage for subtest output
+	bufferMu        sync.Mutex
 
 	// JSON output
 	jsonFile *os.File
@@ -218,8 +219,9 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		alert:       alert,
 		spinner:     s,
 		progress:    p,
-		testBuffers: make(map[string][]string),
-		totalTests:  totalTests,
+		testBuffers:    make(map[string][]string),
+		subtestOutputs: make(map[string][]string),
+		totalTests:     totalTests,
 		startTime:   time.Now(),
 	}
 }
@@ -391,6 +393,13 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Clean up buffer
 			m.bufferMu.Lock()
+			if strings.Contains(event.Test, "/") {
+				// This is a subtest - preserve its output for parent test
+				if output, exists := m.testBuffers[event.Test]; exists && len(output) > 0 {
+					m.subtestOutputs[event.Test] = make([]string, len(output))
+					copy(m.subtestOutputs[event.Test], output)
+				}
+			}
 			delete(m.testBuffers, event.Test)
 			m.bufferMu.Unlock()
 
@@ -411,13 +420,26 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			output := make([]string, len(bufferedOutput))
 			copy(output, bufferedOutput)
 
-			// If no output found, check for subtest output (parent test might have no direct output)
+			// If no output found, check for subtest output
 			if len(output) == 0 {
 				testPrefix := event.Test + "/"
+				// First check persistent subtest outputs
+				for testName, testOutput := range m.subtestOutputs {
+					if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
+						output = append(output, testOutput...)
+					}
+				}
+				// Also check current buffers (for subtests that haven't completed yet)
 				for testName, testOutput := range m.testBuffers {
 					if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
-						// Found subtest output, use it
-						output = append(output, testOutput...)
+						// Don't duplicate if already added from subtestOutputs
+						alreadyAdded := false
+						if _, exists := m.subtestOutputs[testName]; exists {
+							alreadyAdded = true
+						}
+						if !alreadyAdded {
+							output = append(output, testOutput...)
+						}
 					}
 				}
 			}
@@ -457,6 +479,13 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Clean up buffer
 			m.bufferMu.Lock()
+			if strings.Contains(event.Test, "/") {
+				// This is a subtest - preserve its output for parent test
+				if output, exists := m.testBuffers[event.Test]; exists && len(output) > 0 {
+					m.subtestOutputs[event.Test] = make([]string, len(output))
+					copy(m.subtestOutputs[event.Test], output)
+				}
+			}
 			delete(m.testBuffers, event.Test)
 			m.bufferMu.Unlock()
 
@@ -493,6 +522,13 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Clean up buffer
 			m.bufferMu.Lock()
+			if strings.Contains(event.Test, "/") {
+				// This is a subtest - preserve its output for parent test
+				if output, exists := m.testBuffers[event.Test]; exists && len(output) > 0 {
+					m.subtestOutputs[event.Test] = make([]string, len(output))
+					copy(m.subtestOutputs[event.Test], output)
+				}
+			}
 			delete(m.testBuffers, event.Test)
 			m.bufferMu.Unlock()
 
