@@ -69,16 +69,17 @@ testacc-coverage: testacc-cover
 
 # Test target for CI with gotcha
 testacc-ci: get
+	@cd tools/gotcha && go mod download
 	@go install -C tools/gotcha .
 	@gotcha stream ./... \
 		--timeout=40m \
 		--coverprofile=coverage.out \
-		--output=gotcha-results.json \
+		--output=test-results.json \
 		-- $(TESTARGS)
-	@gotcha parse gotcha-results.json --format=github --coverprofile=coverage.out --post-comment
+	@gotcha parse test-results.json --format=github --coverprofile=coverage.out --post-comment
 
 # Clean test artifacts
 clean-test:
-	rm -f test-results.json test-summary.md coverage.out coverage.html gotcha-results.json
+	rm -f test-results.json test-summary.md coverage.out coverage.html
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-ci clean-test
