@@ -89,10 +89,38 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 		return fmt.Errorf("failed to get session info after authentication: %w", err)
 	}
 
+	// Set process environment variables
 	if whoami.Environment != nil {
 		for key, value := range whoami.Environment {
 			if err := os.Setenv(key, value); err != nil {
 				return fmt.Errorf("failed to set environment variable %s: %w", key, err)
+			}
+		}
+	}
+
+	// Get identity environment variables and merge into component environment section
+	if identity, exists := atmosConfig.Auth.Identities[defaultIdentityName]; exists {
+		if len(identity.Environment) > 0 {
+			environment.MergeIdentityEnvOverrides(stackInfo, identity.Environment)
+		}
+	}
+
+	// Get provider name for AWS file environment variables
+	providerName := ""
+	if identity, exists := atmosConfig.Auth.Identities[defaultIdentityName]; exists {
+		if identity.Via != nil && identity.Via.Provider != "" {
+			providerName = identity.Via.Provider
+		}
+	}
+
+	// Add AWS file environment variables to component environment
+	if providerName != "" {
+		if provider, exists := atmosConfig.Auth.Providers[providerName]; exists {
+			// Check if this is an AWS provider
+			if provider.Kind == "aws/iam-identity-center" || provider.Kind == "aws/assume-role" || provider.Kind == "aws/user" {
+				awsFileManager := environment.NewAWSFileManager()
+				awsEnvVars := awsFileManager.GetEnvironmentVariables(providerName)
+				environment.MergeIdentityEnvOverrides(stackInfo, awsEnvVars)
 			}
 		}
 	}

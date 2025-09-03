@@ -81,7 +81,7 @@ type CredentialStore interface {
 	IsExpired(alias string) (bool, error)
 }
 
-// AWSFileManager defines the interface for managing AWS credentials and config files
+// AWSFileManager manages AWS credentials and config files
 type AWSFileManager interface {
 	// WriteCredentials writes AWS credentials to the provider-specific file
 	WriteCredentials(providerName string, creds *schema.AWSCredentials) error
@@ -97,6 +97,9 @@ type AWSFileManager interface {
 
 	// SetEnvironmentVariables sets the AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE environment variables
 	SetEnvironmentVariables(providerName string) error
+
+	// GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
+	GetEnvironmentVariables(providerName string) []schema.EnvironmentVariable
 
 	// Cleanup removes AWS files for the provider
 	Cleanup(providerName string) error

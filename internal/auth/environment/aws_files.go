@@ -98,6 +98,17 @@ func (m *awsFileManager) SetEnvironmentVariables(providerName string) error {
 	return nil
 }
 
+// GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
+func (m *awsFileManager) GetEnvironmentVariables(providerName string) []schema.EnvironmentVariable {
+	credentialsPath := m.GetCredentialsPath(providerName)
+	configPath := m.GetConfigPath(providerName)
+
+	return []schema.EnvironmentVariable{
+		{Key: "AWS_SHARED_CREDENTIALS_FILE", Value: credentialsPath},
+		{Key: "AWS_CONFIG_FILE", Value: configPath},
+	}
+}
+
 // Cleanup removes AWS files for the provider
 func (m *awsFileManager) Cleanup(providerName string) error {
 	providerDir := filepath.Join(m.baseDir, providerName)
