@@ -15,7 +15,7 @@ testargs: "-timeout 40m"
 show: all
 
 # Output file for test results
-output: gotcha-results.json
+output: test-results.json
 
 # Coverage profile file for detailed analysis
 coverprofile: coverage.out

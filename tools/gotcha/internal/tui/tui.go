@@ -192,7 +192,6 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 	// Add coverage if requested
 	if coverProfile != "" {
 		args = append(args, fmt.Sprintf("-coverprofile=%s", coverProfile))
-		args = append(args, "-coverpkg=./...")
 	}
 
 	// Add verbose flag

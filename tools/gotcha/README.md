@@ -61,6 +61,10 @@ gotcha stream -- -run TestConfigLoad
 gotcha stream -- -run "TestConfig.*"
 gotcha stream -- -run TestStackProcess -race
 
+# Configure coverage packages (useful for monorepos)
+gotcha stream --coverprofile=coverage.out -- -coverpkg=github.com/cloudposse/atmos/...
+gotcha stream --coverprofile=coverage.out -- -coverpkg=./pkg/...,./internal/...
+
 # Combine gotcha flags with go test flags
 gotcha stream --show=failed -- -run "Test.*Load" -v
 

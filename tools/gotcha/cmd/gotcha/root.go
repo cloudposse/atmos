@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
@@ -32,6 +33,9 @@ var (
 
 // Global logger instance with consistent styling.
 var globalLogger *log.Logger
+
+// configFile holds the path to the config file if specified via --config flag.
+var configFile string
 
 // initGlobalLogger initializes the global logger with solid background colors.
 func initGlobalLogger() {
@@ -68,8 +72,52 @@ func initGlobalLogger() {
 	})
 }
 
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
+	if configFile != "" {
+		// Use config file from the flag
+		viper.SetConfigFile(configFile)
+	} else {
+		// Set config file name (without extension)
+		viper.SetConfigName(".gotcha")
+		viper.SetConfigType("yaml")
+		
+		// Search for config file in current directory
+		viper.AddConfigPath(".")
+		
+		// Also search in parent directories
+		viper.AddConfigPath("..")
+		viper.AddConfigPath("../..")
+		viper.AddConfigPath("../../..")
+	}
+	
+	// Bind environment variables
+	viper.SetEnvPrefix("GOTCHA")
+	viper.AutomaticEnv()
+	
+	// Read config file if it exists (silently, logging happens after logger init)
+	_ = viper.ReadInConfig()
+}
+
 // Execute is the main entry point for the cobra commands.
 func Execute() error {
+	// Pre-parse to get the config flag before full command execution
+	// This allows us to load the config file before other flag processing
+	for i, arg := range os.Args {
+		if arg == "--config" && i+1 < len(os.Args) {
+			configFile = os.Args[i+1]
+			break
+		}
+		// Also check for --config=value format
+		if strings.HasPrefix(arg, "--config=") {
+			configFile = strings.TrimPrefix(arg, "--config=")
+			break
+		}
+	}
+	
+	// Initialize viper configuration
+	initConfig()
+	
 	// Configure colors for lipgloss based on environment (GitHub Actions, CI, etc.)
 	tui.ConfigureColors()
 
@@ -84,6 +132,11 @@ func Execute() error {
 			"profile", tui.ProfileName(profile),
 			"github_actions", tui.IsGitHubActions(),
 			"ci", tui.IsCI())
+		
+		// Log config file if one was loaded
+		if viper.ConfigFileUsed() != "" {
+			globalLogger.Debug("Loaded config file", "file", viper.ConfigFileUsed())
+		}
 	}
 
 	// Reinitialize styles after color profile is set
@@ -130,6 +183,9 @@ step summaries and markdown reports.`,
 		},
 	}
 
+	// Add persistent flag for config file (available to all subcommands)
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "Config file path (default: .gotcha.yaml)")
+	
 	// Add stream-specific flags to root command for direct usage
 	rootCmd.Flags().String("packages", "", "Space-separated packages to test (default: ./...)")
 	rootCmd.Flags().String("show", "all", "Filter displayed tests: all, failed, passed, skipped, collapsed, none")
@@ -252,16 +308,26 @@ func newVersionCmd(logger *log.Logger) *cobra.Command {
 func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	logger.Info("Starting stream mode with real-time test execution")
 
-	// Get flags
-	packages, _ := cmd.Flags().GetString("packages")
-	show, _ := cmd.Flags().GetString("show")
-	timeout, _ := cmd.Flags().GetString("timeout")
-	outputFile, _ := cmd.Flags().GetString("output")
-	coverprofile, _ := cmd.Flags().GetString("coverprofile")
-	_, _ = cmd.Flags().GetBool("exclude-mocks") // Not used in stream mode
-	include, _ := cmd.Flags().GetString("include")
-	exclude, _ := cmd.Flags().GetString("exclude")
-	alert, _ := cmd.Flags().GetBool("alert")
+	// Bind flags to viper
+	_ = viper.BindPFlag("packages", cmd.Flags().Lookup("packages"))
+	_ = viper.BindPFlag("show", cmd.Flags().Lookup("show"))
+	_ = viper.BindPFlag("timeout", cmd.Flags().Lookup("timeout"))
+	_ = viper.BindPFlag("output", cmd.Flags().Lookup("output"))
+	_ = viper.BindPFlag("coverprofile", cmd.Flags().Lookup("coverprofile"))
+	_ = viper.BindPFlag("exclude-mocks", cmd.Flags().Lookup("exclude-mocks"))
+	_ = viper.BindPFlag("include", cmd.Flags().Lookup("include"))
+	_ = viper.BindPFlag("exclude", cmd.Flags().Lookup("exclude"))
+	_ = viper.BindPFlag("alert", cmd.Flags().Lookup("alert"))
+
+	// Get configuration values (from flags, env, or config file)
+	packages := viper.GetString("packages")
+	show := viper.GetString("show")
+	timeout := viper.GetString("timeout")
+	outputFile := viper.GetString("output")
+	coverprofile := viper.GetString("coverprofile")
+	include := viper.GetString("include")
+	exclude := viper.GetString("exclude")
+	alert := viper.GetBool("alert")
 
 	// Validate show filter
 	if !utils.IsValidShowFilter(show) {
@@ -347,13 +413,21 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	logger.Info("Starting parse mode for JSON test results")
 
-	// Get flags
-	input, _ := cmd.Flags().GetString("input")
-	format, _ := cmd.Flags().GetString("format")
-	outputFile, _ := cmd.Flags().GetString("output")
-	coverprofile, _ := cmd.Flags().GetString("coverprofile")
-	excludeMocks, _ := cmd.Flags().GetBool("exclude-mocks")
-	generateSummary, _ := cmd.Flags().GetBool("generate-summary")
+	// Bind flags to viper
+	_ = viper.BindPFlag("input", cmd.Flags().Lookup("input"))
+	_ = viper.BindPFlag("format", cmd.Flags().Lookup("format"))
+	_ = viper.BindPFlag("output", cmd.Flags().Lookup("output"))
+	_ = viper.BindPFlag("coverprofile", cmd.Flags().Lookup("coverprofile"))
+	_ = viper.BindPFlag("exclude-mocks", cmd.Flags().Lookup("exclude-mocks"))
+	_ = viper.BindPFlag("generate-summary", cmd.Flags().Lookup("generate-summary"))
+
+	// Get configuration values (from flags, env, or config file)
+	input := viper.GetString("input")
+	format := viper.GetString("format")
+	outputFile := viper.GetString("output")
+	coverprofile := viper.GetString("coverprofile")
+	excludeMocks := viper.GetBool("exclude-mocks")
+	generateSummary := viper.GetBool("generate-summary")
 
 	// Handle input source
 	var inputReader *os.File
@@ -384,8 +458,11 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		return fmt.Errorf("error writing output: %w", err)
 	}
 
+	// Bind flag to viper
+	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
+	
 	// Handle GitHub comment posting
-	postComment, _ := cmd.Flags().GetBool("post-comment")
+	postComment := viper.GetBool("post-comment")
 	if postComment {
 		if err := postGitHubComment(summary, cmd, logger); err != nil {
 			logger.Warn("Failed to post GitHub comment", "error", err)
@@ -416,14 +493,18 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		return nil
 	}
 
-	// Get token from flag or context
-	token, _ := cmd.Flags().GetString("github-token")
+	// Bind flags to viper
+	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
+	_ = viper.BindPFlag("comment-uuid", cmd.Flags().Lookup("comment-uuid"))
+
+	// Get token from viper (flag, env, or config) or context
+	token := viper.GetString("github-token")
 	if token == "" {
 		token = ctx.Token
 	}
 
-	// Get UUID from flag or context
-	uuid, _ := cmd.Flags().GetString("comment-uuid")
+	// Get UUID from viper (flag, env, or config) or context
+	uuid := viper.GetString("comment-uuid")
 	if uuid == "" {
 		uuid = ctx.CommentUUID
 	}

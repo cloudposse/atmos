@@ -75,7 +75,7 @@ testacc-ci: get
 		--timeout=40m \
 		--coverprofile=coverage.out \
 		--output=test-results.json \
-		-- $(TESTARGS)
+		-- -coverpkg=github.com/cloudposse/atmos/... $(TESTARGS)
 	@gotcha parse test-results.json --format=github --coverprofile=coverage.out --post-comment
 
 # Clean test artifacts
