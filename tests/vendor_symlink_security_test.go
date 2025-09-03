@@ -155,7 +155,7 @@ func TestCVE_2025_8959_VendorProtection(t *testing.T) {
 			if tc.expectLegitimateOK {
 				assert.NoError(t, err,
 					"Legitimate symlink should work with policy %s", tc.policy)
-				
+
 				// For non-reject policies, verify content was copied correctly.
 				verifyLegitimateContent(t, destLegitimate, tc.policy)
 			} else {
@@ -270,7 +270,7 @@ func TestVendorSymlinkPolicyIntegration(t *testing.T) {
 
 			// Check internal symlink.
 			checkSymlinkPresence(t, testTarget, "internal_link.txt", cfg.expectInternal, cfg.name)
-			
+
 			// Check external symlink.
 			checkSymlinkPresence(t, testTarget, "external_link.txt", cfg.expectExternal, cfg.name)
 		})
