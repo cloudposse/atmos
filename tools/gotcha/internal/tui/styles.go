@@ -11,7 +11,7 @@ const (
 	// Color constants using hex values (mapped to ANSI by Lipgloss based on terminal capabilities).
 	// These follow the PRD specification while maintaining compatibility across all environments.
 	colorGreen     = "#2ECC40" // Bright green for pass (maps to ANSI green)
-	colorRed       = "#DC143C" // Crimson red for fail (maps to ANSI red)
+	colorRed       = "#FF0000" // Bright red for fail (properly maps to ANSI red in all profiles)
 	colorAmber     = "#FFB347" // Peach orange for skip (maps to ANSI yellow)
 	colorLightGray = "#D3D3D3" // Light gray for test names
 	colorDarkGray  = "#666666" // Dark gray for durations

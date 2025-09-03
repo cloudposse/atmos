@@ -383,7 +383,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 		// Track statistics
 		p.failed++
 		// Always show failures regardless of filter
-		fmt.Fprintf(os.Stderr, " %s FAILED: %s %s\n",
+		fmt.Fprintf(os.Stderr, " %s %s %s\n",
 			tui.FailStyle.Render(tui.CheckFail),
 			tui.TestNameStyle.Render(event.Test),
 			tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))

@@ -160,12 +160,16 @@ func Execute() error {
 
 	// Configure colors for lipgloss based on environment (GitHub Actions, CI, etc.)
 	tui.ConfigureColors()
+	// Initialize styles after configuring colors to ensure proper color mapping
+	tui.InitStyles()
 
 	// Initialize global logger before any other operations
 	initGlobalLogger()
 
 	// Configure colors again and set logger color profile
 	profile := tui.ConfigureColors()
+	// Reinitialize styles after reconfiguring colors
+	tui.InitStyles()
 	if globalLogger != nil {
 		globalLogger.SetColorProfile(profile)
 		globalLogger.Debug("Color profile configured",
