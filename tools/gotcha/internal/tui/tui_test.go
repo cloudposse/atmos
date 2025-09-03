@@ -399,13 +399,13 @@ func TestTestBufferHandling(t *testing.T) {
 			}
 
 			// Verify buffers
-			assert.Equal(t, len(tt.expectedBuffer), len(model.testBuffers), 
+			assert.Equal(t, len(tt.expectedBuffer), len(model.testBuffers),
 				"Buffer count mismatch for %s", tt.description)
 
 			for testName, expectedOutput := range tt.expectedBuffer {
 				actualOutput, exists := model.testBuffers[testName]
 				assert.True(t, exists, "Buffer should exist for test %s", testName)
-				assert.Equal(t, expectedOutput, actualOutput, 
+				assert.Equal(t, expectedOutput, actualOutput,
 					"Output mismatch for test %s: %s", testName, tt.description)
 			}
 		})
@@ -414,11 +414,11 @@ func TestTestBufferHandling(t *testing.T) {
 
 func TestSubtestOutputCollection(t *testing.T) {
 	tests := []struct {
-		name             string
-		parentTest       string
-		testBuffers      map[string][]string
-		expectedOutput   []string
-		description      string
+		name           string
+		parentTest     string
+		testBuffers    map[string][]string
+		expectedOutput []string
+		description    string
 	}{
 		{
 			name:       "parent with no output but subtests have output",
@@ -467,8 +467,8 @@ func TestSubtestOutputCollection(t *testing.T) {
 			name:       "no subtests",
 			parentTest: "TestSimple",
 			testBuffers: map[string][]string{
-				"TestSimple":   {"simple output\n"},
-				"TestOther":    {"other output\n"},
+				"TestSimple": {"simple output\n"},
+				"TestOther":  {"other output\n"},
 			},
 			expectedOutput: []string{
 				"simple output\n",
@@ -481,7 +481,7 @@ func TestSubtestOutputCollection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Simulate the logic from the fail event handler
 			output := tt.testBuffers[tt.parentTest]
-			
+
 			// If no output found, check for subtest output
 			if len(output) == 0 {
 				testPrefix := tt.parentTest + "/"
@@ -577,7 +577,7 @@ func TestEventOrdering(t *testing.T) {
 				for _, event := range tt.events {
 					if event.Action == "output" {
 						_, exists := model.testBuffers[event.Test]
-						assert.True(t, exists, 
+						assert.True(t, exists,
 							"Buffer should exist for test %s after output event", event.Test)
 					}
 				}
