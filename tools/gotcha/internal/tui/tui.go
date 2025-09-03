@@ -407,7 +407,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			bufferedOutput := m.testBuffers[event.Test]
 			output := make([]string, len(bufferedOutput))
 			copy(output, bufferedOutput)
-			
+
 			// If no output found, check for subtest output (parent test might have no direct output)
 			if len(output) == 0 {
 				testPrefix := event.Test + "/"

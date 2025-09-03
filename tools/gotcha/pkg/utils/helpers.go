@@ -388,7 +388,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Show buffered error output
 		output, exists := p.buffers[event.Test]
-		
+
 		// If no output found, check for subtest output (parent test might have no direct output)
 		if !exists || len(output) == 0 {
 			testPrefix := event.Test + "/"
@@ -399,7 +399,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				}
 			}
 		}
-		
+
 		// Display the output
 		for _, line := range output {
 			// Filter to show only meaningful error lines
@@ -407,7 +407,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				fmt.Fprint(os.Stderr, "    "+line)
 			}
 		}
-		
+
 		delete(p.buffers, event.Test)
 
 	case "skip":
