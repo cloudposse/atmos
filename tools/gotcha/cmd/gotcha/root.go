@@ -37,7 +37,7 @@ var globalLogger *log.Logger
 // configFile holds the path to the config file if specified via --config flag.
 var configFile string
 
-// initGlobalLogger initializes the global logger with solid background colors.
+// initGlobalLogger initializes the global logger with solid background colors per PRD spec.
 func initGlobalLogger() {
 	globalLogger = log.New(os.Stderr)
 	globalLogger.SetLevel(log.InfoLevel)
@@ -45,28 +45,28 @@ func initGlobalLogger() {
 		Levels: map[log.Level]lipgloss.Style{
 			log.DebugLevel: lipgloss.NewStyle().
 				SetString("DEBUG").
-				Background(lipgloss.Color("63")).
-				Foreground(lipgloss.Color("0")).
+				Background(lipgloss.Color("#3F51B5")). // Indigo background
+				Foreground(lipgloss.Color("#000000")). // Black foreground
 				Padding(0, 1),
 			log.InfoLevel: lipgloss.NewStyle().
 				SetString("INFO").
-				Background(lipgloss.Color("86")).
-				Foreground(lipgloss.Color("0")).
+				Background(lipgloss.Color("#4CAF50")). // Green background
+				Foreground(lipgloss.Color("#000000")). // Black foreground
 				Padding(0, 1),
 			log.WarnLevel: lipgloss.NewStyle().
 				SetString("WARN").
-				Background(lipgloss.Color("192")).
-				Foreground(lipgloss.Color("0")).
+				Background(lipgloss.Color("#FF9800")). // Orange background
+				Foreground(lipgloss.Color("#000000")). // Black foreground
 				Padding(0, 1),
 			log.ErrorLevel: lipgloss.NewStyle().
 				SetString("ERROR").
-				Background(lipgloss.Color("196")).
-				Foreground(lipgloss.Color("0")).
+				Background(lipgloss.Color("#F44336")). // Red background
+				Foreground(lipgloss.Color("#000000")). // Black foreground
 				Padding(0, 1),
 			log.FatalLevel: lipgloss.NewStyle().
 				SetString("FATAL").
-				Background(lipgloss.Color("196")).
-				Foreground(lipgloss.Color("15")).
+				Background(lipgloss.Color("#F44336")). // Red background
+				Foreground(lipgloss.Color("#FFFFFF")). // White foreground
 				Padding(0, 1),
 		},
 	})
@@ -339,8 +339,33 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		outputFile = filepath.Join(os.TempDir(), "test-results.json")
 	}
 
-	// Get packages from flags or arguments
+	// Split args into packages and pass-through arguments
+	// Everything after "--" should be passed directly to go test
 	var testPackages []string
+	var passthroughArgs []string
+	
+	// Check if cmd.ArgsLenAtDash() is set (indicates position of -- separator)
+	dashPos := cmd.ArgsLenAtDash()
+	if dashPos >= 0 {
+		// We have a -- separator
+		// Args before -- are packages, args after -- are pass-through
+		if dashPos > 0 {
+			args = args[:dashPos]
+		} else {
+			args = []string{}
+		}
+		// Cobra automatically puts everything after -- in args after dashPos
+		// but since we sliced args above, we need to get them from os.Args
+		// Find the -- position in os.Args and get everything after it
+		for i, arg := range os.Args {
+			if arg == "--" && i+1 < len(os.Args) {
+				passthroughArgs = os.Args[i+1:]
+				break
+			}
+		}
+	}
+
+	// Get packages from flags or arguments (before --)
 	if packages != "" {
 		testPackages = strings.Fields(packages)
 	} else if len(args) > 0 {
@@ -372,6 +397,12 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Prepare test arguments
 	testArgsStr := "-timeout " + timeout
+	
+	// Add pass-through arguments
+	if len(passthroughArgs) > 0 {
+		testArgsStr += " " + strings.Join(passthroughArgs, " ")
+		logger.Debug("Pass-through arguments detected", "args", passthroughArgs)
+	}
 
 	// Pre-calculate total test count for progress display
 	totalTests := utils.GetTestCount(testPackages, testArgsStr)

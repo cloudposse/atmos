@@ -8,15 +8,16 @@ const (
 	CheckFail = "✘" // UTF-8 cross mark
 	CheckSkip = "⊘" // UTF-8 circled division slash
 
-	// ANSI color constants for better CI/terminal compatibility.
-	colorGreen     = "2"  // Bright green for pass (ANSI)
-	colorRed       = "1"  // Bright red for fail (ANSI)
-	colorAmber     = "3"  // Yellow/amber for skip (ANSI)
-	colorLightGray = "7"  // Light gray for durations (ANSI)
-	colorDarkGray  = "8"  // Dark gray for test names (ANSI)
-	colorBlue      = "4"  // Blue for spinner (ANSI)
-	colorDarkRed   = "88" // Dark red for error background (256 color)
-	colorWhite     = "15" // White for error text (ANSI)
+	// Color constants using hex values (mapped to ANSI by Lipgloss based on terminal capabilities).
+	// These follow the PRD specification while maintaining compatibility across all environments.
+	colorGreen     = "#2ECC40" // Bright green for pass (maps to ANSI green)
+	colorRed       = "#DC143C" // Crimson red for fail (maps to ANSI red)
+	colorAmber     = "#FFB347" // Peach orange for skip (maps to ANSI yellow)
+	colorLightGray = "#D3D3D3" // Light gray for durations
+	colorDarkGray  = "#666666" // Dark gray for test names
+	colorBlue      = "#5DADE2" // Blue for spinner
+	colorDarkRed   = "#B22222" // Dark red for error background
+	colorWhite     = "#FFFFFF" // White for error text
 )
 
 var (
