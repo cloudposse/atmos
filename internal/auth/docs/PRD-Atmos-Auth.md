@@ -493,6 +493,7 @@ identities:
 ```
 
 **Environment Variable Behavior**:
+
 - Variables are set before Terraform execution
 - Array format preserves case-sensitive keys (required due to Viper limitations)
 - Variables are available to all tools executed under the identity
@@ -523,6 +524,7 @@ identities:
 ```
 
 **AWS File Management Behavior**:
+
 - Credentials written to `~/.aws/atmos/<provider>/credentials` during prehook
 - Config written to `~/.aws/atmos/<provider>/config` during prehook
 - `AWS_SHARED_CREDENTIALS_FILE` points to Atmos-managed credentials file
@@ -611,43 +613,94 @@ identities:
 
 ### 5.3 Component-Level Auth Configuration
 
-Components can override auth configuration defined in `atmos.yaml`:
+Components can override auth configuration defined in `atmos.yaml`. Here's a complete example:
+
+#### Global Auth Configuration (`atmos.yaml`)
 
 ```yaml
-# In component configuration
+auth:
+  providers:
+    cplive-sso:
+      kind: aws/iam-identity-center
+      start_url: https://cplive.awsapps.com/start/
+      region: us-east-2
+      session: { duration: 15m }
+      default: true
+
+  identities:
+    managers:
+      kind: aws/permission-set
+      default: false # Not default globally
+      via: { provider: cplive-sso }
+      spec:
+        name: IdentityManagersTeamAccess
+        account:
+          name: core-identity
+      alias: managers-core
+```
+
+#### Component Stack Configuration
+
+```yaml
 components:
   terraform:
     vpc:
       # Component-specific auth overrides
-      auth:
-        identities:
-          vpc-admin:
-            kind: aws/permission-set
-            via: { provider: company-sso }
-            spec:
-              name: NetworkAdminAccess
-              account:
-                name: networking
-            environment:
-              - key: VPC_DEPLOYMENT_MODE
-                value: secure
-        providers:
-          company-sso:
-            session:
-              duration: 30m  # Override default duration
-      
+      identities:
+        managers:
+          default: true # Override: make this the default for VPC component
+
       # Regular component configuration
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
       vars:
-        vpc_cidr: "10.0.0.0/16"
+        enabled: true
+```
+
+**Result**: For the VPC component, the `managers` identity becomes the default identity, overriding the global `default: false` setting.
+
+#### Advanced Component Override Example
+
+```yaml
+components:
+  terraform:
+    security-vpc:
+      # Component-specific auth overrides
+      identities:
+        security-admin:
+          kind: aws/permission-set
+          via: { provider: cplive-sso }
+          spec:
+            name: SecurityAdminAccess
+            account:
+              name: security
+          environment:
+            - key: SECURITY_MODE
+              value: strict
+        managers:
+          default: false # Disable managers as default for security components
+
+      providers:
+        cplive-sso:
+          session:
+            duration: 30m # Override session duration for security operations
+
+      vars:
+        vpc_cidr: "10.1.0.0/16"
 ```
 
 **Component Auth Merging Rules**:
-1. Component identities override global identities with same name
-2. Component providers override global providers with same name
-3. New identities/providers in components are added to available options
-4. Component environment variables are merged with identity environment variables
-5. AWS credential file paths are automatically set based on active provider
-6. Validation occurs on the merged configuration
+
+1. **Identity Property Overrides**: Component identity properties override global identity properties with same name
+   - Example: `managers.default: true` in component overrides `managers.default: false` in global config
+2. **New Identities**: New identities defined in components are added to available options
+3. **Provider Overrides**: Component providers override global providers with same name
+4. **Environment Variable Merging**: Component environment variables are merged with identity environment variables
+5. **AWS File Management**: AWS credential file paths are automatically set based on active provider
+6. **Validation**: Validation occurs on the merged configuration
+7. **Precedence**: Component-level configuration always takes precedence over global configuration
 
 ### 5.4 Component Description Output
 
@@ -664,33 +717,47 @@ atmos describe component vpc -s plat-ue2-sandbox -q .identities
 atmos describe component vpc -s plat-ue2-sandbox -q .providers
 ```
 
-**Expected Output for Identities**:
+**Expected Output for VPC Component Identities**:
+
 ```yaml
 identities:
   managers:
     kind: aws/permission-set
-    default: true
+    default: true # Overridden from false to true by component
     via: { provider: cplive-sso }
     spec:
       name: IdentityManagersTeamAccess
       account:
         name: core-identity
     alias: managers-core
-    environment:
-      - key: AWS_PROFILE
-        value: managers-core
-      - key: TEAM_ROLE
-        value: managers
-  vpc-admin:  # Component-specific override
+    # AWS files automatically managed:
+    # ~/.aws/atmos/cplive-sso/credentials
+    # ~/.aws/atmos/cplive-sso/config
+```
+
+**Expected Output for Security-VPC Component Identities**:
+
+```yaml
+identities:
+  managers:
     kind: aws/permission-set
-    via: { provider: company-sso }
+    default: false # Overridden to disable for security components
+    via: { provider: cplive-sso }
     spec:
-      name: NetworkAdminAccess
+      name: IdentityManagersTeamAccess
       account:
-        name: networking
+        name: core-identity
+    alias: managers-core
+  security-admin: # Component-specific identity
+    kind: aws/permission-set
+    via: { provider: cplive-sso }
+    spec:
+      name: SecurityAdminAccess
+      account:
+        name: security
     environment:
-      - key: VPC_DEPLOYMENT_MODE
-        value: secure
+      - key: SECURITY_MODE
+        value: strict
 ```
 
 ## 6. Best Practices
@@ -1150,16 +1217,16 @@ type AWSFileConfig struct {
 type AWSFileManager interface {
     // WriteCredentials writes AWS credentials to provider-specific file
     WriteCredentials(provider string, creds *Credentials) error
-    
+
     // WriteConfig writes AWS config to provider-specific file
     WriteConfig(provider string, config *AWSConfig) error
-    
+
     // GetFilePaths returns the paths for AWS credentials and config files
     GetFilePaths(provider string) *AWSFileConfig
-    
+
     // SetEnvironmentVariables sets AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE
     SetEnvironmentVariables(provider string) []EnvironmentVariable
-    
+
     // Cleanup removes temporary AWS files
     Cleanup(provider string) error
 }
