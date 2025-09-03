@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"fmt"
 	"net/url"
 
 	"github.com/hashicorp/go-getter"
@@ -19,7 +20,7 @@ type CustomGitGetter struct {
 func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
 	// Normal clone
 	if err := c.GetCustom(dst, url); err != nil {
-		return err
+		return fmt.Errorf("failed to clone %s to %s: %w", url, dst, err)
 	}
 
 	// Validate symlinks based on policy (default to allow_safe if not configured)
@@ -28,7 +29,11 @@ func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
 		policy = security.PolicyAllowSafe
 	}
 
-	return security.ValidateSymlinks(dst, policy)
+	if err := security.ValidateSymlinks(dst, policy); err != nil {
+		return fmt.Errorf("symlink validation failed for %s at %s: %w", url, dst, err)
+	}
+	
+	return nil
 }
 
 // removeSymlinks walks the directory and removes any symlinks it encounters.

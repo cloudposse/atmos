@@ -151,6 +151,7 @@ func copyComponentToDestination(params copyComponentParams) error {
 		PreserveOwner: false,
 
 		// OnSymlink specifies what to do on symlink based on security policy
+		// Use the temp directory (source) as the boundary for symlink validation
 		OnSymlink: security.CreateSymlinkHandler(params.tempDir, policy),
 	}
 
@@ -506,7 +507,8 @@ func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor, atmosCon
 		PreserveTimes: false,
 		PreserveOwner: false,
 		// OnSymlink specifies what to do on symlink based on security policy
-		OnSymlink: security.CreateSymlinkHandler(tempDir, policy),
+		// Use the source directory (p.uri) as the boundary for symlink validation
+		OnSymlink: security.CreateSymlinkHandler(p.uri, policy),
 	}
 
 	tempDir2 := tempDir

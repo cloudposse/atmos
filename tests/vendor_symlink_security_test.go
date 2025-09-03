@@ -57,6 +57,10 @@ func TestCVE_2025_8959_VendorProtection(t *testing.T) {
 	maliciousSource := filepath.Join(testDir, "malicious-source")
 	require.NoError(t, os.MkdirAll(maliciousSource, 0o755))
 
+	// Compute the relative path from maliciousSource to sensitiveFile for the directory traversal attack.
+	relPathToSensitive, err := filepath.Rel(maliciousSource, sensitiveFile)
+	require.NoError(t, err, "Failed to compute relative path for directory traversal attack")
+
 	// Create various attack symlinks.
 	attacks := []struct {
 		name   string
@@ -71,7 +75,7 @@ func TestCVE_2025_8959_VendorProtection(t *testing.T) {
 		{
 			name:   "directory_traversal_attack",
 			link:   filepath.Join(maliciousSource, "traversal_attack.txt"),
-			target: filepath.Join("..", "..", filepath.Base(sensitiveDir), "sensitive.txt"),
+			target: relPathToSensitive,
 		},
 		{
 			name:   "etc_passwd_attack",
