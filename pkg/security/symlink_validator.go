@@ -1,6 +1,7 @@
 package security
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,14 +68,15 @@ func IsSymlinkSafe(symlink, boundary string) bool {
 	}
 
 	// If target is relative, make it absolute relative to symlink's directory.
+	// We need to evaluate it properly to resolve .. components.
 	if !filepath.IsAbs(target) {
-		target = filepath.Join(filepath.Dir(symlink), target)
+		target = filepath.Clean(filepath.Join(filepath.Dir(symlink), target))
 	}
 
-	// Clean paths to remove .. and . components.
-	cleanTarget, err := filepath.Abs(filepath.Clean(target))
+	// Make paths absolute for comparison.
+	cleanTarget, err := filepath.Abs(target)
 	if err != nil {
-		log.Debug("Failed to clean target path", "target", target, "error", err)
+		log.Debug("Failed to make target absolute", "target", target, "error", err)
 		return false
 	}
 
@@ -112,7 +114,7 @@ func ValidateSymlinks(root string, policy SymlinkPolicy) error {
 
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			return fmt.Errorf("walking %s: %w", path, err)
 		}
 
 		// Check if this is a symlink.
@@ -125,22 +127,30 @@ func ValidateSymlinks(root string, policy SymlinkPolicy) error {
 		case PolicyRejectAll:
 			// Remove all symlinks for maximum security.
 			log.Debug("Removing symlink (reject_all policy)", "path", path)
-			return os.Remove(path)
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("removing symlink %s: %w", path, err)
+			}
+			return nil
 
 		case PolicyAllowSafe:
 			// Validate and remove unsafe symlinks.
 			if !IsSymlinkSafe(path, root) {
 				log.Warn("Removing unsafe symlink", "path", path)
-				return os.Remove(path)
+				if err := os.Remove(path); err != nil {
+					return fmt.Errorf("removing unsafe symlink %s: %w", path, err)
+				}
+			} else {
+				log.Debug("Keeping safe symlink", "path", path)
 			}
-			log.Debug("Keeping safe symlink", "path", path)
 			return nil
 
 		default:
 			// For unknown policies, default to safe behavior.
 			if !IsSymlinkSafe(path, root) {
 				log.Warn("Removing unsafe symlink (unknown policy, defaulting to safe)", "path", path, "policy", policy)
-				return os.Remove(path)
+				if err := os.Remove(path); err != nil {
+					return fmt.Errorf("removing unsafe symlink %s (unknown policy %s): %w", path, policy, err)
+				}
 			}
 			return nil
 		}

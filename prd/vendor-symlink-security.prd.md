@@ -87,7 +87,9 @@ HashiCorp's fix in go-getter v1.7.9 simply disables all symlinks for git operati
 **Why:**
 - Centralized configuration
 - Consistent with Atmos patterns
-- Supports both nested and dot notation
+- Uses standard YAML nested structure
+
+**Note:** The configuration uses standard YAML nested keys (e.g., `vendor:` → `policy:` → `symlinks:`). The dot-separated path `vendor.policy.symlinks` is the canonical key name used for environment variable overrides (e.g., `ATMOS_VENDOR_POLICY_SYMLINKS`) and command-line flag references, not a YAML syntax option.
 
 **Alternatives Considered:**
 - Environment variables - Less discoverable
