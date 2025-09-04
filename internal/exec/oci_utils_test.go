@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestBindEnv tests the Viper environment binding function
+// TestBindEnv tests the Viper environment binding function.
 func TestBindEnv(t *testing.T) {
 	tests := []struct {
 		name     string

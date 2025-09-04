@@ -17,7 +17,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// TestProcessOciImage tests the main OCI image processing function
+// TestProcessOciImage tests the main OCI image processing function.
 func TestProcessOciImage(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -66,7 +66,7 @@ func TestProcessOciImage(t *testing.T) {
 	}
 }
 
-// TestProcessOciImageIntegration tests OCI image processing with mock data
+// TestProcessOciImageIntegration tests OCI image processing with mock data.
 func TestProcessOciImageIntegration(t *testing.T) {
 	t.Run("Test with mock OCI image", func(t *testing.T) {
 		// This test verifies that the function handles the processing flow correctly
@@ -85,7 +85,7 @@ func TestProcessOciImageIntegration(t *testing.T) {
 	})
 }
 
-// TestPullImage tests the image pulling functionality
+// TestPullImage tests the image pulling functionality.
 func TestPullImage(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -133,7 +133,7 @@ func TestPullImage(t *testing.T) {
 	}
 }
 
-// TestCheckArtifactType tests artifact type validation
+// TestCheckArtifactType tests artifact type validation.
 func TestCheckArtifactType(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -210,7 +210,7 @@ func TestCheckArtifactType(t *testing.T) {
 	}
 }
 
-// TestParseOCIManifest tests OCI manifest parsing
+// TestParseOCIManifest tests OCI manifest parsing.
 func TestParseOCIManifest(t *testing.T) {
 	tests := []struct {
 		name        string

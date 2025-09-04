@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestECRAuthDirect tests AWS ECR authentication directly
+// TestECRAuthDirect tests AWS ECR authentication directly.
 func TestECRAuthDirect(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -45,7 +45,7 @@ func TestECRAuthDirect(t *testing.T) {
 	}
 }
 
-// TestECRRegistryParsing tests the ECR registry parsing logic
+// TestECRRegistryParsing tests the ECR registry parsing logic.
 func TestECRRegistryParsing(t *testing.T) {
 	tests := []struct {
 		name     string

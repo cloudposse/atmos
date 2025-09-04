@@ -16,7 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestACRAuthDirect tests Azure Container Registry authentication directly
+// TestACRAuthDirect tests Azure Container Registry authentication directly.
 func TestACRAuthDirect(t *testing.T) {
 	if os.Getenv("ATMOS_AZURE_E2E") == "" {
 		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
@@ -156,7 +156,7 @@ func TestGetACRAuthViaServicePrincipalDirect(t *testing.T) {
 	}
 }
 
-// TestGetACRAuthViaDefaultCredentialDirect tests Azure Default Credential authentication directly
+// TestGetACRAuthViaDefaultCredentialDirect tests Azure Default Credential authentication directly.
 func TestGetACRAuthViaDefaultCredentialDirect(t *testing.T) {
 	if os.Getenv("ATMOS_AZURE_E2E") == "" {
 		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
@@ -208,7 +208,7 @@ func TestGetACRAuthViaDefaultCredentialDirect(t *testing.T) {
 	}
 }
 
-// TestExchangeAADForACRRefreshTokenDirect tests AAD to ACR token exchange directly
+// TestExchangeAADForACRRefreshTokenDirect tests AAD to ACR token exchange directly.
 func TestExchangeAADForACRRefreshTokenDirect(t *testing.T) {
 	if os.Getenv("ATMOS_AZURE_E2E") == "" {
 		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
@@ -296,7 +296,7 @@ func TestExchangeAADForACRRefreshTokenDirect(t *testing.T) {
 	}
 }
 
-// TestExchangeAADForACRRefreshTokenWithStubbedHTTP demonstrates how to stub HTTP client for testing
+// TestExchangeAADForACRRefreshTokenWithStubbedHTTP demonstrates how to stub HTTP client for testing.
 func TestExchangeAADForACRRefreshTokenWithStubbedHTTP(t *testing.T) {
 	// Save original HTTP client
 	originalClient := httpClient
@@ -341,7 +341,7 @@ func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return m.response, nil
 }
 
-// TestExtractTenantIDFromTokenDirect tests JWT token parsing for tenant ID directly
+// TestExtractTenantIDFromTokenDirect tests JWT token parsing for tenant ID directly.
 func TestExtractTenantIDFromTokenDirect(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -411,7 +411,7 @@ func TestExtractTenantIDFromTokenDirect(t *testing.T) {
 	}
 }
 
-// Helper functions for creating test JWT tokens
+// Helper functions for creating test JWT tokens.
 func createValidJWTDirect(tenantID string) string {
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 	payload := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf(`{"tid":"%s","sub":"test","iss":"test"}`, tenantID)))

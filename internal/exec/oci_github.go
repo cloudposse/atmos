@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// getGitHubAuth attempts to get GitHub Container Registry authentication
+// getGitHubAuth attempts to get GitHub Container Registry authentication.
 func getGitHubAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
 	// Check for GitHub Container Registry
 	if strings.EqualFold(registry, "ghcr.io") {

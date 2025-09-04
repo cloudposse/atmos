@@ -21,7 +21,7 @@ import (
 
 // getDockerAuth attempts to get Docker authentication for a registry
 // Supports DOCKER_CONFIG environment variable, global credential stores (credsStore),
-// and per-registry credential helpers (credHelpers)
+// and per-registry credential helpers (credHelpers).
 func getDockerAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
 	// Create a Viper instance for environment variable access
 	v := viper.New()
@@ -142,7 +142,7 @@ func getDockerAuth(registry string, atmosConfig *schema.AtmosConfiguration) (aut
 	return nil, fmt.Errorf("no authentication found in Docker config for registry %s", registry)
 }
 
-// getCredentialStoreAuth attempts to get credentials from Docker's credential store
+// getCredentialStoreAuth attempts to get credentials from Docker's credential store.
 func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, error) {
 	// Validate registry using an allowlist approach
 	// Registry may only include letters, digits, dots, colons, slashes, and hyphens
@@ -195,7 +195,7 @@ func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, e
 	}, nil
 }
 
-// decodeDockerAuth decodes the base64-encoded auth string from Docker config
+// decodeDockerAuth decodes the base64-encoded auth string from Docker config.
 func decodeDockerAuth(authString string) (string, string, error) {
 	// Decode base64
 	decoded, err := base64.StdEncoding.DecodeString(authString)

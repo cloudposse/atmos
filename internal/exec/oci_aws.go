@@ -16,7 +16,7 @@ import (
 
 // getECRAuth attempts to get AWS ECR authentication using AWS credentials
 // Supports SSO/role providers by not gating on environment variables
-// Supports both standard ECR and FIPS endpoints
+// Supports both standard ECR and FIPS endpoints.
 func getECRAuth(registry string) (authn.Authenticator, error) {
 	// Use regex to match both standard and FIPS ECR endpoints
 	// Supports: <account>.dkr.ecr.<region>.amazonaws.com[.cn]

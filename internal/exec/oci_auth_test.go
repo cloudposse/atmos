@@ -9,7 +9,7 @@ import (
 )
 
 // TestGetRegistryAuth tests the main registry authentication function
-// This is an integration test that verifies the overall authentication flow
+// This is an integration test that verifies the overall authentication flow.
 func TestGetRegistryAuth(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -76,7 +76,7 @@ func TestGetRegistryAuth(t *testing.T) {
 }
 
 // TestCloudProviderAuth tests authentication for different cloud providers
-// This is an integration test that verifies provider-specific authentication flows
+// This is an integration test that verifies provider-specific authentication flows.
 func TestCloudProviderAuth(t *testing.T) {
 	tests := []struct {
 		name        string

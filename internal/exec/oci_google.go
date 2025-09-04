@@ -9,7 +9,7 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-// getGCRAuth attempts to get Google Container Registry authentication
+// getGCRAuth attempts to get Google Container Registry authentication.
 func getGCRAuth(registry string) (authn.Authenticator, error) {
 	// Use Google Cloud Application Default Credentials
 	ctx := context.Background()

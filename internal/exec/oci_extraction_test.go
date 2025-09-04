@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestExtractZipFile tests ZIP file extraction functionality
+// TestExtractZipFile tests ZIP file extraction functionality.
 func TestExtractZipFile(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -104,7 +104,7 @@ func TestExtractZipFile(t *testing.T) {
 	}
 }
 
-// TestExtractZipFileZipSlip tests ZIP slip vulnerability protection
+// TestExtractZipFileZipSlip tests ZIP slip vulnerability protection.
 func TestExtractZipFileZipSlip(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -187,7 +187,7 @@ func TestExtractZipFileZipSlip(t *testing.T) {
 	}
 }
 
-// TestExtractZipFileSymlinks tests ZIP file extraction with symlink handling
+// TestExtractZipFileSymlinks tests ZIP file extraction with symlink handling.
 func TestExtractZipFileSymlinks(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -262,7 +262,7 @@ func TestExtractZipFileSymlinks(t *testing.T) {
 	}
 }
 
-// TestExtractRawData tests raw data extraction functionality
+// TestExtractRawData tests raw data extraction functionality.
 func TestExtractRawData(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestGCRAuth tests Google Container Registry authentication
+// TestGCRAuth tests Google Container Registry authentication.
 func TestGCRAuth(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -51,8 +51,8 @@ func TestGCRAuth(t *testing.T) {
 	}
 }
 
-// TestGCRRegistryDetection tests Google registry detection logic
-// Note: This test reflects the current implementation logic in getRegistryAuth
+// TestGCRRegistryDetection tests Google registry detection logic.
+// Note: This test reflects the current implementation logic in getRegistryAuth.
 func TestGCRRegistryDetection(t *testing.T) {
 	tests := []struct {
 		name     string

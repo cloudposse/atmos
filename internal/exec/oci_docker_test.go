@@ -67,7 +67,7 @@ func TestDockerCredHelpers(t *testing.T) {
 	}
 }
 
-// TestDecodeDockerAuth tests Docker auth string decoding
+// TestDecodeDockerAuth tests Docker auth string decoding.
 func TestDecodeDockerAuth(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -124,7 +124,7 @@ func TestDecodeDockerAuth(t *testing.T) {
 	}
 }
 
-// TestGetCredentialStoreAuth tests credential store authentication
+// TestGetCredentialStoreAuth tests credential store authentication.
 func TestGetCredentialStoreAuth(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -256,7 +256,7 @@ func TestGetCredentialStoreAuth(t *testing.T) {
 	}
 }
 
-// Helper function to create temporary files for testing
+// Helper function to create temporary files for testing.
 func createTempFile(t *testing.T, content string) string {
 	tmpfile, err := os.CreateTemp("", "docker-config-*.json")
 	if err != nil {

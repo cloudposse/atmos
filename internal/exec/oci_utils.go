@@ -34,7 +34,7 @@ const (
 	githubTokenEnv        = "GITHUB_TOKEN"
 )
 
-// bindEnv binds environment variables to Viper with fallback support
+// bindEnv binds environment variables to Viper with fallback support.
 func bindEnv(v *viper.Viper, key string, envVars ...string) {
 	if err := v.BindEnv(append([]string{key}, envVars...)...); err != nil {
 		log.Debug("Failed to bind environment variable", "key", key, "envVars", envVars, "error", err)
@@ -398,7 +398,7 @@ func extractZipFile(reader io.Reader, destDir string) error {
 	return nil
 }
 
-// checkArtifactType to check and log artifact type mismatches .
+// checkArtifactType to check and log artifact type mismatches.
 func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 	manifest, err := parseOCIManifest(bytes.NewReader(descriptor.Manifest))
 	if err != nil {

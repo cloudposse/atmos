@@ -10,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestGitHubAuth tests GitHub Container Registry authentication
+// TestGitHubAuth tests GitHub Container Registry authentication.
 func TestGitHubAuth(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -75,7 +75,7 @@ func TestGitHubAuth(t *testing.T) {
 	}
 }
 
-// TestGitHubAuthWithEnvironment tests GitHub authentication with environment variables
+// TestGitHubAuthWithEnvironment tests GitHub authentication with environment variables.
 func TestGitHubAuthWithEnvironment(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -143,7 +143,7 @@ func TestGitHubAuthWithEnvironment(t *testing.T) {
 	}
 }
 
-// TestGitHubAuthPrecedence tests token precedence (Atmos config vs environment)
+// TestGitHubAuthPrecedence tests token precedence (Atmos config vs environment).
 func TestGitHubAuthPrecedence(t *testing.T) {
 	// Test that Atmos config token takes precedence over environment
 	atmosConfig := &schema.AtmosConfiguration{

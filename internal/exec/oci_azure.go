@@ -23,7 +23,7 @@ import (
 // httpClient is used for outbound HTTP in this package; override in tests.
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-// getACRAuth attempts to get Azure Container Registry authentication
+// getACRAuth attempts to get Azure Container Registry authentication.
 func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
 	// Extract ACR name from registry URL first
 	// Expected formats: <acr-name>.azurecr.{io|cn|us}
@@ -76,7 +76,7 @@ func getACRAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.
 	return nil, fmt.Errorf("no valid Azure authentication found for %s", registry)
 }
 
-// exchangeAADForACRRefreshToken exchanges an AAD token for an ACR refresh token
+// exchangeAADForACRRefreshToken exchanges an AAD token for an ACR refresh token.
 func exchangeAADForACRRefreshToken(ctx context.Context, registry, tenantID, aadToken string) (string, error) {
 	// ACR OAuth2 endpoint for token exchange
 	oauthURL := fmt.Sprintf("https://%s/oauth2/exchange", registry)
@@ -131,7 +131,7 @@ func exchangeAADForACRRefreshToken(ctx context.Context, registry, tenantID, aadT
 	return "", fmt.Errorf("no token received from ACR OAuth2 exchange")
 }
 
-// extractTenantIDFromToken extracts the tenant ID from a JWT token
+// extractTenantIDFromToken extracts the tenant ID from a JWT token.
 func extractTenantIDFromToken(tokenString string) (string, error) {
 	// JWT tokens have 3 parts separated by dots
 	parts := strings.Split(tokenString, ".")
