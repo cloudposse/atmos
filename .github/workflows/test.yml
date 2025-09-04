@@ -16,6 +16,16 @@ on:
       - "test/**"
 
   workflow_dispatch:
+    inputs:
+      enable-tmate:
+        description: 'Enable tmate debugging'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+          - 'on-failure'
 
 env:
   TERRAFORM_VERSION: "1.9.7"
@@ -194,6 +204,28 @@ jobs:
       #        ]
       #       }
 
+      # Setup tmate session for debugging (activate by creating a label 'debug-with-tmate' on the PR or enable-tmate input)
+      - name: Setup tmate session
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.enable-tmate == 'true') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'debug-with-tmate')) && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+          detached: true
+        timeout-minutes: 15
+
+      - name: Debug Information
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          echo "=== Debug Information ==="
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Matrix Target: ${{ matrix.flavor.target }}"
+          echo "Go Version: $(go version)"
+          echo "Working Directory: $(pwd)"
+          echo "PATH: $PATH"
+          which atmos || echo "atmos not in PATH"
+          atmos version || echo "Failed to run atmos version"
+          echo "========================"
+
       - name: Acceptance tests
         timeout-minutes: 30
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -201,6 +233,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-ci
+      
+      # Setup tmate session for debugging after failure (activate by creating a label 'debug-on-failure' on the PR or enable-tmate=on-failure input)
+      - name: Setup tmate session on failure
+        if: ${{ failure() && ((github.event_name == 'workflow_dispatch' && github.event.inputs.enable-tmate == 'on-failure') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'debug-on-failure'))) && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+        timeout-minutes: 30
 
 
       - name: Upload test artifacts for debugging
