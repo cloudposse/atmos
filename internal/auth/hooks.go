@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth/config"
@@ -33,15 +32,6 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	authLogLevel, _ := log.ParseLevel(atmosConfig.Auth.Logs.Level)
 	log.SetLevel(authLogLevel)
 	defer log.SetLevel(atmosLogLevel)
-
-	// Store original log level and set auth log level if configured
-	originalLevel := log.GetLevel()
-	if atmosConfig.Auth.Logs != nil && atmosConfig.Auth.Logs.Level != "" {
-		if authLevel, err := log.ParseLevel(atmosConfig.Auth.Logs.Level); err == nil {
-			log.SetLevel(authLevel)
-			defer log.SetLevel(originalLevel)
-		}
-	}
 
 	// Skip if no auth config
 	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
@@ -92,7 +82,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 		}
 	}
 
-	// Create auth manager with merged config
+	// Create auth manager with merged configuration
 	authManager, err := NewAuthManager(
 		mergedAuthConfig,
 		credStore,
@@ -104,51 +94,34 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 		return fmt.Errorf("failed to create auth manager: %w", err)
 	}
 
-	// Try to get current session
+	// Determine target identity: stack info identity (CLI flag) or default identity
 	ctx := context.Background()
-	whoami, err := authManager.Whoami(ctx)
-	log.Debug("Current session check", "whoami", whoami, "error", err)
+	var targetIdentityName string
 
-	var needsAuthentication = true
-	var defaultIdentityName string
-
-	if err == nil && whoami != nil {
-		// Check if credentials are still valid (at least 5 minutes remaining)
-		if whoami.Expiration != nil && whoami.Expiration.After(time.Now().Add(5*time.Minute)) {
-			log.Debug("Using existing valid session", "identity", whoami.Identity, "expiration", whoami.Expiration, "environment", whoami.Environment)
-			needsAuthentication = false
-			defaultIdentityName = whoami.Identity
-		}
-	}
-
-	if needsAuthentication {
-		// Need to authenticate - find default identity
-		defaultIdentityName, err = authManager.GetDefaultIdentity()
+	if stackInfo.Identity != "" {
+		// This is set by the CLI Flag
+		targetIdentityName = stackInfo.Identity
+	} else {
+		targetIdentityName, err = authManager.GetDefaultIdentity()
 		if err != nil {
 			return fmt.Errorf("failed to get default identity: %w", err)
 		}
-		if defaultIdentityName == "" {
-			return fmt.Errorf("no default identity configured for authentication")
-		}
-
-		log.Info("Authenticating with default identity", "identity", defaultIdentityName)
-
-		// Authenticate with default identity
-		_, err = authManager.Authenticate(ctx, defaultIdentityName)
-		if err != nil {
-			return fmt.Errorf("failed to authenticate with default identity: %w", err)
-		}
-
-		// Get updated session info
-		whoami, err = authManager.Whoami(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get session info after authentication: %w", err)
-		}
+	}
+	if targetIdentityName == "" {
+		return fmt.Errorf("no default identity configured for authentication")
 	}
 
-	// Always set up environment variables and AWS files (whether from cache or fresh auth)
+	log.Info("Authenticating with identity", "identity", targetIdentityName)
+
+	// Authenticate with target identity
+	whoami, err := authManager.Authenticate(ctx, targetIdentityName)
+	if err != nil {
+		return fmt.Errorf("failed to authenticate with identity %q: %w", targetIdentityName, err)
+	}
+
+	// Always set up environment variables and AWS files
 	// Get identity environment variables and merge into component environment section
-	if identity, exists := atmosConfig.Auth.Identities[defaultIdentityName]; exists {
+	if identity, exists := mergedAuthConfig.Identities[targetIdentityName]; exists {
 		if len(identity.Env) > 0 {
 			environment.MergeIdentityEnvOverrides(stackInfo, identity.Env)
 		}
@@ -156,22 +129,40 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
-	// Find root provider for chained identities to determine if AWS files are needed
-	rootProviderName := findRootProvider(&atmosConfig.Auth, defaultIdentityName)
+	// Get root provider name - use "aws-user" for AWS user identities, otherwise get from identity chain
+	rootProviderName := ""
+	if identity, exists := mergedAuthConfig.Identities[targetIdentityName]; exists {
+		if identity.Kind == "aws/user" && identity.Via == nil {
+			rootProviderName = "aws-user"
+		} else if identity.Via != nil && identity.Via.Provider != "" {
+			rootProviderName = identity.Via.Provider
+		}
+	}
 
 	// Setup AWS files and environment variables if this is an AWS provider
 	if rootProviderName != "" {
-		if provider, exists := atmosConfig.Auth.Providers[rootProviderName]; exists {
+		// Handle AWS User identities (standalone, no provider config)
+		if rootProviderName == "aws-user" {
+			// Setup AWS files (recreates them if deleted)
+			if err := authManager.SetupAWSFiles(ctx, rootProviderName, targetIdentityName, whoami.Credentials); err != nil {
+				return fmt.Errorf("failed to setup AWS files: %w", err)
+			}
+
+			awsFileManager := environment.NewAWSFileManager()
+			// Use provider name for AWS file paths and identity name for AWS_PROFILE
+			awsEnvVars := awsFileManager.GetEnvironmentVariables(rootProviderName, targetIdentityName)
+			environment.MergeIdentityEnvOverrides(stackInfo, awsEnvVars)
+		} else if provider, exists := mergedAuthConfig.Providers[rootProviderName]; exists {
 			// Check if this is an AWS provider
-			if provider.Kind == "aws/iam-identity-center" || provider.Kind == "aws/assume-role" || provider.Kind == "aws/user" {
+			if provider.Kind == "aws/iam-identity-center" || provider.Kind == "aws/assume-role" {
 				// Setup AWS files (recreates them if deleted)
-				if err := authManager.SetupAWSFiles(ctx, rootProviderName, defaultIdentityName, whoami.Credentials); err != nil {
+				if err := authManager.SetupAWSFiles(ctx, rootProviderName, targetIdentityName, whoami.Credentials); err != nil {
 					return fmt.Errorf("failed to setup AWS files: %w", err)
 				}
-				
+
 				awsFileManager := environment.NewAWSFileManager()
 				// Use provider name for AWS file paths and identity name for AWS_PROFILE
-				awsEnvVars := awsFileManager.GetEnvironmentVariables(rootProviderName, defaultIdentityName)
+				awsEnvVars := awsFileManager.GetEnvironmentVariables(rootProviderName, targetIdentityName)
 				environment.MergeIdentityEnvOverrides(stackInfo, awsEnvVars)
 			}
 		}
@@ -183,40 +174,3 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	return nil
 }
 
-// findRootProvider traverses the identity chain to find the root provider
-func findRootProvider(authConfig *schema.AuthConfig, identityName string) string {
-	visited := make(map[string]bool)
-
-	for identityName != "" {
-		// Prevent infinite loops
-		if visited[identityName] {
-			return ""
-		}
-		visited[identityName] = true
-
-		identity, exists := authConfig.Identities[identityName]
-		if !exists {
-			return ""
-		}
-
-		if identity.Via == nil {
-			return ""
-		}
-
-		// If this identity points to a provider, we found the root
-		if identity.Via.Provider != "" {
-			return identity.Via.Provider
-		}
-
-		// If this identity points to another identity, continue traversing
-		if identity.Via.Identity != "" {
-			identityName = identity.Via.Identity
-			continue
-		}
-
-		// No provider or identity found
-		return ""
-	}
-
-	return ""
-}

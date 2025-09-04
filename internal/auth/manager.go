@@ -96,41 +96,20 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 	return m.buildWhoamiInfo(identityName, finalCreds), nil
 }
 
-// Whoami returns information about the current effective principal
-func (m *manager) Whoami(ctx context.Context) (*schema.WhoamiInfo, error) {
-	// Since keyring doesn't support listing, we'll check each configured identity
-	// to find the most recent valid credentials using the new hierarchical cache keys
-	var mostRecentInfo *schema.WhoamiInfo
-	var mostRecentTime time.Time
-
-	for identityName := range m.config.Identities {
-		// Try to retrieve credentials for this identity
-		creds, err := m.credentialStore.Retrieve(identityName)
-		if err != nil {
-			continue // No credentials stored for this identity
-		}
-
-		// Check if credentials are expired
-		if expired, err := m.credentialStore.IsExpired(identityName); err != nil || expired {
-			continue // Credentials are expired or can't check expiration
-		}
-
-		// Parse expiration time to find the most recent
-		if creds.AWS != nil && creds.AWS.Expiration != "" {
-			if expTime, err := time.Parse(time.RFC3339, creds.AWS.Expiration); err == nil {
-				if expTime.After(mostRecentTime) {
-					mostRecentTime = expTime
-					mostRecentInfo = m.buildWhoamiInfo(identityName, creds)
-				}
-			}
-		}
+// Whoami returns information about the specified identity's credentials
+func (m *manager) Whoami(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
+	// Try to retrieve credentials for this specific identity
+	creds, err := m.credentialStore.Retrieve(identityName)
+	if err != nil {
+		return nil, fmt.Errorf("no credentials found for identity %q: %w", identityName, err)
 	}
 
-	if mostRecentInfo == nil {
-		return nil, fmt.Errorf("no active authentication session found")
+	// Check if credentials are expired
+	if expired, err := m.credentialStore.IsExpired(identityName); err != nil || expired {
+		return nil, fmt.Errorf("credentials for identity %q are expired or invalid", identityName)
 	}
 
-	return mostRecentInfo, nil
+	return m.buildWhoamiInfo(identityName, creds), nil
 }
 
 // Validate validates the entire auth configuration
@@ -272,18 +251,17 @@ func (m *manager) getProviderForIdentityRecursive(identityName string, visited m
 	return ""
 }
 
-
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation
 func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, targetIdentity string) (*schema.Credentials, error) {
 
 	// Step 1: Bottom-up validation - check cached credentials from target to root
 	validFromIndex := m.findFirstValidCachedCredentials(chain, targetIdentity)
-	
+
 	if validFromIndex == -1 {
 		log.Debug("No valid cached credentials found in chain, full authentication required")
 	} else {
 		log.Debug("Found valid cached credentials", "validFromIndex", validFromIndex, "chainStep", getChainStepName(chain, validFromIndex))
-		
+
 		// If target identity has valid cached credentials, use them
 		if validFromIndex == len(chain)-1 {
 			if cachedCreds, err := m.credentialStore.Retrieve(targetIdentity); err == nil {
@@ -303,7 +281,7 @@ func (m *manager) findFirstValidCachedCredentials(chain []string, targetIdentity
 	// Check from target identity (bottom) up to provider (top)
 	for i := len(chain) - 1; i >= 0; i-- {
 		identityName := chain[i]
-		
+
 		// Check if we have cached credentials for this level
 		if cachedCreds, err := m.credentialStore.Retrieve(identityName); err == nil {
 			// Check if credentials are still valid (>5 minutes remaining)
@@ -396,7 +374,7 @@ func (m *manager) authenticateFromIndex(ctx context.Context, chain []string, sta
 		}
 
 		currentCreds = nextCreds
-		
+
 		// Cache credentials for this level
 		if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
 			log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
@@ -409,7 +387,6 @@ func (m *manager) authenticateFromIndex(ctx context.Context, chain []string, sta
 
 	return currentCreds, nil
 }
-
 
 // Helper functions for logging
 func getChainStepName(chain []string, index int) string {
@@ -439,9 +416,32 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, identityName st
 
 	log.Debug("Authentication chain built", "identity", identityName, "chainLength", len(chain), "chain", chain)
 
-	// Start with provider authentication
 	var currentCreds *schema.Credentials
+	var startIndex int
 
+	// Check if this is an AWS User identity (standalone, no provider)
+	if len(chain) == 1 {
+		// Single identity in chain - check if it's AWS User
+		identityName := chain[0]
+		if identity, exists := m.config.Identities[identityName]; exists && identity.Kind == "aws/user" {
+			// AWS User identity - authenticate directly without provider
+			identityInstance, exists := m.identities[identityName]
+			if !exists {
+				return nil, fmt.Errorf("AWS User identity %q not found", identityName)
+			}
+
+			// AWS User identities authenticate with nil credentials (no provider chain)
+			currentCreds, err = identityInstance.Authenticate(ctx, nil)
+			if err != nil {
+				return nil, fmt.Errorf("AWS User identity %q authentication failed: %w", identityName, err)
+			}
+
+			log.Debug("AWS User authenticated directly", "identity", identityName, "hasAWSCreds", currentCreds.AWS != nil)
+			return currentCreds, nil
+		}
+	}
+
+	// Standard provider-based authentication chain
 	// Step 1: Authenticate with the source provider
 	providerName := chain[0]
 	provider, exists := m.providers[providerName]
@@ -455,9 +455,10 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, identityName st
 	}
 
 	log.Debug("Provider authenticated", "provider", providerName, "hasAWSCreds", currentCreds.AWS != nil)
+	startIndex = 1
 
 	// Step 2: Authenticate through each identity in the chain
-	for i := 1; i < len(chain); i++ {
+	for i := startIndex; i < len(chain); i++ {
 		identityStep := chain[i]
 		identity, exists := m.identities[identityStep]
 		if !exists {
@@ -528,7 +529,13 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return fmt.Errorf("identity %q not found", identityName)
 	}
 
+	// AWS User identities don't require via configuration - they are standalone
 	if identity.Via == nil {
+		if identity.Kind == "aws/user" {
+			// AWS User is standalone - just add it to the chain and return
+			*chain = append(*chain, identityName)
+			return nil
+		}
 		return fmt.Errorf("identity %q has no via configuration", identityName)
 	}
 

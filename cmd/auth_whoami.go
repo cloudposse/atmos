@@ -36,9 +36,16 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create auth manager: %w", err)
 	}
 
-	// Get current authentication status
+	// Get default identity to check whoami status
 	ctx := context.Background()
-	whoami, err := authManager.Whoami(ctx)
+	defaultIdentity, err := authManager.GetDefaultIdentity()
+	if err != nil {
+		u.PrintfMarkdown("**No default identity configured**\n")
+		u.PrintfMarkdown("Configure auth in atmos.yaml and run `atmos auth login` to authenticate.\n")
+		return nil
+	}
+
+	whoami, err := authManager.Whoami(ctx, defaultIdentity)
 	if err != nil {
 		u.PrintfMarkdown("**No active authentication session found**\n")
 		u.PrintfMarkdown("Run `atmos auth login` to authenticate.\n")

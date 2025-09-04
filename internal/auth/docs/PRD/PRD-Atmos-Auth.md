@@ -874,16 +874,18 @@ identities:
 
 #### AWS User (Break-glass)
 
+AWS User identities are standalone and do not require a `via` provider configuration. They authenticate directly using AWS access keys.
+
 ```yaml
 identities:
-  emergency:
+  superuser:
     kind: aws/user
     spec:
       # Credentials can be specified in spec (takes precedence)
-      access_key_id: !env AWS_EMERGENCY_ACCESS_KEY_ID
-      secret_access_key: !env AWS_EMERGENCY_SECRET_ACCESS_KEY
+      access_key_id: !env AWS_SUPERUSER_ACCESS_KEY_ID
+      secret_access_key: !env AWS_SUPERUSER_SECRET_ACCESS_KEY
       region: us-east-1
-    alias: emergency
+    alias: superuser
 
   # Alternative: credentials retrieved from keyring when not in spec
   emergency-keyring:
@@ -894,6 +896,13 @@ identities:
       # Configure with: atmos auth user configure
     alias: emergency-keyring
 ```
+
+**Key Characteristics:**
+
+- No `via` provider required - AWS User identities are self-contained
+- Credentials sourced from environment variables or OS keychain
+- Primarily used for break-glass scenarios and emergency access
+- Direct AWS API authentication using access key pairs
 
 #### Azure Role
 
@@ -960,6 +969,12 @@ auth:
         account:
           name: core-identity
       alias: managers-core
+
+    superuser:
+      kind: aws/user
+      # No via provider required - AWS User identities are self-contained
+      spec:
+        region: us-east-1
 ```
 
 #### Component Stack Configuration
@@ -1021,9 +1036,9 @@ components:
 2. **New Identities**: New identities defined in components are added to available options
 3. **Provider Overrides**: Component providers override global providers with same name
 4. **Environment Variable Merging**: Component environment variables are merged with identity environment variables
-6. **AWS File Management**: AWS credential file paths are automatically set based on active provider
-7. **Validation**: Validation occurs on the merged configuration
-8. **Precedence**: Component-level configuration always takes precedence over global configuration
+5. **AWS File Management**: AWS credential file paths are automatically set based on active provider
+6. **Validation**: Validation occurs on the merged configuration
+7. **Precedence**: Component-level configuration always takes precedence over global configuration
 
 ### 5.4 Component Description Output
 
@@ -1090,6 +1105,7 @@ identities:
 #### Scenario 1: Simple Chain (SSO → Permission Set)
 
 **Configuration:**
+
 ```yaml
 providers:
   cplive-sso:
@@ -1106,11 +1122,12 @@ identities:
 ```
 
 **Authentication Flow:**
+
 1. **Target**: `managers` identity
 2. **Chain**: `cplive-sso` → `managers`
 3. **Cache Check**: Check `aws-iam-identity-center/cplive-sso/managers` cache key
 4. **If Valid**: Use cached credentials, skip authentication
-5. **If Invalid**: 
+5. **If Invalid**:
    - Check `sso/cplive-sso/managers` for SSO tokens
    - If SSO tokens valid, refresh permission set credentials
    - If SSO tokens invalid, prompt for SSO authentication, then get permission set
@@ -1118,6 +1135,7 @@ identities:
 #### Scenario 2: Complex Chain (SSO → Permission Set → Assume Role)
 
 **Configuration:**
+
 ```yaml
 providers:
   cplive-sso:
@@ -1131,7 +1149,7 @@ identities:
     spec:
       name: IdentityManagersTeamAccess
       account: { name: core-identity }
-      
+
   sandbox-admin:
     kind: aws/assume-role
     via: { identity: managers }
@@ -1140,6 +1158,7 @@ identities:
 ```
 
 **Authentication Flow:**
+
 1. **Target**: `sandbox-admin` identity
 2. **Chain**: `cplive-sso` → `managers` → `sandbox-admin`
 3. **Bottom-Up Validation**:
@@ -1153,18 +1172,19 @@ identities:
 #### Scenario 3: Deep Chain (SSO → Permission Set → Assume Role → Nested Assume Role)
 
 **Configuration:**
+
 ```yaml
 identities:
   managers:
     kind: aws/permission-set
     via: { provider: cplive-sso }
-    
+
   cross-account-admin:
     kind: aws/assume-role
     via: { identity: managers }
     spec:
       assume_role: arn:aws:iam::123456789012:role/CrossAccountAccess
-      
+
   production-admin:
     kind: aws/assume-role
     via: { identity: cross-account-admin }
@@ -1173,6 +1193,7 @@ identities:
 ```
 
 **Authentication Flow:**
+
 1. **Target**: `production-admin` identity
 2. **Chain**: `cplive-sso` → `managers` → `cross-account-admin` → `production-admin`
 3. **Optimization Strategy**:
@@ -1186,6 +1207,7 @@ identities:
 **Cache Key Format**: `<provider_kind>/<provider_name>/<identity_name>`
 
 **Examples:**
+
 - SSO Tokens: `sso/cplive-sso/managers`
 - Permission Set: `aws-iam-identity-center/cplive-sso/managers`
 - Assume Role: `aws-assume-role/managers/sandbox-admin`
@@ -1194,11 +1216,13 @@ identities:
 ### 5.3 Performance Benefits
 
 **Without Hierarchical Caching:**
+
 - Every authentication requires full chain re-authentication
 - SSO prompts on every expired credential
 - No optimization for partially valid chains
 
 **With Hierarchical Caching:**
+
 - 90% reduction in authentication time for valid cached credentials
 - Selective re-authentication minimizes user prompts
 - Optimal credential reuse across identity chains

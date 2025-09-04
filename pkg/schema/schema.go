@@ -1050,6 +1050,7 @@ type AWSCredentials struct {
 	SessionToken    string `json:"session_token,omitempty"`
 	Region          string `json:"region,omitempty"`
 	Expiration      string `json:"expiration,omitempty"`
+	MfaArn          string `json:"mfa_arn,omitempty"`
 }
 
 // AzureCredentials defines Azure-specific credential fields

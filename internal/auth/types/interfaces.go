@@ -44,8 +44,8 @@ type AuthManager interface {
 	// Authenticate performs authentication for the specified identity
 	Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error)
 
-	// Whoami returns information about the current effective principal
-	Whoami(ctx context.Context) (*schema.WhoamiInfo, error)
+	// Whoami returns information about the specified identity's credentials
+	Whoami(ctx context.Context, identityName string) (*schema.WhoamiInfo, error)
 
 	// Validate validates the entire auth configuration
 	Validate() error

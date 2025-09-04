@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/huh"
 	log "github.com/charmbracelet/log"
@@ -54,13 +53,8 @@ var authUserConfigureCmd = &cobra.Command{
 			return err
 		}
 
-		// Resolve provider and compute alias <provider>/<identity>
-		identity := atmosConfig.Auth.Identities[choice]
-		providerName := identity.Via.Provider
-		if providerName == "" {
-			return fmt.Errorf("identity %s does not specify a provider", choice)
-		}
-		alias := fmt.Sprintf("%s/%s", providerName, choice)
+		// For AWS User identities, use the identity name directly as alias
+		alias := choice // AWS User identities are standalone, no provider needed
 
 		// Prompt for credentials
 		var accessKeyID, secretAccessKey, mfaArn string
@@ -85,21 +79,20 @@ var authUserConfigureCmd = &cobra.Command{
 			return err
 		}
 
-		// Save to keyring using generic store
-		store := credentials.NewKeyringAuthStore()
-		type userSecret struct {
-			AccessKeyID     string    `json:"access_key_id"`
-			SecretAccessKey string    `json:"secret_access_key"`
-			MfaArn          string    `json:"mfa_arn,omitempty"`
-			LastUpdated     time.Time `json:"last_updated"`
+		// Save to keyring using schema.Credentials format
+		store := credentials.NewCredentialStore()
+		
+		// Create credentials in the proper schema format with AWS wrapper
+		creds := &schema.Credentials{
+			AWS: &schema.AWSCredentials{
+				AccessKeyID:     accessKeyID,
+				SecretAccessKey: secretAccessKey,
+				MfaArn:          mfaArn,
+			},
 		}
-		secret := userSecret{
-			AccessKeyID:     accessKeyID,
-			SecretAccessKey: secretAccessKey,
-			MfaArn:          mfaArn,
-			LastUpdated:     time.Now(),
-		}
-		if err := store.SetAny(alias, secret); err != nil {
+		
+		// Store the credentials
+		if err := store.Store(alias, creds); err != nil {
 			return err
 		}
 		log.Info("Saved credentials to keyring", "alias", alias)

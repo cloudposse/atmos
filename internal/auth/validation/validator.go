@@ -84,8 +84,6 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 		return v.validateSSOProvider(provider)
 	case "aws/assume-role":
 		return v.validateAssumeRoleProvider(provider)
-	case "aws/user":
-		return v.validateUserProvider(provider)
 	default:
 		return fmt.Errorf("unsupported provider kind: %s", provider.Kind)
 	}
@@ -101,8 +99,8 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 		return fmt.Errorf("identity kind is required")
 	}
 
-	// Validate via configuration
-	if identity.Via != nil {
+	// Validate via configuration - AWS User identities don't require via provider
+	if identity.Kind != "aws/user" && identity.Via != nil {
 		if identity.Via.Provider != "" {
 			if _, exists := providers[identity.Via.Provider]; !exists {
 				return fmt.Errorf("referenced provider %q does not exist", identity.Via.Provider)
@@ -182,12 +180,6 @@ func (v *validator) validateAssumeRoleProvider(provider *schema.Provider) error 
 	return nil
 }
 
-// validateUserProvider validates AWS user provider configuration
-func (v *validator) validateUserProvider(provider *schema.Provider) error {
-	// User providers typically don't have strict validation requirements
-	// as credentials are stored securely in keyring
-	return nil
-}
 
 // validatePermissionSetIdentity validates AWS permission set identity configuration
 func (v *validator) validatePermissionSetIdentity(identity *schema.Identity) error {
