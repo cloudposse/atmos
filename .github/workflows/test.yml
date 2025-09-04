@@ -186,6 +186,12 @@ jobs:
           go-version-file: "go.mod"
         id: go
 
+      - name: Add Go bin to PATH
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+          echo "Go binary path: $(go env GOPATH)/bin"
+
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
@@ -220,10 +226,13 @@ jobs:
           echo "Runner OS: ${{ runner.os }}"
           echo "Matrix Target: ${{ matrix.flavor.target }}"
           echo "Go Version: $(go version)"
+          echo "GOPATH: $(go env GOPATH)"
+          echo "GOPATH/bin: $(go env GOPATH)/bin"
           echo "Working Directory: $(pwd)"
           echo "PATH: $PATH"
           which atmos || echo "atmos not in PATH"
           atmos version || echo "Failed to run atmos version"
+          which gotcha || echo "gotcha not in PATH (will be installed by make testacc-ci)"
           echo "========================"
 
       - name: Acceptance tests
