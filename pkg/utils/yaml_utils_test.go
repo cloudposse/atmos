@@ -84,8 +84,8 @@ func TestConvertToYAML(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "slice",
-			data: []string{"item1", "item2", "item3"},
+			name:        "slice",
+			data:        []string{"item1", "item2", "item3"},
 			expected:    "- item1\n- item2\n- item3\n",
 			expectError: false,
 		},
@@ -114,7 +114,7 @@ func TestConvertToYAML(t *testing.T) {
 					"child": "value",
 				},
 			},
-			opts: []YAMLOptions{{Indent: 4}},
+			opts:        []YAMLOptions{{Indent: 4}},
 			expected:    "parent:\n    child: value\n",
 			expectError: false,
 		},
@@ -123,7 +123,7 @@ func TestConvertToYAML(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ConvertToYAML(tt.data, tt.opts...)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -199,7 +199,7 @@ items:
 		t.Run(tt.name, func(t *testing.T) {
 			var result map[string]interface{}
 			result, err := UnmarshalYAML[map[string]interface{}](tt.input)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -243,17 +243,17 @@ func TestWriteToFileAsYAML(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := WriteToFileAsYAML(tt.filePath, tt.data, 0644)
-			
+			err := WriteToFileAsYAML(tt.filePath, tt.data, 0o644)
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				
+
 				// Verify file was written and can be read back
 				content, err := os.ReadFile(tt.filePath)
 				assert.NoError(t, err)
-				
+
 				// Parse the YAML to verify it's valid
 				var parsed interface{}
 				err = yaml.Unmarshal(content, &parsed)
@@ -316,17 +316,17 @@ func TestWriteToFileAsYAMLWithConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := WriteToFileAsYAMLWithConfig(tt.config, tt.filePath, tt.data, 0644)
-			
+			err := WriteToFileAsYAMLWithConfig(tt.config, tt.filePath, tt.data, 0o644)
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				
+
 				// Verify file was written
 				content, err := os.ReadFile(tt.filePath)
 				assert.NoError(t, err)
-				
+
 				// Verify indentation if custom
 				if tt.config.Settings.Terminal.TabWidth == 4 {
 					// Check that nested content has 4 space indent
@@ -380,7 +380,7 @@ func TestPrintAsYAMLWithConfig(t *testing.T) {
 			os.Stdout = os.NewFile(0, os.DevNull)
 
 			err := PrintAsYAMLWithConfig(tt.config, tt.data)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -430,7 +430,7 @@ func TestGetHighlightedYAML(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := GetHighlightedYAML(config, tt.data)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -470,7 +470,7 @@ func TestYAMLOptions(t *testing.T) {
 		{
 			name:     "single space indent (yaml library minimum is 2)",
 			opts:     YAMLOptions{Indent: 1},
-			expected: "parent:\n  child1: value1\n  child2: value2\n",  // yaml library uses minimum of 2
+			expected: "parent:\n  child1: value1\n  child2: value2\n", // yaml library uses minimum of 2
 		},
 	}
 
@@ -482,4 +482,3 @@ func TestYAMLOptions(t *testing.T) {
 		})
 	}
 }
-

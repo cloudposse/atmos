@@ -205,13 +205,13 @@ func TestConvertPathsToAbsolutePaths(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ConvertPathsToAbsolutePaths(tt.paths)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 				assert.Len(t, result, len(tt.paths))
-				
+
 				// Check all paths are absolute
 				for _, path := range result {
 					assert.True(t, filepath.IsAbs(path), "Path should be absolute: %s", path)
@@ -251,10 +251,10 @@ func TestJoinAbsolutePathWithPaths(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := JoinAbsolutePathWithPaths(tt.basePath, tt.paths)
-			
+
 			assert.NoError(t, err)
 			assert.Len(t, result, tt.expected)
-			
+
 			for i, path := range result {
 				assert.Contains(t, path, tt.basePath)
 				assert.Contains(t, path, tt.paths[i])
@@ -290,7 +290,7 @@ func TestTrimBasePathFromPath(t *testing.T) {
 		},
 		// Note: On Unix, backslashes are valid filename chars, so filepath.ToSlash doesn't convert them
 		{
-			name:     "windows style paths on Unix", 
+			name:     "windows style paths on Unix",
 			basePath: `C:\base\path`,
 			path:     `C:\base\path\subdir\file.txt`,
 			expected: `\subdir\file.txt`, // On Unix, backslashes remain as-is
@@ -320,7 +320,7 @@ func TestIsPathAbsolute(t *testing.T) {
 
 	// Add Windows-specific tests if on Windows
 	if filepath.Separator == '\\' {
-		tests = append(tests, 
+		tests = append(tests,
 			struct {
 				name     string
 				path     string
@@ -339,10 +339,10 @@ func TestIsPathAbsolute(t *testing.T) {
 
 func TestJoinAbsolutePathWithPath(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create a test file
 	testFile := filepath.Join(tmpDir, "test.txt")
-	err := os.WriteFile(testFile, []byte("test"), 0644)
+	err := os.WriteFile(testFile, []byte("test"), 0o644)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -380,7 +380,7 @@ func TestJoinAbsolutePathWithPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := JoinAbsolutePathWithPath(tt.basePath, tt.providedPath)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -419,12 +419,12 @@ func TestEnsureDir(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := EnsureDir(tt.fileName)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				
+
 				// Verify directory was created
 				dir := filepath.Dir(tt.fileName)
 				assert.True(t, FileOrDirExists(dir))
@@ -484,9 +484,9 @@ func TestGetAllFilesInDir(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create test directory structure
-	err := os.MkdirAll(filepath.Join(tmpDir, "subdir1"), 0755)
+	err := os.MkdirAll(filepath.Join(tmpDir, "subdir1"), 0o755)
 	require.NoError(t, err)
-	err = os.MkdirAll(filepath.Join(tmpDir, "subdir2"), 0755)
+	err = os.MkdirAll(filepath.Join(tmpDir, "subdir2"), 0o755)
 	require.NoError(t, err)
 
 	// Create test files
@@ -498,7 +498,7 @@ func TestGetAllFilesInDir(t *testing.T) {
 	}
 
 	for _, file := range testFiles {
-		err := os.WriteFile(filepath.Join(tmpDir, file), []byte("test"), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, file), []byte("test"), 0o644)
 		require.NoError(t, err)
 	}
 
@@ -506,8 +506,8 @@ func TestGetAllFilesInDir(t *testing.T) {
 	files, err := GetAllFilesInDir(tmpDir)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(files), 4)
-	
-	// Note: Skipping non-existent directory test as GetAllFilesInDir doesn't 
+
+	// Note: Skipping non-existent directory test as GetAllFilesInDir doesn't
 	// properly handle the case when info is nil during filepath.Walk errors
 }
 
@@ -516,22 +516,22 @@ func TestGetAllYamlFilesInDir(t *testing.T) {
 
 	// Create test files
 	testFiles := map[string]bool{
-		"config.yaml":      true,
-		"settings.yml":     true,
+		"config.yaml":        true,
+		"settings.yml":       true,
 		"template.yaml.tmpl": true,
-		"doc.txt":          false,
-		"script.sh":        false,
-		"data.json":        false,
+		"doc.txt":            false,
+		"script.sh":          false,
+		"data.json":          false,
 	}
 
 	for file := range testFiles {
-		err := os.WriteFile(filepath.Join(tmpDir, file), []byte("test"), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, file), []byte("test"), 0o644)
 		require.NoError(t, err)
 	}
 
 	files, err := GetAllYamlFilesInDir(tmpDir)
 	assert.NoError(t, err)
-	
+
 	// Count YAML files
 	yamlCount := 0
 	for _, isYaml := range testFiles {
@@ -539,16 +539,16 @@ func TestGetAllYamlFilesInDir(t *testing.T) {
 			yamlCount++
 		}
 	}
-	
+
 	assert.Len(t, files, yamlCount)
 }
 
 func TestIsSocket(t *testing.T) {
 	tests := []struct {
-		name        string
-		setup       func() (string, func())
+		name         string
+		setup        func() (string, func())
 		expectSocket bool
-		expectError bool
+		expectError  bool
 	}{
 		{
 			name: "regular file",
@@ -597,15 +597,15 @@ func TestIsSocket(t *testing.T) {
 
 func TestSearchConfigFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create atmos.yaml in tmpDir
 	atmosFile := filepath.Join(tmpDir, "atmos.yaml")
-	err := os.WriteFile(atmosFile, []byte("test"), 0644)
+	err := os.WriteFile(atmosFile, []byte("test"), 0o644)
 	require.NoError(t, err)
 
 	// Create config.yml in tmpDir
 	configFile := filepath.Join(tmpDir, "config.yml")
-	err = os.WriteFile(configFile, []byte("test"), 0644)
+	err = os.WriteFile(configFile, []byte("test"), 0o644)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -659,10 +659,10 @@ func TestIsURL(t *testing.T) {
 	}{
 		{"http URL", "http://example.com", true},
 		{"https URL", "https://example.com", true},
-		{"ftp URL", "ftp://example.com", false},  // Only http/https are valid
-		{"git URL", "git://github.com/user/repo", false},  // Only http/https are valid
-		{"ssh URL", "ssh://user@host.com", false},  // Only http/https are valid
-		{"file URL", "file:///path/to/file", false},  // Only http/https are valid
+		{"ftp URL", "ftp://example.com", false},          // Only http/https are valid
+		{"git URL", "git://github.com/user/repo", false}, // Only http/https are valid
+		{"ssh URL", "ssh://user@host.com", false},        // Only http/https are valid
+		{"file URL", "file:///path/to/file", false},      // Only http/https are valid
 		{"URL with path", "https://example.com/path/to/resource", true},
 		{"URL with query", "https://example.com?query=value", true},
 		{"relative path", "./relative/path", false},
@@ -708,7 +708,7 @@ func TestGetFileNameFromURL(t *testing.T) {
 		{
 			name:        "URL ending with slash",
 			url:         "https://example.com/directory/",
-			expected:    "directory",  // filepath.Base returns the directory name
+			expected:    "directory", // filepath.Base returns the directory name
 			expectError: false,
 		},
 		{
@@ -719,7 +719,7 @@ func TestGetFileNameFromURL(t *testing.T) {
 		},
 		{
 			name:        "invalid URL",
-			url:         "://invalid",  // Invalid URL format
+			url:         "://invalid", // Invalid URL format
 			expected:    "",
 			expectError: true,
 		},
@@ -728,7 +728,7 @@ func TestGetFileNameFromURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := GetFileNameFromURL(tt.url)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -756,25 +756,25 @@ func TestResolveRelativePath(t *testing.T) {
 			name:     "non-relative path unchanged",
 			path:     "relative/path",
 			basePath: "/base",
-			expected: "relative/path",  // Non-relative paths are returned as-is
+			expected: "relative/path", // Non-relative paths are returned as-is
 		},
 		{
 			name:     "current directory",
 			path:     ".",
-			basePath: "/base/file.yaml",  // basePath should be a file path
+			basePath: "/base/file.yaml", // basePath should be a file path
 			expected: "/base",
 		},
 		{
 			name:     "parent directory",
 			path:     "../sibling",
-			basePath: "/base/child/file.yaml",  // basePath should be a file path
+			basePath: "/base/child/file.yaml", // basePath should be a file path
 			expected: "/base/sibling",
 		},
 		{
 			name:     "empty path",
 			path:     "",
 			basePath: "/base",
-			expected: "",  // Empty path returns empty
+			expected: "", // Empty path returns empty
 		},
 	}
 
@@ -791,7 +791,7 @@ func TestResolveRelativePath(t *testing.T) {
 
 func TestGetLineEnding(t *testing.T) {
 	ending := GetLineEnding()
-	
+
 	// On Windows, should be \r\n, on Unix-like systems should be \n
 	if runtime.GOOS == "windows" {
 		assert.Equal(t, "\r\n", ending)

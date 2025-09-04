@@ -501,7 +501,7 @@ func TestSliceOfInterfacesToSliceOfStringsWithErrors(t *testing.T) {
 				})
 			} else {
 				result, err := SliceOfInterfacesToSliceOfStrings(tt.input)
-				
+
 				if tt.expectError {
 					assert.Error(t, err)
 				} else {
@@ -519,13 +519,13 @@ func TestSliceContainsString_Performance(t *testing.T) {
 	for i := range largeSlice {
 		largeSlice[i] = fmt.Sprintf("item_%d", i)
 	}
-	
+
 	// Test finding first element (best case)
 	assert.True(t, SliceContainsString(largeSlice, "item_0"))
-	
+
 	// Test finding last element (worst case)
 	assert.True(t, SliceContainsString(largeSlice, "item_9999"))
-	
+
 	// Test not finding element
 	assert.False(t, SliceContainsString(largeSlice, "not_found"))
 }
@@ -536,13 +536,13 @@ func TestSliceContainsInt_Performance(t *testing.T) {
 	for i := range largeSlice {
 		largeSlice[i] = i
 	}
-	
+
 	// Test finding first element (best case)
 	assert.True(t, SliceContainsInt(largeSlice, 0))
-	
-	// Test finding last element (worst case)  
+
+	// Test finding last element (worst case)
 	assert.True(t, SliceContainsInt(largeSlice, 9999))
-	
+
 	// Test not finding element
 	assert.False(t, SliceContainsInt(largeSlice, -1))
 }

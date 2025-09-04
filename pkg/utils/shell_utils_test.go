@@ -57,12 +57,12 @@ func TestExecuteShellAndReturnOutput(t *testing.T) {
 			expected: "hello world\n",
 		},
 		{
-			name:    "dry run mode",
-			command: "echo should_not_execute",
-			cmdName: "test-dry-run",
-			dir:     ".",
-			env:     []string{},
-			dryRun:  true,
+			name:     "dry run mode",
+			command:  "echo should_not_execute",
+			cmdName:  "test-dry-run",
+			dir:      ".",
+			env:      []string{},
+			dryRun:   true,
 			expected: "", // No output in dry run
 		},
 		{
@@ -102,7 +102,7 @@ func TestExecuteShellAndReturnOutput(t *testing.T) {
 			expected: "line1\nline2\nline3\n",
 		},
 		{
-			name: "shell level incremented",
+			name:    "shell level incremented",
 			command: "echo $ATMOS_SHLVL",
 			cmdName: "test-shlvl",
 			dir:     ".",
@@ -114,7 +114,7 @@ func TestExecuteShellAndReturnOutput(t *testing.T) {
 			expected: "3\n",
 		},
 		{
-			name: "max shell depth exceeded",
+			name:    "max shell depth exceeded",
 			command: "echo test",
 			cmdName: "test-max-depth",
 			dir:     ".",
@@ -140,7 +140,7 @@ func TestExecuteShellAndReturnOutput(t *testing.T) {
 
 			// Clear ATMOS_SHLVL before each test
 			os.Unsetenv("ATMOS_SHLVL")
-			
+
 			if tt.setup != nil {
 				tt.setup()
 			}
@@ -151,7 +151,7 @@ func TestExecuteShellAndReturnOutput(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				
+
 				// Special handling for pwd command
 				if tt.command == "pwd" {
 					assert.Contains(t, output, tt.dir)
@@ -246,11 +246,11 @@ func TestShellRunner(t *testing.T) {
 			expected: "Hello World\n",
 		},
 		{
-			name:     "command substitution",
-			command:  "echo Today is $(date +%A 2>/dev/null || echo unknown)",
-			cmdName:  "substitution-test",
-			dir:      ".",
-			env:      []string{},
+			name:    "command substitution",
+			command: "echo Today is $(date +%A 2>/dev/null || echo unknown)",
+			cmdName: "substitution-test",
+			dir:     ".",
+			env:     []string{},
 			// Output will vary, just check it doesn't error
 		},
 	}
@@ -265,7 +265,7 @@ func TestShellRunner(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				output := buf.String()
-				
+
 				// For command substitution test, just check we got something
 				if strings.Contains(tt.command, "date") {
 					assert.NotEmpty(t, output)
@@ -360,9 +360,9 @@ func TestGetNextShellLevelExtended(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup()
-			
+
 			level, err := GetNextShellLevel()
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 				if tt.errorType != nil {
@@ -380,10 +380,10 @@ func TestShellRunnerWithDifferentDirectories(t *testing.T) {
 	// Create temporary directories for testing
 	tmpDir1 := t.TempDir()
 	tmpDir2 := t.TempDir()
-	
+
 	// Create a test file in tmpDir1
 	testFile := "test.txt"
-	err := os.WriteFile(fmt.Sprintf("%s/%s", tmpDir1, testFile), []byte("test content"), 0644)
+	err := os.WriteFile(fmt.Sprintf("%s/%s", tmpDir1, testFile), []byte("test content"), 0o644)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -423,7 +423,7 @@ func TestShellRunnerWithDifferentDirectories(t *testing.T) {
 			var buf bytes.Buffer
 			err := ShellRunner(tt.command, "dir-test", tt.dir, []string{}, &buf)
 			assert.NoError(t, err)
-			
+
 			output := buf.String()
 			assert.True(t, tt.expected(output), "Output: %s", output)
 		})
@@ -537,7 +537,7 @@ func TestShellRunnerEdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			err := ShellRunner(tt.command, "edge-test", ".", []string{}, &buf)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {

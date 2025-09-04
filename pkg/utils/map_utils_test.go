@@ -15,9 +15,9 @@ func TestStringKeysFromMap(t *testing.T) {
 		{
 			name: "simple map",
 			input: map[string]any{
-				"zebra":   "value1",
-				"apple":   "value2",
-				"banana":  "value3",
+				"zebra":  "value1",
+				"apple":  "value2",
+				"banana": "value3",
 			},
 			expected: []string{"apple", "banana", "zebra"}, // Should be sorted
 		},
@@ -302,9 +302,9 @@ func TestMapOfInterfaceKeysToMapOfStringKeys(t *testing.T) {
 		{
 			name: "only non-string keys",
 			input: map[any]any{
-				123:   "value1",
-				true:  "value2",
-				3.14:  "value3",
+				123:  "value1",
+				true: "value2",
+				3.14: "value3",
 			},
 			expected: map[string]any{},
 		},
@@ -322,8 +322,8 @@ func TestMapOfInterfaceKeysToMapOfStringKeys(t *testing.T) {
 		{
 			name: "complex values",
 			input: map[any]any{
-				"slice": []int{1, 2, 3},
-				"map":   map[string]int{"nested": 1},
+				"slice":  []int{1, 2, 3},
+				"map":    map[string]int{"nested": 1},
 				"struct": struct{ Name string }{Name: "test"},
 			},
 			expected: map[string]any{

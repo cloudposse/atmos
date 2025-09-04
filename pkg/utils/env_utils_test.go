@@ -10,11 +10,11 @@ import (
 
 func TestConvertEnvVars(t *testing.T) {
 	tests := []struct {
-		name            string
-		envVarsMap      map[string]any
-		expectedContains []string
+		name                string
+		envVarsMap          map[string]any
+		expectedContains    []string
 		expectedNotContains []string
-		expectedLen     int
+		expectedLen         int
 	}{
 		{
 			name: "simple string values",
@@ -40,9 +40,9 @@ func TestConvertEnvVars(t *testing.T) {
 			},
 			expectedContains: []string{
 				"STRING=hello",
-				"INT=%!s(int=42)",       // fmt.Sprintf with %s on int
+				"INT=%!s(int=42)",         // fmt.Sprintf with %s on int
 				"FLOAT=%!s(float64=3.14)", // fmt.Sprintf with %s on float
-				"BOOL=%!s(bool=true)",    // fmt.Sprintf with %s on bool
+				"BOOL=%!s(bool=true)",     // fmt.Sprintf with %s on bool
 			},
 			expectedLen: 4,
 		},
@@ -65,9 +65,9 @@ func TestConvertEnvVars(t *testing.T) {
 		{
 			name: "with null string values",
 			envVarsMap: map[string]any{
-				"VALID":      "value",
+				"VALID":       "value",
 				"NULL_STRING": "null",
-				"VALID2":     "value2",
+				"VALID2":      "value2",
 			},
 			expectedContains: []string{
 				"VALID=value",
@@ -142,15 +142,15 @@ func TestConvertEnvVars(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ConvertEnvVars(tt.envVarsMap)
-			
+
 			// Check length
 			assert.Len(t, result, tt.expectedLen)
-			
+
 			// Check expected values are present
 			for _, expected := range tt.expectedContains {
 				assert.Contains(t, result, expected)
 			}
-			
+
 			// Check values that should not be present
 			for _, notExpected := range tt.expectedNotContains {
 				assert.NotContains(t, result, notExpected)
@@ -172,9 +172,9 @@ func TestEnvironToMap(t *testing.T) {
 	}()
 
 	tests := []struct {
-		name     string
-		setup    func()
-		verify   func(t *testing.T, envMap map[string]string)
+		name   string
+		setup  func()
+		verify func(t *testing.T, envMap map[string]string)
 	}{
 		{
 			name: "basic environment variables",
@@ -296,11 +296,11 @@ func TestConvertEnvVarsStability(t *testing.T) {
 func TestEnvironToMapWithRealEnvironment(t *testing.T) {
 	// Test with the real environment (don't clear it)
 	envMap := EnvironToMap()
-	
+
 	// Verify that at least some standard environment variables are present
 	// (these might not exist on all systems, so we check if they exist first)
 	possibleVars := []string{"PATH", "HOME", "USER", "SHELL", "PWD"}
-	
+
 	foundAtLeastOne := false
 	for _, varName := range possibleVars {
 		if osValue, exists := os.LookupEnv(varName); exists {
@@ -310,10 +310,10 @@ func TestEnvironToMapWithRealEnvironment(t *testing.T) {
 			assert.Equal(t, osValue, mapValue, "Value for %s should match", varName)
 		}
 	}
-	
+
 	// On most systems, at least one of these variables should exist
 	assert.True(t, foundAtLeastOne, "Should find at least one standard environment variable")
-	
+
 	// The map should not be empty on most systems
 	assert.NotEmpty(t, envMap, "Environment map should not be empty on most systems")
 }
@@ -328,16 +328,16 @@ func TestConvertEnvVarsOrder(t *testing.T) {
 		"E": nil,
 		"F": "valueF",
 	}
-	
+
 	result := ConvertEnvVars(envVarsMap)
-	
+
 	// Should only have A, D, F
 	assert.Len(t, result, 3)
-	
+
 	// Sort for consistent checking
 	sort.Strings(result)
 	expected := []string{"A=valueA", "D=valueD", "F=valueF"}
 	sort.Strings(expected)
-	
+
 	assert.Equal(t, expected, result)
 }
