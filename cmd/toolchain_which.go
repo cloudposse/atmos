@@ -14,9 +14,9 @@ This command shows the full path to the binary for a tool that is configured
 in .tool-versions and installed via toolchain.
 
 Examples:
-  toolchain which terraform
-  toolchain which hashicorp/terraform
-  toolchain which kubectl`,
+atmos toolchain which terraform
+atmos toolchain which hashicorp/terraform
+atmos toolchain which kubectl`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		toolName := args[0]

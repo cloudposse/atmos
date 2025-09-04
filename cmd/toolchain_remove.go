@@ -15,11 +15,11 @@ var toolchainRemoveCmd = &cobra.Command{
 This command removes a tool and all its versions, or a specific version, from the .tool-versions file.
 
 Examples:
-  toolchain remove terraform
-  toolchain remove hashicorp/terraform
-  toolchain remove terraform@1.11.4
-  toolchain remove hashicorp/terraform@1.11.4
-  toolchain remove --file /path/to/.tool-versions kubectl@1.28.0`,
+atmos toolchain remove terraform
+atmos toolchain remove hashicorp/terraform
+atmos toolchain remove terraform@1.11.4
+atmos toolchain remove hashicorp/terraform@1.11.4
+atmos toolchain remove --file /path/to/.tool-versions kubectl@1.28.0`,
 	Args: cobra.ExactArgs(1),
 	RunE: runRemoveToolCmd,
 }
