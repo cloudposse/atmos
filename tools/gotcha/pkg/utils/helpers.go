@@ -101,7 +101,6 @@ func FilterPackages(packages []string, includePatterns, excludePatterns string) 
 	return filtered, nil
 }
 
-
 // isTTY checks if we're running in a terminal and Bubble Tea can actually use it.
 func IsTTY() bool {
 	// Provide an environment override
@@ -156,7 +155,7 @@ func EmitAlert(enabled bool) {
 func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool) int {
 	// Configure colors and initialize styles for stream mode
 	tui.ConfigureColors()
-	
+
 	// Build the go test command
 	args := []string{"test", "-json"}
 
@@ -325,20 +324,20 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	case "pass":
 		// Track statistics
 		p.passed++
-		
+
 		// Track subtest statistics
 		if strings.Contains(event.Test, "/") {
 			// This is a subtest - update parent's stats
 			parts := strings.SplitN(event.Test, "/", 2)
 			parentTest := parts[0]
 			subtestName := parts[1]
-			
+
 			if p.subtestStats[parentTest] == nil {
 				p.subtestStats[parentTest] = &SubtestStats{}
 			}
 			p.subtestStats[parentTest].passed = append(p.subtestStats[parentTest].passed, subtestName)
 		}
-		
+
 		// Show success with actual test name
 		if p.shouldShowTestEvent("pass") {
 			fmt.Fprintf(os.Stderr, " %s %s %s\n",
@@ -352,32 +351,32 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	case "fail":
 		// Track statistics
 		p.failed++
-		
+
 		// Track subtest statistics
 		if strings.Contains(event.Test, "/") {
 			// This is a subtest - update parent's stats
 			parts := strings.SplitN(event.Test, "/", 2)
 			parentTest := parts[0]
 			subtestName := parts[1]
-			
+
 			if p.subtestStats[parentTest] == nil {
 				p.subtestStats[parentTest] = &SubtestStats{}
 			}
 			p.subtestStats[parentTest].failed = append(p.subtestStats[parentTest].failed, subtestName)
 		}
-		
+
 		// Check if this is a parent test with subtests
 		if !strings.Contains(event.Test, "/") && p.subtestStats[event.Test] != nil {
 			stats := p.subtestStats[event.Test]
 			totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
-			
+
 			// Generate mini progress indicator
 			miniProgress := p.generateSubtestProgress(len(stats.passed), totalSubtests)
 			percentage := 0
 			if totalSubtests > 0 {
 				percentage = (len(stats.passed) * 100) / totalSubtests
 			}
-			
+
 			// Display parent test with subtest summary in line
 			fmt.Fprintf(os.Stderr, " %s %s %s %s %d%% passed\n",
 				tui.FailStyle.Render(tui.CheckFail),
@@ -385,21 +384,21 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
 				miniProgress,
 				percentage)
-			
+
 			// Add detailed subtest summary
 			if totalSubtests > 0 {
 				fmt.Fprintf(os.Stderr, "\n    Subtest Summary: %d passed, %d failed of %d total\n",
 					len(stats.passed), len(stats.failed), totalSubtests)
-				
+
 				// Show passed subtests
 				if len(stats.passed) > 0 {
-					fmt.Fprintf(os.Stderr, "\n    %s Passed (%d):\n", 
+					fmt.Fprintf(os.Stderr, "\n    %s Passed (%d):\n",
 						tui.PassStyle.Render("✔"), len(stats.passed))
 					for _, name := range stats.passed {
 						fmt.Fprintf(os.Stderr, "      • %s\n", name)
 					}
 				}
-				
+
 				// Show failed subtests
 				if len(stats.failed) > 0 {
 					fmt.Fprintf(os.Stderr, "\n    %s Failed (%d):\n",
@@ -408,7 +407,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 						fmt.Fprintf(os.Stderr, "      • %s\n", name)
 					}
 				}
-				
+
 				// Show skipped subtests if any
 				if len(stats.skipped) > 0 {
 					fmt.Fprintf(os.Stderr, "\n    %s Skipped (%d):\n",
@@ -451,20 +450,20 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	case "skip":
 		// Track statistics
 		p.skipped++
-		
+
 		// Track subtest statistics
 		if strings.Contains(event.Test, "/") {
 			// This is a subtest - update parent's stats
 			parts := strings.SplitN(event.Test, "/", 2)
 			parentTest := parts[0]
 			subtestName := parts[1]
-			
+
 			if p.subtestStats[parentTest] == nil {
 				p.subtestStats[parentTest] = &SubtestStats{}
 			}
 			p.subtestStats[parentTest].skipped = append(p.subtestStats[parentTest].skipped, subtestName)
 		}
-		
+
 		// Show skip with actual test name
 		if p.shouldShowTestEvent("skip") {
 			fmt.Fprintf(os.Stderr, " %s %s\n",
@@ -510,7 +509,7 @@ func (p *StreamProcessor) printSummary() {
 	}
 	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
 	fmt.Fprintf(os.Stderr, "\n")
-	
+
 	// Log completion time as info message
 	elapsed := time.Since(p.startTime)
 	fmt.Fprintf(os.Stderr, "%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds())
@@ -519,40 +518,40 @@ func (p *StreamProcessor) printSummary() {
 // generateSubtestProgress creates a visual progress indicator for subtest results.
 func (p *StreamProcessor) generateSubtestProgress(passed, total int) string {
 	const maxDots = 10 // Maximum number of dots to show for readability
-	
+
 	if total == 0 {
 		return ""
 	}
-	
+
 	// Determine how many dots to show (actual count up to maxDots)
 	dotsToShow := total
 	if dotsToShow > maxDots {
 		dotsToShow = maxDots
 	}
-	
+
 	// Calculate how many dots for passed vs failed
 	passedDots := passed
 	failedDots := total - passed
-	
+
 	// If we need to scale down to maxDots, do it proportionally
 	if total > maxDots {
 		passedDots = (passed * maxDots) / total
 		failedDots = maxDots - passedDots
 	}
-	
+
 	// Build the indicator with colored dots
 	var indicator strings.Builder
-	
+
 	// Add green dots for passed tests
 	for i := 0; i < passedDots; i++ {
 		indicator.WriteString(tui.PassStyle.Render("●"))
 	}
-	
+
 	// Add red dots for failed tests
 	for i := 0; i < failedDots; i++ {
 		indicator.WriteString(tui.FailStyle.Render("●"))
 	}
-	
+
 	return indicator.String()
 }
 

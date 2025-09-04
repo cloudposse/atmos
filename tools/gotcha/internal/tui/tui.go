@@ -138,8 +138,8 @@ type TestModel struct {
 	failCount      int
 	skipCount      int
 	testBuffers    map[string][]string
-	subtestOutputs map[string][]string          // Persistent storage for subtest output
-	subtestStats   map[string]*SubtestStats     // Track subtest statistics per parent test
+	subtestOutputs map[string][]string      // Persistent storage for subtest output
+	subtestStats   map[string]*SubtestStats // Track subtest statistics per parent test
 	bufferMu       sync.Mutex
 
 	// JSON output
@@ -397,7 +397,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				parts := strings.SplitN(event.Test, "/", 2)
 				parentTest := parts[0]
 				subtestName := parts[1]
-				
+
 				if m.subtestStats[parentTest] == nil {
 					m.subtestStats[parentTest] = &SubtestStats{}
 				}
@@ -423,14 +423,14 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !strings.Contains(event.Test, "/") && m.subtestStats[event.Test] != nil {
 					stats := m.subtestStats[event.Test]
 					totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
-					
+
 					// Generate mini progress indicator for subtests
 					miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
 					percentage := 0
 					if totalSubtests > 0 {
 						percentage = (len(stats.passed) * 100) / totalSubtests
 					}
-					
+
 					// Display parent test with subtest summary in line
 					displayOutput = fmt.Sprintf("%s %s %s %s %d%% passed\n",
 						PassStyle.Render(CheckPass),
@@ -510,7 +510,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				parts := strings.SplitN(event.Test, "/", 2)
 				parentTest := parts[0]
 				subtestName := parts[1]
-				
+
 				if m.subtestStats[parentTest] == nil {
 					m.subtestStats[parentTest] = &SubtestStats{}
 				}
@@ -534,14 +534,14 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !strings.Contains(event.Test, "/") && m.subtestStats[event.Test] != nil {
 					stats := m.subtestStats[event.Test]
 					totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
-					
+
 					// Generate mini progress indicator for subtests
 					miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
 					percentage := 0
 					if totalSubtests > 0 {
 						percentage = (len(stats.passed) * 100) / totalSubtests
 					}
-					
+
 					// Display parent test with subtest summary in line
 					displayOutput = fmt.Sprintf("\n%s %s %s %s %d%% passed",
 						FailStyle.Render(CheckFail),
@@ -549,21 +549,21 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
 						miniProgress,
 						percentage)
-					
+
 					// Add detailed subtest summary
 					if totalSubtests > 0 {
 						displayOutput += fmt.Sprintf("\n\n    Subtest Summary: %d passed, %d failed of %d total\n",
 							len(stats.passed), len(stats.failed), totalSubtests)
-						
+
 						// Show passed subtests
 						if len(stats.passed) > 0 {
-							displayOutput += fmt.Sprintf("\n    %s Passed (%d):\n", 
+							displayOutput += fmt.Sprintf("\n    %s Passed (%d):\n",
 								PassStyle.Render("✔"), len(stats.passed))
 							for _, name := range stats.passed {
 								displayOutput += fmt.Sprintf("      • %s\n", name)
 							}
 						}
-						
+
 						// Show failed subtests
 						if len(stats.failed) > 0 {
 							displayOutput += fmt.Sprintf("\n    %s Failed (%d):\n",
@@ -572,7 +572,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								displayOutput += fmt.Sprintf("      • %s\n", name)
 							}
 						}
-						
+
 						// Show skipped subtests if any
 						if len(stats.skipped) > 0 {
 							displayOutput += fmt.Sprintf("\n    %s Skipped (%d):\n",
@@ -635,7 +635,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				parts := strings.SplitN(event.Test, "/", 2)
 				parentTest := parts[0]
 				subtestName := parts[1]
-				
+
 				if m.subtestStats[parentTest] == nil {
 					m.subtestStats[parentTest] = &SubtestStats{}
 				}
@@ -693,13 +693,13 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.totalTests > 0 {
 			m.progress.SetPercent(1.0)
 		}
-		
+
 		// Generate the final summary output before setting done
 		var summaryOutput string
 		if !m.aborted {
 			summaryOutput = m.generateFinalSummary()
 		}
-		
+
 		m.done = true
 		if m.jsonFile != nil {
 			m.jsonFile.Close()
@@ -779,7 +779,7 @@ func (m *TestModel) View() string {
 		if m.totalTests > 0 {
 			percentage = (m.completedTests * 100) / m.totalTests
 		}
-		count = fmt.Sprintf(" %d/%d tests (%d%%) (%ds) %.1fKB", 
+		count = fmt.Sprintf(" %d/%d tests (%d%%) (%ds) %.1fKB",
 			m.completedTests, m.totalTests, percentage, elapsedSeconds, bufferSizeKB)
 	} else {
 		// Very early, before any run events
@@ -861,40 +861,40 @@ func (m *TestModel) GetExitCode() int {
 // generateSubtestProgress creates a visual progress indicator for subtest results.
 func (m *TestModel) generateSubtestProgress(passed, total int) string {
 	const maxDots = 10 // Maximum number of dots to show for readability
-	
+
 	if total == 0 {
 		return ""
 	}
-	
+
 	// Determine how many dots to show (actual count up to maxDots)
 	dotsToShow := total
 	if dotsToShow > maxDots {
 		dotsToShow = maxDots
 	}
-	
+
 	// Calculate how many dots for passed vs failed
 	passedDots := passed
 	failedDots := total - passed
-	
+
 	// If we need to scale down to maxDots, do it proportionally
 	if total > maxDots {
 		passedDots = (passed * maxDots) / total
 		failedDots = maxDots - passedDots
 	}
-	
+
 	// Build the indicator with colored dots
 	var indicator strings.Builder
-	
+
 	// Add green dots for passed tests
 	for i := 0; i < passedDots; i++ {
 		indicator.WriteString(PassStyle.Render("●"))
 	}
-	
+
 	// Add red dots for failed tests
 	for i := 0; i < failedDots; i++ {
 		indicator.WriteString(FailStyle.Render("●"))
 	}
-	
+
 	return indicator.String()
 }
 

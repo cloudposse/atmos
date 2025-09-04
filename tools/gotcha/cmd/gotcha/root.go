@@ -41,7 +41,7 @@ var configFile string
 func initGlobalLogger() {
 	// Get the current color profile to preserve it
 	profile := lipgloss.ColorProfile()
-	
+
 	globalLogger = log.New(os.Stderr)
 	globalLogger.SetColorProfile(profile)
 	globalLogger.SetStyles(&log.Styles{
@@ -53,7 +53,7 @@ func initGlobalLogger() {
 				Padding(0, 1),
 			log.InfoLevel: lipgloss.NewStyle().
 				SetString("INFO").
-				Background(lipgloss.Color("#4CAF50")). // Green background  
+				Background(lipgloss.Color("#4CAF50")). // Green background
 				Foreground(lipgloss.Color("#000000")). // Black foreground
 				Padding(0, 1),
 			log.WarnLevel: lipgloss.NewStyle().
@@ -528,7 +528,6 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		p := tea.NewProgram(&model)
 
 		finalModel, err := p.Run()
-		
 		if err != nil {
 			return fmt.Errorf("failed to run test UI: %w", err)
 		}
@@ -538,11 +537,11 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 			// The TUI might have changed the global color profile
 			// Re-detect and configure colors properly
 			tui.ConfigureColors()
-			
+
 			// Re-initialize global logger after TUI exits with proper styles
 			initGlobalLogger()
 			// Use the reinitalized globalLogger for logging
-			
+
 			// Log info messages now that TUI is done
 			_ = viper.BindEnv("GOTCHA_GITHUB_STEP_SUMMARY", "GITHUB_STEP_SUMMARY")
 			githubSummary := viper.GetString("GOTCHA_GITHUB_STEP_SUMMARY")
@@ -551,12 +550,12 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 			} else {
 				globalLogger.Info(fmt.Sprintf("GitHub step summary written to %s", githubSummary))
 			}
-			
+
 			elapsed := m.GetElapsedTime()
 			if elapsed > 0 {
 				globalLogger.Info(fmt.Sprintf("Tests completed in %.2fs", elapsed.Seconds()))
 			}
-			
+
 			exitCode := m.GetExitCode()
 			if exitCode != 0 {
 				return fmt.Errorf("%w with exit code %d", types.ErrTestsFailed, exitCode)
