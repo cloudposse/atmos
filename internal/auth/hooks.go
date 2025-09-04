@@ -1,8 +1,5 @@
 package auth
 
-// Re-export types from the types package to maintain backward compatibility
-// This allows existing code to continue using auth.Provider, auth.Identity, etc.
-
 import (
 	"context"
 	"fmt"
