@@ -12,7 +12,7 @@ const (
 	// These follow the PRD specification while maintaining compatibility across all environments.
 	colorGreen     = "#2ECC40" // Bright green for pass (maps to ANSI green)
 	colorRed       = "#FF0000" // Bright red for fail (properly maps to ANSI red in all profiles)
-	colorAmber     = "#FFB347" // Peach orange for skip (maps to ANSI yellow)
+	colorAmber     = "#FFDD00" // Golden yellow for skip (maps correctly to ANSI yellow, not red)
 	colorLightGray = "#D3D3D3" // Light gray for test names
 	colorDarkGray  = "#666666" // Dark gray for durations
 	colorBlue      = "#5DADE2" // Blue for spinner

@@ -154,6 +154,9 @@ func EmitAlert(enabled bool) {
 
 // runSimpleStream runs tests with simple non-interactive streaming output.
 func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool) int {
+	// Configure colors and initialize styles for stream mode
+	tui.ConfigureColors()
+	
 	// Build the go test command
 	args := []string{"test", "-json"}
 

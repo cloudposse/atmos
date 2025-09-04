@@ -80,6 +80,9 @@ func detectColorProfile() termenv.Profile {
 func ConfigureColors() termenv.Profile {
 	profile := detectColorProfile()
 	lipgloss.SetColorProfile(profile)
+	
+	// Reinitialize styles with the new color profile
+	InitStyles()
 
 	// Return profile so caller can configure logger if needed
 	return profile

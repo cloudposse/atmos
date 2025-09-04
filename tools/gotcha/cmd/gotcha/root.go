@@ -533,7 +533,47 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		if m, ok := finalModel.(*tui.TestModel); ok {
 			// Re-configure color profile after TUI exits (TUI might have changed it)
 			profile := tui.ConfigureColors()
+			
+			// Save the current logger styles before changing profile
+			currentStyles := &log.Styles{
+				Levels: map[log.Level]lipgloss.Style{
+					log.DebugLevel: lipgloss.NewStyle().
+						SetString("DEBUG").
+						Background(lipgloss.Color("#3F51B5")). // Indigo background
+						Foreground(lipgloss.Color("#000000")). // Black foreground
+						Padding(0, 1),
+					log.InfoLevel: lipgloss.NewStyle().
+						SetString("INFO").
+						Background(lipgloss.Color("#4CAF50")). // Green background
+						Foreground(lipgloss.Color("#000000")). // Black foreground
+						Padding(0, 1),
+					log.WarnLevel: lipgloss.NewStyle().
+						SetString("WARN").
+						Background(lipgloss.Color("#FF9800")). // Orange background
+						Foreground(lipgloss.Color("#000000")). // Black foreground
+						Padding(0, 1),
+					log.ErrorLevel: lipgloss.NewStyle().
+						SetString("ERROR").
+						Background(lipgloss.Color("#F44336")). // Red background
+						Foreground(lipgloss.Color("#000000")). // Black foreground
+						Padding(0, 1),
+					log.FatalLevel: lipgloss.NewStyle().
+						SetString("FATAL").
+						Background(lipgloss.Color("#F44336")). // Red background
+						Foreground(lipgloss.Color("#FFFFFF")). // White foreground
+						Padding(0, 1),
+				},
+				Key: lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#666666")). // Dark gray for keys
+					Bold(true),
+				Value: lipgloss.NewStyle(),
+				Separator: lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#999999")), // Medium gray for separator
+			}
+			
+			// Set color profile and then restore styles
 			logger.SetColorProfile(profile)
+			logger.SetStyles(currentStyles)
 			
 			// Log info messages now that TUI is done
 			_ = viper.BindEnv("GOTCHA_GITHUB_STEP_SUMMARY", "GITHUB_STEP_SUMMARY")
