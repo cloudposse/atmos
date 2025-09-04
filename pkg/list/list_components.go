@@ -14,21 +14,13 @@ var (
 	ErrParseStacks = errors.New("could not parse stacks")
 	// ErrParseComponents is returned when component data cannot be parsed.
 	ErrParseComponents = errors.New("could not parse components")
-	// ErrParseTerraformComponents is returned when terraform component data cannot be parsed.
-	ErrParseTerraformComponents = errors.New("could not parse Terraform components")
-	// ErrParseHelmfileComponents is returned when helmfile component data cannot be parsed.
-	ErrParseHelmfileComponents = errors.New("could not parse Helmfile components")
-	// ErrParsePackerComponents is returned when packer component data cannot be parsed.
-	ErrParsePackerComponents = errors.New("could not parse Packer components")
-	// ErrParseAnsibleComponents is returned when ansible component data cannot be parsed.
-	ErrParseAnsibleComponents = errors.New("could not parse Ansible components")
 	// ErrStackNotFound is returned when a requested stack is not found.
 	ErrStackNotFound = errors.New("stack not found")
 	// ErrProcessStack is returned when there's an error processing a stack.
 	ErrProcessStack = errors.New("error processing stack")
 )
 
-// getStackComponents extracts Terraform components from the final map of stacks.
+// getStackComponents extracts components from the final map of stacks.
 func getStackComponents(stackData any) ([]string, error) {
 	stackMap, ok := stackData.(map[string]any)
 	if !ok {
@@ -40,24 +32,27 @@ func getStackComponents(stackData any) ([]string, error) {
 		return nil, ErrParseComponents
 	}
 
-	terraformComponents, ok := componentsMap["terraform"].(map[string]any)
-	if !ok {
-		return nil, ErrParseTerraformComponents
+	// Initialize empty maps for each component type
+	terraformComponents := make(map[string]any)
+	helmfileComponents := make(map[string]any)
+	packerComponents := make(map[string]any)
+	ansibleComponents := make(map[string]any)
+
+	// Only try to get components if they exist, no error if they don't
+	if comp, ok := componentsMap["terraform"].(map[string]any); ok {
+		terraformComponents = comp
 	}
 
-	helmfileComponents, ok := componentsMap["helmfile"].(map[string]any)
-	if !ok {
-		return nil, ErrParseHelmfileComponents
+	if comp, ok := componentsMap["helmfile"].(map[string]any); ok {
+		helmfileComponents = comp
 	}
 
-	packerComponents, ok := componentsMap["packer"].(map[string]any)
-	if !ok {
-		return nil, ErrParsePackerComponents
+	if comp, ok := componentsMap["packer"].(map[string]any); ok {
+		packerComponents = comp
 	}
 
-	ansibleComponents, ok := componentsMap["ansible"].(map[string]any)
-	if !ok {
-		return nil, ErrParseAnsibleComponents
+	if comp, ok := componentsMap["ansible"].(map[string]any); ok {
+		ansibleComponents = comp
 	}
 
 	// Merge all component maps into one.
