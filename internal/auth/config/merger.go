@@ -68,7 +68,7 @@ func (m *merger) MergeIdentity(global *schema.Identity, component *schema.Identi
 		Via:         global.Via,
 		Spec:        make(map[string]interface{}),
 		Alias:       global.Alias,
-		Environment: make([]schema.EnvironmentVariable, len(global.Environment)),
+		Env: global.Env,
 	}
 
 	// Copy global spec
@@ -77,7 +77,7 @@ func (m *merger) MergeIdentity(global *schema.Identity, component *schema.Identi
 	}
 
 	// Copy global environment variables
-	copy(merged.Environment, global.Environment)
+	copy(merged.Env, global.Env)
 
 	// Apply component overrides
 	if component.Default {
@@ -98,7 +98,7 @@ func (m *merger) MergeIdentity(global *schema.Identity, component *schema.Identi
 	}
 
 	// Append component environment variables
-	merged.Environment = append(merged.Environment, component.Environment...)
+	merged.Env = append(merged.Env, component.Env...)
 
 	return merged
 }

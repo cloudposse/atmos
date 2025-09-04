@@ -586,7 +586,7 @@ identities:
     spec:
       name: DeveloperAccess
       account.name: development
-    environment:
+    env:
       - key: AWS_PROFILE
         value: dev-admin
       - key: TERRAFORM_WORKSPACE
@@ -746,7 +746,7 @@ providers:
 
 #### Environment Variable Support
 
-All identity types support an `environment` block for injecting environment variables:
+All identity types support an `env` block for injecting environment variables:
 
 ```yaml
 identities:
@@ -759,7 +759,7 @@ identities:
       account:
         name: core-identity
     alias: managers-core
-    environment:
+    env:
       - key: AWS_PROFILE
         value: managers-core
       - key: TEAM_ROLE
@@ -789,7 +789,7 @@ identities:
       name: ProductionAdmin
       account:
         name: production
-    environment:
+    env:
       - key: AWS_PROFILE
         value: prod-admin
       - key: ENVIRONMENT
@@ -819,7 +819,7 @@ identities:
       name: DeveloperAccess
       account.name: development
     alias: dev
-    environment:
+    env:
       - key: AWS_PROFILE
         value: dev-access
       - key: ENVIRONMENT
@@ -965,7 +965,7 @@ components:
             name: SecurityAdminAccess
             account:
               name: security
-          environment:
+          env:
             - key: SECURITY_MODE
               value: strict
         managers:
@@ -1044,7 +1044,7 @@ identities:
       name: SecurityAdminAccess
       account:
         name: security
-    environment:
+    env:
       - key: SECURITY_MODE
         value: strict
 ```

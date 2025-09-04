@@ -53,7 +53,7 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 	
 	// Add environment variables from identity config
-	for _, envVar := range i.config.Environment {
+	for _, envVar := range i.config.Env {
 		env[envVar.Key] = envVar.Value
 	}
 
@@ -70,7 +70,7 @@ func (i *userIdentity) Merge(component *schema.Identity) types.Identity {
 			Via:         i.config.Via,
 			Spec:        make(map[string]interface{}),
 			Alias:       i.config.Alias,
-			Environment: i.config.Environment,
+			Env: i.config.Env,
 		},
 	}
 
@@ -83,7 +83,7 @@ func (i *userIdentity) Merge(component *schema.Identity) types.Identity {
 	}
 
 	// Merge environment variables
-	merged.config.Environment = append(merged.config.Environment, component.Environment...)
+	merged.config.Env = append(merged.config.Env, component.Env...)
 
 	// Override alias if provided
 	if component.Alias != "" {

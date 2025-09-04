@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -13,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/internal/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 type Provider = types.Provider
@@ -111,15 +111,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	if err == nil && whoami != nil {
 		// Check if credentials are still valid (at least 5 minutes remaining)
 		if whoami.Expiration != nil && whoami.Expiration.After(time.Now().Add(5*time.Minute)) {
-			log.Debug("Using existing valid session", "identity", whoami.Identity, "expiration", whoami.Expiration)
-			// Set environment variables for existing session
-			if whoami.Environment != nil {
-				for key, value := range whoami.Environment {
-					if err := os.Setenv(key, value); err != nil {
-						return fmt.Errorf("failed to set environment variable %s: %w", key, err)
-					}
-				}
-			}
+			log.Debug("Using existing valid session", "identity", whoami.Identity, "expiration", whoami.Expiration, "environment", whoami.Environment)
 			return nil // Already authenticated
 		}
 	}
@@ -149,21 +141,14 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
-	// Set process environment variables
-	if whoami.Environment != nil {
-		for key, value := range whoami.Environment {
-			if err := os.Setenv(key, value); err != nil {
-				return fmt.Errorf("failed to set environment variable %s: %w", key, err)
-			}
-		}
-	}
-
 	// Get identity environment variables and merge into component environment section
 	if identity, exists := atmosConfig.Auth.Identities[defaultIdentityName]; exists {
-		if len(identity.Environment) > 0 {
-			environment.MergeIdentityEnvOverrides(stackInfo, identity.Environment)
+		if len(identity.Env) > 0 {
+			environment.MergeIdentityEnvOverrides(stackInfo, identity.Env)
 		}
 	}
+	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvSection)
+	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvList)
 
 	// Get provider name for AWS file environment variables
 	providerName := ""

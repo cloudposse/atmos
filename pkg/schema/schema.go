@@ -1005,7 +1005,7 @@ type Identity struct {
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
 	Spec        map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
-	Environment []EnvironmentVariable  `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 }
 
 // IdentityVia defines how an identity connects to a provider or other identity
