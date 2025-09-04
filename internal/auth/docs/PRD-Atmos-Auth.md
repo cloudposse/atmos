@@ -214,6 +214,24 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Identity chains work seamlessly with component-level overrides
 - **Priority**: P0 (Must Have)
 
+#### FR-016: Identity Chaining Credential Flow
+
+- **Description**: Ensure proper credential transformation through identity chains
+- **Acceptance Criteria**:
+  - Each identity in a chain receives credentials from the previous step in the chain
+  - Provider credentials flow to first identity, then each identity transforms credentials for the next
+  - AWS SSO → Permission Set → Assume Role chain works correctly:
+    - AWS SSO provider authenticates and returns base credentials
+    - Permission Set identity uses SSO credentials to assume permission set role
+    - Assume Role identity uses Permission Set credentials (not SSO credentials) to assume final role
+  - Identity chains resolve the source provider recursively but authenticate sequentially
+  - Each identity's `Authenticate()` method receives the output credentials from the previous identity
+  - Credential transformation preserves necessary metadata (region, account, etc.)
+  - Chain authentication stops at first failure with clear error indicating which step failed
+  - Support for any depth of chaining: provider → identity → identity → ... → identity
+  - Each identity can validate that incoming credentials are appropriate for its authentication method
+- **Priority**: P0 (Must Have)
+
 ### 2.2 Non-Functional Requirements
 
 #### NFR-001: Security
@@ -413,6 +431,63 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 - Validation ensures component overrides are valid
 - Audit trail shows which identity was used
 
+#### UC-008: Deep Identity Chaining Authentication
+
+**Actor**: DevOps Engineer  
+**Goal**: Authenticate through a complex identity chain for production access  
+**Scenario**:
+
+1. Engineer runs `atmos auth login -i prod-cross-account-admin`
+2. System resolves identity chain: AWS SSO → Permission Set → Assume Role
+3. **Step 1**: AWS SSO provider authenticates user via device flow
+   - Returns SSO session credentials with temporary access token
+4. **Step 2**: Permission Set identity receives SSO credentials
+   - Uses SSO credentials to assume `IdentityManagersTeamAccess` permission set
+   - Returns permission set role credentials (AccessKeyID, SecretAccessKey, SessionToken)
+5. **Step 3**: Assume Role identity receives permission set credentials
+   - Uses permission set credentials (not original SSO credentials) to assume cross-account role
+   - Returns final cross-account role credentials
+6. Engineer now has access to production cross-account resources
+
+**Identity Configuration Example**:
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      start_url: https://company.awsapps.com/start/
+      region: us-east-1
+      default: true
+
+  identities:
+    managers-base:
+      kind: aws/permission-set
+      via: { provider: company-sso }
+      spec:
+        name: IdentityManagersTeamAccess
+        account:
+          name: core-identity
+      alias: managers
+
+    prod-cross-account-admin:
+      kind: aws/assume-role
+      via: { identity: managers-base }  # Chain from permission set, not provider
+      spec:
+        assume_role: arn:aws:iam::999999999999:role/CrossAccountProductionAdmin
+        session_name: atmos-prod-access
+      alias: prod-admin
+```
+
+**Acceptance Criteria**:
+
+- Each step in the chain receives credentials from the previous step
+- SSO credentials are not used directly by the assume role step
+- Permission set credentials are properly transformed and passed to assume role
+- Chain authentication fails gracefully if any step fails
+- Clear error messages indicate which step in the chain failed
+- Final credentials provide access to the target cross-account role
+- Audit trail shows the complete authentication chain
+
 ### 3.2 Edge Cases
 
 #### EC-001: Credential Expiration During Long Operations
@@ -429,6 +504,25 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 **Scenario**: Identity A chains to Identity B which chains back to A  
 **Handling**: Validation prevents circular dependencies at configuration time
+
+#### EC-004: Identity Chain Authentication Failures
+
+**Scenario**: Authentication fails at any step in a deep identity chain  
+**Handling**: 
+- Clear error messages indicating which step failed and why
+- Audit trail of successful steps before failure
+- No partial credential caching for failed chains
+- Retry logic only for transient failures (network, temporary service issues)
+- Permanent failures (invalid permissions, missing roles) fail immediately
+
+#### EC-005: Identity Chain Credential Mismatch
+
+**Scenario**: Identity receives credentials that are incompatible with its authentication method  
+**Handling**:
+- Each identity validates incoming credential format and type
+- Clear error messages about credential compatibility
+- Example: Assume Role identity receives non-AWS credentials
+- Validation occurs before attempting authentication to fail fast
 
 ## 4. Technical Architecture
 
@@ -492,11 +586,49 @@ identities:
 
 ### 4.2 Data Flow
 
+#### Basic Authentication Flow
+
 1. **Configuration Loading**: Parse and validate `atmos.yaml` auth section
 2. **Provider Authentication**: Authenticate with configured providers
 3. **Identity Resolution**: Resolve target identity through provider or chain
 4. **Credential Retrieval**: Obtain and cache temporary credentials
 5. **Tool Integration**: Provide credentials to Terraform/other tools
+
+#### Identity Chaining Data Flow
+
+For identity chains (e.g., AWS SSO → Permission Set → Assume Role):
+
+1. **Chain Resolution**: Recursively resolve the provider source for the target identity
+   - `prod-admin` chains to `managers-base` identity
+   - `managers-base` chains to `company-sso` provider
+   - Source provider identified: `company-sso`
+
+2. **Sequential Authentication**: Authenticate through the chain step by step
+   - **Step 1**: Authenticate with source provider (`company-sso`)
+     - Returns base credentials (SSO session tokens)
+   - **Step 2**: First identity (`managers-base`) authenticates using base credentials
+     - Permission Set identity receives SSO credentials
+     - Uses SSO credentials to assume permission set role
+     - Returns permission set credentials (AWS access keys)
+   - **Step 3**: Final identity (`prod-admin`) authenticates using previous credentials
+     - Assume Role identity receives permission set credentials
+     - Uses permission set credentials to assume cross-account role
+     - Returns final role credentials
+
+3. **Credential Transformation**: Each step transforms credentials for the next
+   - Provider credentials → Identity credentials → Final credentials
+   - Metadata (region, account, session info) preserved through chain
+   - Each identity validates incoming credentials are appropriate
+
+4. **Error Handling**: Chain stops at first failure with clear error context
+   - Indicates which step in the chain failed
+   - Provides actionable error messages
+   - Maintains audit trail of successful steps
+
+5. **Caching Strategy**: Cache credentials at each step for performance
+   - Provider credentials cached separately from identity credentials
+   - Each identity's credentials cached with appropriate expiration
+   - Cache keys include full chain context to avoid conflicts
 
 ### 4.3 Security Model
 
@@ -1283,8 +1415,10 @@ type Identity interface {
     // Kind returns the identity type (e.g., "aws/permission-set")
     Kind() string
 
-    // Assume assumes the identity using the provided credentials
-    Assume(ctx context.Context, baseCreds *Credentials) (*Credentials, error)
+    // Authenticate authenticates this identity using the provided credentials from previous step
+    // For identity chains: receives credentials from previous identity in chain
+    // For direct provider chains: receives credentials from provider
+    Authenticate(ctx context.Context, inputCreds *Credentials) (*Credentials, error)
 
     // Validate checks if the identity configuration is valid
     Validate() error

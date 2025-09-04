@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -69,37 +70,19 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 		identityName = defaultIdentity
 	}
 
-	// Get the identity
-	identity, exists := m.identities[identityName]
-	if !exists {
-		return nil, fmt.Errorf("identity %q not found", identityName)
-	}
-
 	// Check if we have cached, non-expired credentials
-	alias := fmt.Sprintf("%s/%s", m.getProviderForIdentity(identityName), identityName)
+	providerName := m.getProviderForIdentity(identityName)
+	alias := fmt.Sprintf("%s/%s", providerName, identityName)
 	if cachedCreds, err := m.credentialStore.Retrieve(alias); err == nil {
 		if expired, err := m.credentialStore.IsExpired(alias); err == nil && !expired {
 			return m.buildWhoamiInfo(identityName, cachedCreds), nil
 		}
 	}
 
-	// Get base credentials from provider
-	providerName := m.getProviderForIdentity(identityName)
-	provider, exists := m.providers[providerName]
-	if !exists {
-		return nil, fmt.Errorf("provider %q not found for identity %q", providerName, identityName)
-	}
-
-	baseCreds, err := provider.Authenticate(ctx)
+	// Authenticate through the identity chain
+	finalCreds, err := m.authenticateIdentityChain(ctx, identityName)
 	if err != nil {
-		return nil, fmt.Errorf("provider authentication failed: %w", err)
-	}
-
-	log.Info("Base credentials authenticated", "identity", identityName, "AWS", baseCreds.AWS, "accessKeyId", baseCreds.AWS.AccessKeyID[:10]+"...", "hasSecretKey", baseCreds.AWS.SecretAccessKey != "", "hasSessionToken", baseCreds.AWS.SessionToken != "")
-	// Use identity to get final credentials
-	finalCreds, err := identity.Authenticate(ctx, baseCreds)
-	if err != nil {
-		return nil, fmt.Errorf("identity authentication failed: %w", err)
+		return nil, fmt.Errorf("identity chain authentication failed: %w", err)
 	}
 
 	// Store credentials
@@ -108,7 +91,8 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 	}
 
 	// Setup AWS files if this is an AWS provider
-	if isAWSProvider(provider.Kind()) {
+	provider, exists := m.providers[providerName]
+	if exists && isAWSProvider(provider.Kind()) {
 		if err := m.SetupAWSFiles(ctx, providerName, finalCreds); err != nil {
 			return nil, fmt.Errorf("failed to setup AWS files: %w", err)
 		}
@@ -298,6 +282,129 @@ func (m *manager) getProviderForIdentityRecursive(identityName string, visited m
 	}
 
 	return ""
+}
+
+// authenticateIdentityChain performs sequential authentication through an identity chain
+func (m *manager) authenticateIdentityChain(ctx context.Context, identityName string) (*schema.Credentials, error) {
+	bold := lipgloss.NewStyle().Bold(true)
+
+	// Build the authentication chain from target identity back to source provider
+	chain, err := m.buildAuthenticationChain(identityName)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
+	}
+
+	log.Debug("Authentication chain built", "identity", identityName, "chainLength", len(chain), "chain", chain)
+
+	// Start with provider authentication
+	var currentCreds *schema.Credentials
+
+	// Step 1: Authenticate with the source provider
+	providerName := chain[0]
+	provider, exists := m.providers[providerName]
+	if !exists {
+		return nil, fmt.Errorf("provider %q not found", providerName)
+	}
+
+	currentCreds, err = provider.Authenticate(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("provider %q authentication failed: %w", providerName, err)
+	}
+
+	log.Debug("Provider authenticated", "provider", providerName, "hasAWSCreds", currentCreds.AWS != nil)
+
+	// Step 2: Authenticate through each identity in the chain
+	for i := 1; i < len(chain); i++ {
+		identityStep := chain[i]
+		identity, exists := m.identities[identityStep]
+		if !exists {
+			log.Error("❌ Chaining identity %s → %s", bold.Render(chain[i-1]), bold.Render(identityStep))
+			return nil, fmt.Errorf("identity %q not found in chain step %d", identityStep, i)
+		}
+
+		log.Debug("Authenticating identity step", "step", i, "identity", identityStep, "kind", identity.Kind())
+
+		// Each identity receives credentials from the previous step
+		nextCreds, err := identity.Authenticate(ctx, currentCreds)
+		if err != nil {
+			log.Error("❌ Chaining identity %s → %s", bold.Render(chain[i-1]), bold.Render(identityStep))
+			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
+		}
+
+		currentCreds = nextCreds
+		log.Infof("✅ Chaining identity %s → %s", bold.Render(chain[i-1]), bold.Render(identityStep))
+	}
+
+	return currentCreds, nil
+}
+
+// buildAuthenticationChain builds the authentication chain from target identity to source provider
+// Returns a slice where [0] is the provider name, [1..n] are identity names in authentication order
+func (m *manager) buildAuthenticationChain(identityName string) ([]string, error) {
+	var chain []string
+	visited := make(map[string]bool)
+
+	// Recursively build the chain
+	err := m.buildChainRecursive(identityName, &chain, visited)
+	if err != nil {
+		return nil, err
+	}
+
+	// Reverse the chain so provider is first, then identities in authentication order
+	for i := 0; i < len(chain)/2; i++ {
+		j := len(chain) - 1 - i
+		chain[i], chain[j] = chain[j], chain[i]
+	}
+
+	return chain, nil
+}
+
+// buildChainRecursive recursively builds the authentication chain
+func (m *manager) buildChainRecursive(identityName string, chain *[]string, visited map[string]bool) error {
+	// Check for circular dependencies
+	if visited[identityName] {
+		return fmt.Errorf("circular dependency detected in identity chain involving %q", identityName)
+	}
+	visited[identityName] = true
+
+	// Find the identity
+	identity, exists := m.config.Identities[identityName]
+	if !exists {
+		// Try to find by alias
+		for name, ident := range m.config.Identities {
+			if ident.Alias == identityName {
+				identity = ident
+				identityName = name // Use the actual name for the chain
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return fmt.Errorf("identity %q not found", identityName)
+	}
+
+	if identity.Via == nil {
+		return fmt.Errorf("identity %q has no via configuration", identityName)
+	}
+
+	// Add current identity to chain
+	*chain = append(*chain, identityName)
+
+	// If this identity points to a provider, add it and stop
+	if identity.Via.Provider != "" {
+		*chain = append(*chain, identity.Via.Provider)
+		return nil
+	}
+
+	// If this identity points to another identity, recurse
+	if identity.Via.Identity != "" {
+		return m.buildChainRecursive(identity.Via.Identity, chain, visited)
+	}
+
+	return fmt.Errorf("identity %q has invalid via configuration", identityName)
 }
 
 // buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials
