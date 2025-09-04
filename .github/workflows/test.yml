@@ -186,11 +186,37 @@ jobs:
           go-version-file: "go.mod"
         id: go
 
-      - name: Add Go bin to PATH
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+      - name: Setup Go Environment (Unix)
+        if: ${{ matrix.flavor.target != 'windows' && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
+          # Add Go binary directories to PATH for the entire job
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-          echo "Go binary path: $(go env GOPATH)/bin"
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+          
+          # Display Go environment for debugging
+          echo "=== Go Environment Setup ==="
+          echo "GOPATH: $(go env GOPATH)"
+          echo "GOBIN: $(go env GOBIN)"
+          echo "Added to PATH: $(go env GOPATH)/bin"
+          echo "Added to PATH: $HOME/go/bin"
+          echo "==========================="
+
+      - name: Setup Go Environment (Windows)
+        if: ${{ matrix.flavor.target == 'windows' && ! github.event.pull_request.draft }}
+        shell: pwsh
+        run: |
+          # Add Go binary directories to PATH for the entire job
+          $goPath = go env GOPATH
+          echo "$goPath\bin" >> $Env:GITHUB_PATH
+          echo "$Env:USERPROFILE\go\bin" >> $Env:GITHUB_PATH
+          
+          # Display Go environment for debugging
+          Write-Output "=== Go Environment Setup ==="
+          Write-Output "GOPATH: $goPath"
+          Write-Output "GOBIN: $(go env GOBIN)"
+          Write-Output "Added to PATH: $goPath\bin"
+          Write-Output "Added to PATH: $Env:USERPROFILE\go\bin"
+          Write-Output "==========================="
 
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
