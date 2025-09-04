@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -228,6 +227,7 @@ func (i *permissionSetIdentity) checkCache() *schema.Credentials {
 
 	var cache permissionSetCache
 	if err := store.GetAny(cacheKey, &cache); err != nil {
+		log.Debug("No cache or error reading cache", "identity", i.name, "error", err)
 		return nil // No cache or error reading cache
 	}
 	log.Debug("Using cached permission set credentials", "identity", i.name, "accessKeyId", cache.AccessKeyID[:10]+"...")
@@ -237,22 +237,7 @@ func (i *permissionSetIdentity) checkCache() *schema.Credentials {
 		store.Delete(cacheKey)
 		return nil
 	}
-
-	// Validate cached credentials - must have all AWS credential components
-	if cache.AccessKeyID == "" || cache.SecretAccessKey == "" || cache.SessionToken == "" {
-		log.Warn("Invalid cached permission set credentials - missing required fields", "identity", i.name, "hasAccessKey", cache.AccessKeyID != "", "hasSecretKey", cache.SecretAccessKey != "", "hasSessionToken", cache.SessionToken != "")
-		// Remove corrupted cache
-		store.Delete(cacheKey)
-		return nil
-	}
-
-	// Additional validation: AWS AccessKeyID should start with "ASIA" for temporary credentials
-	if !strings.HasPrefix(cache.AccessKeyID, "ASIA") {
-		log.Warn("Invalid cached permission set credentials - AccessKeyID appears to be SSO token", "identity", i.name, "accessKeyPrefix", cache.AccessKeyID[:10]+"...")
-		// Remove corrupted cache
-		store.Delete(cacheKey)
-		return nil
-	}
+	log.Debug("Found cache", "identity", i.name)
 
 	return &schema.Credentials{
 		AWS: &schema.AWSCredentials{

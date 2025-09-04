@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -16,6 +17,9 @@ import (
 
 // TerraformPreHook runs before Terraform commands to set up authentication
 func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
+	log.SetPrefix("[atmos-auth]")
+	defer log.SetPrefix("")
+
 	// Skip if no auth config
 	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
 		return nil
@@ -42,6 +46,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	// Try to get current session
 	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx)
+	log.Debug("Whoami", "whoami", whoami, "error", err)
 	if err == nil && whoami != nil {
 		// Check if credentials are still valid (at least 5 minutes remaining)
 		if whoami.Expiration != nil && whoami.Expiration.After(time.Now().Add(5*time.Minute)) {

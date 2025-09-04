@@ -181,9 +181,11 @@ func (p *ssoProvider) checkCache(identityName string) *schema.Credentials {
 
 	var cache ssoCache
 	if err := store.GetAny(cacheKey, &cache); err != nil {
+		log.Debug("No cache or error reading cache", "identity", identityName, "error", err)
 		return nil // No cache or error reading cache
 	}
 
+	log.Debug("Found cache", "identity", identityName)
 	// Check if cache is expired (with 5 minute buffer)
 	if time.Now().Add(5 * time.Minute).After(cache.Expiration) {
 		// Cache expired, remove it

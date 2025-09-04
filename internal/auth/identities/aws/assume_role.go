@@ -151,7 +151,7 @@ func (i *assumeRoleIdentity) Validate() error {
 // Environment returns environment variables for this identity
 func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
-	
+
 	// Add environment variables from identity config
 	for _, envVar := range i.config.Environment {
 		env[envVar.Key] = envVar.Value
@@ -197,19 +197,21 @@ func (i *assumeRoleIdentity) Merge(component *schema.Identity) types.Identity {
 func (i *assumeRoleIdentity) checkCache() *schema.Credentials {
 	store := authstore.NewKeyringAuthStore()
 	cacheKey := fmt.Sprintf(credentials.KeyringService, i.Kind(), i.getProviderName(), i.name)
-	
+
 	var cache assumeRoleCache
 	if err := store.GetAny(cacheKey, &cache); err != nil {
+		log.Debug("No cache or error reading cache", "identity", i.name, "error", err)
 		return nil // No cache or error reading cache
 	}
-	
+	log.Debug("Found cache", "identity", i.name)
+
 	// Check if cache is expired (with 5 minute buffer)
 	if time.Now().Add(5 * time.Minute).After(cache.Expiration) {
 		// Cache expired, remove it
 		store.Delete(cacheKey)
 		return nil
 	}
-	
+
 	return &schema.Credentials{
 		AWS: &schema.AWSCredentials{
 			AccessKeyID:     cache.AccessKeyID,
@@ -225,7 +227,7 @@ func (i *assumeRoleIdentity) checkCache() *schema.Credentials {
 func (i *assumeRoleIdentity) cacheCredentials(creds *schema.Credentials, expiration time.Time) {
 	cacheKey := fmt.Sprintf(credentials.KeyringService, i.Kind(), i.getProviderName(), i.name)
 	store := authstore.NewKeyringAuthStore()
-	
+
 	cache := assumeRoleCache{
 		AccessKeyID:     creds.AWS.AccessKeyID,
 		SecretAccessKey: creds.AWS.SecretAccessKey,
@@ -234,7 +236,7 @@ func (i *assumeRoleIdentity) cacheCredentials(creds *schema.Credentials, expirat
 		Expiration:      expiration,
 		LastUpdated:     time.Now(),
 	}
-	
+
 	log.Debug("Caching assume role credentials", "key", cacheKey)
 	if err := store.SetAny(cacheKey, cache); err != nil {
 		// Don't fail authentication if caching fails, just log
