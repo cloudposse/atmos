@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -57,6 +58,8 @@ func NewAuthManager(
 
 // Authenticate performs authentication for the specified identity
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
+	log.SetPrefix("[atmos-auth]")
+	defer log.SetPrefix("")
 	// If no identity specified, use default
 	if identityName == "" {
 		defaultIdentity, err := m.GetDefaultIdentity()
@@ -92,6 +95,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 		return nil, fmt.Errorf("provider authentication failed: %w", err)
 	}
 
+	log.Info("Base credentials authenticated", "identity", identityName, "AWS", baseCreds.AWS, "accessKeyId", baseCreds.AWS.AccessKeyID[:10]+"...", "hasSecretKey", baseCreds.AWS.SecretAccessKey != "", "hasSessionToken", baseCreds.AWS.SessionToken != "")
 	// Use identity to get final credentials
 	finalCreds, err := identity.Authenticate(ctx, baseCreds)
 	if err != nil {

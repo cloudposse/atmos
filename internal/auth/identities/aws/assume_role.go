@@ -52,12 +52,15 @@ type assumeRoleCache struct {
 func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
 	// Check cache first
 	if creds := i.checkCache(); creds != nil {
+		log.Debug("Using cached assume role credentials", "identity", i.name, "accessKeyId", creds.AWS.AccessKeyID[:10]+"...")
 		return creds, nil
 	}
 
 	if baseCreds == nil || baseCreds.AWS == nil {
 		return nil, fmt.Errorf("base AWS credentials are required")
 	}
+
+	log.Debug("Assume role authentication with base credentials", "identity", i.name, "baseAccessKeyId", baseCreds.AWS.AccessKeyID[:10]+"...", "hasSecretKey", baseCreds.AWS.SecretAccessKey != "", "hasSessionToken", baseCreds.AWS.SessionToken != "")
 
 	// Get role ARN from spec
 	roleArn, ok := i.config.Spec["assume_role"].(string)

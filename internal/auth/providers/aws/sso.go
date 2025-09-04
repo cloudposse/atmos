@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth/authstore"
+	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -74,7 +75,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 
 	// Register the client
 	registerResp, err := oidcClient.RegisterClient(ctx, &ssooidc.RegisterClientInput{
-		ClientName: aws.String("atmos-cli"),
+		ClientName: aws.String("atmos-auth"),
 		ClientType: aws.String("public"),
 	})
 	if err != nil {
@@ -176,20 +177,20 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 // checkCache checks for valid cached SSO credentials for a specific identity
 func (p *ssoProvider) checkCache(identityName string) *schema.Credentials {
 	store := authstore.NewKeyringAuthStore()
-	cacheKey := fmt.Sprintf("atmos-auth/sso/%s/%s", p.name, identityName)
-	
+	cacheKey := fmt.Sprintf(credentials.KeyringService, p.Kind(), p.name, identityName)
+
 	var cache ssoCache
 	if err := store.GetAny(cacheKey, &cache); err != nil {
 		return nil // No cache or error reading cache
 	}
-	
+
 	// Check if cache is expired (with 5 minute buffer)
 	if time.Now().Add(5 * time.Minute).After(cache.Expiration) {
 		// Cache expired, remove it
 		store.Delete(cacheKey)
 		return nil
 	}
-	
+
 	return &schema.Credentials{
 		AWS: &schema.AWSCredentials{
 			AccessKeyID: cache.AccessToken,
@@ -202,8 +203,8 @@ func (p *ssoProvider) checkCache(identityName string) *schema.Credentials {
 // cacheCredentials stores SSO credentials in keyring for a specific identity
 func (p *ssoProvider) cacheCredentials(identityName, accessToken, refreshToken string, expiration time.Time) {
 	store := authstore.NewKeyringAuthStore()
-	cacheKey := fmt.Sprintf("atmos-auth/sso/%s/%s", p.name, identityName)
-	
+	cacheKey := fmt.Sprintf(credentials.KeyringService, p.Kind(), p.name, identityName)
+
 	cache := ssoCache{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
@@ -211,7 +212,7 @@ func (p *ssoProvider) cacheCredentials(identityName, accessToken, refreshToken s
 		Region:       p.region,
 		LastUpdated:  time.Now(),
 	}
-	
+
 	if err := store.SetAny(cacheKey, cache); err != nil {
 		log.Warn("Failed to cache SSO credentials", "error", err)
 	}

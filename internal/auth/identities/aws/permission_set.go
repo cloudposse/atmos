@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -52,12 +53,15 @@ type permissionSetCache struct {
 func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
 	// Check cache first
 	if creds := i.checkCache(); creds != nil {
+		log.Debug("Using cached permission set credentials", "identity", i.name, "accessKeyId", creds.AWS.AccessKeyID[:10]+"...")
 		return creds, nil
 	}
 
 	if baseCreds == nil || baseCreds.AWS == nil {
 		return nil, fmt.Errorf("base AWS credentials are required")
 	}
+
+	log.Debug("Permission set authentication with base credentials", "identity", i.name, "baseAccessKeyId", baseCreds.AWS.AccessKeyID[:10]+"...")
 
 	// Get permission set name from spec
 	permissionSetName, ok := i.config.Spec["name"].(string)
@@ -139,6 +143,8 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 			Expiration:      expiration,
 		},
 	}
+
+	log.Debug("Permission set authentication successful", "identity", i.name, "accessKeyId", creds.AWS.AccessKeyID[:10]+"...")
 
 	// Cache the credentials
 	i.cacheCredentials(creds, expirationTime)
@@ -224,10 +230,26 @@ func (i *permissionSetIdentity) checkCache() *schema.Credentials {
 	if err := store.GetAny(cacheKey, &cache); err != nil {
 		return nil // No cache or error reading cache
 	}
-
+	log.Debug("Using cached permission set credentials", "identity", i.name, "accessKeyId", cache.AccessKeyID[:10]+"...")
 	// Check if cache is expired (with 5 minute buffer)
 	if time.Now().Add(5 * time.Minute).After(cache.Expiration) {
 		// Cache expired, remove it
+		store.Delete(cacheKey)
+		return nil
+	}
+
+	// Validate cached credentials - must have all AWS credential components
+	if cache.AccessKeyID == "" || cache.SecretAccessKey == "" || cache.SessionToken == "" {
+		log.Warn("Invalid cached permission set credentials - missing required fields", "identity", i.name, "hasAccessKey", cache.AccessKeyID != "", "hasSecretKey", cache.SecretAccessKey != "", "hasSessionToken", cache.SessionToken != "")
+		// Remove corrupted cache
+		store.Delete(cacheKey)
+		return nil
+	}
+
+	// Additional validation: AWS AccessKeyID should start with "ASIA" for temporary credentials
+	if !strings.HasPrefix(cache.AccessKeyID, "ASIA") {
+		log.Warn("Invalid cached permission set credentials - AccessKeyID appears to be SSO token", "identity", i.name, "accessKeyPrefix", cache.AccessKeyID[:10]+"...")
+		// Remove corrupted cache
 		store.Delete(cacheKey)
 		return nil
 	}
