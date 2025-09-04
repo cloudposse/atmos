@@ -69,7 +69,6 @@ testacc-coverage: testacc-cover
 
 # Test target for CI with gotcha
 testacc-ci: get
-	cd tools/gotcha && go mod download
 	go install -C tools/gotcha .
 	$$(go env GOPATH)/bin/gotcha stream ./... \
 		--show=all \
