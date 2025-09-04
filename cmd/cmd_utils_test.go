@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -189,5 +190,29 @@ func TestIsVersionCommand(t *testing.T) {
 			result := isVersionCommand()
 			assert.Equal(t, tt.expected, result)
 		})
+	}
+}
+
+// skipIfPackerNotInstalled skips the test if packer is not available in PATH.
+func skipIfPackerNotInstalled(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("packer"); err != nil {
+		t.Skip("Skipping test: packer is not installed or not in PATH")
+	}
+}
+
+// skipIfTerraformNotInstalled skips the test if terraform is not available in PATH.
+func skipIfTerraformNotInstalled(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("terraform"); err != nil {
+		t.Skip("Skipping test: terraform is not installed or not in PATH")
+	}
+}
+
+// skipIfHelmfileNotInstalled skips the test if helmfile is not available in PATH.
+func skipIfHelmfileNotInstalled(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("helmfile"); err != nil {
+		t.Skip("Skipping test: helmfile is not installed or not in PATH")
 	}
 }

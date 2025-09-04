@@ -6,7 +6,6 @@ import (
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/google/uuid"
@@ -50,11 +49,11 @@ func CaptureCmd(cmd *cobra.Command, err ...error) {
 }
 
 // PrintTelemetryDisclosure displays the telemetry disclosure message if one is available.
-// It calls disclosureMessage() to get the message and prints as markdown
+// It calls disclosureMessage() to get the message and prints to stderr
 // if a message is returned.
 func PrintTelemetryDisclosure() {
 	if message := disclosureMessage(); message != "" {
-		utils.PrintMessageInColor(message, theme.Colors.Default)
+		utils.PrintfMessageToTUI("%s", message)
 	}
 }
 

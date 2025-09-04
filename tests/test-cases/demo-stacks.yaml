@@ -28,8 +28,6 @@ tests:
         - "\\bworkflow\\b"
         - "Flags:"
         - "for more information about a command"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos version
