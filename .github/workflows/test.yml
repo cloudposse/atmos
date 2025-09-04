@@ -186,16 +186,6 @@ jobs:
           go-version-file: "go.mod"
         id: go
 
-      # Why this is needed:
-      # setup-go@v5 adds GOBIN to PATH, but GOBIN is empty by default.
-      # When GOBIN is empty, `go install` puts binaries in $GOPATH/bin.
-      # Therefore, we need to add $GOPATH/bin to PATH manually.
-      # See: https://github.com/actions/setup-go/issues/14
-      - name: Fix Go bin PATH
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: |
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
@@ -231,9 +221,15 @@ jobs:
           echo "Matrix Target: ${{ matrix.flavor.target }}"
           echo "Go Version: $(go version)"
           echo "GOPATH: $(go env GOPATH)"
+          echo "GOBIN: $(go env GOBIN)"
           echo "GOPATH/bin: $(go env GOPATH)/bin"
           echo "Working Directory: $(pwd)"
           echo "PATH: $PATH"
+          echo ""
+          echo "=== PATH contains GOPATH/bin? ==="
+          echo "$PATH" | grep -q "$(go env GOPATH)/bin" && echo "YES: GOPATH/bin is in PATH" || echo "NO: GOPATH/bin is NOT in PATH"
+          echo ""
+          echo "=== Binary locations ==="
           which atmos || echo "atmos not in PATH"
           atmos version || echo "Failed to run atmos version"
           which gotcha || echo "gotcha not in PATH (will be installed by make testacc-ci)"
