@@ -402,6 +402,33 @@ filter:
 - **Interactive TUI** with Bubble Tea components
 - **JSON output** to configurable file (default: `gotcha-results.json`)
 - **Subtest tracking** with real-time pass/fail/skip statistics
+- **Package headers**: Display package name when testing starts
+  - **Format**: `▶ github.com/cloudposse/atmos/tools/gotcha/pkg/utils`
+  - **Styling**: Blue bold text using `PackageHeaderStyle`
+  - **Display**: Shows when a new package starts being tested
+- **No tests indication**: Show "No tests" for packages without test files
+  - **Format**: Gray text saying "No tests"
+  - **Detection mechanisms**:
+    1. **Skip events**: Triggered by `skip` action for package-level events
+    2. **Coverage mode**: When `[no test files]` output detected followed by `pass` event (occurs with `coverprofile`)
+    3. **Empty packages**: When package starts but no test events (`run`, `pass`, `fail`, `skip`) occur before next package or end of stream
+  - **Implementation**: Track test count per package, display "No tests" when count remains zero
+  - **Styling**: Uses `DurationStyle` for subtle gray appearance
+
+#### TUI Mode Display
+- **Package headers**: Display package name at start of package testing
+  - **Format**: Same as stream mode with arrow indicator
+  - **Event handling**: Detects `start` action with empty Test field
+  - **State tracking**: Uses `currentPackage` field to avoid duplicates
+- **No tests indication**: Shows when package has no test files
+  - **Event detection**: Same comprehensive detection as stream mode
+  - **Display location**: After package header
+  - **Visual consistency**: Matches stream mode styling and detection logic
+- **Progress bar**: Real-time test completion percentage
+- **Spinner animation**: Visual feedback during test execution
+- **Test status updates**: Live pass/fail/skip counts
+- **Elapsed time tracking**: Running timer display
+- **Buffer size monitoring**: Memory usage indicator in KB
 
 #### Configuration Options
 - **Timeout control**: Configurable test timeout (default: 40m)
