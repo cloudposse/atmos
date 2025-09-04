@@ -50,8 +50,8 @@ type AuthManager interface {
 	// Validate validates the entire auth configuration
 	Validate() error
 
-	// SetupAWSFiles writes AWS credentials and config files for the specified provider
-	SetupAWSFiles(ctx context.Context, providerName string, creds *schema.Credentials) error
+	// SetupAWSFiles writes AWS credentials and config files for the specified identity
+	SetupAWSFiles(ctx context.Context, identityName string, creds *schema.Credentials) error
 
 	// GetDefaultIdentity returns the name of the default identity, if any
 	GetDefaultIdentity() (string, error)
@@ -83,11 +83,11 @@ type CredentialStore interface {
 
 // AWSFileManager manages AWS credentials and config files
 type AWSFileManager interface {
-	// WriteCredentials writes AWS credentials to the provider-specific file
-	WriteCredentials(providerName string, creds *schema.AWSCredentials) error
+	// WriteCredentials writes AWS credentials to the provider-specific file with identity profile
+	WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error
 
-	// WriteConfig writes AWS config to the provider-specific file
-	WriteConfig(providerName string, region string) error
+	// WriteConfig writes AWS config to the provider-specific file with identity profile
+	WriteConfig(providerName, identityName, region string) error
 
 	// GetCredentialsPath returns the path to the credentials file for the provider
 	GetCredentialsPath(providerName string) string

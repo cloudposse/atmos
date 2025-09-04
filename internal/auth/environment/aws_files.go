@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	ini "gopkg.in/ini.v1"
+
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -22,8 +24,8 @@ func NewAWSFileManager() types.AWSFileManager {
 	}
 }
 
-// WriteCredentials writes AWS credentials to the provider-specific file
-func (m *awsFileManager) WriteCredentials(providerName string, creds *schema.AWSCredentials) error {
+// WriteCredentials writes AWS credentials to the provider-specific file with identity profile
+func (m *awsFileManager) WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error {
 	credentialsPath := m.GetCredentialsPath(providerName)
 	
 	// Ensure directory exists
@@ -31,26 +33,44 @@ func (m *awsFileManager) WriteCredentials(providerName string, creds *schema.AWS
 		return fmt.Errorf("failed to create credentials directory: %w", err)
 	}
 
-	// Create credentials file content
-	content := fmt.Sprintf(`[default]
-aws_access_key_id = %s
-aws_secret_access_key = %s
-`, creds.AccessKeyID, creds.SecretAccessKey)
-
-	if creds.SessionToken != "" {
-		content += fmt.Sprintf("aws_session_token = %s\n", creds.SessionToken)
+	// Load existing INI file or create new one
+	cfg, err := ini.Load(credentialsPath)
+	if err != nil {
+		// File doesn't exist or is invalid, create new one
+		cfg = ini.Empty()
 	}
 
-	// Write file
-	if err := os.WriteFile(credentialsPath, []byte(content), 0600); err != nil {
+	// Get or create the profile section
+	section, err := cfg.NewSection(identityName)
+	if err != nil {
+		return fmt.Errorf("failed to create profile section: %w", err)
+	}
+
+	// Set credentials
+	section.Key("aws_access_key_id").SetValue(creds.AccessKeyID)
+	section.Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
+	if creds.SessionToken != "" {
+		section.Key("aws_session_token").SetValue(creds.SessionToken)
+	} else {
+		// Remove session token if not present
+		section.DeleteKey("aws_session_token")
+	}
+
+	// Save file with proper permissions
+	if err := cfg.SaveTo(credentialsPath); err != nil {
 		return fmt.Errorf("failed to write credentials file: %w", err)
+	}
+
+	// Set proper file permissions
+	if err := os.Chmod(credentialsPath, 0600); err != nil {
+		return fmt.Errorf("failed to set credentials file permissions: %w", err)
 	}
 
 	return nil
 }
 
-// WriteConfig writes AWS config to the provider-specific file
-func (m *awsFileManager) WriteConfig(providerName string, region string) error {
+// WriteConfig writes AWS config to the provider-specific file with identity profile
+func (m *awsFileManager) WriteConfig(providerName, identityName, region string) error {
 	configPath := m.GetConfigPath(providerName)
 	
 	// Ensure directory exists
@@ -58,15 +78,37 @@ func (m *awsFileManager) WriteConfig(providerName string, region string) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Create config file content
-	content := fmt.Sprintf(`[default]
-region = %s
-output = json
-`, region)
+	// Load existing INI file or create new one
+	cfg, err := ini.Load(configPath)
+	if err != nil {
+		// File doesn't exist or is invalid, create new one
+		cfg = ini.Empty()
+	}
 
-	// Write file
-	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil {
+	// Get or create the profile section (AWS config uses "profile name" format, except for "default")
+	var profileSectionName string
+	if identityName == "default" {
+		profileSectionName = "default"
+	} else {
+		profileSectionName = fmt.Sprintf("profile %s", identityName)
+	}
+	section, err := cfg.NewSection(profileSectionName)
+	if err != nil {
+		return fmt.Errorf("failed to create profile section: %w", err)
+	}
+
+	// Set config values
+	section.Key("region").SetValue(region)
+	section.Key("output").SetValue("json")
+
+	// Save file with proper permissions
+	if err := cfg.SaveTo(configPath); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	// Set proper file permissions
+	if err := os.Chmod(configPath, 0600); err != nil {
+		return fmt.Errorf("failed to set config file permissions: %w", err)
 	}
 
 	return nil
@@ -119,3 +161,4 @@ func (m *awsFileManager) Cleanup(providerName string) error {
 
 	return nil
 }
+

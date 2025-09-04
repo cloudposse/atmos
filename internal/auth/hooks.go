@@ -159,21 +159,17 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvSection)
 	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvList)
 
-	// Get provider name for AWS file environment variables
-	providerName := ""
-	if identity, exists := atmosConfig.Auth.Identities[defaultIdentityName]; exists {
-		if identity.Via != nil && identity.Via.Provider != "" {
-			providerName = identity.Via.Provider
-		}
-	}
-
-	// Add AWS file environment variables to component environment
-	if providerName != "" {
-		if provider, exists := atmosConfig.Auth.Providers[providerName]; exists {
+	// Find root provider for chained identities to determine if AWS files are needed
+	rootProviderName := findRootProvider(&atmosConfig.Auth, defaultIdentityName)
+	
+	// Add AWS file environment variables to component environment if this is an AWS provider
+	if rootProviderName != "" {
+		if provider, exists := atmosConfig.Auth.Providers[rootProviderName]; exists {
 			// Check if this is an AWS provider
 			if provider.Kind == "aws/iam-identity-center" || provider.Kind == "aws/assume-role" || provider.Kind == "aws/user" {
 				awsFileManager := environment.NewAWSFileManager()
-				awsEnvVars := awsFileManager.GetEnvironmentVariables(providerName)
+				// Use provider name for AWS file paths (files are organized by provider)
+				awsEnvVars := awsFileManager.GetEnvironmentVariables(rootProviderName)
 				environment.MergeIdentityEnvOverrides(stackInfo, awsEnvVars)
 			}
 		}
@@ -181,4 +177,42 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	log.Debug("Auth hook completed successfully")
 	return nil
+}
+
+// findRootProvider traverses the identity chain to find the root provider
+func findRootProvider(authConfig *schema.AuthConfig, identityName string) string {
+	visited := make(map[string]bool)
+	
+	for identityName != "" {
+		// Prevent infinite loops
+		if visited[identityName] {
+			return ""
+		}
+		visited[identityName] = true
+		
+		identity, exists := authConfig.Identities[identityName]
+		if !exists {
+			return ""
+		}
+		
+		if identity.Via == nil {
+			return ""
+		}
+		
+		// If this identity points to a provider, we found the root
+		if identity.Via.Provider != "" {
+			return identity.Via.Provider
+		}
+		
+		// If this identity points to another identity, continue traversing
+		if identity.Via.Identity != "" {
+			identityName = identity.Via.Identity
+			continue
+		}
+		
+		// No provider or identity found
+		return ""
+	}
+	
+	return ""
 }
