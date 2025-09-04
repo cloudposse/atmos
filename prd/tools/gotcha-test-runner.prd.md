@@ -409,11 +409,11 @@ filter:
 - **No tests indication**: Show "No tests" for packages without test files
   - **Format**: Gray text saying "No tests"
   - **Detection mechanisms**:
-    1. **Skip events**: Triggered by `skip` action for package-level events
+    1. **Skip events**: Triggered by `skip` action for package-level events (standard case)
     2. **Coverage mode**: When `[no test files]` output detected followed by `pass` event (occurs with `coverprofile`)
-    3. **Empty packages**: When package starts but no test events (`run`, `pass`, `fail`, `skip`) occur before next package or end of stream
-  - **Implementation**: Track test count per package, display "No tests" when count remains zero
+  - **Implementation**: Track packages with `[no test files]` in output, display "No tests" on skip or pass events
   - **Styling**: Uses `DurationStyle` for subtle gray appearance
+  - **Important**: Do NOT attempt to detect "empty" packages by counting tests, as events may arrive out of order
 
 #### TUI Mode Display
 - **Package headers**: Display package name at start of package testing
@@ -421,7 +421,7 @@ filter:
   - **Event handling**: Detects `start` action with empty Test field
   - **State tracking**: Uses `currentPackage` field to avoid duplicates
 - **No tests indication**: Shows when package has no test files
-  - **Event detection**: Same comprehensive detection as stream mode
+  - **Event detection**: Same detection as stream mode (skip events and `[no test files]` with pass)
   - **Display location**: After package header
   - **Visual consistency**: Matches stream mode styling and detection logic
 - **Progress bar**: Real-time test completion percentage

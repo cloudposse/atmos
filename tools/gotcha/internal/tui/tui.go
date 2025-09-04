@@ -117,7 +117,7 @@ type TestModel struct {
 	currentIndex   int // Legacy counter - will be removed
 	currentTest    string
 	currentPackage string // Current package being tested
-	packageTestCount map[string]int // Track test count per package to detect empty packages
+	packagesWithNoTests map[string]bool // Track packages that have "[no test files]" in output
 	width          int
 	height         int
 	done           bool
@@ -233,7 +233,7 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		testBuffers:    make(map[string][]string),
 		subtestOutputs: make(map[string][]string),
 		subtestStats:   make(map[string]*SubtestStats),
-		packageTestCount: make(map[string]int),
+		packagesWithNoTests: make(map[string]bool),
 		totalTests:     0, // Will be incremented by "run" events
 		completedTests: 0, // Will be incremented by pass/fail/skip events
 		startTime:      time.Now(),
@@ -358,24 +358,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "start":
 				// New package starting
 				if event.Package != "" && m.currentPackage != event.Package {
-					// Before switching to the new package, check if the previous package had no tests
-					if m.currentPackage != "" && m.packageTestCount[m.currentPackage] == 0 {
-						// The previous package had no tests, print "No tests" for it
-						noTestsMsg := fmt.Sprintf("  %s\n", 
-							DurationStyle.Render("No tests"))
-						// Display both the "No tests" for previous package and the new package header
-						m.currentPackage = event.Package
-						m.packageTestCount[event.Package] = 0 // Initialize test count for new package
-						packageHeader := fmt.Sprintf("\n▶ %s\n\n", 
-							PackageHeaderStyle.Render(event.Package))
-						return m, tea.Batch(
-							tea.Printf("%s%s", noTestsMsg, packageHeader),
-							nextCmd, 
-							m.spinner.Tick,
-						)
-					}
 					m.currentPackage = event.Package
-					m.packageTestCount[event.Package] = 0 // Initialize test count for new package
 					// Display package header
 					packageHeader := fmt.Sprintf("\n▶ %s\n\n", 
 						PackageHeaderStyle.Render(event.Package))
@@ -390,8 +373,6 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if event.Package != "" {
 					noTestsMsg := fmt.Sprintf("  %s\n", 
 						DurationStyle.Render("No tests"))
-					// Mark that we've handled this package
-					m.packageTestCount[event.Package] = -1 // Special value to indicate already handled
 					return m, tea.Batch(
 						tea.Printf("%s", noTestsMsg),
 						nextCmd,
@@ -401,9 +382,8 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "output":
 				// Check for "no test files" message in output
 				if event.Package != "" && strings.Contains(event.Output, "[no test files]") {
-					// Mark this package for showing "No tests" when it completes with pass
-					// (this happens when coverprofile is enabled)
-					m.packageTestCount[event.Package] = -2 // Special marker for coverprofile case
+					// Mark that this package has no tests
+					m.packagesWithNoTests[event.Package] = true
 				}
 				// Package-level output might contain important command output
 				if m.currentTest != "" {
@@ -415,11 +395,10 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.bufferMu.Unlock()
 				}
 			case "pass":
-				// Check if this is a package pass with no tests (happens with coverprofile)
-				if event.Package != "" && m.packageTestCount[event.Package] == -2 {
+				// When a package passes with coverage but had no test files, show "No tests"
+				if event.Package != "" && m.packagesWithNoTests[event.Package] {
 					noTestsMsg := fmt.Sprintf("  %s\n", 
 						DurationStyle.Render("No tests"))
-					m.packageTestCount[event.Package] = -1 // Mark as handled
 					return m, tea.Batch(
 						tea.Printf("%s", noTestsMsg),
 						nextCmd,
@@ -428,13 +407,6 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, tea.Batch(nextCmd, m.spinner.Tick) // Continue reading
-		}
-
-		// Track test count for the current package (only for top-level tests, not subtests)
-		if event.Package != "" && !strings.Contains(event.Test, "/") {
-			if count, exists := m.packageTestCount[event.Package]; exists && count >= 0 {
-				m.packageTestCount[event.Package]++
-			}
 		}
 
 		switch event.Action {
@@ -763,14 +735,6 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case testsDoneMsg:
-		// Check if the last package had no tests and print "No tests" if needed
-		var lastPackageNoTestsMsg string
-		if m.currentPackage != "" && m.packageTestCount[m.currentPackage] == 0 {
-			// The last package had no tests
-			lastPackageNoTestsMsg = fmt.Sprintf("  %s\n", 
-				DurationStyle.Render("No tests"))
-		}
-		
 		// Update progress to 100% before marking as done
 		if m.totalTests > 0 {
 			m.progress.SetPercent(1.0)
@@ -780,11 +744,6 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var summaryOutput string
 		if !m.aborted {
 			summaryOutput = m.generateFinalSummary()
-		}
-		
-		// Print last package message if needed, then summary
-		if lastPackageNoTestsMsg != "" {
-			summaryOutput = lastPackageNoTestsMsg + summaryOutput
 		}
 
 		m.done = true
