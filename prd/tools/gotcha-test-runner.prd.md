@@ -417,13 +417,23 @@ filter:
 #### Job Summary Generation
 - **Write to `$GITHUB_STEP_SUMMARY`**: Automatic job summary creation
 - **Markdown formatting**: GitHub-compatible summary layout
+  - **Total elapsed time**: Display overall test run duration at the top
+  - **Test statistics**: Pass/fail/skip counts with shields.io badges
+  - **Slowest tests section**: Collapsible details showing up to 20 slowest tests with percentage of total time
+    - Shows actual count in header (e.g., "⏱️ Slowest Tests (5)" if only 5 tests exist)
+    - Maximum of 20 tests displayed even if more are available
+  - **Package summary**: Collapsible table showing test counts and durations grouped by package
 - **Coverage visualization**: Badges and detailed coverage tables
 - **Test failure highlighting**: Prominent display of failed tests
 
 #### PR Comment System
 - **Automated commenting**: Post test results as PR comments
 - **Comment deduplication**: UUID-based tracking to update existing comments
-- **Size management**: Smart truncation for large test suites
+- **Size management**: Intelligent truncation for large test suites
+  - **GitHub's 65536 byte limit**: Enforced at multiple levels
+  - **Smart content prioritization**: Failed tests shown first, then skipped, then passed
+  - **Graceful degradation**: Progressively removes less important sections to fit
+  - **Truncation message**: Clear indication when content has been truncated
 - **Template-based formatting**: Consistent comment structure
 
 #### GitHub API Integration

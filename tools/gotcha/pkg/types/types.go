@@ -25,11 +25,12 @@ type TestResult struct {
 
 // TestSummary represents the overall summary of test results.
 type TestSummary struct {
-	Failed       []TestResult
-	Skipped      []TestResult
-	Passed       []TestResult
-	Coverage     string
-	CoverageData *CoverageData
+	Failed           []TestResult
+	Skipped          []TestResult
+	Passed           []TestResult
+	Coverage         string
+	CoverageData     *CoverageData
+	TotalElapsedTime float64 // Total elapsed time in seconds
 }
 
 // CoverageFunction represents a function's coverage information.

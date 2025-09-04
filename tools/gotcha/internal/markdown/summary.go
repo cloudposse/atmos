@@ -28,6 +28,11 @@ func WriteContent(output io.Writer, summary *types.TestSummary, format string) {
 	// Test Results section (h1).
 	fmt.Fprintf(output, "# Test Results\n\n")
 
+	// Display total elapsed time if available
+	if summary.TotalElapsedTime > 0 {
+		fmt.Fprintf(output, "_Total Time: %.2fs_\n\n", summary.TotalElapsedTime)
+	}
+
 	// Get test counts.
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
 

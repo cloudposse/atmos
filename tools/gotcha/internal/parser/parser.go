@@ -19,13 +19,18 @@ func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*ty
 	tests := make(map[string]types.TestResult)
 	var coverage string
 	var coverageData *types.CoverageData
+	var totalElapsedTime float64
 
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
-		testCoverage := processLine(line, tests)
+		testCoverage, pkgElapsed := processLineWithElapsed(line, tests)
 		if testCoverage != "" {
 			coverage = testCoverage
+		}
+		// Track the maximum package elapsed time (overall test run time)
+		if pkgElapsed > totalElapsedTime {
+			totalElapsedTime = pkgElapsed
 		}
 	}
 
@@ -47,26 +52,30 @@ func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*ty
 	sortResults(&failed, &skipped, &passed)
 
 	return &types.TestSummary{
-		Failed:       failed,
-		Skipped:      skipped,
-		Passed:       passed,
-		Coverage:     coverage,
-		CoverageData: coverageData,
+		Failed:           failed,
+		Skipped:          skipped,
+		Passed:           passed,
+		Coverage:         coverage,
+		CoverageData:     coverageData,
+		TotalElapsedTime: totalElapsedTime,
 	}, nil
 }
 
-// processLine processes a single line of JSON output.
-func processLine(line string, tests map[string]types.TestResult) string {
+// processLineWithElapsed processes a single line of JSON output and returns coverage and elapsed time.
+func processLineWithElapsed(line string, tests map[string]types.TestResult) (string, float64) {
 	// Try to parse as JSON.
 	var event types.TestEvent
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
-		return "" // Skip non-JSON lines.
+		return "", 0 // Skip non-JSON lines.
 	}
+
+	var coverage string
+	var elapsed float64
 
 	// Extract coverage info from output.
 	if event.Action == "output" && strings.Contains(event.Output, "coverage:") {
-		if coverage := extractCoverage(event.Output); coverage != "" {
-			return coverage
+		if cov := extractCoverage(event.Output); cov != "" {
+			coverage = cov
 		}
 	}
 
@@ -75,7 +84,18 @@ func processLine(line string, tests map[string]types.TestResult) string {
 		recordTestResult(&event, tests)
 	}
 
-	return ""
+	// Capture package-level elapsed time (overall test duration)
+	if event.Test == "" && (event.Action == "pass" || event.Action == "fail") && event.Elapsed > 0 {
+		elapsed = event.Elapsed
+	}
+
+	return coverage, elapsed
+}
+
+// processLine processes a single line of JSON output (kept for backward compatibility).
+func processLine(line string, tests map[string]types.TestResult) string {
+	coverage, _ := processLineWithElapsed(line, tests)
+	return coverage
 }
 
 // extractCoverage extracts coverage percentage from output line.
