@@ -72,24 +72,49 @@ func setFlagsForDescribeDependentsCmd(flags *pflag.FlagSet, describe *exec.Descr
 	if err != nil {
 		return err
 	}
+
 	err = setStringFlagIfChanged(flags, "file", &describe.File)
 	if err != nil {
 		return err
 	}
+
 	err = setStringFlagIfChanged(flags, "stack", &describe.Stack)
 	if err != nil {
 		return err
 	}
+
 	err = setStringFlagIfChanged(flags, "query", &describe.Query)
 	if err != nil {
 		return err
 	}
+
+	// `true` by default
+	describe.ProcessTemplates = true
+	err = setBoolFlagIfChanged(flags, "process-templates", &describe.ProcessTemplates)
+	if err != nil {
+		return err
+	}
+
+	// `true` by default
+	describe.ProcessYamlFunctions = true
+	err = setBoolFlagIfChanged(flags, "process-functions", &describe.ProcessYamlFunctions)
+	if err != nil {
+		return err
+	}
+
+	err = setSliceOfStringsFlagIfChanged(flags, "skip", &describe.Skip)
+	if err != nil {
+		return err
+	}
+
 	if describe.Format == "" {
 		describe.Format = "json"
 	}
+
 	if describe.Format != "json" && describe.Format != "yaml" {
 		return ErrInvalidFormat
 	}
+
 	return nil
 }
 
@@ -99,7 +124,10 @@ func init() {
 	AddStackCompletion(describeDependentsCmd)
 	describeDependentsCmd.PersistentFlags().StringP("format", "f", "json", "The output format (`json` is default)")
 	describeDependentsCmd.PersistentFlags().String("file", "", "Write the result to the file")
-	describeDependentsCmd.PersistentFlags().String("query", "", "Filter the output using a JMESPath query")
+	describeDependentsCmd.PersistentFlags().StringP("query", "q", "", "Filter the output using a YQ expression")
+	describeDependentsCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
+	describeDependentsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+	describeDependentsCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
 	errUtils.CheckErrorPrintAndExit(err, "", "")

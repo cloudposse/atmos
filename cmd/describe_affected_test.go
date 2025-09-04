@@ -43,10 +43,12 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				fs.Set("format", "yaml")
 			},
 			expected: &exec.DescribeAffectedCmdArgs{
-				Ref:               "main",
-				SHA:               "abc123",
-				IncludeDependents: true,
-				Format:            "yaml",
+				Ref:                  "main",
+				SHA:                  "abc123",
+				IncludeDependents:    true,
+				Format:               "yaml",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{
@@ -55,10 +57,12 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				fs.Set("upload", "true")
 			},
 			expected: &exec.DescribeAffectedCmdArgs{
-				Upload:            true,
-				IncludeDependents: true,
-				IncludeSettings:   true,
-				Format:            "json",
+				Upload:               true,
+				IncludeDependents:    true,
+				IncludeSettings:      true,
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{
@@ -67,7 +71,9 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				// No flags set
 			},
 			expected: &exec.DescribeAffectedCmdArgs{
-				Format: "json",
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 		{
@@ -76,7 +82,9 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				fs.Set("format", "json")
 			},
 			expected: &exec.DescribeAffectedCmdArgs{
-				Format: "json",
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		},
 	}

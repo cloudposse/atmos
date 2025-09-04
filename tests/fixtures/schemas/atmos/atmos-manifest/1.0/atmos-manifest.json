@@ -916,6 +916,9 @@
         {
           "type": "object",
           "properties": {
+            "stack": {
+              "type": "string"
+            },
             "namespace": {
               "type": "string"
             },

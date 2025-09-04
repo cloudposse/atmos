@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -36,7 +37,7 @@ func TestDescribeDependentsExec_Execute_Success_NoQuery(t *testing.T) {
 	}
 
 	// Mock functions
-	mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, component, stack string, includeSettings bool) ([]schema.Dependent, error) {
+	mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
 		assert.Equal(t, "test-component", component)
 		assert.Equal(t, "test-stack", stack)
 		assert.False(t, includeSettings)
@@ -101,7 +102,7 @@ func TestDescribeDependentsExec_Execute_Success_WithQuery(t *testing.T) {
 
 	exec := &describeDependentsExec{
 		atmosConfig: atmosConfig,
-		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, component, stack string, includeSettings bool) ([]schema.Dependent, error) {
+		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
 			return dependents, nil
 		},
 		newPageCreator:        newMockPageCreator,
@@ -131,7 +132,7 @@ func TestDescribeDependentsExec_Execute_ExecuteDescribeDependentsError(t *testin
 	pagerMock := pager.NewMockPageCreator(gomock.NewController(t))
 	exec := &describeDependentsExec{
 		atmosConfig: atmosConfig,
-		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, component, stack string, includeSettings bool) ([]schema.Dependent, error) {
+		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
 			return nil, expectedError
 		},
 		newPageCreator:        pagerMock,
@@ -170,7 +171,7 @@ func TestDescribeDependentsExec_Execute_YqExpressionError(t *testing.T) {
 
 	exec := &describeDependentsExec{
 		atmosConfig: atmosConfig,
-		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, component, stack string, includeSettings bool) ([]schema.Dependent, error) {
+		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
 			return dependents, nil
 		},
 		newPageCreator: mockPageCreator,
@@ -201,7 +202,7 @@ func TestDescribeDependentsExec_Execute_EmptyDependents(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	dependents := []schema.Dependent{}
 
-	mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, component, stack string, includeSettings bool) ([]schema.Dependent, error) {
+	mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
 		return dependents, nil
 	}
 
@@ -259,7 +260,7 @@ func TestDescribeDependentsExec_Execute_DifferentFormatsAndFiles(t *testing.T) {
 			dependents := []schema.Dependent{{Component: "comp1", Stack: "stack1"}}
 			pagerMock := pager.NewMockPageCreator(gomock.NewController(t))
 			// Mock functions
-			mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, component, stack string, includeSettings bool) ([]schema.Dependent, error) {
+			mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
 				return dependents, nil
 			}
 
@@ -456,7 +457,7 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc // capture
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false)
+			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false, true, true, nil)
 			require.NoError(t, err)
 
 			// Order-agnostic equality on struct slices
@@ -655,11 +656,110 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc // capture
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false)
+			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false, true, true, nil)
 			require.NoError(t, err)
 
 			// Order-agnostic equality on struct slices
 			assert.ElementsMatch(t, tc.expected, res)
 		})
 	}
+}
+
+// mk is a helper that builds a Dependent and derives StackSlug = Stack + "-" + Component.
+func mk(stack, component, path string) schema.Dependent {
+	return schema.Dependent{
+		Stack:         stack,
+		Component:     component,
+		StackSlug:     stack + "-" + strings.ReplaceAll(component, "/", "-"),
+		ComponentPath: path,
+	}
+}
+
+// withChildren attaches dependent children to dependents.
+func withChildren(d schema.Dependent, kids []schema.Dependent) schema.Dependent {
+	d.Dependents = kids
+	return d
+}
+
+func TestSortDependentsByStackSlug_BasicOrder(t *testing.T) {
+	deps := []schema.Dependent{
+		mk("uw2-network", "vpc", "p4"),
+		mk("ue1-network", "tgw/hub", "p2"),
+		mk("ue1-network", "tgw/attachment", "p1"),
+		mk("uw2-network", "tgw/attachment", "p3"),
+	}
+
+	// Expected order by StackSlug
+	expected := []schema.Dependent{
+		mk("ue1-network", "tgw/attachment", "p1"),
+		mk("ue1-network", "tgw/hub", "p2"),
+		mk("uw2-network", "tgw/attachment", "p3"),
+		mk("uw2-network", "vpc", "p4"),
+	}
+
+	sortDependentsByStackSlug(deps)
+	require.Equal(t, expected, deps)
+}
+
+func TestSortDependentsByStackSlugRecursive_EmptyAndNil(t *testing.T) {
+	// nil slice
+	var nilDeps []schema.Dependent
+	sortDependentsByStackSlugRecursive(nilDeps) // should not panic
+	require.Nil(t, nilDeps)
+
+	// empty slice
+	empty := []schema.Dependent{}
+	sortDependentsByStackSlugRecursive(empty) // should not panic
+	require.Empty(t, empty)
+}
+
+func TestSortDependentsByStackSlugRecursive_BasicAndNested(t *testing.T) {
+	// Unsorted tree
+	deps := []schema.Dependent{
+		withChildren(mk("uw2-network", "vpc", "p3"), []schema.Dependent{
+			mk("uw2-network", "tgw/hub", "c2"),
+			mk("uw2-network", "tgw/attachment", "c1"),
+		}),
+		withChildren(mk("ue1-network", "vpc", "p1"), []schema.Dependent{
+			mk("ue1-network", "tgw/attachment", "a1"),
+		}),
+		withChildren(mk("ue1-network", "tgw/hub", "p2"), []schema.Dependent{
+			mk("ue1-network", "z-comp", "g2"),
+			mk("ue1-network", "a-comp", "g1"),
+		}),
+	}
+
+	// Expected (sorted recursively)
+	expected := []schema.Dependent{
+		withChildren(mk("ue1-network", "tgw/hub", "p2"), []schema.Dependent{
+			mk("ue1-network", "a-comp", "g1"),
+			mk("ue1-network", "z-comp", "g2"),
+		}),
+		withChildren(mk("ue1-network", "vpc", "p1"), []schema.Dependent{
+			mk("ue1-network", "tgw/attachment", "a1"),
+		}),
+		withChildren(mk("uw2-network", "vpc", "p3"), []schema.Dependent{
+			mk("uw2-network", "tgw/attachment", "c1"),
+			mk("uw2-network", "tgw/hub", "c2"),
+		}),
+	}
+
+	sortDependentsByStackSlugRecursive(deps)
+	require.Equal(t, expected, deps)
+}
+
+func TestSortDependentsByStackSlugRecursive_TieStabilityAtNestedLevel(t *testing.T) {
+	// Children have identical (Stack, Component) → identical StackSlug; order should be stable.
+	parent := withChildren(mk("ue1-network", "vpc", "parent"), []schema.Dependent{
+		mk("ue1-network", "tgw/attachment", "first"),
+		mk("ue1-network", "tgw/attachment", "second"),
+	})
+
+	deps := []schema.Dependent{parent}
+	sortDependentsByStackSlugRecursive(deps)
+
+	require.Len(t, deps, 1)
+	require.Len(t, deps[0].Dependents, 2)
+	require.Equal(t, "first", deps[0].Dependents[0].ComponentPath)
+	require.Equal(t, "second", deps[0].Dependents[1].ComponentPath)
 }
