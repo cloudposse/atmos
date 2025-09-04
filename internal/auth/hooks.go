@@ -159,11 +159,16 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	// Find root provider for chained identities to determine if AWS files are needed
 	rootProviderName := findRootProvider(&atmosConfig.Auth, defaultIdentityName)
 
-	// Add AWS file environment variables to component environment if this is an AWS provider
+	// Setup AWS files and environment variables if this is an AWS provider
 	if rootProviderName != "" {
 		if provider, exists := atmosConfig.Auth.Providers[rootProviderName]; exists {
 			// Check if this is an AWS provider
 			if provider.Kind == "aws/iam-identity-center" || provider.Kind == "aws/assume-role" || provider.Kind == "aws/user" {
+				// Setup AWS files (recreates them if deleted)
+				if err := authManager.SetupAWSFiles(ctx, rootProviderName, defaultIdentityName, whoami.Credentials); err != nil {
+					return fmt.Errorf("failed to setup AWS files: %w", err)
+				}
+				
 				awsFileManager := environment.NewAWSFileManager()
 				// Use provider name for AWS file paths and identity name for AWS_PROFILE
 				awsEnvVars := awsFileManager.GetEnvironmentVariables(rootProviderName, defaultIdentityName)
