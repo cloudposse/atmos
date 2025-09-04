@@ -15,10 +15,10 @@ var toolchainRunCmd = &cobra.Command{
 If no version is specified, the latest version will be used.
 
 Examples:
-  toolchain run terraform --version          # Uses latest version
-  toolchain run terraform@1.9.8 --version   # Uses specific version
-  toolchain run opentofu@1.10.1 init
-  toolchain run terraform@1.5.7 plan -var-file=prod.tfvars`,
+atmos toolchain run terraform --version          # Uses latest version
+atmos toolchain run terraform@1.9.8 --version   # Uses specific version
+atmos toolchain run opentofu@1.10.1 init
+atmos toolchain run terraform@1.5.7 plan -var-file=prod.tfvars`,
 	Args:               cobra.MinimumNArgs(1),
 	RunE:               runTool,
 	DisableFlagParsing: true,
