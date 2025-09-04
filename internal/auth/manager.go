@@ -11,13 +11,13 @@ import (
 
 // manager implements the AuthManager interface
 type manager struct {
-	config           *schema.AuthConfig
-	providers        map[string]types.Provider
-	identities       map[string]types.Identity
-	credentialStore  types.CredentialStore
-	awsFileManager   types.AWSFileManager
-	configMerger     types.ConfigMerger
-	validator        types.Validator
+	config          *schema.AuthConfig
+	providers       map[string]types.Provider
+	identities      map[string]types.Identity
+	credentialStore types.CredentialStore
+	awsFileManager  types.AWSFileManager
+	configMerger    types.ConfigMerger
+	validator       types.Validator
 }
 
 // NewAuthManager creates a new AuthManager instance
@@ -125,20 +125,20 @@ func (m *manager) Whoami(ctx context.Context) (*schema.WhoamiInfo, error) {
 		if providerName == "" {
 			continue
 		}
-		
+
 		alias := fmt.Sprintf("%s/%s", providerName, identityName)
-		
+
 		// Try to retrieve credentials for this identity
 		creds, err := m.credentialStore.Retrieve(alias)
 		if err != nil {
 			continue // No credentials stored for this identity
 		}
-		
+
 		// Check if credentials are expired
 		if expired, err := m.credentialStore.IsExpired(alias); err != nil || expired {
 			continue // Credentials are expired or can't check expiration
 		}
-		
+
 		// Parse expiration time to find the most recent
 		if creds.AWS != nil && creds.AWS.Expiration != "" {
 			if expTime, err := time.Parse(time.RFC3339, creds.AWS.Expiration); err == nil {
@@ -246,19 +246,60 @@ func (m *manager) initializeIdentities() error {
 }
 
 // getProviderForIdentity returns the provider name for the given identity
+// Recursively resolves through identity chains to find the root provider
 func (m *manager) getProviderForIdentity(identityName string) string {
-	if identity, exists := m.config.Identities[identityName]; exists {
-		if identity.Via != nil && identity.Via.Provider != "" {
-			return identity.Via.Provider
+	visited := make(map[string]bool)
+	return m.getProviderForIdentityRecursive(identityName, visited)
+}
+
+// getProviderForIdentityRecursive recursively resolves provider through identity chains
+func (m *manager) getProviderForIdentityRecursive(identityName string, visited map[string]bool) string {
+	// Check for circular dependencies
+	if visited[identityName] {
+		return "" // Circular dependency detected
+	}
+	visited[identityName] = true
+
+	// First try to find by identity name
+	identity, exists := m.config.Identities[identityName]
+	if !exists {
+		// If not found by name, try to find by alias
+		for name, ident := range m.config.Identities {
+			if ident.Alias == identityName {
+				identity = ident
+				exists = true
+				// Update visited with the actual identity name to prevent cycles
+				visited[name] = true
+				break
+			}
 		}
 	}
+
+	if !exists {
+		return ""
+	}
+
+	if identity.Via == nil {
+		return ""
+	}
+
+	// If this identity points to a provider, return it
+	if identity.Via.Provider != "" {
+		return identity.Via.Provider
+	}
+
+	// If this identity points to another identity, recurse
+	if identity.Via.Identity != "" {
+		return m.getProviderForIdentityRecursive(identity.Via.Identity, visited)
+	}
+
 	return ""
 }
 
 // buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials
 func (m *manager) buildWhoamiInfo(identityName string, creds *schema.Credentials) *schema.WhoamiInfo {
 	providerName := m.getProviderForIdentity(identityName)
-	
+
 	info := &schema.WhoamiInfo{
 		Provider:    providerName,
 		Identity:    identityName,

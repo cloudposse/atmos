@@ -8,6 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/internal/auth/authstore"
+	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -35,16 +38,31 @@ func (i *assumeRoleIdentity) Kind() string {
 	return "aws/assume-role"
 }
 
+// assumeRoleCache represents cached assume role credentials
+type assumeRoleCache struct {
+	AccessKeyID     string    `json:"access_key_id"`
+	SecretAccessKey string    `json:"secret_access_key"`
+	SessionToken    string    `json:"session_token"`
+	Region          string    `json:"region"`
+	Expiration      time.Time `json:"expiration"`
+	LastUpdated     time.Time `json:"last_updated"`
+}
+
 // Authenticate performs authentication using assume role
 func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
+	// Check cache first
+	if creds := i.checkCache(); creds != nil {
+		return creds, nil
+	}
+
 	if baseCreds == nil || baseCreds.AWS == nil {
 		return nil, fmt.Errorf("base AWS credentials are required")
 	}
 
 	// Get role ARN from spec
-	roleArn, ok := i.config.Spec["role_arn"].(string)
+	roleArn, ok := i.config.Spec["assume_role"].(string)
 	if !ok || roleArn == "" {
-		return nil, fmt.Errorf("role_arn is required in spec")
+		return nil, fmt.Errorf("assume_role is required in spec")
 	}
 
 	// Create AWS config using base credentials
@@ -91,11 +109,13 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 
 	// Convert to our credential format
 	expiration := ""
+	expirationTime := time.Time{}
 	if result.Credentials.Expiration != nil {
-		expiration = result.Credentials.Expiration.Format(time.RFC3339)
+		expirationTime = *result.Credentials.Expiration
+		expiration = expirationTime.Format(time.RFC3339)
 	}
 
-	return &schema.Credentials{
+	creds := &schema.Credentials{
 		AWS: &schema.AWSCredentials{
 			AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
 			SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
@@ -103,7 +123,12 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 			Region:          baseCreds.AWS.Region,
 			Expiration:      expiration,
 		},
-	}, nil
+	}
+
+	// Cache the credentials
+	i.cacheCredentials(creds, expirationTime)
+
+	return creds, nil
 }
 
 // Validate validates the identity configuration
@@ -112,9 +137,9 @@ func (i *assumeRoleIdentity) Validate() error {
 		return fmt.Errorf("spec is required")
 	}
 
-	roleArn, ok := i.config.Spec["role_arn"].(string)
+	roleArn, ok := i.config.Spec["assume_role"].(string)
 	if !ok || roleArn == "" {
-		return fmt.Errorf("role_arn is required in spec")
+		return fmt.Errorf("assume_role is required in spec")
 	}
 
 	return nil
@@ -163,4 +188,66 @@ func (i *assumeRoleIdentity) Merge(component *schema.Identity) types.Identity {
 	}
 
 	return merged
+}
+
+// checkCache checks for valid cached assume role credentials
+func (i *assumeRoleIdentity) checkCache() *schema.Credentials {
+	store := authstore.NewKeyringAuthStore()
+	cacheKey := fmt.Sprintf(credentials.KeyringService, i.Kind(), i.getProviderName(), i.name)
+	
+	var cache assumeRoleCache
+	if err := store.GetAny(cacheKey, &cache); err != nil {
+		return nil // No cache or error reading cache
+	}
+	
+	// Check if cache is expired (with 5 minute buffer)
+	if time.Now().Add(5 * time.Minute).After(cache.Expiration) {
+		// Cache expired, remove it
+		store.Delete(cacheKey)
+		return nil
+	}
+	
+	return &schema.Credentials{
+		AWS: &schema.AWSCredentials{
+			AccessKeyID:     cache.AccessKeyID,
+			SecretAccessKey: cache.SecretAccessKey,
+			SessionToken:    cache.SessionToken,
+			Region:          cache.Region,
+			Expiration:      cache.Expiration.Format(time.RFC3339),
+		},
+	}
+}
+
+// cacheCredentials stores assume role credentials in keyring
+func (i *assumeRoleIdentity) cacheCredentials(creds *schema.Credentials, expiration time.Time) {
+	cacheKey := fmt.Sprintf(credentials.KeyringService, i.Kind(), i.getProviderName(), i.name)
+	store := authstore.NewKeyringAuthStore()
+	
+	cache := assumeRoleCache{
+		AccessKeyID:     creds.AWS.AccessKeyID,
+		SecretAccessKey: creds.AWS.SecretAccessKey,
+		SessionToken:    creds.AWS.SessionToken,
+		Region:          creds.AWS.Region,
+		Expiration:      expiration,
+		LastUpdated:     time.Now(),
+	}
+	
+	log.Debug("Caching assume role credentials", "key", cacheKey)
+	if err := store.SetAny(cacheKey, cache); err != nil {
+		// Don't fail authentication if caching fails, just log
+		log.Warn("Failed to cache assume role credentials", "error", err)
+	}
+}
+
+// getProviderName extracts the provider name from the identity configuration
+func (i *assumeRoleIdentity) getProviderName() string {
+	if i.config.Via != nil && i.config.Via.Provider != "" {
+		return i.config.Via.Provider
+	}
+	if i.config.Via != nil && i.config.Via.Identity != "" {
+		// This assume role identity chains through another identity
+		// For caching purposes, we'll use the chained identity name
+		return i.config.Via.Identity
+	}
+	return "unknown"
 }

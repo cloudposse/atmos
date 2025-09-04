@@ -43,6 +43,9 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Support Azure roles, GCP service account impersonation
   - Support Okta applications
   - Enable identity chaining via other identities or providers
+  - Support deep identity chaining (provider→identity→identity→identity)
+  - Recursive provider resolution for identity chains
+  - Identity chains can be arbitrarily deep without limitation
 - **Priority**: P0 (Must Have)
 
 #### FR-003: Credential Sourcing
@@ -164,6 +167,21 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Find most recent valid credentials across all configured identities
 - **Priority**: P0 (Must Have)
 
+#### FR-015: SSO Credential Caching
+
+- **Description**: Cache SSO authentication credentials to avoid repeated user prompts
+- **Acceptance Criteria**:
+  - SSO providers check keyring for cached credentials before prompting user
+  - Store SSO credentials in keyring after successful authentication
+  - Cache includes access tokens, refresh tokens, and expiration times
+  - Automatic cache invalidation when credentials expire
+  - Cache key format: `sso/<provider_name>/<identity_name>`
+  - Support for credential refresh using cached refresh tokens
+  - Graceful fallback to interactive authentication when cache is invalid
+  - Cache respects session duration configured in provider
+  - Clear error messages when cached credentials are expired or invalid
+- **Priority**: P0 (Must Have)
+
 #### FR-013: Interactive User Credential Configuration
 
 - **Description**: Interactive configuration of AWS user credentials with secure storage
@@ -179,6 +197,22 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Support for updating existing stored credentials
   - Clear error messages for keyring access failures
 - **Priority**: P1 (Should Have)
+
+#### FR-014: Deep Identity Chaining
+
+- **Description**: Support arbitrarily deep identity-to-identity chaining
+- **Acceptance Criteria**:
+  - Identities can chain to other identities via `via.identity`
+  - Provider resolution works recursively through identity chains
+  - Support chains like: provider → identity1 → identity2 → identity3
+  - Each identity in chain can override previous identity's configuration
+  - Circular dependency detection prevents infinite loops
+  - Clear error messages for broken chains
+  - Authentication flows through entire chain to reach final identity
+  - Base provider credentials flow through chain transformations
+  - `getProviderForIdentity()` function resolves provider recursively
+  - Identity chains work seamlessly with component-level overrides
+- **Priority**: P0 (Must Have)
 
 ### 2.2 Non-Functional Requirements
 
@@ -199,6 +233,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Authentication completion within 5 seconds
   - Credential caching to avoid repeated API calls
   - Parallel provider initialization where possible
+  - SSO credential caching eliminates repeated user prompts
+  - Cache hit authentication completes within 1 second
 - **Priority**: P1 (Should Have)
 
 #### NFR-003: Reliability

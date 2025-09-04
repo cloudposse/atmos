@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/internal/auth/authstore"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -49,8 +50,20 @@ func (p *ssoProvider) Kind() string {
 	return "aws/iam-identity-center"
 }
 
+// ssoCache represents cached SSO credentials
+type ssoCache struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token,omitempty"`
+	Expiration   time.Time `json:"expiration"`
+	Region       string    `json:"region"`
+	LastUpdated  time.Time `json:"last_updated"`
+}
+
 // Authenticate performs AWS SSO authentication
 func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
+	// Note: Cache checking is now handled by identities that use this provider
+	// since they have access to the identity name required for the cache key
+
 	// Initialize AWS config for the SSO region
 	cfg := aws.Config{
 		Region: p.region,
@@ -130,6 +143,9 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 	// Calculate expiration time
 	expiration := time.Now().Add(time.Duration(p.getSessionDuration()) * time.Minute)
 
+	// Note: Caching is now handled by identities that use this provider
+	// since they have access to the identity name required for the cache key
+
 	return &schema.Credentials{
 		AWS: &schema.AWSCredentials{
 			AccessKeyID: accessToken, // This will be used by identities to get actual credentials
@@ -155,6 +171,50 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 	env["AWS_REGION"] = p.region
 	return env, nil
+}
+
+// checkCache checks for valid cached SSO credentials for a specific identity
+func (p *ssoProvider) checkCache(identityName string) *schema.Credentials {
+	store := authstore.NewKeyringAuthStore()
+	cacheKey := fmt.Sprintf("atmos-auth/sso/%s/%s", p.name, identityName)
+	
+	var cache ssoCache
+	if err := store.GetAny(cacheKey, &cache); err != nil {
+		return nil // No cache or error reading cache
+	}
+	
+	// Check if cache is expired (with 5 minute buffer)
+	if time.Now().Add(5 * time.Minute).After(cache.Expiration) {
+		// Cache expired, remove it
+		store.Delete(cacheKey)
+		return nil
+	}
+	
+	return &schema.Credentials{
+		AWS: &schema.AWSCredentials{
+			AccessKeyID: cache.AccessToken,
+			Region:      cache.Region,
+			Expiration:  cache.Expiration.Format(time.RFC3339),
+		},
+	}
+}
+
+// cacheCredentials stores SSO credentials in keyring for a specific identity
+func (p *ssoProvider) cacheCredentials(identityName, accessToken, refreshToken string, expiration time.Time) {
+	store := authstore.NewKeyringAuthStore()
+	cacheKey := fmt.Sprintf("atmos-auth/sso/%s/%s", p.name, identityName)
+	
+	cache := ssoCache{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		Expiration:   expiration,
+		Region:       p.region,
+		LastUpdated:  time.Now(),
+	}
+	
+	if err := store.SetAny(cacheKey, cache); err != nil {
+		log.Warn("Failed to cache SSO credentials", "error", err)
+	}
 }
 
 // getSessionDuration returns the session duration in minutes

@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	keyringService = "atmos-auth"
+	KeyringService = "atmos-auth/%s/%s/%s"
 )
 
 // keyringStore implements the CredentialStore interface using the system keyring
@@ -30,7 +30,7 @@ func (s *keyringStore) Store(alias string, creds *schema.Credentials) error {
 		return fmt.Errorf("failed to marshal credentials: %w", err)
 	}
 
-	if err := keyring.Set(keyringService, alias, string(data)); err != nil {
+	if err := keyring.Set(KeyringService, alias, string(data)); err != nil {
 		return fmt.Errorf("failed to store credentials in keyring: %w", err)
 	}
 
@@ -39,7 +39,7 @@ func (s *keyringStore) Store(alias string, creds *schema.Credentials) error {
 
 // Retrieve retrieves credentials for the given alias
 func (s *keyringStore) Retrieve(alias string) (*schema.Credentials, error) {
-	data, err := keyring.Get(keyringService, alias)
+	data, err := keyring.Get(KeyringService, alias)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve credentials from keyring: %w", err)
 	}
@@ -54,7 +54,7 @@ func (s *keyringStore) Retrieve(alias string) (*schema.Credentials, error) {
 
 // Delete deletes credentials for the given alias
 func (s *keyringStore) Delete(alias string) error {
-	if err := keyring.Delete(keyringService, alias); err != nil {
+	if err := keyring.Delete(KeyringService, alias); err != nil {
 		return fmt.Errorf("failed to delete credentials from keyring: %w", err)
 	}
 

@@ -8,6 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
+	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/internal/auth/authstore"
+	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -35,8 +38,23 @@ func (i *permissionSetIdentity) Kind() string {
 	return "aws/permission-set"
 }
 
+// permissionSetCache represents cached permission set credentials
+type permissionSetCache struct {
+	AccessKeyID     string    `json:"access_key_id"`
+	SecretAccessKey string    `json:"secret_access_key"`
+	SessionToken    string    `json:"session_token"`
+	Region          string    `json:"region"`
+	Expiration      time.Time `json:"expiration"`
+	LastUpdated     time.Time `json:"last_updated"`
+}
+
 // Authenticate performs authentication using permission set
 func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
+	// Check cache first
+	if creds := i.checkCache(); creds != nil {
+		return creds, nil
+	}
+
 	if baseCreds == nil || baseCreds.AWS == nil {
 		return nil, fmt.Errorf("base AWS credentials are required")
 	}
@@ -59,7 +77,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 	}
 
 	// Create AWS config using the base credentials (SSO access token)
-	cfg, err := config.LoadDefaultConfig(ctx, 
+	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(baseCreds.AWS.Region),
 		config.WithCredentialsProvider(aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
 			return aws.Credentials{
@@ -106,11 +124,13 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 
 	// Convert to our credential format
 	expiration := ""
+	expirationTime := time.Time{}
 	if roleCredsResp.RoleCredentials.Expiration != 0 {
-		expiration = time.Unix(roleCredsResp.RoleCredentials.Expiration/1000, 0).Format(time.RFC3339)
+		expirationTime = time.Unix(roleCredsResp.RoleCredentials.Expiration/1000, 0)
+		expiration = expirationTime.Format(time.RFC3339)
 	}
 
-	return &schema.Credentials{
+	creds := &schema.Credentials{
 		AWS: &schema.AWSCredentials{
 			AccessKeyID:     aws.ToString(roleCredsResp.RoleCredentials.AccessKeyId),
 			SecretAccessKey: aws.ToString(roleCredsResp.RoleCredentials.SecretAccessKey),
@@ -118,7 +138,12 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 			Region:          baseCreds.AWS.Region,
 			Expiration:      expiration,
 		},
-	}, nil
+	}
+
+	// Cache the credentials
+	i.cacheCredentials(creds, expirationTime)
+
+	return creds, nil
 }
 
 // Validate validates the identity configuration
@@ -148,7 +173,7 @@ func (i *permissionSetIdentity) Validate() error {
 // Environment returns environment variables for this identity
 func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
-	
+
 	// Add environment variables from identity config
 	for _, envVar := range i.config.Environment {
 		env[envVar.Key] = envVar.Value
@@ -188,4 +213,61 @@ func (i *permissionSetIdentity) Merge(component *schema.Identity) types.Identity
 	}
 
 	return merged
+}
+
+// checkCache checks for valid cached permission set credentials
+func (i *permissionSetIdentity) checkCache() *schema.Credentials {
+	store := authstore.NewKeyringAuthStore()
+	cacheKey := fmt.Sprintf(credentials.KeyringService, i.Kind(), i.getProviderName(), i.name)
+
+	var cache permissionSetCache
+	if err := store.GetAny(cacheKey, &cache); err != nil {
+		return nil // No cache or error reading cache
+	}
+
+	// Check if cache is expired (with 5 minute buffer)
+	if time.Now().Add(5 * time.Minute).After(cache.Expiration) {
+		// Cache expired, remove it
+		store.Delete(cacheKey)
+		return nil
+	}
+
+	return &schema.Credentials{
+		AWS: &schema.AWSCredentials{
+			AccessKeyID:     cache.AccessKeyID,
+			SecretAccessKey: cache.SecretAccessKey,
+			SessionToken:    cache.SessionToken,
+			Region:          cache.Region,
+			Expiration:      cache.Expiration.Format(time.RFC3339),
+		},
+	}
+}
+
+// cacheCredentials stores permission set credentials in keyring
+func (i *permissionSetIdentity) cacheCredentials(creds *schema.Credentials, expiration time.Time) {
+	cacheKey := fmt.Sprintf(credentials.KeyringService, i.Kind(), i.getProviderName(), i.name)
+	store := authstore.NewKeyringAuthStore()
+
+	cache := permissionSetCache{
+		AccessKeyID:     creds.AWS.AccessKeyID,
+		SecretAccessKey: creds.AWS.SecretAccessKey,
+		SessionToken:    creds.AWS.SessionToken,
+		Region:          creds.AWS.Region,
+		Expiration:      expiration,
+		LastUpdated:     time.Now(),
+	}
+
+	log.Debug("Caching permission set credentials", "key", cacheKey)
+	if err := store.SetAny(cacheKey, cache); err != nil {
+		// Don't fail authentication if caching fails, just log
+		log.Warn("Failed to cache permission set credentials", "error", err)
+	}
+}
+
+// getProviderName extracts the provider name from the identity configuration
+func (i *permissionSetIdentity) getProviderName() string {
+	if i.config.Via != nil && i.config.Via.Provider != "" {
+		return i.config.Via.Provider
+	}
+	return "unknown"
 }
