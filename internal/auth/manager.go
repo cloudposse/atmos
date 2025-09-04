@@ -84,11 +84,11 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 		return nil, fmt.Errorf("hierarchical authentication failed: %w", err)
 	}
 
-	// Setup AWS files if this is an AWS provider
-	providerName := m.getProviderForIdentity(identityName)
+	// Setup AWS files if this is an AWS provider (chain[0] is always the provider name)
+	providerName := chain[0]
 	provider, exists := m.providers[providerName]
 	if exists && isAWSProvider(provider.Kind()) {
-		if err := m.SetupAWSFiles(ctx, identityName, finalCreds); err != nil {
+		if err := m.SetupAWSFiles(ctx, providerName, identityName, finalCreds); err != nil {
 			return nil, fmt.Errorf("failed to setup AWS files: %w", err)
 		}
 	}
@@ -148,36 +148,30 @@ func (m *manager) Validate() error {
 }
 
 // SetupAWSFiles writes AWS credentials and config files for the specified identity
-func (m *manager) SetupAWSFiles(ctx context.Context, identityName string, creds *schema.Credentials) error {
+func (m *manager) SetupAWSFiles(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error {
 	if creds.AWS == nil {
 		return fmt.Errorf("no AWS credentials found")
 	}
 
-	// Get root provider name for file organization
-	rootProviderName := m.findRootProviderForIdentity(identityName)
-	if rootProviderName == "" {
-		return fmt.Errorf("could not determine root provider for identity %s", identityName)
-	}
-
 	// Write credentials file to provider directory with identity profile
-	if err := m.awsFileManager.WriteCredentials(rootProviderName, identityName, creds.AWS); err != nil {
+	if err := m.awsFileManager.WriteCredentials(providerName, identityName, creds.AWS); err != nil {
 		return fmt.Errorf("failed to write AWS credentials: %w", err)
 	}
 
 	// Write config file to provider directory with identity profile
 	region := creds.AWS.Region
 	if region == "" {
-		// Get region from root provider config
-		if provider, exists := m.config.Providers[rootProviderName]; exists {
+		// Get region from provider config
+		if provider, exists := m.config.Providers[providerName]; exists {
 			region = provider.Region
 		}
 	}
-	if err := m.awsFileManager.WriteConfig(rootProviderName, identityName, region); err != nil {
+	if err := m.awsFileManager.WriteConfig(providerName, identityName, region); err != nil {
 		return fmt.Errorf("failed to write AWS config: %w", err)
 	}
 
 	// Set environment variables using provider name for file paths
-	if err := m.awsFileManager.SetEnvironmentVariables(rootProviderName); err != nil {
+	if err := m.awsFileManager.SetEnvironmentVariables(providerName); err != nil {
 		return fmt.Errorf("failed to set AWS environment variables: %w", err)
 	}
 
@@ -287,43 +281,6 @@ func (m *manager) getProviderForIdentityRecursive(identityName string, visited m
 	return ""
 }
 
-// findRootProviderForIdentity traverses the identity chain to find the root provider
-func (m *manager) findRootProviderForIdentity(identityName string) string {
-	visited := make(map[string]bool)
-	
-	for identityName != "" {
-		// Prevent infinite loops
-		if visited[identityName] {
-			return ""
-		}
-		visited[identityName] = true
-		
-		identity, exists := m.config.Identities[identityName]
-		if !exists {
-			return ""
-		}
-		
-		if identity.Via == nil {
-			return ""
-		}
-		
-		// If this identity points to a provider, we found the root
-		if identity.Via.Provider != "" {
-			return identity.Via.Provider
-		}
-		
-		// If this identity points to another identity, continue traversing
-		if identity.Via.Identity != "" {
-			identityName = identity.Via.Identity
-			continue
-		}
-		
-		// No provider or identity found
-		return ""
-	}
-	
-	return ""
-}
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation
 func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, targetIdentity string) (*schema.Credentials, error) {

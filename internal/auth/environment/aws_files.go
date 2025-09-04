@@ -141,13 +141,14 @@ func (m *awsFileManager) SetEnvironmentVariables(providerName string) error {
 }
 
 // GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
-func (m *awsFileManager) GetEnvironmentVariables(providerName string) []schema.EnvironmentVariable {
+func (m *awsFileManager) GetEnvironmentVariables(providerName, identityName string) []schema.EnvironmentVariable {
 	credentialsPath := m.GetCredentialsPath(providerName)
 	configPath := m.GetConfigPath(providerName)
 
 	return []schema.EnvironmentVariable{
 		{Key: "AWS_SHARED_CREDENTIALS_FILE", Value: credentialsPath},
 		{Key: "AWS_CONFIG_FILE", Value: configPath},
+		{Key: "AWS_PROFILE", Value: identityName},
 	}
 }
 

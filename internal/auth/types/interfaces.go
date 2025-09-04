@@ -51,7 +51,7 @@ type AuthManager interface {
 	Validate() error
 
 	// SetupAWSFiles writes AWS credentials and config files for the specified identity
-	SetupAWSFiles(ctx context.Context, identityName string, creds *schema.Credentials) error
+	SetupAWSFiles(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error
 
 	// GetDefaultIdentity returns the name of the default identity, if any
 	GetDefaultIdentity() (string, error)
@@ -99,7 +99,7 @@ type AWSFileManager interface {
 	SetEnvironmentVariables(providerName string) error
 
 	// GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
-	GetEnvironmentVariables(providerName string) []schema.EnvironmentVariable
+	GetEnvironmentVariables(providerName, identityName string) []schema.EnvironmentVariable
 
 	// Cleanup removes AWS files for the provider
 	Cleanup(providerName string) error

@@ -108,10 +108,10 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx)
 	log.Debug("Current session check", "whoami", whoami, "error", err)
-	
+
 	var needsAuthentication = true
 	var defaultIdentityName string
-	
+
 	if err == nil && whoami != nil {
 		// Check if credentials are still valid (at least 5 minutes remaining)
 		if whoami.Expiration != nil && whoami.Expiration.After(time.Now().Add(5*time.Minute)) {
@@ -132,7 +132,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 		}
 
 		log.Info("Authenticating with default identity", "identity", defaultIdentityName)
-		
+
 		// Authenticate with default identity
 		_, err = authManager.Authenticate(ctx, defaultIdentityName)
 		if err != nil {
@@ -156,63 +156,62 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
-	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvSection)
-	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvList)
-
 	// Find root provider for chained identities to determine if AWS files are needed
 	rootProviderName := findRootProvider(&atmosConfig.Auth, defaultIdentityName)
-	
+
 	// Add AWS file environment variables to component environment if this is an AWS provider
 	if rootProviderName != "" {
 		if provider, exists := atmosConfig.Auth.Providers[rootProviderName]; exists {
 			// Check if this is an AWS provider
 			if provider.Kind == "aws/iam-identity-center" || provider.Kind == "aws/assume-role" || provider.Kind == "aws/user" {
 				awsFileManager := environment.NewAWSFileManager()
-				// Use provider name for AWS file paths (files are organized by provider)
-				awsEnvVars := awsFileManager.GetEnvironmentVariables(rootProviderName)
+				// Use provider name for AWS file paths and identity name for AWS_PROFILE
+				awsEnvVars := awsFileManager.GetEnvironmentVariables(rootProviderName, defaultIdentityName)
 				environment.MergeIdentityEnvOverrides(stackInfo, awsEnvVars)
 			}
 		}
 	}
 
 	log.Debug("Auth hook completed successfully")
+
+	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvSection)
 	return nil
 }
 
 // findRootProvider traverses the identity chain to find the root provider
 func findRootProvider(authConfig *schema.AuthConfig, identityName string) string {
 	visited := make(map[string]bool)
-	
+
 	for identityName != "" {
 		// Prevent infinite loops
 		if visited[identityName] {
 			return ""
 		}
 		visited[identityName] = true
-		
+
 		identity, exists := authConfig.Identities[identityName]
 		if !exists {
 			return ""
 		}
-		
+
 		if identity.Via == nil {
 			return ""
 		}
-		
+
 		// If this identity points to a provider, we found the root
 		if identity.Via.Provider != "" {
 			return identity.Via.Provider
 		}
-		
+
 		// If this identity points to another identity, continue traversing
 		if identity.Via.Identity != "" {
 			identityName = identity.Via.Identity
 			continue
 		}
-		
+
 		// No provider or identity found
 		return ""
 	}
-	
+
 	return ""
 }

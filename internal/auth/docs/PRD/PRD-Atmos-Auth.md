@@ -116,7 +116,7 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 #### FR-009: Identity Environment Variables
 
-- **Description**: Support environment variable injection from identities
+- **Description**: Support environment variable injection from identities including AWS_PROFILE for proper AWS CLI integration
 - **Acceptance Criteria**:
   - Identities support `environment` block with array of key-value objects
   - Environment variables are set before Terraform execution
@@ -124,15 +124,22 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Support for case-sensitive environment variable names
   - Environment variables must be merged into component environment section
   - Component environment section takes precedence over process environment
+  - AWS identities automatically include `AWS_PROFILE` environment variable set to identity name
+  - `AWS_PROFILE` ensures AWS CLI uses correct profile within provider-specific credential files
+  - AWS file environment variables (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`) are automatically injected
 - **Priority**: P0 (Must Have)
 
 #### FR-010: AWS Credentials and Config File Management
 
-- **Description**: Manage isolated AWS credentials and config files for Atmos
+- **Description**: Manage isolated AWS credentials and config files for Atmos using provider-based directories with identity profiles
 - **Acceptance Criteria**:
-  - Write AWS credentials to `~/.aws/atmos/<provider>/credentials`
-  - Write AWS config to `~/.aws/atmos/<provider>/config`
-  - Set `AWS_SHARED_CREDENTIALS_FILE` and `AWS_CONFIG_FILE` environment variables
+  - Write AWS credentials to `~/.aws/atmos/<provider>/credentials` using INI format
+  - Write AWS config to `~/.aws/atmos/<provider>/config` using INI format
+  - Store multiple identity profiles within each provider's credential and config files
+  - Use `[identity-name]` sections in credentials file (e.g., `[sandbox-admin]`, `[managers]`)
+  - Use `[profile identity-name]` sections in config file (except `[default]` for identity named "default")
+  - Set `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, and `AWS_PROFILE` environment variables
+  - Use `gopkg.in/ini.v1` package for robust INI file parsing and generation
   - Credential files are written during Terraform prehook
   - User's existing AWS files remain unmodified
   - Provider-specific isolation prevents credential conflicts
@@ -823,12 +830,17 @@ identities:
 
 **AWS File Management Behavior**:
 
-- Credentials written to `~/.aws/atmos/<provider>/credentials` during prehook
-- Config written to `~/.aws/atmos/<provider>/config` during prehook
+- Credentials written to `~/.aws/atmos/<provider>/credentials` during prehook using INI format
+- Config written to `~/.aws/atmos/<provider>/config` during prehook using INI format
+- Multiple identity profiles stored within each provider's credential and config files
+- Credentials file contains `[identity-name]` sections (e.g., `[sandbox-admin]`, `[managers]`)
+- Config file contains `[profile identity-name]` sections (except `[default]` for identity named "default")
 - `AWS_SHARED_CREDENTIALS_FILE` points to Atmos-managed credentials file
 - `AWS_CONFIG_FILE` points to Atmos-managed config file
+- `AWS_PROFILE` set to identity name to select correct profile within files
 - User's existing `~/.aws/credentials` and `~/.aws/config` remain untouched
 - Provider isolation prevents conflicts between different auth providers
+- Uses `gopkg.in/ini.v1` package for robust INI file parsing and generation
 
 #### AWS Permission Set
 
