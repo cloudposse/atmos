@@ -39,7 +39,11 @@ var configFile string
 
 // initGlobalLogger initializes the global logger with solid background colors per PRD spec.
 func initGlobalLogger() {
+	// Get the current color profile to preserve it
+	profile := lipgloss.ColorProfile()
+	
 	globalLogger = log.New(os.Stderr)
+	globalLogger.SetColorProfile(profile)
 	globalLogger.SetStyles(&log.Styles{
 		Levels: map[log.Level]lipgloss.Style{
 			log.DebugLevel: lipgloss.NewStyle().
@@ -531,62 +535,26 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 		// Extract exit code and log info messages after TUI exits
 		if m, ok := finalModel.(*tui.TestModel); ok {
-			// Re-configure color profile after TUI exits (TUI might have changed it)
-			profile := tui.ConfigureColors()
+			// The TUI might have changed the global color profile
+			// Re-detect and configure colors properly
+			tui.ConfigureColors()
 			
-			// Save the current logger styles before changing profile
-			currentStyles := &log.Styles{
-				Levels: map[log.Level]lipgloss.Style{
-					log.DebugLevel: lipgloss.NewStyle().
-						SetString("DEBUG").
-						Background(lipgloss.Color("#3F51B5")). // Indigo background
-						Foreground(lipgloss.Color("#000000")). // Black foreground
-						Padding(0, 1),
-					log.InfoLevel: lipgloss.NewStyle().
-						SetString("INFO").
-						Background(lipgloss.Color("#4CAF50")). // Green background
-						Foreground(lipgloss.Color("#000000")). // Black foreground
-						Padding(0, 1),
-					log.WarnLevel: lipgloss.NewStyle().
-						SetString("WARN").
-						Background(lipgloss.Color("#FF9800")). // Orange background
-						Foreground(lipgloss.Color("#000000")). // Black foreground
-						Padding(0, 1),
-					log.ErrorLevel: lipgloss.NewStyle().
-						SetString("ERROR").
-						Background(lipgloss.Color("#F44336")). // Red background
-						Foreground(lipgloss.Color("#000000")). // Black foreground
-						Padding(0, 1),
-					log.FatalLevel: lipgloss.NewStyle().
-						SetString("FATAL").
-						Background(lipgloss.Color("#F44336")). // Red background
-						Foreground(lipgloss.Color("#FFFFFF")). // White foreground
-						Padding(0, 1),
-				},
-				Key: lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#666666")). // Dark gray for keys
-					Bold(true),
-				Value: lipgloss.NewStyle(),
-				Separator: lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#999999")), // Medium gray for separator
-			}
-			
-			// Set color profile and then restore styles
-			logger.SetColorProfile(profile)
-			logger.SetStyles(currentStyles)
+			// Re-initialize global logger after TUI exits with proper styles
+			initGlobalLogger()
+			// Use the reinitalized globalLogger for logging
 			
 			// Log info messages now that TUI is done
 			_ = viper.BindEnv("GOTCHA_GITHUB_STEP_SUMMARY", "GITHUB_STEP_SUMMARY")
 			githubSummary := viper.GetString("GOTCHA_GITHUB_STEP_SUMMARY")
 			if githubSummary == "" {
-				logger.Info("GITHUB_STEP_SUMMARY not set (skipped)")
+				globalLogger.Info("GITHUB_STEP_SUMMARY not set (skipped)")
 			} else {
-				logger.Info(fmt.Sprintf("GitHub step summary written to %s", githubSummary))
+				globalLogger.Info(fmt.Sprintf("GitHub step summary written to %s", githubSummary))
 			}
 			
 			elapsed := m.GetElapsedTime()
 			if elapsed > 0 {
-				logger.Info(fmt.Sprintf("Tests completed in %.2fs", elapsed.Seconds()))
+				globalLogger.Info(fmt.Sprintf("Tests completed in %.2fs", elapsed.Seconds()))
 			}
 			
 			exitCode := m.GetExitCode()
