@@ -45,6 +45,11 @@ var (
 
 	// Statistics styles.
 	StatsHeaderStyle = lipgloss.NewStyle().Bold(true)
+
+	// Package header style for displaying package paths.
+	PackageHeaderStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(colorBlue)).
+				Bold(true)
 )
 
 // SetRenderer sets the current renderer for style creation.
@@ -70,6 +75,9 @@ func InitStyles() {
 			Background(lipgloss.Color(colorDarkRed)).
 			Foreground(lipgloss.Color(colorWhite))
 		StatsHeaderStyle = currentRenderer.NewStyle().Bold(true)
+		PackageHeaderStyle = currentRenderer.NewStyle().
+			Foreground(lipgloss.Color(colorBlue)).
+			Bold(true)
 	} else {
 		// Fallback to default style creation
 		PassStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
@@ -84,5 +92,8 @@ func InitStyles() {
 			Background(lipgloss.Color(colorDarkRed)).
 			Foreground(lipgloss.Color(colorWhite))
 		StatsHeaderStyle = lipgloss.NewStyle().Bold(true)
+		PackageHeaderStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorBlue)).
+			Bold(true)
 	}
 }

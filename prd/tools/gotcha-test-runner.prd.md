@@ -155,9 +155,14 @@ The visual hierarchy MUST follow these strict requirements to ensure optimal rea
 3. **Duration/Metadata** (Tertiary Visual Priority)
    - Color: `colorDarkGray` (#666666)
    - Purpose: Available when needed but de-emphasized
-   - Example: `(0.03s)`
 
-4. **Subtest Summary** (Inline with Parent Test)
+4. **Package Headers** (Navigation/Context)
+   - Color: `colorBlue` (#5DADE2) with Bold
+   - Format: `▶ github.com/cloudposse/atmos/tools/gotcha/internal/parser`
+   - Purpose: Clear visual separation between packages in multi-package test runs
+   - Display: Shows when entering a new package context
+
+5. **Subtest Summary** (Inline with Parent Test)
    - Format: `[X/Y passed]` where X is passed subtests, Y is total subtests
    - Color: Matches parent test status color
    - Purpose: Quick overview of subtest results without overwhelming display
@@ -571,10 +576,11 @@ Existing tools failed to provide:
 ### Output Quality
 - ✅ **Visual consistency**: All output uses consistent Charm ecosystem styling
 - ✅ **Information hierarchy**: Important information (failures) prominently displayed
-- ✅ **Visual hierarchy colors**: Test symbols use status colors (green/red/amber), test names use light gray, durations use dark gray
+- ✅ **Visual hierarchy colors**: Package headers use blue/bold, test symbols use status colors (green/red/amber), test names use light gray, durations use dark gray
 - ✅ **Performance**: Tool completes processing within reasonable time limits
 - ✅ **Accessibility**: Output readable in various terminal configurations
 - ✅ **Subtest visualization**: Tests with subtests display inline summary `[X/Y passed]` and detailed breakdown on failure
+- ✅ **Package delineation**: Clear visual separation between test packages with styled headers
 
 ### Configuration Management
 - ✅ **YAML config**: `.gotcha.yaml` files loaded and applied correctly

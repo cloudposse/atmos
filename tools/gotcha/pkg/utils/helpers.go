@@ -206,7 +206,8 @@ type StreamProcessor struct {
 	jsonWriter   io.Writer
 	showFilter   string
 	startTime    time.Time
-	currentTest  string // Track current test for package-level output
+	currentTest    string // Track current test for package-level output
+	currentPackage string // Track current package being tested
 	// Statistics tracking
 	passed  int
 	failed  int
@@ -300,8 +301,17 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 	// Handle package-level events
 	if event.Test == "" {
-		// Package-level output might contain important command output
-		if event.Action == "output" && p.currentTest != "" {
+		// Handle package start events
+		if event.Action == "start" && event.Package != "" {
+			// Check if this is a new package
+			if p.currentPackage != event.Package {
+				p.currentPackage = event.Package
+				// Print package header with arrow and styled package name
+				fmt.Fprintf(os.Stderr, "\n▶ %s\n\n", 
+					tui.PackageHeaderStyle.Render(event.Package))
+			}
+		} else if event.Action == "output" && p.currentTest != "" {
+			// Package-level output might contain important command output
 			// Append package-level output to the current test's buffer
 			if p.buffers[p.currentTest] != nil {
 				p.buffers[p.currentTest] = append(p.buffers[p.currentTest], event.Output)
