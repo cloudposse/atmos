@@ -406,12 +406,34 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Don't print passed tests immediately to avoid overwriting progress bar
 			// The progress bar shows the current status
 			if m.shouldShowTest("pass") && m.showFilter == "passed" {
-				// Only show passed tests if explicitly requested
-				output := fmt.Sprintf("%s %s %s\n",
-					PassStyle.Render(CheckPass),
-					TestNameStyle.Render(event.Test),
-					DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
-				displayCmd = tea.Printf("%s", output)
+				var displayOutput string
+				// Check if this is a parent test with subtests
+				if !strings.Contains(event.Test, "/") && m.subtestStats[event.Test] != nil {
+					stats := m.subtestStats[event.Test]
+					totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
+					
+					// Generate mini progress indicator for subtests
+					miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
+					percentage := 0
+					if totalSubtests > 0 {
+						percentage = (len(stats.passed) * 100) / totalSubtests
+					}
+					
+					// Display parent test with subtest summary in line
+					displayOutput = fmt.Sprintf("%s %s %s %s %d%% passed\n",
+						PassStyle.Render(CheckPass),
+						TestNameStyle.Render(event.Test),
+						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
+						miniProgress,
+						percentage)
+				} else {
+					// Regular test without subtests
+					displayOutput = fmt.Sprintf("%s %s %s\n",
+						PassStyle.Render(CheckPass),
+						TestNameStyle.Render(event.Test),
+						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
+				}
+				displayCmd = tea.Printf("%s", displayOutput)
 			}
 
 			// Clean up buffer
@@ -500,12 +522,20 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					stats := m.subtestStats[event.Test]
 					totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
 					
+					// Generate mini progress indicator for subtests
+					miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
+					percentage := 0
+					if totalSubtests > 0 {
+						percentage = (len(stats.passed) * 100) / totalSubtests
+					}
+					
 					// Display parent test with subtest summary in line
-					displayOutput = fmt.Sprintf("\n%s %s %s [%d/%d passed]",
+					displayOutput = fmt.Sprintf("\n%s %s %s %s %d%% passed",
 						FailStyle.Render(CheckFail),
 						TestNameStyle.Render(event.Test),
 						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
-						len(stats.passed), totalSubtests)
+						miniProgress,
+						percentage)
 					
 					// Add detailed subtest summary
 					if totalSubtests > 0 {
@@ -718,12 +748,9 @@ func (m *TestModel) View() string {
 	// Calculate buffer size
 	bufferSizeKB := m.getBufferSizeKB()
 
-	// Create mini progress indicator
-	miniProgress := m.generateMiniProgress()
-	
 	// Always show current test count without a total since we don't know the actual total
 	var count string
-	count = fmt.Sprintf(" %s %d tests (%ds) %.1fKB", miniProgress, m.currentIndex, elapsedSeconds, bufferSizeKB)
+	count = fmt.Sprintf(" %d tests (%ds) %.1fKB", m.currentIndex, elapsedSeconds, bufferSizeKB)
 
 	// Use our own terminal width detection instead of Bubble Tea's
 	terminalWidth := getTerminalWidth()
@@ -792,28 +819,16 @@ func (m *TestModel) GetExitCode() int {
 	return 0
 }
 
-// generateFinalSummary creates the formatted final summary output.
-// generateMiniProgress creates a visual progress indicator using dots.
-func (m *TestModel) generateMiniProgress() string {
+// generateSubtestProgress creates a visual progress indicator for subtest results.
+func (m *TestModel) generateSubtestProgress(passed, total int) string {
 	const totalDots = 5
-	if m.totalTests <= 0 {
-		// If we don't know the total, show an indeterminate spinner pattern
-		patterns := []string{
-			"[●○○○○]",
-			"[○●○○○]",
-			"[○○●○○]",
-			"[○○○●○]",
-			"[○○○○●]",
-			"[○○○●○]",
-			"[○○●○○]",
-			"[○●○○○]",
-		}
-		// Use currentIndex to cycle through patterns
-		return patterns[m.currentIndex%len(patterns)]
+	
+	if total == 0 {
+		return "[○○○○○]"
 	}
 	
 	// Calculate progress percentage
-	progress := float64(m.currentIndex) / float64(m.totalTests)
+	progress := float64(passed) / float64(total)
 	if progress > 1.0 {
 		progress = 1.0
 	}

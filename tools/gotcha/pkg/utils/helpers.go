@@ -424,12 +424,20 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			stats := p.subtestStats[event.Test]
 			totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
 			
+			// Generate mini progress indicator
+			miniProgress := p.generateSubtestProgress(len(stats.passed), totalSubtests)
+			percentage := 0
+			if totalSubtests > 0 {
+				percentage = (len(stats.passed) * 100) / totalSubtests
+			}
+			
 			// Display parent test with subtest summary in line
-			fmt.Fprintf(os.Stderr, " %s %s %s [%d/%d passed]\n",
+			fmt.Fprintf(os.Stderr, " %s %s %s %s %d%% passed\n",
 				tui.FailStyle.Render(tui.CheckFail),
 				tui.TestNameStyle.Render(event.Test),
 				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
-				len(stats.passed), totalSubtests)
+				miniProgress,
+				percentage)
 			
 			// Add detailed subtest summary
 			if totalSubtests > 0 {
@@ -558,6 +566,38 @@ func (p *StreamProcessor) printSummary() {
 	}
 	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
 	fmt.Fprintf(os.Stderr, "\n")
+}
+
+// generateSubtestProgress creates a visual progress indicator for subtest results.
+func (p *StreamProcessor) generateSubtestProgress(passed, total int) string {
+	const totalDots = 5
+	
+	if total == 0 {
+		return "[○○○○○]"
+	}
+	
+	// Calculate progress percentage
+	progress := float64(passed) / float64(total)
+	if progress > 1.0 {
+		progress = 1.0
+	}
+	
+	// Calculate how many dots should be filled
+	filledDots := int(progress * float64(totalDots))
+	
+	// Build the indicator
+	var indicator strings.Builder
+	indicator.WriteString("[")
+	for i := 0; i < totalDots; i++ {
+		if i < filledDots {
+			indicator.WriteString("●")
+		} else {
+			indicator.WriteString("○")
+		}
+	}
+	indicator.WriteString("]")
+	
+	return indicator.String()
 }
 
 // Note: HandleOutput and HandleConsoleOutput have been moved to the output package
