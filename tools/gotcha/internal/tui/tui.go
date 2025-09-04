@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -113,14 +112,16 @@ type SubtestStats struct {
 // TestModel represents the test UI model.
 type TestModel struct {
 	// Test tracking
-	totalTests   int
-	currentIndex int
-	currentTest  string
-	width        int
-	height       int
-	done         bool
-	aborted      bool
-	startTime    time.Time
+	totalTests     int // Total number of tests that will run (from "run" events)
+	completedTests int // Number of tests that have completed (pass/fail/skip)
+	currentIndex   int // Legacy counter - will be removed
+	currentTest    string
+	width          int
+	height         int
+	done           bool
+	aborted        bool
+	startTime      time.Time
+	elapsedTime    time.Duration // Store elapsed time for logging after TUI exits
 
 	// UI components
 	spinner  spinner.Model
@@ -182,7 +183,7 @@ type streamOutputMsg struct {
 }
 
 // NewTestModel creates a new test model for the TUI.
-func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int, alert bool) TestModel {
+func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool) TestModel {
 	// Create progress bar
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -230,7 +231,8 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		testBuffers:    make(map[string][]string),
 		subtestOutputs: make(map[string][]string),
 		subtestStats:   make(map[string]*SubtestStats),
-		totalTests:     totalTests,
+		totalTests:     0, // Will be incremented by "run" events
+		completedTests: 0, // Will be incremented by pass/fail/skip events
 		startTime:      time.Now(),
 	}
 }
@@ -344,18 +346,27 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.readNextLine(), m.spinner.Tick)
 		}
 
-		// Skip package-level events for most actions
-		if event.Test == "" {
-			return m, tea.Batch(m.readNextLine(), m.spinner.Tick) // Continue reading
-		}
-
 		// Convert to appropriate test message and continue streaming
 		nextCmd := m.readNextLine()
+
+		// Handle package-level events separately
+		if event.Test == "" {
+			// Package-level output might contain important command output
+			if event.Action == "output" && m.currentTest != "" {
+				// Append package-level output to the current test's buffer
+				m.bufferMu.Lock()
+				if m.testBuffers[m.currentTest] != nil {
+					m.testBuffers[m.currentTest] = append(m.testBuffers[m.currentTest], event.Output)
+				}
+				m.bufferMu.Unlock()
+			}
+			return m, tea.Batch(nextCmd, m.spinner.Tick) // Continue reading
+		}
 
 		switch event.Action {
 		case "run":
 			m.currentTest = event.Test
-			// Don't increment totalTests - it's already set from test discovery
+			m.totalTests++ // Count all tests that start running (parent and subtests)
 			m.bufferMu.Lock()
 			// Only initialize if buffer doesn't exist (to preserve early output)
 			if m.testBuffers[event.Test] == nil {
@@ -379,6 +390,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "pass":
 			m.passCount++
+			m.completedTests++ // Count all completed tests (parent and subtests)
 			// Track subtest statistics
 			if strings.Contains(event.Test, "/") {
 				// This is a subtest - update parent's stats
@@ -398,14 +410,14 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Update progress
 			var progressCmd tea.Cmd
 			if m.totalTests > 0 {
-				progressCmd = m.progress.SetPercent(float64(m.currentIndex) / float64(m.totalTests))
+				progressCmd = m.progress.SetPercent(float64(m.completedTests) / float64(m.totalTests))
 			}
 
 			var displayCmd tea.Cmd
 			// Only show if filter allows it
 			// Don't print passed tests immediately to avoid overwriting progress bar
 			// The progress bar shows the current status
-			if m.shouldShowTest("pass") && m.showFilter == "passed" {
+			if m.shouldShowTest("pass") {
 				var displayOutput string
 				// Check if this is a parent test with subtests
 				if !strings.Contains(event.Test, "/") && m.subtestStats[event.Test] != nil {
@@ -491,6 +503,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bufferMu.Unlock()
 
 			m.failCount++
+			m.completedTests++ // Count all completed tests (parent and subtests)
 			// Track subtest statistics
 			if strings.Contains(event.Test, "/") {
 				// This is a subtest - update parent's stats
@@ -510,7 +523,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Update progress
 			var progressCmd tea.Cmd
 			if m.totalTests > 0 {
-				progressCmd = m.progress.SetPercent(float64(m.currentIndex) / float64(m.totalTests))
+				progressCmd = m.progress.SetPercent(float64(m.completedTests) / float64(m.totalTests))
 			}
 
 			var displayCmd tea.Cmd
@@ -577,11 +590,11 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
 				}
 
-				// Add error details if present (only for tests without subtests or if explicitly needed)
-				if len(output) > 0 && (strings.Contains(event.Test, "/") || m.subtestStats[event.Test] == nil) {
+				// Add error details if present - show ALL output for failed tests
+				if len(output) > 0 {
 					displayOutput += "\n\n"
 					for _, line := range output {
-						// Show all error output
+						// Show all error output including command output
 						displayOutput += "    " + line
 					}
 				}
@@ -615,6 +628,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "skip":
 			m.skipCount++
+			m.completedTests++ // Count all completed tests (parent and subtests)
 			// Track subtest statistics
 			if strings.Contains(event.Test, "/") {
 				// This is a subtest - update parent's stats
@@ -634,13 +648,13 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Update progress
 			var progressCmd tea.Cmd
 			if m.totalTests > 0 {
-				progressCmd = m.progress.SetPercent(float64(m.currentIndex) / float64(m.totalTests))
+				progressCmd = m.progress.SetPercent(float64(m.completedTests) / float64(m.totalTests))
 			}
 
 			var displayCmd tea.Cmd
 			// Only show if filter allows it
 			// Don't print skipped tests immediately to avoid overwriting progress bar
-			if m.shouldShowTest("skip") && m.showFilter == "skipped" {
+			if m.shouldShowTest("skip") {
 				// Only show skipped tests if explicitly requested
 				output := fmt.Sprintf("%s %s\n",
 					SkipStyle.Render(CheckSkip),
@@ -675,6 +689,17 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case testsDoneMsg:
+		// Update progress to 100% before marking as done
+		if m.totalTests > 0 {
+			m.progress.SetPercent(1.0)
+		}
+		
+		// Generate the final summary output before setting done
+		var summaryOutput string
+		if !m.aborted {
+			summaryOutput = m.generateFinalSummary()
+		}
+		
 		m.done = true
 		if m.jsonFile != nil {
 			m.jsonFile.Close()
@@ -685,8 +710,6 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Don't show final summary if aborted
 		if !m.aborted {
-			// Generate the final summary output
-			summaryOutput := m.generateFinalSummary()
 			return m, tea.Sequence(
 				tea.Printf("%s", summaryOutput),
 				tea.Quit,
@@ -726,7 +749,8 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *TestModel) View() string {
 	if m.done {
-		return ""
+		// Return a newline to clear the progress bar line
+		return "\n"
 	}
 
 	// Build the status line components
@@ -748,9 +772,19 @@ func (m *TestModel) View() string {
 	// Calculate buffer size
 	bufferSizeKB := m.getBufferSizeKB()
 
-	// Always show current test count without a total since we don't know the actual total
+	// Show test progress with accurate counts
 	var count string
-	count = fmt.Sprintf(" %d tests (%ds) %.1fKB", m.currentIndex, elapsedSeconds, bufferSizeKB)
+	if m.totalTests > 0 {
+		percentage := 0
+		if m.totalTests > 0 {
+			percentage = (m.completedTests * 100) / m.totalTests
+		}
+		count = fmt.Sprintf(" %d/%d tests (%d%%) (%ds) %.1fKB", 
+			m.completedTests, m.totalTests, percentage, elapsedSeconds, bufferSizeKB)
+	} else {
+		// Very early, before any run events
+		count = fmt.Sprintf(" discovering tests... (%ds)", elapsedSeconds)
+	}
 
 	// Use our own terminal width detection instead of Bubble Tea's
 	terminalWidth := getTerminalWidth()
@@ -807,6 +841,11 @@ func (m *TestModel) shouldShowTest(status string) bool {
 	return false // This should never be reached due to validation
 }
 
+// GetElapsedTime returns the total elapsed time for the test run.
+func (m *TestModel) GetElapsedTime() time.Duration {
+	return m.elapsedTime
+}
+
 // GetExitCode returns the appropriate exit code based on test results.
 // GetExitCode returns the exit code from the test run.
 func (m *TestModel) GetExitCode() int {
@@ -824,7 +863,7 @@ func (m *TestModel) generateSubtestProgress(passed, total int) string {
 	const maxDots = 10 // Maximum number of dots to show for readability
 	
 	if total == 0 {
-		return "[]"
+		return ""
 	}
 	
 	// Determine how many dots to show (actual count up to maxDots)
@@ -845,7 +884,6 @@ func (m *TestModel) generateSubtestProgress(passed, total int) string {
 	
 	// Build the indicator with colored dots
 	var indicator strings.Builder
-	indicator.WriteString("[")
 	
 	// Add green dots for passed tests
 	for i := 0; i < passedDots; i++ {
@@ -857,8 +895,6 @@ func (m *TestModel) generateSubtestProgress(passed, total int) string {
 		indicator.WriteString(FailStyle.Render("●"))
 	}
 	
-	indicator.WriteString("]")
-	
 	return indicator.String()
 }
 
@@ -869,22 +905,20 @@ func (m *TestModel) generateFinalSummary() string {
 	var summaryStatus string
 	var summaryPath string
 
-	if githubSummary == "" {
-		// Log the skipped status using the logger
-		logger.GetLogger().Info("GITHUB_STEP_SUMMARY not set (skipped)")
-		summaryStatus = "" // Don't include in the summary output string
-	} else {
+	if githubSummary != "" {
 		summaryStatus = fmt.Sprintf("GitHub step summary written to %s", githubSummary)
 	}
 
-	// Calculate total tests and duration (approximate)
+	// Calculate total tests and duration
 	totalTests := m.passCount + m.failCount + m.skipCount
+	elapsed := time.Since(m.startTime)
+	m.elapsedTime = elapsed // Store for logging after TUI exits
 
 	// Build the summary box
 	border := strings.Repeat("─", 40)
 
 	var output strings.Builder
-	output.WriteString("\n")
+	output.WriteString("\n\n")
 	if summaryStatus != "" {
 		output.WriteString(summaryStatus)
 		output.WriteString("\n")

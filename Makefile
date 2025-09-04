@@ -72,6 +72,7 @@ testacc-ci: get
 	cd tools/gotcha && go mod download
 	go install -C tools/gotcha .
 	gotcha stream ./... \
+		--show=all \
 		--timeout=40m \
 		--coverprofile=coverage.out \
 		--output=test-results.json \

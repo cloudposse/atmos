@@ -4,18 +4,14 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"go/ast"
-	goparser "go/parser"
-	"go/token"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 
@@ -105,69 +101,6 @@ func FilterPackages(packages []string, includePatterns, excludePatterns string) 
 	return filtered, nil
 }
 
-// getTestCount uses AST parsing to quickly count Test and Example functions.
-func GetTestCount(testPackages []string, testArgs string) int {
-	totalTests := 0
-	fset := token.NewFileSet()
-
-	for _, pkg := range testPackages {
-		// Handle special package patterns
-		var searchDir string
-		if pkg == "./..." {
-			searchDir = "."
-		} else if strings.HasSuffix(pkg, "/...") {
-			searchDir = strings.TrimSuffix(pkg, "/...")
-		} else {
-			searchDir = pkg
-		}
-
-		// Walk through directories to find Go test files
-		err := filepath.Walk(searchDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			// Skip non-Go files and non-test files
-			if !strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-
-			// Skip vendor directories and hidden directories
-			if strings.Contains(path, "/vendor/") || strings.Contains(path, "/.") {
-				return nil
-			}
-
-			// Parse the Go file
-			src, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-
-			file, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
-			if err != nil {
-				return nil
-			}
-
-			// Count Test and Example functions
-			for _, decl := range file.Decls {
-				if fn, ok := decl.(*ast.FuncDecl); ok {
-					if fn.Name != nil {
-						name := fn.Name.Name
-						if strings.HasPrefix(name, "Test") || strings.HasPrefix(name, "Example") {
-							totalTests++
-						}
-					}
-				}
-			}
-
-			return nil
-		})
-		if err != nil {
-		}
-	}
-
-	return totalTests
-}
 
 // isTTY checks if we're running in a terminal and Bubble Tea can actually use it.
 func IsTTY() bool {
@@ -220,7 +153,7 @@ func EmitAlert(enabled bool) {
 }
 
 // runSimpleStream runs tests with simple non-interactive streaming output.
-func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, totalTests int, alert bool) int {
+func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool) int {
 	// Build the go test command
 	args := []string{"test", "-json"}
 
@@ -264,6 +197,8 @@ type StreamProcessor struct {
 	subtestStats map[string]*SubtestStats // Track subtest statistics per parent test
 	jsonWriter   io.Writer
 	showFilter   string
+	startTime    time.Time
+	currentTest  string // Track current test for package-level output
 	// Statistics tracking
 	passed  int
 	failed  int
@@ -300,6 +235,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		subtestStats: make(map[string]*SubtestStats),
 		jsonWriter:   jsonFile,
 		showFilter:   showFilter,
+		startTime:    time.Now(),
 	}
 
 	// Process the stream
@@ -351,16 +287,24 @@ func (p *StreamProcessor) processStream(input io.Reader) error {
 }
 
 func (p *StreamProcessor) processEvent(event *types.TestEvent) {
-	// Skip package-level events
-	if event.Test == "" {
-		return
-	}
-
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// Handle package-level events
+	if event.Test == "" {
+		// Package-level output might contain important command output
+		if event.Action == "output" && p.currentTest != "" {
+			// Append package-level output to the current test's buffer
+			if p.buffers[p.currentTest] != nil {
+				p.buffers[p.currentTest] = append(p.buffers[p.currentTest], event.Output)
+			}
+		}
+		return
+	}
+
 	switch event.Action {
 	case "run":
+		p.currentTest = event.Test
 		// Initialize buffer for this test (only if doesn't exist to preserve early output)
 		if p.buffers[event.Test] == nil {
 			p.buffers[event.Test] = []string{}
@@ -493,12 +437,9 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				}
 			}
 
-			// Display the output
+			// Display ALL output for failed tests (including command output)
 			for _, line := range output {
-				// Filter to show only meaningful error lines
-				if parser.ShouldShowErrorLine(line) {
-					fmt.Fprint(os.Stderr, "    "+line)
-				}
+				fmt.Fprint(os.Stderr, "    "+line)
 			}
 		}
 
@@ -555,7 +496,7 @@ func (p *StreamProcessor) printSummary() {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "\n")
+	fmt.Fprintf(os.Stderr, "\n\n")
 	fmt.Fprintf(os.Stderr, "%s\n", tui.StatsHeaderStyle.Render("Test Results:"))
 	fmt.Fprintf(os.Stderr, "  %s Passed:  %d\n", tui.PassStyle.Render(tui.CheckPass), p.passed)
 	if p.failed > 0 {
@@ -566,6 +507,10 @@ func (p *StreamProcessor) printSummary() {
 	}
 	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
 	fmt.Fprintf(os.Stderr, "\n")
+	
+	// Log completion time as info message
+	elapsed := time.Since(p.startTime)
+	fmt.Fprintf(os.Stderr, "%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds())
 }
 
 // generateSubtestProgress creates a visual progress indicator for subtest results.
@@ -573,7 +518,7 @@ func (p *StreamProcessor) generateSubtestProgress(passed, total int) string {
 	const maxDots = 10 // Maximum number of dots to show for readability
 	
 	if total == 0 {
-		return "[]"
+		return ""
 	}
 	
 	// Determine how many dots to show (actual count up to maxDots)
@@ -594,7 +539,6 @@ func (p *StreamProcessor) generateSubtestProgress(passed, total int) string {
 	
 	// Build the indicator with colored dots
 	var indicator strings.Builder
-	indicator.WriteString("[")
 	
 	// Add green dots for passed tests
 	for i := 0; i < passedDots; i++ {
@@ -605,8 +549,6 @@ func (p *StreamProcessor) generateSubtestProgress(passed, total int) string {
 	for i := 0; i < failedDots; i++ {
 		indicator.WriteString(tui.FailStyle.Render("●"))
 	}
-	
-	indicator.WriteString("]")
 	
 	return indicator.String()
 }

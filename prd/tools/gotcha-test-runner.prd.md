@@ -99,6 +99,18 @@ globalLogger.SetColorProfile(profile)
 - **Default Level**: `info`
 - **Precedence**: CLI flag > Environment variable > Config file > Default
 
+#### Color Output Configuration
+- **CLI Flag**: `--no-color` (persistent flag available to all commands)
+- **Environment Variables**: `NO_COLOR` (disable), `FORCE_COLOR` (force enable)
+- **Supported Values**: 
+  - `--no-color`: Disable all color output
+  - `NO_COLOR=1`: Disable colors via environment
+  - `FORCE_COLOR=1`: Force ANSI colors
+  - `FORCE_COLOR=2`: Force ANSI256 colors
+  - `FORCE_COLOR=3`: Force TrueColor
+- **Default Behavior**: Colors enabled (ANSI) even when piping to other commands
+- **Precedence**: `--no-color` flag > `NO_COLOR` env > `FORCE_COLOR` env > terminal detection > ANSI default
+
 #### Log Level Styling with Hex Colors
 - **DEBUG**: Background color `#3F51B5` (indigo), black foreground
 - **INFO**: Background color `#4CAF50` (green), black foreground  
@@ -168,14 +180,14 @@ Where:
 - **Unicode symbols**: ✔ (pass), ✘ (fail), ⊘ (skip)
 - **Progress indicators**: Animated spinners and progress bars
 - **Mini progress indicators**: Visual subtest progress using colored dots on parent test lines
-  - Format: `[●●●●●]` with actual number of dots matching subtest count (up to 10 max)
+  - Format: `●●●●●` (no brackets) with actual number of dots matching subtest count (up to 10 max)
   - Green dots (●) represent passed subtests, red dots (●) represent failed subtests
-  - Display on parent test lines with subtests: `✘ TestName (0.00s) [●●●●] 25% passed`
+  - Display on parent test lines with subtests: `✘ TestName (0.00s) ●●●● 25% passed`
   - Shows 1 dot per subtest for up to 10 subtests
   - For >10 subtests, scales proportionally to 10 dots maximum for readability
-  - Example: 4 subtests with 1 pass, 3 fail shows `[●●●●]` (1 green, 3 red)
-  - Example: 10 subtests with 7 pass, 3 fail shows `[●●●●●●●●●●]` (7 green, 3 red)
-  - Example: 20 subtests with 10 pass, 10 fail shows `[●●●●●●●●●●]` (5 green, 5 red, scaled)
+  - Example: 4 subtests with 1 pass, 3 fail shows `●●●●` (1 green, 3 red)
+  - Example: 10 subtests with 7 pass, 3 fail shows `●●●●●●●●●●` (7 green, 3 red)
+  - Example: 20 subtests with 10 pass, 10 fail shows `●●●●●●●●●●` (5 green, 5 red, scaled)
   - Update when parent test completes with final subtest statistics
   - Uses ANSI color codes via Lipgloss styles for terminal compatibility
 - **Test result styling**: Color-coded output with consistent formatting
@@ -219,8 +231,30 @@ Where:
 - **Data Structure**: Track subtest results in a map keyed by parent test name
 - **Event Processing**: Capture subtest events and associate with parent tests
 - **Display Logic**: Show detailed breakdown only for tests with failed/skipped subtests
-- **Progress Tracking**: Only count top-level tests for progress bar calculations
+- **Progress Tracking**: Count all tests (parent and subtests) for accurate progress
 - **Both Modes**: Support identical visualization in both TUI and simple (non-TTY) modes
+
+### Test Counting Strategy
+- **Dynamic Discovery**: Count tests based on "run" events from `go test -json` output
+- **No AST Parsing**: Remove static AST-based counting for accurate runtime counts
+- **Total Tests**: Increment counter on each "run" event (includes all parent tests and subtests)
+- **Completed Tests**: Increment on "pass", "fail", or "skip" events
+- **Progress Display**: Show `X/Y tests (Z%)` format once tests start running
+- **Early Display**: Show "discovering tests..." message before first "run" event
+
+### Show Filter Behavior
+- **Consistent Filtering**: TUI and headless modes must apply filters identically
+- **Filter Options**:
+  - `all`: Display all test results (pass, fail, skip)
+  - `failed`: Display only failed tests
+  - `passed`: Display only passed tests
+  - `skipped`: Display only skipped tests
+  - `collapsed`: Show minimal output, expand on failure
+  - `none`: Show only final summary
+- **Default Configuration**:
+  - Local development: `show: failed` (reduce noise)
+  - CI environments: `--show=all` flag (full visibility)
+- **Implementation**: Single `shouldShowTest()` method for consistent behavior
 
 #### Logger Key Styling
 - **Log Keys**: Style with dark gray (#666666) and bold formatting
@@ -243,8 +277,15 @@ viper.BindEnv("COLORTERM")          // Extended terminal capabilities
 #### Color Profile Detection
 - **TrueColor**: Modern terminals with full RGB support
 - **ANSI256**: GitHub Actions and most CI environments  
-- **ANSI**: Basic CI environments with limited color support
-- **NoColor**: Disabled via environment variables or detection
+- **ANSI**: Basic CI environments with limited color support (default fallback)
+- **NoColor**: Disabled via `--no-color` flag or `NO_COLOR` environment variable
+
+#### Color Control Options
+- **CLI Flag**: `--no-color` to disable all color output
+- **Environment Variable**: `NO_COLOR=1` to disable colors globally
+- **Force Color**: `FORCE_COLOR=1/2/3` to force ANSI/ANSI256/TrueColor respectively
+- **Default Behavior**: Colors enabled by default, even when piping to other commands
+- **Precedence**: CLI flag > NO_COLOR env > FORCE_COLOR env > terminal detection > ANSI default
 
 #### Charm Ecosystem Integration
 ```go
@@ -267,6 +308,8 @@ viper.BindEnv("GOTCHA_FORCE_NO_TTY", "FORCE_NO_TTY")
 viper.BindEnv("GOTCHA_FORCE_TTY", "FORCE_TTY")
 viper.BindEnv("GOTCHA_TIMEOUT", "TIMEOUT")
 viper.BindEnv("GOTCHA_OUTPUT", "OUTPUT")
+viper.BindEnv("NO_COLOR")           // Standard NO_COLOR convention
+viper.BindEnv("FORCE_COLOR")        // Standard FORCE_COLOR convention
 ```
 
 #### Configuration File Format (.gotcha.yaml)
@@ -322,6 +365,17 @@ filter:
 - Automatic detection of TTY capability
 - Graceful degradation to simple streaming output
 - CI-friendly output without interactive elements
+
+### Test Completion Logging
+
+#### Completion Time Display
+- **Format**: "Tests completed in X.XXs" displayed as info-level log message
+- **Timing**: Shows total elapsed time from test start to completion
+- **Display Modes**: 
+  - **TUI Mode**: Logged via structured logger after test summary
+  - **Stream Mode**: Printed to stderr with duration style
+- **Precision**: Display to 2 decimal places for seconds
+- **Styling**: Uses `DurationStyle` for consistent visual presentation
 
 ### Stream Mode Features
 

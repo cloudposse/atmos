@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"io"
 	"os"
 	"sync"
 
@@ -12,6 +13,8 @@ var (
 	// globalLogger is the shared logger instance.
 	globalLogger *log.Logger
 	once         sync.Once
+	// logBuffer is used to buffer log output during TUI sessions.
+	logBuffer *BufferedWriter
 )
 
 // GetLogger returns the configured global logger instance.
@@ -31,9 +34,42 @@ func SetLogger(logger *log.Logger) {
 	globalLogger = logger
 }
 
+// EnableBuffering redirects logger output to a buffer instead of stderr.
+// This is useful during TUI sessions to prevent interference with the UI.
+func EnableBuffering() {
+	if logBuffer == nil {
+		logBuffer = NewBufferedWriter(os.Stderr)
+	}
+	if globalLogger != nil {
+		globalLogger.SetOutput(logBuffer)
+	}
+}
+
+// DisableBuffering restores logger output to stderr and flushes any buffered content.
+func DisableBuffering() {
+	if globalLogger != nil {
+		globalLogger.SetOutput(os.Stderr)
+	}
+	if logBuffer != nil {
+		_ = logBuffer.Flush()
+		logBuffer = nil
+	}
+}
+
+// FlushBuffer writes any buffered log output to stderr.
+func FlushBuffer() {
+	if logBuffer != nil {
+		_ = logBuffer.Flush()
+	}
+}
+
 // NewStyledLogger creates a new logger with the standard gotcha styling.
 func NewStyledLogger() *log.Logger {
-	logger := log.New(os.Stderr)
+	output := io.Writer(os.Stderr)
+	if logBuffer != nil {
+		output = logBuffer
+	}
+	logger := log.New(output)
 	logger.SetStyles(&log.Styles{
 		Levels: map[log.Level]lipgloss.Style{
 			log.DebugLevel: lipgloss.NewStyle().

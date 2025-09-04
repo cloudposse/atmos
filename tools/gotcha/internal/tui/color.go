@@ -25,8 +25,8 @@ func detectColorProfile() termenv.Profile {
 	_ = viper.BindEnv("BUILDKITE")
 	_ = viper.BindEnv("DRONE")
 
-	// Check if colors are explicitly disabled
-	if viper.GetString("NO_COLOR") != "" {
+	// Check if colors are explicitly disabled via --no-color flag or NO_COLOR env
+	if viper.GetBool("no_color") || viper.GetString("NO_COLOR") != "" {
 		return termenv.Ascii
 	}
 
@@ -69,11 +69,10 @@ func detectColorProfile() termenv.Profile {
 		return termenv.ANSI256
 	}
 
-	// Use automatic detection as fallback
-	// This will check TERM, COLORTERM, and other terminal capabilities
-	profile := termenv.EnvColorProfile()
-
-	return profile
+	// Default to ANSI colors for modern terminals
+	// Even when piping, most modern terminals can handle ANSI codes
+	// Users can explicitly disable with --no-color if needed
+	return termenv.ANSI
 }
 
 // configureColors sets up the color profile for lipgloss based on environment detection.

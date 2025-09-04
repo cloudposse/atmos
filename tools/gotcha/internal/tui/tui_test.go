@@ -16,9 +16,8 @@ func TestNewTestModel(t *testing.T) {
 	outputFile := "output.json"
 	coverProfile := "coverage.out"
 	showFilter := "failed"
-	totalTests := 42
 
-	model := NewTestModel(testPackages, testArgs, outputFile, coverProfile, showFilter, totalTests, false)
+	model := NewTestModel(testPackages, testArgs, outputFile, coverProfile, showFilter, false)
 	// Check that model fields are set correctly
 	if model.outputFile != outputFile {
 		t.Errorf("NewTestModel() outputFile = %v, want %v", model.outputFile, outputFile)
@@ -28,8 +27,9 @@ func TestNewTestModel(t *testing.T) {
 		t.Errorf("NewTestModel() showFilter = %v, want %v", model.showFilter, showFilter)
 	}
 
-	if model.totalTests != totalTests {
-		t.Errorf("NewTestModel() totalTests = %v, want %v", model.totalTests, totalTests)
+	// totalTests should start at 0 and be incremented by "run" events
+	if model.totalTests != 0 {
+		t.Errorf("NewTestModel() totalTests = %v, want %v", model.totalTests, 0)
 	}
 
 	// Check that startTime is initialized
@@ -45,7 +45,7 @@ func TestNewTestModel(t *testing.T) {
 }
 
 func TestTestModelInit(t *testing.T) {
-	model := NewTestModel([]string{"./pkg"}, "", "", "", "all", 10, false)
+	model := NewTestModel([]string{"./pkg"}, "", "", "", "all", false)
 	cmd := model.Init()
 
 	// Init should return a command (spinner tick)

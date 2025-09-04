@@ -12,11 +12,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/fang"
+	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
@@ -39,7 +39,45 @@ var configFile string
 
 // initGlobalLogger initializes the global logger with solid background colors per PRD spec.
 func initGlobalLogger() {
-	globalLogger = logger.NewStyledLogger()
+	globalLogger = log.New(os.Stderr)
+	globalLogger.SetStyles(&log.Styles{
+		Levels: map[log.Level]lipgloss.Style{
+			log.DebugLevel: lipgloss.NewStyle().
+				SetString("DEBUG").
+				Background(lipgloss.Color("#3F51B5")). // Indigo background
+				Foreground(lipgloss.Color("#000000")). // Black foreground
+				Padding(0, 1),
+			log.InfoLevel: lipgloss.NewStyle().
+				SetString("INFO").
+				Background(lipgloss.Color("#4CAF50")). // Green background  
+				Foreground(lipgloss.Color("#000000")). // Black foreground
+				Padding(0, 1),
+			log.WarnLevel: lipgloss.NewStyle().
+				SetString("WARN").
+				Background(lipgloss.Color("#FF9800")). // Orange background
+				Foreground(lipgloss.Color("#000000")). // Black foreground
+				Padding(0, 1),
+			log.ErrorLevel: lipgloss.NewStyle().
+				SetString("ERROR").
+				Background(lipgloss.Color("#F44336")). // Red background
+				Foreground(lipgloss.Color("#000000")). // Black foreground
+				Padding(0, 1),
+			log.FatalLevel: lipgloss.NewStyle().
+				SetString("FATAL").
+				Background(lipgloss.Color("#F44336")). // Red background
+				Foreground(lipgloss.Color("#FFFFFF")). // White foreground
+				Padding(0, 1),
+		},
+		// Style the keys with a darker gray color
+		Key: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#666666")). // Dark gray for keys
+			Bold(true),
+		// Values stay with their default styling (no change)
+		Value: lipgloss.NewStyle(),
+		// Optional: style the separator between key and value
+		Separator: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#999999")), // Medium gray for separator
+	})
 
 	// Get log level from configuration (flag > env > config > default)
 	logLevelStr := viper.GetString("log.level")
@@ -66,9 +104,6 @@ func initGlobalLogger() {
 	}
 
 	globalLogger.SetLevel(logLevel)
-	
-	// Set the global logger in the logger package for use by other packages
-	logger.SetLogger(globalLogger)
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -130,6 +165,18 @@ func Execute() error {
 	// Set log level from flag if provided (highest priority)
 	if logLevel != "" {
 		viper.Set("log.level", logLevel)
+	}
+
+	// Check for --no-color flag early
+	var noColor bool
+	for _, arg := range os.Args {
+		if arg == "--no-color" {
+			noColor = true
+			break
+		}
+	}
+	if noColor {
+		viper.Set("no_color", true)
 	}
 
 	// Configure colors for lipgloss based on environment (GitHub Actions, CI, etc.)
@@ -204,6 +251,16 @@ step summaries and markdown reports.`,
 				_ = viper.BindPFlag("log.level", flag)
 			}
 
+			// Bind the no-color flag to viper after Cobra has parsed it
+			if flag := cmd.Root().PersistentFlags().Lookup("no-color"); flag != nil {
+				_ = viper.BindPFlag("no_color", flag)
+				if viper.GetBool("no_color") {
+					// Reconfigure colors when flag is set
+					tui.ConfigureColors()
+					tui.InitStyles()
+				}
+			}
+
 			// Re-apply log level if it was set via flag
 			if logLevelStr := viper.GetString("log.level"); logLevelStr != "" {
 				var logLevel log.Level
@@ -236,6 +293,7 @@ step summaries and markdown reports.`,
 	// Add persistent flags (available to all subcommands)
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "Config file path (default: .gotcha.yaml)")
 	rootCmd.PersistentFlags().String("log-level", "", "Log level: debug, info, warn, error, fatal (default: info)")
+	rootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 
 	// Add stream-specific flags to root command for direct usage
 	rootCmd.Flags().String("packages", "", "Space-separated packages to test (default: ./...)")
@@ -455,26 +513,42 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		logger.Debug("Pass-through arguments detected", "args", passthroughArgs)
 	}
 
-	// Pre-calculate total test count for progress display
-	totalTests := utils.GetTestCount(testPackages, testArgsStr)
-
-	// Log test discovery with both package and test counts
-	logger.Info("Test discovery completed", "packages", len(testPackages), "tests", totalTests)
+	// Log test package discovery
+	logger.Info("Test package discovery completed", "packages", len(testPackages))
 
 	// Check if we have a TTY for interactive mode
 	if utils.IsTTY() {
 		// Create and run the Bubble Tea program
-		model := tui.NewTestModel(testPackages, testArgsStr, outputFile, coverprofile, show, totalTests, alert)
+		model := tui.NewTestModel(testPackages, testArgsStr, outputFile, coverprofile, show, alert)
 		// Use default Bubble Tea configuration
 		p := tea.NewProgram(&model)
 
 		finalModel, err := p.Run()
+		
 		if err != nil {
 			return fmt.Errorf("failed to run test UI: %w", err)
 		}
 
-		// Extract exit code from final model
+		// Extract exit code and log info messages after TUI exits
 		if m, ok := finalModel.(*tui.TestModel); ok {
+			// Re-configure color profile after TUI exits (TUI might have changed it)
+			profile := tui.ConfigureColors()
+			logger.SetColorProfile(profile)
+			
+			// Log info messages now that TUI is done
+			_ = viper.BindEnv("GOTCHA_GITHUB_STEP_SUMMARY", "GITHUB_STEP_SUMMARY")
+			githubSummary := viper.GetString("GOTCHA_GITHUB_STEP_SUMMARY")
+			if githubSummary == "" {
+				logger.Info("GITHUB_STEP_SUMMARY not set (skipped)")
+			} else {
+				logger.Info(fmt.Sprintf("GitHub step summary written to %s", githubSummary))
+			}
+			
+			elapsed := m.GetElapsedTime()
+			if elapsed > 0 {
+				logger.Info(fmt.Sprintf("Tests completed in %.2fs", elapsed.Seconds()))
+			}
+			
 			exitCode := m.GetExitCode()
 			if exitCode != 0 {
 				return fmt.Errorf("%w with exit code %d", types.ErrTestsFailed, exitCode)
@@ -482,7 +556,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		}
 	} else {
 		// Fallback to simple streaming for CI/non-TTY environments
-		exitCode := utils.RunSimpleStream(testPackages, testArgsStr, outputFile, coverprofile, show, totalTests, alert)
+		exitCode := utils.RunSimpleStream(testPackages, testArgsStr, outputFile, coverprofile, show, alert)
 		if exitCode != 0 {
 			return fmt.Errorf("%w with exit code %d", types.ErrTestsFailed, exitCode)
 		}
