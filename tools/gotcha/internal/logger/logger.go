@@ -31,7 +31,6 @@ func SetLogger(logger *log.Logger) {
 	globalLogger = logger
 }
 
-
 // NewStyledLogger creates a new logger with the standard gotcha styling.
 func NewStyledLogger() *log.Logger {
 	logger := log.New(os.Stderr)
