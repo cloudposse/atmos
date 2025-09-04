@@ -186,37 +186,15 @@ jobs:
           go-version-file: "go.mod"
         id: go
 
-      - name: Setup Go Environment (Unix)
-        if: ${{ matrix.flavor.target != 'windows' && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+      # Why this is needed:
+      # setup-go@v5 adds GOBIN to PATH, but GOBIN is empty by default.
+      # When GOBIN is empty, `go install` puts binaries in $GOPATH/bin.
+      # Therefore, we need to add $GOPATH/bin to PATH manually.
+      # See: https://github.com/actions/setup-go/issues/14
+      - name: Fix Go bin PATH
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          # Add Go binary directories to PATH for the entire job
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-          echo "$HOME/go/bin" >> $GITHUB_PATH
-          
-          # Display Go environment for debugging
-          echo "=== Go Environment Setup ==="
-          echo "GOPATH: $(go env GOPATH)"
-          echo "GOBIN: $(go env GOBIN)"
-          echo "Added to PATH: $(go env GOPATH)/bin"
-          echo "Added to PATH: $HOME/go/bin"
-          echo "==========================="
-
-      - name: Setup Go Environment (Windows)
-        if: ${{ matrix.flavor.target == 'windows' && ! github.event.pull_request.draft }}
-        shell: pwsh
-        run: |
-          # Add Go binary directories to PATH for the entire job
-          $goPath = go env GOPATH
-          echo "$goPath\bin" >> $Env:GITHUB_PATH
-          echo "$Env:USERPROFILE\go\bin" >> $Env:GITHUB_PATH
-          
-          # Display Go environment for debugging
-          Write-Output "=== Go Environment Setup ==="
-          Write-Output "GOPATH: $goPath"
-          Write-Output "GOBIN: $(go env GOBIN)"
-          Write-Output "Added to PATH: $goPath\bin"
-          Write-Output "Added to PATH: $Env:USERPROFILE\go\bin"
-          Write-Output "==========================="
 
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
