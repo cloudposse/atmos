@@ -266,4 +266,3 @@ func ExecuteAnsible(
 
 	return nil
 }
-
