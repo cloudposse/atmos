@@ -12,9 +12,9 @@ var toolchainInstallCmd = &cobra.Command{
 
 The tool should be specified in the format: owner/repo@version
 Examples:
-  toolchain install suzuki-shunsuke/github-comment@v3.5.0
-  toolchain install hashicorp/terraform@v1.5.0
-  toolchain install                    # Install from .tool-versions file`,
+atmos toolchain install suzuki-shunsuke/github-comment@v3.5.0
+atmos toolchain install hashicorp/terraform@v1.5.0
+atmos toolchain install                    # Install from .tool-versions file`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runInstall,
 }
