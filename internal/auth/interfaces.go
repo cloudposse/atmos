@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth/config"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/environment"
@@ -27,8 +28,27 @@ type Validator = types.Validator
 
 // TerraformPreHook runs before Terraform commands to set up authentication
 func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
+	// Set up authentication logging
+	log.SetPrefix("[atmos-auth]")
+	defer log.SetPrefix("")
+
+	atmosLogLevel, _ := log.ParseLevel(atmosConfig.Logs.Level)
+	authLogLevel, _ := log.ParseLevel(atmosConfig.Auth.Logs.Level)
+	log.SetLevel(authLogLevel)
+	defer log.SetLevel(atmosLogLevel)
+
+	// Store original log level and set auth log level if configured
+	originalLevel := log.GetLevel()
+	if atmosConfig.Auth.Logs != nil && atmosConfig.Auth.Logs.Level != "" {
+		if authLevel, err := log.ParseLevel(atmosConfig.Auth.Logs.Level); err == nil {
+			log.SetLevel(authLevel)
+			defer log.SetLevel(originalLevel)
+		}
+	}
+
 	// Skip if no auth config
 	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
+		log.Debug("No auth configuration found, skipping authentication")
 		return nil
 	}
 
@@ -41,11 +61,12 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	// Merge component auth config with global auth config
 	mergedAuthConfig := &atmosConfig.Auth
 	if stackInfo != nil && stackInfo.ComponentIdentitiesSection != nil {
+		log.Debug("Merging component auth configuration")
 		// Convert ComponentIdentitiesSection to ComponentAuthConfig
 		componentConfig := &schema.ComponentAuthConfig{
 			Identities: make(map[string]schema.Identity),
 		}
-		
+
 		// Parse component identities
 		for name, identityData := range stackInfo.ComponentIdentitiesSection {
 			if identityMap, ok := identityData.(map[string]interface{}); ok {
@@ -54,18 +75,18 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 				if globalIdentity, exists := atmosConfig.Auth.Identities[name]; exists {
 					identity = globalIdentity
 				}
-				
+
 				// Apply component overrides
 				if defaultVal, exists := identityMap["default"]; exists {
 					if defaultBool, ok := defaultVal.(bool); ok {
 						identity.Default = defaultBool
 					}
 				}
-				
+
 				componentConfig.Identities[name] = identity
 			}
 		}
-		
+
 		// Merge configurations
 		var err error
 		mergedAuthConfig, err = configMerger.MergeAuthConfig(&atmosConfig.Auth, componentConfig)
@@ -89,9 +110,11 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	// Try to get current session
 	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx)
+	log.Debug("Current session check", "whoami", whoami, "error", err)
 	if err == nil && whoami != nil {
 		// Check if credentials are still valid (at least 5 minutes remaining)
 		if whoami.Expiration != nil && whoami.Expiration.After(time.Now().Add(5*time.Minute)) {
+			log.Debug("Using existing valid session", "identity", whoami.Identity, "expiration", whoami.Expiration)
 			// Set environment variables for existing session
 			if whoami.Environment != nil {
 				for key, value := range whoami.Environment {
@@ -113,6 +136,8 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 		return fmt.Errorf("no default identity configured for authentication")
 	}
 
+	log.Info("Authenticating with default identity", "identity", defaultIdentityName)
+
 	// Authenticate with default identity
 	_, err = authManager.Authenticate(ctx, defaultIdentityName)
 	if err != nil {
@@ -124,6 +149,8 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	if err != nil {
 		return fmt.Errorf("failed to get session info after authentication: %w", err)
 	}
+
+	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
 	// Set process environment variables
 	if whoami.Environment != nil {
@@ -161,5 +188,6 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 		}
 	}
 
+	log.Debug("Auth hook completed successfully")
 	return nil
 }

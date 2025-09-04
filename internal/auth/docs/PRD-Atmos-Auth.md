@@ -232,6 +232,22 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Each identity can validate that incoming credentials are appropriate for its authentication method
 - **Priority**: P0 (Must Have)
 
+#### FR-017: Authentication Logging Configuration
+
+- **Description**: Support configurable logging levels specifically for authentication operations
+- **Acceptance Criteria**:
+  - Support `logs` section in auth configuration with `level` property
+  - Log level applies only to authentication operations, not global Atmos logging
+  - Supported log levels: `Debug`, `Info`, `Warn`, `Error` (matching Atmos schema)
+  - Default log level when not specified should be `Info`
+  - Log level configuration is validated at startup
+  - Authentication logs use configured level while preserving global log settings
+  - Log level automatically reverts to global atmos.yaml log level after authentication completes
+  - Example: Global `INFO` + Auth `DEBUG` → Auth operations use `DEBUG`, then revert to `INFO`
+  - Log level can ONLY be configured in atmos.yaml, not at component level
+  - Integration with Charm Bracelet's logging framework for consistent formatting
+- **Priority**: P1 (Should Have)
+
 ### 2.2 Non-Functional Requirements
 
 #### NFR-001: Security
@@ -450,6 +466,7 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 6. Engineer now has access to production cross-account resources
 
 **Identity Configuration Example**:
+
 ```yaml
 auth:
   providers:
@@ -471,7 +488,7 @@ auth:
 
     prod-cross-account-admin:
       kind: aws/assume-role
-      via: { identity: managers-base }  # Chain from permission set, not provider
+      via: { identity: managers-base } # Chain from permission set, not provider
       spec:
         assume_role: arn:aws:iam::999999999999:role/CrossAccountProductionAdmin
         session_name: atmos-prod-access
@@ -508,7 +525,8 @@ auth:
 #### EC-004: Identity Chain Authentication Failures
 
 **Scenario**: Authentication fails at any step in a deep identity chain  
-**Handling**: 
+**Handling**:
+
 - Clear error messages indicating which step failed and why
 - Audit trail of successful steps before failure
 - No partial credential caching for failed chains
@@ -519,6 +537,7 @@ auth:
 
 **Scenario**: Identity receives credentials that are incompatible with its authentication method  
 **Handling**:
+
 - Each identity validates incoming credential format and type
 - Clear error messages about credential compatibility
 - Example: Assume Role identity receives non-AWS credentials
@@ -528,15 +547,27 @@ auth:
 
 ### 4.1 Core Components
 
-#### Authentication Providers
+#### Authentication Configuration Structure
 
 ```yaml
-providers:
-  aws-sso:
-    kind: aws/iam-identity-center
-    start_url: https://company.awsapps.com/start/
-    region: us-east-1
-    default: true
+auth:
+  logs:
+    level: Debug # Optional: Debug, Info, Warn, Error (default: Info)
+
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      start_url: https://company.awsapps.com/start/
+      region: us-east-1
+      default: true
+
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via: { provider: aws-sso }
+      spec:
+        name: DeveloperAccess
+        account.name: development
 ```
 
 **Responsibilities**:
@@ -599,11 +630,13 @@ identities:
 For identity chains (e.g., AWS SSO → Permission Set → Assume Role):
 
 1. **Chain Resolution**: Recursively resolve the provider source for the target identity
+
    - `prod-admin` chains to `managers-base` identity
    - `managers-base` chains to `company-sso` provider
    - Source provider identified: `company-sso`
 
 2. **Sequential Authentication**: Authenticate through the chain step by step
+
    - **Step 1**: Authenticate with source provider (`company-sso`)
      - Returns base credentials (SSO session tokens)
    - **Step 2**: First identity (`managers-base`) authenticates using base credentials
@@ -616,11 +649,13 @@ For identity chains (e.g., AWS SSO → Permission Set → Assume Role):
      - Returns final role credentials
 
 3. **Credential Transformation**: Each step transforms credentials for the next
+
    - Provider credentials → Identity credentials → Final credentials
    - Metadata (region, account, session info) preserved through chain
    - Each identity validates incoming credentials are appropriate
 
 4. **Error Handling**: Chain stops at first failure with clear error context
+
    - Indicates which step in the chain failed
    - Provides actionable error messages
    - Maintains audit trail of successful steps
@@ -870,6 +905,9 @@ Components can override auth configuration defined in `atmos.yaml`. Here's a com
 
 ```yaml
 auth:
+  logs:
+    level: Debug # Optional: Debug, Info, Warn, Error (default: Info)
+
   providers:
     cplive-sso:
       kind: aws/iam-identity-center
@@ -949,9 +987,9 @@ components:
 2. **New Identities**: New identities defined in components are added to available options
 3. **Provider Overrides**: Component providers override global providers with same name
 4. **Environment Variable Merging**: Component environment variables are merged with identity environment variables
-5. **AWS File Management**: AWS credential file paths are automatically set based on active provider
-6. **Validation**: Validation occurs on the merged configuration
-7. **Precedence**: Component-level configuration always takes precedence over global configuration
+6. **AWS File Management**: AWS credential file paths are automatically set based on active provider
+7. **Validation**: Validation occurs on the merged configuration
+8. **Precedence**: Component-level configuration always takes precedence over global configuration
 
 ### 5.4 Component Description Output
 
@@ -1484,8 +1522,14 @@ type AWSFileManager interface {
     Cleanup(provider string) error
 }
 
+// LogsConfig represents logging configuration for auth operations
+type LogsConfig struct {
+    Level string `json:"level,omitempty" yaml:"level,omitempty"` // Debug, Info, Warn, Error
+}
+
 // AuthConfig represents the complete auth configuration after merging
 type AuthConfig struct {
+    Logs       *LogsConfig          `json:"logs,omitempty" yaml:"logs,omitempty"`
     Providers  map[string]Provider  `json:"providers" yaml:"providers"`
     Identities map[string]Identity  `json:"identities" yaml:"identities"`
     Default    string              `json:"default,omitempty" yaml:"default,omitempty"`
@@ -1493,6 +1537,7 @@ type AuthConfig struct {
 
 // ComponentAuthConfig represents component-level auth overrides
 type ComponentAuthConfig struct {
+    Logs       *LogsConfig          `json:"logs,omitempty" yaml:"logs,omitempty"`
     Providers  map[string]Provider  `json:"providers,omitempty" yaml:"providers,omitempty"`
     Identities map[string]Identity  `json:"identities,omitempty" yaml:"identities,omitempty"`
     Default    string              `json:"default,omitempty" yaml:"default,omitempty"`

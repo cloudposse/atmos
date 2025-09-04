@@ -22,6 +22,13 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 		return fmt.Errorf("auth config cannot be nil")
 	}
 
+	// Validate logs configuration
+	if config.Logs != nil {
+		if err := v.ValidateLogsConfig(config.Logs); err != nil {
+			return fmt.Errorf("logs configuration validation failed: %w", err)
+		}
+	}
+
 	// Validate providers
 	for name, provider := range config.Providers {
 		if err := v.ValidateProvider(name, &provider); err != nil {
@@ -42,6 +49,23 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 	}
 
 	return nil
+}
+
+// ValidateLogsConfig validates the logs configuration
+func (v *validator) ValidateLogsConfig(logs *schema.LogsConfig) error {
+	if logs.Level == "" {
+		// Default to Info if not specified
+		return nil
+	}
+
+	validLevels := []string{"Debug", "Info", "Warn", "Error"}
+	for _, validLevel := range validLevels {
+		if logs.Level == validLevel {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("invalid log level %q, must be one of: %s", logs.Level, strings.Join(validLevels, ", "))
 }
 
 // ValidateProvider validates a provider configuration
@@ -103,7 +127,7 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 func (v *validator) ValidateChains(identities map[string]*schema.Identity, providers map[string]*schema.Provider) error {
 	// Build dependency graph
 	graph := make(map[string][]string)
-	
+
 	for name, identity := range identities {
 		if identity.Via != nil {
 			if identity.Via.Identity != "" {

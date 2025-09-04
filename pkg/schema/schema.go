@@ -971,20 +971,26 @@ type ListColumnConfig struct {
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }
 
+// LogsConfig defines the logging configuration for authentication operations
+type LogsConfig struct {
+	Level string `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`
+}
+
 // AuthConfig defines the authentication configuration structure
 type AuthConfig struct {
+	Logs       *LogsConfig         `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
 }
 
 // Provider defines an authentication provider configuration
 type Provider struct {
-	Kind      string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	StartURL  string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
-	Region    string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
-	Session   *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
-	Default   bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
-	Spec      map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
+	Kind     string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
+	StartURL string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
+	Region   string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+	Session  *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	Default  bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Spec     map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
 }
 
 // SessionConfig defines session configuration for providers
@@ -1064,13 +1070,13 @@ type GCPCredentials struct {
 
 // WhoamiInfo represents the current effective authentication principal
 type WhoamiInfo struct {
-	Provider     string            `json:"provider"`
-	Identity     string            `json:"identity"`
-	Principal    string            `json:"principal"`
-	Account      string            `json:"account,omitempty"`
-	Region       string            `json:"region,omitempty"`
-	Expiration   *time.Time        `json:"expiration,omitempty"`
-	Environment  map[string]string `json:"environment,omitempty"`
-	Credentials  *Credentials      `json:"credentials,omitempty"`
-	LastUpdated  time.Time         `json:"last_updated"`
+	Provider    string            `json:"provider"`
+	Identity    string            `json:"identity"`
+	Principal   string            `json:"principal"`
+	Account     string            `json:"account,omitempty"`
+	Region      string            `json:"region,omitempty"`
+	Expiration  *time.Time        `json:"expiration,omitempty"`
+	Environment map[string]string `json:"environment,omitempty"`
+	Credentials *Credentials      `json:"credentials,omitempty"`
+	LastUpdated time.Time         `json:"last_updated"`
 }
