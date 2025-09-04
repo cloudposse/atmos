@@ -1,5 +1,9 @@
 base_path: "./"
 
+schemas:
+  atmos:
+    manifest: "schemas/atmos-manifest.json"
+
 components:
   ansible:
     base_path: "components/ansible"

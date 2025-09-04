@@ -16,6 +16,12 @@ var (
 	ErrParseComponents = errors.New("could not parse components")
 	// ErrParseTerraformComponents is returned when terraform component data cannot be parsed.
 	ErrParseTerraformComponents = errors.New("could not parse Terraform components")
+	// ErrParseHelmfileComponents is returned when helmfile component data cannot be parsed.
+	ErrParseHelmfileComponents = errors.New("could not parse Helmfile components")
+	// ErrParsePackerComponents is returned when packer component data cannot be parsed.
+	ErrParsePackerComponents = errors.New("could not parse Packer components")
+	// ErrParseAnsibleComponents is returned when ansible component data cannot be parsed.
+	ErrParseAnsibleComponents = errors.New("could not parse Ansible components")
 	// ErrStackNotFound is returned when a requested stack is not found.
 	ErrStackNotFound = errors.New("stack not found")
 	// ErrProcessStack is returned when there's an error processing a stack.
@@ -39,7 +45,25 @@ func getStackComponents(stackData any) ([]string, error) {
 		return nil, ErrParseTerraformComponents
 	}
 
-	return lo.Keys(terraformComponents), nil
+	helmfileComponents, ok := componentsMap["helmfile"].(map[string]any)
+	if !ok {
+		return nil, ErrParseHelmfileComponents
+	}
+
+	packerComponents, ok := componentsMap["packer"].(map[string]any)
+	if !ok {
+		return nil, ErrParsePackerComponents
+	}
+
+	ansibleComponents, ok := componentsMap["ansible"].(map[string]any)
+	if !ok {
+		return nil, ErrParseAnsibleComponents
+	}
+
+	// Merge all component maps into one.
+	allComponents := lo.Assign(terraformComponents, helmfileComponents, packerComponents, ansibleComponents)
+
+	return lo.Keys(allComponents), nil
 }
 
 // getComponentsForSpecificStack extracts components from a specific stack.

@@ -16,6 +16,9 @@
     "packer": {
       "$ref": "#/definitions/packer"
     },
+    "ansible": {
+      "$ref": "#/definitions/ansible"
+    },
     "vars": {
       "$ref": "#/definitions/vars"
     },
@@ -41,69 +44,48 @@
   "additionalProperties": true,
   "oneOf": [
     {
-      "required": [
-        "workflows"
-      ]
+      "required": ["workflows"]
     },
     {
       "anyOf": [
         {
           "additionalProperties": true,
           "not": {
-            "required": [
-              "workflows"
-            ]
+            "required": ["workflows"]
           }
         },
         {
-          "required": [
-            "import"
-          ]
+          "required": ["import"]
         },
         {
-          "required": [
-            "terraform"
-          ]
+          "required": ["terraform"]
         },
         {
-          "required": [
-            "helmfile"
-          ]
+          "required": ["helmfile"]
         },
         {
-          "required": [
-            "packer"
-          ]
+          "required": ["packer"]
         },
         {
-          "required": [
-            "vars"
-          ]
+          "required": ["ansible"]
         },
         {
-          "required": [
-            "hooks"
-          ]
+          "required": ["vars"]
         },
         {
-          "required": [
-            "env"
-          ]
+          "required": ["hooks"]
         },
         {
-          "required": [
-            "settings"
-          ]
+          "required": ["env"]
         },
         {
-          "required": [
-            "components"
-          ]
+          "required": ["settings"]
         },
         {
-          "required": [
-            "overrides"
-          ]
+          "required": ["components"]
+        },
+        {
+          "required": ["overrides"]
         }
       ]
     }
@@ -145,9 +127,7 @@
                     "additionalProperties": true
                   }
                 },
-                "required": [
-                  "path"
-                ]
+                "required": ["path"]
               }
             ]
           }
@@ -174,6 +154,9 @@
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
+            },
+            "ansible": {
+              "$ref": "#/definitions/ansible_components"
             }
           },
           "required": []
@@ -474,6 +457,92 @@
         }
       ]
     },
+    "ansible": {
+      "title": "ansible",
+      "description": "Ansible section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "ansible_components": {
+      "title": "ansible_components",
+      "description": "Ansible components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/ansible_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ansible_component_manifest": {
+      "title": "ansible_component_manifest",
+      "description": "Ansible component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
     "command": {
       "title": "command",
       "description": "Command to execute",
@@ -498,10 +567,7 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": [
-                "abstract",
-                "real"
-              ]
+              "enum": ["abstract", "real"]
             },
             "enabled": {
               "type": "boolean",
@@ -622,10 +688,7 @@
           "properties": {
             "schema_type": {
               "type": "string",
-              "enum": [
-                "jsonschema",
-                "opa"
-              ]
+              "enum": ["jsonschema", "opa"]
             },
             "schema_path": {
               "type": "string"
@@ -650,10 +713,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "schema_type",
-            "schema_path"
-          ]
+          "required": ["schema_type", "schema_path"]
         }
       ]
     },
@@ -916,9 +976,6 @@
         {
           "type": "object",
           "properties": {
-            "stack": {
-              "type": "string"
-            },
             "namespace": {
               "type": "string"
             },
@@ -943,19 +1000,13 @@
           },
           "oneOf": [
             {
-              "required": [
-                "component"
-              ]
+              "required": ["component"]
             },
             {
-              "required": [
-                "file"
-              ]
+              "required": ["file"]
             },
             {
-              "required": [
-                "folder"
-              ]
+              "required": ["folder"]
             }
           ],
           "additionalProperties": false
@@ -1130,17 +1181,13 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "command"
-                    ]
+                    "required": ["command"]
                   }
                 }
               ]
             }
           },
-          "required": [
-            "steps"
-          ]
+          "required": ["steps"]
         }
       ]
     },

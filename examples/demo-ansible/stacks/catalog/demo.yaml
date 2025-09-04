@@ -2,29 +2,28 @@ components:
   ansible:
     webapp:
       metadata:
-        type: real
         description: "Demo web application using Ansible for configuration management"
-      
+
       vars:
         webapp_name: "demo-webapp"
         webapp_version: "1.0.0"
         environment: "{{ stage }}"
         target_hosts: "webservers"
-        
+
         # Nginx configuration
         nginx_worker_processes: "auto"
         nginx_worker_connections: 1024
         nginx_client_max_body_size: "10M"
-        
+
         # Application settings
         log_level: "INFO"
         debug_mode: false
-        
+
       settings:
         ansible:
           playbook: "site.yml"
           inventory: "inventory.yml"
-          
+
       env:
         ANSIBLE_HOST_KEY_CHECKING: "False"
         ANSIBLE_STDOUT_CALLBACK: "yaml"
