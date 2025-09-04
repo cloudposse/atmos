@@ -90,14 +90,14 @@ func TestGetStackComponents(t *testing.T) {
 		assert.True(t, errors.Is(err, ErrParseComponents))
 	})
 
-	t.Run("missing terraform components", func(t *testing.T) {
-		_, err := getStackComponents(map[string]any{
-			"components": map[string]any{
-				"not-terraform": map[string]any{},
-			},
-		})
-		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrParseTerraformComponents))
+	t.Run("empty components map", func(t *testing.T) {
+		emptyComponentsData := map[string]any{
+			"components": map[string]any{},
+		}
+
+		components, err := getStackComponents(emptyComponentsData)
+		require.NoError(t, err)
+		assert.Empty(t, components)
 	})
 }
 
@@ -110,13 +110,18 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 					"vpc":       map[string]any{},
 					"infra/vpc": map[string]any{},
 				},
+				"helmfile": map[string]any{
+					"nginx": map[string]any{},
+				},
 			},
 		},
 		"stack2": map[string]any{
 			"components": map[string]any{
-				"terraform": map[string]any{
-					"eks":       map[string]any{},
-					"infra/eks": map[string]any{},
+				"packer": map[string]any{
+					"base-image": map[string]any{},
+				},
+				"ansible": map[string]any{
+					"server-setup": map[string]any{},
 				},
 			},
 		},
@@ -127,6 +132,12 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 		components, err := getComponentsForSpecificStack("stack1", stacksMap)
 		require.NoError(t, err)
 		assert.ElementsMatch(t, []string{"vpc", "infra/vpc"}, components)
+	})
+
+	t.Run("stack with packer and ansible only", func(t *testing.T) {
+		components, err := getComponentsForSpecificStack("stack2", stacksMap)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"base-image", "server-setup"}, components)
 	})
 
 	// Test error cases
