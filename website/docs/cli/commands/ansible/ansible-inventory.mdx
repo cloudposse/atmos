@@ -1,0 +1,56 @@
+---
+title: atmos ansible inventory
+sidebar_label: inventory
+sidebar_class_name: command
+id: inventory
+description: Display or dump the configured inventory as Ansible sees it
+---
+
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Screengrab from '@site/src/components/Screengrab'
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
+<img width="80" align="right" src={useBaseUrl('/img/ansible.svg')} alt="Ansible"/>
+
+:::note Purpose
+Use this command to display or dump the configured inventory as Ansible sees it.
+This is useful for debugging inventory configuration and understanding how hosts are organized.
+:::
+
+<Screengrab title="atmos ansible inventory --help" slug="atmos-ansible-inventory--help" />
+
+## Usage
+
+```shell
+atmos ansible inventory <component> --stack <stack> [options]
+```
+
+## Examples
+
+```shell
+atmos ansible inventory webapp --stack dev --list
+atmos ansible inventory webapp --stack dev --host webserver1
+atmos ansible inventory webapp -s prod --graph
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>Atmos component name</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack (required)</dd>
+  
+  <dt>`--inventory` / `-i`</dt>
+  <dd>Ansible inventory file or directory (optional)</dd>
+</dl>
+
+:::tip
+For more details on the `ansible-inventory` command and options, refer to [Ansible inventory command reference](https://docs.ansible.com/ansible/latest/cli/ansible-inventory.html).
+:::

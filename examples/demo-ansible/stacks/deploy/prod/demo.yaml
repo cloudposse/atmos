@@ -1,0 +1,32 @@
+import:
+  - catalog/demo
+
+vars:
+  stage: "prod"
+
+components:
+  ansible:
+    webapp:
+      vars:
+        webapp_port: 443
+        debug_mode: false
+        log_level: "ERROR"
+        
+        # Production configuration
+        target_hosts: "webservers"
+        webapp_environment: "production"
+        webapp_version: "2.0.0"
+        
+        # Production security settings
+        nginx_worker_connections: 2048
+        nginx_client_max_body_size: "5M"
+        
+      settings:
+        ansible:
+          playbook: "site.yml"
+          inventory: "inventory.yml"
+          
+      env:
+        ANSIBLE_VERBOSITY: "0"
+        ANSIBLE_HOST_KEY_CHECKING: "True"
+        ANSIBLE_GATHERING: "explicit"

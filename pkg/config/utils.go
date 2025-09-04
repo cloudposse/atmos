@@ -345,6 +345,18 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Packer.BasePath = componentsPackerBasePath
 	}
 
+	componentsAnsibleCommand := os.Getenv("ATMOS_COMPONENTS_ANSIBLE_COMMAND")
+	if len(componentsAnsibleCommand) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_ANSIBLE_COMMAND", componentsAnsibleCommand)
+		atmosConfig.Components.Ansible.Command = componentsAnsibleCommand
+	}
+
+	componentsAnsibleBasePath := os.Getenv("ATMOS_COMPONENTS_ANSIBLE_BASE_PATH")
+	if len(componentsAnsibleBasePath) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_ANSIBLE_BASE_PATH", componentsAnsibleBasePath)
+		atmosConfig.Components.Ansible.BasePath = componentsAnsibleBasePath
+	}
+
 	workflowsBasePath := os.Getenv("ATMOS_WORKFLOWS_BASE_PATH")
 	if len(workflowsBasePath) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_WORKFLOWS_BASE_PATH", workflowsBasePath)

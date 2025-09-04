@@ -48,6 +48,11 @@ components:
     command: packer
     # Can also be set using 'ATMOS_COMPONENTS_PACKER_BASE_PATH' ENV var, or '--packer-dir' command-line argument
     base_path: "components/packer"
+  ansible:
+    # Can also be set using 'ATMOS_COMPONENTS_ANSIBLE_COMMAND' ENV var, or '--ansible-command' command-line argument
+    command: ansible-playbook
+    # Can also be set using 'ATMOS_COMPONENTS_ANSIBLE_BASE_PATH' ENV var, or '--ansible-dir' command-line argument
+    base_path: "components/ansible"
 
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments

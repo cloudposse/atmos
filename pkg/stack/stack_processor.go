@@ -12,6 +12,7 @@ func ProcessYAMLConfigFiles(
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
 	packerComponentsBasePath string,
+	ansibleComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
@@ -28,6 +29,7 @@ func ProcessYAMLConfigFiles(
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
 		packerComponentsBasePath,
+		ansibleComponentsBasePath,
 		filePaths,
 		processStackDeps,
 		processComponentDeps,
@@ -99,7 +101,8 @@ func ProcessStackConfig(
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
-		"",
+		"", // packerComponentsBasePath - not used in this context
+		"", // ansibleComponentsBasePath - not used in this context
 		stack,
 		config,
 		processStackDeps,

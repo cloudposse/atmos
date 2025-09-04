@@ -1,0 +1,30 @@
+all:
+  children:
+    webservers:
+      hosts:
+        web1:
+          ansible_host: 192.168.1.10
+          ansible_user: ubuntu
+        web2:
+          ansible_host: 192.168.1.11
+          ansible_user: ubuntu
+        web3:
+          ansible_host: 192.168.1.12
+          ansible_user: ubuntu
+      vars:
+        nginx_worker_processes: auto
+        nginx_worker_connections: 1024
+    
+    loadbalancers:
+      hosts:
+        lb1:
+          ansible_host: 192.168.1.20
+          ansible_user: ubuntu
+      vars:
+        nginx_proxy_timeout: 30s
+        nginx_max_body_size: 10M
+
+  vars:
+    # Global variables for all hosts
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    ansible_python_interpreter: /usr/bin/python3

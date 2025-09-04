@@ -39,6 +39,7 @@ func CreateSpaceliftStacks(
 			terraformComponentsBasePath,
 			helmfileComponentsBasePath,
 			packerComponentsBasePath,
+			"", // ansibleComponentsBasePath - not used in Spacelift context
 			filePaths,
 			processStackDeps,
 			processComponentDeps,
@@ -63,6 +64,7 @@ func CreateSpaceliftStacks(
 			atmosConfig.TerraformDirAbsolutePath,
 			atmosConfig.HelmfileDirAbsolutePath,
 			atmosConfig.PackerDirAbsolutePath,
+			atmosConfig.AnsibleDirAbsolutePath,
 			atmosConfig.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps,

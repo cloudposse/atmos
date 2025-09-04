@@ -1,0 +1,29 @@
+import:
+  - catalog/demo
+
+vars:
+  stage: "staging"
+
+components:
+  ansible:
+    webapp:
+      vars:
+        webapp_port: 80
+        debug_mode: false
+        log_level: "WARNING"
+        
+        # Staging uses different hosts
+        target_hosts: "webservers"
+        
+        # Staging environment variables
+        webapp_environment: "staging"
+        webapp_version: "1.1.0"
+        
+      settings:
+        ansible:
+          playbook: "site.yml"
+          inventory: "inventory.yml"
+          
+      env:
+        ANSIBLE_VERBOSITY: "0"
+        ANSIBLE_GATHERING: "explicit"

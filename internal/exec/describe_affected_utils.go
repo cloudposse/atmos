@@ -80,12 +80,14 @@ func executeDescribeAffected(
 	currentStacksTerraformDirAbsolutePath := atmosConfig.TerraformDirAbsolutePath
 	currentStacksHelmfileDirAbsolutePath := atmosConfig.HelmfileDirAbsolutePath
 	currentStacksPackerDirAbsolutePath := atmosConfig.PackerDirAbsolutePath
+	currentStacksAnsibleDirAbsolutePath := atmosConfig.AnsibleDirAbsolutePath
 	currentStacksStackConfigFilesAbsolutePaths := atmosConfig.StackConfigFilesAbsolutePaths
 
 	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath)
 	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Terraform.BasePath)
 	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Helmfile.BasePath)
 	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Packer.BasePath)
+	atmosConfig.AnsibleDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Ansible.BasePath)
 	atmosConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
 		filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath),
 		atmosConfig.StackConfigFilesRelativePaths,
@@ -115,6 +117,7 @@ func executeDescribeAffected(
 	atmosConfig.TerraformDirAbsolutePath = currentStacksTerraformDirAbsolutePath
 	atmosConfig.HelmfileDirAbsolutePath = currentStacksHelmfileDirAbsolutePath
 	atmosConfig.PackerDirAbsolutePath = currentStacksPackerDirAbsolutePath
+	atmosConfig.AnsibleDirAbsolutePath = currentStacksAnsibleDirAbsolutePath
 	atmosConfig.StackConfigFilesAbsolutePaths = currentStacksStackConfigFilesAbsolutePaths
 
 	log.Debug("Getting current working repo commit object")

@@ -78,4 +78,11 @@ var (
 	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
 	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
 	ErrMerge                    = errors.New("merge error")
+
+	// Ansible-related errors.
+	ErrAnsibleExecutionFailed  = errors.New("ansible command execution failed")
+	ErrAnsiblePlaybookMissing  = errors.New("ansible playbook is required")
+	ErrAnsibleInventoryMissing = errors.New("ansible inventory is required")
+	ErrAnsibleComponentMissing = errors.New("ansible component does not exist")
+	ErrAnsibleSettingsInvalid  = errors.New("invalid ansible settings")
 )

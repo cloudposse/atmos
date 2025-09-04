@@ -1,0 +1,12 @@
+debug_mode: true
+environment: '{{ stage }}'
+log_level: DEBUG
+nginx_client_max_body_size: 10M
+nginx_worker_connections: 1024
+nginx_worker_processes: auto
+stage: dev
+target_hosts: webservers
+webapp_environment: development
+webapp_name: demo-webapp
+webapp_port: 8080
+webapp_version: 1.0.0

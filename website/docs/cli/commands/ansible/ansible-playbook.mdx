@@ -1,0 +1,59 @@
+---
+title: atmos ansible playbook
+sidebar_label: playbook
+sidebar_class_name: command
+id: playbook
+description: Run an Ansible playbook for configuration management
+---
+
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Screengrab from '@site/src/components/Screengrab'
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
+<img width="80" align="right" src={useBaseUrl('/img/ansible.svg')} alt="Ansible"/>
+
+:::note Purpose
+Use this command to execute an Ansible playbook configured for an Atmos component in a stack.
+The playbook runs against the specified inventory and applies the configuration defined in the component variables.
+:::
+
+<Screengrab title="atmos ansible playbook --help" slug="atmos-ansible-playbook--help" />
+
+## Usage
+
+```shell
+atmos ansible playbook <component> --stack <stack> [options]
+```
+
+## Examples
+
+```shell
+atmos ansible playbook webapp --stack dev
+atmos ansible playbook webapp --stack dev --playbook site.yml
+atmos ansible playbook webapp -s prod --inventory hosts.yml
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>Atmos component name</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack (required)</dd>
+  
+  <dt>`--playbook` / `-p`</dt>
+  <dd>Ansible playbook file (optional)</dd>
+  
+  <dt>`--inventory` / `-i`</dt>
+  <dd>Ansible inventory file or directory (optional)</dd>
+</dl>
+
+:::tip
+For more details on the `ansible-playbook` command and options, refer to [Ansible playbook command reference](https://docs.ansible.com/ansible/latest/cli/ansible-playbook.html).
+:::

@@ -194,6 +194,14 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.PackerDirAbsolutePath = packerDirAbsPath
 
+	// Convert Ansible dir to an absolute path.
+	ansibleBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath)
+	ansibleDirAbsPath, err := filepath.Abs(ansibleBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.AnsibleDirAbsolutePath = ansibleDirAbsPath
+
 	return nil
 }
 
