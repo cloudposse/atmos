@@ -21,69 +21,34 @@ Execute the `toolchain install` command like this:
 atmos toolchain install 
 ```
 
-:::tip
-Run `atmos terraform clean --help` to see all the available options
-:::
-
-## Delete custom files
-
-You can delete custom files or folders using glob patterns.
-```
-components:
-  terraform:
-    station:
-      vars:
-        location: Stockholm
-        lang: se
-      settings:
-        clean:
-          paths:
-           - temp.log
-```
-
 ## Examples
 
 ```shell
-# Delete all Terraform-related files for all components (with confirmation)
-atmos terraform clean 
-# Force delete all Terraform-related files for all components (no confirmation)
-atmos terraform clean --force
-atmos terraform clean top-level-component1 -s tenant1-ue2-dev
-atmos terraform clean infra/vpc -s tenant1-ue2-staging
-atmos terraform clean infra/vpc -s tenant1-ue2-staging --skip-lock-file
-atmos terraform clean test/test-component -s tenant1-ue2-dev
-atmos terraform clean test/test-component-override-2 -s tenant2-ue2-prod
-atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
+atmos toolchain install suzuki-shunsuke/github-comment@v3.5.0
+atmos toolchain install hashicorp/terraform@v1.5.0
+atmos toolchain install                    # Install from .tool-versions file
 ```
 
 ## Arguments
 
 <dl>
-    <dt>`component` <em>(required)</em></dt>
+    <dt>`package@version` <em>(optional)</em></dt>
     <dd>
-        Atmos terraform component.
+        Package to install from the aqua repository
     </dd>
 </dl>
 
 ## Flags
 
 <dl>
-    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dt>`--default`  <em>(optional)</em></dt>
     <dd>
-        Atmos stack.
+        Set installed version as default (front of .tool-versions)
     </dd>
 
-    <dt>`--dry-run` <em>(optional)</em></dt>
-    <dd>
-        Dry run.
+    <dt>`--reinstall` <em>(optional)</em></dt>
 
-        ```shell
-        atmos terraform clean <component> -s <stack> --dry-run=true
-        ```
-    </dd>
-
-    <dt>`--skip-lock-file` <em>(optional)</em></dt>
     <dd>
-        Skip deleting the `.terraform.lock.hcl` file.
+        Reinstall even if already installed
     </dd>
 </dl>
