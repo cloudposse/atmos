@@ -205,8 +205,9 @@ jobs:
       #       }
 
       # Setup tmate session for debugging (activate by creating a label 'debug-with-tmate' on the PR or enable-tmate input)
+      # Skip for bot accounts since they don't have SSH keys
       - name: Setup tmate session
-        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.enable-tmate == 'true') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'debug-with-tmate')) && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        if: ${{ !endsWith(github.actor, '[bot]') && ((github.event_name == 'workflow_dispatch' && github.event.inputs.enable-tmate == 'true') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'debug-with-tmate'))) && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
         uses: mxschmitt/action-tmate@v3
         with:
           limit-access-to-actor: true
@@ -244,8 +245,9 @@ jobs:
         run: make testacc-ci
       
       # Setup tmate session for debugging after failure (activate by creating a label 'debug-on-failure' on the PR or enable-tmate=on-failure input)
+      # Skip for bot accounts since they don't have SSH keys
       - name: Setup tmate session on failure
-        if: ${{ failure() && ((github.event_name == 'workflow_dispatch' && github.event.inputs.enable-tmate == 'on-failure') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'debug-on-failure'))) && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        if: ${{ failure() && !endsWith(github.actor, '[bot]') && ((github.event_name == 'workflow_dispatch' && github.event.inputs.enable-tmate == 'on-failure') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'debug-on-failure'))) && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
         uses: mxschmitt/action-tmate@v3
         with:
           limit-access-to-actor: true
