@@ -16,9 +16,9 @@ already exists, it will be updated with the new version.
 The tool will be validated against the registry to ensure it exists before being added.
 
 Examples:
-  toolchain add terraform 1.9.8
-  toolchain add hashicorp/terraform 1.11.4
-  toolchain add --file /path/to/.tool-versions kubectl 1.28.0`,
+atmos toolchain add terraform 1.9.8
+atmos toolchain add hashicorp/terraform 1.11.4
+atmos toolchain add --file /path/to/.tool-versions kubectl 1.28.0`,
 	Args: cobra.ExactArgs(2),
 	RunE: runAddToolCmd,
 }
