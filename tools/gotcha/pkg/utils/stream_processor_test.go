@@ -106,7 +106,7 @@ func TestStreamProcessorBuffering(t *testing.T) {
 				actualOutput, exists := processor.buffers[testName]
 				if len(expectedOutput) > 0 {
 					assert.True(t, exists, "Buffer should exist for test %s", testName)
-					assert.Equal(t, expectedOutput, actualOutput, 
+					assert.Equal(t, expectedOutput, actualOutput,
 						"Output mismatch for test %s: %s", testName, tt.description)
 				}
 			}
@@ -159,7 +159,7 @@ func TestStreamProcessorSubtestOutput(t *testing.T) {
 			},
 			expectedOutput: []string{
 				"level1\n",
-				"level2\n", 
+				"level2\n",
 				"level3\n",
 			},
 			description: "Should collect all nested subtest output",
@@ -170,7 +170,7 @@ func TestStreamProcessorSubtestOutput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Simulate the collection logic
 			output, exists := tt.buffers[tt.parentTest]
-			
+
 			// If no output found, check for subtest output
 			if !exists || len(output) == 0 {
 				testPrefix := tt.parentTest + "/"
