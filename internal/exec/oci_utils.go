@@ -45,6 +45,7 @@ const (
 	githubTokenEnv        = "GITHUB_TOKEN"
 	logFieldIndex         = "index"
 	logFieldDigest        = "digest"
+	logFieldError         = "error"
 	defaultDirMode        = 0o755             // Default directory permissions (rwxr-xr-x)
 	maxZipSize            = 100 * 1024 * 1024 // Maximum ZIP file size: 100MB (prevents decompression bomb)
 )
@@ -52,7 +53,7 @@ const (
 // bindEnv binds environment variables to Viper with fallback support.
 func bindEnv(v *viper.Viper, key string, envVars ...string) {
 	if err := v.BindEnv(append([]string{key}, envVars...)...); err != nil {
-		log.Debug("Failed to bind environment variable", "key", key, "envVars", envVars, "error", err)
+		log.Debug("Failed to bind environment variable", "key", key, "envVars", envVars, logFieldError, err)
 	}
 }
 
@@ -66,7 +67,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
-		log.Error("Failed to parse OCI image reference", "image", imageName, "error", err)
+		log.Error("Failed to parse OCI image reference", "image", imageName, logFieldError, err)
 		return fmt.Errorf("invalid image reference: %w", err)
 	}
 
@@ -77,7 +78,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 
 	img, err := descriptor.Image()
 	if err != nil {
-		log.Error("Failed to get image descriptor", "image", imageName, "error", err)
+		log.Error("Failed to get image descriptor", "image", imageName, logFieldError, err)
 		return fmt.Errorf("cannot get a descriptor for the OCI image '%s': %w", imageName, err)
 	}
 
@@ -85,7 +86,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 
 	layers, err := img.Layers()
 	if err != nil {
-		log.Error("Failed to retrieve layers from OCI image", "image", imageName, "error", err)
+		log.Error("Failed to retrieve layers from OCI image", "image", imageName, logFieldError, err)
 		return fmt.Errorf("failed to get image layers: %w", err)
 	}
 
@@ -97,7 +98,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 	successfulLayers := 0
 	for i, layer := range layers {
 		if err := processLayer(layer, i, destDir); err != nil {
-			log.Warn("Failed to process layer", logFieldIndex, i, "error", err)
+			log.Warn("Failed to process layer", logFieldIndex, i, logFieldError, err)
 			continue // Continue with other layers instead of failing completely
 		}
 		successfulLayers++
@@ -107,7 +108,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 	files, err := os.ReadDir(destDir)
 	switch {
 	case err != nil:
-		log.Warn("Could not read destination directory", "dir", destDir, "error", err)
+		log.Warn("Could not read destination directory", "dir", destDir, logFieldError, err)
 	case len(files) == 0:
 		log.Warn("No files were extracted to destination directory", "dir", destDir, "totalLayers", len(layers), "successfulLayers", successfulLayers)
 	default:
@@ -136,7 +137,7 @@ func pullImage(ref name.Reference, atmosConfig *schema.AtmosConfiguration) (*rem
 
 	descriptor, err := remote.Get(ref, opts...)
 	if err != nil {
-		log.Error("Failed to pull OCI image", "image", ref.Name(), "error", err)
+		log.Error("Failed to pull OCI image", "image", ref.Name(), logFieldError, err)
 		return nil, fmt.Errorf("failed to pull image '%s': %w", ref.Name(), err)
 	}
 
@@ -259,7 +260,7 @@ func getRegistryAuth(registry string, atmosConfig *schema.AtmosConfiguration) (a
 
 // handleExtractionError handles extraction errors by attempting alternative extraction methods.
 func handleExtractionError(extractionErr error, layer v1.Layer, uncompressed io.ReadCloser, destDir string, index int, layerDesc v1.Hash) error {
-	log.Error("Layer extraction failed", logFieldIndex, index, logFieldDigest, layerDesc, "error", extractionErr)
+	log.Error("Layer extraction failed", logFieldIndex, index, logFieldDigest, layerDesc, logFieldError, extractionErr)
 
 	// Try alternative extraction methods for different formats
 	log.Debug("Attempting alternative extraction methods", logFieldIndex, index, logFieldDigest, layerDesc)
@@ -270,7 +271,7 @@ func handleExtractionError(extractionErr error, layer v1.Layer, uncompressed io.
 	}
 	uncompressed, err := layer.Uncompressed()
 	if err != nil {
-		log.Error("Failed to reset uncompressed reader", logFieldIndex, index, logFieldDigest, layerDesc, "error", err)
+		log.Error("Failed to reset uncompressed reader", logFieldIndex, index, logFieldDigest, layerDesc, logFieldError, err)
 		return fmt.Errorf("layer decompression error: %w", err)
 	}
 	defer func() {
@@ -281,7 +282,7 @@ func handleExtractionError(extractionErr error, layer v1.Layer, uncompressed io.
 
 	// Try to extract as raw data first
 	if err := extractRawData(uncompressed, destDir, index); err != nil {
-		log.Error("Raw data extraction also failed", logFieldIndex, index, logFieldDigest, layerDesc, "error", err)
+		log.Error("Raw data extraction also failed", logFieldIndex, index, logFieldDigest, layerDesc, logFieldError, err)
 
 		// If this is the first layer and it fails, it might be metadata
 		if index == 0 {
@@ -300,14 +301,14 @@ func handleExtractionError(extractionErr error, layer v1.Layer, uncompressed io.
 func processLayer(layer v1.Layer, index int, destDir string) error {
 	layerDesc, err := layer.Digest()
 	if err != nil {
-		log.Warn("Skipping layer with invalid digest", logFieldIndex, index, "error", err)
+		log.Warn("Skipping layer with invalid digest", logFieldIndex, index, logFieldError, err)
 		return nil
 	}
 
 	// Get layer size for debugging
 	size, err := layer.Size()
 	if err != nil {
-		log.Warn("Could not get layer size", logFieldIndex, index, logFieldDigest, layerDesc, "error", err)
+		log.Warn("Could not get layer size", logFieldIndex, index, logFieldDigest, layerDesc, logFieldError, err)
 	} else {
 		log.Debug("Processing layer", logFieldIndex, index, logFieldDigest, layerDesc, "size", size)
 	}
@@ -315,14 +316,14 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	// Get layer media type for debugging
 	mediaType, err := layer.MediaType()
 	if err != nil {
-		log.Warn("Could not get layer media type", logFieldIndex, index, logFieldDigest, layerDesc, "error", err)
+		log.Warn("Could not get layer media type", logFieldIndex, index, logFieldDigest, layerDesc, logFieldError, err)
 	} else {
 		log.Debug("Layer media type", logFieldIndex, index, logFieldDigest, layerDesc, "mediaType", mediaType)
 	}
 
 	uncompressed, err := layer.Uncompressed()
 	if err != nil {
-		log.Error("Layer decompression failed", logFieldIndex, index, logFieldDigest, layerDesc, "error", err)
+		log.Error("Layer decompression failed", logFieldIndex, index, logFieldDigest, layerDesc, logFieldError, err)
 		return fmt.Errorf("layer decompression error: %w", err)
 	}
 	defer func() {
@@ -530,7 +531,7 @@ func extractZipFile(reader io.Reader, destDir string) error {
 func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 	manifest, err := parseOCIManifest(bytes.NewReader(descriptor.Manifest))
 	if err != nil {
-		log.Error("Failed to parse OCI manifest", "image", imageName, "error", err)
+		log.Error("Failed to parse OCI manifest", "image", imageName, logFieldError, err)
 		return
 	}
 
