@@ -35,20 +35,20 @@ func TestSortResults(t *testing.T) {
 		},
 		{
 			name:      "empty results",
-			failed:    []TestResult{},
-			skipped:   []TestResult{},
-			passed:    []TestResult{},
+			failed:    []types.TestResult{},
+			skipped:   []types.TestResult{},
+			passed:    []types.TestResult{},
 			wantOrder: "empty",
 		},
 		{
 			name: "single items in each category",
-			failed: []TestResult{
+			failed: []types.TestResult{
 				{Test: "TestFailedOne", Duration: 0.5},
 			},
-			skipped: []TestResult{
+			skipped: []types.TestResult{
 				{Test: "TestSkippedOne", Duration: 0.3},
 			},
-			passed: []TestResult{
+			passed: []types.TestResult{
 				{Test: "TestPassedOne", Duration: 0.8},
 			},
 			wantOrder: "single items",
@@ -58,11 +58,11 @@ func TestSortResults(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Make copies to avoid modifying test data
-			failed := make([]TestResult, len(tt.failed))
+			failed := make([]types.TestResult, len(tt.failed))
 			copy(failed, tt.failed)
-			skipped := make([]TestResult, len(tt.skipped))
+			skipped := make([]types.TestResult, len(tt.skipped))
 			copy(skipped, tt.skipped)
-			passed := make([]TestResult, len(tt.passed))
+			passed := make([]types.TestResult, len(tt.passed))
 			copy(passed, tt.passed)
 
 			sortResults(&failed, &skipped, &passed)
@@ -101,7 +101,7 @@ func TestParseTestJSONEnhanced(t *testing.T) {
 		coverProfile string
 		excludeMocks bool
 		wantErr      bool
-		checkResult  func(*TestSummary) error
+		checkResult  func(*types.TestSummary) error
 	}{
 		{
 			name: "comprehensive test results with coverage",
@@ -112,7 +112,7 @@ func TestParseTestJSONEnhanced(t *testing.T) {
 			coverProfile: "",
 			excludeMocks: true,
 			wantErr:      false,
-			checkResult: func(summary *TestSummary) error {
+			checkResult: func(summary *types.TestSummary) error {
 				if len(summary.Passed) != 1 {
 					return fmt.Errorf("expected 1 passed test, got %d", len(summary.Passed))
 				}
@@ -136,7 +136,7 @@ invalid json line that should be skipped
 			coverProfile: "",
 			excludeMocks: true,
 			wantErr:      false,
-			checkResult: func(summary *TestSummary) error {
+			checkResult: func(summary *types.TestSummary) error {
 				if len(summary.Passed) != 1 {
 					return fmt.Errorf("expected 1 passed test despite malformed JSON, got %d", len(summary.Passed))
 				}
@@ -152,7 +152,7 @@ invalid json line that should be skipped
 			coverProfile: "test.out", // Use our test coverage file
 			excludeMocks: true,
 			wantErr:      false,
-			checkResult: func(summary *TestSummary) error {
+			checkResult: func(summary *types.TestSummary) error {
 				if summary.CoverageData == nil {
 					return fmt.Errorf("expected coverage data to be parsed")
 				}
@@ -168,7 +168,7 @@ invalid json line that should be skipped
 			coverProfile: "",
 			excludeMocks: true,
 			wantErr:      false,
-			checkResult: func(summary *TestSummary) error {
+			checkResult: func(summary *types.TestSummary) error {
 				if len(summary.Passed) != 0 || len(summary.Failed) != 0 || len(summary.Skipped) != 0 {
 					return fmt.Errorf("expected empty results for empty input")
 				}
@@ -181,16 +181,16 @@ invalid json line that should be skipped
 		t.Run(tt.name, func(t *testing.T) {
 			reader := strings.NewReader(tt.jsonInput)
 
-			summary, err := parseTestJSON(reader, tt.coverProfile, tt.excludeMocks)
+			summary, err := ParseTestJSON(reader, tt.coverProfile, tt.excludeMocks)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseTestJSON() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ParseTestJSON() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if !tt.wantErr && tt.checkResult != nil {
 				if checkErr := tt.checkResult(summary); checkErr != nil {
-					t.Errorf("parseTestJSON() result validation failed: %v", checkErr)
+					t.Errorf("ParseTestJSON() result validation failed: %v", checkErr)
 				}
 			}
 		})
@@ -233,7 +233,7 @@ func TestProcessLineEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tests := make(map[string]TestResult)
+			tests := make(map[string]types.TestResult)
 
 			result := processLine(tt.line, tests)
 

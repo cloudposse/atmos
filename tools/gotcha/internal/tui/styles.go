@@ -21,6 +21,9 @@ const (
 )
 
 var (
+	// Store the current renderer to ensure consistent style creation
+	currentRenderer *lipgloss.Renderer
+
 	// Test result styles.
 	PassStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
 	FailStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed))
@@ -44,20 +47,42 @@ var (
 	StatsHeaderStyle = lipgloss.NewStyle().Bold(true)
 )
 
+// SetRenderer sets the current renderer for style creation.
+func SetRenderer(r *lipgloss.Renderer) {
+	currentRenderer = r
+}
+
 // InitStyles reinitializes all styles after color profile is set.
 // This must be called after ConfigureColors() to ensure styles use the correct profile.
 func InitStyles() {
-	// Reinitialize all styles with the current color profile
-	PassStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
-	FailStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed))
-	SkipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAmber))
-	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray)) // Light gray for test names
-	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))  // Dark gray for durations
-	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
-	errorHeaderStyle = lipgloss.NewStyle().
-		SetString("ERROR").
-		Padding(0, 1, 0, 1).
-		Background(lipgloss.Color(colorDarkRed)).
-		Foreground(lipgloss.Color(colorWhite))
-	StatsHeaderStyle = lipgloss.NewStyle().Bold(true)
+	// Use the current renderer if available, otherwise use default NewStyle
+	if currentRenderer != nil {
+		// Create styles using the custom renderer
+		PassStyle = currentRenderer.NewStyle().Foreground(lipgloss.Color(colorGreen))
+		FailStyle = currentRenderer.NewStyle().Foreground(lipgloss.Color(colorRed))
+		SkipStyle = currentRenderer.NewStyle().Foreground(lipgloss.Color(colorAmber))
+		TestNameStyle = currentRenderer.NewStyle().Foreground(lipgloss.Color(colorLightGray))
+		DurationStyle = currentRenderer.NewStyle().Foreground(lipgloss.Color(colorDarkGray))
+		spinnerStyle = currentRenderer.NewStyle().Foreground(lipgloss.Color(colorBlue))
+		errorHeaderStyle = currentRenderer.NewStyle().
+			SetString("ERROR").
+			Padding(0, 1, 0, 1).
+			Background(lipgloss.Color(colorDarkRed)).
+			Foreground(lipgloss.Color(colorWhite))
+		StatsHeaderStyle = currentRenderer.NewStyle().Bold(true)
+	} else {
+		// Fallback to default style creation
+		PassStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
+		FailStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed))
+		SkipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAmber))
+		TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray))
+		DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))
+		spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
+		errorHeaderStyle = lipgloss.NewStyle().
+			SetString("ERROR").
+			Padding(0, 1, 0, 1).
+			Background(lipgloss.Color(colorDarkRed)).
+			Foreground(lipgloss.Color(colorWhite))
+		StatsHeaderStyle = lipgloss.NewStyle().Bold(true)
+	}
 }

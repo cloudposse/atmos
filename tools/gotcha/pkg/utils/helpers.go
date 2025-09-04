@@ -384,8 +384,15 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			}
 
 			// Display parent test with subtest summary in line
+			// Use pass style if all subtests passed, fail style otherwise
+			var statusIcon string
+			if percentage == 100 && len(stats.failed) == 0 {
+				statusIcon = tui.PassStyle.Render(tui.CheckPass)
+			} else {
+				statusIcon = tui.FailStyle.Render(tui.CheckFail)
+			}
 			fmt.Fprintf(os.Stderr, " %s %s %s %s %d%% passed\n",
-				tui.FailStyle.Render(tui.CheckFail),
+				statusIcon,
 				tui.TestNameStyle.Render(event.Test),
 				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
 				miniProgress,

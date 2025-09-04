@@ -184,17 +184,12 @@ func Execute() error {
 	}
 
 	// Configure colors for lipgloss based on environment (GitHub Actions, CI, etc.)
-	tui.ConfigureColors()
-	// Initialize styles after configuring colors to ensure proper color mapping
-	tui.InitStyles()
 
 	// Initialize global logger before any other operations
 	initGlobalLogger()
 
 	// Configure colors again and set logger color profile
 	profile := tui.ConfigureColors()
-	// Reinitialize styles after reconfiguring colors
-	tui.InitStyles()
 	if globalLogger != nil {
 		globalLogger.SetColorProfile(profile)
 		globalLogger.Debug("Color profile configured",
@@ -208,8 +203,6 @@ func Execute() error {
 		}
 	}
 
-	// Reinitialize styles after color profile is set
-	tui.InitStyles()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -261,7 +254,6 @@ step summaries and markdown reports.`,
 				if viper.GetBool("no_color") {
 					// Reconfigure colors when flag is set
 					tui.ConfigureColors()
-					tui.InitStyles()
 				}
 			}
 
@@ -521,6 +513,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	logger.Info("Test package discovery completed", "packages", len(testPackages))
 
 	// Check if we have a TTY for interactive mode
+	logger.Debug("TTY detection", "is_tty", utils.IsTTY())
 	if utils.IsTTY() {
 		// Create and run the Bubble Tea program
 		model := tui.NewTestModel(testPackages, testArgsStr, outputFile, coverprofile, show, alert)

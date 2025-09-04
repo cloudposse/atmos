@@ -28,7 +28,13 @@ func detectColorProfile() termenv.Profile {
 	_ = viper.BindEnv("DRONE")
 
 	// Check if colors are explicitly disabled via --no-color flag or NO_COLOR env
-	if viper.GetBool("no_color") || viper.GetString("NO_COLOR") != "" {
+	noColorFlag := viper.GetBool("no_color")
+	noColorEnv := viper.GetString("NO_COLOR")
+	// NO_COLOR should only disable colors if it's set to a truthy value
+	// The standard says any non-empty value disables colors, but some tools set it to "false" to enable colors
+	// We'll treat "false", "0", and empty string as NOT disabling colors
+	noColorSet := noColorEnv != "" && noColorEnv != "false" && noColorEnv != "0"
+	if noColorFlag || noColorSet {
 		return termenv.Ascii
 	}
 
@@ -81,7 +87,13 @@ func detectColorProfile() termenv.Profile {
 // ConfigureColors sets up the color profile for terminal output.
 func ConfigureColors() termenv.Profile {
 	profile := detectColorProfile()
+	
+	// Set the color profile for lipgloss
+	// This works even when output is piped, unlike custom renderers
 	lipgloss.SetColorProfile(profile)
+	
+	// Clear any custom renderer to use the global profile
+	SetRenderer(nil)
 
 	// Reinitialize styles with the new color profile
 	InitStyles()

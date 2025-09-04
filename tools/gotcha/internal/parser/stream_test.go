@@ -84,10 +84,10 @@ func TestShouldShowErrorLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldShowErrorLine(tt.line)
+			got := ShouldShowErrorLine(tt.line)
 
 			if got != tt.want {
-				t.Errorf("shouldShowErrorLine(%q) = %v, want %v", tt.line, got, tt.want)
+				t.Errorf("ShouldShowErrorLine(%q) = %v, want %v", tt.line, got, tt.want)
 			}
 		})
 	}
@@ -112,8 +112,8 @@ func TestShouldShowErrorLineEdgeCases(t *testing.T) {
 
 	for _, line := range errorLines {
 		t.Run("error_line_"+line, func(t *testing.T) {
-			if !shouldShowErrorLine(line) {
-				t.Errorf("shouldShowErrorLine(%q) should return true for error line", line)
+			if !ShouldShowErrorLine(line) {
+				t.Errorf("ShouldShowErrorLine(%q) should return true for error line", line)
 			}
 		})
 	}
@@ -128,8 +128,8 @@ func TestShouldShowErrorLineEdgeCases(t *testing.T) {
 
 	for _, line := range normalLines {
 		t.Run("normal_line_"+line, func(t *testing.T) {
-			if shouldShowErrorLine(line) {
-				t.Errorf("shouldShowErrorLine(%q) should return false for normal line", line)
+			if ShouldShowErrorLine(line) {
+				t.Errorf("ShouldShowErrorLine(%q) should return false for normal line", line)
 			}
 		})
 	}

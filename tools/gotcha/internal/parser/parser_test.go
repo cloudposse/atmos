@@ -3,6 +3,7 @@ package parser
 import (
 	"reflect"
 	"strings"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"testing"
 )
 
@@ -10,16 +11,16 @@ func TestProcessLine(t *testing.T) {
 	tests := []struct {
 		name           string
 		line           string
-		initialTests   map[string]TestResult
+		initialTests   map[string]types.TestResult
 		expectedOutput string
-		expectedTests  map[string]TestResult
+		expectedTests  map[string]types.TestResult
 	}{
 		{
 			name:           "valid test pass event",
 			line:           `{"Time":"2024-01-01T00:00:00Z","Action":"pass","Package":"github.com/test/pkg","Test":"TestExample","Elapsed":0.5}`,
-			initialTests:   make(map[string]TestResult),
+			initialTests:   make(map[string]types.TestResult),
 			expectedOutput: "",
-			expectedTests: map[string]TestResult{
+			expectedTests: map[string]types.TestResult{
 				"github.com/test/pkg.TestExample": {
 					Package:  "github.com/test/pkg",
 					Test:     "TestExample",
@@ -31,9 +32,9 @@ func TestProcessLine(t *testing.T) {
 		{
 			name:           "valid test fail event",
 			line:           `{"Time":"2024-01-01T00:00:00Z","Action":"fail","Package":"github.com/test/pkg","Test":"TestFailing","Elapsed":1.2}`,
-			initialTests:   make(map[string]TestResult),
+			initialTests:   make(map[string]types.TestResult),
 			expectedOutput: "",
-			expectedTests: map[string]TestResult{
+			expectedTests: map[string]types.TestResult{
 				"github.com/test/pkg.TestFailing": {
 					Package:  "github.com/test/pkg",
 					Test:     "TestFailing",
@@ -45,30 +46,30 @@ func TestProcessLine(t *testing.T) {
 		{
 			name:           "coverage output line",
 			line:           `{"Time":"2024-01-01T00:00:00Z","Action":"output","Package":"github.com/test/pkg","Output":"coverage: 75.5% of statements\n"}`,
-			initialTests:   make(map[string]TestResult),
+			initialTests:   make(map[string]types.TestResult),
 			expectedOutput: "75.5%",
-			expectedTests:  make(map[string]TestResult),
+			expectedTests:  make(map[string]types.TestResult),
 		},
 		{
 			name:           "regular output line",
 			line:           `{"Time":"2024-01-01T00:00:00Z","Action":"output","Package":"github.com/test/pkg","Test":"TestExample","Output":"=== RUN   TestExample\n"}`,
-			initialTests:   make(map[string]TestResult),
+			initialTests:   make(map[string]types.TestResult),
 			expectedOutput: "",
-			expectedTests:  make(map[string]TestResult),
+			expectedTests:  make(map[string]types.TestResult),
 		},
 		{
 			name:           "invalid JSON",
 			line:           `invalid json line`,
-			initialTests:   make(map[string]TestResult),
+			initialTests:   make(map[string]types.TestResult),
 			expectedOutput: "",
-			expectedTests:  make(map[string]TestResult),
+			expectedTests:  make(map[string]types.TestResult),
 		},
 		{
 			name:           "empty line",
 			line:           "",
-			initialTests:   make(map[string]TestResult),
+			initialTests:   make(map[string]types.TestResult),
 			expectedOutput: "",
-			expectedTests:  make(map[string]TestResult),
+			expectedTests:  make(map[string]types.TestResult),
 		},
 	}
 
@@ -143,20 +144,20 @@ func TestExtractCoverage(t *testing.T) {
 func TestRecordTestResult(t *testing.T) {
 	tests := []struct {
 		name         string
-		event        *TestEvent
-		initialTests map[string]TestResult
-		want         map[string]TestResult
+		event        *types.TestEvent
+		initialTests map[string]types.TestResult
+		want         map[string]types.TestResult
 	}{
 		{
 			name: "record pass event",
-			event: &TestEvent{
+			event: &types.TestEvent{
 				Action:  "pass",
 				Package: "github.com/test/pkg",
 				Test:    "TestExample",
 				Elapsed: 0.5,
 			},
-			initialTests: make(map[string]TestResult),
-			want: map[string]TestResult{
+			initialTests: make(map[string]types.TestResult),
+			want: map[string]types.TestResult{
 				"github.com/test/pkg.TestExample": {
 					Package:  "github.com/test/pkg",
 					Test:     "TestExample",
@@ -167,14 +168,14 @@ func TestRecordTestResult(t *testing.T) {
 		},
 		{
 			name: "record fail event",
-			event: &TestEvent{
+			event: &types.TestEvent{
 				Action:  "fail",
 				Package: "github.com/test/pkg",
 				Test:    "TestFailing",
 				Elapsed: 1.2,
 			},
-			initialTests: make(map[string]TestResult),
-			want: map[string]TestResult{
+			initialTests: make(map[string]types.TestResult),
+			want: map[string]types.TestResult{
 				"github.com/test/pkg.TestFailing": {
 					Package:  "github.com/test/pkg",
 					Test:     "TestFailing",
@@ -185,13 +186,13 @@ func TestRecordTestResult(t *testing.T) {
 		},
 		{
 			name: "record skip event",
-			event: &TestEvent{
+			event: &types.TestEvent{
 				Action:  "skip",
 				Package: "github.com/test/pkg",
 				Test:    "TestSkipped",
 			},
-			initialTests: make(map[string]TestResult),
-			want: map[string]TestResult{
+			initialTests: make(map[string]types.TestResult),
+			want: map[string]types.TestResult{
 				"github.com/test/pkg.TestSkipped": {
 					Package:  "github.com/test/pkg",
 					Test:     "TestSkipped",
@@ -202,13 +203,13 @@ func TestRecordTestResult(t *testing.T) {
 		},
 		{
 			name: "update existing test result",
-			event: &TestEvent{
+			event: &types.TestEvent{
 				Action:  "pass",
 				Package: "github.com/test/pkg",
 				Test:    "TestExample",
 				Elapsed: 0.8,
 			},
-			initialTests: map[string]TestResult{
+			initialTests: map[string]types.TestResult{
 				"github.com/test/pkg.TestExample": {
 					Package:  "github.com/test/pkg",
 					Test:     "TestExample",
@@ -216,7 +217,7 @@ func TestRecordTestResult(t *testing.T) {
 					Duration: 0,
 				},
 			},
-			want: map[string]TestResult{
+			want: map[string]types.TestResult{
 				"github.com/test/pkg.TestExample": {
 					Package:  "github.com/test/pkg",
 					Test:     "TestExample",
@@ -227,13 +228,13 @@ func TestRecordTestResult(t *testing.T) {
 		},
 		{
 			name: "ignore non-final actions",
-			event: &TestEvent{
+			event: &types.TestEvent{
 				Action:  "run",
 				Package: "github.com/test/pkg",
 				Test:    "TestExample",
 			},
-			initialTests: make(map[string]TestResult),
-			want: map[string]TestResult{
+			initialTests: make(map[string]types.TestResult),
+			want: map[string]types.TestResult{
 				"github.com/test/pkg.TestExample": {
 					Package:  "github.com/test/pkg",
 					Test:     "TestExample",
@@ -310,21 +311,21 @@ invalid json line
 		t.Run(tt.name, func(t *testing.T) {
 			reader := strings.NewReader(tt.jsonInput)
 
-			got, err := parseTestJSON(reader, tt.coverProfile, tt.excludeMocks)
+			got, err := ParseTestJSON(reader, tt.coverProfile, tt.excludeMocks)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseTestJSON() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ParseTestJSON() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if tt.checkCounts {
 				if len(got.Passed) != tt.expectPassed {
-					t.Errorf("parseTestJSON() passed count = %d, want %d", len(got.Passed), tt.expectPassed)
+					t.Errorf("ParseTestJSON() passed count = %d, want %d", len(got.Passed), tt.expectPassed)
 				}
 				if len(got.Failed) != tt.expectFailed {
-					t.Errorf("parseTestJSON() failed count = %d, want %d", len(got.Failed), tt.expectFailed)
+					t.Errorf("ParseTestJSON() failed count = %d, want %d", len(got.Failed), tt.expectFailed)
 				}
 				if len(got.Skipped) != tt.expectSkipped {
-					t.Errorf("parseTestJSON() skipped count = %d, want %d", len(got.Skipped), tt.expectSkipped)
+					t.Errorf("ParseTestJSON() skipped count = %d, want %d", len(got.Skipped), tt.expectSkipped)
 				}
 			}
 		})
