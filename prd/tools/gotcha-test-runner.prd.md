@@ -161,7 +161,7 @@ The visual hierarchy MUST follow these strict requirements to ensure optimal rea
    - Format: `▶ github.com/cloudposse/atmos/tools/gotcha/internal/parser`
    - Purpose: Clear visual separation between packages in multi-package test runs
    - Display: Shows when entering a new package context
-   - No tests indication: Shows `No tests` in gray when package has no test files
+   - No tests indication: Shows `No tests` in gray when package has no runnable tests
 
 5. **Subtest Summary** (Inline with Parent Test)
    - Format: `[X/Y passed]` where X is passed subtests, Y is total subtests
@@ -406,24 +406,31 @@ filter:
   - **Format**: `▶ github.com/cloudposse/atmos/tools/gotcha/pkg/utils`
   - **Styling**: Blue bold text using `PackageHeaderStyle`
   - **Display**: Shows when a new package starts being tested
-- **No tests indication**: Show "No tests" for packages without test files
+- **No tests indication**: Show "No tests" for packages without runnable tests
   - **Format**: Gray text saying "No tests"
   - **Detection mechanisms**:
-    1. **Skip events**: Triggered by `skip` action for package-level events (standard case)
-    2. **Coverage mode**: When `[no test files]` output detected followed by `pass` event (occurs with `coverprofile`)
-  - **Implementation**: Track packages with `[no test files]` in output, display "No tests" on skip or pass events
+    1. **Skip events**: Package-level `skip` action (typically for packages with no test files)
+    2. **No test files marker**: `[no test files]` in output followed by package `pass` event (occurs with `coverprofile`)
+    3. **No runnable tests**: Package `pass` event with no `run` events (test files exist but no test functions)
+  - **Implementation details**:
+    - Track packages with `[no test files]` in output via `packagesWithNoTests` map
+    - Track if package had any test `run` events via `packageHasTests` map (initialized to false on `start`)
+    - Use `packageNoTestsPrinted` map to prevent duplicate "No tests" messages
+    - For out-of-order events: Display "No tests for <package>" when message appears under wrong package
+  - **Parallel execution handling**: When packages run in parallel, events may interleave requiring special handling
   - **Styling**: Uses `DurationStyle` for subtle gray appearance
-  - **Important**: Do NOT attempt to detect "empty" packages by counting tests, as events may arrive out of order
+  - **Important**: Do NOT attempt to detect by counting completed tests, as events arrive asynchronously
 
 #### TUI Mode Display
 - **Package headers**: Display package name at start of package testing
   - **Format**: Same as stream mode with arrow indicator
   - **Event handling**: Detects `start` action with empty Test field
   - **State tracking**: Uses `currentPackage` field to avoid duplicates
-- **No tests indication**: Shows when package has no test files
-  - **Event detection**: Same detection as stream mode (skip events and `[no test files]` with pass)
-  - **Display location**: After package header
-  - **Visual consistency**: Matches stream mode styling and detection logic
+- **No tests indication**: Shows when package has no runnable tests
+  - **Event detection**: Identical to stream mode (all three detection mechanisms)
+  - **Implementation**: Uses same maps (`packagesWithNoTests`, `packageHasTests`, `packageNoTestsPrinted`)
+  - **Display location**: After package header or when pass event arrives out of order
+  - **Visual consistency**: Matches stream mode styling, detection logic, and parallel handling
 - **Progress bar**: Real-time test completion percentage
 - **Spinner animation**: Visual feedback during test execution
 - **Test status updates**: Live pass/fail/skip counts
