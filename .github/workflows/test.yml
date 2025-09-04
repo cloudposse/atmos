@@ -186,12 +186,6 @@ jobs:
           go-version-file: "go.mod"
         id: go
 
-      - name: Configure Go environment
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: |
-          # Ensure GOPATH/bin is in PATH for go install binaries
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |

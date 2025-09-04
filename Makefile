@@ -67,9 +67,12 @@ testacc-cover: get
 testacc-coverage: testacc-cover
 	go tool cover -html=coverage.out -o coverage.html
 
+# Build and install gotcha tool
+tools/gotcha:
+	@$(MAKE) -C tools/gotcha install
+
 # Test target for CI with gotcha
-testacc-ci: get
-	go install -C tools/gotcha .
+testacc-ci: get tools/gotcha
 	$$(go env GOPATH)/bin/gotcha stream ./... \
 		--show=all \
 		--timeout=40m \
@@ -82,4 +85,4 @@ testacc-ci: get
 clean-test:
 	rm -f test-results.json test-summary.md coverage.out coverage.html
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-ci clean-test
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-ci tools/gotcha clean-test
