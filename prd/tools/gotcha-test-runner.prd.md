@@ -168,10 +168,14 @@ Where:
 - **Unicode symbols**: ✔ (pass), ✘ (fail), ⊘ (skip)
 - **Progress indicators**: Animated spinners and progress bars
 - **Mini progress indicators**: Visual subtest progress using colored dots on parent test lines
-  - Format: `[●●●●●]` with proportional colored dots based on pass/fail ratio
+  - Format: `[●●●●●]` with actual number of dots matching subtest count (up to 10 max)
   - Green dots (●) represent passed subtests, red dots (●) represent failed subtests
-  - Display on parent test lines with subtests: `✘ TestName (0.00s) [●●●●●] 40% passed`
-  - Show 5 dots total, proportionally distributed based on subtest results
+  - Display on parent test lines with subtests: `✘ TestName (0.00s) [●●●●] 25% passed`
+  - Shows 1 dot per subtest for up to 10 subtests
+  - For >10 subtests, scales proportionally to 10 dots maximum for readability
+  - Example: 4 subtests with 1 pass, 3 fail shows `[●●●●]` (1 green, 3 red)
+  - Example: 10 subtests with 7 pass, 3 fail shows `[●●●●●●●●●●]` (7 green, 3 red)
+  - Example: 20 subtests with 10 pass, 10 fail shows `[●●●●●●●●●●]` (5 green, 5 red, scaled)
   - Update when parent test completes with final subtest statistics
   - Uses ANSI color codes via Lipgloss styles for terminal compatibility
 - **Test result styling**: Color-coded output with consistent formatting

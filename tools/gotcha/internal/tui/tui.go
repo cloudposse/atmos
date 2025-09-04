@@ -821,39 +821,26 @@ func (m *TestModel) GetExitCode() int {
 
 // generateSubtestProgress creates a visual progress indicator for subtest results.
 func (m *TestModel) generateSubtestProgress(passed, total int) string {
-	const totalDots = 5
+	const maxDots = 10 // Maximum number of dots to show for readability
 	
 	if total == 0 {
-		return "[○○○○○]"
+		return "[]"
+	}
+	
+	// Determine how many dots to show (actual count up to maxDots)
+	dotsToShow := total
+	if dotsToShow > maxDots {
+		dotsToShow = maxDots
 	}
 	
 	// Calculate how many dots for passed vs failed
-	// We'll show dots proportionally: green for passed, red for failed
-	passedDots := 0
-	failedDots := 0
+	passedDots := passed
+	failedDots := total - passed
 	
-	if total > 0 {
-		// Calculate proportional dots
-		passedDots = (passed * totalDots) / total
-		failedDots = ((total - passed) * totalDots) / total
-		
-		// Ensure we always show totalDots (handle rounding)
-		totalShown := passedDots + failedDots
-		if totalShown < totalDots {
-			// Add remainder to failed if there are failures, otherwise to passed
-			if total > passed {
-				failedDots += (totalDots - totalShown)
-			} else {
-				passedDots += (totalDots - totalShown)
-			}
-		} else if totalShown > totalDots {
-			// Remove excess from failed first
-			if failedDots > 0 {
-				failedDots--
-			} else {
-				passedDots--
-			}
-		}
+	// If we need to scale down to maxDots, do it proportionally
+	if total > maxDots {
+		passedDots = (passed * maxDots) / total
+		failedDots = maxDots - passedDots
 	}
 	
 	// Build the indicator with colored dots
