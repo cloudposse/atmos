@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -10,28 +11,82 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	"github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	log "github.com/charmbracelet/log"
 	"github.com/google/go-containerregistry/pkg/authn"
 )
+
+var (
+	// Static errors for ECR authentication
+	errInvalidECRRegistryFormat   = errors.New("invalid ECR registry format")
+	errCouldNotParseECRAccount    = errors.New("could not parse ECR account/region")
+	errFailedToGetECRAuthToken    = errors.New("failed to get ECR authorization token")
+	errNoECRAuthorizationData     = errors.New("no authorization data returned from ECR")
+	errEmptyECRAuthorizationToken = errors.New("empty ECR authorization token")
+	errFailedToDecodeECRAuthToken = errors.New("failed to decode ECR authorization token")
+	errInvalidECRAuthTokenFormat  = errors.New("invalid ECR authorization token format")
+	errFailedToLoadAWSConfig      = errors.New("failed to load AWS config")
+)
+
+// parseECRRegistry parses ECR registry string and extracts account ID and region.
+func parseECRRegistry(registry string) (accountID, region string, err error) {
+	re := regexp.MustCompile(`^(?P<acct>\d{12})\.dkr\.(?P<svc>ecr(?:-fips)?)\.(?P<region>[a-z0-9-]+)\.amazonaws\.com(?:\.cn)?$`)
+	m := re.FindStringSubmatch(registry)
+	if m == nil {
+		return "", "", fmt.Errorf("%w: %s", errInvalidECRRegistryFormat, registry)
+	}
+
+	accountID = m[re.SubexpIndex("acct")]
+	region = m[re.SubexpIndex("region")]
+
+	if accountID == "" || region == "" {
+		return "", "", fmt.Errorf("%w from %s", errCouldNotParseECRAccount, registry)
+	}
+
+	return accountID, region, nil
+}
+
+// getECRAuthToken retrieves the authorization token from ECR.
+func getECRAuthToken(ctx context.Context, ecrClient *ecr.Client, accountID string) (*types.AuthorizationData, error) {
+	authTokenInput := &ecr.GetAuthorizationTokenInput{
+		RegistryIds: []string{accountID},
+	}
+	authTokenOutput, err := ecrClient.GetAuthorizationToken(ctx, authTokenInput)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errFailedToGetECRAuthToken, err)
+	}
+	if len(authTokenOutput.AuthorizationData) == 0 {
+		return nil, errNoECRAuthorizationData
+	}
+	return &authTokenOutput.AuthorizationData[0], nil
+}
+
+// parseECRCredentials decodes and parses the ECR authorization token.
+func parseECRCredentials(authData *types.AuthorizationData, registry string) (username, password string, err error) {
+	if authData.AuthorizationToken == nil {
+		return "", "", fmt.Errorf("%w for %s", errEmptyECRAuthorizationToken, registry)
+	}
+
+	token, err := base64.StdEncoding.DecodeString(*authData.AuthorizationToken)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: %w", errFailedToDecodeECRAuthToken, err)
+	}
+
+	parts := strings.SplitN(string(token), ":", 2)
+	if len(parts) != 2 {
+		return "", "", errInvalidECRAuthTokenFormat
+	}
+
+	return parts[0], parts[1], nil
+}
 
 // getECRAuth attempts to get AWS ECR authentication using AWS credentials
 // Supports SSO/role providers by not gating on environment variables
 // Supports both standard ECR and FIPS endpoints.
 func getECRAuth(registry string) (authn.Authenticator, error) {
-	// Use regex to match both standard and FIPS ECR endpoints
-	// Supports: <account>.dkr.ecr.<region>.amazonaws.com[.cn]
-	// Supports: <account>.dkr.ecr-fips.<region>.amazonaws.com[.cn]
-	re := regexp.MustCompile(`^(?P<acct>\d{12})\.dkr\.(?P<svc>ecr(?:-fips)?)\.(?P<region>[a-z0-9-]+)\.amazonaws\.com(?:\.cn)?$`)
-	m := re.FindStringSubmatch(registry)
-	if m == nil {
-		return nil, fmt.Errorf("invalid ECR registry format: %s", registry)
-	}
-
-	accountID := m[re.SubexpIndex("acct")]
-	region := m[re.SubexpIndex("region")]
-
-	if accountID == "" || region == "" {
-		return nil, fmt.Errorf("could not parse ECR account/region from %s", registry)
+	accountID, region, err := parseECRRegistry(registry)
+	if err != nil {
+		return nil, err
 	}
 
 	log.Debug("Extracted ECR registry info", "registry", registry, "accountID", accountID, "region", region)
@@ -43,50 +98,21 @@ func getECRAuth(registry string) (authn.Authenticator, error) {
 	// Load AWS config for the target region
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, fmt.Errorf("%w: %w", errFailedToLoadAWSConfig, err)
 	}
 	ecrClient := ecr.NewFromConfig(cfg)
 
-	// Get ECR authorization token for the target account
-	authTokenInput := &ecr.GetAuthorizationTokenInput{
-		RegistryIds: []string{accountID},
-	}
-	authTokenOutput, err := ecrClient.GetAuthorizationToken(ctx, authTokenInput)
+	// Get ECR authorization token
+	authData, err := getECRAuthToken(ctx, ecrClient, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ECR authorization token: %w", err)
-	}
-	if len(authTokenOutput.AuthorizationData) == 0 {
-		return nil, fmt.Errorf("no authorization data returned from ECR")
+		return nil, err
 	}
 
-	// Prefer the entry whose ProxyEndpoint matches the target registry
-	authData := authTokenOutput.AuthorizationData[0]
-	for i := range authTokenOutput.AuthorizationData {
-		ad := authTokenOutput.AuthorizationData[i]
-		if ad.ProxyEndpoint != nil && strings.Contains(*ad.ProxyEndpoint, registry) {
-			authData = ad
-			break
-		}
-	}
-
-	// Nil-safe token decoding
-	if authData.AuthorizationToken == nil {
-		return nil, fmt.Errorf("empty ECR authorization token for %s", registry)
-	}
-
-	token, err := base64.StdEncoding.DecodeString(*authData.AuthorizationToken)
+	// Parse credentials from token
+	username, password, err := parseECRCredentials(authData, registry)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode ECR authorization token: %w", err)
+		return nil, err
 	}
-
-	// Parse username:password from token
-	parts := strings.SplitN(string(token), ":", 2)
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid ECR authorization token format")
-	}
-
-	username := parts[0]
-	password := parts[1]
 
 	log.Debug("Successfully obtained ECR credentials", "registry", registry, "accountID", accountID, "region", region)
 

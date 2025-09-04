@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,11 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+var (
+	// Static errors for GitHub authentication
+	errNoGitHubAuthenticationFound = errors.New("no GitHub authentication found for registry")
 )
 
 // getGitHubAuth attempts to get GitHub Container Registry authentication.
@@ -33,5 +39,5 @@ func getGitHubAuth(registry string, atmosConfig *schema.AtmosConfiguration) (aut
 		}
 	}
 
-	return nil, fmt.Errorf("no GitHub authentication found for registry %s", registry)
+	return nil, fmt.Errorf("%w %s", errNoGitHubAuthenticationFound, registry)
 }

@@ -65,11 +65,9 @@ func TestGetRegistryAuth(t *testing.T) {
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
-			} else {
+			} else if err != nil {
 				// Authentication might fail due to missing credentials, but should not panic
-				if err != nil {
-					t.Logf("Authentication failed as expected: %v", err)
-				}
+				t.Logf("Authentication failed as expected: %v", err)
 			}
 		})
 	}
@@ -123,11 +121,9 @@ func TestCloudProviderAuth(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-			} else {
+			} else if err != nil {
 				// Authentication might fail due to missing credentials, but should not panic
-				if err != nil {
-					t.Logf("Authentication failed as expected: %v", err)
-				}
+				t.Logf("Authentication failed as expected: %v", err)
 			}
 		})
 	}

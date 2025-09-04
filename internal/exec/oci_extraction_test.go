@@ -13,6 +13,60 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// runZipExtractionTest is a helper function to run ZIP extraction tests.
+func runZipExtractionTest(t *testing.T, zipContent map[string]string, expectError bool, errorMsg string) {
+	tempDir := t.TempDir()
+
+	// Create a ZIP file in memory
+	var buf bytes.Buffer
+	zipWriter := zip.NewWriter(&buf)
+
+	for filename, content := range zipContent {
+		writer, err := zipWriter.Create(filename)
+		require.NoError(t, err)
+		_, err = writer.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	zipWriter.Close()
+
+	// Test extraction
+	reader := bytes.NewReader(buf.Bytes())
+	err := extractZipFile(reader, tempDir)
+
+	if expectError {
+		assert.Error(t, err)
+		if errorMsg != "" {
+			assert.Contains(t, err.Error(), errorMsg)
+		}
+	} else {
+		assert.NoError(t, err)
+
+		// Check that files were extracted
+		for filename, expectedContent := range zipContent {
+			filePath := filepath.Join(tempDir, filename)
+			assert.FileExists(t, filePath)
+
+			content, err := os.ReadFile(filePath)
+			assert.NoError(t, err)
+			assert.Equal(t, expectedContent, string(content))
+		}
+	}
+}
+
+// runZipExtractionTestSuite runs a complete test suite for ZIP extraction.
+func runZipExtractionTestSuite(t *testing.T, tests []struct {
+	name        string
+	zipContent  map[string]string
+	expectError bool
+	errorMsg    string
+}) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runZipExtractionTest(t, tt.zipContent, tt.expectError, tt.errorMsg)
+		})
+	}
+}
+
 // TestExtractZipFile tests ZIP file extraction functionality.
 func TestExtractZipFile(t *testing.T) {
 	tests := []struct {
@@ -62,46 +116,7 @@ func TestExtractZipFile(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-
-			// Create a ZIP file in memory
-			var buf bytes.Buffer
-			zipWriter := zip.NewWriter(&buf)
-
-			for filename, content := range tt.zipContent {
-				writer, err := zipWriter.Create(filename)
-				require.NoError(t, err)
-				_, err = writer.Write([]byte(content))
-				require.NoError(t, err)
-			}
-			zipWriter.Close()
-
-			// Test extraction
-			reader := bytes.NewReader(buf.Bytes())
-			err := extractZipFile(reader, tempDir)
-
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.errorMsg != "" {
-					assert.Contains(t, err.Error(), tt.errorMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-
-				// Check that files were extracted
-				for filename, expectedContent := range tt.zipContent {
-					filePath := filepath.Join(tempDir, filename)
-					assert.FileExists(t, filePath)
-
-					content, err := os.ReadFile(filePath)
-					assert.NoError(t, err)
-					assert.Equal(t, expectedContent, string(content))
-				}
-			}
-		})
-	}
+	runZipExtractionTestSuite(t, tests)
 }
 
 // TestExtractZipFileZipSlip tests ZIP slip vulnerability protection.
@@ -145,46 +160,7 @@ func TestExtractZipFileZipSlip(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-
-			// Create a ZIP file in memory
-			var buf bytes.Buffer
-			zipWriter := zip.NewWriter(&buf)
-
-			for filename, content := range tt.zipContent {
-				writer, err := zipWriter.Create(filename)
-				require.NoError(t, err)
-				_, err = writer.Write([]byte(content))
-				require.NoError(t, err)
-			}
-			zipWriter.Close()
-
-			// Test extraction
-			reader := bytes.NewReader(buf.Bytes())
-			err := extractZipFile(reader, tempDir)
-
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.errorMsg != "" {
-					assert.Contains(t, err.Error(), tt.errorMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-
-				// Check that files were extracted safely
-				for filename, expectedContent := range tt.zipContent {
-					filePath := filepath.Join(tempDir, filename)
-					assert.FileExists(t, filePath)
-
-					content, err := os.ReadFile(filePath)
-					assert.NoError(t, err)
-					assert.Equal(t, expectedContent, string(content))
-				}
-			}
-		})
-	}
+	runZipExtractionTestSuite(t, tests)
 }
 
 // TestExtractZipFileSymlinks tests ZIP file extraction with symlink handling.
@@ -299,18 +275,19 @@ func TestExtractRawData(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-
-				// Check that the file was created
-				expectedFile := filepath.Join(tempDir, fmt.Sprintf("layer_%d_raw", tt.layerIndex))
-				assert.FileExists(t, expectedFile)
-
-				// Check file content
-				content, err := os.ReadFile(expectedFile)
-				assert.NoError(t, err)
-				assert.Equal(t, tt.data, string(content))
+				return
 			}
+
+			assert.NoError(t, err)
+
+			// Check that the file was created
+			expectedFile := filepath.Join(tempDir, fmt.Sprintf("layer_%d_raw", tt.layerIndex))
+			assert.FileExists(t, expectedFile)
+
+			// Check file content
+			content, err := os.ReadFile(expectedFile)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.data, string(content))
 		})
 	}
 }
