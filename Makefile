@@ -67,22 +67,25 @@ testacc-cover: get
 testacc-coverage: testacc-cover
 	go tool cover -html=coverage.out -o coverage.html
 
-# Build and install gotcha tool
-tools/gotcha:
+# The actual gotcha binary path
+GOTCHA_BIN := $(shell go env GOPATH)/bin/gotcha
+
+# Build and install gotcha tool - depends on actual binary file
+$(GOTCHA_BIN):
 	@$(MAKE) -C tools/gotcha install
 
 # Test target for CI with gotcha
-testacc-ci: get tools/gotcha
-	$$(go env GOPATH)/bin/gotcha stream ./... \
+testacc-ci: get $(GOTCHA_BIN)
+	$(GOTCHA_BIN) stream ./... \
 		--show=all \
 		--timeout=40m \
 		--coverprofile=coverage.out \
 		--output=test-results.json \
 		-- -coverpkg=github.com/cloudposse/atmos/... $(TESTARGS)
-	$$(go env GOPATH)/bin/gotcha parse test-results.json --format=github --coverprofile=coverage.out --post-comment
+	$(GOTCHA_BIN) parse test-results.json --format=github --coverprofile=coverage.out --post-comment
 
 # Clean test artifacts
 clean-test:
 	rm -f test-results.json test-summary.md coverage.out coverage.html
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-ci tools/gotcha clean-test
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-ci clean-test
