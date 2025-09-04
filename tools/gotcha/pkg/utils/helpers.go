@@ -209,6 +209,8 @@ type StreamProcessor struct {
 	currentTest    string // Track current test for package-level output
 	currentPackage string // Track current package being tested
 	packagesWithNoTests map[string]bool // Track packages that have no test files
+	packageHasTests map[string]bool // Track if package had any test run events
+	packageNoTestsPrinted map[string]bool // Track if we already printed "No tests" for a package
 	// Statistics tracking
 	passed  int
 	failed  int
@@ -244,6 +246,8 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		buffers:      make(map[string][]string),
 		subtestStats: make(map[string]*SubtestStats),
 		packagesWithNoTests: make(map[string]bool),
+		packageHasTests: make(map[string]bool),
+		packageNoTestsPrinted: make(map[string]bool),
 		jsonWriter:   jsonFile,
 		showFilter:   showFilter,
 		startTime:    time.Now(),
@@ -309,14 +313,19 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			// Check if this is a new package
 			if p.currentPackage != event.Package {
 				p.currentPackage = event.Package
+				// Initialize tracking for this package
+				p.packageHasTests[event.Package] = false
 				// Print package header with arrow and styled package name
 				fmt.Fprintf(os.Stderr, "\n▶ %s\n\n", 
 					tui.PackageHeaderStyle.Render(event.Package))
 			}
 		} else if event.Action == "skip" && event.Package != "" && event.Test == "" {
 			// Package was skipped (usually means no test files)
-			fmt.Fprintf(os.Stderr, "  %s\n", 
-				tui.DurationStyle.Render("No tests"))
+			if !p.packageNoTestsPrinted[event.Package] {
+				fmt.Fprintf(os.Stderr, "  %s\n", 
+					tui.DurationStyle.Render("No tests"))
+				p.packageNoTestsPrinted[event.Package] = true
+			}
 		} else if event.Action == "output" && event.Package != "" && event.Test == "" {
 			// Check for "no test files" message in output
 			if strings.Contains(event.Output, "[no test files]") {
@@ -324,10 +333,33 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				p.packagesWithNoTests[event.Package] = true
 			}
 		} else if event.Action == "pass" && event.Package != "" && event.Test == "" {
-			// When a package passes with coverage but had no test files, show "No tests"
-			if p.packagesWithNoTests[event.Package] {
-				fmt.Fprintf(os.Stderr, "  %s\n", 
-					tui.DurationStyle.Render("No tests"))
+			// When a package passes, check if we need to show "No tests"
+			if !p.packageNoTestsPrinted[event.Package] {
+				if p.packagesWithNoTests[event.Package] {
+					// Package had "[no test files]" in output
+					// If this isn't the current package, we need to show which package this is for
+					if p.currentPackage != event.Package {
+						fmt.Fprintf(os.Stderr, "\n  %s for %s\n", 
+							tui.DurationStyle.Render("No tests"),
+							tui.PackageHeaderStyle.Render(event.Package))
+					} else {
+						fmt.Fprintf(os.Stderr, "  %s\n", 
+							tui.DurationStyle.Render("No tests"))
+					}
+					p.packageNoTestsPrinted[event.Package] = true
+				} else if hasTests, exists := p.packageHasTests[event.Package]; exists && !hasTests {
+					// Package passed but no tests were run
+					// If this isn't the current package, we need to show which package this is for
+					if p.currentPackage != event.Package {
+						fmt.Fprintf(os.Stderr, "\n  %s for %s\n", 
+							tui.DurationStyle.Render("No tests"),
+							tui.PackageHeaderStyle.Render(event.Package))
+					} else {
+						fmt.Fprintf(os.Stderr, "  %s\n", 
+							tui.DurationStyle.Render("No tests"))
+					}
+					p.packageNoTestsPrinted[event.Package] = true
+				}
 			}
 		} else if event.Action == "output" && p.currentTest != "" {
 			// Package-level output might contain important command output
@@ -337,6 +369,11 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			}
 		}
 		return
+	}
+
+	// Mark that this package has tests
+	if event.Package != "" && event.Test != "" {
+		p.packageHasTests[event.Package] = true
 	}
 
 	switch event.Action {

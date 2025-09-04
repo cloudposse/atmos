@@ -118,6 +118,7 @@ type TestModel struct {
 	currentTest    string
 	currentPackage string // Current package being tested
 	packagesWithNoTests map[string]bool // Track packages that have "[no test files]" in output
+	packageHasTests map[string]bool // Track if package had any test run events
 	width          int
 	height         int
 	done           bool
@@ -234,6 +235,7 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		subtestOutputs: make(map[string][]string),
 		subtestStats:   make(map[string]*SubtestStats),
 		packagesWithNoTests: make(map[string]bool),
+		packageHasTests: make(map[string]bool),
 		totalTests:     0, // Will be incremented by "run" events
 		completedTests: 0, // Will be incremented by pass/fail/skip events
 		startTime:      time.Now(),
@@ -396,17 +398,33 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case "pass":
 				// When a package passes with coverage but had no test files, show "No tests"
-				if event.Package != "" && m.packagesWithNoTests[event.Package] {
-					noTestsMsg := fmt.Sprintf("  %s\n", 
-						DurationStyle.Render("No tests"))
-					return m, tea.Batch(
-						tea.Printf("%s", noTestsMsg),
-						nextCmd,
-						m.spinner.Tick,
-					)
+				if event.Package != "" {
+					if m.packagesWithNoTests[event.Package] {
+						noTestsMsg := fmt.Sprintf("  %s\n", 
+							DurationStyle.Render("No tests"))
+						return m, tea.Batch(
+							tea.Printf("%s", noTestsMsg),
+							nextCmd,
+							m.spinner.Tick,
+						)
+					} else if !m.packageHasTests[event.Package] {
+						// Package passed but no tests were run (e.g., all tests filtered out or no test functions)
+						noTestsMsg := fmt.Sprintf("  %s\n", 
+							DurationStyle.Render("No tests"))
+						return m, tea.Batch(
+							tea.Printf("%s", noTestsMsg),
+							nextCmd,
+							m.spinner.Tick,
+						)
+					}
 				}
 			}
 			return m, tea.Batch(nextCmd, m.spinner.Tick) // Continue reading
+		}
+
+		// Mark that this package has tests
+		if event.Package != "" && event.Test != "" {
+			m.packageHasTests[event.Package] = true
 		}
 
 		switch event.Action {
