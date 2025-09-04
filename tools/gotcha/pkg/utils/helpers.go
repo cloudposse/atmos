@@ -156,7 +156,7 @@ func EmitAlert(enabled bool) {
 func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool) int {
 	// Configure colors and initialize styles for stream mode
 	profile := tui.ConfigureColors()
-	
+
 	// Debug: Log the detected color profile in CI
 	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 		logger.GetLogger().Debug("Color profile detected", "profile", tui.ProfileName(profile), "CI", os.Getenv("CI"), "GITHUB_ACTIONS", os.Getenv("GITHUB_ACTIONS"))
