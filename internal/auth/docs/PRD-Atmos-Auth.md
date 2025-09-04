@@ -95,6 +95,9 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Components can override providers defined in atmos.yaml
   - Component-level auth configuration takes precedence
   - Merged configuration is validated at runtime
+  - Component-level default identity overrides global default identity
+  - Default identity resolution considers merged configuration
+  - Component overrides work even when no global default is set
 - **Priority**: P0 (Must Have)
 
 #### FR-008: Component Description Enhancement
@@ -115,6 +118,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Environment variables are set before Terraform execution
   - Variables are available to Terraform and other tools
   - Support for case-sensitive environment variable names
+  - Environment variables must be merged into component environment section
+  - Component environment section takes precedence over process environment
 - **Priority**: P0 (Must Have)
 
 #### FR-010: AWS Credentials and Config File Management
@@ -127,6 +132,35 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Credential files are written during Terraform prehook
   - User's existing AWS files remain unmodified
   - Provider-specific isolation prevents credential conflicts
+  - AWS file environment variables must be injected into component environment section
+  - Environment variables must be available to Terraform execution
+- **Priority**: P0 (Must Have)
+
+#### FR-011: SSO Device Authorization Flow
+
+- **Description**: Robust AWS SSO device authorization with proper polling
+- **Acceptance Criteria**:
+  - Implement proper polling mechanism for device authorization
+  - Handle AuthorizationPendingException correctly
+  - Handle SlowDownException with exponential backoff
+  - Provide user feedback during polling process
+  - Support configurable timeout and retry logic
+  - Graceful error handling for terminal errors
+  - Use AWS SDK v2 error type checking instead of string matching
+  - Automatic browser opening when possible
+- **Priority**: P0 (Must Have)
+
+#### FR-012: Credential Store Keyring Integration
+
+- **Description**: Secure credential storage without listing capability dependency
+- **Acceptance Criteria**:
+  - Store credentials securely in system keyring
+  - Retrieve credentials by identity alias
+  - Check credential expiration without listing all credentials
+  - Whoami functionality works without keyring listing capability
+  - Iterate through configured identities to find active sessions
+  - Handle keyring backend limitations gracefully
+  - Find most recent valid credentials across all configured identities
 - **Priority**: P0 (Must Have)
 
 ### 2.2 Non-Functional Requirements
@@ -1354,6 +1388,8 @@ type ComponentAuthConfig struct {
   - _Mitigation_: Version provider APIs, implement adapter patterns
 - **Credential compromise**: Cached credentials could be exposed
   - _Mitigation_: Strong encryption, automatic cleanup, monitoring
+- **Environment variable injection failures**: Component environment not properly updated
+  - _Mitigation_: Comprehensive testing, validation of environment merging, fallback mechanisms
 
 #### Medium Risk
 
@@ -1361,11 +1397,17 @@ type ComponentAuthConfig struct {
   - _Mitigation_: Caching, parallel processing, performance monitoring
 - **Complex debugging**: Multi-provider chains may be hard to troubleshoot
   - _Mitigation_: Comprehensive logging, debugging tools, clear error messages
+- **SSO polling failures**: Device authorization flow may fail or timeout
+  - _Mitigation_: Robust error handling, proper AWS SDK error types, user feedback
+- **Keyring limitations**: System keyring may not support all required operations
+  - _Mitigation_: Alternative storage backends, graceful degradation, iteration-based approaches
 
 #### Low Risk
 
 - **Configuration complexity**: Users may misconfigure auth settings
   - _Mitigation_: Schema validation, good defaults, clear documentation
+- **Component override conflicts**: Component-level auth config may conflict with global config
+  - _Mitigation_: Clear precedence rules, validation, comprehensive testing
 
 ### 11.2 Business Risks
 

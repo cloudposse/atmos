@@ -38,9 +38,45 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	configMerger := config.NewConfigMerger()
 	validator := validation.NewValidator()
 
-	// Create auth manager
+	// Merge component auth config with global auth config
+	mergedAuthConfig := &atmosConfig.Auth
+	if stackInfo != nil && stackInfo.ComponentIdentitiesSection != nil {
+		// Convert ComponentIdentitiesSection to ComponentAuthConfig
+		componentConfig := &schema.ComponentAuthConfig{
+			Identities: make(map[string]schema.Identity),
+		}
+		
+		// Parse component identities
+		for name, identityData := range stackInfo.ComponentIdentitiesSection {
+			if identityMap, ok := identityData.(map[string]interface{}); ok {
+				// Start with global identity if it exists
+				identity := schema.Identity{}
+				if globalIdentity, exists := atmosConfig.Auth.Identities[name]; exists {
+					identity = globalIdentity
+				}
+				
+				// Apply component overrides
+				if defaultVal, exists := identityMap["default"]; exists {
+					if defaultBool, ok := defaultVal.(bool); ok {
+						identity.Default = defaultBool
+					}
+				}
+				
+				componentConfig.Identities[name] = identity
+			}
+		}
+		
+		// Merge configurations
+		var err error
+		mergedAuthConfig, err = configMerger.MergeAuthConfig(&atmosConfig.Auth, componentConfig)
+		if err != nil {
+			return fmt.Errorf("failed to merge component auth config: %w", err)
+		}
+	}
+
+	// Create auth manager with merged config
 	authManager, err := NewAuthManager(
-		&atmosConfig.Auth,
+		mergedAuthConfig,
 		credStore,
 		awsFileManager,
 		configMerger,
