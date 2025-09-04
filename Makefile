@@ -67,8 +67,12 @@ testacc-cover: get
 testacc-coverage: testacc-cover
 	go tool cover -html=coverage.out -o coverage.html
 
-# The actual gotcha binary path
+# The actual gotcha binary path (cross-platform)
+ifeq ($(OS),Windows_NT)
+GOTCHA_BIN := $(shell go env GOPATH)\bin\gotcha.exe
+else
 GOTCHA_BIN := $(shell go env GOPATH)/bin/gotcha
+endif
 
 # Build and install gotcha tool - depends on actual binary file
 $(GOTCHA_BIN):
