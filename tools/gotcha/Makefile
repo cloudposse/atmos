@@ -18,7 +18,7 @@ mod-download:
 build-default: mod-download
 	@echo "Building gotcha to $(BUILD_DIR)/$(BINARY_NAME)"
 	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) -v ./
+	go build -o $(BUILD_DIR)/$(BINARY_NAME) -v ./cmd/gotcha
 
 # Install to GOPATH/bin
 install: build-default
