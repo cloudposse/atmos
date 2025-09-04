@@ -70,13 +70,13 @@ testacc-coverage: testacc-cover
 # Test target for CI with gotcha
 testacc-ci: get
 	go install -C tools/gotcha .
-	$$(go env GOPATH)/bin/gotcha stream ./... \
+	gotcha stream ./... \
 		--show=all \
 		--timeout=40m \
 		--coverprofile=coverage.out \
 		--output=test-results.json \
 		-- -coverpkg=github.com/cloudposse/atmos/... $(TESTARGS)
-	$$(go env GOPATH)/bin/gotcha parse test-results.json --format=github --coverprofile=coverage.out --post-comment
+	gotcha parse test-results.json --format=github --coverprofile=coverage.out --post-comment
 
 # Clean test artifacts
 clean-test:
