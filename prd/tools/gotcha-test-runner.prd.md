@@ -161,6 +161,7 @@ The visual hierarchy MUST follow these strict requirements to ensure optimal rea
    - Format: `▶ github.com/cloudposse/atmos/tools/gotcha/internal/parser`
    - Purpose: Clear visual separation between packages in multi-package test runs
    - Display: Shows when entering a new package context
+   - No tests indication: Shows `No tests` in gray when package has no test files
 
 5. **Subtest Summary** (Inline with Parent Test)
    - Format: `[X/Y passed]` where X is passed subtests, Y is total subtests
@@ -207,6 +208,16 @@ Where:
 - **Detailed breakdown**: Display comprehensive subtest results for failed parent tests
 
 #### Display Formats
+
+##### Package Headers
+```
+▶ github.com/cloudposse/atmos/tools/gotcha/internal/parser
+
+▶ github.com/cloudposse/atmos/tools/gotcha/pkg/constants
+  No tests
+
+▶ github.com/cloudposse/atmos/tools/gotcha/pkg/utils
+```
 
 ##### Successful Parent Test with All Subtests Passing
 ```
@@ -580,7 +591,7 @@ Existing tools failed to provide:
 - ✅ **Performance**: Tool completes processing within reasonable time limits
 - ✅ **Accessibility**: Output readable in various terminal configurations
 - ✅ **Subtest visualization**: Tests with subtests display inline summary `[X/Y passed]` and detailed breakdown on failure
-- ✅ **Package delineation**: Clear visual separation between test packages with styled headers
+- ✅ **Package delineation**: Clear visual separation between test packages with styled headers and "No tests" indication for empty packages
 
 ### Configuration Management
 - ✅ **YAML config**: `.gotcha.yaml` files loaded and applied correctly

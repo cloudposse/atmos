@@ -310,6 +310,10 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				fmt.Fprintf(os.Stderr, "\n▶ %s\n\n", 
 					tui.PackageHeaderStyle.Render(event.Package))
 			}
+		} else if event.Action == "skip" && event.Package != "" {
+			// Package was skipped (usually means no test files)
+			fmt.Fprintf(os.Stderr, "  %s\n", 
+				tui.DurationStyle.Render("No tests"))
 		} else if event.Action == "output" && p.currentTest != "" {
 			// Package-level output might contain important command output
 			// Append package-level output to the current test's buffer
