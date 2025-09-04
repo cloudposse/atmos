@@ -167,11 +167,13 @@ Where:
 #### Visual Elements
 - **Unicode symbols**: ✔ (pass), ✘ (fail), ⊘ (skip)
 - **Progress indicators**: Animated spinners and progress bars
-- **Mini progress indicators**: Visual test progress using filled/unfilled dots (●○) format
-  - Format: `[●●●○○]` where ● represents completed tests and ○ represents pending tests
-  - Display alongside test execution for quick visual progress feedback
-  - Update in real-time as tests complete
-  - Show 5 dots total, with each dot representing 20% of test completion
+- **Mini progress indicators**: Visual subtest progress using colored dots on parent test lines
+  - Format: `[●●●●●]` with proportional colored dots based on pass/fail ratio
+  - Green dots (●) represent passed subtests, red dots (●) represent failed subtests
+  - Display on parent test lines with subtests: `✘ TestName (0.00s) [●●●●●] 40% passed`
+  - Show 5 dots total, proportionally distributed based on subtest results
+  - Update when parent test completes with final subtest statistics
+  - Uses ANSI color codes via Lipgloss styles for terminal compatibility
 - **Test result styling**: Color-coded output with consistent formatting
 - **Error highlighting**: High-contrast error displays with background colors
 - **Subtest visualization**: Inline summary with detailed breakdown on failure

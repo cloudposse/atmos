@@ -827,25 +827,49 @@ func (m *TestModel) generateSubtestProgress(passed, total int) string {
 		return "[○○○○○]"
 	}
 	
-	// Calculate progress percentage
-	progress := float64(passed) / float64(total)
-	if progress > 1.0 {
-		progress = 1.0
-	}
+	// Calculate how many dots for passed vs failed
+	// We'll show dots proportionally: green for passed, red for failed
+	passedDots := 0
+	failedDots := 0
 	
-	// Calculate how many dots should be filled
-	filledDots := int(progress * float64(totalDots))
-	
-	// Build the indicator
-	var indicator strings.Builder
-	indicator.WriteString("[")
-	for i := 0; i < totalDots; i++ {
-		if i < filledDots {
-			indicator.WriteString("●")
-		} else {
-			indicator.WriteString("○")
+	if total > 0 {
+		// Calculate proportional dots
+		passedDots = (passed * totalDots) / total
+		failedDots = ((total - passed) * totalDots) / total
+		
+		// Ensure we always show totalDots (handle rounding)
+		totalShown := passedDots + failedDots
+		if totalShown < totalDots {
+			// Add remainder to failed if there are failures, otherwise to passed
+			if total > passed {
+				failedDots += (totalDots - totalShown)
+			} else {
+				passedDots += (totalDots - totalShown)
+			}
+		} else if totalShown > totalDots {
+			// Remove excess from failed first
+			if failedDots > 0 {
+				failedDots--
+			} else {
+				passedDots--
+			}
 		}
 	}
+	
+	// Build the indicator with colored dots
+	var indicator strings.Builder
+	indicator.WriteString("[")
+	
+	// Add green dots for passed tests
+	for i := 0; i < passedDots; i++ {
+		indicator.WriteString(PassStyle.Render("●"))
+	}
+	
+	// Add red dots for failed tests
+	for i := 0; i < failedDots; i++ {
+		indicator.WriteString(FailStyle.Render("●"))
+	}
+	
 	indicator.WriteString("]")
 	
 	return indicator.String()
