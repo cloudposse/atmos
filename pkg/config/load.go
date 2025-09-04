@@ -306,14 +306,14 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	allSettings := tempViper.AllSettings()
 	yamlBytes, err := yaml.Marshal(allSettings)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config to YAML: %w", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedMarshalConfigToYaml, err)
 	}
 
 	// Merge the YAML content into the main Viper instance
 	v.SetConfigFile(configFilePath)
 	err = v.MergeConfig(strings.NewReader(string(yamlBytes)))
 	if err != nil {
-		return fmt.Errorf("failed to merge config: %w", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrMerge, err)
 	}
 
 	return nil
