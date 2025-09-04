@@ -75,6 +75,7 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - `atmos auth env` to export credentials
   - `atmos auth exec` to run commands under identity
   - `atmos auth validate` for configuration validation
+  - `atmos auth user configure` for interactive user credential setup
 - **Priority**: P0 (Must Have)
 
 #### FR-006: Terraform Integration
@@ -162,6 +163,22 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Handle keyring backend limitations gracefully
   - Find most recent valid credentials across all configured identities
 - **Priority**: P0 (Must Have)
+
+#### FR-013: Interactive User Credential Configuration
+
+- **Description**: Interactive configuration of AWS user credentials with secure storage
+- **Acceptance Criteria**:
+  - `atmos auth user configure` command available
+  - Use Charm Bracelet's huh library for interactive selection
+  - Present selector to choose from configured AWS user identity types
+  - Prompt for AWS access key ID, secret access key, and optional MFA ARN
+  - Store credentials securely in system keyring using go-keyring package
+  - Credentials stored per identity with unique keyring keys
+  - AWS user provider retrieves credentials from keyring when not specified in spec
+  - Spec-based credentials take precedence over keyring-stored credentials
+  - Support for updating existing stored credentials
+  - Clear error messages for keyring access failures
+- **Priority**: P1 (Should Have)
 
 ### 2.2 Non-Functional Requirements
 
@@ -286,7 +303,7 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 **Scenario**:
 
 1. SSO system is down during incident
-2. SRE uses break-glass AWS user credentials
+2. SRE uses break-glass AWS user credentials stored in keyring
 3. SRE gains emergency access to critical systems
 4. All actions are logged for post-incident review
 
@@ -295,6 +312,28 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 - Reliable access when federated systems fail
 - Enhanced logging for break-glass usage
 - Time-limited emergency access
+- Secure credential storage in system keyring
+
+#### UC-007: Interactive User Credential Setup
+
+**Actor**: DevOps Engineer  
+**Goal**: Configure AWS user credentials for break-glass access  
+**Scenario**:
+
+1. Engineer runs `atmos auth user configure`
+2. System presents interactive selector of configured AWS user identities
+3. Engineer selects target identity (e.g., "emergency-admin")
+4. System prompts for AWS access key ID, secret access key, and optional MFA ARN
+5. Credentials are securely stored in system keyring
+6. Engineer can now use the identity for authentication
+
+**Acceptance Criteria**:
+
+- Intuitive interactive interface using Charm Bracelet's huh library
+- Secure storage of credentials in system keyring
+- Support for updating existing credentials
+- Clear feedback on successful configuration
+- Graceful error handling for keyring access issues
 
 #### UC-005: Terraform Workflow with Auto-Authentication
 
@@ -603,10 +642,20 @@ identities:
   emergency:
     kind: aws/user
     spec:
+      # Credentials can be specified in spec (takes precedence)
       access_key_id: !env AWS_EMERGENCY_ACCESS_KEY_ID
       secret_access_key: !env AWS_EMERGENCY_SECRET_ACCESS_KEY
       region: us-east-1
     alias: emergency
+
+  # Alternative: credentials retrieved from keyring when not in spec
+  emergency-keyring:
+    kind: aws/user
+    spec:
+      region: us-east-1
+      # access_key_id and secret_access_key retrieved from keyring
+      # Configure with: atmos auth user configure
+    alias: emergency-keyring
 ```
 
 #### Azure Role

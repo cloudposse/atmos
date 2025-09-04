@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cloudposse/atmos/internal/auth/authstore"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -40,22 +41,55 @@ func (p *userProvider) Kind() string {
 
 // Authenticate performs AWS user authentication (returns static credentials)
 func (p *userProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
-	// For user providers, credentials are typically stored in keyring
-	// This is a placeholder - actual implementation would retrieve from secure storage
+	var accessKeyID, secretAccessKey, sessionToken string
 	
-	// Get credentials from spec or environment
-	accessKeyID, ok := p.config.Spec["access_key_id"].(string)
-	if !ok || accessKeyID == "" {
-		return nil, fmt.Errorf("access_key_id is required in provider spec")
+	// Try to get credentials from spec first (takes precedence)
+	if specAccessKeyID, ok := p.config.Spec["access_key_id"].(string); ok && specAccessKeyID != "" {
+		accessKeyID = specAccessKeyID
 	}
-
-	secretAccessKey, ok := p.config.Spec["secret_access_key"].(string)
-	if !ok || secretAccessKey == "" {
-		return nil, fmt.Errorf("secret_access_key is required in provider spec")
+	
+	if specSecretAccessKey, ok := p.config.Spec["secret_access_key"].(string); ok && specSecretAccessKey != "" {
+		secretAccessKey = specSecretAccessKey
 	}
-
-	// Session token is optional
-	sessionToken, _ := p.config.Spec["session_token"].(string)
+	
+	// Session token is optional from spec
+	sessionToken, _ = p.config.Spec["session_token"].(string)
+	
+	// If credentials not in spec, try to retrieve from keyring
+	if accessKeyID == "" || secretAccessKey == "" {
+		// Get identity name from provider name (assumes format provider/identity)
+		// This will be passed from the auth manager when we know the identity
+		// For now, we'll construct the alias based on provider name
+		alias := fmt.Sprintf("%s/default", p.name) // Fallback alias
+		
+		store := authstore.NewKeyringAuthStore()
+		type userSecret struct {
+			AccessKeyID     string    `json:"access_key_id"`
+			SecretAccessKey string    `json:"secret_access_key"`
+			MfaArn          string    `json:"mfa_arn,omitempty"`
+			LastUpdated     time.Time `json:"last_updated"`
+		}
+		
+		var secret userSecret
+		err := store.GetAny(alias, &secret)
+		if err == nil {
+			if accessKeyID == "" {
+				accessKeyID = secret.AccessKeyID
+			}
+			if secretAccessKey == "" {
+				secretAccessKey = secret.SecretAccessKey
+			}
+		}
+	}
+	
+	// Validate that we have required credentials
+	if accessKeyID == "" {
+		return nil, fmt.Errorf("access_key_id is required in provider spec or keyring")
+	}
+	
+	if secretAccessKey == "" {
+		return nil, fmt.Errorf("secret_access_key is required in provider spec or keyring")
+	}
 
 	// User credentials don't typically expire, but we set a far future date
 	expiration := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
@@ -73,20 +107,11 @@ func (p *userProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 
 // Validate validates the provider configuration
 func (p *userProvider) Validate() error {
-	if p.config.Spec == nil {
-		return fmt.Errorf("spec is required")
-	}
-	
-	accessKeyID, ok := p.config.Spec["access_key_id"].(string)
-	if !ok || accessKeyID == "" {
-		return fmt.Errorf("access_key_id is required in spec")
-	}
-	
-	secretAccessKey, ok := p.config.Spec["secret_access_key"].(string)
-	if !ok || secretAccessKey == "" {
-		return fmt.Errorf("secret_access_key is required in spec")
-	}
-	
+	// For AWS user providers, credentials can come from either:
+	// 1. Spec configuration (takes precedence)
+	// 2. Keyring storage (configured via atmos auth user configure)
+	// At validation time, we only require that the provider is properly configured
+	// Actual credential validation happens during authentication
 	return nil
 }
 
