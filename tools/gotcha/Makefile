@@ -10,12 +10,8 @@ INSTALL_PATH := $(GOPATH)/bin
 # Default target
 build: build-default
 
-# Download dependencies
-get:
-	@go get
-
 # Build the gotcha binary
-build-default: get
+build-default:
 	@echo "Building gotcha to $(BUILD_DIR)/$(BINARY_NAME)"
 	@mkdir -p $(BUILD_DIR)
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) -v ./
@@ -34,12 +30,12 @@ uninstall:
 	@echo "Removed $(INSTALL_PATH)/$(BINARY_NAME)"
 
 # Run tests
-test: get
+test:
 	@echo "Running tests"
 	go test ./...
 
 # Lint only changed files from origin/main
-lint: get
+lint:
 	golangci-lint run --new-from-rev=origin/main
 
 # Format code with gofumpt
@@ -54,4 +50,4 @@ clean: uninstall
 	rm -f test-summary.md
 	rm -f *.out coverage.html
 
-.PHONY: build get build-default install uninstall test lint fmt clean
+.PHONY: build build-default install uninstall test lint fmt clean
