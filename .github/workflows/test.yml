@@ -214,28 +214,6 @@ jobs:
           detached: true
         timeout-minutes: 15
 
-      - name: Debug Information
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: |
-          echo "=== Debug Information ==="
-          echo "Runner OS: ${{ runner.os }}"
-          echo "Matrix Target: ${{ matrix.flavor.target }}"
-          echo "Go Version: $(go version)"
-          echo "GOPATH: $(go env GOPATH)"
-          echo "GOBIN: $(go env GOBIN)"
-          echo "GOPATH/bin: $(go env GOPATH)/bin"
-          echo "Working Directory: $(pwd)"
-          echo "PATH: $PATH"
-          echo ""
-          echo "=== PATH contains GOPATH/bin? ==="
-          echo "$PATH" | grep -q "$(go env GOPATH)/bin" && echo "YES: GOPATH/bin is in PATH" || echo "NO: GOPATH/bin is NOT in PATH"
-          echo ""
-          echo "=== Binary locations ==="
-          which atmos || echo "atmos not in PATH"
-          atmos version || echo "Failed to run atmos version"
-          which gotcha || echo "gotcha not in PATH (will be installed by make testacc-ci)"
-          echo "========================"
-
       - name: Acceptance tests
         timeout-minutes: 30
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
