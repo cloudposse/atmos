@@ -9,8 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/internal/auth/authstore"
-	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -50,11 +48,7 @@ type assumeRoleCache struct {
 
 // Authenticate performs authentication using assume role
 func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
-	// Check cache first
-	if creds := i.checkCache(); creds != nil {
-		log.Debug("Using cached assume role credentials", "identity", i.name, "accessKeyId", creds.AWS.AccessKeyID[:10]+"...")
-		return creds, nil
-	}
+	// Note: Caching is now handled at the manager level to prevent duplicates
 
 	if baseCreds == nil || baseCreds.AWS == nil {
 		return nil, fmt.Errorf("base AWS credentials are required")
@@ -128,9 +122,7 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 		},
 	}
 
-	// Cache the credentials
-	i.cacheCredentials(creds, expirationTime)
-
+	// Note: Caching handled at manager level
 	return creds, nil
 }
 
@@ -165,12 +157,12 @@ func (i *assumeRoleIdentity) Merge(component *schema.Identity) types.Identity {
 	merged := &assumeRoleIdentity{
 		name: i.name,
 		config: &schema.Identity{
-			Kind:        i.config.Kind,
-			Default:     component.Default, // Component can override default
-			Via:         i.config.Via,
-			Spec:        make(map[string]interface{}),
-			Alias:       i.config.Alias,
-			Env: i.config.Env,
+			Kind:    i.config.Kind,
+			Default: component.Default, // Component can override default
+			Via:     i.config.Via,
+			Spec:    make(map[string]interface{}),
+			Alias:   i.config.Alias,
+			Env:     i.config.Env,
 		},
 	}
 
@@ -193,56 +185,7 @@ func (i *assumeRoleIdentity) Merge(component *schema.Identity) types.Identity {
 	return merged
 }
 
-// checkCache checks for valid cached assume role credentials
-func (i *assumeRoleIdentity) checkCache() *schema.Credentials {
-	store := authstore.NewKeyringAuthStore()
-	cacheKey := fmt.Sprintf(credentials.KeyringService, i.Kind(), i.getProviderName(), i.name)
-
-	var cache assumeRoleCache
-	if err := store.GetAny(cacheKey, &cache); err != nil {
-		log.Debug("No cache or error reading cache", "identity", i.name, "error", err)
-		return nil // No cache or error reading cache
-	}
-	log.Debug("Found cache", "identity", i.name)
-
-	// Check if cache is expired (with 5 minute buffer)
-	if time.Now().Add(5 * time.Minute).After(cache.Expiration) {
-		// Cache expired, remove it
-		store.Delete(cacheKey)
-		return nil
-	}
-
-	return &schema.Credentials{
-		AWS: &schema.AWSCredentials{
-			AccessKeyID:     cache.AccessKeyID,
-			SecretAccessKey: cache.SecretAccessKey,
-			SessionToken:    cache.SessionToken,
-			Region:          cache.Region,
-			Expiration:      cache.Expiration.Format(time.RFC3339),
-		},
-	}
-}
-
-// cacheCredentials stores assume role credentials in keyring
-func (i *assumeRoleIdentity) cacheCredentials(creds *schema.Credentials, expiration time.Time) {
-	cacheKey := fmt.Sprintf(credentials.KeyringService, i.Kind(), i.getProviderName(), i.name)
-	store := authstore.NewKeyringAuthStore()
-
-	cache := assumeRoleCache{
-		AccessKeyID:     creds.AWS.AccessKeyID,
-		SecretAccessKey: creds.AWS.SecretAccessKey,
-		SessionToken:    creds.AWS.SessionToken,
-		Region:          creds.AWS.Region,
-		Expiration:      expiration,
-		LastUpdated:     time.Now(),
-	}
-
-	log.Debug("Caching assume role credentials", "key", cacheKey)
-	if err := store.SetAny(cacheKey, cache); err != nil {
-		// Don't fail authentication if caching fails, just log
-		log.Warn("Failed to cache assume role credentials", "error", err)
-	}
-}
+// Note: Caching is now handled at the manager level to prevent duplicate entries
 
 // getProviderName extracts the provider name from the identity configuration
 func (i *assumeRoleIdentity) getProviderName() string {

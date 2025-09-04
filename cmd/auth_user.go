@@ -7,10 +7,10 @@ import (
 	"github.com/charmbracelet/huh"
 	log "github.com/charmbracelet/log"
 
-	"github.com/cloudposse/atmos/internal/auth/authstore"
+	"github.com/cloudposse/atmos/internal/auth/credentials"
+	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -86,7 +86,7 @@ var authUserConfigureCmd = &cobra.Command{
 		}
 
 		// Save to keyring using generic store
-		store := authstore.NewKeyringAuthStore()
+		store := credentials.NewKeyringAuthStore()
 		type userSecret struct {
 			AccessKeyID     string    `json:"access_key_id"`
 			SecretAccessKey string    `json:"secret_access_key"`

@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	KeyringService = "atmos-auth/%s/%s/%s"
+	KeyringService       = "atmos-auth/%s/%s/%s"
+	KeyringServiceHeader = "atmos-auth"
 )
 
 // keyringStore implements the CredentialStore interface using the system keyring
@@ -30,7 +31,7 @@ func (s *keyringStore) Store(alias string, creds *schema.Credentials) error {
 		return fmt.Errorf("failed to marshal credentials: %w", err)
 	}
 
-	if err := keyring.Set(KeyringService, alias, string(data)); err != nil {
+	if err := keyring.Set(alias, KeyringServiceHeader, string(data)); err != nil {
 		return fmt.Errorf("failed to store credentials in keyring: %w", err)
 	}
 
@@ -39,7 +40,7 @@ func (s *keyringStore) Store(alias string, creds *schema.Credentials) error {
 
 // Retrieve retrieves credentials for the given alias
 func (s *keyringStore) Retrieve(alias string) (*schema.Credentials, error) {
-	data, err := keyring.Get(KeyringService, alias)
+	data, err := keyring.Get(alias, KeyringServiceHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve credentials from keyring: %w", err)
 	}
@@ -54,7 +55,7 @@ func (s *keyringStore) Retrieve(alias string) (*schema.Credentials, error) {
 
 // Delete deletes credentials for the given alias
 func (s *keyringStore) Delete(alias string) error {
-	if err := keyring.Delete(KeyringService, alias); err != nil {
+	if err := keyring.Delete(alias, KeyringServiceHeader); err != nil {
 		return fmt.Errorf("failed to delete credentials from keyring: %w", err)
 	}
 
@@ -105,4 +106,37 @@ func (s *keyringStore) IsExpired(alias string) (bool, error) {
 
 	// If no expiration info, assume not expired
 	return false, nil
+}
+
+// GetAny retrieves and unmarshals any type from the keyring
+func (s *keyringStore) GetAny(key string, dest interface{}) error {
+	data, err := keyring.Get(key, KeyringServiceHeader)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve data from keyring: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(data), dest); err != nil {
+		return fmt.Errorf("failed to unmarshal data: %w", err)
+	}
+
+	return nil
+}
+
+// SetAny marshals and stores any type in the keyring
+func (s *keyringStore) SetAny(key string, value interface{}) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data: %w", err)
+	}
+
+	if err := keyring.Set(key, KeyringServiceHeader, string(data)); err != nil {
+		return fmt.Errorf("failed to store data in keyring: %w", err)
+	}
+
+	return nil
+}
+
+// NewKeyringAuthStore creates a new keyring-based auth store (for backward compatibility)
+func NewKeyringAuthStore() *keyringStore {
+	return &keyringStore{}
 }

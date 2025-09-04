@@ -167,7 +167,29 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Find most recent valid credentials across all configured identities
 - **Priority**: P0 (Must Have)
 
-#### FR-015: SSO Credential Caching
+#### FR-015: Hierarchical Credential Caching
+
+- **Description**: Implement chain-based credential caching that optimizes authentication across identity hierarchies
+- **Acceptance Criteria**:
+  - **Chain Discovery**: Auth manager calculates complete identity chain from target identity to root provider
+  - **Bottom-Up Validation**: Check cached credentials starting from target identity (bottom of chain)
+  - **Selective Re-authentication**: Re-authenticate only invalid credentials in the chain
+  - **Cache Key Strategy**: Each identity in chain has unique cache key: `<provider_kind>/<provider_name>/<identity_name>`
+  - **Chain Examples**:
+    - Simple: `SSO Provider → Permission Set`
+    - Complex: `SSO Provider → Permission Set → Assume Role → Nested Assume Role`
+  - **Validation Flow**:
+    1. Check target identity (assume role) credentials first
+    2. If valid (>5min remaining), use cached credentials
+    3. If invalid, traverse up chain to find first valid credentials
+    4. Re-authenticate from first invalid point down to target
+    5. Cache all newly obtained credentials
+  - **Performance Optimization**: Minimize authentication requests by reusing valid cached credentials at any chain level
+  - **Error Handling**: Clear error messages indicating which level in chain failed authentication
+  - **Session Management**: Each chain level respects its configured session duration
+- **Priority**: P0 (Must Have)
+
+#### FR-016: SSO Credential Caching
 
 - **Description**: Cache SSO authentication credentials to avoid repeated user prompts
 - **Acceptance Criteria**:
@@ -1048,6 +1070,127 @@ identities:
       - key: SECURITY_MODE
         value: strict
 ```
+
+## 5. Hierarchical Authentication Flow Examples
+
+### 5.1 Chain-Based Authentication Scenarios
+
+#### Scenario 1: Simple Chain (SSO → Permission Set)
+
+**Configuration:**
+```yaml
+providers:
+  cplive-sso:
+    kind: aws/iam-identity-center
+    start_url: https://cplive.awsapps.com/start/
+
+identities:
+  managers:
+    kind: aws/permission-set
+    via: { provider: cplive-sso }
+    spec:
+      name: IdentityManagersTeamAccess
+      account: { name: core-identity }
+```
+
+**Authentication Flow:**
+1. **Target**: `managers` identity
+2. **Chain**: `cplive-sso` → `managers`
+3. **Cache Check**: Check `aws-iam-identity-center/cplive-sso/managers` cache key
+4. **If Valid**: Use cached credentials, skip authentication
+5. **If Invalid**: 
+   - Check `sso/cplive-sso/managers` for SSO tokens
+   - If SSO tokens valid, refresh permission set credentials
+   - If SSO tokens invalid, prompt for SSO authentication, then get permission set
+
+#### Scenario 2: Complex Chain (SSO → Permission Set → Assume Role)
+
+**Configuration:**
+```yaml
+providers:
+  cplive-sso:
+    kind: aws/iam-identity-center
+    start_url: https://cplive.awsapps.com/start/
+
+identities:
+  managers:
+    kind: aws/permission-set
+    via: { provider: cplive-sso }
+    spec:
+      name: IdentityManagersTeamAccess
+      account: { name: core-identity }
+      
+  sandbox-admin:
+    kind: aws/assume-role
+    via: { identity: managers }
+    spec:
+      assume_role: arn:aws:iam::539916835077:role/cplive-plat-gbl-sandbox-admin
+```
+
+**Authentication Flow:**
+1. **Target**: `sandbox-admin` identity
+2. **Chain**: `cplive-sso` → `managers` → `sandbox-admin`
+3. **Bottom-Up Validation**:
+   - Check `aws-assume-role/managers/sandbox-admin` (assume role credentials)
+   - If valid (>5min), use cached credentials ✅
+   - If invalid, check `aws-iam-identity-center/cplive-sso/managers` (permission set credentials)
+   - If permission set valid, use it to refresh assume role credentials
+   - If permission set invalid, check `sso/cplive-sso/managers` (SSO tokens)
+   - Re-authenticate from first invalid point down to target
+
+#### Scenario 3: Deep Chain (SSO → Permission Set → Assume Role → Nested Assume Role)
+
+**Configuration:**
+```yaml
+identities:
+  managers:
+    kind: aws/permission-set
+    via: { provider: cplive-sso }
+    
+  cross-account-admin:
+    kind: aws/assume-role
+    via: { identity: managers }
+    spec:
+      assume_role: arn:aws:iam::123456789012:role/CrossAccountAccess
+      
+  production-admin:
+    kind: aws/assume-role
+    via: { identity: cross-account-admin }
+    spec:
+      assume_role: arn:aws:iam::987654321098:role/ProductionAdmin
+```
+
+**Authentication Flow:**
+1. **Target**: `production-admin` identity
+2. **Chain**: `cplive-sso` → `managers` → `cross-account-admin` → `production-admin`
+3. **Optimization Strategy**:
+   - Check each level from bottom to top
+   - Find first valid cached credentials
+   - Re-authenticate only from first invalid point downward
+   - Cache all newly obtained credentials
+
+### 5.2 Cache Key Strategy
+
+**Cache Key Format**: `<provider_kind>/<provider_name>/<identity_name>`
+
+**Examples:**
+- SSO Tokens: `sso/cplive-sso/managers`
+- Permission Set: `aws-iam-identity-center/cplive-sso/managers`
+- Assume Role: `aws-assume-role/managers/sandbox-admin`
+- Nested Assume Role: `aws-assume-role/cross-account-admin/production-admin`
+
+### 5.3 Performance Benefits
+
+**Without Hierarchical Caching:**
+- Every authentication requires full chain re-authentication
+- SSO prompts on every expired credential
+- No optimization for partially valid chains
+
+**With Hierarchical Caching:**
+- 90% reduction in authentication time for valid cached credentials
+- Selective re-authentication minimizes user prompts
+- Optimal credential reuse across identity chains
+- Graceful degradation when partial chain is invalid
 
 ## 6. Best Practices
 

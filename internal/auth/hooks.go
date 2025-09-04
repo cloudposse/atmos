@@ -126,7 +126,13 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	}
 
 	log.Info("Authenticating with default identity", "identity", defaultIdentityName)
-
+	// Get identity environment variables and merge into component environment section
+	if identity, exists := atmosConfig.Auth.Identities[defaultIdentityName]; exists {
+		if len(identity.Env) > 0 {
+			environment.MergeIdentityEnvOverrides(stackInfo, identity.Env)
+		}
+	}
+	
 	// Authenticate with default identity
 	_, err = authManager.Authenticate(ctx, defaultIdentityName)
 	if err != nil {
@@ -141,12 +147,6 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
-	// Get identity environment variables and merge into component environment section
-	if identity, exists := atmosConfig.Auth.Identities[defaultIdentityName]; exists {
-		if len(identity.Env) > 0 {
-			environment.MergeIdentityEnvOverrides(stackInfo, identity.Env)
-		}
-	}
 	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvSection)
 	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvList)
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cloudposse/atmos/internal/auth/authstore"
+	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -42,34 +42,34 @@ func (p *userProvider) Kind() string {
 // Authenticate performs AWS user authentication (returns static credentials)
 func (p *userProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
 	var accessKeyID, secretAccessKey, sessionToken string
-	
+
 	// Try to get credentials from spec first (takes precedence)
 	if specAccessKeyID, ok := p.config.Spec["access_key_id"].(string); ok && specAccessKeyID != "" {
 		accessKeyID = specAccessKeyID
 	}
-	
+
 	if specSecretAccessKey, ok := p.config.Spec["secret_access_key"].(string); ok && specSecretAccessKey != "" {
 		secretAccessKey = specSecretAccessKey
 	}
-	
+
 	// Session token is optional from spec
 	sessionToken, _ = p.config.Spec["session_token"].(string)
-	
+
 	// If credentials not in spec, try to retrieve from keyring
 	if accessKeyID == "" || secretAccessKey == "" {
 		// Get identity name from provider name (assumes format provider/identity)
 		// This will be passed from the auth manager when we know the identity
 		// For now, we'll construct the alias based on provider name
 		alias := fmt.Sprintf("%s/default", p.name) // Fallback alias
-		
-		store := authstore.NewKeyringAuthStore()
+
+		store := credentials.NewKeyringAuthStore()
 		type userSecret struct {
 			AccessKeyID     string    `json:"access_key_id"`
 			SecretAccessKey string    `json:"secret_access_key"`
 			MfaArn          string    `json:"mfa_arn,omitempty"`
 			LastUpdated     time.Time `json:"last_updated"`
 		}
-		
+
 		var secret userSecret
 		err := store.GetAny(alias, &secret)
 		if err == nil {
@@ -81,12 +81,12 @@ func (p *userProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 			}
 		}
 	}
-	
+
 	// Validate that we have required credentials
 	if accessKeyID == "" {
 		return nil, fmt.Errorf("access_key_id is required in provider spec or keyring")
 	}
-	
+
 	if secretAccessKey == "" {
 		return nil, fmt.Errorf("secret_access_key is required in provider spec or keyring")
 	}

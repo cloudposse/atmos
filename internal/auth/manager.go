@@ -57,7 +57,7 @@ func NewAuthManager(
 	return m, nil
 }
 
-// Authenticate performs authentication for the specified identity
+// Authenticate performs hierarchical authentication for the specified identity
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
 	log.SetPrefix("[atmos-auth]")
 	defer log.SetPrefix("")
@@ -70,27 +70,22 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 		identityName = defaultIdentity
 	}
 
-	// Check if we have cached, non-expired credentials
-	providerName := m.getProviderForIdentity(identityName)
-	alias := fmt.Sprintf("%s/%s", providerName, identityName)
-	if cachedCreds, err := m.credentialStore.Retrieve(alias); err == nil {
-		if expired, err := m.credentialStore.IsExpired(alias); err == nil && !expired {
-			return m.buildWhoamiInfo(identityName, cachedCreds), nil
-		}
-	}
-
-	// Authenticate through the identity chain
-	finalCreds, err := m.authenticateIdentityChain(ctx, identityName)
+	// Build the complete authentication chain
+	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		return nil, fmt.Errorf("identity chain authentication failed: %w", err)
+		return nil, fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
 	}
 
-	// Store credentials
-	if err := m.credentialStore.Store(alias, finalCreds); err != nil {
-		return nil, fmt.Errorf("failed to store credentials: %w", err)
+	log.Debug("Authentication chain discovered", "identity", identityName, "chainLength", len(chain), "chain", chain)
+
+	// Perform hierarchical credential validation (bottom-up)
+	finalCreds, err := m.authenticateHierarchical(ctx, chain, identityName)
+	if err != nil {
+		return nil, fmt.Errorf("hierarchical authentication failed: %w", err)
 	}
 
 	// Setup AWS files if this is an AWS provider
+	providerName := m.getProviderForIdentity(identityName)
 	provider, exists := m.providers[providerName]
 	if exists && isAWSProvider(provider.Kind()) {
 		if err := m.SetupAWSFiles(ctx, providerName, finalCreds); err != nil {
@@ -104,26 +99,28 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 // Whoami returns information about the current effective principal
 func (m *manager) Whoami(ctx context.Context) (*schema.WhoamiInfo, error) {
 	// Since keyring doesn't support listing, we'll check each configured identity
-	// to find the most recent valid credentials
+	// to find the most recent valid credentials using the new hierarchical cache keys
 	var mostRecentInfo *schema.WhoamiInfo
 	var mostRecentTime time.Time
 
 	for identityName := range m.config.Identities {
-		providerName := m.getProviderForIdentity(identityName)
-		if providerName == "" {
-			continue
+		// Build the authentication chain to get the proper cache key
+		chain, err := m.buildAuthenticationChain(identityName)
+		if err != nil {
+			continue // Skip identities with invalid chains
 		}
 
-		alias := fmt.Sprintf("%s/%s", providerName, identityName)
+		// Use the hierarchical cache key for the target identity
+		cacheKey := m.buildCacheKey(chain, identityName)
 
 		// Try to retrieve credentials for this identity
-		creds, err := m.credentialStore.Retrieve(alias)
+		creds, err := m.credentialStore.Retrieve(cacheKey)
 		if err != nil {
 			continue // No credentials stored for this identity
 		}
 
 		// Check if credentials are expired
-		if expired, err := m.credentialStore.IsExpired(alias); err != nil || expired {
+		if expired, err := m.credentialStore.IsExpired(cacheKey); err != nil || expired {
 			continue // Credentials are expired or can't check expiration
 		}
 
@@ -282,6 +279,180 @@ func (m *manager) getProviderForIdentityRecursive(identityName string, visited m
 	}
 
 	return ""
+}
+
+// authenticateHierarchical performs hierarchical authentication with bottom-up validation
+func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, targetIdentity string) (*schema.Credentials, error) {
+
+	// Step 1: Bottom-up validation - check cached credentials from target to root
+	validFromIndex := m.findFirstValidCachedCredentials(chain, targetIdentity)
+	
+	if validFromIndex == -1 {
+		log.Debug("No valid cached credentials found in chain, full authentication required")
+	} else {
+		log.Debug("Found valid cached credentials", "validFromIndex", validFromIndex, "chainStep", getChainStepName(chain, validFromIndex))
+		
+		// If target identity has valid cached credentials, use them
+		if validFromIndex == len(chain)-1 {
+			cacheKey := m.buildCacheKey(chain, targetIdentity)
+			if cachedCreds, err := m.credentialStore.Retrieve(cacheKey); err == nil {
+				log.Debug("Using cached credentials for target identity", "identity", targetIdentity)
+				return cachedCreds, nil
+			}
+		}
+	}
+
+	// Step 2: Selective re-authentication from first invalid point down to target
+	return m.authenticateFromIndex(ctx, chain, validFromIndex, targetIdentity)
+}
+
+// findFirstValidCachedCredentials checks cached credentials from bottom to top of chain
+// Returns the index of the first valid cached credentials, or -1 if none found
+func (m *manager) findFirstValidCachedCredentials(chain []string, targetIdentity string) int {
+	// Check from target identity (bottom) up to provider (top)
+	for i := len(chain) - 1; i >= 0; i-- {
+		cacheKey := m.buildCacheKey(chain[:i+1], targetIdentity)
+		
+		// Check if we have cached credentials for this level
+		if cachedCreds, err := m.credentialStore.Retrieve(cacheKey); err == nil {
+			// Check if credentials are still valid (>5 minutes remaining)
+			if expired, err := m.credentialStore.IsExpired(cacheKey); err == nil && !expired {
+				// Additional check for AWS credentials expiration
+				if cachedCreds.AWS != nil && cachedCreds.AWS.Expiration != "" {
+					if expTime, err := time.Parse(time.RFC3339, cachedCreds.AWS.Expiration); err == nil {
+						if expTime.After(time.Now().Add(5 * time.Minute)) {
+							log.Debug("Found valid cached credentials", "chainIndex", i, "cacheKey", cacheKey, "expiration", expTime)
+							return i
+						}
+					}
+				} else {
+					// Non-AWS credentials or no expiration info, assume valid
+					log.Debug("Found valid cached credentials (non-AWS)", "chainIndex", i, "cacheKey", cacheKey)
+					return i
+				}
+			}
+		}
+	}
+	return -1 // No valid cached credentials found
+}
+
+// authenticateFromIndex performs authentication starting from the given index in the chain
+func (m *manager) authenticateFromIndex(ctx context.Context, chain []string, startIndex int, targetIdentity string) (*schema.Credentials, error) {
+	bold := lipgloss.NewStyle().Bold(true)
+	var currentCreds *schema.Credentials
+	var err error
+
+	// Determine starting point
+	actualStartIndex := startIndex
+	if startIndex == -1 {
+		actualStartIndex = 0 // Start from provider if no valid cached credentials
+	}
+
+	// If we have valid cached credentials, retrieve them as starting point
+	if startIndex > 0 {
+		cacheKey := m.buildCacheKey(chain[:startIndex+1], targetIdentity)
+		currentCreds, err = m.credentialStore.Retrieve(cacheKey)
+		if err != nil {
+			log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
+			actualStartIndex = 0
+		} else {
+			log.Debug("Starting authentication from cached credentials", "startIndex", startIndex)
+			actualStartIndex = startIndex + 1 // Start from next step after cached credentials
+		}
+	}
+
+	// Step 1: Authenticate with provider if needed
+	if actualStartIndex == 0 {
+		providerName := chain[0]
+		provider, exists := m.providers[providerName]
+		if !exists {
+			return nil, fmt.Errorf("provider %q not found", providerName)
+		}
+
+		log.Debug("Authenticating with provider", "provider", providerName)
+		currentCreds, err = provider.Authenticate(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("provider %q authentication failed: %w", providerName, err)
+		}
+
+		// Cache provider credentials if this is SSO
+		if provider.Kind() == "aws/iam-identity-center" {
+			ssoKey := fmt.Sprintf("sso/%s/%s", providerName, targetIdentity)
+			if err := m.credentialStore.Store(ssoKey, currentCreds); err != nil {
+				log.Debug("Failed to cache SSO credentials", "error", err)
+			}
+		}
+
+		log.Debug("Provider authenticated", "provider", providerName)
+		actualStartIndex = 1
+	}
+
+	// Step 2: Authenticate through identity chain
+	for i := actualStartIndex; i < len(chain); i++ {
+		identityStep := chain[i]
+		identity, exists := m.identities[identityStep]
+		if !exists {
+			log.Error("❌ Chaining identity %s → %s", bold.Render(getPreviousStepName(chain, i)), bold.Render(identityStep))
+			return nil, fmt.Errorf("identity %q not found in chain step %d", identityStep, i)
+		}
+
+		log.Debug("Authenticating identity step", "step", i, "identity", identityStep, "kind", identity.Kind())
+
+		// Each identity receives credentials from the previous step
+		nextCreds, err := identity.Authenticate(ctx, currentCreds)
+		if err != nil {
+			log.Error("❌ Chaining identity %s → %s", bold.Render(getPreviousStepName(chain, i)), bold.Render(identityStep))
+			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
+		}
+
+		currentCreds = nextCreds
+		
+		// Cache credentials for this level
+		cacheKey := m.buildCacheKey(chain[:i+1], targetIdentity)
+		if err := m.credentialStore.Store(cacheKey, currentCreds); err != nil {
+			log.Debug("Failed to cache credentials", "cacheKey", cacheKey, "error", err)
+		} else {
+			log.Debug("Cached credentials", "cacheKey", cacheKey)
+		}
+
+		log.Infof("✅ Chaining identity %s → %s", bold.Render(getPreviousStepName(chain, i)), bold.Render(identityStep))
+	}
+
+	return currentCreds, nil
+}
+
+// buildCacheKey builds a cache key for the given chain level and target identity
+func (m *manager) buildCacheKey(chainPrefix []string, targetIdentity string) string {
+	if len(chainPrefix) == 1 {
+		// Provider level - use SSO cache key format
+		return fmt.Sprintf("sso/%s/%s", chainPrefix[0], targetIdentity)
+	}
+	
+	// Identity level - use hierarchical cache key format
+	providerName := chainPrefix[0]
+	provider, exists := m.providers[providerName]
+	if !exists {
+		return fmt.Sprintf("unknown/%s/%s", providerName, targetIdentity)
+	}
+	
+	// Use provider kind and the immediate parent identity
+	parentIdentity := chainPrefix[len(chainPrefix)-1]
+	return fmt.Sprintf("%s/%s/%s", provider.Kind(), parentIdentity, targetIdentity)
+}
+
+// Helper functions for logging
+func getChainStepName(chain []string, index int) string {
+	if index < len(chain) {
+		return chain[index]
+	}
+	return "unknown"
+}
+
+func getPreviousStepName(chain []string, currentIndex int) string {
+	if currentIndex > 0 && currentIndex <= len(chain) {
+		return chain[currentIndex-1]
+	}
+	return "unknown"
 }
 
 // authenticateIdentityChain performs sequential authentication through an identity chain
