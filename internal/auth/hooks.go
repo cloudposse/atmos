@@ -108,41 +108,50 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx)
 	log.Debug("Current session check", "whoami", whoami, "error", err)
+	
+	var needsAuthentication = true
+	var defaultIdentityName string
+	
 	if err == nil && whoami != nil {
 		// Check if credentials are still valid (at least 5 minutes remaining)
 		if whoami.Expiration != nil && whoami.Expiration.After(time.Now().Add(5*time.Minute)) {
 			log.Debug("Using existing valid session", "identity", whoami.Identity, "expiration", whoami.Expiration, "environment", whoami.Environment)
-			return nil // Already authenticated
+			needsAuthentication = false
+			defaultIdentityName = whoami.Identity
 		}
 	}
 
-	// Need to authenticate - find default identity
-	defaultIdentityName, err := authManager.GetDefaultIdentity()
-	if err != nil {
-		return fmt.Errorf("failed to get default identity: %w", err)
-	}
-	if defaultIdentityName == "" {
-		return fmt.Errorf("no default identity configured for authentication")
+	if needsAuthentication {
+		// Need to authenticate - find default identity
+		defaultIdentityName, err = authManager.GetDefaultIdentity()
+		if err != nil {
+			return fmt.Errorf("failed to get default identity: %w", err)
+		}
+		if defaultIdentityName == "" {
+			return fmt.Errorf("no default identity configured for authentication")
+		}
+
+		log.Info("Authenticating with default identity", "identity", defaultIdentityName)
+		
+		// Authenticate with default identity
+		_, err = authManager.Authenticate(ctx, defaultIdentityName)
+		if err != nil {
+			return fmt.Errorf("failed to authenticate with default identity: %w", err)
+		}
+
+		// Get updated session info
+		whoami, err = authManager.Whoami(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get session info after authentication: %w", err)
+		}
 	}
 
-	log.Info("Authenticating with default identity", "identity", defaultIdentityName)
+	// Always set up environment variables and AWS files (whether from cache or fresh auth)
 	// Get identity environment variables and merge into component environment section
 	if identity, exists := atmosConfig.Auth.Identities[defaultIdentityName]; exists {
 		if len(identity.Env) > 0 {
 			environment.MergeIdentityEnvOverrides(stackInfo, identity.Env)
 		}
-	}
-	
-	// Authenticate with default identity
-	_, err = authManager.Authenticate(ctx, defaultIdentityName)
-	if err != nil {
-		return fmt.Errorf("failed to authenticate with default identity: %w", err)
-	}
-
-	// Get updated session info and set environment variables
-	whoami, err = authManager.Whoami(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get session info after authentication: %w", err)
 	}
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
