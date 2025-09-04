@@ -32,15 +32,15 @@ func DetectContext() (*Context, error) {
 	_ = viper.BindEnv("GOTCHA_COMMENT_UUID")
 	_ = viper.BindEnv("GOTCHA_GITHUB_TOKEN", "GITHUB_TOKEN")
 
-	// Check if running in GitHub Actions
-	isActions := viper.GetString("GITHUB_ACTIONS") != ""
+	// Check if running in GitHub Actions - use os.Getenv directly for reliability
+	isActions := os.Getenv("GITHUB_ACTIONS") != ""
 
 	if !isActions {
 		return nil, ErrNotGitHubActions
 	}
 
-	// Parse repository (format: owner/repo)
-	repository := viper.GetString("GITHUB_REPOSITORY")
+	// Parse repository (format: owner/repo) - use os.Getenv for CI env vars
+	repository := os.Getenv("GITHUB_REPOSITORY")
 	if repository == "" {
 		return nil, ErrRepositoryNotSet
 	}
@@ -53,8 +53,8 @@ func DetectContext() (*Context, error) {
 	owner := parts[0]
 	repo := parts[1]
 
-	// Get event information
-	eventName := viper.GetString("GITHUB_EVENT_NAME")
+	// Get event information - use os.Getenv for CI env vars
+	eventName := os.Getenv("GITHUB_EVENT_NAME")
 	if eventName == "" {
 		return nil, ErrEventNameNotSet
 	}
@@ -65,14 +65,21 @@ func DetectContext() (*Context, error) {
 		return nil, fmt.Errorf("failed to extract PR number: %w", err)
 	}
 
-	// Get comment UUID
+	// Get comment UUID - this can use viper since it might be configured
 	commentUUID := viper.GetString("GOTCHA_COMMENT_UUID")
+	if commentUUID == "" {
+		// Fall back to env var
+		commentUUID = os.Getenv("GOTCHA_COMMENT_UUID")
+	}
 	if commentUUID == "" {
 		return nil, ErrCommentUUIDNotSet
 	}
 
-	// Get GitHub token
+	// Get GitHub token - check both viper and env directly
 	token := viper.GetString("GOTCHA_GITHUB_TOKEN")
+	if token == "" {
+		token = os.Getenv("GITHUB_TOKEN")
+	}
 	if token == "" {
 		return nil, ErrGitHubTokenNotAvailable
 	}
@@ -103,7 +110,8 @@ func extractPRNumber(eventName string) (int, error) {
 
 // getPRNumberFromEventPayload reads the GitHub event payload and extracts PR number.
 func getPRNumberFromEventPayload() (int, error) {
-	eventPath := viper.GetString("GITHUB_EVENT_PATH")
+	// Use os.Getenv for CI env vars
+	eventPath := os.Getenv("GITHUB_EVENT_PATH")
 	if eventPath == "" {
 		return 0, ErrEventPathNotSet
 	}

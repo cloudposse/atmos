@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/spf13/viper"
@@ -106,12 +108,13 @@ func ProfileName(profile termenv.Profile) string {
 
 // IsGitHubActions detects if we're running in GitHub Actions.
 func IsGitHubActions() bool {
-	return viper.GetString("GITHUB_ACTIONS") != ""
+	// Use os.Getenv directly for CI detection to ensure it works before viper is fully configured
+	return os.Getenv("GITHUB_ACTIONS") != ""
 }
 
 // IsCI detects if we're running in any CI environment.
 func IsCI() bool {
-	// Check common CI environment variables
+	// Check common CI environment variables using os.Getenv directly
 	ciVars := []string{
 		"CI",
 		"CONTINUOUS_INTEGRATION",
@@ -126,7 +129,7 @@ func IsCI() bool {
 	}
 
 	for _, envVar := range ciVars {
-		if value := viper.GetString(envVar); value != "" && value != "false" {
+		if value := os.Getenv(envVar); value != "" && value != "false" {
 			return true
 		}
 	}

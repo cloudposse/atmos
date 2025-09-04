@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 
@@ -154,7 +155,12 @@ func EmitAlert(enabled bool) {
 // runSimpleStream runs tests with simple non-interactive streaming output.
 func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool) int {
 	// Configure colors and initialize styles for stream mode
-	tui.ConfigureColors()
+	profile := tui.ConfigureColors()
+	
+	// Debug: Log the detected color profile in CI
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		logger.GetLogger().Debug("Color profile detected", "profile", tui.ProfileName(profile), "CI", os.Getenv("CI"), "GITHUB_ACTIONS", os.Getenv("GITHUB_ACTIONS"))
+	}
 
 	// Build the go test command
 	args := []string{"test", "-json"}
