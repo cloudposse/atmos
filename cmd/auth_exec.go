@@ -1,0 +1,111 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"syscall"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/spf13/cobra"
+)
+
+// authExecCmd executes a command with authentication environment variables
+var authExecCmd = &cobra.Command{
+	Use:   "exec [command] [args...]",
+	Short: "Execute a command with authentication environment variables",
+	Long:  "Execute a command with the authenticated identity's environment variables set.",
+	Args:  cobra.MinimumNArgs(1),
+
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Load atmos configuration
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		if err != nil {
+			return fmt.Errorf("failed to load atmos config: %w", err)
+		}
+
+		// Create auth manager
+		authManager, err := createAuthManager(&atmosConfig.Auth)
+		if err != nil {
+			return fmt.Errorf("failed to create auth manager: %w", err)
+		}
+
+		// Get identity from flag or use default
+		identityName, _ := cmd.Flags().GetString("identity")
+		if identityName == "" {
+			defaultIdentity, err := authManager.GetDefaultIdentity()
+			if err != nil {
+				return fmt.Errorf("no default identity configured and no identity specified: %w", err)
+			}
+			identityName = defaultIdentity
+		}
+
+		// Authenticate to get credentials
+		ctx := context.Background()
+		whoami, err := authManager.Authenticate(ctx, identityName)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
+		}
+
+		// Get environment variables from cloud provider
+		envVars, err := getCloudProviderEnvironmentVariables(&atmosConfig.Auth, identityName, whoami.Credentials)
+		if err != nil {
+			return fmt.Errorf("failed to get environment variables: %w", err)
+		}
+
+		// Execute the command with authentication environment
+		return executeCommandWithEnv(args, envVars)
+	},
+}
+
+// executeCommandWithEnv executes a command with additional environment variables
+func executeCommandWithEnv(args []string, envVars map[string]string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("no command specified")
+	}
+
+	// Prepare the command
+	cmdName := args[0]
+	cmdArgs := args[1:]
+	
+	// Look for the command in PATH
+	cmdPath, err := exec.LookPath(cmdName)
+	if err != nil {
+		return fmt.Errorf("command not found: %s", cmdName)
+	}
+
+	// Prepare environment variables
+	env := os.Environ()
+	for key, value := range envVars {
+		env = append(env, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	// Execute the command
+	execCmd := exec.Command(cmdPath, cmdArgs...)
+	execCmd.Env = env
+	execCmd.Stdin = os.Stdin
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+
+	// Run the command and wait for completion
+	err = execCmd.Run()
+	if err != nil {
+		// If it's an exit error, preserve the exit code
+		if exitError, ok := err.(*exec.ExitError); ok {
+			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
+				os.Exit(status.ExitStatus())
+			}
+		}
+		return fmt.Errorf("command execution failed: %w", err)
+	}
+
+	return nil
+}
+
+func init() {
+	authExecCmd.Flags().StringP("identity", "i", "", "Specify the identity to use for authentication")
+	authCmd.AddCommand(authExecCmd)
+}
