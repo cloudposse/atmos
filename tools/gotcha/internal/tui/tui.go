@@ -507,8 +507,8 @@ func (m *TestModel) View() string {
 	// Build the status line components
 	spin := m.spinner.View() + " "
 
-	// Test name with fixed display width
-	const maxTestWidth = 35
+	// Test name with more room (increased from 35 to 45)
+	const maxTestWidth = 45
 	var info string
 	if m.currentTest != "" {
 		testName := m.currentTest
@@ -517,15 +517,14 @@ func (m *TestModel) View() string {
 		}
 		styledName := TestNameStyle.Render(testName)
 		info = fmt.Sprintf("Running %s", styledName)
-		// Pad to fixed display width
+		// Add minimal padding for alignment
 		padding := maxTestWidth - len(testName) + 8 // +8 for "Running " 
-		if padding > 0 {
+		if padding > 0 && padding < 20 { // Cap padding to avoid excessive space
 			info += strings.Repeat(" ", padding)
 		}
 	} else {
 		info = "Starting tests..."
-		// Pad to match the width when showing a test
-		info += strings.Repeat(" ", maxTestWidth + 8 - len("Starting tests..."))
+		// Don't add excessive padding for the starting message
 	}
 
 	prog := m.progress.View()
@@ -560,29 +559,25 @@ func (m *TestModel) View() string {
 	// Build the right-aligned section
 	rightSection := timeStr + " " + bufferStr
 	
-	// Calculate the middle section
-	middleSection := prog + " " + percentage + "  " + testCount
+	// Calculate the middle section with tighter spacing
+	middleSection := prog + " " + percentage + " " + testCount
 	
 	// Calculate available space using actual display widths
-	leftSection := spin + info
+	leftSection := spin + info + "  " // Add some space after test name
 	leftWidth := getDisplayWidth(leftSection)
 	middleWidth := getDisplayWidth(middleSection)
 	rightWidth := getDisplayWidth(rightSection)
 	
-	// Calculate gap to right-align the time/buffer
-	// Reserve space for the right section to prevent cutoff
-	usedWidth := leftWidth + middleWidth + rightWidth + 4 // +4 for spacing between sections
+	// Calculate minimal gap between middle and right sections
+	// We want just enough space to separate them, not to right-align
+	usedWidth := leftWidth + middleWidth + rightWidth + 2 // +2 for minimal spacing
 	if usedWidth > terminalWidth {
-		// If we're over width, truncate the test name in info
-		// and recalculate
-		return spin + "Running..." + " " + prog + " " + percentage + "  " + testCount + "  " + timeStr + " " + bufferStr + "\n"
+		// If we're over width, use compact format
+		return spin + "Running..." + " " + prog + " " + percentage + " " + testCount + " " + timeStr + " " + bufferStr + "\n"
 	}
 	
-	gapWidth := terminalWidth - usedWidth
-	if gapWidth < 1 {
-		gapWidth = 1
-	}
-	gap := strings.Repeat(" ", gapWidth)
+	// Use a smaller, fixed gap between sections for consistent spacing
+	gap := "  " // Just 2 spaces between middle and right sections
 	
 	// Assemble the complete status line
 	statusLine := leftSection + middleSection + gap + rightSection
