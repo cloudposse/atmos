@@ -582,11 +582,11 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	postComment := viper.GetBool("post-comment")
 	if postComment && outputFile != "" {
 		logger.Info("Processing results for GitHub comment")
-		
+
 		// Parse the JSON file we just created
 		if inputFile, err := os.Open(outputFile); err == nil {
 			defer inputFile.Close()
-			
+
 			// Parse with coverage if available
 			excludeMocks := viper.GetBool("exclude-mocks")
 			if summary, err := parser.ParseTestJSON(inputFile, coverprofile, excludeMocks); err == nil {
