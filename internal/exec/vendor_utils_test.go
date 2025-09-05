@@ -10,9 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestExecuteVendorPullCommand(t *testing.T) {
+	// Check for GitHub access with rate limit check
+	rateLimits := tests.RequireGitHubAccess(t)
+	if rateLimits != nil && rateLimits.Remaining < 10 {
+		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~10 requests", rateLimits.Remaining)
+	}
 	stacksPath := "../../tests/fixtures/scenarios/vendor2"
 
 	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -73,6 +79,14 @@ func TestReadAndProcessVendorConfigFile(t *testing.T) {
 // and that the vendor components are correctly pulled.
 // The function also verifies that the state files are existing and deleted after the vendor pull command is executed.
 func TestExecuteVendorPull(t *testing.T) {
+	// Check for GitHub access with rate limit check
+	rateLimits := tests.RequireGitHubAccess(t)
+	if rateLimits != nil && rateLimits.Remaining < 20 {
+		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~20 requests", rateLimits.Remaining)
+	}
+	
+	// Check for OCI authentication (GitHub token) for pulling images from ghcr.io
+	tests.RequireOCIAuthentication(t)
 	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
 		err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 		if err != nil {

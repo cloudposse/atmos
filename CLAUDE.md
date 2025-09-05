@@ -272,19 +272,47 @@ Atmos provides extensive template functions available in stack configurations:
 
 ## Testing Guidelines
 
+### Test Strategy with Preconditions
+Atmos uses **precondition-based test skipping** to provide a better developer experience. Tests check for required preconditions (AWS profiles, network access, Git configuration) and skip gracefully with helpful messages rather than failing. See:
+- **[Testing Strategy PRD](docs/prd/testing-strategy.md)** - Complete design document
+- **[Tests README](tests/README.md)** - Practical testing guide with examples
+- **[Test Preconditions](tests/test_preconditions.go)** - Helper functions for precondition checks
+
+### Running Tests
+```bash
+# Run all tests (will skip if preconditions not met)
+go test ./...
+
+# Bypass all precondition checks
+export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true
+go test ./...
+
+# Run with verbose output to see skips
+go test -v ./...
+```
+
 ### Test File Locations
 - Unit tests: `pkg/**/*_test.go`
 - Integration tests: `tests/**/*_test.go` with fixtures in `tests/test-cases/`
 - Command tests: `cmd/**/*_test.go`
+- Test helpers: `tests/test_preconditions.go`
 
-### Running Specific Tests  
-```bash
-# Run specific test
-go test ./pkg/config -run TestConfigLoad
-# Run with coverage
-go test ./pkg/config -cover
-# Integration tests  
-go test ./tests -run TestCLI
+### Writing Tests with Preconditions
+```go
+func TestAWSFeature(t *testing.T) {
+    // Check AWS precondition at test start
+    tests.RequireAWSProfile(t, "profile-name")
+    // ... test code
+}
+
+func TestGitHubVendoring(t *testing.T) {
+    // Check GitHub access with rate limits
+    rateLimits := tests.RequireGitHubAccess(t)
+    if rateLimits != nil && rateLimits.Remaining < 20 {
+        t.Skipf("Need at least 20 GitHub API requests, only %d remaining", rateLimits.Remaining)
+    }
+    // ... test code
+}
 ```
 
 ### Test Data
