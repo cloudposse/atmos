@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
 func TestGetCoverageEmoji(t *testing.T) {
@@ -72,14 +76,14 @@ func TestGetCoverageEmoji(t *testing.T) {
 func TestCalculateFunctionCoverage(t *testing.T) {
 	tests := []struct {
 		name           string
-		functions      []CoverageFunction
+		functions      []types.CoverageFunction
 		wantCovered    int
 		wantTotal      int
 		wantPercentage float64
 	}{
 		{
 			name: "mixed coverage functions",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "func1", Coverage: 100.0},
 				{Function: "func2", Coverage: 0.0},
 				{Function: "func3", Coverage: 75.0},
@@ -91,7 +95,7 @@ func TestCalculateFunctionCoverage(t *testing.T) {
 		},
 		{
 			name: "all functions covered",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "func1", Coverage: 100.0},
 				{Function: "func2", Coverage: 50.0},
 				{Function: "func3", Coverage: 25.0},
@@ -102,7 +106,7 @@ func TestCalculateFunctionCoverage(t *testing.T) {
 		},
 		{
 			name: "no functions covered",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "func1", Coverage: 0.0},
 				{Function: "func2", Coverage: 0.0},
 			},
@@ -112,14 +116,14 @@ func TestCalculateFunctionCoverage(t *testing.T) {
 		},
 		{
 			name:           "empty functions list",
-			functions:      []CoverageFunction{},
+			functions:      []types.CoverageFunction{},
 			wantCovered:    0,
 			wantTotal:      0,
 			wantPercentage: 0.0,
 		},
 		{
 			name: "single function with partial coverage",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "func1", Coverage: 33.3},
 			},
 			wantCovered:    1,
@@ -147,14 +151,14 @@ func TestCalculateFunctionCoverage(t *testing.T) {
 func TestWriteDetailedCoverage(t *testing.T) {
 	tests := []struct {
 		name         string
-		coverageData *CoverageData
+		coverageData *types.CoverageData
 		wantContains []string
 	}{
 		{
 			name: "coverage with function data",
-			coverageData: &CoverageData{
+			coverageData: &types.CoverageData{
 				StatementCoverage: "75.5%",
-				FunctionCoverage: []CoverageFunction{
+				FunctionCoverage: []types.CoverageFunction{
 					{Function: "func1", File: "file1.go", Coverage: 100.0},
 					{Function: "func2", File: "file2.go", Coverage: 0.0},
 				},
@@ -169,9 +173,9 @@ func TestWriteDetailedCoverage(t *testing.T) {
 		},
 		{
 			name: "coverage without function data",
-			coverageData: &CoverageData{
+			coverageData: &types.CoverageData{
 				StatementCoverage: "90.0%",
-				FunctionCoverage:  []CoverageFunction{},
+				FunctionCoverage:  []types.CoverageFunction{},
 			},
 			wantContains: []string{
 				"# Test Coverage",
@@ -181,9 +185,9 @@ func TestWriteDetailedCoverage(t *testing.T) {
 		},
 		{
 			name: "low coverage",
-			coverageData: &CoverageData{
+			coverageData: &types.CoverageData{
 				StatementCoverage: "25.0%",
-				FunctionCoverage:  []CoverageFunction{},
+				FunctionCoverage:  []types.CoverageFunction{},
 			},
 			wantContains: []string{
 				"# Test Coverage",
@@ -196,7 +200,7 @@ func TestWriteDetailedCoverage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writeTestCoverageSection(&buf, tt.coverageData)
+			WriteDetailedCoverage(&buf, tt.coverageData)
 			output := buf.String()
 
 			for _, want := range tt.wantContains {
@@ -211,14 +215,14 @@ func TestWriteDetailedCoverage(t *testing.T) {
 func TestGetUncoveredFunctionsInPR(t *testing.T) {
 	tests := []struct {
 		name         string
-		functions    []CoverageFunction
+		functions    []types.CoverageFunction
 		changedFiles []string
 		wantCount    int
 		wantTotal    int
 	}{
 		{
 			name: "uncovered functions in changed files",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "func1", File: "changed_file.go", Coverage: 0.0},
 				{Function: "func2", File: "changed_file.go", Coverage: 75.0},
 				{Function: "func3", File: "unchanged_file.go", Coverage: 0.0},
@@ -230,7 +234,7 @@ func TestGetUncoveredFunctionsInPR(t *testing.T) {
 		},
 		{
 			name: "no uncovered functions in changed files",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "func1", File: "changed_file.go", Coverage: 100.0},
 				{Function: "func2", File: "changed_file.go", Coverage: 75.0},
 			},
@@ -240,14 +244,14 @@ func TestGetUncoveredFunctionsInPR(t *testing.T) {
 		},
 		{
 			name:         "no changed files",
-			functions:    []CoverageFunction{{Function: "func1", File: "file.go", Coverage: 0.0}},
+			functions:    []types.CoverageFunction{{Function: "func1", File: "file.go", Coverage: 0.0}},
 			changedFiles: []string{},
 			wantCount:    0,
 			wantTotal:    0,
 		},
 		{
 			name:         "no functions",
-			functions:    []CoverageFunction{},
+			functions:    []types.CoverageFunction{},
 			changedFiles: []string{"changed_file.go"},
 			wantCount:    0,
 			wantTotal:    0,
@@ -278,13 +282,13 @@ func TestGetUncoveredFunctionsInPR(t *testing.T) {
 func TestWriteUncoveredFunctionsTable(t *testing.T) {
 	tests := []struct {
 		name         string
-		functions    []CoverageFunction
+		functions    []types.CoverageFunction
 		total        int
 		wantContains []string
 	}{
 		{
 			name: "write uncovered functions table",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "uncoveredFunc1", File: "github.com/example/pkg/file1.go"},
 				{Function: "uncoveredFunc2", File: "github.com/example/pkg/file2.go"},
 			},
@@ -299,7 +303,7 @@ func TestWriteUncoveredFunctionsTable(t *testing.T) {
 		},
 		{
 			name:      "empty functions list",
-			functions: []CoverageFunction{},
+			functions: []types.CoverageFunction{},
 			total:     0,
 			wantContains: []string{
 				"❌ Uncovered Functions in This PR (0 of 0)",
@@ -325,13 +329,13 @@ func TestWriteUncoveredFunctionsTable(t *testing.T) {
 func TestWritePRFilteredUncoveredFunctions(t *testing.T) {
 	tests := []struct {
 		name         string
-		functions    []CoverageFunction
+		functions    []types.CoverageFunction
 		wantContains []string
 		wantEmpty    bool
 	}{
 		{
 			name: "write filtered uncovered functions",
-			functions: []CoverageFunction{
+			functions: []types.CoverageFunction{
 				{Function: "func1", File: "tools/gotcha/coverage.go", Coverage: 0.0},
 				{Function: "func2", File: "tools/gotcha/formatters.go", Coverage: 0.0},
 			},
@@ -344,7 +348,7 @@ func TestWritePRFilteredUncoveredFunctions(t *testing.T) {
 		},
 		{
 			name:      "empty functions list",
-			functions: []CoverageFunction{},
+			functions: []types.CoverageFunction{},
 			wantEmpty: true,
 		},
 	}
@@ -374,11 +378,11 @@ func TestWritePRFilteredUncoveredFunctions(t *testing.T) {
 // Test coverage threshold constants.
 func TestCoverageThresholds(t *testing.T) {
 	// Verify that the thresholds are set correctly.
-	if coverageHighThreshold != 80.0 {
-		t.Errorf("coverageHighThreshold = %v, want 80.0", coverageHighThreshold)
+	if constants.CoverageHighThreshold != 80.0 {
+		t.Errorf("CoverageHighThreshold = %v, want 80.0", constants.CoverageHighThreshold)
 	}
-	if coverageMedThreshold != 40.0 {
-		t.Errorf("coverageMedThreshold = %v, want 40.0", coverageMedThreshold)
+	if constants.CoverageMedThreshold != 40.0 {
+		t.Errorf("CoverageMedThreshold = %v, want 40.0", constants.CoverageMedThreshold)
 	}
 }
 
@@ -397,7 +401,7 @@ func TestFormatterHelpers(t *testing.T) {
 
 		for _, tt := range tests {
 			// This tests the logic that shortPackage uses.
-			got := shortPackage(tt.fullPath)
+			got := utils.ShortPackage(tt.fullPath)
 			// shortPackage should return the package name, but we're testing file paths.
 			// For file paths, we'd want to extract just the meaningful part.
 			if tt.fullPath != "" && !strings.Contains(got, tt.want) {

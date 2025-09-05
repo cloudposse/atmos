@@ -134,7 +134,7 @@ func TestWriteTestTableEnhanced(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			WriteTestTable(&buf, tt.tests, tt.includeDuration, tt.totalDuration)
+			writeTestTable(&buf, tt.tests, tt.includeDuration, tt.totalDuration)
 
 			output := buf.String()
 
@@ -270,7 +270,7 @@ func TestGetUncoveredFunctionsInPREnhanced(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFunctions, gotCount := GetUncoveredFunctionsInPR(tt.functions, tt.changedFiles)
+			gotFunctions, gotCount := getUncoveredFunctionsInPR(tt.functions, tt.changedFiles)
 
 			if gotCount != tt.wantCount {
 				t.Errorf("getUncoveredFunctionsInPR() count = %v, want %v", gotCount, tt.wantCount)

@@ -9,16 +9,161 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
 // CommentSizeLimit represents GitHub's comment size limit.
 const CommentSizeLimit = 65536
 
-// generateCommentContent creates markdown content specifically for GitHub comments.
-// It strategically resizes content to fit within GitHub's size limits while preserving
-// the core intent: show failed & skipped tests and keep badges.
-// GenerateGitHubComment creates markdown content for GitHub PR comments.
+// GenerateAdaptiveComment creates markdown content for GitHub PR comments.
+// It attempts to use the full rich content (same as job summaries) if it fits
+// within GitHub's 65KB limit, otherwise falls back to a concise version.
+func GenerateAdaptiveComment(summary *types.TestSummary, uuid string) string {
+	// First, try to generate the full rich comment
+	fullComment := generateFullComment(summary, uuid)
+	
+	// If it fits within GitHub's limit, use it
+	if len(fullComment) <= CommentSizeLimit {
+		return fullComment
+	}
+	
+	// Otherwise, fall back to concise version
+	return generateConciseComment(summary, uuid)
+}
+
+// generateFullComment creates the full rich markdown content (same as job summaries)
+func generateFullComment(summary *types.TestSummary, uuid string) string {
+	var content bytes.Buffer
+	
+	// Add UUID magic comment to prevent duplicate GitHub comments
+	if uuid != "" {
+		fmt.Fprintf(&content, "<!-- test-summary-uuid: %s -->\n\n", uuid)
+	}
+	
+	// Test Results section (h1)
+	fmt.Fprintf(&content, "# Test Results\n\n")
+	
+	// Display total elapsed time if available
+	if summary.TotalElapsedTime > 0 {
+		fmt.Fprintf(&content, "_Total Time: %.2fs_\n\n", summary.TotalElapsedTime)
+	}
+	
+	// Get test counts
+	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
+	
+	// Display test results as shields.io badges - always show all badges
+	if total == 0 {
+		fmt.Fprintf(&content, "[![No Tests](https://shields.io/badge/NO_TESTS-0-inactive?style=for-the-badge)](#user-content-no-tests)")
+	} else {
+		fmt.Fprintf(&content, "[![Passed](https://shields.io/badge/PASSED-%d-success?style=for-the-badge)](#user-content-passed) ", len(summary.Passed))
+		fmt.Fprintf(&content, "[![Failed](https://shields.io/badge/FAILED-%d-critical?style=for-the-badge)](#user-content-failed) ", len(summary.Failed))
+		fmt.Fprintf(&content, "[![Skipped](https://shields.io/badge/SKIPPED-%d-inactive?style=for-the-badge)](#user-content-skipped) ", len(summary.Skipped))
+	}
+	fmt.Fprintf(&content, "\n\n")
+	
+	// Write test sections - use the same functions as job summary for consistency
+	WriteFailedTestsTable(&content, summary.Failed)
+	WriteSkippedTestsTable(&content, summary.Skipped)
+	
+	// Add slowest tests section if there are passed tests
+	if len(summary.Passed) > 0 {
+		writeSlowestTestsSection(&content, summary.Passed)
+	}
+	
+	// Add package summary section if there are tests
+	if total > 0 {
+		writePackageSummarySection(&content, summary)
+	}
+	
+	// For smaller test suites, include passed tests
+	if len(summary.Passed) > 0 && len(summary.Passed) <= 100 {
+		WritePassedTestsTable(&content, summary.Passed)
+	}
+	
+	// Test Coverage section - use the same format as job summary
+	if summary.CoverageData != nil {
+		WriteDetailedCoverage(&content, summary.CoverageData)
+	} else if summary.Coverage != "" {
+		WriteBasicCoverage(&content, summary.Coverage)
+	}
+	
+	return content.String()
+}
+
+// writeSlowestTestsSection adds a collapsible section with the slowest tests
+func writeSlowestTestsSection(output io.Writer, passed []types.TestResult) {
+	if len(passed) == 0 {
+		return
+	}
+	
+	// Get top 20 slowest tests
+	slowest := utils.GetTopSlowestTests(passed, 20)
+	if len(slowest) == 0 {
+		return
+	}
+	
+	// Calculate total duration for percentage calculation
+	var totalDuration float64
+	for _, test := range passed {
+		totalDuration += test.Duration
+	}
+	
+	fmt.Fprintf(output, "<details>\n")
+	fmt.Fprintf(output, "<summary>⏱️ Slowest Tests (%d)</summary>\n\n", len(slowest))
+	fmt.Fprintf(output, "| Test | Package | Duration | %% of Total |\n")
+	fmt.Fprintf(output, "|------|---------|----------|------------|\n")
+	
+	for _, test := range slowest {
+		percentage := (test.Duration / totalDuration) * 100
+		shortPkg := utils.ShortPackage(test.Package)
+		fmt.Fprintf(output, "| `%s` | %s | %.2fs | %.1f%% |\n",
+			test.Test, shortPkg, test.Duration, percentage)
+	}
+	
+	fmt.Fprintf(output, "\n</details>\n\n")
+}
+
+// writePackageSummarySection adds a collapsible table with package statistics
+func writePackageSummarySection(output io.Writer, summary *types.TestSummary) {
+	// Combine all tests to generate package summary
+	allTests := make([]types.TestResult, 0, len(summary.Passed)+len(summary.Failed)+len(summary.Skipped))
+	allTests = append(allTests, summary.Passed...)
+	allTests = append(allTests, summary.Failed...)
+	allTests = append(allTests, summary.Skipped...)
+	
+	summaries := utils.GeneratePackageSummary(allTests)
+	if len(summaries) == 0 {
+		return
+	}
+	
+	// Sort by total duration descending
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].TotalDuration > summaries[j].TotalDuration
+	})
+	
+	fmt.Fprintf(output, "<details>\n")
+	fmt.Fprintf(output, "<summary>📦 Package Summary (%d packages)</summary>\n\n", len(summaries))
+	fmt.Fprintf(output, "| Package | Tests | Total Duration | Avg Duration |\n")
+	fmt.Fprintf(output, "|---------|-------|----------------|-------------|\n")
+	
+	for _, pkg := range summaries {
+		shortName := utils.ShortPackage(pkg.Package)
+		fmt.Fprintf(output, "| %s | %d | %.2fs | %.2fs |\n",
+			shortName, pkg.TestCount, pkg.TotalDuration, pkg.AvgDuration)
+	}
+	
+	fmt.Fprintf(output, "\n</details>\n\n")
+}
+
+// GenerateGitHubComment is a compatibility wrapper that calls GenerateAdaptiveComment
+// Deprecated: Use GenerateAdaptiveComment instead
 func GenerateGitHubComment(summary *types.TestSummary, uuid string) string {
+	return GenerateAdaptiveComment(summary, uuid)
+}
+
+// generateConciseComment creates a size-optimized version for large test suites
+// This is the original GenerateGitHubComment implementation, renamed
+func generateConciseComment(summary *types.TestSummary, uuid string) string {
 	var content bytes.Buffer
 
 	// Add UUID magic comment to prevent duplicate GitHub comments.

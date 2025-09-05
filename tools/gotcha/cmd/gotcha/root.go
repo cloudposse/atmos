@@ -717,8 +717,13 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	client := gh.NewClient(token)
 	manager := gh.NewCommentManager(client, logger)
 
-	// Generate markdown with UUID marker, using strategic resizing
-	markdownContent := markdown.GenerateGitHubComment(summary, uuid)
+	// Generate adaptive markdown content that uses full content when possible
+	markdownContent := markdown.GenerateAdaptiveComment(summary, uuid)
+	
+	logger.Debug("Generated adaptive comment", 
+		"size", len(markdownContent),
+		"limit", 65536,
+		"using_full", len(markdownContent) <= 65536)
 
 	// Post or update comment
 	return manager.PostOrUpdateComment(context.Background(), ctx, markdownContent)

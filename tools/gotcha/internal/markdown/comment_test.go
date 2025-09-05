@@ -8,6 +8,204 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestGenerateAdaptiveComment(t *testing.T) {
+	tests := []struct {
+		name     string
+		summary  *types.TestSummary
+		uuid     string
+		expected struct {
+			hasUUID           bool
+			hasBadges         bool
+			hasFailedTests    bool
+			hasSkippedTests   bool
+			hasSlowestTests   bool
+			hasPackageSummary bool
+			hasElapsedTime    bool
+			withinSizeLimit   bool
+		}
+	}{
+		{
+			name: "Small test suite uses full format",
+			summary: &types.TestSummary{
+				Failed: []types.TestResult{
+					{Package: "pkg/test", Test: "TestFailed1", Duration: 1.5},
+				},
+				Skipped: []types.TestResult{
+					{Package: "pkg/test", Test: "TestSkipped1"},
+				},
+				Passed: []types.TestResult{
+					{Package: "pkg/test", Test: "TestPassed1", Duration: 0.1},
+					{Package: "pkg/test", Test: "TestPassed2", Duration: 0.2},
+					{Package: "pkg/test", Test: "TestPassed3", Duration: 0.3},
+				},
+				TotalElapsedTime: 2.1,
+			},
+			uuid: "test-uuid-adaptive",
+			expected: struct {
+				hasUUID           bool
+				hasBadges         bool
+				hasFailedTests    bool
+				hasSkippedTests   bool
+				hasSlowestTests   bool
+				hasPackageSummary bool
+				hasElapsedTime    bool
+				withinSizeLimit   bool
+			}{
+				hasUUID:           true,
+				hasBadges:         true,
+				hasFailedTests:    true,
+				hasSkippedTests:   true,
+				hasSlowestTests:   true,  // Should include slowest tests
+				hasPackageSummary: true,  // Should include package summary
+				hasElapsedTime:    true,  // Should include elapsed time
+				withinSizeLimit:   true,
+			},
+		},
+		{
+			name: "Empty test results still gets full format",
+			summary: &types.TestSummary{
+				Failed:           []types.TestResult{},
+				Skipped:          []types.TestResult{},
+				Passed:           []types.TestResult{},
+				TotalElapsedTime: 0,
+			},
+			uuid: "test-uuid-empty",
+			expected: struct {
+				hasUUID           bool
+				hasBadges         bool
+				hasFailedTests    bool
+				hasSkippedTests   bool
+				hasSlowestTests   bool
+				hasPackageSummary bool
+				hasElapsedTime    bool
+				withinSizeLimit   bool
+			}{
+				hasUUID:           true,
+				hasBadges:         true,
+				hasFailedTests:    false,
+				hasSkippedTests:   false,
+				hasSlowestTests:   false,
+				hasPackageSummary: false,
+				hasElapsedTime:    false,
+				withinSizeLimit:   true,
+			},
+		},
+		{
+			name: "Medium test suite with all features",
+			summary: &types.TestSummary{
+				Failed: []types.TestResult{
+					{Package: "pkg/utils", Test: "TestFailed1", Duration: 1.5},
+					{Package: "pkg/utils", Test: "TestFailed2", Duration: 2.0},
+				},
+				Skipped: []types.TestResult{
+					{Package: "pkg/core", Test: "TestSkipped1"},
+					{Package: "pkg/core", Test: "TestSkipped2"},
+				},
+				Passed: generateTestsWithPackages(50),
+				TotalElapsedTime: 125.5,
+				Coverage:         "75.5%",
+			},
+			uuid: "test-uuid-medium",
+			expected: struct {
+				hasUUID           bool
+				hasBadges         bool
+				hasFailedTests    bool
+				hasSkippedTests   bool
+				hasSlowestTests   bool
+				hasPackageSummary bool
+				hasElapsedTime    bool
+				withinSizeLimit   bool
+			}{
+				hasUUID:           true,
+				hasBadges:         true,
+				hasFailedTests:    true,
+				hasSkippedTests:   true,
+				hasSlowestTests:   true,
+				hasPackageSummary: true,
+				hasElapsedTime:    true,
+				withinSizeLimit:   true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateAdaptiveComment(tt.summary, tt.uuid)
+
+			// Check UUID presence
+			if tt.expected.hasUUID {
+				assert.Contains(t, result, "test-summary-uuid: "+tt.uuid, "Comment should contain UUID marker")
+			}
+
+			// Check badges presence
+			if tt.expected.hasBadges {
+				assert.Contains(t, result, "shields.io/badge", "Comment should contain test badges")
+			}
+
+			// Check failed tests
+			if tt.expected.hasFailedTests {
+				assert.Contains(t, result, "Failed Tests", "Comment should contain failed tests section")
+			}
+
+			// Check skipped tests
+			if tt.expected.hasSkippedTests {
+				assert.Contains(t, result, "Skipped Tests", "Comment should contain skipped tests section")
+			}
+
+			// Check slowest tests (NEW)
+			if tt.expected.hasSlowestTests {
+				assert.Contains(t, result, "⏱️ Slowest Tests", "Comment should contain slowest tests section")
+			}
+
+			// Check package summary (NEW)
+			if tt.expected.hasPackageSummary {
+				assert.Contains(t, result, "📦 Package Summary", "Comment should contain package summary section")
+			}
+
+			// Check elapsed time (NEW)
+			if tt.expected.hasElapsedTime {
+				assert.Contains(t, result, "Total Time:", "Comment should contain total elapsed time")
+			}
+
+			// Check size limit
+			if tt.expected.withinSizeLimit {
+				assert.LessOrEqual(t, len(result), CommentSizeLimit, "Comment should be within GitHub's size limit")
+			}
+		})
+	}
+}
+
+// TestAdaptiveBehavior tests the adaptive fallback behavior
+func TestAdaptiveBehavior(t *testing.T) {
+	// Create a large test summary that would exceed the size limit
+	hugeSummary := &types.TestSummary{
+		Failed:  generateManyTests(500),
+		Skipped: generateManyTests(500),
+		Passed:  generateManyTests(2000),
+		CoverageData: &types.CoverageData{
+			StatementCoverage: "85.5%",
+			FunctionCoverage:  generateManyFunctions(100),
+		},
+	}
+
+	result := GenerateAdaptiveComment(hugeSummary, "size-test-uuid")
+
+	// Should fall back to concise format
+	assert.LessOrEqual(t, len(result), CommentSizeLimit,
+		"Large comment should be within size limit due to adaptive fallback")
+	
+	// Should still have essential information
+	assert.Contains(t, result, "test-summary-uuid: size-test-uuid", "Should have UUID")
+	assert.Contains(t, result, "PASSED-2000", "Should have pass count")
+	assert.Contains(t, result, "FAILED-500", "Should have fail count")
+	assert.Contains(t, result, "SKIPPED-500", "Should have skip count")
+	
+	// Concise version should NOT have these sections
+	assert.NotContains(t, result, "⏱️ Slowest Tests", "Concise version should not have slowest tests")
+	assert.NotContains(t, result, "📦 Package Summary", "Concise version should not have package summary")
+}
+
+// TestGenerateGitHubComment tests backward compatibility
 func TestGenerateGitHubComment(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -296,6 +494,40 @@ func generateManyTests(count int) []types.TestResult {
 		}
 	}
 	return tests
+}
+
+// generateTestsWithPackages generates tests distributed across multiple packages
+func generateTestsWithPackages(count int) []types.TestResult {
+	packages := []string{
+		"github.com/cloudposse/atmos/pkg/utils",
+		"github.com/cloudposse/atmos/pkg/config",
+		"github.com/cloudposse/atmos/pkg/stack",
+		"github.com/cloudposse/atmos/internal/exec",
+		"github.com/cloudposse/atmos/cmd",
+	}
+	
+	tests := make([]types.TestResult, count)
+	for i := 0; i < count; i++ {
+		tests[i] = types.TestResult{
+			Package:  packages[i%len(packages)],
+			Test:     "TestGenerated" + string(rune('A'+i%26)),
+			Duration: float64(i%20) * 0.5, // Varying durations
+		}
+	}
+	return tests
+}
+
+// generateManyFunctions generates many coverage functions for testing
+func generateManyFunctions(count int) []types.CoverageFunction {
+	functions := make([]types.CoverageFunction, count)
+	for i := 0; i < count; i++ {
+		functions[i] = types.CoverageFunction{
+			File:     "pkg/test/file" + string(rune('A'+i%26)) + ".go",
+			Function: "Function" + string(rune('A'+i%26)),
+			Coverage: float64(i%2) * 100, // Some covered, some not
+		}
+	}
+	return functions
 }
 
 // Helper function to generate many coverage functions for testing
