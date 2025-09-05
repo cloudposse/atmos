@@ -20,6 +20,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Allow tests to override exec for credential helpers.
+var lookPath = exec.LookPath
+var commandContext = exec.CommandContext
+
 // DockerConfig represents the structure of Docker's config.json file.
 type DockerConfig struct {
 	Auths map[string]struct {
@@ -52,7 +56,7 @@ var (
 
 // resolveDockerConfigPath resolves the Docker config file path from various sources.
 func resolveDockerConfigPath(atmosConfig *schema.AtmosConfiguration) (string, error) {
-	// Create a Viper instance for environment variable access
+	// Create a Viper instance for environment variable access.
 	v := viper.New()
 	bindEnv(v, "docker_config", "ATMOS_OCI_DOCKER_CONFIG", "DOCKER_CONFIG")
 
@@ -73,18 +77,18 @@ func resolveDockerConfigPath(atmosConfig *schema.AtmosConfiguration) (string, er
 
 // loadDockerConfig loads and parses the Docker config file.
 func loadDockerConfig(configPath string) (DockerConfig, error) {
-	// Check if Docker config file exists
+	// Check if Docker config file exists.
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return DockerConfig{}, fmt.Errorf("%w: %s", errDockerConfigFileNotFound, configPath)
 	}
 
-	// Read Docker config file
+	// Read Docker config file.
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
 		return DockerConfig{}, fmt.Errorf("%w: %v", errFailedToReadDockerConfigFile, err)
 	}
 
-	// Parse Docker config JSON
+	// Parse Docker config JSON.
 	var dockerConfig DockerConfig
 	if err := json.Unmarshal(configData, &dockerConfig); err != nil {
 		return DockerConfig{}, fmt.Errorf("%w: %v", errFailedToParseDockerConfigJSON, err)
@@ -131,6 +135,14 @@ func tryCredentialHelpers(registry string, credHelpers map[string]string) (authn
 		}
 	}
 
+	// Try with http:// prefix.
+	httpRegistry := "http://" + registry
+	if helper, ok := credHelpers[httpRegistry]; ok {
+		if auth, err := tryCredentialHelper(registry, httpRegistry, helper); err == nil {
+			return auth, nil
+		}
+	}
+
 	return nil, errNoCredentialHelperFound
 }
 
@@ -159,13 +171,15 @@ func tryDirectAuth(registry string, auths map[string]struct {
 		registry,
 		"https://" + registry,
 		"http://" + registry,
+		"https://" + registry + "/v1/",
+		"http://" + registry + "/v1/",
 	}
 
 	for _, reg := range registryVariants {
 		if authData, exists := auths[reg]; exists && authData.Auth != "" {
 			username, password, err := decodeDockerAuth(authData.Auth)
 			if err != nil {
-				return nil, fmt.Errorf("%w %s: %w", errFailedToDecodeAuthForRegistry, reg, err)
+				return nil, fmt.Errorf("%w %s: %v", errFailedToDecodeAuthForRegistry, reg, err)
 			}
 			return &authn.Basic{
 				Username: username,
@@ -226,23 +240,23 @@ func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, e
 		return nil, fmt.Errorf("%w: %s", errInvalidCredentialStoreName, credsStore)
 	}
 
-	// For Docker Desktop on macOS, the credential store is typically "desktop"
-	// We need to use the docker-credential-desktop helper to get credentials
+	// For Docker Desktop on macOS, the credential store is typically "desktop".
+	// We need to use the docker-credential-desktop helper to get credentials.
 
 	// Try to execute the credential helper
 	helperCmd := "docker-credential-" + credsStore
-	if _, err := exec.LookPath(helperCmd); err != nil {
-		return nil, fmt.Errorf("%w %s: %w", errCredentialHelperNotFound, helperCmd, err)
+	if _, err := lookPath(helperCmd); err != nil {
+		return nil, fmt.Errorf("%w %s: %v", errCredentialHelperNotFound, helperCmd, err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, helperCmd, "get")
-	cmd.Stdin = strings.NewReader(registry)
+	cmd := commandContext(ctx, helperCmd, "get")
+	cmd.Stdin = strings.NewReader(registry + "\n")
 
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("%w %s: %w", errFailedToGetCredentialsFromStore, credsStore, err)
+		return nil, fmt.Errorf("%w %s: %v", errFailedToGetCredentialsFromStore, credsStore, err)
 	}
 
 	// Parse the JSON output from the credential helper
