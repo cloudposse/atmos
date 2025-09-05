@@ -811,11 +811,15 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 					m.packagesWithNoTests[event.Package] = true
 				}
 				
-				// Check for FATAL errors in output (e.g., TestMain failures)
-				if strings.Contains(event.Output, "FATAL") || strings.Contains(event.Output, "FAIL\t"+event.Package) {
-					// Mark package as failed
+				// Check for package-level FAIL in output (e.g., TestMain failures)
+				// This catches "FAIL\tpackage.name\t0.123s" which go test outputs
+				if strings.Contains(event.Output, "FAIL\t"+event.Package) {
+					// Mark package as failed - it likely has tests that failed to run
 					if pkg := m.packageResults[event.Package]; pkg != nil {
-						pkg.Status = "fail"
+						// Don't override status if already set, but ensure we know tests exist
+						if pkg.Status == "running" {
+							pkg.Status = "fail"
+						}
 						pkg.HasTests = true // It has tests, they just failed to run
 					}
 				}
@@ -848,6 +852,12 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 					delete(m.activePackages, event.Package)
 					if !contains(m.packageOrder, event.Package) {
 						m.packageOrder = append(m.packageOrder, event.Package)
+					}
+					
+					// If package failed with no tests recorded, it likely has tests that couldn't run
+					// (e.g., TestMain failure, compilation error, etc.)
+					if event.Action == "fail" && len(pkg.Tests) == 0 && !m.packagesWithNoTests[event.Package] {
+						pkg.HasTests = true
 					}
 				}
 			}

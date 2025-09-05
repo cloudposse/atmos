@@ -440,13 +440,17 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 					p.packagesWithNoTests[event.Package] = true
 				}
 				
-				// Check for FATAL errors in output (e.g., TestMain failures)
-				if strings.Contains(event.Output, "FATAL") || strings.Contains(event.Output, "FAIL\t"+event.Package) {
-					// Mark package as failed
+				// Check for package-level FAIL in output (e.g., TestMain failures)
+				// This catches "FAIL\tpackage.name\t0.123s" which go test outputs
+				if strings.Contains(event.Output, "FAIL\t"+event.Package) {
+					// Mark package as failed - it likely has tests that failed to run
 					if pkg, exists := p.packageResults[event.Package]; exists {
-						pkg.Status = "fail"
+						// Don't override status if already set, but ensure we know tests exist
+						if pkg.Status == "running" {
+							pkg.Status = "fail"
+						}
 						pkg.HasTests = true // It has tests, they just failed to run
-						// Store the fatal output
+						// Store the output for display
 						pkg.Output = append(pkg.Output, event.Output)
 					}
 				}
@@ -475,6 +479,12 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				pkg.Elapsed = event.Elapsed
 				pkg.EndTime = time.Now()
 				delete(p.activePackages, event.Package)
+				
+				// If no tests were recorded but package failed, it likely has tests that couldn't run
+				// (e.g., TestMain failure, compilation error, etc.)
+				if len(pkg.Tests) == 0 && !p.packagesWithNoTests[event.Package] {
+					pkg.HasTests = true
+				}
 				
 				// Display buffered package results
 				p.displayPackageResult(pkg)
