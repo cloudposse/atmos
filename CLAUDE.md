@@ -156,11 +156,11 @@ viper.SetEnvPrefix("ATMOS")
 
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
-- **NEVER use `t.Skip()` without a reason**
+- **NEVER use `t.Skipf()` without a reason**
 - Examples:
   ```go
   // WRONG: No reason provided
-  t.Skip("Skipping test")
+  t.Skipf("Skipping test")
   
   // CORRECT: Clear reason with context
   t.Skipf("Skipping symlink test on Windows: symlinks require special privileges")
