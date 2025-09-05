@@ -153,7 +153,7 @@ func EmitAlert(enabled bool) {
 }
 
 // runSimpleStream runs tests with simple non-interactive streaming output.
-func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool) int {
+func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, fullOutput bool) int {
 	// Configure colors and initialize styles for stream mode
 	profile := tui.ConfigureColors()
 
@@ -184,7 +184,7 @@ func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, 
 	args = append(args, testPackages...)
 
 	// Run the tests
-	exitCode := RunTestsWithSimpleStreaming(args, outputFile, showFilter)
+	exitCode := RunTestsWithSimpleStreaming(args, outputFile, showFilter, fullOutput)
 
 	// Emit alert at completion
 	EmitAlert(alert)
@@ -231,6 +231,7 @@ type StreamProcessor struct {
 	subtestStats map[string]*SubtestStats // Track subtest statistics per parent test
 	jsonWriter   io.Writer
 	showFilter   string
+	fullOutput   bool   // Show complete output with proper formatting
 	startTime    time.Time
 	currentTest    string // Track current test for package-level output
 	
@@ -252,7 +253,7 @@ type StreamProcessor struct {
 }
 
 // runTestsWithSimpleStreaming runs tests and processes output in real-time.
-func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter string) int {
+func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter string, fullOutput bool) int {
 	// Create the command
 	cmd := exec.Command("go", testArgs...)
 	cmd.Stderr = os.Stderr // Pass through stderr
@@ -292,6 +293,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		
 		jsonWriter:   jsonFile,
 		showFilter:   showFilter,
+		fullOutput:   fullOutput,
 		startTime:    time.Now(),
 	}
 
@@ -738,8 +740,18 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 	
 	// Display test output for failures (respecting show filter)
 	if test.Status == "fail" && len(test.Output) > 0 && p.showFilter != "none" {
-		for _, outputLine := range test.Output {
-			fmt.Fprint(os.Stderr, indent+"    "+outputLine)
+		if p.fullOutput {
+			// With full output, properly render tabs and maintain formatting
+			for _, outputLine := range test.Output {
+				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
+				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+				fmt.Fprint(os.Stderr, indent+"    "+formatted)
+			}
+		} else {
+			// Default: show output as-is
+			for _, outputLine := range test.Output {
+				fmt.Fprint(os.Stderr, indent+"    "+outputLine)
+			}
 		}
 	}
 	
@@ -783,6 +795,14 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 						indent, tui.FailStyle.Render("✘"), len(failed))
 					for _, subtest := range failed {
 						fmt.Fprintf(os.Stderr, "%s      • %s\n", indent, subtest.Name)
+						// Show subtest output if full-output is enabled
+						if p.fullOutput && len(subtest.Output) > 0 {
+							for _, outputLine := range subtest.Output {
+								formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
+								formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+								fmt.Fprint(os.Stderr, indent+"        "+formatted)
+							}
+						}
 					}
 				}
 				

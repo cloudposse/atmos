@@ -109,6 +109,32 @@ type SubtestStats struct {
 	skipped []string // names of skipped subtests
 }
 
+// PackageResult holds the complete test results for a package.
+type PackageResult struct {
+	Package      string
+	StartTime    time.Time
+	EndTime      time.Time
+	Status       string              // "pass", "fail", "skip", "running"
+	Tests        map[string]*TestResult
+	TestOrder    []string            // Order in which tests were run
+	Coverage     string              // Coverage percentage if available
+	Output       []string            // Package-level output
+	Elapsed      float64
+	HasTests     bool                // Track if any tests ran
+}
+
+// TestResult holds the result of an individual test.
+type TestResult struct {
+	Name         string
+	FullName     string              // Full test name including package
+	Status       string              // "pass", "fail", "skip"
+	Elapsed      float64
+	Output       []string            // All output from the test
+	Parent       string              // Parent test name if this is a subtest
+	Subtests     map[string]*TestResult
+	SubtestOrder []string
+}
+
 // TestModel represents the test UI model.
 type TestModel struct {
 	// Test tracking
@@ -136,6 +162,7 @@ type TestModel struct {
 	outputFile string
 	showFilter string // "all", "failed", "passed", "skipped"
 	alert      bool   // whether to emit terminal bell on completion
+	fullOutput bool   // whether to show complete output for failed tests
 
 	// Results tracking
 	passCount      int
@@ -145,6 +172,12 @@ type TestModel struct {
 	subtestOutputs map[string][]string      // Persistent storage for subtest output
 	subtestStats   map[string]*SubtestStats // Track subtest statistics per parent test
 	bufferMu       sync.Mutex
+
+	// Buffered output
+	packageResults map[string]*PackageResult // Complete package results
+	packageOrder   []string                  // Order packages were completed
+	activePackages map[string]bool           // Track which packages are currently running
+	completedPackageOutput strings.Builder   // Accumulated output from completed packages
 
 	// JSON output
 	jsonFile *os.File
@@ -187,7 +220,7 @@ type streamOutputMsg struct {
 }
 
 // NewTestModel creates a new test model for the TUI.
-func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool) TestModel {
+func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, fullOutput bool) TestModel {
 	// Create progress bar
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -230,6 +263,7 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		outputFile:     outputFile,
 		showFilter:     showFilter,
 		alert:          alert,
+		fullOutput:     fullOutput,
 		spinner:        s,
 		progress:       p,
 		testBuffers:    make(map[string][]string),
@@ -238,6 +272,9 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		packagesWithNoTests: make(map[string]bool),
 		packageHasTests: make(map[string]bool),
 		packageNoTestsPrinted: make(map[string]bool),
+		packageResults: make(map[string]*PackageResult),
+		packageOrder:   []string{},
+		activePackages: make(map[string]bool),
 		totalTests:     0, // Will be incremented by "run" events
 		completedTests: 0, // Will be incremented by pass/fail/skip events
 		startTime:      time.Now(),
@@ -356,425 +393,31 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Convert to appropriate test message and continue streaming
 		nextCmd := m.readNextLine()
 
-		// Handle package-level events separately
-		if event.Test == "" {
-			switch event.Action {
-			case "start":
-				// New package starting
-				if event.Package != "" && m.currentPackage != event.Package {
-					m.currentPackage = event.Package
-					// Initialize tracking for this package
-					m.packageHasTests[event.Package] = false
-					// Display package header
-					packageHeader := fmt.Sprintf("\n▶ %s\n\n", 
-						PackageHeaderStyle.Render(event.Package))
-					return m, tea.Batch(
-						tea.Printf("%s", packageHeader),
-						nextCmd, 
-						m.spinner.Tick,
-					)
-				}
-			case "skip":
-				// Package has no tests
-				if event.Package != "" && !m.packageNoTestsPrinted[event.Package] {
-					noTestsMsg := fmt.Sprintf("  %s\n", 
-						DurationStyle.Render("No tests"))
-					m.packageNoTestsPrinted[event.Package] = true
-					return m, tea.Batch(
-						tea.Printf("%s", noTestsMsg),
-						nextCmd,
-						m.spinner.Tick,
-					)
-				}
-			case "output":
-				// Check for "no test files" message in output
-				if event.Package != "" && strings.Contains(event.Output, "[no test files]") {
-					// Mark that this package has no tests
-					m.packagesWithNoTests[event.Package] = true
-				}
-				// Package-level output might contain important command output
-				if m.currentTest != "" {
-					// Append package-level output to the current test's buffer
-					m.bufferMu.Lock()
-					if m.testBuffers[m.currentTest] != nil {
-						m.testBuffers[m.currentTest] = append(m.testBuffers[m.currentTest], event.Output)
-					}
-					m.bufferMu.Unlock()
-				}
-			case "pass":
-				// When a package passes, check if we need to show "No tests"
-				if event.Package != "" && !m.packageNoTestsPrinted[event.Package] {
-					if m.packagesWithNoTests[event.Package] {
-						// Package had "[no test files]" in output
-						// If this isn't the current package, we need to show which package this is for
-						var noTestsMsg string
-						if m.currentPackage != event.Package {
-							noTestsMsg = fmt.Sprintf("\n  %s for %s\n", 
-								DurationStyle.Render("No tests"),
-								PackageHeaderStyle.Render(event.Package))
-						} else {
-							noTestsMsg = fmt.Sprintf("  %s\n", 
-								DurationStyle.Render("No tests"))
-						}
-						m.packageNoTestsPrinted[event.Package] = true
-						return m, tea.Batch(
-							tea.Printf("%s", noTestsMsg),
-							nextCmd,
-							m.spinner.Tick,
-						)
-					} else if hasTests, exists := m.packageHasTests[event.Package]; exists && !hasTests {
-						// Package passed but no tests were run
-						// If this isn't the current package, we need to show which package this is for
-						var noTestsMsg string
-						if m.currentPackage != event.Package {
-							noTestsMsg = fmt.Sprintf("\n  %s for %s\n", 
-								DurationStyle.Render("No tests"),
-								PackageHeaderStyle.Render(event.Package))
-						} else {
-							noTestsMsg = fmt.Sprintf("  %s\n", 
-								DurationStyle.Render("No tests"))
-						}
-						m.packageNoTestsPrinted[event.Package] = true
-						return m, tea.Batch(
-							tea.Printf("%s", noTestsMsg),
-							nextCmd,
-							m.spinner.Tick,
-						)
+		// Process event with buffering
+		m.processEvent(&event)
+		
+		// Check if any packages completed and display them
+		var displayCmd tea.Cmd
+		for _, pkg := range m.packageOrder {
+			if result, exists := m.packageResults[pkg]; exists && result.Status != "running" {
+				// Package is complete, check if we've already displayed it
+				if !strings.Contains(m.completedPackageOutput.String(), fmt.Sprintf("▶ %s", pkg)) {
+					// Display this package
+					output := m.displayPackageResult(result)
+					if output != "" {
+						m.completedPackageOutput.WriteString(output)
+						displayCmd = tea.Printf("%s", output)
 					}
 				}
 			}
-			return m, tea.Batch(nextCmd, m.spinner.Tick) // Continue reading
 		}
 
-		// Mark that this package has tests
-		if event.Package != "" && event.Test != "" {
-			m.packageHasTests[event.Package] = true
+
+		// Continue reading and optionally display
+		if displayCmd != nil {
+			return m, tea.Batch(nextCmd, displayCmd, m.spinner.Tick)
 		}
-
-		switch event.Action {
-		case "run":
-			m.currentTest = event.Test
-			m.totalTests++ // Count all tests that start running (parent and subtests)
-			m.bufferMu.Lock()
-			// Only initialize if buffer doesn't exist (to preserve early output)
-			if m.testBuffers[event.Test] == nil {
-				m.testBuffers[event.Test] = []string{}
-			}
-			m.bufferMu.Unlock()
-			// Batch next command with spinner tick to keep UI updating
-			return m, tea.Batch(nextCmd, m.spinner.Tick)
-
-		case "output":
-			// Buffer the output for potential error display
-			m.bufferMu.Lock()
-			// Create buffer if it doesn't exist (can happen with subtests or out-of-order events)
-			if m.testBuffers[event.Test] == nil {
-				m.testBuffers[event.Test] = []string{}
-			}
-			m.testBuffers[event.Test] = append(m.testBuffers[event.Test], event.Output)
-			m.bufferMu.Unlock()
-			// Batch next command with spinner tick to keep UI updating
-			return m, tea.Batch(nextCmd, m.spinner.Tick)
-
-		case "pass":
-			m.passCount++
-			m.completedTests++ // Count all completed tests (parent and subtests)
-			// Track subtest statistics
-			if strings.Contains(event.Test, "/") {
-				// This is a subtest - update parent's stats
-				parts := strings.SplitN(event.Test, "/", 2)
-				parentTest := parts[0]
-				subtestName := parts[1]
-
-				if m.subtestStats[parentTest] == nil {
-					m.subtestStats[parentTest] = &SubtestStats{}
-				}
-				m.subtestStats[parentTest].passed = append(m.subtestStats[parentTest].passed, subtestName)
-			} else {
-				// Only increment currentIndex for top-level tests, not subtests
-				m.currentIndex++
-			}
-
-			// Update progress
-			var progressCmd tea.Cmd
-			if m.totalTests > 0 {
-				progressCmd = m.progress.SetPercent(float64(m.completedTests) / float64(m.totalTests))
-			}
-
-			var displayCmd tea.Cmd
-			// Only show if filter allows it
-			// Don't print passed tests immediately to avoid overwriting progress bar
-			// The progress bar shows the current status
-			if m.shouldShowTest("pass") {
-				var displayOutput string
-				// Check if this is a parent test with subtests
-				if !strings.Contains(event.Test, "/") && m.subtestStats[event.Test] != nil {
-					stats := m.subtestStats[event.Test]
-					totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
-
-					// Generate mini progress indicator for subtests
-					miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
-					percentage := 0
-					if totalSubtests > 0 {
-						percentage = (len(stats.passed) * 100) / totalSubtests
-					}
-
-					// Display parent test with subtest summary in line
-					displayOutput = fmt.Sprintf("  %s %s %s %s %d%% passed\n",
-						PassStyle.Render(CheckPass),
-						TestNameStyle.Render(event.Test),
-						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
-						miniProgress,
-						percentage)
-				} else {
-					// Regular test without subtests
-					displayOutput = fmt.Sprintf("  %s %s %s\n",
-						PassStyle.Render(CheckPass),
-						TestNameStyle.Render(event.Test),
-						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
-				}
-				displayCmd = tea.Printf("%s", displayOutput)
-			}
-
-			// Clean up buffer
-			m.bufferMu.Lock()
-			if strings.Contains(event.Test, "/") {
-				// This is a subtest - preserve its output for parent test
-				if output, exists := m.testBuffers[event.Test]; exists && len(output) > 0 {
-					m.subtestOutputs[event.Test] = make([]string, len(output))
-					copy(m.subtestOutputs[event.Test], output)
-				}
-			}
-			delete(m.testBuffers, event.Test)
-			m.bufferMu.Unlock()
-
-			// Continue reading and optionally show progress/display
-			cmds := []tea.Cmd{nextCmd, m.spinner.Tick}
-			if progressCmd != nil {
-				cmds = append(cmds, progressCmd)
-			}
-			if displayCmd != nil {
-				cmds = append(cmds, displayCmd)
-			}
-			return m, tea.Batch(cmds...)
-
-		case "fail":
-			// Get buffered output for this test
-			m.bufferMu.Lock()
-			bufferedOutput := m.testBuffers[event.Test]
-			output := make([]string, len(bufferedOutput))
-			copy(output, bufferedOutput)
-
-			// If no output found, check for subtest output
-			if len(output) == 0 {
-				testPrefix := event.Test + "/"
-				// First check persistent subtest outputs
-				for testName, testOutput := range m.subtestOutputs {
-					if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
-						output = append(output, testOutput...)
-					}
-				}
-				// Also check current buffers (for subtests that haven't completed yet)
-				for testName, testOutput := range m.testBuffers {
-					if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
-						// Don't duplicate if already added from subtestOutputs
-						alreadyAdded := false
-						if _, exists := m.subtestOutputs[testName]; exists {
-							alreadyAdded = true
-						}
-						if !alreadyAdded {
-							output = append(output, testOutput...)
-						}
-					}
-				}
-			}
-			m.bufferMu.Unlock()
-
-			m.failCount++
-			m.completedTests++ // Count all completed tests (parent and subtests)
-			// Track subtest statistics
-			if strings.Contains(event.Test, "/") {
-				// This is a subtest - update parent's stats
-				parts := strings.SplitN(event.Test, "/", 2)
-				parentTest := parts[0]
-				subtestName := parts[1]
-
-				if m.subtestStats[parentTest] == nil {
-					m.subtestStats[parentTest] = &SubtestStats{}
-				}
-				m.subtestStats[parentTest].failed = append(m.subtestStats[parentTest].failed, subtestName)
-			} else {
-				// Only increment currentIndex for top-level tests, not subtests
-				m.currentIndex++
-			}
-
-			// Update progress
-			var progressCmd tea.Cmd
-			if m.totalTests > 0 {
-				progressCmd = m.progress.SetPercent(float64(m.completedTests) / float64(m.totalTests))
-			}
-
-			var displayCmd tea.Cmd
-			// Only show if filter allows it
-			if m.shouldShowTest("fail") {
-				// Check if this is a parent test with subtests
-				var displayOutput string
-				if !strings.Contains(event.Test, "/") && m.subtestStats[event.Test] != nil {
-					stats := m.subtestStats[event.Test]
-					totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
-
-					// Generate mini progress indicator for subtests
-					miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
-					percentage := 0
-					if totalSubtests > 0 {
-						percentage = (len(stats.passed) * 100) / totalSubtests
-					}
-
-					// Display parent test with subtest summary in line
-					displayOutput = fmt.Sprintf("\n  %s %s %s %s %d%% passed",
-						FailStyle.Render(CheckFail),
-						TestNameStyle.Render(event.Test),
-						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
-						miniProgress,
-						percentage)
-
-					// Add detailed subtest summary
-					if totalSubtests > 0 {
-						displayOutput += fmt.Sprintf("\n\n    Subtest Summary: %d passed, %d failed of %d total\n",
-							len(stats.passed), len(stats.failed), totalSubtests)
-
-						// Show passed subtests
-						if len(stats.passed) > 0 {
-							displayOutput += fmt.Sprintf("\n    %s Passed (%d):\n",
-								PassStyle.Render("✔"), len(stats.passed))
-							for _, name := range stats.passed {
-								displayOutput += fmt.Sprintf("      • %s\n", name)
-							}
-						}
-
-						// Show failed subtests
-						if len(stats.failed) > 0 {
-							displayOutput += fmt.Sprintf("\n    %s Failed (%d):\n",
-								FailStyle.Render("✘"), len(stats.failed))
-							for _, name := range stats.failed {
-								displayOutput += fmt.Sprintf("      • %s\n", name)
-							}
-						}
-
-						// Show skipped subtests if any
-						if len(stats.skipped) > 0 {
-							displayOutput += fmt.Sprintf("\n    %s Skipped (%d):\n",
-								SkipStyle.Render("⊘"), len(stats.skipped))
-							for _, name := range stats.skipped {
-								displayOutput += fmt.Sprintf("      • %s\n", name)
-							}
-						}
-					}
-				} else {
-					// Regular test or subtest - display normally
-					displayOutput = fmt.Sprintf("\n  %s %s %s",
-						FailStyle.Render(CheckFail),
-						TestNameStyle.Render(event.Test),
-						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
-				}
-
-				// Add error details if present - show ALL output for failed tests
-				if len(output) > 0 {
-					displayOutput += "\n\n"
-					for _, line := range output {
-						// Show all error output including command output
-						displayOutput += "    " + line
-					}
-				}
-				// Single newline - test name line is the visual separator
-				displayOutput += "\n"
-
-				displayCmd = tea.Printf("%s", displayOutput)
-			}
-
-			// Clean up buffer
-			m.bufferMu.Lock()
-			if strings.Contains(event.Test, "/") {
-				// This is a subtest - preserve its output for parent test
-				if output, exists := m.testBuffers[event.Test]; exists && len(output) > 0 {
-					m.subtestOutputs[event.Test] = make([]string, len(output))
-					copy(m.subtestOutputs[event.Test], output)
-				}
-			}
-			delete(m.testBuffers, event.Test)
-			m.bufferMu.Unlock()
-
-			// Continue reading and optionally show progress/display
-			cmds := []tea.Cmd{nextCmd, m.spinner.Tick}
-			if progressCmd != nil {
-				cmds = append(cmds, progressCmd)
-			}
-			if displayCmd != nil {
-				cmds = append(cmds, displayCmd)
-			}
-			return m, tea.Batch(cmds...)
-
-		case "skip":
-			m.skipCount++
-			m.completedTests++ // Count all completed tests (parent and subtests)
-			// Track subtest statistics
-			if strings.Contains(event.Test, "/") {
-				// This is a subtest - update parent's stats
-				parts := strings.SplitN(event.Test, "/", 2)
-				parentTest := parts[0]
-				subtestName := parts[1]
-
-				if m.subtestStats[parentTest] == nil {
-					m.subtestStats[parentTest] = &SubtestStats{}
-				}
-				m.subtestStats[parentTest].skipped = append(m.subtestStats[parentTest].skipped, subtestName)
-			} else {
-				// Only increment currentIndex for top-level tests, not subtests
-				m.currentIndex++
-			}
-
-			// Update progress
-			var progressCmd tea.Cmd
-			if m.totalTests > 0 {
-				progressCmd = m.progress.SetPercent(float64(m.completedTests) / float64(m.totalTests))
-			}
-
-			var displayCmd tea.Cmd
-			// Only show if filter allows it
-			// Don't print skipped tests immediately to avoid overwriting progress bar
-			if m.shouldShowTest("skip") {
-				// Only show skipped tests if explicitly requested
-				output := fmt.Sprintf("  %s %s\n",
-					SkipStyle.Render(CheckSkip),
-					TestNameStyle.Render(event.Test))
-				displayCmd = tea.Printf("%s", output)
-			}
-
-			// Clean up buffer
-			m.bufferMu.Lock()
-			if strings.Contains(event.Test, "/") {
-				// This is a subtest - preserve its output for parent test
-				if output, exists := m.testBuffers[event.Test]; exists && len(output) > 0 {
-					m.subtestOutputs[event.Test] = make([]string, len(output))
-					copy(m.subtestOutputs[event.Test], output)
-				}
-			}
-			delete(m.testBuffers, event.Test)
-			m.bufferMu.Unlock()
-
-			// Continue reading and optionally show progress/display
-			cmds := []tea.Cmd{nextCmd, m.spinner.Tick}
-			if progressCmd != nil {
-				cmds = append(cmds, progressCmd)
-			}
-			if displayCmd != nil {
-				cmds = append(cmds, displayCmd)
-			}
-			return m, tea.Batch(cmds...)
-
-		default:
-			return m, nextCmd
-		}
+		return m, tea.Batch(nextCmd, m.spinner.Tick)
 
 	case testsDoneMsg:
 		// Update progress to 100% before marking as done
@@ -1048,4 +691,389 @@ func emitAlert(enabled bool) {
 	if enabled {
 		fmt.Fprint(os.Stderr, "\a")
 	}
+}
+
+// processEvent processes a test event and updates the model state.
+func (m *TestModel) processEvent(event *types.TestEvent) {
+	// Handle package-level events
+	if event.Test == "" {
+		switch event.Action {
+		case "start":
+			// New package starting
+			if event.Package != "" {
+				m.currentPackage = event.Package
+				// Initialize package result
+				if m.packageResults[event.Package] == nil {
+					m.packageResults[event.Package] = &PackageResult{
+						Package:   event.Package,
+						StartTime: time.Now(),
+						Status:    "running",
+						Tests:     make(map[string]*TestResult),
+						TestOrder: []string{},
+						HasTests:  false,
+					}
+					m.activePackages[event.Package] = true
+				}
+			}
+		case "output":
+			// Check for coverage or "no test files" message
+			if event.Package != "" {
+				if strings.Contains(event.Output, "coverage:") {
+					// Extract coverage percentage
+					if matches := strings.Fields(event.Output); len(matches) >= 2 {
+						for i, field := range matches {
+							if field == "coverage:" && i+1 < len(matches) {
+								m.packageResults[event.Package].Coverage = matches[i+1]
+								break
+							}
+						}
+					}
+				}
+				if strings.Contains(event.Output, "[no test files]") {
+					m.packagesWithNoTests[event.Package] = true
+				}
+				// Buffer package-level output
+				if pkg := m.packageResults[event.Package]; pkg != nil {
+					pkg.Output = append(pkg.Output, event.Output)
+				}
+			}
+		case "skip":
+			// Package skipped (no tests to run)
+			if event.Package != "" {
+				if pkg := m.packageResults[event.Package]; pkg != nil {
+					pkg.Status = "skip"
+					pkg.EndTime = time.Now()
+					pkg.Elapsed = event.Elapsed
+					delete(m.activePackages, event.Package)
+					if !contains(m.packageOrder, event.Package) {
+						m.packageOrder = append(m.packageOrder, event.Package)
+					}
+				}
+			}
+		case "pass", "fail":
+			// Package completed
+			if event.Package != "" {
+				if pkg := m.packageResults[event.Package]; pkg != nil {
+					pkg.Status = event.Action
+					pkg.EndTime = time.Now()
+					pkg.Elapsed = event.Elapsed
+					delete(m.activePackages, event.Package)
+					if !contains(m.packageOrder, event.Package) {
+						m.packageOrder = append(m.packageOrder, event.Package)
+					}
+				}
+			}
+		}
+		return
+	}
+
+	// Handle test-level events
+	if event.Package != "" {
+		pkg := m.packageResults[event.Package]
+		if pkg == nil {
+			// Create package if it doesn't exist (can happen with out-of-order events)
+			pkg = &PackageResult{
+				Package:   event.Package,
+				StartTime: time.Now(),
+				Status:    "running",
+				Tests:     make(map[string]*TestResult),
+				TestOrder: []string{},
+				HasTests:  false,
+			}
+			m.packageResults[event.Package] = pkg
+			m.activePackages[event.Package] = true
+		}
+		
+		// Mark that this package has tests
+		pkg.HasTests = true
+		
+		// Parse test hierarchy
+		var parentTest string
+		var isSubtest bool
+		if strings.Contains(event.Test, "/") {
+			parts := strings.SplitN(event.Test, "/", 2)
+			parentTest = parts[0]
+			isSubtest = true
+		}
+		
+		switch event.Action {
+		case "run":
+			m.currentTest = event.Test
+			m.totalTests++
+			
+			if isSubtest {
+				// This is a subtest
+				parent := pkg.Tests[parentTest]
+				if parent == nil {
+					// Parent test might not exist yet due to parallel execution
+					parent = &TestResult{
+						Name:         parentTest,
+						FullName:     parentTest,
+						Status:       "running",
+						Subtests:     make(map[string]*TestResult),
+						SubtestOrder: []string{},
+					}
+					pkg.Tests[parentTest] = parent
+				}
+				
+				subtest := &TestResult{
+					Name:     event.Test,
+					FullName: event.Test,
+					Status:   "running",
+					Parent:   parentTest,
+				}
+				parent.Subtests[event.Test] = subtest
+				parent.SubtestOrder = append(parent.SubtestOrder, event.Test)
+			} else {
+				// Top-level test
+				test := &TestResult{
+					Name:         event.Test,
+					FullName:     event.Test,
+					Status:       "running",
+					Subtests:     make(map[string]*TestResult),
+					SubtestOrder: []string{},
+				}
+				pkg.Tests[event.Test] = test
+				pkg.TestOrder = append(pkg.TestOrder, event.Test)
+			}
+			
+		case "output":
+			// Buffer the output
+			if isSubtest {
+				if parent := pkg.Tests[parentTest]; parent != nil {
+					if subtest := parent.Subtests[event.Test]; subtest != nil {
+						subtest.Output = append(subtest.Output, event.Output)
+					}
+				}
+			} else {
+				if test := pkg.Tests[event.Test]; test != nil {
+					test.Output = append(test.Output, event.Output)
+				}
+			}
+			
+		case "pass", "fail", "skip":
+			m.completedTests++
+			
+			// Update counts
+			switch event.Action {
+			case "pass":
+				m.passCount++
+			case "fail":
+				m.failCount++
+			case "skip":
+				m.skipCount++
+			}
+			
+			// Update test result
+			if isSubtest {
+				if parent := pkg.Tests[parentTest]; parent != nil {
+					if subtest := parent.Subtests[event.Test]; subtest != nil {
+						subtest.Status = event.Action
+						subtest.Elapsed = event.Elapsed
+					}
+					// Update parent subtest stats
+					if m.subtestStats[parentTest] == nil {
+						m.subtestStats[parentTest] = &SubtestStats{}
+					}
+					switch event.Action {
+					case "pass":
+						m.subtestStats[parentTest].passed = append(m.subtestStats[parentTest].passed, event.Test)
+					case "fail":
+						m.subtestStats[parentTest].failed = append(m.subtestStats[parentTest].failed, event.Test)
+					case "skip":
+						m.subtestStats[parentTest].skipped = append(m.subtestStats[parentTest].skipped, event.Test)
+					}
+				}
+			} else {
+				if test := pkg.Tests[event.Test]; test != nil {
+					test.Status = event.Action
+					test.Elapsed = event.Elapsed
+				}
+			}
+			
+			// Update progress
+			if m.totalTests > 0 {
+				m.progress.SetPercent(float64(m.completedTests) / float64(m.totalTests))
+			}
+		}
+	}
+}
+
+// displayPackageResult generates the display output for a completed package.
+func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
+	var output strings.Builder
+	
+	// Package header
+	output.WriteString(fmt.Sprintf("\n▶ %s\n\n", PackageHeaderStyle.Render(pkg.Package)))
+	
+	// Check for "No tests"
+	if pkg.Status == "skip" || m.packagesWithNoTests[pkg.Package] || !pkg.HasTests {
+		output.WriteString(fmt.Sprintf("  %s\n", DurationStyle.Render("No tests")))
+		return output.String()
+	}
+	
+	// Display tests in order
+	for _, testName := range pkg.TestOrder {
+		test := pkg.Tests[testName]
+		if test == nil {
+			continue
+		}
+		
+		// Check if we should display this test based on filter
+		if !m.shouldShowTest(test.Status) && m.showFilter != "collapsed" {
+			continue
+		}
+		
+		// Display test result
+		m.displayTest(&output, test)
+	}
+	
+	// Add coverage if available
+	if pkg.Coverage != "" {
+		output.WriteString(fmt.Sprintf("\n  %s %s\n", 
+			DurationStyle.Render("Coverage:"), 
+			DurationStyle.Render(pkg.Coverage)))
+	}
+	
+	return output.String()
+}
+
+// displayTest adds a test's display output to the builder.
+func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
+	// Check if this test has subtests
+	hasSubtests := len(test.Subtests) > 0
+	
+	// Build the test display
+	var styledIcon string
+	switch test.Status {
+	case "pass":
+		styledIcon = PassStyle.Render(CheckPass)
+	case "fail":
+		styledIcon = FailStyle.Render(CheckFail)
+	case "skip":
+		styledIcon = SkipStyle.Render(CheckSkip)
+	default:
+		return // Don't display running tests
+	}
+	
+	// Display the test
+	output.WriteString(fmt.Sprintf("  %s %s", styledIcon, TestNameStyle.Render(test.Name)))
+	
+	// Add duration if available
+	if test.Elapsed > 0 {
+		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed))))
+	}
+	
+	// Add subtest progress indicator if it has subtests
+	if hasSubtests && m.subtestStats[test.Name] != nil {
+		stats := m.subtestStats[test.Name]
+		totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
+		
+		if totalSubtests > 0 {
+			miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
+			percentage := (len(stats.passed) * 100) / totalSubtests
+			output.WriteString(fmt.Sprintf(" %s %d%% passed", miniProgress, percentage))
+		}
+	}
+	
+	output.WriteString("\n")
+	
+	// Show test output for failed tests if not in collapsed mode
+	if test.Status == "fail" && m.showFilter != "collapsed" && len(test.Output) > 0 {
+		output.WriteString("\n")
+		if m.fullOutput {
+			// With full output, properly render tabs and maintain formatting
+			for _, line := range test.Output {
+				// Replace literal \t with actual tabs and \n with newlines
+				formatted := strings.ReplaceAll(line, `\t`, "\t")
+				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+				output.WriteString("    " + formatted)
+			}
+		} else {
+			// Default: show output as-is
+			for _, line := range test.Output {
+				output.WriteString("    " + line)
+			}
+		}
+		output.WriteString("\n")
+	}
+	
+	// Show detailed subtest results for failed parent tests
+	if test.Status == "fail" && hasSubtests && m.showFilter != "collapsed" {
+		stats := m.subtestStats[test.Name]
+		if stats != nil {
+			totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
+			if totalSubtests > 0 {
+				output.WriteString(fmt.Sprintf("\n    Subtest Summary: %d passed, %d failed of %d total\n",
+					len(stats.passed), len(stats.failed), totalSubtests))
+				
+				// Show passed subtests
+				if len(stats.passed) > 0 {
+					output.WriteString(fmt.Sprintf("\n    %s Passed (%d):\n", PassStyle.Render("✔"), len(stats.passed)))
+					for _, name := range stats.passed {
+						// Extract just the subtest name, not the full path
+						parts := strings.SplitN(name, "/", 2)
+						subtestName := name
+						if len(parts) > 1 {
+							subtestName = parts[1]
+						}
+						output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
+					}
+				}
+				
+				// Show failed subtests with their output
+				if len(stats.failed) > 0 {
+					output.WriteString(fmt.Sprintf("\n    %s Failed (%d):\n", FailStyle.Render("✘"), len(stats.failed)))
+					for _, name := range stats.failed {
+						// Extract just the subtest name
+						parts := strings.SplitN(name, "/", 2)
+						subtestName := name
+						if len(parts) > 1 {
+							subtestName = parts[1]
+						}
+						output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
+						
+						// Show subtest output if available
+						if subtest := test.Subtests[name]; subtest != nil && len(subtest.Output) > 0 {
+							if m.fullOutput {
+								// With full output, properly render tabs and maintain formatting
+								for _, line := range subtest.Output {
+									formatted := strings.ReplaceAll(line, `\t`, "\t")
+									formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+									output.WriteString("        " + formatted)
+								}
+							} else {
+								for _, line := range subtest.Output {
+									output.WriteString("        " + line)
+								}
+							}
+						}
+					}
+				}
+				
+				// Show skipped subtests if any
+				if len(stats.skipped) > 0 {
+					output.WriteString(fmt.Sprintf("\n    %s Skipped (%d):\n", SkipStyle.Render("⊘"), len(stats.skipped)))
+					for _, name := range stats.skipped {
+						parts := strings.SplitN(name, "/", 2)
+						subtestName := name
+						if len(parts) > 1 {
+							subtestName = parts[1]
+						}
+						output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
+					}
+				}
+			}
+		}
+	}
+}
+
+// contains checks if a string is in a slice.
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
