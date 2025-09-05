@@ -1,0 +1,29 @@
+import:
+  - catalog/demo
+
+vars:
+  stage: "dev"
+
+components:
+  ansible:
+    webapp:
+      vars:
+        webapp_port: 8080
+        debug_mode: true
+        log_level: "DEBUG"
+        
+        # Development-specific inventory
+        target_hosts: "webservers"
+        
+        # Dev environment variables
+        webapp_environment: "development"
+        
+      settings:
+        ansible:
+          # Override default settings for dev
+          playbook: "site.yml"
+          inventory: "inventory.yml"
+          
+      env:
+        ANSIBLE_VERBOSITY: "1"
+        ANSIBLE_DISPLAY_SKIPPED_HOSTS: "True"

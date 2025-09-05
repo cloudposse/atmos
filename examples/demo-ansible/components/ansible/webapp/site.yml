@@ -1,0 +1,60 @@
+---
+- name: Configure webapp servers
+  hosts: "{{ target_hosts | default('webservers') }}"
+  become: yes
+  gather_facts: yes
+
+  vars:
+    app_name: "{{ webapp_name | default('mywebapp') }}"
+    app_version: "{{ webapp_version | default('1.0.0') }}"
+    app_port: "{{ webapp_port | default(8080) }}"
+    app_env: "{{ environment | default('development') }}"
+
+  tasks:
+    - name: Ensure required packages are installed
+      package:
+        name:
+          - nginx
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Create app directory
+      file:
+        path: "/opt/{{ app_name }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create app configuration
+      template:
+        src: app.conf.j2
+        dest: "/etc/nginx/sites-available/{{ app_name }}"
+        mode: '0644'
+      notify: reload nginx
+
+    - name: Enable app site
+      file:
+        src: "/etc/nginx/sites-available/{{ app_name }}"
+        dest: "/etc/nginx/sites-enabled/{{ app_name }}"
+        state: link
+      notify: reload nginx
+
+    - name: Start and enable nginx
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Display deployment info
+      debug:
+        msg:
+          - "Application: {{ app_name }}"
+          - "Version: {{ app_version }}"
+          - "Environment: {{ app_env }}"
+          - "Port: {{ app_port }}"
+
+  handlers:
+    - name: reload nginx
+      service:
+        name: nginx
+        state: reloaded

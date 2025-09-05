@@ -46,6 +46,7 @@ func TestStackProcessor(t *testing.T) {
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
 		packerComponentsBasePath,
+		"", // ansibleComponentsBasePath
 		filePaths,
 		processStackDeps,
 		processComponentDeps,
@@ -224,8 +225,9 @@ func TestStackProcessorRelativePaths(t *testing.T) {
 		&atmosConfig,
 		stacksBasePath,
 		terraformComponentsBasePath,
-		"",
-		"",
+		"", // helmfileComponentsBasePath
+		"", // packerComponentsBasePath
+		"", // ansibleComponentsBasePath
 		filePaths,
 		true,
 		true,
@@ -319,6 +321,7 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 			"terraform",
 			"helmfile",
 			"packer",
+			"ansible",
 			[]string{},
 			true,
 			true,
@@ -346,6 +349,7 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 			"terraform",
 			"helmfile",
 			"packer",
+			"ansible",
 			[]string{"non-existent-file.yaml"},
 			true,
 			true,
@@ -380,6 +384,7 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 			"../../tests/fixtures/scenarios/complete/components/terraform",
 			"../../tests/fixtures/scenarios/complete/components/helmfile",
 			"../../tests/fixtures/scenarios/complete/components/packer",
+			"../../tests/fixtures/scenarios/complete/components/ansible",
 			filePaths,
 			true,
 			true,

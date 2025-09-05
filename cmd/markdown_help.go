@@ -41,6 +41,21 @@ var examples = map[string]ExampleContent{
 	"atmos_aws_eks_update_kubeconfig": {
 		Suggestion: "https://atmos.tools/cli/commands/aws/eks-update-kubeconfig",
 	},
+	"atmos_ansible": {
+		Suggestion: "https://atmos.tools/cli/commands/ansible/usage",
+	},
+	"atmos_ansible_playbook": {
+		Suggestion: "https://atmos.tools/cli/commands/ansible/playbook",
+	},
+	"atmos_ansible_inventory": {
+		Suggestion: "https://atmos.tools/cli/commands/ansible/inventory",
+	},
+	"atmos_ansible_vault": {
+		Suggestion: "https://atmos.tools/cli/commands/ansible/vault",
+	},
+	"atmos_ansible_version": {
+		Suggestion: "https://atmos.tools/cli/commands/ansible/version",
+	},
 }
 
 func init() {

@@ -1,0 +1,21 @@
+---
+# Global variables for all hosts
+
+# Common packages to install
+common_packages:
+  - curl
+  - wget
+  - htop
+  - vim
+
+# Security settings
+firewall_enabled: true
+automatic_updates: true
+
+# Logging configuration
+log_retention_days: 30
+syslog_server: "{{ syslog_host | default('') }}"
+
+# Default service settings
+service_restart_policy: "always"
+service_timeout: 300

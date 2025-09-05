@@ -1,0 +1,22 @@
+server {
+    listen {{ app_port }};
+    server_name {{ ansible_fqdn | default('localhost') }};
+    
+    location / {
+        root /opt/{{ app_name }}/public;
+        index index.html index.htm;
+        try_files $uri $uri/ =404;
+    }
+    
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "OK - {{ app_name }} v{{ app_version }} ({{ app_env }})\n";
+        add_header Content-Type text/plain;
+    }
+    
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+}

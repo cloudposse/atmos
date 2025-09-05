@@ -16,6 +16,9 @@
     "packer": {
       "$ref": "#/definitions/packer"
     },
+    "ansible": {
+      "$ref": "#/definitions/ansible"
+    },
     "vars": {
       "$ref": "#/definitions/vars"
     },
@@ -73,6 +76,11 @@
         {
           "required": [
             "packer"
+          ]
+        },
+        {
+          "required": [
+            "ansible"
           ]
         },
         {
@@ -174,6 +182,9 @@
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
+            },
+            "ansible": {
+              "$ref": "#/definitions/ansible_components"
             }
           },
           "required": []
@@ -442,6 +453,92 @@
     "packer_component_manifest": {
       "title": "packer_component_manifest",
       "description": "packer component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "ansible": {
+      "title": "ansible",
+      "description": "Ansible section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "ansible_components": {
+      "title": "ansible_components",
+      "description": "Ansible components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/ansible_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ansible_component_manifest": {
+      "title": "ansible_component_manifest",
+      "description": "Ansible component manifest",
       "oneOf": [
         {
           "type": "string",

@@ -1,0 +1,31 @@
+base_path: "./"
+
+schemas:
+  atmos:
+    manifest: "schemas/atmos-manifest.json"
+
+components:
+  ansible:
+    base_path: "components/ansible"
+    command: "ansible-playbook"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# No arguments or flags are required
+commands:
+- name: "test"
+  description: "Run all tests"
+  steps:
+  - atmos validate stacks
+  - atmos ansible playbook webapp -s dev -- --check
+

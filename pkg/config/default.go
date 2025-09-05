@@ -57,6 +57,10 @@ var (
 				BasePath: "components/packer",
 				Command:  "packer",
 			},
+			Ansible: schema.Ansible{
+				BasePath: "components/ansible",
+				Command:  "ansible-playbook",
+			},
 		},
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",

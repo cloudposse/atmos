@@ -1,0 +1,77 @@
+---
+title: atmos ansible
+sidebar_label: ansible
+sidebar_class_name: command
+---
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
+<img width="80" align="right" src={useBaseUrl('/img/ansible.svg')} alt="Ansible"/>
+
+:::note Purpose
+Use these subcommands to interact with [Ansible](https://docs.ansible.com/)
+to manage configuration and automate infrastructure deployments.
+:::
+
+## Usage
+
+<Terminal>
+```shell
+atmos ansible <sub-command> <atmos-component> --stack <atmos-stack> [atmos-flags] -- [ansible-options]
+```
+</Terminal>
+
+:::tip
+For more details on the Ansible commands and options, refer to [Ansible Documentation](https://docs.ansible.com/ansible/latest/cli/).
+:::
+
+## Atmos Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--playbook` <em>(alias `-p`)</em><em>(optional)</em></dt>
+    <dd>
+        Ansible playbook file.
+        It can be specified in the `settings.ansible.playbook` section in the Atmos component manifest,
+        or on the command line via the flag `--playbook <playbook>` (shorthand `-p`).
+        The command line flag takes precedence over `settings.ansible.playbook`.
+    </dd>
+
+    <dt>`--inventory` <em>(alias `-i`)</em><em>(optional)</em></dt>
+    <dd>
+        Ansible inventory file or directory.
+        It can be specified in the `settings.ansible.inventory` section in the Atmos component manifest,
+        or on the command line via the flag `--inventory <inventory>` (shorthand `-i`).
+        The command line flag takes precedence over `settings.ansible.inventory`.
+    </dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos ansible version
+
+atmos ansible playbook webapp --stack dev
+atmos ansible playbook webapp -s dev --playbook site.yml
+atmos ansible playbook webapp -s prod -p production.yml
+
+atmos ansible inventory webapp -s dev --list
+atmos ansible inventory webapp -s dev --host webserver1
+
+atmos ansible vault webapp -s dev encrypt secrets.yml
+atmos ansible vault webapp -s dev decrypt secrets.yml
+atmos ansible vault webapp -s dev create new-secrets.yml
+```
+</Terminal>
+
+## Subcommands
+
+<DocCardList />

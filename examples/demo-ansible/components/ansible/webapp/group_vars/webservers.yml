@@ -1,0 +1,22 @@
+---
+# Variables specific to webserver hosts
+
+# Web server configuration
+web_root: "/var/www/{{ webapp_name | default('webapp') }}"
+web_user: "www-data"
+web_group: "www-data"
+
+# Nginx specific settings
+nginx_worker_processes: "{{ ansible_processor_vcpus | default(2) }}"
+nginx_worker_connections: "{{ nginx_worker_connections | default(1024) }}"
+nginx_keepalive_timeout: 65
+nginx_client_max_body_size: "{{ nginx_client_max_body_size | default('10M') }}"
+
+# SSL/TLS settings (for production)
+ssl_enabled: "{{ (environment == 'prod') | bool }}"
+ssl_certificate: "/etc/ssl/certs/{{ webapp_name }}.crt"
+ssl_certificate_key: "/etc/ssl/private/{{ webapp_name }}.key"
+
+# Monitoring
+enable_status_page: true
+status_page_location: "/nginx_status"
