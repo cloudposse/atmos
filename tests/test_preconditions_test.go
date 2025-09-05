@@ -315,10 +315,10 @@ func TestLogPreconditionOverride_Variations(t *testing.T) {
 func TestRequireAWSProfile_NonExistent(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// This should skip the test
 	RequireAWSProfile(t, "definitely-non-existent-profile-xyz-12345")
-	
+
 	// Should not reach here
 	t.Error("Should have skipped with non-existent profile")
 }
@@ -327,16 +327,16 @@ func TestRequireAWSProfile_NonExistent(t *testing.T) {
 func TestRequireGitRepository_NotInRepo(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// Change to temp directory that's not a git repo
 	tmpDir := t.TempDir()
 	origDir, _ := os.Getwd()
 	defer os.Chdir(origDir)
-	
+
 	if err := os.Chdir(tmpDir); err == nil {
 		// This should skip the test
 		RequireGitRepository(t)
-		
+
 		// Should not reach here
 		t.Error("Should have skipped when not in git repo")
 	}
@@ -346,10 +346,10 @@ func TestRequireGitRepository_NotInRepo(t *testing.T) {
 func TestRequireGitRepository_InRepo(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// This test runs in the actual repo, so it should work
 	repo := RequireGitRepository(t)
-	
+
 	if repo != nil {
 		// We got a repo object, test passed
 		assert.NotNil(t, repo)
@@ -361,10 +361,10 @@ func TestRequireGitRepository_InRepo(t *testing.T) {
 func TestRequireGitRemoteWithValidURL_WithRemote(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// This should work in the actual repo
 	url := RequireGitRemoteWithValidURL(t)
-	
+
 	// Either we got a URL or test was skipped
 	_ = url
 }
@@ -373,7 +373,7 @@ func TestRequireGitRemoteWithValidURL_WithRemote(t *testing.T) {
 func TestRequireGitHubAccess_NoToken(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// Clear any GitHub tokens
 	origGH := os.Getenv("GITHUB_TOKEN")
 	origAtmos := os.Getenv("ATMOS_GITHUB_TOKEN")
@@ -387,10 +387,10 @@ func TestRequireGitHubAccess_NoToken(t *testing.T) {
 			os.Setenv("ATMOS_GITHUB_TOKEN", origAtmos)
 		}
 	}()
-	
+
 	// This will either skip or return rate limit info
 	info := RequireGitHubAccess(t)
-	
+
 	// If we got info, it worked (even with rate limits)
 	_ = info
 }
@@ -399,10 +399,10 @@ func TestRequireGitHubAccess_NoToken(t *testing.T) {
 func TestRequireNetworkAccess_ValidURL(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// Try with a commonly available URL
 	RequireNetworkAccess(t, "https://github.com")
-	
+
 	// If we get here, network access worked
 }
 
@@ -410,10 +410,10 @@ func TestRequireNetworkAccess_ValidURL(t *testing.T) {
 func TestRequireNetworkAccess_InvalidURL(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// This should skip
 	RequireNetworkAccess(t, "https://definitely-invalid-domain-xyz-12345.example.com")
-	
+
 	// Should not reach here
 	t.Error("Should have skipped with invalid URL")
 }
