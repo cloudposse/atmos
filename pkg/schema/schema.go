@@ -1047,6 +1047,7 @@ type Credentials struct {
 	AWS   *AWSCredentials   `yaml:"aws,omitempty" json:"aws,omitempty" mapstructure:"aws"`
 	Azure *AzureCredentials `yaml:"azure,omitempty" json:"azure,omitempty" mapstructure:"azure"`
 	GCP   *GCPCredentials   `yaml:"gcp,omitempty" json:"gcp,omitempty" mapstructure:"gcp"`
+	OIDC  *OIDCCredentials  `yaml:"oidc,omitempty" json:"oidc,omitempty" mapstructure:"oidc"`
 }
 
 // AWSCredentials defines AWS-specific credential fields
@@ -1073,6 +1074,13 @@ type GCPCredentials struct {
 	RefreshToken string `json:"refresh_token,omitempty"`
 	ProjectID    string `json:"project_id,omitempty"`
 	Expiration   string `json:"expiration,omitempty"`
+}
+
+// OIDCCredentials defines OIDC-specific credential fields
+type OIDCCredentials struct {
+	Token    string `json:"token,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Audience string `json:"audience,omitempty"`
 }
 
 // WhoamiInfo represents the current effective authentication principal

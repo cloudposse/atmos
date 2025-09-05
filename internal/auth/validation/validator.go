@@ -87,6 +87,8 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 		return v.validateAssumeRoleProvider(provider)
 	case "aws/saml":
 		return v.validateSAMLProvider(provider)
+	case "github/oidc":
+		return v.validateGitHubOIDCProvider(provider)
 	default:
 		return fmt.Errorf("unsupported provider kind: %s", provider.Kind)
 	}
@@ -196,6 +198,15 @@ func (v *validator) validateSAMLProvider(provider *schema.Provider) error {
 	// Validate URL format
 	if _, err := url.Parse(provider.URL); err != nil {
 		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	return nil
+}
+
+// validateGitHubOIDCProvider validates GitHub OIDC provider configuration
+func (v *validator) validateGitHubOIDCProvider(provider *schema.Provider) error {
+	if provider.Region == "" {
+		return fmt.Errorf("region is required for GitHub OIDC provider")
 	}
 
 	return nil

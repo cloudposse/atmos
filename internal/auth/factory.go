@@ -6,6 +6,7 @@ import (
 	"github.com/cloudposse/atmos/internal/auth/identities/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	awsProviders "github.com/cloudposse/atmos/internal/auth/providers/aws"
+	githubProviders "github.com/cloudposse/atmos/internal/auth/providers/github"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -18,6 +19,8 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return awsProviders.NewAssumeRoleProvider(name, config)
 	case "aws/saml":
 		return awsProviders.NewSAMLProvider(name, config)
+	case "github/oidc":
+		return githubProviders.NewOIDCProvider(name, config)
 	default:
 		return nil, fmt.Errorf("unsupported provider kind: %s", config.Kind)
 	}

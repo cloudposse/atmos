@@ -804,13 +804,44 @@ providers:
 - Multiple SAML assertion formats are supported (Base64 encoded, raw XML, processed assertions)
 - Provider type auto-detection: Google Apps URLs automatically use "Browser" provider for compatibility
 
-#### GitHub Actions OIDC
+#### GitHub OIDC
 
+The GitHub OIDC provider authenticates using GitHub Actions OIDC tokens and is designed to work with AWS assume role identities for CI/CD workflows.
+
+**Basic Configuration:**
 ```yaml
 providers:
   github-oidc:
-    kind: oidc/github-actions
+    kind: github/oidc
+    region: us-east-1
 ```
+
+**Usage with AWS Assume Role Identity:**
+```yaml
+providers:
+  github-oidc:
+    kind: github/oidc
+    region: us-east-1
+
+identities:
+  ci-role:
+    kind: aws/assume-role
+    via: { provider: github-oidc }
+    principal:
+      role_arn: arn:aws:iam::123456789012:role/GitHubActionsRole
+      session_name: github-actions-${GITHUB_RUN_ID}
+```
+
+**Environment Variables (GitHub Actions):**
+- `ACTIONS_ID_TOKEN_REQUEST_TOKEN` - GitHub Actions OIDC token (automatically set)
+- `ACTIONS_ID_TOKEN_REQUEST_URL` - GitHub Actions OIDC endpoint (automatically set)
+
+**Usage Notes:**
+- Only works within GitHub Actions environment
+- Requires GitHub Actions workflow to have `id-token: write` permission
+- OIDC token is automatically retrieved from GitHub Actions environment
+- Typically used with AWS assume role identities for temporary AWS credentials
+- AWS files are automatically managed with provider-based organization
 
 #### Azure Entra ID
 
