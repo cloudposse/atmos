@@ -532,17 +532,17 @@ func (m *TestModel) View() string {
 		percentFloat := float64(m.completedTests) / float64(m.totalTests)
 		percent := int(percentFloat * 100)
 		percentage = fmt.Sprintf("%3d%%", percent) // Fixed width
-		// Format test count with "tests" in dark gray
-		testCount = fmt.Sprintf("%3d/%-3d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
+		// Format test count with "tests" in dark gray - use dynamic width
+		testCount = fmt.Sprintf("%d/%d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
 	} else {
 		// Very early, before any run events
 		percentage = "  0%"
 		testCount = DurationStyle.Render("discovering tests")
 	}
 	
-	// Format time and buffer with units in dark gray
-	timeStr := fmt.Sprintf("(%4d%s)", elapsedSeconds, DurationStyle.Render("s"))
-	bufferStr := fmt.Sprintf("%7.1f%s", bufferSizeKB, DurationStyle.Render("KB"))
+	// Format time and buffer with units in dark gray (no parentheses)
+	timeStr := fmt.Sprintf("%d%s", elapsedSeconds, DurationStyle.Render("s"))
+	bufferStr := fmt.Sprintf("%.1f%s", bufferSizeKB, DurationStyle.Render("KB"))
 	
 	// Build the right-aligned section
 	rightSection := timeStr + " " + bufferStr
@@ -550,17 +550,24 @@ func (m *TestModel) View() string {
 	// Calculate the middle section
 	middleSection := prog + " " + percentage + "  " + testCount
 	
-	// Calculate available space
+	// Calculate available space using actual display widths
 	leftSection := spin + info
-	leftWidth := getDisplayWidth(spin) + maxTestWidth + 8
+	leftWidth := getDisplayWidth(leftSection)
 	middleWidth := getDisplayWidth(middleSection)
 	rightWidth := getDisplayWidth(rightSection)
 	
 	// Calculate gap to right-align the time/buffer
-	// Account for actual display widths properly
-	gapWidth := terminalWidth - leftWidth - middleWidth - rightWidth
-	if gapWidth < 2 {
-		gapWidth = 2 // Minimum gap to prevent cutoff
+	// Reserve space for the right section to prevent cutoff
+	usedWidth := leftWidth + middleWidth + rightWidth + 4 // +4 for spacing between sections
+	if usedWidth > terminalWidth {
+		// If we're over width, truncate the test name in info
+		// and recalculate
+		return spin + "Running..." + " " + prog + " " + percentage + "  " + testCount + "  " + timeStr + " " + bufferStr + "\n"
+	}
+	
+	gapWidth := terminalWidth - usedWidth
+	if gapWidth < 1 {
+		gapWidth = 1
 	}
 	gap := strings.Repeat(" ", gapWidth)
 	
