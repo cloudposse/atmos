@@ -52,6 +52,7 @@ internal/exec/output.*
 coverage.out
 coverage.html
 coverage.out.tmp
+tests.test
 
 # Test artifacts
 test-results.json
