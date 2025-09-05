@@ -167,10 +167,10 @@ viper.SetEnvPrefix("ATMOS")
   t.Skipf("Skipping test: %s", dynamicReason)
   ```
 - **For CLI tests that depend on rebuilt binaries**:
-  - Package-level `skipReason` variable is set in `TestMain`
+  - Set package-level `skipReason` variable in `TestMain` before calling `m.Run()`
   - Individual test functions check and skip with `t.Skipf()` if set
-  - TestMain MUST always call `m.Run()` to allow proper test skipping
-  - Never use `log.Fatal()` for missing/stale binaries
+  - TestMain MUST call `os.Exit(m.Run())` to propagate the test exit code
+  - Never use `log.Fatal()` for missing/stale binaries - set `skipReason` instead
 
 ### CLI Command Structure & Examples
 Atmos uses **embedded markdown files** for maintainable examples:
