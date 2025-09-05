@@ -66,14 +66,20 @@ func (m *merger) MergeIdentity(global *schema.Identity, component *schema.Identi
 		Kind:        global.Kind,
 		Default:     global.Default,
 		Via:         global.Via,
-		Spec:        make(map[string]interface{}),
+		Principal:   make(map[string]interface{}),
+		Credentials: make(map[string]interface{}),
 		Alias:       global.Alias,
 		Env: global.Env,
 	}
 
-	// Copy global spec
-	for k, v := range global.Spec {
-		merged.Spec[k] = v
+	// Copy global principal
+	for k, v := range global.Principal {
+		merged.Principal[k] = v
+	}
+
+	// Copy global credentials
+	for k, v := range global.Credentials {
+		merged.Credentials[k] = v
 	}
 
 	// Copy global environment variables
@@ -92,9 +98,14 @@ func (m *merger) MergeIdentity(global *schema.Identity, component *schema.Identi
 		merged.Alias = component.Alias
 	}
 
-	// Merge spec - component values override global values
-	for k, v := range component.Spec {
-		merged.Spec[k] = v
+	// Merge principal - component values override global values
+	for k, v := range component.Principal {
+		merged.Principal[k] = v
+	}
+
+	// Merge credentials - component values override global values
+	for k, v := range component.Credentials {
+		merged.Credentials[k] = v
 	}
 
 	// Append component environment variables

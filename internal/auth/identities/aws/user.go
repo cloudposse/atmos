@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/huh"
-
+	"github.com/charmbracelet/log"
 	atmosCredentials "github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/environment"
 	"github.com/cloudposse/atmos/internal/auth/types"
@@ -50,11 +50,14 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 		return nil, fmt.Errorf("failed to retrieve AWS User credentials for %q: %w", i.name, err)
 	}
 	
-	// Get region from identity spec
+	// Get region from identity credentials
 	region := "us-east-1" // default
-	if r, ok := i.config.Spec["region"].(string); ok && r != "" {
+	if r, ok := i.config.Credentials["region"].(string); ok && r != "" {
 		region = r
 	}
+	
+	// Debug logging
+	log.Debug("AWS User region extraction", "identity", i.name, "region", region, "credentials", i.config.Credentials)
 	
 	// Set region in credentials if not already set
 	if longLivedCreds.AWS.Region == "" {
@@ -68,6 +71,9 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider
 func (i *userIdentity) writeAWSFiles(creds *schema.Credentials, region string) error {
 	awsFileManager := environment.NewAWSFileManager()
+	
+	// Debug logging
+	log.Debug("Writing AWS files", "identity", i.name, "region", region, "creds_region", creds.AWS.Region)
 	
 	// Write credentials to ~/.aws/atmos/aws-user/credentials
 	if err := awsFileManager.WriteCredentials("aws-user", i.name, creds.AWS); err != nil {
@@ -204,18 +210,27 @@ func (i *userIdentity) Merge(component *schema.Identity) types.Identity {
 			Kind:        i.config.Kind,
 			Default:     component.Default, // Component can override default
 			Via:         i.config.Via,
-			Spec:        make(map[string]interface{}),
+			Principal:   make(map[string]interface{}),
+			Credentials: make(map[string]interface{}),
 			Alias:       i.config.Alias,
 			Env: i.config.Env,
 		},
 	}
 
-	// Merge spec
-	for k, v := range i.config.Spec {
-		merged.config.Spec[k] = v
+	// Merge principal
+	for k, v := range i.config.Principal {
+		merged.config.Principal[k] = v
 	}
-	for k, v := range component.Spec {
-		merged.config.Spec[k] = v // Component overrides
+	for k, v := range component.Principal {
+		merged.config.Principal[k] = v // Component overrides
+	}
+
+	// Merge credentials
+	for k, v := range i.config.Credentials {
+		merged.config.Credentials[k] = v
+	}
+	for k, v := range component.Credentials {
+		merged.config.Credentials[k] = v // Component overrides
 	}
 
 	// Merge environment variables

@@ -59,6 +59,10 @@ type AuthManager interface {
 	// ListIdentities returns all available identity names
 	ListIdentities() []string
 
+	// GetProviderForIdentity returns the root provider name for the given identity
+	// Recursively resolves through identity chains to find the root provider
+	GetProviderForIdentity(identityName string) string
+
 	// ListProviders returns all available provider names
 	ListProviders() []string
 }

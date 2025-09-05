@@ -56,14 +56,18 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 
 	log.Debug("Permission set authentication with base credentials", "identity", i.name, "baseAccessKeyId", baseCreds.AWS.AccessKeyID[:10]+"...")
 
-	// Get permission set name from spec
-	permissionSetName, ok := i.config.Spec["name"].(string)
-	if !ok || permissionSetName == "" {
-		return nil, fmt.Errorf("permission set name is required in spec")
+	// Get permission set name from principal or spec (backward compatibility)
+	var permissionSetName string
+	var ok bool
+	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
+			return nil, fmt.Errorf("permission set name is required in principal")
 	}
 
-	// Get account info from spec
-	accountSpec, ok := i.config.Spec["account"].(map[string]interface{})
+	// Get account info from principal or spec (backward compatibility)
+	var accountSpec map[string]interface{}
+	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
+			return nil, fmt.Errorf("account specification is required in principal")
+	}
 	if !ok {
 		return nil, fmt.Errorf("account specification is required")
 	}
@@ -145,18 +149,21 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 
 // Validate validates the identity configuration
 func (i *permissionSetIdentity) Validate() error {
-	if i.config.Spec == nil {
-		return fmt.Errorf("spec is required")
+	if i.config.Principal == nil {
+		return fmt.Errorf("principal is required")
 	}
 
-	permissionSetName, ok := i.config.Spec["name"].(string)
-	if !ok || permissionSetName == "" {
-		return fmt.Errorf("permission set name is required in spec")
+	// Check permission set name in principal or spec (backward compatibility)
+	var permissionSetName string
+	var ok bool
+	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
+			return fmt.Errorf("permission set name is required in principal")
 	}
 
-	accountSpec, ok := i.config.Spec["account"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("account specification is required")
+	// Check account info in principal
+	var accountSpec map[string]interface{}
+	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
+			return fmt.Errorf("account specification is required in principal")
 	}
 
 	accountName, ok := accountSpec["name"].(string)
@@ -184,21 +191,30 @@ func (i *permissionSetIdentity) Merge(component *schema.Identity) types.Identity
 	merged := &permissionSetIdentity{
 		name: i.name,
 		config: &schema.Identity{
-			Kind:    i.config.Kind,
-			Default: component.Default, // Component can override default
-			Via:     i.config.Via,
-			Spec:    make(map[string]interface{}),
-			Alias:   i.config.Alias,
-			Env:     i.config.Env,
+			Kind:        i.config.Kind,
+			Default:     component.Default, // Component can override default
+			Via:         i.config.Via,
+			Principal:   make(map[string]interface{}),
+			Credentials: make(map[string]interface{}),
+			Alias:       i.config.Alias,
+			Env:         i.config.Env,
 		},
 	}
 
-	// Merge spec
-	for k, v := range i.config.Spec {
-		merged.config.Spec[k] = v
+	// Merge principal
+	for k, v := range i.config.Principal {
+		merged.config.Principal[k] = v
 	}
-	for k, v := range component.Spec {
-		merged.config.Spec[k] = v // Component overrides
+	for k, v := range component.Principal {
+		merged.config.Principal[k] = v // Component overrides
+	}
+
+	// Merge credentials
+	for k, v := range i.config.Credentials {
+		merged.config.Credentials[k] = v
+	}
+	for k, v := range component.Credentials {
+		merged.config.Credentials[k] = v // Component overrides
 	}
 
 	// Merge environment variables

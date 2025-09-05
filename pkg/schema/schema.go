@@ -1003,7 +1003,8 @@ type Identity struct {
 	Kind        string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
 	Default     bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
-	Spec        map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
+	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"`
+	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 }

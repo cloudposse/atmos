@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/charmbracelet/log"
 	ini "gopkg.in/ini.v1"
 
 	"github.com/cloudposse/atmos/internal/auth/types"
@@ -97,6 +98,9 @@ func (m *awsFileManager) WriteConfig(providerName, identityName, region, outputF
 		return fmt.Errorf("failed to create profile section: %w", err)
 	}
 
+	// Debug logging for region
+	log.Debug("AWS WriteConfig", "providerName", providerName, "identityName", identityName, "region", region, "outputFormat", outputFormat)
+	
 	// Set config values only if they are not empty
 	if region != "" {
 		section.Key("region").SetValue(region)

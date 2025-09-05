@@ -134,8 +134,9 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	if identity, exists := mergedAuthConfig.Identities[targetIdentityName]; exists {
 		if identity.Kind == "aws/user" && identity.Via == nil {
 			rootProviderName = "aws-user"
-		} else if identity.Via != nil && identity.Via.Provider != "" {
-			rootProviderName = identity.Via.Provider
+		} else {
+			// Use AuthManager's method to recursively resolve provider through identity chains
+			rootProviderName = authManager.GetProviderForIdentity(targetIdentityName)
 		}
 	}
 

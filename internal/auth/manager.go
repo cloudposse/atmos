@@ -131,9 +131,19 @@ func (m *manager) SetupAWSFiles(ctx context.Context, providerName, identityName 
 	// Write config file to provider directory with identity profile
 	region := creds.AWS.Region
 	if region == "" {
-		// Get region from provider config
-		if provider, exists := m.config.Providers[providerName]; exists {
-			region = provider.Region
+		// For AWS user identities, get region from identity credentials config
+		if providerName == "aws-user" {
+			if identity, exists := m.config.Identities[identityName]; exists {
+				if r, ok := identity.Credentials["region"].(string); ok && r != "" {
+					region = r
+				}
+			}
+		}
+		// Fallback to provider config
+		if region == "" {
+			if provider, exists := m.config.Providers[providerName]; exists {
+				region = provider.Region
+			}
 		}
 	}
 	if err := m.awsFileManager.WriteConfig(providerName, identityName, region, ""); err != nil {
@@ -249,6 +259,12 @@ func (m *manager) getProviderForIdentityRecursive(identityName string, visited m
 	}
 
 	return ""
+}
+
+// GetProviderForIdentity returns the provider name for the given identity
+// Recursively resolves through identity chains to find the root provider
+func (m *manager) GetProviderForIdentity(identityName string) string {
+	return m.getProviderForIdentity(identityName)
 }
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation

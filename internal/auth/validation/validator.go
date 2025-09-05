@@ -183,16 +183,16 @@ func (v *validator) validateAssumeRoleProvider(provider *schema.Provider) error 
 
 // validatePermissionSetIdentity validates AWS permission set identity configuration
 func (v *validator) validatePermissionSetIdentity(identity *schema.Identity) error {
-	if identity.Spec == nil {
-		return fmt.Errorf("spec is required for permission set identity")
+	if identity.Principal == nil {
+		return fmt.Errorf("principal is required for permission set identity")
 	}
 
-	name, ok := identity.Spec["name"].(string)
+	name, ok := identity.Principal["name"].(string)
 	if !ok || name == "" {
-		return fmt.Errorf("permission set name is required in spec")
+		return fmt.Errorf("permission set name is required in principal")
 	}
 
-	accountSpec, ok := identity.Spec["account"].(map[string]interface{})
+	accountSpec, ok := identity.Principal["account"].(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("account specification is required")
 	}
@@ -207,13 +207,13 @@ func (v *validator) validatePermissionSetIdentity(identity *schema.Identity) err
 
 // validateAssumeRoleIdentity validates AWS assume role identity configuration
 func (v *validator) validateAssumeRoleIdentity(identity *schema.Identity) error {
-	if identity.Spec == nil {
-		return fmt.Errorf("spec is required for assume role identity")
+	if identity.Principal == nil {
+		return fmt.Errorf("principal is required for assume role identity")
 	}
 
-	roleArn, ok := identity.Spec["role_arn"].(string)
+	roleArn, ok := identity.Principal["assume_role"].(string)
 	if !ok || roleArn == "" {
-		return fmt.Errorf("role_arn is required in spec")
+		return fmt.Errorf("assume_role is required in principal")
 	}
 
 	if !strings.HasPrefix(roleArn, "arn:aws:iam::") {

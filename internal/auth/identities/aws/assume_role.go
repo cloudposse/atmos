@@ -56,10 +56,11 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 
 	log.Debug("Assume role authentication with base credentials", "identity", i.name, "baseAccessKeyId", baseCreds.AWS.AccessKeyID[:10]+"...", "hasSecretKey", baseCreds.AWS.SecretAccessKey != "", "hasSessionToken", baseCreds.AWS.SessionToken != "")
 
-	// Get role ARN from spec
-	roleArn, ok := i.config.Spec["assume_role"].(string)
-	if !ok || roleArn == "" {
-		return nil, fmt.Errorf("assume_role is required in spec")
+	// Get role ARN from principal or spec (backward compatibility)
+	var roleArn string
+	var ok bool
+	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
+			return nil, fmt.Errorf("assume_role is required in principal")
 	}
 
 	// Create AWS config using base credentials
@@ -88,12 +89,14 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 	}
 
 	// Add external ID if specified
-	if externalID, ok := i.config.Spec["external_id"].(string); ok && externalID != "" {
+	if externalID, ok := i.config.Principal["external_id"].(string); ok && externalID != "" {
 		assumeRoleInput.ExternalId = aws.String(externalID)
 	}
 
 	// Add duration if specified
-	if durationStr, ok := i.config.Spec["duration"].(string); ok && durationStr != "" {
+	var durationStr string
+	durationStr, _ = i.config.Principal["duration"].(string)
+	if durationStr != "" {
 		if duration, err := time.ParseDuration(durationStr); err == nil {
 			assumeRoleInput.DurationSeconds = aws.Int32(int32(duration.Seconds()))
 		}
@@ -128,13 +131,15 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 
 // Validate validates the identity configuration
 func (i *assumeRoleIdentity) Validate() error {
-	if i.config.Spec == nil {
-		return fmt.Errorf("spec is required")
+	if i.config.Principal == nil {
+		return fmt.Errorf("principal is required")
 	}
 
-	roleArn, ok := i.config.Spec["assume_role"].(string)
-	if !ok || roleArn == "" {
-		return fmt.Errorf("assume_role is required in spec")
+	// Check role ARN in principal or spec (backward compatibility)
+	var roleArn string
+	var ok bool
+	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
+			return fmt.Errorf("assume_role is required in principal")
 	}
 
 	return nil
@@ -157,21 +162,30 @@ func (i *assumeRoleIdentity) Merge(component *schema.Identity) types.Identity {
 	merged := &assumeRoleIdentity{
 		name: i.name,
 		config: &schema.Identity{
-			Kind:    i.config.Kind,
-			Default: component.Default, // Component can override default
-			Via:     i.config.Via,
-			Spec:    make(map[string]interface{}),
-			Alias:   i.config.Alias,
-			Env:     i.config.Env,
+			Kind:        i.config.Kind,
+			Default:     component.Default, // Component can override default
+			Via:         i.config.Via,
+			Principal:   make(map[string]interface{}),
+			Credentials: make(map[string]interface{}),
+			Alias:       i.config.Alias,
+			Env:         i.config.Env,
 		},
 	}
 
-	// Merge spec
-	for k, v := range i.config.Spec {
-		merged.config.Spec[k] = v
+	// Merge principal
+	for k, v := range i.config.Principal {
+		merged.config.Principal[k] = v
 	}
-	for k, v := range component.Spec {
-		merged.config.Spec[k] = v // Component overrides
+	for k, v := range component.Principal {
+		merged.config.Principal[k] = v // Component overrides
+	}
+
+	// Merge credentials
+	for k, v := range i.config.Credentials {
+		merged.config.Credentials[k] = v
+	}
+	for k, v := range component.Credentials {
+		merged.config.Credentials[k] = v // Component overrides
 	}
 
 	// Merge environment variables
