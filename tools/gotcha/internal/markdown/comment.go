@@ -65,16 +65,6 @@ func generateFullComment(summary *types.TestSummary, uuid string) string {
 	WriteFailedTestsTable(&content, summary.Failed)
 	WriteSkippedTestsTable(&content, summary.Skipped)
 
-	// Add slowest tests section if there are passed tests
-	if len(summary.Passed) > 0 {
-		writeSlowestTestsSection(&content, summary.Passed)
-	}
-
-	// Add package summary section if there are tests
-	if total > 0 {
-		writePackageSummarySection(&content, summary)
-	}
-
 	// For smaller test suites, include passed tests
 	if len(summary.Passed) > 0 && len(summary.Passed) <= 100 {
 		WritePassedTestsTable(&content, summary.Passed)
@@ -85,6 +75,16 @@ func generateFullComment(summary *types.TestSummary, uuid string) string {
 		WriteDetailedCoverage(&content, summary.CoverageData)
 	} else if summary.Coverage != "" {
 		WriteBasicCoverage(&content, summary.Coverage)
+	}
+
+	// Add slowest tests section after coverage
+	if len(summary.Passed) > 0 {
+		writeSlowestTestsSection(&content, summary.Passed)
+	}
+
+	// Add package summary section after slowest tests
+	if total > 0 {
+		writePackageSummarySection(&content, summary)
 	}
 
 	return content.String()
