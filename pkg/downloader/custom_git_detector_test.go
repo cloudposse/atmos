@@ -164,7 +164,7 @@ func TestDetect_UnsupportedHost(t *testing.T) {
 
 func TestRemoveSymlinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping symlink tests on Windows.")
+		t.Skipf("Skipping symlink tests on Windows: symlinks require special privileges")
 	}
 	tempDir, err := os.MkdirTemp("", "symlinktest")
 	if err != nil {
