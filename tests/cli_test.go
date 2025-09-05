@@ -497,7 +497,7 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	
+
 	if skipReason == "" {
 		logger.Info("Atmos binary for tests", "binary", binaryPath)
 	}
@@ -506,8 +506,8 @@ func TestMain(m *testing.M) {
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
-	flag.Parse() // Parse command-line flags
-	exitCode := m.Run()  // ALWAYS run tests so they can skip properly
+	flag.Parse()        // Parse command-line flags
+	exitCode := m.Run() // ALWAYS run tests so they can skip properly
 	errUtils.Exit(exitCode)
 }
 
@@ -747,7 +747,7 @@ func TestCLICommands(t *testing.T) {
 	if skipReason != "" {
 		t.Skipf("%s", skipReason)
 	}
-	
+
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {
