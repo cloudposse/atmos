@@ -38,10 +38,11 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	}
 
 	client := &getter.Client{
-		Ctx:  ctx,
-		Src:  src,
-		Dst:  dest,
-		Mode: clientMode,
+		Ctx:             ctx,
+		Src:             src,
+		Dst:             dest,
+		Mode:            clientMode,
+		DisableSymlinks: false,
 		Getters: map[string]getter.Getter{
 			// Overriding 'git'
 			"git":   &CustomGitGetter{},

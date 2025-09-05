@@ -52,3 +52,4 @@ internal/exec/output.*
 coverage.out
 coverage.html
 node_modules
+tests.test

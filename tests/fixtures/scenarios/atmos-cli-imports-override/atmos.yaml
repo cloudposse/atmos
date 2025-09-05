@@ -1,0 +1,13 @@
+# Description: This is an example of a custom import configuration file.
+# The import configuration file is used to load configurations from multiple files and directories.
+# The configurations are merged together to create a single configuration object.
+# The configurations are loaded in the order they are defined in the import section.
+base_path: "./"
+import:
+  - "./commands.yaml"                                                                    # Load a specific file
+
+commands:
+  - name: "foo"
+    description: "Run foo"
+    steps:
+      - echo "foo"
