@@ -55,7 +55,7 @@ var (
 func resolveDockerConfigPath(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	// Create a Viper instance for environment variable access
 	v := viper.New()
-	bindEnv(v, "docker_config", "ATMOS_DOCKER_CONFIG", "DOCKER_CONFIG")
+	bindEnv(v, "docker_config", "ATMOS_OCI_DOCKER_CONFIG", "DOCKER_CONFIG")
 
 	// Resolve Docker config path
 	configDir := atmosConfig.Settings.OCI.DockerConfig

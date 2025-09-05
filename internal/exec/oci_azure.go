@@ -63,9 +63,9 @@ func extractACRName(registry string) (string, error) {
 func gatherAzureCredentials(atmosConfig *schema.AtmosConfiguration) (clientID, clientSecret, tenantID string) {
 	// Create a Viper instance for environment variable access
 	v := viper.New()
-	bindEnv(v, "azure_client_id", "ATMOS_AZURE_CLIENT_ID", "AZURE_CLIENT_ID")
-	bindEnv(v, "azure_client_secret", "ATMOS_AZURE_CLIENT_SECRET", "AZURE_CLIENT_SECRET")
-	bindEnv(v, "azure_tenant_id", "ATMOS_AZURE_TENANT_ID", "AZURE_TENANT_ID")
+	bindEnv(v, "azure_client_id", "ATMOS_OCI_AZURE_CLIENT_ID", "AZURE_CLIENT_ID")
+	bindEnv(v, "azure_client_secret", "ATMOS_OCI_AZURE_CLIENT_SECRET", "AZURE_CLIENT_SECRET")
+	bindEnv(v, "azure_tenant_id", "ATMOS_OCI_AZURE_TENANT_ID", "AZURE_TENANT_ID")
 
 	// Check for Azure Service Principal credentials first
 	clientID = atmosConfig.Settings.OCI.AzureClientID

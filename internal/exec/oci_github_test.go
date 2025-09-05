@@ -93,7 +93,7 @@ func TestGitHubAuthWithEnvironment(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "GitHub CR with ATMOS_GITHUB_TOKEN environment variable",
+			name:        "GitHub CR with ATMOS_OCI_GITHUB_TOKEN environment variable",
 			registry:    "ghcr.io",
 			atmosConfig: &schema.AtmosConfiguration{},
 			envToken:    "atmos-token",
@@ -113,9 +113,9 @@ func TestGitHubAuthWithEnvironment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up environment
 			if tt.envToken != "" {
-				if tt.name == "GitHub CR with ATMOS_GITHUB_TOKEN environment variable" {
-					os.Setenv("ATMOS_GITHUB_TOKEN", tt.envToken)
-					defer os.Unsetenv("ATMOS_GITHUB_TOKEN")
+				if tt.name == "GitHub CR with ATMOS_OCI_GITHUB_TOKEN environment variable" {
+					os.Setenv("ATMOS_OCI_GITHUB_TOKEN", tt.envToken)
+					defer os.Unsetenv("ATMOS_OCI_GITHUB_TOKEN")
 				} else {
 					os.Setenv("GITHUB_TOKEN", tt.envToken)
 					defer os.Unsetenv("GITHUB_TOKEN")

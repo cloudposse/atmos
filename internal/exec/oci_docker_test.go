@@ -19,7 +19,7 @@ func TestDockerCredHelpers(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("DOCKER_CONFIG", dir)
-	t.Setenv("ATMOS_DOCKER_CONFIG", cfg)
+	t.Setenv("ATMOS_OCI_DOCKER_CONFIG", cfg)
 
 	tests := []struct {
 		name        string

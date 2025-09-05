@@ -122,12 +122,12 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.telemetry.endpoint", "ATMOS_TELEMETRY_ENDPOINT")
 
 	// OCI Registry Authentication settings
-	bindEnv(v, "settings.oci.github_token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
-	bindEnv(v, "settings.oci.azure_client_id", "ATMOS_AZURE_CLIENT_ID", "AZURE_CLIENT_ID")
-	bindEnv(v, "settings.oci.azure_client_secret", "ATMOS_AZURE_CLIENT_SECRET", "AZURE_CLIENT_SECRET")
-	bindEnv(v, "settings.oci.azure_tenant_id", "ATMOS_AZURE_TENANT_ID", "AZURE_TENANT_ID")
-	bindEnv(v, "settings.oci.azure_cli_auth", "ATMOS_AZURE_CLI_AUTH", "AZURE_CLI_AUTH")
-	bindEnv(v, "settings.oci.docker_config", "ATMOS_DOCKER_CONFIG", "DOCKER_CONFIG")
+	bindEnv(v, "settings.oci.github_token", "ATMOS_OCI_GITHUB_TOKEN", "GITHUB_TOKEN")
+	bindEnv(v, "settings.oci.azure_client_id", "ATMOS_OCI_AZURE_CLIENT_ID", "AZURE_CLIENT_ID")
+	bindEnv(v, "settings.oci.azure_client_secret", "ATMOS_OCI_AZURE_CLIENT_SECRET", "AZURE_CLIENT_SECRET")
+	bindEnv(v, "settings.oci.azure_tenant_id", "ATMOS_OCI_AZURE_TENANT_ID", "AZURE_TENANT_ID")
+	bindEnv(v, "settings.oci.azure_cli_auth", "ATMOS_OCI_AZURE_CLI_AUTH", "AZURE_CLI_AUTH")
+	bindEnv(v, "settings.oci.docker_config", "ATMOS_OCI_DOCKER_CONFIG", "DOCKER_CONFIG")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {

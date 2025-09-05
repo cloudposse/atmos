@@ -23,7 +23,7 @@ func getGitHubAuth(registry string, atmosConfig *schema.AtmosConfiguration) (aut
 	if strings.EqualFold(registry, "ghcr.io") {
 		// Create a Viper instance for environment variable access
 		v := viper.New()
-		bindEnv(v, "github_token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+		bindEnv(v, "github_token", "ATMOS_OCI_GITHUB_TOKEN", "GITHUB_TOKEN")
 
 		// Try Atmos-specific token first, then fallback to standard GITHUB_TOKEN
 		token := atmosConfig.Settings.OCI.GithubToken
