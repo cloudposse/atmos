@@ -133,7 +133,7 @@ type TestResult struct {
 	Parent       string   // Parent test name if this is a subtest
 	Subtests     map[string]*TestResult
 	SubtestOrder []string
-	SkipReason   string   // Reason why test was skipped (if applicable)
+	SkipReason   string // Reason why test was skipped (if applicable)
 }
 
 // TestModel represents the test UI model.
@@ -1141,7 +1141,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 	if test.Elapsed > 0 {
 		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed))))
 	}
-	
+
 	// Add skip reason if available
 	if test.Status == "skip" && test.SkipReason != "" {
 		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("[%s]", test.SkipReason))))
