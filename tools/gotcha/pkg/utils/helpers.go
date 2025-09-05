@@ -324,7 +324,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 func (p *StreamProcessor) processStream(input io.Reader) error {
 	scanner := bufio.NewScanner(input)
-	
+
 	// Track if we're in CI for periodic flushing
 	inCI := os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != ""
 	lastFlush := time.Now()
@@ -345,7 +345,7 @@ func (p *StreamProcessor) processStream(input io.Reader) error {
 		}
 
 		p.processEvent(&event)
-		
+
 		// Periodic flush in CI to ensure output appears promptly
 		if inCI && time.Since(lastFlush) > flushInterval {
 			os.Stderr.Sync()
@@ -674,7 +674,7 @@ func (p *StreamProcessor) printSummary() {
 	// Log completion time as info message
 	elapsed := time.Since(p.startTime)
 	fmt.Fprintf(os.Stderr, "%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds())
-	
+
 	// Ensure output is flushed
 	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 		os.Stderr.Sync()
@@ -745,7 +745,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Display package header - ▶ icon in white, package name in cyan
 	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
-	
+
 	// Flush output immediately in CI environments to prevent buffering
 	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 		os.Stderr.Sync()
@@ -826,7 +826,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 			fmt.Fprintf(os.Stderr, "\n%s", summaryLine)
 		}
 	}
-	
+
 	// Flush output after displaying package results
 	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 		os.Stderr.Sync()
