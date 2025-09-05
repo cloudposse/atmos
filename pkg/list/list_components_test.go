@@ -131,7 +131,7 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 	t.Run("existing stack", func(t *testing.T) {
 		components, err := getComponentsForSpecificStack("stack1", stacksMap)
 		require.NoError(t, err)
-		assert.ElementsMatch(t, []string{"vpc", "infra/vpc"}, components)
+		assert.ElementsMatch(t, []string{"vpc", "infra/vpc", "nginx"}, components)
 	})
 
 	t.Run("stack with packer and ansible only", func(t *testing.T) {

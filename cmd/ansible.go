@@ -17,6 +17,7 @@ var ansibleCmd = &cobra.Command{
 	Aliases:            []string{"as"},
 	Short:              "Manage ansible playbooks for infrastructure automation",
 	Long:               `Run Ansible commands for configuration management and infrastructure automation.`,
+	Example:            ansibleUsageMarkdown,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Args:               cobra.NoArgs,
 }

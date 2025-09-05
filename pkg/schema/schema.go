@@ -433,6 +433,8 @@ type ArgsAndFlagsInfo struct {
 	HelmfileDir               string
 	PackerCommand             string
 	PackerDir                 string
+	AnsibleCommand            string
+	AnsibleDir                string
 	ConfigDir                 string
 	StacksDir                 string
 	WorkflowsDir              string
@@ -497,6 +499,8 @@ type ConfigAndStacksInfo struct {
 	HelmfileDir                   string
 	PackerCommand                 string
 	PackerDir                     string
+	AnsibleCommand                string
+	AnsibleDir                    string
 	ConfigDir                     string
 	StacksDir                     string
 	WorkflowsDir                  string

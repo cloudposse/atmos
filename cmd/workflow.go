@@ -12,11 +12,12 @@ import (
 //go:embed markdown/workflow.md
 var workflowMarkdown string
 
-// workflowCmd executes a workflow
+// workflowCmd executes a workflow.
 var workflowCmd = &cobra.Command{
-	Use:   "workflow",
-	Short: "Run predefined tasks using workflows",
-	Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
+	Use:     "workflow",
+	Short:   "Run predefined tasks using workflows",
+	Long:    `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
+	Example: workflowMarkdown,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
