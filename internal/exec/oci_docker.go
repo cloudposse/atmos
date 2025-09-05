@@ -57,20 +57,20 @@ func resolveDockerConfigPath(atmosConfig *schema.AtmosConfiguration) (string, er
 	v := viper.New()
 	bindEnv(v, "docker_config", "ATMOS_OCI_DOCKER_CONFIG", "DOCKER_CONFIG")
 
-	// Resolve Docker config path
-	configDir := atmosConfig.Settings.OCI.DockerConfig
-	if configDir == "" {
-		configDir = v.GetString("docker_config")
-	}
-	if configDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("%w: %w", errFailedToGetUserHomeDir, err)
-		}
-		configDir = filepath.Join(homeDir, ".docker")
-	}
-	return filepath.Join(configDir, "config.json"), nil
-}
+ 	// Resolve Docker config path (env has precedence).
+ 	configDir := v.GetString("docker_config")
+ 	if configDir == "" {
+ 		configDir = atmosConfig.Settings.OCI.DockerConfig
+ 	}
+ 	if configDir == "" {
+ 		homeDir, err := os.UserHomeDir()
+ 		if err != nil {
+ 			return "", fmt.Errorf("%w: %w", errFailedToGetUserHomeDir, err)
+ 		}
+ 		configDir = filepath.Join(homeDir, ".docker")
+ 	}
+ 	return filepath.Join(configDir, "config.json"), nil
+ }
 
 // loadDockerConfig loads and parses the Docker config file.
 func loadDockerConfig(configPath string) (DockerConfig, error) {
