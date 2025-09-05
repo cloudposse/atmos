@@ -807,7 +807,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		uuid = fmt.Sprintf("%s-%s", uuid, jobDiscriminator)
 		logger.Debug("Using discriminated UUID", "uuid", uuid, "discriminator", jobDiscriminator)
 	}
-	
+
 	// Update the context with the discriminated UUID so it's used for finding existing comments
 	ctx.CommentUUID = uuid
 
