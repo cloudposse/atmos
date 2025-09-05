@@ -388,7 +388,31 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				
 				// Check for coverage
 				if strings.Contains(event.Output, "coverage:") {
-					pkg.Coverage = strings.TrimSpace(event.Output)
+					// Extract coverage information properly
+					if strings.Contains(event.Output, "coverage: [no statements]") {
+						// No statements to cover
+						pkg.Coverage = "0.0%"
+					} else if strings.Contains(event.Output, "coverage: [no test files]") {
+						// No test files - shouldn't happen with actual tests
+						pkg.Coverage = "0.0%"
+					} else {
+						// Extract percentage from normal coverage output
+						if matches := strings.Fields(event.Output); len(matches) >= 2 {
+							for i, field := range matches {
+								if field == "coverage:" && i+1 < len(matches) {
+									coverage := matches[i+1]
+									// Keep only valid percentage values
+									if strings.HasSuffix(coverage, "%") {
+										pkg.Coverage = coverage
+									} else {
+										// Handle edge cases
+										pkg.Coverage = "0.0%"
+									}
+									break
+								}
+							}
+						}
+					}
 				}
 				
 				// Check for "no test files" message

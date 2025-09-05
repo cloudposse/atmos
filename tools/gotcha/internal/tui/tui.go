@@ -757,12 +757,28 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 			// Check for coverage or "no test files" message
 			if event.Package != "" {
 				if strings.Contains(event.Output, "coverage:") {
-					// Extract coverage percentage
-					if matches := strings.Fields(event.Output); len(matches) >= 2 {
-						for i, field := range matches {
-							if field == "coverage:" && i+1 < len(matches) {
-								m.packageResults[event.Package].Coverage = matches[i+1]
-								break
+					// Extract coverage information
+					if strings.Contains(event.Output, "coverage: [no statements]") {
+						// No statements to cover
+						m.packageResults[event.Package].Coverage = "0.0%"
+					} else if strings.Contains(event.Output, "coverage: [no test files]") {
+						// No test files - shouldn't happen with actual tests
+						m.packageResults[event.Package].Coverage = "0.0%"
+					} else {
+						// Extract percentage from normal coverage output
+						if matches := strings.Fields(event.Output); len(matches) >= 2 {
+							for i, field := range matches {
+								if field == "coverage:" && i+1 < len(matches) {
+									coverage := matches[i+1]
+									// Remove any trailing characters
+									if strings.HasSuffix(coverage, "%") {
+										m.packageResults[event.Package].Coverage = coverage
+									} else {
+										// Handle edge cases
+										m.packageResults[event.Package].Coverage = "0.0%"
+									}
+									break
+								}
 							}
 						}
 					}
