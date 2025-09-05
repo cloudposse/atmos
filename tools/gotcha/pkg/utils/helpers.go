@@ -342,6 +342,25 @@ func (p *StreamProcessor) processStream(input io.Reader) error {
 		p.processEvent(&event)
 	}
 
+	// After processing all events, check for incomplete packages
+	// These are packages that started but never completed (no pass/fail/skip event)
+	p.mu.Lock()
+	for pkgName := range p.activePackages {
+		if pkg, exists := p.packageResults[pkgName]; exists {
+			if pkg.Status == "running" {
+				// Package started but never completed - likely failed
+				pkg.Status = "fail"
+				pkg.EndTime = time.Now()
+				pkg.HasTests = true // Assume it has tests that failed to run
+				
+				// Display the failed package
+				p.displayPackageResult(pkg)
+				delete(p.activePackages, pkgName)
+			}
+		}
+	}
+	p.mu.Unlock()
+	
 	return scanner.Err()
 }
 
@@ -419,6 +438,17 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				if strings.Contains(event.Output, "[no test files]") {
 					// Mark for legacy compatibility
 					p.packagesWithNoTests[event.Package] = true
+				}
+				
+				// Check for FATAL errors in output (e.g., TestMain failures)
+				if strings.Contains(event.Output, "FATAL") || strings.Contains(event.Output, "FAIL\t"+event.Package) {
+					// Mark package as failed
+					if pkg, exists := p.packageResults[event.Package]; exists {
+						pkg.Status = "fail"
+						pkg.HasTests = true // It has tests, they just failed to run
+						// Store the fatal output
+						pkg.Output = append(pkg.Output, event.Output)
+					}
 				}
 			}
 		} else if event.Action == "pass" && event.Package != "" && event.Test == "" {
@@ -669,6 +699,22 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Display package header - ▶ icon in white, package name in cyan
 	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
+	
+	// Check for package-level failures (e.g., TestMain failures)
+	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
+		// Package failed without running any tests (likely TestMain failure)
+		fmt.Fprintf(os.Stderr, "  %s Package failed to run tests\n", tui.FailStyle.Render(tui.CheckFail))
+		
+		// Display any package-level output (error messages)
+		if len(pkg.Output) > 0 {
+			for _, line := range pkg.Output {
+				if strings.TrimSpace(line) != "" {
+					fmt.Fprintf(os.Stderr, "    %s", line)
+				}
+			}
+		}
+		return
+	}
 	
 	// Check if package has no tests
 	if !pkg.HasTests {

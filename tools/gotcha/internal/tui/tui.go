@@ -431,6 +431,24 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case testsDoneMsg:
+		// Check for incomplete packages (packages that started but never completed)
+		for pkgName := range m.activePackages {
+			if pkg, exists := m.packageResults[pkgName]; exists {
+				if pkg.Status == "running" {
+					// Package started but never completed - likely failed
+					pkg.Status = "fail"
+					pkg.EndTime = time.Now()
+					pkg.HasTests = true // Assume it has tests that failed to run
+					m.failCount++ // Count as a failure
+					
+					// Ensure it's in the package order
+					if !contains(m.packageOrder, pkgName) {
+						m.packageOrder = append(m.packageOrder, pkgName)
+					}
+				}
+			}
+		}
+		
 		// Update progress to 100% before marking as done
 		var finalCmd tea.Cmd
 		if m.totalTests > 0 {
@@ -792,6 +810,16 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 				if strings.Contains(event.Output, "[no test files]") {
 					m.packagesWithNoTests[event.Package] = true
 				}
+				
+				// Check for FATAL errors in output (e.g., TestMain failures)
+				if strings.Contains(event.Output, "FATAL") || strings.Contains(event.Output, "FAIL\t"+event.Package) {
+					// Mark package as failed
+					if pkg := m.packageResults[event.Package]; pkg != nil {
+						pkg.Status = "fail"
+						pkg.HasTests = true // It has tests, they just failed to run
+					}
+				}
+				
 				// Buffer package-level output
 				if pkg := m.packageResults[event.Package]; pkg != nil {
 					pkg.Output = append(pkg.Output, event.Output)
@@ -969,6 +997,22 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	output.WriteString(fmt.Sprintf("\n▶ %s\n\n", PackageHeaderStyle.Render(pkg.Package)))
 	
 	// Check for "No tests"
+	// Check for package-level failures (e.g., TestMain failures)
+	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
+		// Package failed without running any tests (likely TestMain failure)
+		output.WriteString(fmt.Sprintf("  %s Package failed to run tests\n", FailStyle.Render(CheckFail)))
+		
+		// Display any package-level output (error messages)
+		if len(pkg.Output) > 0 {
+			for _, line := range pkg.Output {
+				if strings.TrimSpace(line) != "" {
+					output.WriteString(fmt.Sprintf("    %s", line))
+				}
+			}
+		}
+		return output.String()
+	}
+	
 	if pkg.Status == "skip" || m.packagesWithNoTests[pkg.Package] || !pkg.HasTests {
 		output.WriteString(fmt.Sprintf("  %s\n", DurationStyle.Render("No tests")))
 		return output.String()
