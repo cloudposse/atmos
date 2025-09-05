@@ -324,6 +324,11 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 func (p *StreamProcessor) processStream(input io.Reader) error {
 	scanner := bufio.NewScanner(input)
+	
+	// Track if we're in CI for periodic flushing
+	inCI := os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != ""
+	lastFlush := time.Now()
+	flushInterval := 100 * time.Millisecond // Flush frequently in CI
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -340,6 +345,12 @@ func (p *StreamProcessor) processStream(input io.Reader) error {
 		}
 
 		p.processEvent(&event)
+		
+		// Periodic flush in CI to ensure output appears promptly
+		if inCI && time.Since(lastFlush) > flushInterval {
+			os.Stderr.Sync()
+			lastFlush = time.Now()
+		}
 	}
 
 	// After processing all events, check for incomplete packages
@@ -394,14 +405,6 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				// Keep legacy tracking for compatibility
 				p.currentPackage = event.Package
 				p.packageHasTests[event.Package] = false
-
-				// In CI/non-TTY environments, show immediate feedback when package starts
-				if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-					// Release lock before I/O to prevent deadlock
-					p.mu.Unlock()
-					fmt.Fprintf(os.Stderr, "\n▶ Testing %s...\n", tui.PackageHeaderStyle.Render(event.Package))
-					p.mu.Lock()
-				}
 			}
 		} else if event.Action == "skip" && event.Package != "" && event.Test == "" {
 			// Package was skipped (usually means no test files)
@@ -594,13 +597,6 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 		// Track statistics
 		p.passed++
 
-		// In CI/non-TTY environments, show immediate feedback for test completion
-		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-			// Only show top-level tests (not subtests) to avoid too much output
-			if !strings.Contains(event.Test, "/") {
-				fmt.Fprintf(os.Stderr, "  %s %s (%.2fs)\n", tui.PassStyle.Render(tui.CheckPass), event.Test, event.Elapsed)
-			}
-		}
 		// Clear buffer
 		delete(p.buffers, event.Test)
 
@@ -616,13 +612,6 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 		// Track statistics
 		p.failed++
 
-		// In CI/non-TTY environments, show immediate feedback for test failures
-		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-			// Only show top-level tests (not subtests) to avoid too much output
-			if !strings.Contains(event.Test, "/") {
-				fmt.Fprintf(os.Stderr, "  %s %s (%.2fs)\n", tui.FailStyle.Render(tui.CheckFail), event.Test, event.Elapsed)
-			}
-		}
 		// Clear buffer
 		delete(p.buffers, event.Test)
 
@@ -638,13 +627,6 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 		// Track statistics
 		p.skipped++
 
-		// In CI/non-TTY environments, show immediate feedback for skipped tests
-		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-			// Only show top-level tests (not subtests) to avoid too much output
-			if !strings.Contains(event.Test, "/") {
-				fmt.Fprintf(os.Stderr, "  %s %s (%.2fs)\n", tui.SkipStyle.Render(tui.CheckSkip), event.Test, event.Elapsed)
-			}
-		}
 		// Clear buffer
 		delete(p.buffers, event.Test)
 	}
@@ -692,6 +674,11 @@ func (p *StreamProcessor) printSummary() {
 	// Log completion time as info message
 	elapsed := time.Since(p.startTime)
 	fmt.Fprintf(os.Stderr, "%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds())
+	
+	// Ensure output is flushed
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		os.Stderr.Sync()
+	}
 }
 
 // generateSubtestProgress creates a visual progress indicator for subtest results.
@@ -758,6 +745,11 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Display package header - ▶ icon in white, package name in cyan
 	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
+	
+	// Flush output immediately in CI environments to prevent buffering
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		os.Stderr.Sync()
+	}
 
 	// Check for package-level failures (e.g., TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
@@ -833,6 +825,11 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		if summaryLine != "" {
 			fmt.Fprintf(os.Stderr, "\n%s", summaryLine)
 		}
+	}
+	
+	// Flush output after displaying package results
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		os.Stderr.Sync()
 	}
 }
 
