@@ -487,11 +487,18 @@ func (m *TestModel) View() string {
 	// Build the status line components
 	spin := m.spinner.View() + " "
 
+	// Fixed width for test name to prevent layout shifting
+	const maxTestWidth = 40
 	var info string
 	if m.currentTest != "" {
-		info = fmt.Sprintf("Running %s...", TestNameStyle.Render(m.currentTest))
+		testName := m.currentTest
+		if len(testName) > maxTestWidth {
+			testName = testName[:maxTestWidth-3] + "..."
+		}
+		// Pad to fixed width
+		info = fmt.Sprintf("Running %-*s", maxTestWidth, TestNameStyle.Render(testName))
 	} else {
-		info = "Starting tests..."
+		info = fmt.Sprintf("%-*s", maxTestWidth+7, "Starting tests...")
 	}
 
 	prog := m.progress.View()
@@ -507,21 +514,23 @@ func (m *TestModel) View() string {
 	var percentage string
 	var testCount string
 	if m.totalTests > 0 {
-		percent := 0
-		if m.totalTests > 0 {
-			percent = (m.completedTests * 100) / m.totalTests
-		}
-		percentage = fmt.Sprintf("%d%%", percent)
-		testCount = fmt.Sprintf("%d/%d tests", m.completedTests, m.totalTests)
+		// Calculate percentage as float first for accuracy
+		percentFloat := float64(m.completedTests) / float64(m.totalTests)
+		percent := int(percentFloat * 100)
+		percentage = fmt.Sprintf("%3d%%", percent) // Fixed width
+		testCount = fmt.Sprintf("%3d/%-3d tests", m.completedTests, m.totalTests) // Fixed width
+		
+		// Update progress bar with the calculated percentage
+		m.progress.SetPercent(percentFloat)
 	} else {
 		// Very early, before any run events
-		percentage = "0%"
+		percentage = "  0%"
 		testCount = "discovering tests"
 	}
 	
-	// Format the rest of the status
-	timeStr := fmt.Sprintf("(%ds)", elapsedSeconds)
-	bufferStr := fmt.Sprintf("%.1fKB", bufferSizeKB)
+	// Format the rest of the status with fixed widths
+	timeStr := fmt.Sprintf("(%4ds)", elapsedSeconds) // Fixed width for time
+	bufferStr := fmt.Sprintf("%7.1fKB", bufferSizeKB) // Fixed width for buffer
 
 	// Build the status line in the requested order:
 	// [Spinner] Running TestStackProcess... [████████░░] 75%  15/20 tests  (4s) 28.3KB
@@ -676,7 +685,7 @@ func (m *TestModel) generateFinalSummary() string {
 func (m *TestModel) getBufferSizeKB() float64 {
 	totalBytes := 0
 	
-	// Calculate size of all package results
+	// Calculate size of all package results and their output
 	for _, pkg := range m.packageResults {
 		// Package name and status
 		totalBytes += len(pkg.Package) + 20 // package header overhead
@@ -684,19 +693,31 @@ func (m *TestModel) getBufferSizeKB() float64 {
 		// Coverage info
 		totalBytes += len(pkg.Coverage)
 		
+		// Package-level output
+		for _, line := range pkg.Output {
+			totalBytes += len(line)
+		}
+		
 		// All test results
 		for _, test := range pkg.Tests {
-			totalBytes += len(test.Name) + 20 // test header overhead
+			totalBytes += len(test.Name) + len(test.Status) + 20 // test header overhead
 			for _, output := range test.Output {
 				totalBytes += len(output)
 			}
 			// Subtests
 			for _, subtest := range test.Subtests {
-				totalBytes += len(subtest.Name) + 20
+				totalBytes += len(subtest.Name) + len(subtest.Status) + 20
 				for _, output := range subtest.Output {
 					totalBytes += len(output)
 				}
 			}
+		}
+	}
+	
+	// Also count data from active/incomplete packages
+	for pkg, active := range m.activePackages {
+		if active {
+			totalBytes += len(pkg) + 100 // estimate for active package overhead
 		}
 	}
 	
@@ -816,7 +837,10 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 		switch event.Action {
 		case "run":
 			m.currentTest = event.Test
-			m.totalTests++
+			// Only count top-level tests, not subtests
+			if !isSubtest {
+				m.totalTests++
+			}
 			
 			if isSubtest {
 				// This is a subtest
@@ -869,7 +893,10 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 			}
 			
 		case "pass", "fail", "skip":
-			m.completedTests++
+			// Only count top-level tests, not subtests
+			if !isSubtest {
+				m.completedTests++
+			}
 			
 			// Update counts
 			switch event.Action {
@@ -908,11 +935,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 				}
 			}
 			
-			// Update progress
-			if m.totalTests > 0 {
-				percent := float64(m.completedTests) / float64(m.totalTests)
-				m.progress.SetPercent(percent)
-			}
+			// Progress is now updated in View() method to avoid duplication
 		}
 	}
 }
