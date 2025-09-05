@@ -107,6 +107,8 @@ jobs:
     runs-on: ${{ matrix.flavor.os }}
     env:
       GOTCHA_COMMENT_UUID: e7b3c8f2-4d5a-4c9b-8e1f-2a3b4c5d6e7f
+      GOTCHA_JOB_DISCRIMINATOR: ${{ matrix.flavor.target }}
+      GOTCHA_POST_COMMENT: adaptive
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}

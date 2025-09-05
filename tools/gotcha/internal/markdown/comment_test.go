@@ -13,6 +13,7 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 		name     string
 		summary  *types.TestSummary
 		uuid     string
+		platform string
 		expected struct {
 			hasUUID           bool
 			hasBadges         bool
@@ -40,7 +41,8 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 				},
 				TotalElapsedTime: 2.1,
 			},
-			uuid: "test-uuid-adaptive",
+			uuid:     "test-uuid-adaptive",
+			platform: "Linux",
 			expected: struct {
 				hasUUID           bool
 				hasBadges         bool
@@ -69,7 +71,8 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 				Passed:           []types.TestResult{},
 				TotalElapsedTime: 0,
 			},
-			uuid: "test-uuid-empty",
+			uuid:     "test-uuid-empty",
+			platform: "Windows",
 			expected: struct {
 				hasUUID           bool
 				hasBadges         bool
@@ -105,7 +108,8 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 				TotalElapsedTime: 125.5,
 				Coverage:         "75.5%",
 			},
-			uuid: "test-uuid-medium",
+			uuid:     "test-uuid-medium",
+			platform: "macOS",
 			expected: struct {
 				hasUUID           bool
 				hasBadges         bool
@@ -130,11 +134,16 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GenerateAdaptiveComment(tt.summary, tt.uuid)
+			result := GenerateAdaptiveComment(tt.summary, tt.uuid, tt.platform)
 
 			// Check UUID presence
 			if tt.expected.hasUUID {
 				assert.Contains(t, result, "test-summary-uuid: "+tt.uuid, "Comment should contain UUID marker")
+			}
+
+			// Check platform in header if provided
+			if tt.platform != "" {
+				assert.Contains(t, result, "Test Results - "+tt.platform, "Comment should contain platform in header")
 			}
 
 			// Check badges presence
@@ -188,7 +197,7 @@ func TestAdaptiveBehavior(t *testing.T) {
 		},
 	}
 
-	result := GenerateAdaptiveComment(hugeSummary, "size-test-uuid")
+	result := GenerateAdaptiveComment(hugeSummary, "size-test-uuid", "Linux")
 
 	// Should fall back to concise format
 	assert.LessOrEqual(t, len(result), CommentSizeLimit,
@@ -334,7 +343,7 @@ func TestGenerateGitHubComment(t *testing.T) {
 
 			// Check core content preservation
 			if tt.expected.preservesCore {
-				assert.Contains(t, result, "# Test Results", "Comment should preserve core test results header")
+				assert.Contains(t, result, "Test Results", "Comment should preserve core test results header")
 				if len(tt.summary.Failed) > 0 || len(tt.summary.Skipped) > 0 || len(tt.summary.Passed) > 0 {
 					assert.Contains(t, result, "PASSED", "Comment should preserve passed badge")
 				}
@@ -350,14 +359,14 @@ func TestTruncateToEssentials(t *testing.T) {
 		Passed:  generateManyTests(100), // Many passed tests
 	}
 
-	result := truncateToEssentials(summary, "test-uuid")
+	result := truncateToEssentials(summary, "test-uuid", "Linux")
 
 	// Should be much smaller than full content
 	assert.LessOrEqual(t, len(result), 10000, "Essential truncation should be quite small")
 
 	// Should preserve core elements
 	assert.Contains(t, result, "test-uuid", "Should contain UUID")
-	assert.Contains(t, result, "# Test Results", "Should contain main header")
+	assert.Contains(t, result, "Test Results", "Should contain main header")
 	assert.Contains(t, result, "shields.io/badge", "Should contain badges")
 	assert.Contains(t, result, "❌ Failed Tests", "Should contain failed tests section")
 	assert.Contains(t, result, "⏭️ Skipped Tests", "Should contain skipped tests section")
@@ -478,7 +487,7 @@ func TestCommentSizeHandling(t *testing.T) {
 
 	// Should still preserve core elements
 	assert.Contains(t, result, "size-test-uuid", "Should contain UUID")
-	assert.Contains(t, result, "# Test Results", "Should contain main header")
+	assert.Contains(t, result, "Test Results", "Should contain main header")
 	assert.Contains(t, result, "shields.io/badge", "Should contain badges")
 	assert.Contains(t, result, "❌ Failed Tests", "Should contain failed tests section")
 }
@@ -541,6 +550,98 @@ func generateManyCoverageFunctions(count int) []types.CoverageFunction {
 		}
 	}
 	return functions
+}
+
+func TestSkipReasonsInComment(t *testing.T) {
+	summary := &types.TestSummary{
+		Failed: []types.TestResult{},
+		Skipped: []types.TestResult{
+			{Package: "pkg/test", Test: "TestSkipped1", SkipReason: "Requires Docker"},
+			{Package: "pkg/test", Test: "TestSkipped2", SkipReason: "Windows only"},
+			{Package: "pkg/test", Test: "TestSkipped3", SkipReason: ""},
+		},
+		Passed: []types.TestResult{},
+	}
+
+	result := GenerateAdaptiveComment(summary, "test-uuid", "Linux")
+
+	// Should contain skip reasons
+	assert.Contains(t, result, "Requires Docker", "Should show skip reason for TestSkipped1")
+	assert.Contains(t, result, "Windows only", "Should show skip reason for TestSkipped2")
+	assert.Contains(t, result, "_No reason provided_", "Should show placeholder for missing skip reason")
+}
+
+func TestPlatformInHeader(t *testing.T) {
+	tests := []struct {
+		name       string
+		platform   string
+		failed     int
+		skipped    int
+		expectEmoji string
+		expectPlatform string
+	}{
+		{
+			name:       "Linux with all passed",
+			platform:   "Linux",
+			failed:     0,
+			skipped:    0,
+			expectEmoji: "✅",
+			expectPlatform: "Linux",
+		},
+		{
+			name:       "Windows with failures",
+			platform:   "Windows",
+			failed:     2,
+			skipped:    0,
+			expectEmoji: "❌",
+			expectPlatform: "Windows",
+		},
+		{
+			name:       "macOS with skips",
+			platform:   "macOS",
+			failed:     0,
+			skipped:    3,
+			expectEmoji: "⚠️",
+			expectPlatform: "macOS",
+		},
+		{
+			name:       "No platform specified",
+			platform:   "",
+			failed:     0,
+			skipped:    0,
+			expectEmoji: "✅",
+			expectPlatform: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			failed := make([]types.TestResult, tt.failed)
+			for i := range failed {
+				failed[i] = types.TestResult{Package: "pkg/test", Test: "TestFailed", Duration: 1.0}
+			}
+			skipped := make([]types.TestResult, tt.skipped)
+			for i := range skipped {
+				skipped[i] = types.TestResult{Package: "pkg/test", Test: "TestSkipped"}
+			}
+
+			summary := &types.TestSummary{
+				Failed:  failed,
+				Skipped: skipped,
+				Passed:  []types.TestResult{},
+			}
+
+			result := GenerateAdaptiveComment(summary, "test-uuid", tt.platform)
+
+			// Check for emoji at the beginning of the title
+			assert.Contains(t, result, "# "+tt.expectEmoji+" Test Results", "Should have correct emoji in title")
+
+			// Check for platform in title if provided
+			if tt.expectPlatform != "" {
+				assert.Contains(t, result, "Test Results - "+tt.expectPlatform, "Should have platform in title")
+			}
+		})
+	}
 }
 
 func TestCoverageTableFormat(t *testing.T) {

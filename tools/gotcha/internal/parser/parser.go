@@ -17,6 +17,7 @@ import (
 // ParseTestJSON parses test JSON output and returns a test summary.
 func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*types.TestSummary, error) {
 	tests := make(map[string]types.TestResult)
+	skipReasons := make(map[string]string) // Track skip reasons separately
 	var coverage string
 	var coverageData *types.CoverageData
 	var totalElapsedTime float64
@@ -24,7 +25,7 @@ func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*ty
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
-		testCoverage, pkgElapsed := processLineWithElapsed(line, tests)
+		testCoverage, pkgElapsed := processLineWithElapsedAndSkipReason(line, tests, skipReasons)
 		if testCoverage != "" {
 			coverage = testCoverage
 		}
@@ -48,7 +49,7 @@ func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*ty
 	}
 
 	// Categorize and sort results.
-	failed, skipped, passed := categorizeResults(tests)
+	failed, skipped, passed := categorizeResults(tests, skipReasons)
 	sortResults(&failed, &skipped, &passed)
 
 	return &types.TestSummary{
@@ -61,8 +62,9 @@ func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*ty
 	}, nil
 }
 
-// processLineWithElapsed processes a single line of JSON output and returns coverage and elapsed time.
-func processLineWithElapsed(line string, tests map[string]types.TestResult) (string, float64) {
+// processLineWithElapsedAndSkipReason processes a single line of JSON output and returns coverage and elapsed time.
+// It also captures skip reasons from test output.
+func processLineWithElapsedAndSkipReason(line string, tests map[string]types.TestResult, skipReasons map[string]string) (string, float64) {
 	// Try to parse as JSON.
 	var event types.TestEvent
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
@@ -79,6 +81,32 @@ func processLineWithElapsed(line string, tests map[string]types.TestResult) (str
 		}
 	}
 
+	// Capture skip reason from output
+	if event.Action == "output" && event.Test != "" {
+		output := strings.TrimSpace(event.Output)
+		key := event.Package + "." + event.Test
+		
+		// Look for skip patterns
+		if strings.Contains(output, "--- SKIP:") {
+			// Mark that we found a skip, reason will come in next output
+			if _, exists := skipReasons[key]; !exists {
+				skipReasons[key] = ""
+			}
+		} else if _, tracking := skipReasons[key]; tracking && skipReasons[key] == "" {
+			// This might be the skip reason (usually comes after --- SKIP line)
+			if output != "" && !strings.HasPrefix(output, "===") && !strings.HasPrefix(output, "---") {
+				// Remove leading tab/spaces and testing.go references
+				reason := strings.TrimSpace(output)
+				if idx := strings.Index(reason, ": "); idx > 0 && strings.Contains(reason[:idx], "testing.go") {
+					reason = strings.TrimSpace(reason[idx+2:])
+				}
+				if reason != "" {
+					skipReasons[key] = reason
+				}
+			}
+		}
+	}
+
 	// Record test results.
 	if event.Test != "" && contains([]string{"pass", "fail", "skip"}, event.Action) {
 		recordTestResult(&event, tests)
@@ -90,6 +118,13 @@ func processLineWithElapsed(line string, tests map[string]types.TestResult) (str
 	}
 
 	return coverage, elapsed
+}
+
+// processLineWithElapsed processes a single line of JSON output and returns coverage and elapsed time.
+// Kept for backward compatibility.
+func processLineWithElapsed(line string, tests map[string]types.TestResult) (string, float64) {
+	skipReasons := make(map[string]string)
+	return processLineWithElapsedAndSkipReason(line, tests, skipReasons)
 }
 
 // processLine processes a single line of JSON output (kept for backward compatibility).
@@ -120,11 +155,18 @@ func recordTestResult(event *types.TestEvent, tests map[string]types.TestResult)
 	}
 }
 
-// categorizeResults separates tests by status.
-func categorizeResults(tests map[string]types.TestResult) ([]types.TestResult, []types.TestResult, []types.TestResult) {
+// categorizeResults separates tests by status and adds skip reasons.
+func categorizeResults(tests map[string]types.TestResult, skipReasons map[string]string) ([]types.TestResult, []types.TestResult, []types.TestResult) {
 	var failed, skipped, passed []types.TestResult
 
-	for _, test := range tests {
+	for key, test := range tests {
+		// Add skip reason if available
+		if test.Status == "skip" {
+			if reason, exists := skipReasons[key]; exists {
+				test.SkipReason = reason
+			}
+		}
+		
 		switch test.Status {
 		case "fail":
 			failed = append(failed, test)

@@ -17,10 +17,11 @@ type TestEvent struct {
 
 // TestResult represents the final result of a single test.
 type TestResult struct {
-	Package  string
-	Test     string
-	Status   string
-	Duration float64
+	Package    string
+	Test       string
+	Status     string
+	Duration   float64
+	SkipReason string // Reason why test was skipped (if applicable)
 }
 
 // TestSummary represents the overall summary of test results.

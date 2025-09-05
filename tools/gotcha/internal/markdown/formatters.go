@@ -46,11 +46,15 @@ func WriteSkippedTestsTable(output io.Writer, skipped []types.TestResult) {
 	fmt.Fprintf(output, "### ⏭️ Skipped Tests (%d)\n\n", len(skipped))
 	fmt.Fprint(output, constants.DetailsOpenTag)
 	fmt.Fprintf(output, "<summary>Click to see skipped tests</summary>\n\n")
-	fmt.Fprintf(output, "| Test | Package |\n")
-	fmt.Fprintf(output, "|------|--------|\n")
+	fmt.Fprintf(output, "| Test | Package | Reason |\n")
+	fmt.Fprintf(output, "|------|---------|--------|\n")
 	for _, test := range skipped {
 		pkg := utils.ShortPackage(test.Package)
-		fmt.Fprintf(output, "| `%s` | %s |\n", test.Test, pkg)
+		reason := test.SkipReason
+		if reason == "" {
+			reason = "_No reason provided_"
+		}
+		fmt.Fprintf(output, "| `%s` | %s | %s |\n", test.Test, pkg, reason)
 	}
 	fmt.Fprint(output, constants.DetailsCloseTag)
 }

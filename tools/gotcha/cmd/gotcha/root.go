@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -301,7 +302,7 @@ step summaries and markdown reports.`,
 	rootCmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	rootCmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 	rootCmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
-	rootCmd.Flags().Bool("post-comment", false, "Post test summary as GitHub PR comment after completion")
+	rootCmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
 	rootCmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
 	rootCmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
@@ -358,7 +359,7 @@ Pre-calculates total test count for accurate progress tracking.`,
 	cmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	cmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 	cmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
-	cmd.Flags().Bool("post-comment", false, "Post test summary as GitHub PR comment after completion")
+	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
 	cmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
 	cmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
@@ -397,7 +398,7 @@ and console output with rich formatting.`,
 	cmd.Flags().String("output", "", "Output file (default: stdout for stdin/markdown)")
 	cmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
 	cmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
-	cmd.Flags().Bool("post-comment", false, "Post test summary as GitHub PR comment")
+	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
 	cmd.Flags().Bool("generate-summary", false, "Write test summary to test-summary.md file")
 	cmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
 	cmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
@@ -579,10 +580,11 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Handle GitHub comment posting if requested
 	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
-	postComment := viper.GetBool("post-comment")
-	if postComment && outputFile != "" {
-		logger.Info("Processing results for GitHub comment")
-
+	postStrategy := viper.GetString("post-comment")
+	flagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
+	normalizedStrategy := normalizePostingStrategy(postStrategy, flagPresent)
+	
+	if outputFile != "" {
 		// Parse the JSON file we just created
 		if inputFile, err := os.Open(outputFile); err == nil {
 			defer inputFile.Close()
@@ -590,13 +592,26 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 			// Parse with coverage if available
 			excludeMocks := viper.GetBool("exclude-mocks")
 			if summary, err := parser.ParseTestJSON(inputFile, coverprofile, excludeMocks); err == nil {
-				if err := postGitHubComment(summary, cmd, logger); err != nil {
-					logger.Warn("Failed to post GitHub comment", "error", err)
+				// Check if we should post based on strategy and results
+				if shouldPostCommentWithOS(normalizedStrategy, summary, runtime.GOOS) {
+					logger.Info("Processing results for GitHub comment",
+						"strategy", normalizedStrategy,
+						"failed", len(summary.Failed),
+						"skipped", len(summary.Skipped))
+					
+					if err := postGitHubComment(summary, cmd, logger); err != nil {
+						logger.Warn("Failed to post GitHub comment", "error", err)
+					}
+				} else {
+					logger.Debug("Skipping GitHub comment based on strategy",
+						"strategy", normalizedStrategy,
+						"failed", len(summary.Failed),
+						"skipped", len(summary.Skipped))
 				}
 			} else {
 				logger.Warn("Failed to parse results for GitHub comment", "error", err)
 			}
-		} else {
+		} else if normalizedStrategy != "" && normalizedStrategy != "never" {
 			logger.Warn("Failed to open results file for GitHub comment", "error", err)
 		}
 	}
@@ -656,8 +671,11 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
 
 	// Handle GitHub comment posting
-	postComment := viper.GetBool("post-comment")
-	if postComment {
+	postStrategy := viper.GetString("post-comment")
+	flagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
+	normalizedStrategy := normalizePostingStrategy(postStrategy, flagPresent)
+	
+	if shouldPostCommentWithOS(normalizedStrategy, summary, runtime.GOOS) {
 		if err := postGitHubComment(summary, cmd, logger); err != nil {
 			logger.Warn("Failed to post GitHub comment", "error", err)
 			// Don't fail the command, just warn
@@ -672,6 +690,60 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 }
 
 // postGitHubComment posts test summary as a GitHub PR comment.
+// normalizePostingStrategy normalizes the posting strategy value.
+func normalizePostingStrategy(strategy string, flagPresent bool) string {
+	// Trim spaces
+	strategy = strings.TrimSpace(strategy)
+	
+	// Handle the special case where flag is present but empty
+	if flagPresent && strategy == "" {
+		return "always"
+	}
+	
+	// Handle boolean aliases
+	switch strings.ToLower(strategy) {
+	case "true", "1", "yes":
+		return "always"
+	case "false", "0", "no":
+		return "never"
+	default:
+		return strings.ToLower(strategy)
+	}
+}
+
+// shouldPostComment determines if we should post a comment based on strategy and test results.
+func shouldPostComment(strategy string, summary *types.TestSummary) bool {
+	return shouldPostCommentWithOS(strategy, summary, runtime.GOOS)
+}
+
+// shouldPostCommentWithOS determines if we should post with explicit OS for testing.
+func shouldPostCommentWithOS(strategy string, summary *types.TestSummary, goos string) bool {
+	switch strategy {
+	case "", "never":
+		return false
+		
+	case "always":
+		return true
+		
+	case "adaptive":
+		// Linux always posts, others only on failures/skips
+		if goos == "linux" {
+			return true
+		}
+		return len(summary.Failed) > 0 || len(summary.Skipped) > 0
+		
+	case "on-failure", "onfailure":
+		return len(summary.Failed) > 0
+		
+	case "on-skip", "onskip":
+		return len(summary.Skipped) > 0
+		
+	default:
+		// Check if it's an OS name (linux, darwin, windows)
+		return strategy == goos
+	}
+}
+
 func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *log.Logger) error {
 	// Detect GitHub context
 	ctx, err := gh.DetectContext()
@@ -686,6 +758,27 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 			"event", ctx.EventName)
 		return nil
 	}
+
+	// Get job discriminator from environment
+	_ = viper.BindEnv("job_discriminator", "GOTCHA_JOB_DISCRIMINATOR")
+	jobDiscriminator := viper.GetString("job_discriminator")
+	
+	// Detect platform for display purposes
+	platform := jobDiscriminator
+	if platform == "" {
+		// Try to detect from common CI environment variables for display
+		if runner := os.Getenv("RUNNER_OS"); runner != "" {
+			platform = strings.ToLower(runner)
+		} else {
+			platform = runtime.GOOS
+		}
+	}
+	
+	logger.Info("Posting GitHub comment",
+		"platform", platform,
+		"failed", len(summary.Failed),
+		"skipped", len(summary.Skipped),
+		"passed", len(summary.Passed))
 
 	// Bind flags to viper
 	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
@@ -706,6 +799,12 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	if uuid == "" {
 		return fmt.Errorf("%w (use --comment-uuid flag or GOTCHA_COMMENT_UUID env)", ErrCommentUUIDRequired)
 	}
+	
+	// Append job discriminator to UUID if present
+	if jobDiscriminator != "" {
+		uuid = fmt.Sprintf("%s-%s", uuid, jobDiscriminator)
+		logger.Debug("Using discriminated UUID", "uuid", uuid, "discriminator", jobDiscriminator)
+	}
 
 	logger.Info("Posting GitHub comment",
 		"owner", ctx.Owner,
@@ -718,7 +817,8 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	manager := gh.NewCommentManager(client, logger)
 
 	// Generate adaptive markdown content that uses full content when possible
-	markdownContent := markdown.GenerateAdaptiveComment(summary, uuid)
+	// Include platform in the header for clarity
+	markdownContent := markdown.GenerateAdaptiveComment(summary, uuid, platform)
 
 	logger.Debug("Generated adaptive comment",
 		"size", len(markdownContent),

@@ -479,6 +479,16 @@ filter:
 #### PR Comment System
 - **Automated commenting**: Post test results as PR comments
 - **Comment deduplication**: UUID-based tracking to update existing comments
+- **Multi-job comment handling**:
+  - **Job discriminator**: Support for `GOTCHA_JOB_DISCRIMINATOR` environment variable
+  - **Platform-specific UUIDs**: Append job discriminator to UUID for unique comments per job
+  - **Conditional posting logic**:
+    - Linux: Always posts comments regardless of test results
+    - Windows/macOS: Only post on failures or skipped tests
+  - **Platform detection**: Auto-detect from `RUNNER_OS` or `GOOS` environment variables
+  - **Status emoji in title**: ✅ for success, ❌ for failures, ⚠️ for skips
+  - **Platform name in header**: Display OS/platform name in comment title
+- **Skip reason display**: Capture and show skip reasons from test output
 - **Size management**: Intelligent truncation for large test suites
   - **GitHub's 65536 byte limit**: Enforced at multiple levels
   - **Smart content prioritization**: Failed tests shown first, then skipped, then passed
@@ -491,6 +501,70 @@ filter:
 - **Comment CRUD operations**: Create, read, update PR comments
 - **Error handling**: Graceful fallback when API is unavailable
 - **Rate limiting**: Respect GitHub API rate limits
+
+### Comment Posting Strategies
+
+The `--post-comment` flag supports multiple strategies for controlling when GitHub PR comments are posted:
+
+#### Available Strategies
+
+| Strategy | Behavior | Use Case |
+|----------|----------|----------|
+| `always` | Always post comment regardless of results or platform | CI jobs that should always report status |
+| `never` | Never post comment | Local development or testing |
+| `adaptive` | Linux always posts, other platforms only on failures/skips | Multi-platform CI optimization (recommended) |
+| `on-failure` | Only post when tests fail | Minimize noise, focus on problems |
+| `on-skip` | Only post when tests are skipped | Track incomplete test coverage |
+| `<os-name>` | Only post on specific OS (linux/darwin/windows) | Platform-specific reporting |
+
+#### Default Behavior
+- `--post-comment` without value: Posts always (equivalent to `--post-comment=always`)
+- `--post-comment=true`: Alias for `always`
+- `--post-comment=false`: Alias for `never`
+- No flag: No comment posting
+
+#### Examples
+
+```bash
+# Always post (default when flag is present)
+gotcha stream --post-comment
+
+# Explicit always
+gotcha stream --post-comment=always
+
+# Never post
+gotcha stream --post-comment=false
+
+# Adaptive strategy (recommended for multi-platform CI)
+gotcha stream --post-comment=adaptive
+
+# Only on failures
+gotcha stream --post-comment=on-failure
+
+# Only on skipped tests
+gotcha stream --post-comment=on-skip
+
+# Platform-specific
+gotcha stream --post-comment=linux
+```
+
+#### Environment Variable Support
+
+```bash
+# Set strategy via environment variable
+export GOTCHA_POST_COMMENT=adaptive
+gotcha stream  # Uses adaptive strategy
+
+# In GitHub Actions workflow
+env:
+  GOTCHA_POST_COMMENT: adaptive
+  GOTCHA_JOB_DISCRIMINATOR: ${{ matrix.flavor.target }}
+```
+
+#### Platform Detection
+- Uses `runtime.GOOS` for reliable OS detection
+- Falls back to `RUNNER_OS` environment variable for display purposes
+- Job discriminator used for unique comment identification, not OS detection
 
 ### Coverage Analysis
 
@@ -668,6 +742,12 @@ This is the key indicator for buffering - display package results only after rec
 ### GitHub Integration
 - ✅ **Job summaries**: GitHub Actions job summaries generated and displayed correctly
 - ✅ **PR comments**: Test results posted as PR comments with proper formatting
+- ✅ **Multi-job comments**: Each CI job posts separate comment with platform discriminator
+- ✅ **Flexible posting strategies**: Support always/never/adaptive/on-failure/on-skip/os-specific
+- ✅ **Default behavior**: `--post-comment` without value defaults to "always"
+- ✅ **Boolean compatibility**: true/false/1/0/yes/no aliases work as expected
+- ✅ **Platform detection**: Uses runtime.GOOS for reliable OS detection
+- ✅ **Skip reason display**: Test skip reasons captured and shown in comments
 - ✅ **Coverage badges**: Coverage percentages displayed with appropriate color coding
 - ✅ **Error handling**: Graceful degradation when GitHub API is unavailable
 

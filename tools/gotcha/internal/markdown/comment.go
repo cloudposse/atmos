@@ -18,9 +18,10 @@ const CommentSizeLimit = 65536
 // GenerateAdaptiveComment creates markdown content for GitHub PR comments.
 // It attempts to use the full rich content (same as job summaries) if it fits
 // within GitHub's 65KB limit, otherwise falls back to a concise version.
-func GenerateAdaptiveComment(summary *types.TestSummary, uuid string) string {
+// The platform parameter is used to add platform-specific headers.
+func GenerateAdaptiveComment(summary *types.TestSummary, uuid string, platform string) string {
 	// First, try to generate the full rich comment
-	fullComment := generateFullComment(summary, uuid)
+	fullComment := generateFullComment(summary, uuid, platform)
 
 	// If it fits within GitHub's limit, use it
 	if len(fullComment) <= CommentSizeLimit {
@@ -28,11 +29,11 @@ func GenerateAdaptiveComment(summary *types.TestSummary, uuid string) string {
 	}
 
 	// Otherwise, fall back to concise version
-	return generateConciseComment(summary, uuid)
+	return generateConciseComment(summary, uuid, platform)
 }
 
 // generateFullComment creates the full rich markdown content (same as job summaries)
-func generateFullComment(summary *types.TestSummary, uuid string) string {
+func generateFullComment(summary *types.TestSummary, uuid string, platform string) string {
 	var content bytes.Buffer
 
 	// Add UUID magic comment to prevent duplicate GitHub comments
@@ -40,8 +41,20 @@ func generateFullComment(summary *types.TestSummary, uuid string) string {
 		fmt.Fprintf(&content, "<!-- test-summary-uuid: %s -->\n\n", uuid)
 	}
 
-	// Test Results section (h1)
-	fmt.Fprintf(&content, "# Test Results\n\n")
+	// Determine status emoji based on test results
+	statusEmoji := "✅" // Default to success
+	if len(summary.Failed) > 0 {
+		statusEmoji = "❌"
+	} else if len(summary.Skipped) > 0 {
+		statusEmoji = "⚠️"
+	}
+
+	// Test Results section (h1) with platform and status emoji
+	if platform != "" {
+		fmt.Fprintf(&content, "# %s Test Results - %s\n\n", statusEmoji, platform)
+	} else {
+		fmt.Fprintf(&content, "# %s Test Results\n\n", statusEmoji)
+	}
 
 	// Display total elapsed time if available
 	if summary.TotalElapsedTime > 0 {
@@ -158,12 +171,12 @@ func writePackageSummarySection(output io.Writer, summary *types.TestSummary) {
 // GenerateGitHubComment is a compatibility wrapper that calls GenerateAdaptiveComment
 // Deprecated: Use GenerateAdaptiveComment instead
 func GenerateGitHubComment(summary *types.TestSummary, uuid string) string {
-	return GenerateAdaptiveComment(summary, uuid)
+	return GenerateAdaptiveComment(summary, uuid, "")
 }
 
 // generateConciseComment creates a size-optimized version for large test suites
 // This is the original GenerateGitHubComment implementation, renamed
-func generateConciseComment(summary *types.TestSummary, uuid string) string {
+func generateConciseComment(summary *types.TestSummary, uuid string, platform string) string {
 	var content bytes.Buffer
 
 	// Add UUID magic comment to prevent duplicate GitHub comments.
@@ -171,8 +184,20 @@ func generateConciseComment(summary *types.TestSummary, uuid string) string {
 		fmt.Fprintf(&content, "<!-- test-summary-uuid: %s -->\n\n", uuid)
 	}
 
-	// Test Results section (h1).
-	fmt.Fprintf(&content, "# Test Results\n\n")
+	// Determine status emoji based on test results
+	statusEmoji := "✅" // Default to success
+	if len(summary.Failed) > 0 {
+		statusEmoji = "❌"
+	} else if len(summary.Skipped) > 0 {
+		statusEmoji = "⚠️"
+	}
+
+	// Test Results section (h1) with platform and status emoji.
+	if platform != "" {
+		fmt.Fprintf(&content, "# %s Test Results - %s\n\n", statusEmoji, platform)
+	} else {
+		fmt.Fprintf(&content, "# %s Test Results\n\n", statusEmoji)
+	}
 
 	// Get test counts.
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
@@ -200,7 +225,7 @@ func generateConciseComment(summary *types.TestSummary, uuid string) string {
 	// If we're already over the limit with just failed/skipped tests,
 	// we have a more serious problem and may need to truncate those too.
 	if currentSize > CommentSizeLimit {
-		return truncateToEssentials(summary, uuid)
+		return truncateToEssentials(summary, uuid, platform)
 	}
 
 	// Don't add passed tests to comments - they're only for job summaries.
@@ -237,7 +262,7 @@ func generateConciseComment(summary *types.TestSummary, uuid string) string {
 }
 
 // truncateToEssentials creates a minimal comment with only the most critical information.
-func truncateToEssentials(summary *types.TestSummary, uuid string) string {
+func truncateToEssentials(summary *types.TestSummary, uuid string, platform string) string {
 	var content bytes.Buffer
 
 	// Add UUID magic comment.
@@ -245,8 +270,20 @@ func truncateToEssentials(summary *types.TestSummary, uuid string) string {
 		fmt.Fprintf(&content, "<!-- test-summary-uuid: %s -->\n\n", uuid)
 	}
 
-	// Test Results section (h1).
-	fmt.Fprintf(&content, "# Test Results\n\n")
+	// Determine status emoji based on test results
+	statusEmoji := "✅" // Default to success
+	if len(summary.Failed) > 0 {
+		statusEmoji = "❌"
+	} else if len(summary.Skipped) > 0 {
+		statusEmoji = "⚠️"
+	}
+
+	// Test Results section (h1) with platform and status emoji.
+	if platform != "" {
+		fmt.Fprintf(&content, "# %s Test Results - %s\n\n", statusEmoji, platform)
+	} else {
+		fmt.Fprintf(&content, "# %s Test Results\n\n", statusEmoji)
+	}
 
 	// Get test counts.
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
@@ -289,13 +326,17 @@ func truncateToEssentials(summary *types.TestSummary, uuid string) string {
 			fmt.Fprintf(&content, "### ⏭️ Skipped Tests (%d)\n\n", len(summary.Skipped))
 		}
 
-		fmt.Fprintf(&content, "| Test | Package |\n|------|--------|\n")
+		fmt.Fprintf(&content, "| Test | Package | Reason |\n|------|---------|--------|\n")
 		for i, test := range summary.Skipped {
 			if i >= maxSkipped {
 				break
 			}
 			pkg := types.ShortPackage(test.Package)
-			fmt.Fprintf(&content, "| `%s` | %s |\n", test.Test, pkg)
+			reason := test.SkipReason
+			if reason == "" {
+				reason = "_No reason provided_"
+			}
+			fmt.Fprintf(&content, "| `%s` | %s | %s |\n", test.Test, pkg, reason)
 		}
 		fmt.Fprintf(&content, "\n")
 	}
