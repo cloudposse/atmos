@@ -678,7 +678,7 @@ func TestCommentStructureOrdering(t *testing.T) {
 	// Verify Total Time is at the very end
 	assert.Greater(t, totalTimePos, -1, "Should have Total Time")
 	assert.Greater(t, totalTimePos, failedPos, "Total Time should be after all test sections")
-	
+
 	// Verify Total Time is near the end of the comment
 	remainingContent := result[totalTimePos:]
 	assert.Less(t, len(remainingContent), 100, "Total Time should be at the very bottom with minimal content after")
