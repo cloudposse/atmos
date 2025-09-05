@@ -41,15 +41,36 @@ var authEnvCmd = &cobra.Command{
 			identityName = defaultIdentity
 		}
 
-		// Authenticate to get credentials
+		// Authenticate to ensure credentials are available
 		ctx := context.Background()
-		whoami, err := authManager.Authenticate(ctx, identityName)
+		_, err = authManager.Authenticate(ctx, identityName)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		// Get environment variables from cloud provider
-		envVars, err := getCloudProviderEnvironmentVariables(&atmosConfig.Auth, identityName, whoami.Credentials)
+		// Get the root provider for this identity (handles identity chaining correctly)
+		providerName := authManager.GetProviderForIdentity(identityName)
+		if providerName == "" {
+			return fmt.Errorf("no provider found for identity %s", identityName)
+		}
+
+		// Get provider configuration to determine cloud provider kind
+		var providerKind string
+		if provider, exists := atmosConfig.Auth.Providers[providerName]; exists {
+			providerKind = provider.Kind
+		} else {
+			// Handle AWS user identities which don't have a provider entry
+			if identity, exists := atmosConfig.Auth.Identities[identityName]; exists && identity.Kind == "aws/user" {
+				providerKind = "aws"
+				providerName = "aws-user"
+			} else {
+				return fmt.Errorf("provider %s not found in configuration", providerName)
+			}
+		}
+
+		// Create cloud provider manager and get environment variables
+		cloudProviderManager := cloud.NewCloudProviderManager()
+		envVars, err := cloudProviderManager.GetEnvironmentVariables(providerKind, providerName, identityName)
 		if err != nil {
 			return fmt.Errorf("failed to get environment variables: %w", err)
 		}
@@ -70,52 +91,6 @@ var authEnvCmd = &cobra.Command{
 	},
 }
 
-// getCloudProviderEnvironmentVariables gets environment variables from the appropriate cloud provider
-func getCloudProviderEnvironmentVariables(authConfig *schema.AuthConfig, identityName string, credentials *schema.Credentials) (map[string]string, error) {
-	// Create cloud provider manager
-	cloudProviderManager := cloud.NewCloudProviderManager()
-	
-	// Determine provider kind and name
-	var providerKind, providerName string
-	
-	if identity, exists := authConfig.Identities[identityName]; exists {
-		if identity.Kind == "aws/user" && identity.Via == nil {
-			providerKind = "aws/user"
-			providerName = "aws-user"
-		} else if identity.Via != nil && identity.Via.Provider != "" {
-			// Get provider from identity chain
-			providerName = getProviderForIdentity(authConfig, identityName)
-			if provider, exists := authConfig.Providers[providerName]; exists {
-				providerKind = provider.Kind
-			}
-		}
-	}
-	
-	if providerKind == "" {
-		return make(map[string]string), nil
-	}
-	
-	// Get environment variables from cloud provider
-	return cloudProviderManager.GetEnvironmentVariables(providerKind, providerName, identityName)
-}
-
-// getProviderForIdentity recursively resolves the provider for an identity
-func getProviderForIdentity(authConfig *schema.AuthConfig, identityName string) string {
-	identity, exists := authConfig.Identities[identityName]
-	if !exists || identity.Via == nil {
-		return ""
-	}
-	
-	if identity.Via.Provider != "" {
-		return identity.Via.Provider
-	}
-	
-	if identity.Via.Identity != "" {
-		return getProviderForIdentity(authConfig, identity.Via.Identity)
-	}
-	
-	return ""
-}
 
 // outputEnvAsJSON outputs environment variables as JSON
 func outputEnvAsJSON(envVars map[string]string) error {
