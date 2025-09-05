@@ -1,0 +1,367 @@
+package tests
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	cp "github.com/otiai10/copy"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/security"
+)
+
+// checkSymlinkPresence is a helper function to verify if a symlink exists or not.
+func checkSymlinkPresence(t *testing.T, dir, filename string, shouldExist bool, testName string) {
+	path := filepath.Join(dir, filename)
+	_, err := os.Lstat(path)
+	if shouldExist {
+		assert.NoError(t, err, "%s should be present for %s", filename, testName)
+	} else {
+		assert.True(t, os.IsNotExist(err), "%s should not be present for %s", filename, testName)
+	}
+}
+
+// verifyLegitimateContent checks that legitimate symlink content was copied correctly.
+func verifyLegitimateContent(t *testing.T, path string, policy security.SymlinkPolicy) {
+	if policy == security.PolicyRejectAll {
+		return
+	}
+	content, err := os.ReadFile(path)
+	if err == nil {
+		assert.Equal(t, "LEGITIMATE DATA", string(content),
+			"Content should match for legitimate symlink")
+	}
+}
+
+// TestCVE_2025_8959_VendorProtection tests protection against CVE-2025-8959.
+// This test verifies that the symlink security feature prevents unauthorized
+// access to files outside vendor boundaries during vendor operations.
+func TestCVE_2025_8959_VendorProtection(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping symlink test on Windows")
+	}
+
+	// Create a test directory structure.
+	testDir := t.TempDir()
+
+	// Create a sensitive file outside the vendor boundary.
+	sensitiveDir := t.TempDir()
+	sensitiveFile := filepath.Join(sensitiveDir, "sensitive.txt")
+	require.NoError(t, os.WriteFile(sensitiveFile, []byte("SENSITIVE DATA"), 0o644))
+
+	// Create a malicious vendor source with attack symlinks.
+	maliciousSource := filepath.Join(testDir, "malicious-source")
+	require.NoError(t, os.MkdirAll(maliciousSource, 0o755))
+
+	// Compute the relative path from maliciousSource to sensitiveFile for the directory traversal attack.
+	relPathToSensitive, err := filepath.Rel(maliciousSource, sensitiveFile)
+	require.NoError(t, err, "Failed to compute relative path for directory traversal attack")
+
+	// Create various attack symlinks.
+	attacks := []struct {
+		name   string
+		link   string
+		target string
+	}{
+		{
+			name:   "absolute_path_attack",
+			link:   filepath.Join(maliciousSource, "absolute_attack.txt"),
+			target: sensitiveFile,
+		},
+		{
+			name:   "directory_traversal_attack",
+			link:   filepath.Join(maliciousSource, "traversal_attack.txt"),
+			target: relPathToSensitive,
+		},
+		{
+			name:   "etc_passwd_attack",
+			link:   filepath.Join(maliciousSource, "passwd_attack.txt"),
+			target: "/etc/passwd",
+		},
+	}
+
+	// Create the attack symlinks.
+	for _, attack := range attacks {
+		require.NoError(t, os.Symlink(attack.target, attack.link),
+			"Failed to create attack symlink: %s", attack.name)
+	}
+
+	// Create a legitimate symlink within the source.
+	legitimateTarget := filepath.Join(maliciousSource, "legitimate.txt")
+	require.NoError(t, os.WriteFile(legitimateTarget, []byte("LEGITIMATE DATA"), 0o644))
+	legitimateLink := filepath.Join(maliciousSource, "legitimate_link.txt")
+	require.NoError(t, os.Symlink("legitimate.txt", legitimateLink))
+
+	// Test different security policies.
+	testCases := []struct {
+		name                string
+		policy              security.SymlinkPolicy
+		expectAttackBlocked bool
+		expectLegitimateOK  bool
+	}{
+		{
+			name:                "PolicyAllowSafe_blocks_attacks_allows_legitimate",
+			policy:              security.PolicyAllowSafe,
+			expectAttackBlocked: true,
+			expectLegitimateOK:  true,
+		},
+		{
+			name:                "PolicyRejectAll_blocks_everything",
+			policy:              security.PolicyRejectAll,
+			expectAttackBlocked: true,
+			expectLegitimateOK:  false,
+		},
+		{
+			name:                "PolicyAllowAll_allows_everything",
+			policy:              security.PolicyAllowAll,
+			expectAttackBlocked: false,
+			expectLegitimateOK:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create destination directory.
+			destDir := filepath.Join(testDir, "dest", tc.name)
+			require.NoError(t, os.MkdirAll(destDir, 0o755))
+
+			// Test copying with the security policy.
+			handler := security.CreateSymlinkHandler(maliciousSource, tc.policy)
+			copyOptions := cp.Options{
+				OnSymlink: handler,
+			}
+
+			err := cp.Copy(maliciousSource, destDir, copyOptions)
+			require.NoError(t, err, "Copy operation failed")
+
+			// Check if attack symlinks were blocked.
+			for _, attack := range attacks {
+				destLink := filepath.Join(destDir, filepath.Base(attack.link))
+				_, err := os.Lstat(destLink)
+
+				if tc.expectAttackBlocked {
+					assert.True(t, os.IsNotExist(err),
+						"Attack symlink should be blocked: %s", attack.name)
+				} else {
+					assert.NoError(t, err,
+						"Attack symlink should be allowed: %s", attack.name)
+				}
+			}
+
+			// Check if legitimate symlink was handled correctly.
+			destLegitimate := filepath.Join(destDir, "legitimate_link.txt")
+			_, err = os.Stat(destLegitimate)
+
+			if tc.expectLegitimateOK {
+				assert.NoError(t, err,
+					"Legitimate symlink should work with policy %s", tc.policy)
+
+				// For non-reject policies, verify content was copied correctly.
+				verifyLegitimateContent(t, destLegitimate, tc.policy)
+			} else {
+				assert.True(t, os.IsNotExist(err),
+					"Legitimate symlink should be blocked with policy %s", tc.policy)
+			}
+		})
+	}
+}
+
+// TestVendorSymlinkPolicyIntegration tests the symlink policy integration
+// with the actual vendor operations.
+func TestVendorSymlinkPolicyIntegration(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping symlink test on Windows")
+	}
+
+	// Create test directories.
+	testDir := t.TempDir()
+	sourceDir := filepath.Join(testDir, "source")
+	targetDir := filepath.Join(testDir, "target")
+
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+
+	// Create a file and a symlink in the source.
+	testFile := filepath.Join(sourceDir, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("test content"), 0o644))
+
+	// Create an internal symlink (should be allowed with allow_safe).
+	internalLink := filepath.Join(sourceDir, "internal_link.txt")
+	require.NoError(t, os.Symlink("test.txt", internalLink))
+
+	// Create an external symlink (should be blocked with allow_safe).
+	externalLink := filepath.Join(sourceDir, "external_link.txt")
+	require.NoError(t, os.Symlink("/etc/passwd", externalLink))
+
+	// Test with different configurations.
+	configs := []struct {
+		name           string
+		atmosConfig    *schema.AtmosConfiguration
+		expectInternal bool
+		expectExternal bool
+	}{
+		{
+			name: "default_allow_safe",
+			atmosConfig: &schema.AtmosConfiguration{
+				Vendor: schema.Vendor{
+					Policy: schema.VendorPolicy{
+						Symlinks: "", // Empty defaults to allow_safe
+					},
+				},
+			},
+			expectInternal: true,
+			expectExternal: false,
+		},
+		{
+			name: "explicit_allow_safe",
+			atmosConfig: &schema.AtmosConfiguration{
+				Vendor: schema.Vendor{
+					Policy: schema.VendorPolicy{
+						Symlinks: "allow_safe",
+					},
+				},
+			},
+			expectInternal: true,
+			expectExternal: false,
+		},
+		{
+			name: "reject_all",
+			atmosConfig: &schema.AtmosConfiguration{
+				Vendor: schema.Vendor{
+					Policy: schema.VendorPolicy{
+						Symlinks: "reject_all",
+					},
+				},
+			},
+			expectInternal: false,
+			expectExternal: false,
+		},
+		{
+			name: "allow_all",
+			atmosConfig: &schema.AtmosConfiguration{
+				Vendor: schema.Vendor{
+					Policy: schema.VendorPolicy{
+						Symlinks: "allow_all",
+					},
+				},
+			},
+			expectInternal: true,
+			expectExternal: true,
+		},
+	}
+
+	for _, cfg := range configs {
+		t.Run(cfg.name, func(t *testing.T) {
+			// Create a unique target for this test.
+			testTarget := filepath.Join(targetDir, cfg.name)
+			require.NoError(t, os.MkdirAll(testTarget, 0o755))
+
+			// Get the policy and create handler.
+			policy := security.GetPolicyFromConfig(cfg.atmosConfig)
+			handler := security.CreateSymlinkHandler(sourceDir, policy)
+
+			// Copy with the policy.
+			copyOptions := cp.Options{
+				OnSymlink: handler,
+			}
+
+			err := cp.Copy(sourceDir, testTarget, copyOptions)
+			require.NoError(t, err)
+
+			// Check internal symlink.
+			checkSymlinkPresence(t, testTarget, "internal_link.txt", cfg.expectInternal, cfg.name)
+
+			// Check external symlink.
+			checkSymlinkPresence(t, testTarget, "external_link.txt", cfg.expectExternal, cfg.name)
+		})
+	}
+}
+
+// TestSymlinkPolicyValidation tests that the policy validation works correctly.
+func TestSymlinkPolicyValidation(t *testing.T) {
+	// Test policy parsing.
+	testCases := []struct {
+		input    string
+		expected security.SymlinkPolicy
+	}{
+		{"allow_safe", security.PolicyAllowSafe},
+		{"ALLOW_SAFE", security.PolicyAllowSafe},
+		{"allow-safe", security.PolicyAllowSafe},
+		{"reject_all", security.PolicyRejectAll},
+		{"REJECT_ALL", security.PolicyRejectAll},
+		{"reject-all", security.PolicyRejectAll},
+		{"allow_all", security.PolicyAllowAll},
+		{"ALLOW_ALL", security.PolicyAllowAll},
+		{"allow-all", security.PolicyAllowAll},
+		{"", security.PolicyAllowSafe},        // Default
+		{"invalid", security.PolicyAllowSafe}, // Unknown defaults to safe
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			result := security.ParsePolicy(tc.input)
+			assert.Equal(t, tc.expected, result,
+				"Policy parsing failed for input: %s", tc.input)
+		})
+	}
+}
+
+// TestCopyWithSymlinkPolicy tests that copy operations respect the symlink policy.
+func TestCopyWithSymlinkPolicy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping symlink test on Windows")
+	}
+
+	// Create test structure.
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Create a normal file.
+	normalFile := filepath.Join(sourceDir, "normal.txt")
+	require.NoError(t, os.WriteFile(normalFile, []byte("normal"), 0o644))
+
+	// Create an internal symlink.
+	internalLink := filepath.Join(sourceDir, "internal.txt")
+	require.NoError(t, os.Symlink("normal.txt", internalLink))
+
+	// Create an external symlink.
+	externalLink := filepath.Join(sourceDir, "external.txt")
+	require.NoError(t, os.Symlink("/etc/hosts", externalLink))
+
+	// Test with allow_safe policy.
+	atmosConfig := &schema.AtmosConfiguration{
+		Vendor: schema.Vendor{
+			Policy: schema.VendorPolicy{
+				Symlinks: "allow_safe",
+			},
+		},
+	}
+
+	// Get policy and create handler.
+	policy := security.GetPolicyFromConfig(atmosConfig)
+	handler := security.CreateSymlinkHandler(sourceDir, policy)
+
+	// Copy with the security policy.
+	copyOptions := cp.Options{
+		OnSymlink: handler,
+	}
+
+	err := cp.Copy(sourceDir, targetDir, copyOptions)
+	require.NoError(t, err)
+
+	// Check that normal file was copied.
+	_, err = os.Stat(filepath.Join(targetDir, "normal.txt"))
+	assert.NoError(t, err, "Normal file should be copied")
+
+	// Check that internal symlink was processed.
+	_, err = os.Stat(filepath.Join(targetDir, "internal.txt"))
+	assert.NoError(t, err, "Internal symlink should be processed")
+
+	// Check that external symlink was blocked.
+	_, err = os.Lstat(filepath.Join(targetDir, "external.txt"))
+	assert.True(t, os.IsNotExist(err), "External symlink should be blocked")
+}

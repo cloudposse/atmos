@@ -22,6 +22,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/security"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -123,11 +124,24 @@ func ExecuteStackVendorInternal(
 	return ErrStackPullNotSupported
 }
 
-func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
+// copyComponentParams holds parameters for copyComponentToDestination function.
+type copyComponentParams struct {
+	tempDir             string
+	componentPath       string
+	vendorComponentSpec *schema.VendorComponentSpec
+	sourceIsLocalFile   bool
+	uri                 string
+	atmosConfig         *schema.AtmosConfiguration
+}
+
+func copyComponentToDestination(params copyComponentParams) error {
+	// Get the symlink policy from config
+	policy := security.GetPolicyFromConfig(params.atmosConfig)
+
 	// Copy from the temp folder to the destination folder and skip the excluded files
 	copyOptions := cp.Options{
 		// Skip specifies which files should be skipped
-		Skip: createComponentSkipFunc(tempDir, vendorComponentSpec),
+		Skip: createComponentSkipFunc(params.tempDir, params.vendorComponentSpec),
 
 		// Preserve the atime and the mtime of the entries
 		// On linux we can preserve only up to 1 millisecond accuracy
@@ -136,21 +150,19 @@ func copyComponentToDestination(tempDir, componentPath string, vendorComponentSp
 		// Preserve the uid and the gid of all entries
 		PreserveOwner: false,
 
-		// OnSymlink specifies what to do on symlink
-		// Override the destination file if it already exists
-		OnSymlink: func(src string) cp.SymlinkAction {
-			return cp.Deep
-		},
+		// OnSymlink specifies what to do on symlink based on security policy
+		// Use the temp directory (source) as the boundary for symlink validation
+		OnSymlink: security.CreateSymlinkHandler(params.tempDir, policy),
 	}
 
-	componentPath2 := componentPath
-	if sourceIsLocalFile {
-		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
+	componentPath2 := params.componentPath
+	if params.sourceIsLocalFile {
+		if filepath.Ext(params.componentPath) == "" {
+			componentPath2 = filepath.Join(params.componentPath, SanitizeFileName(params.uri))
 		}
 	}
 
-	if err := cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
+	if err := cp.Copy(params.tempDir, componentPath2, copyOptions); err != nil {
 		return err
 	}
 	return nil
@@ -467,28 +479,36 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 		}
 
 	case pkgTypeLocal:
-		if err := handlePkgTypeLocalComponent(tempDir, p); err != nil {
+		if err := handlePkgTypeLocalComponent(tempDir, p, atmosConfig); err != nil {
 			return err
 		}
 	default:
 		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
-	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
+	if err := copyComponentToDestination(copyComponentParams{
+		tempDir:             tempDir,
+		componentPath:       p.componentPath,
+		vendorComponentSpec: p.vendorComponentSpec,
+		sourceIsLocalFile:   p.sourceIsLocalFile,
+		uri:                 p.uri,
+		atmosConfig:         atmosConfig,
+	}); err != nil {
 		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
 	}
 
 	return nil
 }
 
-func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor) error {
+func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) error {
+	// Get the symlink policy from config
+	policy := security.GetPolicyFromConfig(atmosConfig)
+
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
-		// OnSymlink specifies what to do on symlink
-		// Override the destination file if it already exists
-		OnSymlink: func(src string) cp.SymlinkAction {
-			return cp.Deep
-		},
+		// OnSymlink specifies what to do on symlink based on security policy
+		// Use the source directory (p.uri) as the boundary for symlink validation
+		OnSymlink: security.CreateSymlinkHandler(p.uri, policy),
 	}
 
 	tempDir2 := tempDir
@@ -534,6 +554,9 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
 
+	// Get the symlink policy from config
+	policy := security.GetPolicyFromConfig(atmosConfig)
+
 	// Copy from the temp folder to the destination folder
 	copyOptions := cp.Options{
 		// Preserve the atime and the mtime of the entries
@@ -542,13 +565,10 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 		// Preserve the uid and the gid of all entries
 		PreserveOwner: false,
 
-		// OnSymlink specifies what to do on symlink
-		// Override the destination file if it already exists
+		// OnSymlink specifies what to do on symlink based on security policy
 		// Prevent the error:
 		// symlink components/terraform/mixins/context.tf components/terraform/infra/vpc-flow-logs-bucket/context.tf: file exists
-		OnSymlink: func(src string) cp.SymlinkAction {
-			return cp.Deep
-		},
+		OnSymlink: security.CreateSymlinkHandler(tempDir, policy),
 	}
 
 	if err := cp.Copy(tempDir, p.componentPath, copyOptions); err != nil {
