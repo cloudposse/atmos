@@ -659,8 +659,8 @@ func (p *StreamProcessor) shouldShowTestEvent(action string) bool {
 
 // printSummary prints a final test summary with statistics.
 func (p *StreamProcessor) printSummary() {
-	total := p.passed + p.failed
-	if total == 0 && p.skipped == 0 {
+	total := p.passed + p.failed + p.skipped
+	if total == 0 {
 		return
 	}
 
@@ -668,6 +668,7 @@ func (p *StreamProcessor) printSummary() {
 	fmt.Fprintf(os.Stderr, "%s\n", tui.StatsHeaderStyle.Render("Test Results:"))
 	fmt.Fprintf(os.Stderr, "  %s Passed:  %d\n", tui.PassStyle.Render(tui.CheckPass), p.passed)
 	fmt.Fprintf(os.Stderr, "  %s Failed:  %d\n", tui.FailStyle.Render(tui.CheckFail), p.failed)
+	fmt.Fprintf(os.Stderr, "  %s Skipped: %d\n", tui.SkipStyle.Render(tui.CheckSkip), p.skipped)
 	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
 	fmt.Fprintf(os.Stderr, "\n")
 
