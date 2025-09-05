@@ -509,8 +509,8 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		logger.Debug("Pass-through arguments detected", "args", passthroughArgs)
 	}
 
-	// Log test package discovery
-	logger.Info("Test package discovery completed", "packages", len(testPackages))
+	// Log test patterns to be discovered
+	logger.Info("Starting test execution", "patterns", len(testPackages))
 
 	// Check if we have a TTY for interactive mode
 	logger.Debug("TTY detection", "is_tty", utils.IsTTY())

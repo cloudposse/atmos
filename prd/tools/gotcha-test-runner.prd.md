@@ -598,6 +598,59 @@ Existing tools failed to provide:
 - **Output escaping**: Prevent injection attacks in generated content
 - **Permission handling**: Respect file system permissions and access controls
 
+### Go Test JSON Stream Format
+
+The tool processes JSON output from `go test -json` which provides structured test events. Each line is a separate JSON object.
+
+#### Event Structure
+Each JSON event contains:
+- **Time**: ISO 8601 timestamp (e.g., "2025-09-04T20:49:20.36365-05:00")
+- **Action**: Event type (start, run, output, pass, fail, skip, pause, cont)
+- **Package**: Full Go package path (e.g., "github.com/cloudposse/atmos/errors")
+- **Test**: Test name (empty string for package-level events)
+- **Output**: Text output line (only for "output" actions, includes escaped characters)
+- **Elapsed**: Duration in seconds (only for pass/fail/skip actions)
+
+#### Action Types
+
+**start** - Package testing begins:
+```json
+{"Time":"2025-09-04T20:49:20.36365-05:00","Action":"start","Package":"github.com/cloudposse/atmos/errors"}
+```
+
+**run** - Test execution starts:
+```json
+{"Time":"2025-09-04T20:49:20.363709-05:00","Action":"run","Package":"github.com/cloudposse/atmos/errors","Test":"TestCheckErrorAndPrint"}
+```
+
+**output** - Text output (line-by-line with escaped characters):
+```json
+{"Time":"2025-09-04T20:49:20.363711-05:00","Action":"output","Package":"github.com/cloudposse/atmos/errors","Test":"TestCheckErrorAndPrint","Output":"=== RUN   TestCheckErrorAndPrint\n"}
+```
+
+**pass** - Test/package succeeded:
+```json
+{"Time":"2025-09-04T20:49:20.36376-05:00","Action":"pass","Package":"github.com/cloudposse/atmos/errors","Test":"TestCheckErrorAndPrint","Elapsed":0}
+```
+
+**fail** - Test/package failed:
+```json
+{"Time":"2025-09-04T20:56:48.066285-05:00","Action":"fail","Package":"github.com/cloudposse/atmos/internal/aws_utils","Test":"TestLoadAWSConfig","Elapsed":0.01}
+```
+
+**skip** - Test/package skipped (no test files):
+```json
+{"Time":"2025-09-04T20:51:10.560116-05:00","Action":"skip","Package":"github.com/cloudposse/atmos/internal/tui/atmos","Elapsed":0}
+```
+
+#### Package Lifecycle
+A package completes when a package-level action (pass/fail/skip) has:
+- Package name in Package field
+- **Empty Test field** (`"Test":""`)
+- Elapsed time
+
+This is the key indicator for buffering - display package results only after receiving this completion event.
+
 ## Acceptance Criteria
 
 ### Core Functionality

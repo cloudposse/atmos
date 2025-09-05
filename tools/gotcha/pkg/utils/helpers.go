@@ -198,6 +198,32 @@ type SubtestStats struct {
 	skipped []string // names of skipped subtests
 }
 
+// PackageResult stores complete information about a tested package.
+type PackageResult struct {
+	Package      string
+	StartTime    time.Time
+	EndTime      time.Time
+	Status       string              // "pass", "fail", "skip", "running"
+	Tests        map[string]*TestResult
+	TestOrder    []string            // Maintain test execution order
+	Coverage     string              // e.g., "coverage: 75.2% of statements"
+	Output       []string            // Package-level output (build errors, etc.)
+	Elapsed      float64
+	HasTests     bool
+}
+
+// TestResult stores individual test information.
+type TestResult struct {
+	Name         string
+	FullName     string              // Full test name including package
+	Status       string              // "pass", "fail", "skip", "running"
+	Elapsed      float64
+	Output       []string            // All output lines from this test
+	Parent       string              // Parent test name for subtests
+	Subtests     map[string]*TestResult
+	SubtestOrder []string
+}
+
 // StreamProcessor handles real-time test output with buffering.
 type StreamProcessor struct {
 	mu           sync.Mutex
@@ -207,10 +233,18 @@ type StreamProcessor struct {
 	showFilter   string
 	startTime    time.Time
 	currentTest    string // Track current test for package-level output
+	
+	// Buffered output fields
+	packageResults  map[string]*PackageResult  // Complete package results
+	packageOrder    []string                   // Order packages were started
+	activePackages  map[string]bool            // Currently running packages
+	
+	// Legacy fields for compatibility (will be removed)
 	currentPackage string // Track current package being tested
 	packagesWithNoTests map[string]bool // Track packages that have no test files
 	packageHasTests map[string]bool // Track if package had any test run events
 	packageNoTestsPrinted map[string]bool // Track if we already printed "No tests" for a package
+	
 	// Statistics tracking
 	passed  int
 	failed  int
@@ -245,9 +279,17 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	processor := &StreamProcessor{
 		buffers:      make(map[string][]string),
 		subtestStats: make(map[string]*SubtestStats),
+		
+		// New buffered output fields
+		packageResults:  make(map[string]*PackageResult),
+		packageOrder:    []string{},
+		activePackages:  make(map[string]bool),
+		
+		// Legacy fields (will be removed)
 		packagesWithNoTests: make(map[string]bool),
 		packageHasTests: make(map[string]bool),
 		packageNoTestsPrinted: make(map[string]bool),
+		
 		jsonWriter:   jsonFile,
 		showFilter:   showFilter,
 		startTime:    time.Now(),
@@ -305,61 +347,81 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-
 	// Handle package-level events
 	if event.Test == "" {
 		// Handle package start events
 		if event.Action == "start" && event.Package != "" {
-			// Check if this is a new package
-			if p.currentPackage != event.Package {
+			// Create new package result entry
+			if _, exists := p.packageResults[event.Package]; !exists {
+				p.packageResults[event.Package] = &PackageResult{
+					Package:   event.Package,
+					StartTime: time.Now(),
+					Status:    "running",
+					Tests:     make(map[string]*TestResult),
+					TestOrder: []string{},
+					HasTests:  false,
+				}
+				p.packageOrder = append(p.packageOrder, event.Package)
+				p.activePackages[event.Package] = true
+				
+				// Keep legacy tracking for compatibility
 				p.currentPackage = event.Package
-				// Initialize tracking for this package
 				p.packageHasTests[event.Package] = false
-				// Print package header with arrow and styled package name
-				fmt.Fprintf(os.Stderr, "\n▶ %s\n\n", 
-					tui.PackageHeaderStyle.Render(event.Package))
 			}
 		} else if event.Action == "skip" && event.Package != "" && event.Test == "" {
 			// Package was skipped (usually means no test files)
-			if !p.packageNoTestsPrinted[event.Package] {
-				fmt.Fprintf(os.Stderr, "  %s\n", 
-					tui.DurationStyle.Render("No tests"))
-				p.packageNoTestsPrinted[event.Package] = true
+			if pkg, exists := p.packageResults[event.Package]; exists {
+				pkg.Status = "skip"
+				pkg.Elapsed = event.Elapsed
+				pkg.EndTime = time.Now()
+				delete(p.activePackages, event.Package)
+				
+				// Display buffered package results
+				p.displayPackageResult(pkg)
 			}
 		} else if event.Action == "output" && event.Package != "" && event.Test == "" {
-			// Check for "no test files" message in output
-			if strings.Contains(event.Output, "[no test files]") {
-				// Mark that this package has no tests
-				p.packagesWithNoTests[event.Package] = true
+			// Package-level output (coverage, build errors, etc.)
+			if pkg, exists := p.packageResults[event.Package]; exists {
+				pkg.Output = append(pkg.Output, event.Output)
+				
+				// Check for coverage
+				if strings.Contains(event.Output, "coverage:") {
+					pkg.Coverage = strings.TrimSpace(event.Output)
+				}
+				
+				// Check for "no test files" message
+				if strings.Contains(event.Output, "[no test files]") {
+					// Mark for legacy compatibility
+					p.packagesWithNoTests[event.Package] = true
+				}
 			}
 		} else if event.Action == "pass" && event.Package != "" && event.Test == "" {
-			// When a package passes, check if we need to show "No tests"
-			if !p.packageNoTestsPrinted[event.Package] {
-				if p.packagesWithNoTests[event.Package] {
-					// Package had "[no test files]" in output
-					// If this isn't the current package, we need to show which package this is for
-					if p.currentPackage != event.Package {
-						fmt.Fprintf(os.Stderr, "\n  %s for %s\n", 
-							tui.DurationStyle.Render("No tests"),
-							tui.PackageHeaderStyle.Render(event.Package))
-					} else {
-						fmt.Fprintf(os.Stderr, "  %s\n", 
-							tui.DurationStyle.Render("No tests"))
-					}
-					p.packageNoTestsPrinted[event.Package] = true
-				} else if hasTests, exists := p.packageHasTests[event.Package]; exists && !hasTests {
-					// Package passed but no tests were run
-					// If this isn't the current package, we need to show which package this is for
-					if p.currentPackage != event.Package {
-						fmt.Fprintf(os.Stderr, "\n  %s for %s\n", 
-							tui.DurationStyle.Render("No tests"),
-							tui.PackageHeaderStyle.Render(event.Package))
-					} else {
-						fmt.Fprintf(os.Stderr, "  %s\n", 
-							tui.DurationStyle.Render("No tests"))
-					}
-					p.packageNoTestsPrinted[event.Package] = true
+			// Package passed
+			if pkg, exists := p.packageResults[event.Package]; exists {
+				pkg.Status = "pass"
+				pkg.Elapsed = event.Elapsed
+				pkg.EndTime = time.Now()
+				delete(p.activePackages, event.Package)
+				
+				// Check if package had no tests
+				if !pkg.HasTests || p.packagesWithNoTests[event.Package] {
+					// Package has no runnable tests
+					pkg.HasTests = false
 				}
+				
+				// Display buffered package results
+				p.displayPackageResult(pkg)
+			}
+		} else if event.Action == "fail" && event.Package != "" && event.Test == "" {
+			// Package failed
+			if pkg, exists := p.packageResults[event.Package]; exists {
+				pkg.Status = "fail"
+				pkg.Elapsed = event.Elapsed
+				pkg.EndTime = time.Now()
+				delete(p.activePackages, event.Package)
+				
+				// Display buffered package results
+				p.displayPackageResult(pkg)
 			}
 		} else if event.Action == "output" && p.currentTest != "" {
 			// Package-level output might contain important command output
@@ -374,181 +436,109 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	// Mark that this package has tests
 	if event.Package != "" && event.Test != "" {
 		p.packageHasTests[event.Package] = true
+		if pkg, exists := p.packageResults[event.Package]; exists {
+			pkg.HasTests = true
+		}
 	}
 
 	switch event.Action {
 	case "run":
 		p.currentTest = event.Test
-		// Initialize buffer for this test (only if doesn't exist to preserve early output)
+		
+		// Create test result entry in package
+		if pkg, exists := p.packageResults[event.Package]; exists {
+			test := &TestResult{
+				Name:         event.Test,
+				FullName:     event.Test,
+				Status:       "running",
+				Output:       []string{},
+				Subtests:     make(map[string]*TestResult),
+				SubtestOrder: []string{},
+			}
+			
+			// Handle subtests
+			if strings.Contains(event.Test, "/") {
+				parts := strings.SplitN(event.Test, "/", 2)
+				parentName := parts[0]
+				subtestName := parts[1]
+				
+				if parent, ok := pkg.Tests[parentName]; ok {
+					test.Parent = parentName
+					test.Name = subtestName  // Store just the subtest name
+					parent.Subtests[event.Test] = test
+					parent.SubtestOrder = append(parent.SubtestOrder, event.Test)
+				}
+				// Note: We don't add subtests to pkg.Tests or pkg.TestOrder
+			} else {
+				// Top-level test
+				pkg.Tests[event.Test] = test
+				pkg.TestOrder = append(pkg.TestOrder, event.Test)
+				pkg.HasTests = true
+			}
+		}
+		
+		// Keep legacy buffer for compatibility
 		if p.buffers[event.Test] == nil {
 			p.buffers[event.Test] = []string{}
 		}
-		// Don't show "Running..." messages in non-TTY mode to avoid clutter
 
 	case "output":
-		// Buffer the output
-		// Create buffer if it doesn't exist (can happen with subtests or out-of-order events)
+		// Buffer the output in test result
+		if pkg, exists := p.packageResults[event.Package]; exists {
+			if test := p.findTest(pkg, event.Test); test != nil {
+				test.Output = append(test.Output, event.Output)
+			}
+		}
+		
+		// Keep legacy buffer for compatibility
 		if p.buffers[event.Test] == nil {
 			p.buffers[event.Test] = []string{}
 		}
 		p.buffers[event.Test] = append(p.buffers[event.Test], event.Output)
 
 	case "pass":
+		// Update test result
+		if pkg, exists := p.packageResults[event.Package]; exists {
+			if test := p.findTest(pkg, event.Test); test != nil {
+				test.Status = "pass"
+				test.Elapsed = event.Elapsed
+			}
+		}
+		
 		// Track statistics
 		p.passed++
-
-		// Track subtest statistics
-		if strings.Contains(event.Test, "/") {
-			// This is a subtest - update parent's stats
-			parts := strings.SplitN(event.Test, "/", 2)
-			parentTest := parts[0]
-			subtestName := parts[1]
-
-			if p.subtestStats[parentTest] == nil {
-				p.subtestStats[parentTest] = &SubtestStats{}
-			}
-			p.subtestStats[parentTest].passed = append(p.subtestStats[parentTest].passed, subtestName)
-		}
-
-		// Show success with actual test name
-		if p.shouldShowTestEvent("pass") {
-			fmt.Fprintf(os.Stderr, "  %s %s %s\n",
-				tui.PassStyle.Render(tui.CheckPass),
-				tui.TestNameStyle.Render(event.Test),
-				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
-		}
+		
 		// Clear buffer
 		delete(p.buffers, event.Test)
 
 	case "fail":
+		// Update test result
+		if pkg, exists := p.packageResults[event.Package]; exists {
+			if test := p.findTest(pkg, event.Test); test != nil {
+				test.Status = "fail"
+				test.Elapsed = event.Elapsed
+			}
+		}
+		
 		// Track statistics
 		p.failed++
-
-		// Track subtest statistics
-		if strings.Contains(event.Test, "/") {
-			// This is a subtest - update parent's stats
-			parts := strings.SplitN(event.Test, "/", 2)
-			parentTest := parts[0]
-			subtestName := parts[1]
-
-			if p.subtestStats[parentTest] == nil {
-				p.subtestStats[parentTest] = &SubtestStats{}
-			}
-			p.subtestStats[parentTest].failed = append(p.subtestStats[parentTest].failed, subtestName)
-		}
-
-		// Check if this is a parent test with subtests
-		if !strings.Contains(event.Test, "/") && p.subtestStats[event.Test] != nil {
-			stats := p.subtestStats[event.Test]
-			totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
-
-			// Generate mini progress indicator
-			miniProgress := p.generateSubtestProgress(len(stats.passed), totalSubtests)
-			percentage := 0
-			if totalSubtests > 0 {
-				percentage = (len(stats.passed) * 100) / totalSubtests
-			}
-
-			// Display parent test with subtest summary in line
-			// Use pass style if all subtests passed, fail style otherwise
-			var statusIcon string
-			if percentage == 100 && len(stats.failed) == 0 {
-				statusIcon = tui.PassStyle.Render(tui.CheckPass)
-			} else {
-				statusIcon = tui.FailStyle.Render(tui.CheckFail)
-			}
-			fmt.Fprintf(os.Stderr, "  %s %s %s %s %d%% passed\n",
-				statusIcon,
-				tui.TestNameStyle.Render(event.Test),
-				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
-				miniProgress,
-				percentage)
-
-			// Add detailed subtest summary
-			if totalSubtests > 0 {
-				fmt.Fprintf(os.Stderr, "\n    Subtest Summary: %d passed, %d failed of %d total\n",
-					len(stats.passed), len(stats.failed), totalSubtests)
-
-				// Show passed subtests
-				if len(stats.passed) > 0 {
-					fmt.Fprintf(os.Stderr, "\n    %s Passed (%d):\n",
-						tui.PassStyle.Render("✔"), len(stats.passed))
-					for _, name := range stats.passed {
-						fmt.Fprintf(os.Stderr, "      • %s\n", name)
-					}
-				}
-
-				// Show failed subtests
-				if len(stats.failed) > 0 {
-					fmt.Fprintf(os.Stderr, "\n    %s Failed (%d):\n",
-						tui.FailStyle.Render("✘"), len(stats.failed))
-					for _, name := range stats.failed {
-						fmt.Fprintf(os.Stderr, "      • %s\n", name)
-					}
-				}
-
-				// Show skipped subtests if any
-				if len(stats.skipped) > 0 {
-					fmt.Fprintf(os.Stderr, "\n    %s Skipped (%d):\n",
-						tui.SkipStyle.Render("⊘"), len(stats.skipped))
-					for _, name := range stats.skipped {
-						fmt.Fprintf(os.Stderr, "      • %s\n", name)
-					}
-				}
-			}
-		} else {
-			// Regular test or subtest - display normally
-			fmt.Fprintf(os.Stderr, "  %s %s %s\n",
-				tui.FailStyle.Render(tui.CheckFail),
-				tui.TestNameStyle.Render(event.Test),
-				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
-		}
-
-		// Show buffered error output (only for tests without subtests or subtests themselves)
-		if strings.Contains(event.Test, "/") || p.subtestStats[event.Test] == nil {
-			output, exists := p.buffers[event.Test]
-
-			// If no output found, check for subtest output (parent test might have no direct output)
-			if !exists || len(output) == 0 {
-				testPrefix := event.Test + "/"
-				for testName, testOutput := range p.buffers {
-					if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
-						output = append(output, testOutput...)
-					}
-				}
-			}
-
-			// Display ALL output for failed tests (including command output)
-			for _, line := range output {
-				fmt.Fprint(os.Stderr, "    "+line)
-			}
-		}
-
+		
+		// Clear buffer
 		delete(p.buffers, event.Test)
 
 	case "skip":
+		// Update test result
+		if pkg, exists := p.packageResults[event.Package]; exists {
+			if test := p.findTest(pkg, event.Test); test != nil {
+				test.Status = "skip"
+				test.Elapsed = event.Elapsed
+			}
+		}
+		
 		// Track statistics
 		p.skipped++
-
-		// Track subtest statistics
-		if strings.Contains(event.Test, "/") {
-			// This is a subtest - update parent's stats
-			parts := strings.SplitN(event.Test, "/", 2)
-			parentTest := parts[0]
-			subtestName := parts[1]
-
-			if p.subtestStats[parentTest] == nil {
-				p.subtestStats[parentTest] = &SubtestStats{}
-			}
-			p.subtestStats[parentTest].skipped = append(p.subtestStats[parentTest].skipped, subtestName)
-		}
-
-		// Show skip with actual test name
-		if p.shouldShowTestEvent("skip") {
-			fmt.Fprintf(os.Stderr, "  %s %s\n",
-				tui.SkipStyle.Render(tui.CheckSkip),
-				tui.TestNameStyle.Render(event.Test))
-		}
+		
+		// Clear buffer
 		delete(p.buffers, event.Test)
 	}
 }
@@ -632,6 +622,204 @@ func (p *StreamProcessor) generateSubtestProgress(passed, total int) string {
 	}
 
 	return indicator.String()
+}
+
+// findTest locates a test within the package result hierarchy.
+func (p *StreamProcessor) findTest(pkg *PackageResult, testName string) *TestResult {
+	if strings.Contains(testName, "/") {
+		// This is a subtest
+		parts := strings.SplitN(testName, "/", 2)
+		parentName := parts[0]
+		
+		if parent, exists := pkg.Tests[parentName]; exists {
+			if subtest, exists := parent.Subtests[testName]; exists {
+				return subtest
+			}
+		}
+		return nil
+	}
+	
+	// Top-level test
+	return pkg.Tests[testName]
+}
+
+// displayPackageResult outputs the buffered results for a completed package.
+func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
+	// Display package header
+	fmt.Fprintf(os.Stderr, "\n%s %s\n",
+		tui.PackageHeaderStyle.Render("▶"),
+		tui.PackageHeaderStyle.Render(pkg.Package))
+	
+	// Check if package has no tests
+	if !pkg.HasTests {
+		fmt.Fprintf(os.Stderr, " %s\n", tui.DurationStyle.Render("No tests"))
+		return
+	}
+	
+	// Display tests based on show filter
+	for _, testName := range pkg.TestOrder {
+		test := pkg.Tests[testName]
+		p.displayTest(test, "")
+	}
+	
+	// Display coverage if available
+	if pkg.Coverage != "" {
+		// Extract percentage from coverage string
+		if strings.Contains(pkg.Coverage, "coverage:") {
+			fmt.Fprintf(os.Stderr, "  %s\n", tui.DurationStyle.Render(pkg.Coverage))
+		}
+	}
+}
+
+// displayTest outputs a single test result with proper formatting.
+func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
+	// Check if we should display this test based on filter
+	if !p.shouldShowTestStatus(test.Status) {
+		return
+	}
+	
+	// Determine status icon
+	var statusIcon string
+	switch test.Status {
+	case "pass":
+		statusIcon = tui.PassStyle.Render(tui.CheckPass)
+	case "fail":
+		statusIcon = tui.FailStyle.Render(tui.CheckFail)
+	case "skip":
+		statusIcon = tui.SkipStyle.Render(tui.CheckSkip)
+	default:
+		return // Don't display running tests
+	}
+	
+	// Build display line
+	var line strings.Builder
+	line.WriteString(indent + " ")
+	line.WriteString(statusIcon)
+	line.WriteString(" ")
+	line.WriteString(tui.TestNameStyle.Render(test.Name))
+	
+	// Add duration for completed tests
+	if test.Elapsed > 0 {
+		line.WriteString(" ")
+		line.WriteString(tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
+	}
+	
+	// Check if test has subtests
+	if len(test.Subtests) > 0 {
+		// Calculate subtest statistics
+		passed := 0
+		failed := 0
+		skipped := 0
+		
+		for _, subtest := range test.Subtests {
+			switch subtest.Status {
+			case "pass":
+				passed++
+			case "fail":
+				failed++
+			case "skip":
+				skipped++
+			}
+		}
+		
+		total := passed + failed + skipped
+		if total > 0 {
+			// Add mini progress indicator
+			miniProgress := p.generateSubtestProgress(passed, total)
+			percentage := (passed * 100) / total
+			
+			line.WriteString(" ")
+			line.WriteString(miniProgress)
+			line.WriteString(fmt.Sprintf(" %d%% passed", percentage))
+		}
+	}
+	
+	fmt.Fprintln(os.Stderr, line.String())
+	
+	// Display test output for failures (respecting show filter)
+	if test.Status == "fail" && len(test.Output) > 0 && p.showFilter != "none" {
+		for _, outputLine := range test.Output {
+			fmt.Fprint(os.Stderr, indent+"    "+outputLine)
+		}
+	}
+	
+	// Display subtests if test failed or show filter is "all"
+	if len(test.Subtests) > 0 && (test.Status == "fail" || p.showFilter == "all") {
+		// Display subtest summary for failed tests
+		if test.Status == "fail" {
+			passed := []*TestResult{}
+			failed := []*TestResult{}
+			skipped := []*TestResult{}
+			
+			for _, subtestName := range test.SubtestOrder {
+				subtest := test.Subtests[subtestName]
+				switch subtest.Status {
+				case "pass":
+					passed = append(passed, subtest)
+				case "fail":
+					failed = append(failed, subtest)
+				case "skip":
+					skipped = append(skipped, subtest)
+				}
+			}
+			
+			total := len(passed) + len(failed) + len(skipped)
+			if total > 0 {
+				fmt.Fprintf(os.Stderr, "\n%s    Subtest Summary: %d passed, %d failed of %d total\n",
+					indent, len(passed), len(failed), total)
+				
+				// Show passed subtests
+				if len(passed) > 0 {
+					fmt.Fprintf(os.Stderr, "\n%s    %s Passed (%d):\n",
+						indent, tui.PassStyle.Render("✔"), len(passed))
+					for _, subtest := range passed {
+						fmt.Fprintf(os.Stderr, "%s      • %s\n", indent, subtest.Name)
+					}
+				}
+				
+				// Show failed subtests
+				if len(failed) > 0 {
+					fmt.Fprintf(os.Stderr, "\n%s    %s Failed (%d):\n",
+						indent, tui.FailStyle.Render("✘"), len(failed))
+					for _, subtest := range failed {
+						fmt.Fprintf(os.Stderr, "%s      • %s\n", indent, subtest.Name)
+					}
+				}
+				
+				// Show skipped subtests
+				if len(skipped) > 0 {
+					fmt.Fprintf(os.Stderr, "\n%s    %s Skipped (%d):\n",
+						indent, tui.SkipStyle.Render("⊘"), len(skipped))
+					for _, subtest := range skipped {
+						fmt.Fprintf(os.Stderr, "%s      • %s\n", indent, subtest.Name)
+					}
+				}
+			}
+		} else if p.showFilter == "all" {
+			// For "all" filter, subtests are already shown in mini progress
+			// Don't display them again unless specifically requested
+		}
+	}
+}
+
+// shouldShowTestStatus determines if a test with the given status should be displayed.
+func (p *StreamProcessor) shouldShowTestStatus(status string) bool {
+	switch p.showFilter {
+	case "all":
+		return true
+	case "failed":
+		return status == "fail"
+	case "passed":
+		return status == "pass"
+	case "skipped":
+		return status == "skip"
+	case "collapsed":
+		return status == "fail" // Only show failures in collapsed mode
+	case "none":
+		return false
+	default:
+		return true
+	}
 }
 
 // Note: HandleOutput and HandleConsoleOutput have been moved to the output package
