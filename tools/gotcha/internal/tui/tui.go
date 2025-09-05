@@ -507,7 +507,7 @@ func (m *TestModel) View() string {
 	// Build the status line components
 	spin := m.spinner.View() + " "
 
-	// Test name with more room (increased from 35 to 45)
+	// Test name with fixed width for stability
 	const maxTestWidth = 45
 	var info string
 	if m.currentTest != "" {
@@ -515,16 +515,14 @@ func (m *TestModel) View() string {
 		if len(testName) > maxTestWidth {
 			testName = testName[:maxTestWidth-3] + "..."
 		}
+		// Pad test name to exactly maxTestWidth BEFORE styling
+		testName = fmt.Sprintf("%-*s", maxTestWidth, testName)
 		styledName := TestNameStyle.Render(testName)
 		info = fmt.Sprintf("Running %s", styledName)
-		// Add minimal padding for alignment
-		padding := maxTestWidth - len(testName) + 8 // +8 for "Running " 
-		if padding > 0 && padding < 20 { // Cap padding to avoid excessive space
-			info += strings.Repeat(" ", padding)
-		}
 	} else {
-		info = "Starting tests..."
-		// Don't add excessive padding for the starting message
+		// Pad "Starting tests..." to match "Running " + maxTestWidth
+		padded := fmt.Sprintf("%-*s", maxTestWidth+8, "Starting tests...")
+		info = padded
 	}
 
 	prog := m.progress.View()
@@ -544,43 +542,21 @@ func (m *TestModel) View() string {
 		percentFloat := float64(m.completedTests) / float64(m.totalTests)
 		percent := int(percentFloat * 100)
 		percentage = fmt.Sprintf("%3d%%", percent) // Fixed width
-		// Format test count with "tests" in dark gray - use dynamic width
-		testCount = fmt.Sprintf("%d/%d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
+		// Format test count with fixed width for stability
+		testCount = fmt.Sprintf("%4d/%-4d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
 	} else {
-		// Very early, before any run events
+		// Very early, before any run events - pad to match width
 		percentage = "  0%"
-		testCount = DurationStyle.Render("discovering tests")
+		testCount = fmt.Sprintf("%-15s", DurationStyle.Render("discovering tests"))
 	}
 	
-	// Format time and buffer with units in dark gray (no parentheses)
-	timeStr := fmt.Sprintf("%d%s", elapsedSeconds, DurationStyle.Render("s"))
-	bufferStr := fmt.Sprintf("%.1f%s", bufferSizeKB, DurationStyle.Render("KB"))
+	// Format time and buffer with fixed widths for stability
+	timeStr := fmt.Sprintf("%3d%s", elapsedSeconds, DurationStyle.Render("s"))
+	bufferStr := fmt.Sprintf("%7.1f%s", bufferSizeKB, DurationStyle.Render("KB"))
 	
-	// Build the right-aligned section
-	rightSection := timeStr + " " + bufferStr
-	
-	// Calculate the middle section with tighter spacing
-	middleSection := prog + " " + percentage + " " + testCount
-	
-	// Calculate available space using actual display widths
-	leftSection := spin + info + "  " // Add some space after test name
-	leftWidth := getDisplayWidth(leftSection)
-	middleWidth := getDisplayWidth(middleSection)
-	rightWidth := getDisplayWidth(rightSection)
-	
-	// Calculate minimal gap between middle and right sections
-	// We want just enough space to separate them, not to right-align
-	usedWidth := leftWidth + middleWidth + rightWidth + 2 // +2 for minimal spacing
-	if usedWidth > terminalWidth {
-		// If we're over width, use compact format
-		return spin + "Running..." + " " + prog + " " + percentage + " " + testCount + " " + timeStr + " " + bufferStr + "\n"
-	}
-	
-	// Use a smaller, fixed gap between sections for consistent spacing
-	gap := "  " // Just 2 spaces between middle and right sections
-	
-	// Assemble the complete status line
-	statusLine := leftSection + middleSection + gap + rightSection
+	// Assemble the complete status line with fixed spacing
+	// All sections are now fixed-width, so no jumping should occur
+	statusLine := spin + info + "  " + prog + " " + percentage + " " + testCount + "  " + timeStr + " " + bufferStr
 	
 	return statusLine + "\n"
 }
