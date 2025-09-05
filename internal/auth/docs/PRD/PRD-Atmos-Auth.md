@@ -800,6 +800,9 @@ providers:
 - Browser automation handles MFA challenges automatically
 - Supports headless browser operation for CI/CD environments
 - SAML assertions are cached for session duration to reduce authentication frequency
+- Google Apps SAML responses are automatically processed with Base64 decoding and assertion extraction
+- Multiple SAML assertion formats are supported (Base64 encoded, raw XML, processed assertions)
+- Provider type auto-detection: Google Apps URLs automatically use "Browser" provider for compatibility
 
 #### GitHub Actions OIDC
 
