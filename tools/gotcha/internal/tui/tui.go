@@ -221,9 +221,9 @@ type streamOutputMsg struct {
 
 // NewTestModel creates a new test model for the TUI.
 func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, outputMode string) TestModel {
-	// Create progress bar with scaled gradient for smooth animation
+	// Create progress bar with pretty gradient using theme colors
 	p := progress.New(
-		progress.WithScaledGradient("#FF0000", "#00FF00"),
+		progress.WithScaledGradient("#5DADE2", "#2ECC40"), // Blue to green gradient
 		progress.WithWidth(40),
 		progress.WithoutPercentage(),
 	)
