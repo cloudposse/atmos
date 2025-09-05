@@ -176,8 +176,14 @@ func tryEnvironmentAuth(registry string) (authn.Authenticator, error) {
 	passwordKey := fmt.Sprintf("%s_password", registryEnvName)
 
 	// Bind the registry-specific environment variables
-	bindEnv(v, usernameKey, fmt.Sprintf("%s_USERNAME", registryEnvName))
-	bindEnv(v, passwordKey, fmt.Sprintf("%s_PASSWORD", registryEnvName))
+	bindEnv(v, usernameKey,
+		fmt.Sprintf("%s_USERNAME", registryEnvName),
+		fmt.Sprintf("ATMOS_%s_USERNAME", registryEnvName),
+	)
+	bindEnv(v, passwordKey,
+		fmt.Sprintf("%s_PASSWORD", registryEnvName),
+		fmt.Sprintf("ATMOS_%s_PASSWORD", registryEnvName),
+	)
 
 	username := v.GetString(usernameKey)
 	password := v.GetString(passwordKey)
@@ -234,10 +240,10 @@ func tryGCRAuth(registry string) (authn.Authenticator, error) {
 
 // getRegistryAuth attempts to find authentication credentials for the given registry.
 // It checks multiple sources in order of preference:
-// 1. GitHub Container Registry (ghcr.io) with GITHUB_TOKEN
-// 2. Docker credential helpers (from ~/.docker/config.json)
-// 3. Environment variables for specific registries
-// 4. AWS ECR authentication (if AWS credentials are available)
+// 1. GitHub Container Registry (ghcr.io) with GITHUB_TOKEN.
+// 2. Docker credential helpers (from ~/.docker/config.json).
+// 3. Environment variables for specific registries.
+// 4. AWS ECR authentication (if AWS credentials are available).
 func getRegistryAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {
 	// Try authentication methods in order of preference
 	authMethods := []func() (authn.Authenticator, error){
@@ -354,7 +360,7 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	return nil
 }
 
-// extractRawData attempts to extract raw data from the layer as a fallback
+// extractRawData attempts to extract raw data from the layer as a fallback.
 func extractRawData(reader io.Reader, destDir string, layerIndex int) error {
 	// Create a temporary file to store the raw data
 	tempFile := filepath.Join(destDir, fmt.Sprintf("layer_%d_raw", layerIndex))
@@ -487,7 +493,7 @@ func shouldSkipZipFile(file *zip.File) (bool, string) {
 	return false, ""
 }
 
-// extractZipFile extracts a ZIP file from an io.Reader into the destination directory
+// extractZipFile extracts a ZIP file from an io.Reader into the destination directory.
 func extractZipFile(reader io.Reader, destDir string) error {
 	// Read the ZIP data with size limit to prevent decompression bomb attacks
 	limitedReader := io.LimitReader(reader, maxZipSize)
@@ -557,11 +563,11 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 	}
 }
 
-// ParseOCIManifest reads and decodes an OCI manifest from a JSON file.
+// parseOCIManifest reads and decodes an OCI manifest from a JSON file.
 func parseOCIManifest(manifestBytes io.Reader) (*ocispec.Manifest, error) {
 	var manifest ocispec.Manifest
 	if err := json.NewDecoder(manifestBytes).Decode(&manifest); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse OCI manifest: %w", err)
 	}
 
 	return &manifest, nil

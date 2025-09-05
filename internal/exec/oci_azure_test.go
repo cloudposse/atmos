@@ -18,9 +18,7 @@ import (
 
 // TestACRAuthDirect tests Azure Container Registry authentication directly.
 func TestACRAuthDirect(t *testing.T) {
-	if os.Getenv("ATMOS_AZURE_E2E") == "" {
-		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
-	}
+	azureSkipIfNotE2E(t)
 
 	tests := []struct {
 		name        string
@@ -82,11 +80,9 @@ func TestACRAuthDirect(t *testing.T) {
 	}
 }
 
-// TestGetACRAuthViaServicePrincipalDirect tests Azure Service Principal authentication directly
+// TestGetACRAuthViaServicePrincipalDirect tests Azure Service Principal authentication directly.
 func TestGetACRAuthViaServicePrincipalDirect(t *testing.T) {
-	if os.Getenv("ATMOS_AZURE_E2E") == "" {
-		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
-	}
+	azureSkipIfNotE2E(t)
 
 	tests := []struct {
 		name         string
@@ -158,9 +154,7 @@ func TestGetACRAuthViaServicePrincipalDirect(t *testing.T) {
 
 // TestGetACRAuthViaDefaultCredentialDirect tests Azure Default Credential authentication directly.
 func TestGetACRAuthViaDefaultCredentialDirect(t *testing.T) {
-	if os.Getenv("ATMOS_AZURE_E2E") == "" {
-		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
-	}
+	azureSkipIfNotE2E(t)
 
 	tests := []struct {
 		name        string
@@ -210,9 +204,7 @@ func TestGetACRAuthViaDefaultCredentialDirect(t *testing.T) {
 
 // TestExchangeAADForACRRefreshTokenDirect tests AAD to ACR token exchange directly.
 func TestExchangeAADForACRRefreshTokenDirect(t *testing.T) {
-	if os.Getenv("ATMOS_AZURE_E2E") == "" {
-		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
-	}
+	azureSkipIfNotE2E(t)
 
 	tests := []struct {
 		name        string
@@ -306,14 +298,18 @@ func TestExchangeAADForACRRefreshTokenWithStubbedHTTP(t *testing.T) {
 
 	// Create a mock HTTP client that returns a predefined response
 	mockClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &mockTransport{
-			response: &http.Response{
+		Timeout: 10 * time.Second,
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, http.MethodPost, req.Method)
+			assert.Equal(t, "test.azurecr.io", req.URL.Host)
+			assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
+			assert.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
+			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     http.Header{"Content-Type": []string{"application/json"}},
 				Body:       io.NopCloser(strings.NewReader(`{"refresh_token": "mock-refresh-token", "access_token": "mock-access-token"}`)),
-			},
-		},
+			}, nil
+		}),
 	}
 
 	// Override the HTTP client
@@ -332,17 +328,16 @@ func TestExchangeAADForACRRefreshTokenWithStubbedHTTP(t *testing.T) {
 	assert.Equal(t, "mock-refresh-token", refreshToken)
 }
 
-// mockTransport is a simple mock transport for testing
-type mockTransport struct {
-	response *http.Response
-}
+// roundTripFunc helps inline stub HTTP behavior in tests.
+type roundTripFunc func(*http.Request) (*http.Response, error)
 
-func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return m.response, nil
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
 
 // TestExtractTenantIDFromTokenDirect tests JWT token parsing for tenant ID directly.
 func TestExtractTenantIDFromTokenDirect(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		token       string
@@ -395,7 +390,9 @@ func TestExtractTenantIDFromTokenDirect(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tenantID, err := extractTenantIDFromToken(tt.token)
 
 			if tt.expectError {
@@ -431,4 +428,10 @@ func createJWTWithInvalidJSONDirect() string {
 	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"invalid json`))
 	signature := base64.RawURLEncoding.EncodeToString([]byte("signature"))
 	return fmt.Sprintf("%s.%s.%s", header, payload, signature)
+}
+
+func azureSkipIfNotE2E(t *testing.T) {
+	if os.Getenv("ATMOS_AZURE_E2E") == "" {
+		t.Skip("Skipping Azure integration test (set ATMOS_AZURE_E2E=1 to run)")
+	}
 }

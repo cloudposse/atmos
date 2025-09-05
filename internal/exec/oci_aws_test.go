@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +8,7 @@ import (
 
 // TestECRAuthDirect tests AWS ECR authentication directly.
 func TestECRAuthDirect(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		registry    string
@@ -30,7 +30,9 @@ func TestECRAuthDirect(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := getECRAuth(tt.registry)
 
 			if tt.expectError {
@@ -47,47 +49,34 @@ func TestECRAuthDirect(t *testing.T) {
 
 // TestECRRegistryParsing tests the ECR registry parsing logic.
 func TestECRRegistryParsing(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name     string
-		registry string
-		isECR    bool
+		name        string
+		registry    string
+		wantAcct    string
+		wantRegion  string
+		expectError bool
 	}{
-		{
-			name:     "Standard ECR",
-			registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com",
-			isECR:    true,
-		},
-		{
-			name:     "ECR FIPS",
-			registry: "123456789012.dkr.ecr-fips.us-west-2.amazonaws.com",
-			isECR:    true,
-		},
-		{
-			name:     "ECR China",
-			registry: "123456789012.dkr.ecr.cn-northwest-1.amazonaws.com.cn",
-			isECR:    true,
-		},
-		{
-			name:     "ECR FIPS China",
-			registry: "123456789012.dkr.ecr-fips.cn-northwest-1.amazonaws.com.cn",
-			isECR:    true,
-		},
-		{
-			name:     "Non-ECR registry",
-			registry: "docker.io",
-			isECR:    false,
-		},
-		{
-			name:     "Invalid format",
-			registry: "invalid-registry.com",
-			isECR:    false,
-		},
+		{"Standard ECR", "123456789012.dkr.ecr.us-west-2.amazonaws.com", "123456789012", "us-west-2", false},
+		{"ECR FIPS", "123456789012.dkr.ecr-fips.us-west-2.amazonaws.com", "123456789012", "us-west-2", false},
+		{"ECR China", "123456789012.dkr.ecr.cn-northwest-1.amazonaws.com.cn", "123456789012", "cn-northwest-1", false},
+		{"ECR FIPS China", "123456789012.dkr.ecr-fips.cn-northwest-1.amazonaws.com.cn", "123456789012", "cn-northwest-1", false},
+		{"Non-ECR registry", "docker.io", "", "", true},
+		{"Invalid format", "invalid-registry.com", "", "", true},
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			isECR := strings.Contains(tt.registry, "dkr.ecr") && strings.Contains(tt.registry, "amazonaws.com")
-			assert.Equal(t, tt.isECR, isECR)
+			t.Parallel()
+			acct, region, err := parseECRRegistry(tt.registry)
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantAcct, acct)
+			assert.Equal(t, tt.wantRegion, region)
 		})
 	}
 }

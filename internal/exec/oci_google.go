@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	log "github.com/charmbracelet/log"
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -20,7 +21,8 @@ var (
 // getGCRAuth attempts to get Google Container Registry authentication.
 func getGCRAuth(registry string) (authn.Authenticator, error) {
 	// Use Google Cloud Application Default Credentials
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	creds, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
 	if err != nil {
 		log.Debug("Failed to find Google Cloud credentials", logFieldRegistry, registry, "error", err)
@@ -39,8 +41,8 @@ func getGCRAuth(registry string) (authn.Authenticator, error) {
 		return nil, fmt.Errorf("%w: %w", errFailedToGetGoogleCloudToken, err)
 	}
 
-	// For GCR, we use the token as the password with "_dcg" as username
-	// This is the standard pattern for GCR authentication
+	// For GCR/Artifact Registry, use an OAuth2 access token as the password with
+	// the username "oauth2accesstoken". This is the standard pattern for GCR/AR authentication.
 	log.Debug("Successfully obtained Google Cloud credentials", logFieldRegistry, registry)
 	return &authn.Basic{
 		Username: "oauth2accesstoken",

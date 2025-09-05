@@ -220,8 +220,8 @@ func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, e
 		return nil, fmt.Errorf("%w: %s", errInvalidRegistryName, registry)
 	}
 
-	// Validate credsStore to prevent command injection
-	if strings.ContainsAny(credsStore, ";&|`$(){}[]<>/\\") {
+	// Validate credsStore using an allowlist (letters, digits, underscore, hyphen).
+	if !regexp.MustCompile(`^[A-Za-z0-9_-]+$`).MatchString(credsStore) {
 		return nil, fmt.Errorf("%w: %s", errInvalidCredentialStoreName, credsStore)
 	}
 

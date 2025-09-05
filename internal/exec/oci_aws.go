@@ -28,16 +28,18 @@ var (
 	errFailedToLoadAWSConfig      = errors.New("failed to load AWS config")
 )
 
+// Precompiled: supports ecr and ecr-fips across partitions (incl. .cn).
+var ecrRegistryRe = regexp.MustCompile(`^(?P<acct>\d{12})\.dkr\.(?P<svc>ecr(?:-fips)?)\.(?P<region>[a-z0-9-]+)\.amazonaws\.com(?:\.cn)?$`)
+
 // parseECRRegistry parses ECR registry string and extracts account ID and region.
 func parseECRRegistry(registry string) (accountID, region string, err error) {
-	re := regexp.MustCompile(`^(?P<acct>\d{12})\.dkr\.(?P<svc>ecr(?:-fips)?)\.(?P<region>[a-z0-9-]+)\.amazonaws\.com(?:\.cn)?$`)
-	m := re.FindStringSubmatch(registry)
+	m := ecrRegistryRe.FindStringSubmatch(registry)
 	if m == nil {
 		return "", "", fmt.Errorf("%w: %s", errInvalidECRRegistryFormat, registry)
 	}
 
-	accountID = m[re.SubexpIndex("acct")]
-	region = m[re.SubexpIndex("region")]
+	accountID = m[ecrRegistryRe.SubexpIndex("acct")]
+	region = m[ecrRegistryRe.SubexpIndex("region")]
 
 	if accountID == "" || region == "" {
 		return "", "", fmt.Errorf("%w from %s", errCouldNotParseECRAccount, registry)
@@ -56,7 +58,7 @@ func getECRAuthToken(ctx context.Context, ecrClient *ecr.Client, accountID strin
 		return nil, fmt.Errorf("%w: %w", errFailedToGetECRAuthToken, err)
 	}
 	if len(authTokenOutput.AuthorizationData) == 0 {
-		return nil, errNoECRAuthorizationData
+		return nil, fmt.Errorf("%w for account %s", errNoECRAuthorizationData, accountID)
 	}
 	return &authTokenOutput.AuthorizationData[0], nil
 }
