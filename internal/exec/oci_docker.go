@@ -21,8 +21,10 @@ import (
 )
 
 // Allow tests to override exec for credential helpers.
-var lookPath = exec.LookPath
-var commandContext = exec.CommandContext
+var (
+	lookPath       = exec.LookPath
+	commandContext = exec.CommandContext
+)
 
 // DockerConfig represents the structure of Docker's config.json file.
 type DockerConfig struct {
