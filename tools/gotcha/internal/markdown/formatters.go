@@ -194,7 +194,7 @@ func WriteDetailedCoverage(output io.Writer, coverageData *types.CoverageData) {
 		return
 	}
 
-	fmt.Fprintf(output, "# Test Coverage\n\n")
+	fmt.Fprintf(output, "## 📊 Test Coverage\n\n")
 
 	// Build statement coverage details.
 	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverageData.StatementCoverage, "%"), constants.Base10BitSize)
@@ -279,7 +279,7 @@ func writeUncoveredFunctionsTable(output io.Writer, functions []types.CoverageFu
 // writeLegacyCoverageSection writes coverage in the legacy table format.
 // WriteBasicCoverage writes basic coverage section with just percentage.
 func WriteBasicCoverage(output io.Writer, coverage string) {
-	fmt.Fprintf(output, "# Test Coverage\n\n")
+	fmt.Fprintf(output, "## 📊 Test Coverage\n\n")
 	coverageFloat, _ := strconv.ParseFloat(strings.TrimSuffix(coverage, "%"), constants.Base10BitSize)
 	emoji := "🔴" // red for < 40%.
 	if coverageFloat >= constants.CoverageHighThreshold {

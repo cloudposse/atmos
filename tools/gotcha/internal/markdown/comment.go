@@ -41,24 +41,17 @@ func generateFullComment(summary *types.TestSummary, uuid string, platform strin
 		fmt.Fprintf(&content, "<!-- test-summary-uuid: %s -->\n\n", uuid)
 	}
 
-	// Determine status emoji based on test results
+	// Determine status emoji based on test results (binary: pass or fail only)
 	statusEmoji := "✅" // Default to success
 	if len(summary.Failed) > 0 {
 		statusEmoji = "❌"
-	} else if len(summary.Skipped) > 0 {
-		statusEmoji = "⚠️"
 	}
 
 	// Test Results section (h1) with platform and status emoji
 	if platform != "" {
-		fmt.Fprintf(&content, "# %s Test Results - %s\n\n", statusEmoji, platform)
+		fmt.Fprintf(&content, "# %s Test Results (%s)\n\n", statusEmoji, platform)
 	} else {
 		fmt.Fprintf(&content, "# %s Test Results\n\n", statusEmoji)
-	}
-
-	// Display total elapsed time if available
-	if summary.TotalElapsedTime > 0 {
-		fmt.Fprintf(&content, "_Total Time: %.2fs_\n\n", summary.TotalElapsedTime)
 	}
 
 	// Get test counts
@@ -98,6 +91,11 @@ func generateFullComment(summary *types.TestSummary, uuid string, platform strin
 	// Add package summary section after slowest tests
 	if total > 0 {
 		writePackageSummarySection(&content, summary)
+	}
+
+	// Display total elapsed time at the very bottom
+	if summary.TotalElapsedTime > 0 {
+		fmt.Fprintf(&content, "\n**Total Time:** %.2fs\n", summary.TotalElapsedTime)
 	}
 
 	return content.String()
@@ -184,17 +182,15 @@ func generateConciseComment(summary *types.TestSummary, uuid string, platform st
 		fmt.Fprintf(&content, "<!-- test-summary-uuid: %s -->\n\n", uuid)
 	}
 
-	// Determine status emoji based on test results
+	// Determine status emoji based on test results (binary: pass or fail only)
 	statusEmoji := "✅" // Default to success
 	if len(summary.Failed) > 0 {
 		statusEmoji = "❌"
-	} else if len(summary.Skipped) > 0 {
-		statusEmoji = "⚠️"
 	}
 
 	// Test Results section (h1) with platform and status emoji.
 	if platform != "" {
-		fmt.Fprintf(&content, "# %s Test Results - %s\n\n", statusEmoji, platform)
+		fmt.Fprintf(&content, "# %s Test Results (%s)\n\n", statusEmoji, platform)
 	} else {
 		fmt.Fprintf(&content, "# %s Test Results\n\n", statusEmoji)
 	}
@@ -238,6 +234,11 @@ func generateConciseComment(summary *types.TestSummary, uuid string, platform st
 		addCoverageWithLimit(&content, summary, remainingBytes)
 	}
 
+	// Display total elapsed time at the very bottom
+	if summary.TotalElapsedTime > 0 {
+		fmt.Fprintf(&content, "\n**Total Time:** %.2fs\n", summary.TotalElapsedTime)
+	}
+
 	result := content.String()
 
 	// Final safety check - if we're still over the limit, do basic truncation.
@@ -270,17 +271,15 @@ func truncateToEssentials(summary *types.TestSummary, uuid string, platform stri
 		fmt.Fprintf(&content, "<!-- test-summary-uuid: %s -->\n\n", uuid)
 	}
 
-	// Determine status emoji based on test results
+	// Determine status emoji based on test results (binary: pass or fail only)
 	statusEmoji := "✅" // Default to success
 	if len(summary.Failed) > 0 {
 		statusEmoji = "❌"
-	} else if len(summary.Skipped) > 0 {
-		statusEmoji = "⚠️"
 	}
 
 	// Test Results section (h1) with platform and status emoji.
 	if platform != "" {
-		fmt.Fprintf(&content, "# %s Test Results - %s\n\n", statusEmoji, platform)
+		fmt.Fprintf(&content, "# %s Test Results (%s)\n\n", statusEmoji, platform)
 	} else {
 		fmt.Fprintf(&content, "# %s Test Results\n\n", statusEmoji)
 	}
@@ -342,6 +341,11 @@ func truncateToEssentials(summary *types.TestSummary, uuid string, platform stri
 	}
 
 	fmt.Fprintf(&content, "_Full test results available in job summary._\n")
+
+	// Display total elapsed time at the very bottom
+	if summary.TotalElapsedTime > 0 {
+		fmt.Fprintf(&content, "\n**Total Time:** %.2fs\n", summary.TotalElapsedTime)
+	}
 
 	return content.String()
 }

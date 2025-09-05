@@ -165,7 +165,7 @@ func TestWriteDetailedCoverage(t *testing.T) {
 				FilteredFiles: []string{"mock_file.go"},
 			},
 			wantContains: []string{
-				"# Test Coverage",
+				"## 📊 Test Coverage",
 				"75.5%",
 				"🟡",                     // Should have medium coverage emoji for 75.5%
 				"1/2 functions covered", // 1 out of 2 functions has coverage > 0%
@@ -178,7 +178,7 @@ func TestWriteDetailedCoverage(t *testing.T) {
 				FunctionCoverage:  []types.CoverageFunction{},
 			},
 			wantContains: []string{
-				"# Test Coverage",
+				"## 📊 Test Coverage",
 				"90.0%",
 				"🟢", // Should have high coverage emoji for 90%
 			},
@@ -190,7 +190,7 @@ func TestWriteDetailedCoverage(t *testing.T) {
 				FunctionCoverage:  []types.CoverageFunction{},
 			},
 			wantContains: []string{
-				"# Test Coverage",
+				"## 📊 Test Coverage",
 				"25.0%",
 				"🔴", // Should have low coverage emoji for 25%
 			},

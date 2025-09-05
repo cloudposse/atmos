@@ -163,7 +163,7 @@ func TestWriteDetailedCoverageEnhanced(t *testing.T) {
 				},
 			},
 			wantText: []string{
-				"# Test Coverage",
+				"## 📊 Test Coverage",
 				"85.5%",
 				"🟢", // High coverage emoji
 				"Statement Coverage",
@@ -180,7 +180,7 @@ func TestWriteDetailedCoverageEnhanced(t *testing.T) {
 				},
 			},
 			wantText: []string{
-				"# Test Coverage",
+				"## 📊 Test Coverage",
 				"65.0%",
 				"🟡", // Medium coverage emoji
 			},
@@ -194,7 +194,7 @@ func TestWriteDetailedCoverageEnhanced(t *testing.T) {
 				},
 			},
 			wantText: []string{
-				"# Test Coverage",
+				"## 📊 Test Coverage",
 				"25.0%",
 				"🔴", // Low coverage emoji
 			},

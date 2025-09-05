@@ -143,7 +143,7 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 
 			// Check platform in header if provided
 			if tt.platform != "" {
-				assert.Contains(t, result, "Test Results - "+tt.platform, "Comment should contain platform in header")
+				assert.Contains(t, result, "Test Results ("+tt.platform+")", "Comment should contain platform in header with parentheses")
 			}
 
 			// Check badges presence
@@ -173,7 +173,7 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 
 			// Check elapsed time (NEW)
 			if tt.expected.hasElapsedTime {
-				assert.Contains(t, result, "Total Time:", "Comment should contain total elapsed time")
+				assert.Contains(t, result, "**Total Time:**", "Comment should contain total elapsed time in bold format")
 			}
 
 			// Check size limit
@@ -601,7 +601,7 @@ func TestPlatformInHeader(t *testing.T) {
 			platform:       "macOS",
 			failed:         0,
 			skipped:        3,
-			expectEmoji:    "⚠️",
+			expectEmoji:    "✅", // Binary emoji: pass or fail only
 			expectPlatform: "macOS",
 		},
 		{
@@ -638,10 +638,53 @@ func TestPlatformInHeader(t *testing.T) {
 
 			// Check for platform in title if provided
 			if tt.expectPlatform != "" {
-				assert.Contains(t, result, "Test Results - "+tt.expectPlatform, "Should have platform in title")
+				assert.Contains(t, result, "Test Results ("+tt.expectPlatform+")", "Should have platform in title with parentheses")
 			}
 		})
 	}
+}
+
+func TestCommentStructureOrdering(t *testing.T) {
+	summary := &types.TestSummary{
+		Failed: []types.TestResult{
+			{Package: "pkg/test", Test: "TestFailed", Duration: 1.0},
+		},
+		Skipped: []types.TestResult{
+			{Package: "pkg/test", Test: "TestSkipped", SkipReason: "Test reason"},
+		},
+		Passed: []types.TestResult{
+			{Package: "pkg/test", Test: "TestPassed1", Duration: 0.5},
+			{Package: "pkg/test", Test: "TestPassed2", Duration: 0.3},
+		},
+		TotalElapsedTime: 105.75,
+		Coverage:         "85.5%",
+	}
+
+	result := GenerateAdaptiveComment(summary, "test-uuid", "Linux")
+
+	// Find positions of key elements
+	titlePos := strings.Index(result, "# ❌ Test Results (Linux)")
+	badgesPos := strings.Index(result, "shields.io/badge")
+	failedPos := strings.Index(result, "### ❌ Failed Tests")
+	totalTimePos := strings.Index(result, "**Total Time:**")
+
+	// Verify title exists
+	assert.Greater(t, titlePos, -1, "Should have title")
+
+	// Verify badges come immediately after title (within ~50 chars for newlines)
+	assert.Greater(t, badgesPos, titlePos, "Badges should come after title")
+	assert.Less(t, badgesPos-titlePos, 60, "Badges should be immediately after title")
+
+	// Verify Total Time is at the very end
+	assert.Greater(t, totalTimePos, -1, "Should have Total Time")
+	assert.Greater(t, totalTimePos, failedPos, "Total Time should be after all test sections")
+	
+	// Verify Total Time is near the end of the comment
+	remainingContent := result[totalTimePos:]
+	assert.Less(t, len(remainingContent), 100, "Total Time should be at the very bottom with minimal content after")
+
+	// Verify exact format of Total Time
+	assert.Contains(t, result, "**Total Time:** 105.75s", "Total Time should be bold with exact format")
 }
 
 func TestCoverageTableFormat(t *testing.T) {
