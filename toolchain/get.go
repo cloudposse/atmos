@@ -12,7 +12,7 @@ import (
 
 // ListToolVersions handles the logic for listing tool versions.
 func ListToolVersions(showAll bool, limit int, toolName string) error {
-	filePath := atmosConfig.Toolchain.FilePath
+	filePath := GetToolVersionsFilePath()
 	// Resolve the tool name to handle aliases
 	installer := NewInstaller()
 	owner, repo, err := installer.parseToolSpec(toolName)
