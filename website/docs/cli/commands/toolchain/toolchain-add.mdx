@@ -1,0 +1,52 @@
+---
+title: atmos toolchain add
+sidebar_label: add
+sidebar_class_name: command
+id: add
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note purpose
+Use this command to install the cli tools from the aqua repositories.
+:::
+
+<Screengrab title="atmos toolchain add --help" slug="atmos-toolchain-add--help" />
+
+## Usage
+
+Execute the `toolchain add` command like this:
+
+```shell
+atmos toolchain add <tool> <version>
+```
+
+## Examples
+
+```shell
+atmos toolchain add suzuki-shunsuke/github-comment 3.5.0
+atmos toolchain add hashicorp/terraform 1.5.0
+```
+
+## Arguments
+
+<dl>
+    <dt>`package` <em>(required)</em></dt>
+    <dd>
+        Package to install from the aqua repository
+    </dd>
+    <dt>`version` <em>(required)</em></dt>
+    <dd>
+        The version to add and update
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--file`  <em>(optional)</em></dt>
+    <dd>
+        Path to tool-versions file (defaults to global --tool-versions-file)
+    </dd>
+
+</dl>
