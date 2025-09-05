@@ -133,6 +133,7 @@ type TestResult struct {
 	Parent       string   // Parent test name if this is a subtest
 	Subtests     map[string]*TestResult
 	SubtestOrder []string
+	SkipReason   string   // Reason why test was skipped (if applicable)
 }
 
 // TestModel represents the test UI model.
@@ -942,11 +943,19 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 				if parent := pkg.Tests[parentTest]; parent != nil {
 					if subtest := parent.Subtests[event.Test]; subtest != nil {
 						subtest.Output = append(subtest.Output, event.Output)
+						// Capture skip reason if this is a skip output
+						if strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "skipping:") {
+							subtest.SkipReason = strings.TrimSpace(event.Output)
+						}
 					}
 				}
 			} else {
 				if test := pkg.Tests[event.Test]; test != nil {
 					test.Output = append(test.Output, event.Output)
+					// Capture skip reason if this is a skip output
+					if strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "skipping:") {
+						test.SkipReason = strings.TrimSpace(event.Output)
+					}
 				}
 			}
 
@@ -990,6 +999,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 				if test := pkg.Tests[event.Test]; test != nil {
 					test.Status = event.Action
 					test.Elapsed = event.Elapsed
+					// Skip reason is already captured from output events
 				}
 			}
 
@@ -1130,6 +1140,11 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 	// Add duration if available
 	if test.Elapsed > 0 {
 		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed))))
+	}
+	
+	// Add skip reason if available
+	if test.Status == "skip" && test.SkipReason != "" {
+		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("[%s]", test.SkipReason))))
 	}
 
 	// Add subtest progress indicator if it has subtests

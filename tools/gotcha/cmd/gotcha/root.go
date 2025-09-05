@@ -677,11 +677,29 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	flagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
 	normalizedStrategy := normalizePostingStrategy(postStrategy, flagPresent)
 
+	logger.Debug("GitHub comment posting decision",
+		"raw_strategy", postStrategy,
+		"flag_present", flagPresent,
+		"normalized_strategy", normalizedStrategy,
+		"os", runtime.GOOS,
+		"failed", len(summary.Failed),
+		"skipped", len(summary.Skipped),
+		"should_post", shouldPostCommentWithOS(normalizedStrategy, summary, runtime.GOOS))
+
 	if shouldPostCommentWithOS(normalizedStrategy, summary, runtime.GOOS) {
+		logger.Info("Posting GitHub comment",
+			"strategy", normalizedStrategy,
+			"os", runtime.GOOS)
 		if err := postGitHubComment(summary, cmd, logger); err != nil {
 			logger.Warn("Failed to post GitHub comment", "error", err)
 			// Don't fail the command, just warn
 		}
+	} else {
+		logger.Debug("Skipping GitHub comment based on conditions",
+			"strategy", normalizedStrategy,
+			"os", runtime.GOOS,
+			"failed", len(summary.Failed),
+			"skipped", len(summary.Skipped))
 	}
 
 	// Silence unused variable warning
