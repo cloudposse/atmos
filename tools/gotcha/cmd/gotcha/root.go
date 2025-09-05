@@ -580,6 +580,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Handle GitHub comment posting if requested
 	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
+	_ = viper.BindEnv("post-comment", "GOTCHA_POST_COMMENT")
 	postStrategy := viper.GetString("post-comment")
 	flagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
 	normalizedStrategy := normalizePostingStrategy(postStrategy, flagPresent)
@@ -669,6 +670,7 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Bind flag to viper
 	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
+	_ = viper.BindEnv("post-comment", "GOTCHA_POST_COMMENT")
 
 	// Handle GitHub comment posting
 	postStrategy := viper.GetString("post-comment")
