@@ -156,7 +156,7 @@ viper.SetEnvPrefix("ATMOS")
 
 ### Test Skipping Conventions (MANDATORY)
 - **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
-- **NEVER use `t.Skip()` without a reason** - This is enforced by golangci-lint's `forbidigo` linter
+- **NEVER use `t.Skip()` without a reason**
 - Examples:
   ```go
   // WRONG: No reason provided

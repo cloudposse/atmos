@@ -143,6 +143,7 @@ linters:
       - linters:
           - err113
           - errcheck
+          - forbidigo
           - funlen
           - gocognit
           - gosec
