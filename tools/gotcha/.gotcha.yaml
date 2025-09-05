@@ -4,9 +4,9 @@
 # Output format for test results
 # Options: standard, full, minimal, verbose
 # - standard: Default output with moderate detail
-# - full: Complete output with proper formatting for failed tests (recommended)
+# - full: Shows complete stdout/stderr output for failed tests with proper formatting (recommended)
 # - minimal: Only show essential information
-# - verbose: Maximum detail including all debug information
+# - verbose: Maximum detail including all debug information and output for all tests
 format: full
 
 # Show filter for test display
