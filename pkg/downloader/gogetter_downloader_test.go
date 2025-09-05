@@ -147,7 +147,7 @@ func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 
 func TestGoGetterGet_File(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping file copying test on Windows due to potential file system differences.")
+		t.Skipf("Skipping file copying test on Windows: file system differences may cause issues")
 	}
 	srcDir, err := os.MkdirTemp("", "src")
 	if err != nil {

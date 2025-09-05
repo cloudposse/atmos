@@ -107,7 +107,7 @@ func TestShouldExcludePath(t *testing.T) {
 // Skipped on Windows.
 func TestShouldExcludePath_Directory(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping directory exclusion test on Windows")
+		t.Skipf("Skipping directory exclusion test on Windows: path handling differs")
 	}
 	dir, err := os.MkdirTemp("", "dir-exclude")
 	if err != nil {
@@ -242,7 +242,7 @@ func TestCopyDirRecursive(t *testing.T) {
 // TestProcessDirEntry_Symlink ensures that symlink entries are skipped.
 func TestProcessDirEntry_Symlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping symlink test on Windows")
+		t.Skipf("Skipping symlink test on Windows: symlinks require special privileges")
 	}
 	srcDir, err := os.MkdirTemp("", "symlink-src")
 	if err != nil {
@@ -260,7 +260,7 @@ func TestProcessDirEntry_Symlink(t *testing.T) {
 	}
 	linkPath := filepath.Join(srcDir, "link.txt")
 	if err := os.Symlink(targetFile, linkPath); err != nil {
-		t.Skip("Cannot create symlink on this system, skipping test.")
+		t.Skipf("Cannot create symlink on this system: insufficient privileges or unsupported filesystem")
 	}
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
@@ -352,7 +352,7 @@ func TestGetMatchesForPattern_InvalidPattern(t *testing.T) {
 // TestGetMatchesForPattern_ShallowNoMatch tests the shallow branch with no matches.
 func TestGetMatchesForPattern_ShallowNoMatch(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping shallow no-match test on Windows")
+		t.Skipf("Skipping shallow no-match test on Windows: glob behavior differs")
 	}
 	oldFn := getGlobMatchesForTest
 	defer func() { getGlobMatchesForTest = oldFn }()
@@ -745,7 +745,7 @@ func TestCopyFile_FailChmod(t *testing.T) {
 	dstFile := filepath.Join(dstDir, "test.txt")
 	err = copyFile(srcFile, dstFile)
 	if err == nil {
-		t.Skip("os.Chmod patch not effective on this platform")
+		t.Skipf("Skipping test: os.Chmod not effective on this platform")
 	}
 	if !strings.Contains(err.Error(), "setting permissions") {
 		t.Errorf("Expected chmod error, got %v", err)

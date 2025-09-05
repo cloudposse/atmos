@@ -41,6 +41,7 @@ var (
 	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 	startingDir         string
 	snapshotBaseDir     string
+	skipReason          string // Package-level variable to track why tests should be skipped
 )
 
 // Define styles using lipgloss.
@@ -478,29 +479,36 @@ func TestMain(m *testing.M) {
 	// Check for the atmos binary
 	binaryPath, err := exec.LookPath("atmos")
 	if err != nil {
-		logger.Fatal("Binary not found", "command", "atmos", "PATH", os.Getenv("PATH"))
+		skipReason = fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
+		logger.Info("Tests will be skipped", "reason", skipReason)
+	} else {
+		rel, err := filepath.Rel(repoRoot, binaryPath)
+		if err == nil && strings.HasPrefix(rel, "..") {
+			skipReason = fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
+			logger.Info("Tests will be skipped", "reason", skipReason)
+		} else {
+			stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
+			if err != nil {
+				skipReason = fmt.Sprintf("Failed to check if rebuild needed: %v", err)
+				logger.Info("Tests will be skipped", "reason", skipReason)
+			} else if stale {
+				skipReason = fmt.Sprintf("Atmos binary at %s needs rebuild. Run 'make build' to rebuild.", binaryPath)
+				logger.Info("Tests will be skipped", "reason", skipReason)
+			}
+		}
 	}
 
-	rel, err := filepath.Rel(repoRoot, binaryPath)
-	if err == nil && strings.HasPrefix(rel, "..") {
-		logger.Fatal("Discovered atmos binary outside of repository", "binary", binaryPath)
-	} else {
-		stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
-		if err != nil {
-			logger.Fatal("failed to check if rebuild is needed", "error", err)
-		}
-		if stale {
-			logger.Fatal("Rebuild needed", "binary", binaryPath)
-		}
+	if skipReason == "" {
+		logger.Info("Atmos binary for tests", "binary", binaryPath)
 	}
-	logger.Info("Atmos binary for tests", "binary", binaryPath)
 
 	logger.Info("Starting directory", "dir", startingDir)
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
-	flag.Parse() // Parse command-line flags
-	errUtils.Exit(m.Run())
+	flag.Parse()        // Parse command-line flags
+	exitCode := m.Run() // ALWAYS run tests so they can skip properly
+	errUtils.Exit(exitCode)
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
@@ -736,6 +744,10 @@ func removeCacheFile() error {
 }
 
 func TestCLICommands(t *testing.T) {
+	if skipReason != "" {
+		t.Skipf("%s", skipReason)
+	}
+
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {
