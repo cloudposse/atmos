@@ -573,43 +573,43 @@ func TestSkipReasonsInComment(t *testing.T) {
 
 func TestPlatformInHeader(t *testing.T) {
 	tests := []struct {
-		name       string
-		platform   string
-		failed     int
-		skipped    int
-		expectEmoji string
+		name           string
+		platform       string
+		failed         int
+		skipped        int
+		expectEmoji    string
 		expectPlatform string
 	}{
 		{
-			name:       "Linux with all passed",
-			platform:   "Linux",
-			failed:     0,
-			skipped:    0,
-			expectEmoji: "✅",
+			name:           "Linux with all passed",
+			platform:       "Linux",
+			failed:         0,
+			skipped:        0,
+			expectEmoji:    "✅",
 			expectPlatform: "Linux",
 		},
 		{
-			name:       "Windows with failures",
-			platform:   "Windows",
-			failed:     2,
-			skipped:    0,
-			expectEmoji: "❌",
+			name:           "Windows with failures",
+			platform:       "Windows",
+			failed:         2,
+			skipped:        0,
+			expectEmoji:    "❌",
 			expectPlatform: "Windows",
 		},
 		{
-			name:       "macOS with skips",
-			platform:   "macOS",
-			failed:     0,
-			skipped:    3,
-			expectEmoji: "⚠️",
+			name:           "macOS with skips",
+			platform:       "macOS",
+			failed:         0,
+			skipped:        3,
+			expectEmoji:    "⚠️",
 			expectPlatform: "macOS",
 		},
 		{
-			name:       "No platform specified",
-			platform:   "",
-			failed:     0,
-			skipped:    0,
-			expectEmoji: "✅",
+			name:           "No platform specified",
+			platform:       "",
+			failed:         0,
+			skipped:        0,
+			expectEmoji:    "✅",
 			expectPlatform: "",
 		},
 	}

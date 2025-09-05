@@ -583,7 +583,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	postStrategy := viper.GetString("post-comment")
 	flagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
 	normalizedStrategy := normalizePostingStrategy(postStrategy, flagPresent)
-	
+
 	if outputFile != "" {
 		// Parse the JSON file we just created
 		if inputFile, err := os.Open(outputFile); err == nil {
@@ -598,7 +598,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 						"strategy", normalizedStrategy,
 						"failed", len(summary.Failed),
 						"skipped", len(summary.Skipped))
-					
+
 					if err := postGitHubComment(summary, cmd, logger); err != nil {
 						logger.Warn("Failed to post GitHub comment", "error", err)
 					}
@@ -674,7 +674,7 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	postStrategy := viper.GetString("post-comment")
 	flagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
 	normalizedStrategy := normalizePostingStrategy(postStrategy, flagPresent)
-	
+
 	if shouldPostCommentWithOS(normalizedStrategy, summary, runtime.GOOS) {
 		if err := postGitHubComment(summary, cmd, logger); err != nil {
 			logger.Warn("Failed to post GitHub comment", "error", err)
@@ -694,12 +694,12 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 func normalizePostingStrategy(strategy string, flagPresent bool) string {
 	// Trim spaces
 	strategy = strings.TrimSpace(strategy)
-	
+
 	// Handle the special case where flag is present but empty
 	if flagPresent && strategy == "" {
 		return "always"
 	}
-	
+
 	// Handle boolean aliases
 	switch strings.ToLower(strategy) {
 	case "true", "1", "yes":
@@ -721,23 +721,23 @@ func shouldPostCommentWithOS(strategy string, summary *types.TestSummary, goos s
 	switch strategy {
 	case "", "never":
 		return false
-		
+
 	case "always":
 		return true
-		
+
 	case "adaptive":
 		// Linux always posts, others only on failures/skips
 		if goos == "linux" {
 			return true
 		}
 		return len(summary.Failed) > 0 || len(summary.Skipped) > 0
-		
+
 	case "on-failure", "onfailure":
 		return len(summary.Failed) > 0
-		
+
 	case "on-skip", "onskip":
 		return len(summary.Skipped) > 0
-		
+
 	default:
 		// Check if it's an OS name (linux, darwin, windows)
 		return strategy == goos
@@ -762,7 +762,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	// Get job discriminator from environment
 	_ = viper.BindEnv("job_discriminator", "GOTCHA_JOB_DISCRIMINATOR")
 	jobDiscriminator := viper.GetString("job_discriminator")
-	
+
 	// Detect platform for display purposes
 	platform := jobDiscriminator
 	if platform == "" {
@@ -773,7 +773,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 			platform = runtime.GOOS
 		}
 	}
-	
+
 	logger.Info("Posting GitHub comment",
 		"platform", platform,
 		"failed", len(summary.Failed),
@@ -799,7 +799,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	if uuid == "" {
 		return fmt.Errorf("%w (use --comment-uuid flag or GOTCHA_COMMENT_UUID env)", ErrCommentUUIDRequired)
 	}
-	
+
 	// Append job discriminator to UUID if present
 	if jobDiscriminator != "" {
 		uuid = fmt.Sprintf("%s-%s", uuid, jobDiscriminator)

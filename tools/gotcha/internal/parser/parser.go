@@ -85,7 +85,7 @@ func processLineWithElapsedAndSkipReason(line string, tests map[string]types.Tes
 	if event.Action == "output" && event.Test != "" {
 		output := strings.TrimSpace(event.Output)
 		key := event.Package + "." + event.Test
-		
+
 		// Look for skip patterns
 		if strings.Contains(output, "--- SKIP:") {
 			// Mark that we found a skip, reason will come in next output
@@ -166,7 +166,7 @@ func categorizeResults(tests map[string]types.TestResult, skipReasons map[string
 				test.SkipReason = reason
 			}
 		}
-		
+
 		switch test.Status {
 		case "fail":
 			failed = append(failed, test)
