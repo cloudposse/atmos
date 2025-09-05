@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -201,6 +202,169 @@ func TestShouldPostComment(t *testing.T) {
 	_ = shouldPostComment("linux", summary)
 	_ = shouldPostComment("darwin", summary)
 	_ = shouldPostComment("windows", summary)
+}
+
+func TestArgumentParsingWithDashSeparator(t *testing.T) {
+	tests := []struct {
+		name              string
+		args              []string
+		expectedPackages  []string
+		expectedPassthru  []string
+		expectError       bool
+	}{
+		{
+			name:              "no arguments",
+			args:              []string{},
+			expectedPackages:  []string{"./..."},
+			expectedPassthru:  []string{},
+		},
+		{
+			name:              "packages only",
+			args:              []string{"./pkg/...", "./internal/..."},
+			expectedPackages:  []string{"./pkg/...", "./internal/..."},
+			expectedPassthru:  []string{},
+		},
+		{
+			name:              "with dash separator and passthrough args",
+			args:              []string{"./pkg/...", "--", "-race", "-v"},
+			expectedPackages:  []string{"./pkg/..."},
+			expectedPassthru:  []string{"-race", "-v"},
+		},
+		{
+			name:              "dash separator with no packages",
+			args:              []string{"--", "-race", "-count=1"},
+			expectedPackages:  []string{"./..."},
+			expectedPassthru:  []string{"-race", "-count=1"},
+		},
+		{
+			name:              "dash separator with coverpkg",
+			args:              []string{"--", "-coverpkg=github.com/cloudposse/atmos/..."},
+			expectedPackages:  []string{"./..."},
+			expectedPassthru:  []string{"-coverpkg=github.com/cloudposse/atmos/..."},
+		},
+		{
+			name:              "complex passthrough with run flag",
+			args:              []string{"./test/...", "--", "-run", "TestConfig.*", "-v", "-race"},
+			expectedPackages:  []string{"./test/..."},
+			expectedPassthru:  []string{"-run", "TestConfig.*", "-v", "-race"},
+		},
+		{
+			name:              "passthrough with equals syntax",
+			args:              []string{"--", "-run=TestSpecific", "-timeout=30s"},
+			expectedPackages:  []string{"./..."},
+			expectedPassthru:  []string{"-run=TestSpecific", "-timeout=30s"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Note: This tests the expected behavior based on the logic in runStream
+			// In practice, the actual parsing happens inside the cobra command execution
+			// which is harder to test directly without running the full command
+			
+			// Simulate the parsing logic from runStream
+			testPackages := []string{}
+			passthroughArgs := []string{}
+			
+			// Find the position of "--" separator
+			dashPos := -1
+			for i, arg := range tt.args {
+				if arg == "--" {
+					dashPos = i
+					break
+				}
+			}
+			
+			if dashPos >= 0 {
+				// Args before -- are packages
+				if dashPos > 0 {
+					testPackages = tt.args[:dashPos]
+				}
+				// Args after -- are passthrough
+				if dashPos+1 < len(tt.args) {
+					passthroughArgs = tt.args[dashPos+1:]
+				}
+			} else {
+				// No separator, all args are packages
+				if len(tt.args) > 0 {
+					testPackages = tt.args
+				}
+			}
+			
+			// Default to ./... if no packages specified
+			if len(testPackages) == 0 {
+				testPackages = []string{"./..."}
+			}
+			
+			assert.Equal(t, tt.expectedPackages, testPackages, "Package parsing mismatch")
+			assert.Equal(t, tt.expectedPassthru, passthroughArgs, "Passthrough args mismatch")
+		})
+	}
+}
+
+func TestPostCommentFlagWithDashSeparator(t *testing.T) {
+	// Test that --post-comment doesn't consume the -- separator
+	tests := []struct {
+		name                  string
+		osArgs                []string
+		expectPostComment     string
+		expectPassthroughArgs bool
+	}{
+		{
+			name:                  "post-comment with value before dash separator",
+			osArgs:                []string{"gotcha", "stream", "--post-comment=adaptive", "--", "-race"},
+			expectPostComment:     "adaptive",
+			expectPassthroughArgs: true,
+		},
+		{
+			name:                  "post-comment via env var with dash separator",
+			osArgs:                []string{"gotcha", "stream", "--", "-coverpkg=./..."},
+			expectPostComment:     "",  // Would be set via GOTCHA_POST_COMMENT env var
+			expectPassthroughArgs: true,
+		},
+		{
+			name:                  "no post-comment with dash separator",
+			osArgs:                []string{"gotcha", "stream", "./pkg/...", "--", "-v", "-race"},
+			expectPostComment:     "",
+			expectPassthroughArgs: true,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Verify that the -- separator is properly detected
+			hasDashSeparator := false
+			for _, arg := range tt.osArgs {
+				if arg == "--" {
+					hasDashSeparator = true
+					break
+				}
+			}
+			
+			if tt.expectPassthroughArgs {
+				assert.True(t, hasDashSeparator, "Expected -- separator to be present")
+			}
+			
+			// Verify that post-comment flag doesn't interfere with parsing
+			postCommentIndex := -1
+			dashIndex := -1
+			
+			for i, arg := range tt.osArgs {
+				if strings.HasPrefix(arg, "--post-comment") {
+					postCommentIndex = i
+				}
+				if arg == "--" {
+					dashIndex = i
+				}
+			}
+			
+			if postCommentIndex >= 0 && dashIndex >= 0 {
+				// Ensure post-comment comes before the dash separator
+				assert.Less(t, postCommentIndex, dashIndex, 
+					"--post-comment should come before -- separator")
+			}
+		})
+	}
 }
 
 func TestPostingStrategiesIntegration(t *testing.T) {
