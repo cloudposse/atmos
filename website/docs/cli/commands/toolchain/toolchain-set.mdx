@@ -1,0 +1,54 @@
+---
+title: atmos toolchain set
+sidebar_label: set
+sidebar_class_name: command
+id: set
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note purpose
+Use this command to install the cli tools from the aqua repositories.
+:::
+
+<Screengrab title="atmos toolchain set --help" slug="atmos-toolchain-set--help" />
+
+## Usage
+
+Execute the `toolchain add` command like this:
+
+```shellsdv
+atmos toolchain set <tool> <version>
+```
+
+## Examples
+
+```shell
+atmos toolchain set terraform 1.11.4
+atmos toolchain set hashicorp/terraform 1.11.4
+atmos toolchain set terraform  # Interactive version selection
+atmos toolchain set --file /path/to/.tool-versions kubectl 1.28.0
+```
+
+## Arguments
+
+<dl>
+    <dt>`package` <em>(required)</em></dt>
+    <dd>
+        Package to install from the aqua repository
+    </dd>
+    <dt>`version` <em>(required)</em></dt>
+    <dd>
+        The version to add and update
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--file`  <em>(optional)</em></dt>
+    <dd>
+        Path to tool-versions file (defaults to global --tool-versions-file)
+    </dd>
+
+</dl>

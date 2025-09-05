@@ -8,7 +8,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 
 :::note purpose
-Use this command to install the cli tools from the aqua repositories.
+Use this command to get the available versions of the cli tools from the aqua repositories.
 :::
 
 <Screengrab title="atmos toolchain versions --help" slug="atmos-toolchain-versions--help" />
@@ -18,14 +18,16 @@ Use this command to install the cli tools from the aqua repositories.
 Execute the `toolchain versions` command like this:
 
 ```shell
-atmos toolchain versions <tool> <version>
+atmos toolchain versions <tool>
 ```
 
 ## Examples
 
 ```shell
-atmos toolchain add suzuki-shunsuke/github-comment 3.5.0
-atmos toolchain add hashicorp/terraform 1.5.0
+atmos toolchain versions terraform
+atmos toolchain versions terraform --all
+atmos toolchain versions terraform --limit 10
+atmos toolchain versions terraform --file path-to-config
 ```
 
 ## Arguments
@@ -33,17 +35,21 @@ atmos toolchain add hashicorp/terraform 1.5.0
 <dl>
     <dt>`package` <em>(required)</em></dt>
     <dd>
-        Package to install from the aqua repository
-    </dd>
-    <dt>`version` <em>(required)</em></dt>
-    <dd>
-        The version to add and update
+        Package to get versions for
     </dd>
 </dl>
 
 ## Flags
 
 <dl>
+    <dt>`--all`  <em>(optional)</em></dt>
+    <dd>
+        List all the versions available for the package
+    </dd>
+    <dt>`--limit`  <em>(optional)</em></dt>
+    <dd>
+        Max number of versions to be displayed
+    </dd>
     <dt>`--file`  <em>(optional)</em></dt>
     <dd>
         Path to tool-versions file (defaults to global --tool-versions-file)

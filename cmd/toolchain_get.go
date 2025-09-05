@@ -17,6 +17,7 @@ var toolchainGetCmd = &cobra.Command{
 		if filePath != "" {
 			atmosConfig.Toolchain.FilePath = filePath
 		}
+		toolchain.SetAtmosConfig(&atmosConfig)
 		return toolchain.ListToolVersions(showAll, limit, toolName)
 	},
 }
