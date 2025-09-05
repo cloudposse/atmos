@@ -40,12 +40,12 @@ func (i *userIdentity) Kind() string {
 	return "aws/user"
 }
 
-// Authenticate performs authentication by retrieving credentials from keyring
+// Authenticate performs authentication by retrieving long-lived credentials and generating session tokens
 func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
-	// For AWS User identities, retrieve credentials from credential store
+	// For AWS User identities, retrieve long-lived credentials from credential store
 	credStore := atmosCredentials.NewCredentialStore()
 	
-	creds, err := credStore.Retrieve(i.name)
+	longLivedCreds, err := credStore.Retrieve(i.name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve AWS User credentials for %q: %w", i.name, err)
 	}
@@ -57,21 +57,12 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 	}
 	
 	// Set region in credentials if not already set
-	if creds.AWS.Region == "" {
-		creds.AWS.Region = region
+	if longLivedCreds.AWS.Region == "" {
+		longLivedCreds.AWS.Region = region
 	}
 	
-	// If MFA ARN is configured, get session token with MFA
-	if creds.AWS.MfaArn != "" {
-		return i.authenticateWithMFA(ctx, creds, region)
-	}
-	
-	// Write credentials to AWS files using "aws-user" as mock provider
-	if err := i.writeAWSFiles(creds, region); err != nil {
-		return nil, fmt.Errorf("failed to write AWS files: %w", err)
-	}
-	
-	return creds, nil
+	// Always generate session tokens (with or without MFA)
+	return i.generateSessionToken(ctx, longLivedCreds, region)
 }
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider
@@ -91,15 +82,15 @@ func (i *userIdentity) writeAWSFiles(creds *schema.Credentials, region string) e
 	return nil
 }
 
-// authenticateWithMFA handles MFA authentication for AWS User identities
-func (i *userIdentity) authenticateWithMFA(ctx context.Context, creds *schema.Credentials, region string) (*schema.Credentials, error) {
-	// Create AWS config with base credentials
+// generateSessionToken generates session tokens for AWS User identities (with or without MFA)
+func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds *schema.Credentials, region string) (*schema.Credentials, error) {
+	// Create AWS config with long-lived credentials
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			creds.AWS.AccessKeyID,
-			creds.AWS.SecretAccessKey,
-			"", // no session token for base credentials
+			longLivedCreds.AWS.AccessKeyID,
+			longLivedCreds.AWS.SecretAccessKey,
+			"", // no session token for long-lived credentials
 		)),
 	)
 	if err != nil {
@@ -109,44 +100,54 @@ func (i *userIdentity) authenticateWithMFA(ctx context.Context, creds *schema.Cr
 	// Create STS client
 	stsClient := sts.NewFromConfig(cfg)
 
-	// Prompt for MFA token
-	var mfaToken string
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Enter MFA Token").
-				Description(fmt.Sprintf("MFA Device: %s", creds.AWS.MfaArn)).
-				Value(&mfaToken).
-				Validate(func(s string) error {
-					if s == "" {
-						return fmt.Errorf("MFA token is required")
-					}
-					if len(s) != 6 {
-						return fmt.Errorf("MFA token must be 6 digits")
-					}
-					return nil
-				}),
-		),
-	)
+	var input *sts.GetSessionTokenInput
+	
+	// Check if MFA is required
+	if longLivedCreds.AWS.MfaArn != "" {
+		// Prompt for MFA token
+		var mfaToken string
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Enter MFA Token").
+					Description(fmt.Sprintf("MFA Device: %s", longLivedCreds.AWS.MfaArn)).
+					Value(&mfaToken).
+					Validate(func(s string) error {
+						if s == "" {
+							return fmt.Errorf("MFA token is required")
+						}
+						if len(s) != 6 {
+							return fmt.Errorf("MFA token must be 6 digits")
+						}
+						return nil
+					}),
+			),
+		)
 
-	if err := form.Run(); err != nil {
-		return nil, fmt.Errorf("failed to get MFA token: %w", err)
-	}
+		if err := form.Run(); err != nil {
+			return nil, fmt.Errorf("failed to get MFA token: %w", err)
+		}
 
-	// Get session token with MFA
-	input := &sts.GetSessionTokenInput{
-		SerialNumber: aws.String(creds.AWS.MfaArn),
-		TokenCode:    aws.String(mfaToken),
-		DurationSeconds: aws.Int32(3600), // 1 hour session
+		// Get session token with MFA
+		input = &sts.GetSessionTokenInput{
+			SerialNumber: aws.String(longLivedCreds.AWS.MfaArn),
+			TokenCode:    aws.String(mfaToken),
+			DurationSeconds: aws.Int32(3600), // 1 hour session
+		}
+	} else {
+		// Get session token without MFA
+		input = &sts.GetSessionTokenInput{
+			DurationSeconds: aws.Int32(3600), // 1 hour session
+		}
 	}
 
 	result, err := stsClient.GetSessionToken(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get session token with MFA: %w", err)
+		return nil, fmt.Errorf("failed to get session token: %w", err)
 	}
 
-	// Convert to standard credentials format
-	newCreds := &schema.Credentials{
+	// Create session credentials (temporary tokens for AWS files)
+	sessionCreds := &schema.Credentials{
 		AWS: &schema.AWSCredentials{
 			AccessKeyID:     *result.Credentials.AccessKeyId,
 			SecretAccessKey: *result.Credentials.SecretAccessKey,
@@ -156,18 +157,15 @@ func (i *userIdentity) authenticateWithMFA(ctx context.Context, creds *schema.Cr
 		},
 	}
 
-	// Write credentials to AWS files using "aws-user" as mock provider
-	if err := i.writeAWSFiles(newCreds, region); err != nil {
+	// Write session credentials to AWS files using "aws-user" as mock provider
+	if err := i.writeAWSFiles(sessionCreds, region); err != nil {
 		return nil, fmt.Errorf("failed to write AWS files: %w", err)
 	}
 
-	// Store credentials in credential store for caching
-	credStore := atmosCredentials.NewCredentialStore()
-	if err := credStore.Store(i.name, newCreds); err != nil {
-		return nil, fmt.Errorf("failed to store credentials: %w", err)
-	}
-
-	return newCreds, nil
+	// Note: We keep the long-lived credentials in the keystore unchanged
+	// Only the session tokens are written to AWS config/credentials files
+	
+	return sessionCreds, nil
 }
 
 
