@@ -61,7 +61,7 @@ testacc: get
 
 testacc-cover: get
 	@echo "Running tests with coverage"
-	go test $(TEST) -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp
+	go test $(TEST) -v -coverpkg=github.com/cloudposse/atmos/... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp
 	cat coverage.out.tmp | grep -v "mock_" > coverage.out
 
 # Run acceptance tests with coverage report
