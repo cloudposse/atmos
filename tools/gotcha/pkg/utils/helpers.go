@@ -652,17 +652,57 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		return
 	}
 	
+	// Count test results for this package
+	var passedCount, failedCount, skippedCount int
+	for _, test := range pkg.Tests {
+		switch test.Status {
+		case "pass":
+			passedCount++
+		case "fail":
+			failedCount++
+		case "skip":
+			skippedCount++
+		}
+	}
+	
 	// Display tests based on show filter
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
 		p.displayTest(test, "")
 	}
 	
-	// Display coverage if available
-	if pkg.Coverage != "" {
-		// Extract percentage from coverage string
-		if strings.Contains(pkg.Coverage, "coverage:") {
-			fmt.Fprintf(os.Stderr, "  %s\n", tui.DurationStyle.Render(pkg.Coverage))
+	// Display summary line with test counts and coverage
+	totalTests := passedCount + failedCount + skippedCount
+	if totalTests > 0 {
+		var summaryLine string
+		coverageStr := ""
+		if pkg.Coverage != "" {
+			coverageStr = fmt.Sprintf(" (%s coverage)", pkg.Coverage)
+		}
+		
+		if failedCount > 0 {
+			// Show failure summary
+			summaryLine = fmt.Sprintf("  %s %d tests failed, %d passed%s\n",
+				tui.FailStyle.Render(tui.CheckFail),
+				failedCount,
+				passedCount,
+				coverageStr)
+		} else if passedCount > 0 {
+			// All tests passed
+			summaryLine = fmt.Sprintf("  %s All %d tests passed%s\n",
+				tui.PassStyle.Render(tui.CheckPass),
+				passedCount,
+				coverageStr)
+		} else if skippedCount > 0 {
+			// Only skipped tests
+			summaryLine = fmt.Sprintf("  %s %d tests skipped%s\n",
+				tui.SkipStyle.Render(tui.CheckSkip),
+				skippedCount,
+				coverageStr)
+		}
+		
+		if summaryLine != "" {
+			fmt.Fprintf(os.Stderr, "\n%s", summaryLine)
 		}
 	}
 }
