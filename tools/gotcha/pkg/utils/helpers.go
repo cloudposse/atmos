@@ -394,7 +394,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				// Keep legacy tracking for compatibility
 				p.currentPackage = event.Package
 				p.packageHasTests[event.Package] = false
-				
+
 				// In CI/non-TTY environments, show immediate feedback when package starts
 				if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 					// Release lock before I/O to prevent deadlock
@@ -593,7 +593,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Track statistics
 		p.passed++
-		
+
 		// In CI/non-TTY environments, show immediate feedback for test completion
 		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 			// Only show top-level tests (not subtests) to avoid too much output
@@ -615,7 +615,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Track statistics
 		p.failed++
-		
+
 		// In CI/non-TTY environments, show immediate feedback for test failures
 		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 			// Only show top-level tests (not subtests) to avoid too much output
@@ -637,7 +637,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Track statistics
 		p.skipped++
-		
+
 		// In CI/non-TTY environments, show immediate feedback for skipped tests
 		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 			// Only show top-level tests (not subtests) to avoid too much output
