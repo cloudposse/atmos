@@ -21,7 +21,7 @@ env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
   HELMFILE_VERSION: "v1.1.0"
-  PACKER_VERSION: "1.13.1"
+  PACKER_VERSION: "1.14.1"
 
 jobs:
   # ensure the code builds...
@@ -199,6 +199,7 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-ci
 
