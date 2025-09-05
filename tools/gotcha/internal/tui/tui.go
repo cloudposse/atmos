@@ -227,6 +227,8 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		progress.WithWidth(40),
 		progress.WithoutPercentage(),
 	)
+	// Initialize progress to 0
+	p.SetPercent(0.0)
 
 	// Create spinner
 	s := spinner.New()
@@ -469,10 +471,8 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case progress.FrameMsg:
-		newModel, cmd := m.progress.Update(msg)
-		if newModel, ok := newModel.(progress.Model); ok {
-			m.progress = newModel
-		}
+		progressModel, cmd := m.progress.Update(msg)
+		m.progress = progressModel.(progress.Model)
 		return m, cmd
 	}
 
@@ -534,9 +534,6 @@ func (m *TestModel) View() string {
 		percentage = fmt.Sprintf("%3d%%", percent) // Fixed width
 		// Format test count with "tests" in dark gray
 		testCount = fmt.Sprintf("%3d/%-3d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
-		
-		// Always update progress bar with the calculated percentage
-		m.progress.SetPercent(percentFloat)
 	} else {
 		// Very early, before any run events
 		percentage = "  0%"
@@ -936,6 +933,12 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 				m.failCount++
 			case "skip":
 				m.skipCount++
+			}
+			
+			// Update progress bar percentage
+			if m.totalTests > 0 {
+				percentFloat := float64(m.completedTests) / float64(m.totalTests)
+				m.progress.SetPercent(percentFloat)
 			}
 			
 			// Update test result
