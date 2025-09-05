@@ -21,12 +21,12 @@ const CommentSizeLimit = 65536
 func GenerateAdaptiveComment(summary *types.TestSummary, uuid string) string {
 	// First, try to generate the full rich comment
 	fullComment := generateFullComment(summary, uuid)
-	
+
 	// If it fits within GitHub's limit, use it
 	if len(fullComment) <= CommentSizeLimit {
 		return fullComment
 	}
-	
+
 	// Otherwise, fall back to concise version
 	return generateConciseComment(summary, uuid)
 }
@@ -34,23 +34,23 @@ func GenerateAdaptiveComment(summary *types.TestSummary, uuid string) string {
 // generateFullComment creates the full rich markdown content (same as job summaries)
 func generateFullComment(summary *types.TestSummary, uuid string) string {
 	var content bytes.Buffer
-	
+
 	// Add UUID magic comment to prevent duplicate GitHub comments
 	if uuid != "" {
 		fmt.Fprintf(&content, "<!-- test-summary-uuid: %s -->\n\n", uuid)
 	}
-	
+
 	// Test Results section (h1)
 	fmt.Fprintf(&content, "# Test Results\n\n")
-	
+
 	// Display total elapsed time if available
 	if summary.TotalElapsedTime > 0 {
 		fmt.Fprintf(&content, "_Total Time: %.2fs_\n\n", summary.TotalElapsedTime)
 	}
-	
+
 	// Get test counts
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
-	
+
 	// Display test results as shields.io badges - always show all badges
 	if total == 0 {
 		fmt.Fprintf(&content, "[![No Tests](https://shields.io/badge/NO_TESTS-0-inactive?style=for-the-badge)](#user-content-no-tests)")
@@ -60,33 +60,33 @@ func generateFullComment(summary *types.TestSummary, uuid string) string {
 		fmt.Fprintf(&content, "[![Skipped](https://shields.io/badge/SKIPPED-%d-inactive?style=for-the-badge)](#user-content-skipped) ", len(summary.Skipped))
 	}
 	fmt.Fprintf(&content, "\n\n")
-	
+
 	// Write test sections - use the same functions as job summary for consistency
 	WriteFailedTestsTable(&content, summary.Failed)
 	WriteSkippedTestsTable(&content, summary.Skipped)
-	
+
 	// Add slowest tests section if there are passed tests
 	if len(summary.Passed) > 0 {
 		writeSlowestTestsSection(&content, summary.Passed)
 	}
-	
+
 	// Add package summary section if there are tests
 	if total > 0 {
 		writePackageSummarySection(&content, summary)
 	}
-	
+
 	// For smaller test suites, include passed tests
 	if len(summary.Passed) > 0 && len(summary.Passed) <= 100 {
 		WritePassedTestsTable(&content, summary.Passed)
 	}
-	
+
 	// Test Coverage section - use the same format as job summary
 	if summary.CoverageData != nil {
 		WriteDetailedCoverage(&content, summary.CoverageData)
 	} else if summary.Coverage != "" {
 		WriteBasicCoverage(&content, summary.Coverage)
 	}
-	
+
 	return content.String()
 }
 
@@ -95,31 +95,31 @@ func writeSlowestTestsSection(output io.Writer, passed []types.TestResult) {
 	if len(passed) == 0 {
 		return
 	}
-	
+
 	// Get top 20 slowest tests
 	slowest := utils.GetTopSlowestTests(passed, 20)
 	if len(slowest) == 0 {
 		return
 	}
-	
+
 	// Calculate total duration for percentage calculation
 	var totalDuration float64
 	for _, test := range passed {
 		totalDuration += test.Duration
 	}
-	
+
 	fmt.Fprintf(output, "<details>\n")
 	fmt.Fprintf(output, "<summary>⏱️ Slowest Tests (%d)</summary>\n\n", len(slowest))
 	fmt.Fprintf(output, "| Test | Package | Duration | %% of Total |\n")
 	fmt.Fprintf(output, "|------|---------|----------|------------|\n")
-	
+
 	for _, test := range slowest {
 		percentage := (test.Duration / totalDuration) * 100
 		shortPkg := utils.ShortPackage(test.Package)
 		fmt.Fprintf(output, "| `%s` | %s | %.2fs | %.1f%% |\n",
 			test.Test, shortPkg, test.Duration, percentage)
 	}
-	
+
 	fmt.Fprintf(output, "\n</details>\n\n")
 }
 
@@ -130,28 +130,28 @@ func writePackageSummarySection(output io.Writer, summary *types.TestSummary) {
 	allTests = append(allTests, summary.Passed...)
 	allTests = append(allTests, summary.Failed...)
 	allTests = append(allTests, summary.Skipped...)
-	
+
 	summaries := utils.GeneratePackageSummary(allTests)
 	if len(summaries) == 0 {
 		return
 	}
-	
+
 	// Sort by total duration descending
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].TotalDuration > summaries[j].TotalDuration
 	})
-	
+
 	fmt.Fprintf(output, "<details>\n")
 	fmt.Fprintf(output, "<summary>📦 Package Summary (%d packages)</summary>\n\n", len(summaries))
 	fmt.Fprintf(output, "| Package | Tests | Total Duration | Avg Duration |\n")
 	fmt.Fprintf(output, "|---------|-------|----------------|-------------|\n")
-	
+
 	for _, pkg := range summaries {
 		shortName := utils.ShortPackage(pkg.Package)
 		fmt.Fprintf(output, "| %s | %d | %.2fs | %.2fs |\n",
 			shortName, pkg.TestCount, pkg.TotalDuration, pkg.AvgDuration)
 	}
-	
+
 	fmt.Fprintf(output, "\n</details>\n\n")
 }
 

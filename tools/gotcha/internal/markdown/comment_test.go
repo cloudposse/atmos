@@ -55,9 +55,9 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 				hasBadges:         true,
 				hasFailedTests:    true,
 				hasSkippedTests:   true,
-				hasSlowestTests:   true,  // Should include slowest tests
-				hasPackageSummary: true,  // Should include package summary
-				hasElapsedTime:    true,  // Should include elapsed time
+				hasSlowestTests:   true, // Should include slowest tests
+				hasPackageSummary: true, // Should include package summary
+				hasElapsedTime:    true, // Should include elapsed time
 				withinSizeLimit:   true,
 			},
 		},
@@ -101,7 +101,7 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 					{Package: "pkg/core", Test: "TestSkipped1"},
 					{Package: "pkg/core", Test: "TestSkipped2"},
 				},
-				Passed: generateTestsWithPackages(50),
+				Passed:           generateTestsWithPackages(50),
 				TotalElapsedTime: 125.5,
 				Coverage:         "75.5%",
 			},
@@ -193,13 +193,13 @@ func TestAdaptiveBehavior(t *testing.T) {
 	// Should fall back to concise format
 	assert.LessOrEqual(t, len(result), CommentSizeLimit,
 		"Large comment should be within size limit due to adaptive fallback")
-	
+
 	// Should still have essential information
 	assert.Contains(t, result, "test-summary-uuid: size-test-uuid", "Should have UUID")
 	assert.Contains(t, result, "PASSED-2000", "Should have pass count")
 	assert.Contains(t, result, "FAILED-500", "Should have fail count")
 	assert.Contains(t, result, "SKIPPED-500", "Should have skip count")
-	
+
 	// Concise version should NOT have these sections
 	assert.NotContains(t, result, "⏱️ Slowest Tests", "Concise version should not have slowest tests")
 	assert.NotContains(t, result, "📦 Package Summary", "Concise version should not have package summary")
@@ -505,7 +505,7 @@ func generateTestsWithPackages(count int) []types.TestResult {
 		"github.com/cloudposse/atmos/internal/exec",
 		"github.com/cloudposse/atmos/cmd",
 	}
-	
+
 	tests := make([]types.TestResult, count)
 	for i := 0; i < count; i++ {
 		tests[i] = types.TestResult{

@@ -719,8 +719,8 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 
 	// Generate adaptive markdown content that uses full content when possible
 	markdownContent := markdown.GenerateAdaptiveComment(summary, uuid)
-	
-	logger.Debug("Generated adaptive comment", 
+
+	logger.Debug("Generated adaptive comment",
 		"size", len(markdownContent),
 		"limit", 65536,
 		"using_full", len(markdownContent) <= 65536)
