@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/internal/auth/cloud"
 	"github.com/cloudposse/atmos/internal/auth/config"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/environment"
@@ -44,6 +45,9 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	awsFileManager := environment.NewAWSFileManager()
 	configMerger := config.NewConfigMerger()
 	validator := validation.NewValidator()
+	
+	// Create cloud provider manager
+	cloudProviderManager := cloud.NewCloudProviderManager()
 
 	// Merge component auth config with global auth config
 	mergedAuthConfig := &atmosConfig.Auth
@@ -140,32 +144,41 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 		}
 	}
 
-	// Setup AWS files and environment variables if this is an AWS provider
+	// Setup cloud provider environment if provider is configured
 	if rootProviderName != "" {
+		var providerKind string
+		
 		// Handle AWS User identities (standalone, no provider config)
 		if rootProviderName == "aws-user" {
-			// Setup AWS files (recreates them if deleted)
-			if err := authManager.SetupAWSFiles(ctx, rootProviderName, targetIdentityName, whoami.Credentials); err != nil {
-				return fmt.Errorf("failed to setup AWS files: %w", err)
-			}
-
-			awsFileManager := environment.NewAWSFileManager()
-			// Use provider name for AWS file paths and identity name for AWS_PROFILE
-			awsEnvVars := awsFileManager.GetEnvironmentVariables(rootProviderName, targetIdentityName)
-			environment.MergeIdentityEnvOverrides(stackInfo, awsEnvVars)
+			providerKind = "aws/user"
 		} else if provider, exists := mergedAuthConfig.Providers[rootProviderName]; exists {
-			// Check if this is an AWS provider or GitHub OIDC provider (which provides AWS credentials)
-			if provider.Kind == "aws/iam-identity-center" || provider.Kind == "aws/assume-role" || provider.Kind == "aws/saml" || provider.Kind == "github/oidc" {
-				// Setup AWS files (recreates them if deleted)
-				if err := authManager.SetupAWSFiles(ctx, rootProviderName, targetIdentityName, whoami.Credentials); err != nil {
-					return fmt.Errorf("failed to setup AWS files: %w", err)
-				}
-
-				awsFileManager := environment.NewAWSFileManager()
-				// Use provider name for AWS file paths and identity name for AWS_PROFILE
-				awsEnvVars := awsFileManager.GetEnvironmentVariables(rootProviderName, targetIdentityName)
-				environment.MergeIdentityEnvOverrides(stackInfo, awsEnvVars)
+			providerKind = provider.Kind
+		}
+		
+		// Setup cloud provider environment if we have a provider kind
+		if providerKind != "" {
+			// Setup cloud provider environment (files, credentials, etc.)
+			if err := cloudProviderManager.SetupEnvironment(ctx, providerKind, rootProviderName, targetIdentityName, whoami.Credentials); err != nil {
+				return fmt.Errorf("failed to setup cloud provider environment: %w", err)
 			}
+			
+			// Get cloud provider environment variables
+			cloudEnvVars, err := cloudProviderManager.GetEnvironmentVariables(providerKind, rootProviderName, targetIdentityName)
+			if err != nil {
+				return fmt.Errorf("failed to get cloud provider environment variables: %w", err)
+			}
+			
+			// Convert map[string]string to []schema.EnvironmentVariable
+			var envVars []schema.EnvironmentVariable
+			for key, value := range cloudEnvVars {
+				envVars = append(envVars, schema.EnvironmentVariable{
+					Key:   key,
+					Value: value,
+				})
+			}
+			
+			// Merge cloud provider environment variables
+			environment.MergeIdentityEnvOverrides(stackInfo, envVars)
 		}
 	}
 
