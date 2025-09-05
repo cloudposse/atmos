@@ -14,6 +14,87 @@ Atmos is a sophisticated Go CLI tool for managing complex cloud infrastructure u
 - **Vendoring system** for external components
 - **Terminal UI** with rich interactive components
 
+## Product Requirements Documents (PRDs)
+
+Atmos maintains Product Requirements Documents in the `prd/` directory for significant features and enhancements. These documents guide implementation and ensure features meet their intended goals.
+
+### When to Consult PRDs
+
+- **Before implementing features**: Check `prd/` for existing requirements documentation
+- **During code review**: Verify implementations match PRD specifications and acceptance criteria
+- **When extending features**: Understand original design decisions and architectural constraints
+- **For testing guidance**: PRDs include comprehensive test plans and edge case coverage
+- **During debugging**: Reference implementation notes and technical guidance
+
+### PRD Structure and Content
+
+PRDs follow a consistent structure based on industry best practices:
+
+1. **Overview** - Feature introduction, core technologies, and operation modes
+2. **Motivation** - Problem statement, business impact, and justification for the feature
+3. **Goals** - Specific, measurable objectives and success criteria
+4. **Out of Scope** - Explicit boundaries and features that will NOT be included
+5. **Detailed Requirements** - Technical specifications, API interfaces, and configuration options
+6. **Alternative Tools Evaluated** - Comparison with existing solutions and rationale for decisions
+7. **Test Plan** - Comprehensive testing approach including unit, integration, and manual testing
+8. **Documentation Updates** - Required documentation changes and areas to update
+9. **Implementation Notes** - Technical guidance, architecture principles, and design patterns
+10. **Acceptance Criteria** - Clear, measurable standards for feature completion
+11. **References** - External documentation, APIs, and contextual resources
+
+### Creating New PRDs
+
+For significant features (generally >10 files, new subsystems, or major architectural changes):
+
+1. **Create PRD file**: Place in `prd/<feature-name>.prd.md` following naming conventions
+2. **Follow template structure**: Use existing PRDs as templates for consistency
+3. **Document technology choices**: Include specific libraries, frameworks, and tools (e.g., Charm ecosystem, Viper, specific color codes)
+4. **Include alternative analysis**: Document other solutions evaluated and why they were rejected
+5. **Specify configuration**: Document all configuration options, environment variables, and CLI interfaces
+6. **Define CLI behavior**: Specify exact command syntax, flag behavior, and argument parsing (including `--` separator handling)
+7. **Reference in commits**: Link to PRDs in commit messages: `feat: implement feature per prd/feature-name.prd.md`
+
+### Configuration and Environment Variables
+
+When documenting features in PRDs, always include:
+- **Viper configuration binding**: Document how environment variables are bound
+- **Configuration precedence**: CLI flags > Environment variables > Config files > Defaults
+- **Environment variable naming**: Use consistent prefixes (e.g., `ATMOS_`, `GOTCHA_`)
+- **Color support requirements**: Document hex color codes, CI environment detection, and profile management
+- **Cross-platform considerations**: Ensure requirements work on Linux, macOS, and Windows
+
+### Technology Stack Documentation
+
+PRDs should explicitly document:
+- **Framework choices**: (e.g., Fang for CLI wrappers, Bubble Tea for TUI, Lipgloss for styling)
+- **Color management**: Specific hex codes, color profiles, and CI environment handling
+- **Configuration libraries**: Viper usage patterns and binding strategies
+- **Logging systems**: Structured logging with Charmbracelet Log and color profile integration
+- **CLI patterns**: Cobra/Fang usage, command structure, and argument passing
+
+### Example PRDs in Repository
+
+- **`prd/labels/label-selection.prd.md`** - Label-based stack and component selection enhancement
+- **`prd/tools/gotcha-test-runner.prd.md`** - Go test runner with Charm ecosystem integration and GitHub Actions support
+
+### Implementation Verification
+
+When implementing features with PRDs:
+- ✅ **Match detailed requirements**: Ensure implementation satisfies all technical specifications
+- ✅ **Pass acceptance criteria**: All success metrics and measurable standards must be met
+- ✅ **Include specified documentation**: Update all areas mentioned in documentation requirements
+- ✅ **Follow implementation notes**: Adhere to architectural guidance and design patterns
+- ✅ **Test comprehensively**: Execute all test scenarios outlined in the test plan
+- ✅ **Handle edge cases**: Address boundary conditions and error scenarios
+- ✅ **Maintain consistency**: Use established patterns for configuration, logging, and CLI design
+
+### PRD Maintenance
+
+- **Update PRDs**: When requirements change during implementation, update the PRD first
+- **Version control**: Track PRD changes alongside code changes in the same commits
+- **Post-implementation review**: After feature completion, validate PRD accuracy for future reference
+- **Link documentation**: Ensure generated documentation references the appropriate PRD sections
+
 ## Essential Commands
 
 ### Development Workflow

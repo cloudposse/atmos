@@ -51,4 +51,15 @@ internal/exec/output.*
 # Coverage files
 coverage.out
 coverage.html
+coverage.out.tmp
 tests.test
+
+# Test artifacts
+test-results.json
+test-summary.md
+gotcha-results.json
+
+# Gotcha binary
+/gotcha
+/tools/gotcha/gotcha
+/tools/gotcha/build/
