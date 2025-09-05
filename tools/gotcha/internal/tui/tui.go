@@ -177,7 +177,7 @@ type TestModel struct {
 	packageResults map[string]*PackageResult // Complete package results
 	packageOrder   []string                  // Order packages were completed
 	activePackages map[string]bool           // Track which packages are currently running
-	completedPackageOutput strings.Builder   // Accumulated output from completed packages
+	displayedPackages map[string]bool        // Track which packages have been displayed
 
 	// JSON output
 	jsonFile *os.File
@@ -272,9 +272,10 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		packagesWithNoTests: make(map[string]bool),
 		packageHasTests: make(map[string]bool),
 		packageNoTestsPrinted: make(map[string]bool),
-		packageResults: make(map[string]*PackageResult),
-		packageOrder:   []string{},
-		activePackages: make(map[string]bool),
+		packageResults:    make(map[string]*PackageResult),
+		packageOrder:      []string{},
+		activePackages:    make(map[string]bool),
+		displayedPackages: make(map[string]bool),
 		totalTests:     0, // Will be incremented by "run" events
 		completedTests: 0, // Will be incremented by pass/fail/skip events
 		startTime:      time.Now(),
@@ -396,28 +397,27 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Process event with buffering
 		m.processEvent(&event)
 		
-		// Check if any packages completed and display them
-		var displayCmd tea.Cmd
+		// Check if any packages completed and display them once
+		var cmds []tea.Cmd
+		cmds = append(cmds, nextCmd, m.spinner.Tick)
+		
 		for _, pkg := range m.packageOrder {
 			if result, exists := m.packageResults[pkg]; exists && result.Status != "running" {
 				// Package is complete, check if we've already displayed it
-				if !strings.Contains(m.completedPackageOutput.String(), fmt.Sprintf("▶ %s", pkg)) {
-					// Display this package
+				if !m.displayedPackages[pkg] {
+					// Mark as displayed and generate output
+					m.displayedPackages[pkg] = true
 					output := m.displayPackageResult(result)
 					if output != "" {
-						m.completedPackageOutput.WriteString(output)
-						displayCmd = tea.Printf("%s", output)
+						// Use tea.Printf to print the output once
+						cmds = append(cmds, tea.Printf("%s", output))
 					}
 				}
 			}
 		}
-
-
-		// Continue reading and optionally display
-		if displayCmd != nil {
-			return m, tea.Batch(nextCmd, displayCmd, m.spinner.Tick)
-		}
-		return m, tea.Batch(nextCmd, m.spinner.Tick)
+		
+		// Continue reading
+		return m, tea.Batch(cmds...)
 
 	case testsDoneMsg:
 		// Update progress to 100% before marking as done
@@ -904,6 +904,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	var output strings.Builder
 	
 	// Package header
+	// Display package header - ▶ icon in white, package name in cyan
 	output.WriteString(fmt.Sprintf("\n▶ %s\n\n", PackageHeaderStyle.Render(pkg.Package)))
 	
 	// Check for "No tests"

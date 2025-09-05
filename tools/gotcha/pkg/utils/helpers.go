@@ -564,20 +564,15 @@ func (p *StreamProcessor) shouldShowTestEvent(action string) bool {
 
 // printSummary prints a final test summary with statistics.
 func (p *StreamProcessor) printSummary() {
-	total := p.passed + p.failed + p.skipped
-	if total == 0 {
+	total := p.passed + p.failed
+	if total == 0 && p.skipped == 0 {
 		return
 	}
 
 	fmt.Fprintf(os.Stderr, "\n\n")
 	fmt.Fprintf(os.Stderr, "%s\n", tui.StatsHeaderStyle.Render("Test Results:"))
 	fmt.Fprintf(os.Stderr, "  %s Passed:  %d\n", tui.PassStyle.Render(tui.CheckPass), p.passed)
-	if p.failed > 0 {
-		fmt.Fprintf(os.Stderr, "  %s Failed:  %d\n", tui.FailStyle.Render(tui.CheckFail), p.failed)
-	}
-	if p.skipped > 0 {
-		fmt.Fprintf(os.Stderr, "  %s Skipped: %d\n", tui.SkipStyle.Render(tui.CheckSkip), p.skipped)
-	}
+	fmt.Fprintf(os.Stderr, "  %s Failed:  %d\n", tui.FailStyle.Render(tui.CheckFail), p.failed)
 	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
 	fmt.Fprintf(os.Stderr, "\n")
 
@@ -647,9 +642,8 @@ func (p *StreamProcessor) findTest(pkg *PackageResult, testName string) *TestRes
 
 // displayPackageResult outputs the buffered results for a completed package.
 func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
-	// Display package header
-	fmt.Fprintf(os.Stderr, "\n%s %s\n",
-		tui.PackageHeaderStyle.Render("▶"),
+	// Display package header - ▶ icon in white, package name in cyan
+	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
 	
 	// Check if package has no tests
