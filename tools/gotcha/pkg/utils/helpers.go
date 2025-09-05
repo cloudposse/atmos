@@ -685,13 +685,13 @@ func (p *StreamProcessor) printSummary() {
 	fmt.Fprintf(os.Stderr, "  %s Failed:  %d\n", tui.FailStyle.Render(tui.CheckFail), p.failed)
 	fmt.Fprintf(os.Stderr, "  %s Skipped: %d\n", tui.SkipStyle.Render(tui.CheckSkip), p.skipped)
 	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
-	
+
 	// Display average coverage if available
 	if packagesWithCoverage > 0 {
 		avgCoverage := totalCoverage / float64(packagesWithCoverage)
 		fmt.Fprintf(os.Stderr, "  Coverage:  %.1f%%\n", avgCoverage)
 	}
-	
+
 	fmt.Fprintf(os.Stderr, "\n")
 
 	// Log completion time as info message
