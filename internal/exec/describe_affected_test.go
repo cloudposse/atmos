@@ -15,8 +15,8 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/tests"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestDescribeAffected(t *testing.T) {
@@ -133,7 +133,7 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 func TestDescribeAffectedScenarios(t *testing.T) {
 	// Check for valid Git remote URL before running test
 	tests.RequireGitRemoteWithValidURL(t)
-	
+
 	basePath := "tests/fixtures/scenarios/atmos-describe-affected-with-dependents-and-locked"
 	pathPrefix := "../../"
 

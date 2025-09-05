@@ -91,7 +91,7 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	// Check for valid Git remote URL before running test
 	tests.RequireGitRemoteWithValidURL(t)
-	
+
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 

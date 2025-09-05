@@ -8,8 +8,8 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/tests"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestAtlantisGenerateRepoConfig(t *testing.T) {

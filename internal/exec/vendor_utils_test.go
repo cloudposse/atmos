@@ -84,7 +84,7 @@ func TestExecuteVendorPull(t *testing.T) {
 	if rateLimits != nil && rateLimits.Remaining < 20 {
 		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~20 requests", rateLimits.Remaining)
 	}
-	
+
 	// Check for OCI authentication (GitHub token) for pulling images from ghcr.io
 	tests.RequireOCIAuthentication(t)
 	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {

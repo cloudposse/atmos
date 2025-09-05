@@ -185,21 +185,21 @@ func TestPreconditionSkipping(t *testing.T) {
 	t.Run("EnvVar missing causes skip", func(t *testing.T) {
 		// Test with non-existent env var - this will skip the test
 		RequireEnvVar(t, "DEFINITELY_NON_EXISTENT_VAR_12345", "testing")
-		
+
 		// This line should not be reached
 		t.Error("Should have skipped")
 	})
 
 	t.Run("Executable missing causes skip", func(t *testing.T) {
 		RequireExecutable(t, "definitely-non-existent-binary-12345", "test purpose")
-		
+
 		// This line should not be reached
 		t.Error("Should have skipped")
 	})
 
 	t.Run("File path missing causes skip", func(t *testing.T) {
 		RequireFilePath(t, "/definitely/non/existent/path/12345", "test file")
-		
+
 		// This line should not be reached
 		t.Error("Should have skipped")
 	})
@@ -285,7 +285,7 @@ func TestRequireOCIAuthentication_WithoutToken(t *testing.T) {
 func TestRequireFilePath_WithExistingPath(t *testing.T) {
 	// Use current directory which should exist
 	RequireFilePath(t, ".", "current directory")
-	
+
 	// Should reach here when path exists
 	assert.True(t, true, "Test continued after RequireFilePath with existing path")
 }
@@ -294,7 +294,7 @@ func TestRequireFilePath_WithExistingPath(t *testing.T) {
 func TestRequireNetworkAccess_InvalidURL(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// Should not panic with invalid URL when bypass is set
 	RequireNetworkAccess(t, "not-a-valid-url")
 }
@@ -304,7 +304,7 @@ func TestLogPreconditionOverride_Variations(t *testing.T) {
 	// Test without bypass first
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
 	LogPreconditionOverride(t)
-	
+
 	// Test with bypass
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
