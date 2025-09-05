@@ -59,5 +59,6 @@ test-summary.md
 gotcha-results.json
 
 # Gotcha binary
-gotcha
-tools/gotcha/gotcha
+/gotcha
+/tools/gotcha/gotcha
+/tools/gotcha/build/

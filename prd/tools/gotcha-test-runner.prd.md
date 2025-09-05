@@ -91,6 +91,26 @@ globalLogger.SetLevel(log.InfoLevel)
 globalLogger.SetColorProfile(profile)
 ```
 
+#### Log Level Configuration
+- **CLI Flag**: `--log-level` (persistent flag available to all commands)
+- **Environment Variable**: `GOTCHA_LOG_LEVEL`
+- **Configuration File**: `log.level` in `.gotcha.yaml`
+- **Supported Levels**: `debug`, `info`, `warn`, `error`, `fatal`
+- **Default Level**: `info`
+- **Precedence**: CLI flag > Environment variable > Config file > Default
+
+#### Color Output Configuration
+- **CLI Flag**: `--no-color` (persistent flag available to all commands)
+- **Environment Variables**: `NO_COLOR` (disable), `FORCE_COLOR` (force enable)
+- **Supported Values**: 
+  - `--no-color`: Disable all color output
+  - `NO_COLOR=1`: Disable colors via environment
+  - `FORCE_COLOR=1`: Force ANSI colors
+  - `FORCE_COLOR=2`: Force ANSI256 colors
+  - `FORCE_COLOR=3`: Force TrueColor
+- **Default Behavior**: Colors enabled (ANSI) even when piping to other commands
+- **Precedence**: `--no-color` flag > `NO_COLOR` env > `FORCE_COLOR` env > terminal detection > ANSI default
+
 #### Log Level Styling with Hex Colors
 - **DEBUG**: Background color `#3F51B5` (indigo), black foreground
 - **INFO**: Background color `#4CAF50` (green), black foreground  
@@ -102,26 +122,161 @@ globalLogger.SetColorProfile(profile)
 - Structured logging for programmatic parsing
 - Human-readable formatting for terminal display
 - Color profile detection for different environments
+- Dynamic log level adjustment at runtime
 
 ### Terminal Styling (Lipgloss with Hex Colors)
 
 #### Color Constants
 ```go
-colorGreen     = "#2ECC40" // Bright green for pass
-colorRed       = "#DC143C" // Crimson red for fail  
-colorAmber     = "#FFB347" // Peach orange for skip
-colorLightGray = "#D3D3D3" // Light gray for test names
-colorDarkGray  = "#666666" // Dark gray for durations
-colorBlue      = "#5DADE2" // Blue for spinner
-colorDarkRed   = "#B22222" // Dark red for error background
-colorWhite     = "#FFFFFF" // White for error text
+colorGreen     = "#2ECC40" // Bright green for pass symbols (✔)
+colorRed       = "#DC143C" // Crimson red for fail symbols (✘)
+colorAmber     = "#FFB347" // Peach orange for skip symbols (⊘)
+colorLightGray = "#D3D3D3" // Light gray for test names (primary text)
+colorDarkGray  = "#666666" // Dark gray for durations (de-emphasized)
+colorBlue      = "#5DADE2" // Blue for spinner animations
+colorDarkRed   = "#B22222" // Dark red for error backgrounds
+colorWhite     = "#FFFFFF" // White for error text on dark backgrounds
 ```
+
+#### Visual Hierarchy Requirements
+
+The visual hierarchy MUST follow these strict requirements to ensure optimal readability:
+
+1. **Test Status Symbols** (Highest Visual Priority)
+   - ✔ Pass: `colorGreen` (#2ECC40) - Immediately visible success indicator
+   - ✘ Fail: `colorRed` (#FF0000) - Immediately visible failure indicator (updated for proper ANSI mapping)
+   - ⊘ Skip: `colorAmber` (#FFB347) - Immediately visible skip indicator
+
+2. **Test Names** (Secondary Visual Priority)
+   - Color: `colorLightGray` (#D3D3D3)
+   - Purpose: Readable and clear, but doesn't compete with status symbols
+   - Example: `TestNewSSMStore/valid_options_with_all_fields`
+
+3. **Duration/Metadata** (Tertiary Visual Priority)
+   - Color: `colorDarkGray` (#666666)
+   - Purpose: Available when needed but de-emphasized
+
+4. **Package Headers** (Navigation/Context)
+   - Color: `colorBlue` (#5DADE2) with Bold
+   - Format: `▶ github.com/cloudposse/atmos/tools/gotcha/internal/parser`
+   - Purpose: Clear visual separation between packages in multi-package test runs
+   - Display: Shows when entering a new package context
+   - No tests indication: Shows `No tests` in gray when package has no runnable tests
+
+5. **Subtest Summary** (Inline with Parent Test)
+   - Format: `[X/Y passed]` where X is passed subtests, Y is total subtests
+   - Color: Matches parent test status color
+   - Purpose: Quick overview of subtest results without overwhelming display
+   - Example: `✘ TestWithSubtests (1.23s) [2/5 passed]`
+
+#### Example Output Display
+```
+✔ TestPasses (0.01s)
+✘ TestFails (0.02s)
+⊘ TestSkipped (0.00s)
+✘ TestWithSubtests (1.23s) [2/5 passed]
+```
+Where:
+- ✔/✘/⊘ are colored per status (green/red/amber)
+- Test names are light gray for readability
+- Durations in parentheses are dark gray for de-emphasis
+- Subtest summaries show inline pass/fail counts
 
 #### Visual Elements
 - **Unicode symbols**: ✔ (pass), ✘ (fail), ⊘ (skip)
 - **Progress indicators**: Animated spinners and progress bars
+- **Mini progress indicators**: Visual subtest progress using colored dots on parent test lines
+  - Format: `●●●●●` (no brackets) with actual number of dots matching subtest count (up to 10 max)
+  - Green dots (●) represent passed subtests, red dots (●) represent failed subtests
+  - Display on parent test lines with subtests: `✘ TestName (0.00s) ●●●● 25% passed`
+  - Shows 1 dot per subtest for up to 10 subtests
+  - For >10 subtests, scales proportionally to 10 dots maximum for readability
+  - Example: 4 subtests with 1 pass, 3 fail shows `●●●●` (1 green, 3 red)
+  - Example: 10 subtests with 7 pass, 3 fail shows `●●●●●●●●●●` (7 green, 3 red)
+  - Example: 20 subtests with 10 pass, 10 fail shows `●●●●●●●●●●` (5 green, 5 red, scaled)
+  - Update when parent test completes with final subtest statistics
+  - Uses ANSI color codes via Lipgloss styles for terminal compatibility
 - **Test result styling**: Color-coded output with consistent formatting
 - **Error highlighting**: High-contrast error displays with background colors
+- **Subtest visualization**: Inline summary with detailed breakdown on failure
+
+### Enhanced Subtest Visualization
+
+#### Subtest Statistics Tracking
+- **Real-time tracking**: Monitor pass/fail/skip counts for each parent test's subtests
+- **Inline summary display**: Show `[X/Y passed]` format alongside parent test
+- **Detailed breakdown**: Display comprehensive subtest results for failed parent tests
+
+#### Display Formats
+
+##### Package Headers
+```
+▶ github.com/cloudposse/atmos/tools/gotcha/internal/parser
+
+▶ github.com/cloudposse/atmos/tools/gotcha/pkg/constants
+  No tests
+
+▶ github.com/cloudposse/atmos/tools/gotcha/pkg/utils
+```
+
+##### Successful Parent Test with All Subtests Passing
+```
+✔ TestWithSubtests (0.45s) [5/5 passed]
+```
+
+##### Failed Parent Test with Mixed Results
+```
+✘ TestWithSubtests (1.23s) [2/5 passed]
+  Passed:
+    • ValidInput
+    • EdgeCase
+  Failed:
+    • InvalidInput
+    • EmptyInput
+  Skipped:
+    • ConditionalTest
+```
+
+##### Parent Test Failed (Not Due to Subtests)
+```
+✘ TestSetupFailure (0.01s)
+  (Test failed during setup/teardown)
+```
+
+#### Implementation Requirements
+- **Data Structure**: Track subtest results in a map keyed by parent test name
+- **Event Processing**: Capture subtest events and associate with parent tests
+- **Display Logic**: Show detailed breakdown only for tests with failed/skipped subtests
+- **Progress Tracking**: Count all tests (parent and subtests) for accurate progress
+- **Both Modes**: Support identical visualization in both TUI and simple (non-TTY) modes
+
+### Test Counting Strategy
+- **Dynamic Discovery**: Count tests based on "run" events from `go test -json` output
+- **No AST Parsing**: Remove static AST-based counting for accurate runtime counts
+- **Total Tests**: Increment counter on each "run" event (includes all parent tests and subtests)
+- **Completed Tests**: Increment on "pass", "fail", or "skip" events
+- **Progress Display**: Show `X/Y tests (Z%)` format once tests start running
+- **Early Display**: Show "discovering tests..." message before first "run" event
+
+### Show Filter Behavior
+- **Consistent Filtering**: TUI and headless modes must apply filters identically
+- **Filter Options**:
+  - `all`: Display all test results (pass, fail, skip)
+  - `failed`: Display only failed tests
+  - `passed`: Display only passed tests
+  - `skipped`: Display only skipped tests
+  - `collapsed`: Show minimal output, expand on failure
+  - `none`: Show only final summary
+- **Default Configuration**:
+  - Local development: `show: failed` (reduce noise)
+  - CI environments: `--show=all` flag (full visibility)
+- **Implementation**: Single `shouldShowTest()` method for consistent behavior
+
+#### Logger Key Styling
+- **Log Keys**: Style with dark gray (#666666) and bold formatting
+- **Log Values**: Keep unstyled or use appropriate color based on context
+- **Separator**: Use consistent separator character (`:` or `=`) between keys and values
+- **Example**: `level=INFO msg="Starting test execution" mode=stream`
 
 ### Color Support in CI Environments
 
@@ -138,8 +293,15 @@ viper.BindEnv("COLORTERM")          // Extended terminal capabilities
 #### Color Profile Detection
 - **TrueColor**: Modern terminals with full RGB support
 - **ANSI256**: GitHub Actions and most CI environments  
-- **ANSI**: Basic CI environments with limited color support
-- **NoColor**: Disabled via environment variables or detection
+- **ANSI**: Basic CI environments with limited color support (default fallback)
+- **NoColor**: Disabled via `--no-color` flag or `NO_COLOR` environment variable
+
+#### Color Control Options
+- **CLI Flag**: `--no-color` to disable all color output
+- **Environment Variable**: `NO_COLOR=1` to disable colors globally
+- **Force Color**: `FORCE_COLOR=1/2/3` to force ANSI/ANSI256/TrueColor respectively
+- **Default Behavior**: Colors enabled by default, even when piping to other commands
+- **Precedence**: CLI flag > NO_COLOR env > FORCE_COLOR env > terminal detection > ANSI default
 
 #### Charm Ecosystem Integration
 ```go
@@ -157,14 +319,21 @@ globalLogger.SetColorProfile(profile)
 
 #### Environment Variable Bindings
 ```go
+viper.BindEnv("GOTCHA_LOG_LEVEL", "LOG_LEVEL")
 viper.BindEnv("GOTCHA_FORCE_NO_TTY", "FORCE_NO_TTY")
 viper.BindEnv("GOTCHA_FORCE_TTY", "FORCE_TTY")
 viper.BindEnv("GOTCHA_TIMEOUT", "TIMEOUT")
 viper.BindEnv("GOTCHA_OUTPUT", "OUTPUT")
+viper.BindEnv("NO_COLOR")           // Standard NO_COLOR convention
+viper.BindEnv("FORCE_COLOR")        // Standard FORCE_COLOR convention
 ```
 
 #### Configuration File Format (.gotcha.yaml)
 ```yaml
+# Logging configuration
+log:
+  level: info  # Log level: debug, info, warn, error, fatal
+
 # Output format: stream, markdown, github
 format: stream
 
@@ -194,6 +363,11 @@ filter:
   exclude: []
 ```
 
+#### Custom Configuration File
+- **Flag**: `--config` to specify custom configuration file path
+- **Example**: `gotcha stream --config=/path/to/config.yaml`
+- **Discovery**: Searches `.gotcha.yaml` in current and parent directories (up to 3 levels)
+
 ### TUI Framework (Bubble Tea)
 
 #### Interactive Components
@@ -208,6 +382,17 @@ filter:
 - Graceful degradation to simple streaming output
 - CI-friendly output without interactive elements
 
+### Test Completion Logging
+
+#### Completion Time Display
+- **Format**: "Tests completed in X.XXs" displayed as info-level log message
+- **Timing**: Shows total elapsed time from test start to completion
+- **Display Modes**: 
+  - **TUI Mode**: Logged via structured logger after test summary
+  - **Stream Mode**: Printed to stderr with duration style
+- **Precision**: Display to 2 decimal places for seconds
+- **Styling**: Uses `DurationStyle` for consistent visual presentation
+
 ### Stream Mode Features
 
 #### Real-time Execution
@@ -216,6 +401,41 @@ filter:
 - **Test result filtering** by status (all, failed, passed, skipped)
 - **Interactive TUI** with Bubble Tea components
 - **JSON output** to configurable file (default: `gotcha-results.json`)
+- **Subtest tracking** with real-time pass/fail/skip statistics
+- **Package headers**: Display package name when testing starts
+  - **Format**: `▶ github.com/cloudposse/atmos/tools/gotcha/pkg/utils`
+  - **Styling**: Blue bold text using `PackageHeaderStyle`
+  - **Display**: Shows when a new package starts being tested
+- **No tests indication**: Show "No tests" for packages without runnable tests
+  - **Format**: Gray text saying "No tests"
+  - **Detection mechanisms**:
+    1. **Skip events**: Package-level `skip` action (typically for packages with no test files)
+    2. **No test files marker**: `[no test files]` in output followed by package `pass` event (occurs with `coverprofile`)
+    3. **No runnable tests**: Package `pass` event with no `run` events (test files exist but no test functions)
+  - **Implementation details**:
+    - Track packages with `[no test files]` in output via `packagesWithNoTests` map
+    - Track if package had any test `run` events via `packageHasTests` map (initialized to false on `start`)
+    - Use `packageNoTestsPrinted` map to prevent duplicate "No tests" messages
+    - For out-of-order events: Display "No tests for <package>" when message appears under wrong package
+  - **Parallel execution handling**: When packages run in parallel, events may interleave requiring special handling
+  - **Styling**: Uses `DurationStyle` for subtle gray appearance
+  - **Important**: Do NOT attempt to detect by counting completed tests, as events arrive asynchronously
+
+#### TUI Mode Display
+- **Package headers**: Display package name at start of package testing
+  - **Format**: Same as stream mode with arrow indicator
+  - **Event handling**: Detects `start` action with empty Test field
+  - **State tracking**: Uses `currentPackage` field to avoid duplicates
+- **No tests indication**: Shows when package has no runnable tests
+  - **Event detection**: Identical to stream mode (all three detection mechanisms)
+  - **Implementation**: Uses same maps (`packagesWithNoTests`, `packageHasTests`, `packageNoTestsPrinted`)
+  - **Display location**: After package header or when pass event arrives out of order
+  - **Visual consistency**: Matches stream mode styling, detection logic, and parallel handling
+- **Progress bar**: Real-time test completion percentage
+- **Spinner animation**: Visual feedback during test execution
+- **Test status updates**: Live pass/fail/skip counts
+- **Elapsed time tracking**: Running timer display
+- **Buffer size monitoring**: Memory usage indicator in KB
 
 #### Configuration Options
 - **Timeout control**: Configurable test timeout (default: 40m)
@@ -240,19 +460,40 @@ filter:
 - **Test categorization**: Group results by package and status
 - **Error extraction**: Highlight and format test failures
 - **Statistics generation**: Comprehensive test run metrics
+- **Subtest analysis**: Detailed breakdown of subtest results with pass/fail counts
 
 ### GitHub Actions Integration
 
 #### Job Summary Generation
 - **Write to `$GITHUB_STEP_SUMMARY`**: Automatic job summary creation
 - **Markdown formatting**: GitHub-compatible summary layout
+  - **Total elapsed time**: Display overall test run duration at the top
+  - **Test statistics**: Pass/fail/skip counts with shields.io badges
+  - **Slowest tests section**: Collapsible details showing up to 20 slowest tests with percentage of total time
+    - Shows actual count in header (e.g., "⏱️ Slowest Tests (5)" if only 5 tests exist)
+    - Maximum of 20 tests displayed even if more are available
+  - **Package summary**: Collapsible table showing test counts and durations grouped by package
 - **Coverage visualization**: Badges and detailed coverage tables
 - **Test failure highlighting**: Prominent display of failed tests
 
 #### PR Comment System
 - **Automated commenting**: Post test results as PR comments
 - **Comment deduplication**: UUID-based tracking to update existing comments
-- **Size management**: Smart truncation for large test suites
+- **Multi-job comment handling**:
+  - **Job discriminator**: Support for `GOTCHA_JOB_DISCRIMINATOR` environment variable
+  - **Platform-specific UUIDs**: Append job discriminator to UUID for unique comments per job
+  - **Conditional posting logic**:
+    - Linux: Always posts comments regardless of test results
+    - Windows/macOS: Only post on failures or skipped tests
+  - **Platform detection**: Auto-detect from `RUNNER_OS` or `GOOS` environment variables
+  - **Status emoji in title**: ✅ for success, ❌ for failures, ⚠️ for skips
+  - **Platform name in header**: Display OS/platform name in comment title
+- **Skip reason display**: Capture and show skip reasons from test output
+- **Size management**: Intelligent truncation for large test suites
+  - **GitHub's 65536 byte limit**: Enforced at multiple levels
+  - **Smart content prioritization**: Failed tests shown first, then skipped, then passed
+  - **Graceful degradation**: Progressively removes less important sections to fit
+  - **Truncation message**: Clear indication when content has been truncated
 - **Template-based formatting**: Consistent comment structure
 
 #### GitHub API Integration
@@ -260,6 +501,70 @@ filter:
 - **Comment CRUD operations**: Create, read, update PR comments
 - **Error handling**: Graceful fallback when API is unavailable
 - **Rate limiting**: Respect GitHub API rate limits
+
+### Comment Posting Strategies
+
+The `--post-comment` flag supports multiple strategies for controlling when GitHub PR comments are posted:
+
+#### Available Strategies
+
+| Strategy | Behavior | Use Case |
+|----------|----------|----------|
+| `always` | Always post comment regardless of results or platform | CI jobs that should always report status |
+| `never` | Never post comment | Local development or testing |
+| `adaptive` | Linux always posts, other platforms only on failures/skips | Multi-platform CI optimization (recommended) |
+| `on-failure` | Only post when tests fail | Minimize noise, focus on problems |
+| `on-skip` | Only post when tests are skipped | Track incomplete test coverage |
+| `<os-name>` | Only post on specific OS (linux/darwin/windows) | Platform-specific reporting |
+
+#### Default Behavior
+- `--post-comment` without value: Posts always (equivalent to `--post-comment=always`)
+- `--post-comment=true`: Alias for `always`
+- `--post-comment=false`: Alias for `never`
+- No flag: No comment posting
+
+#### Examples
+
+```bash
+# Always post (default when flag is present)
+gotcha stream --post-comment
+
+# Explicit always
+gotcha stream --post-comment=always
+
+# Never post
+gotcha stream --post-comment=false
+
+# Adaptive strategy (recommended for multi-platform CI)
+gotcha stream --post-comment=adaptive
+
+# Only on failures
+gotcha stream --post-comment=on-failure
+
+# Only on skipped tests
+gotcha stream --post-comment=on-skip
+
+# Platform-specific
+gotcha stream --post-comment=linux
+```
+
+#### Environment Variable Support
+
+```bash
+# Set strategy via environment variable
+export GOTCHA_POST_COMMENT=adaptive
+gotcha stream  # Uses adaptive strategy
+
+# In GitHub Actions workflow
+env:
+  GOTCHA_POST_COMMENT: adaptive
+  GOTCHA_JOB_DISCRIMINATOR: ${{ matrix.flavor.target }}
+```
+
+#### Platform Detection
+- Uses `runtime.GOOS` for reliable OS detection
+- Falls back to `RUNNER_OS` environment variable for display purposes
+- Job discriminator used for unique comment identification, not OS detection
 
 ### Coverage Analysis
 
@@ -367,6 +672,59 @@ Existing tools failed to provide:
 - **Output escaping**: Prevent injection attacks in generated content
 - **Permission handling**: Respect file system permissions and access controls
 
+### Go Test JSON Stream Format
+
+The tool processes JSON output from `go test -json` which provides structured test events. Each line is a separate JSON object.
+
+#### Event Structure
+Each JSON event contains:
+- **Time**: ISO 8601 timestamp (e.g., "2025-09-04T20:49:20.36365-05:00")
+- **Action**: Event type (start, run, output, pass, fail, skip, pause, cont)
+- **Package**: Full Go package path (e.g., "github.com/cloudposse/atmos/errors")
+- **Test**: Test name (empty string for package-level events)
+- **Output**: Text output line (only for "output" actions, includes escaped characters)
+- **Elapsed**: Duration in seconds (only for pass/fail/skip actions)
+
+#### Action Types
+
+**start** - Package testing begins:
+```json
+{"Time":"2025-09-04T20:49:20.36365-05:00","Action":"start","Package":"github.com/cloudposse/atmos/errors"}
+```
+
+**run** - Test execution starts:
+```json
+{"Time":"2025-09-04T20:49:20.363709-05:00","Action":"run","Package":"github.com/cloudposse/atmos/errors","Test":"TestCheckErrorAndPrint"}
+```
+
+**output** - Text output (line-by-line with escaped characters):
+```json
+{"Time":"2025-09-04T20:49:20.363711-05:00","Action":"output","Package":"github.com/cloudposse/atmos/errors","Test":"TestCheckErrorAndPrint","Output":"=== RUN   TestCheckErrorAndPrint\n"}
+```
+
+**pass** - Test/package succeeded:
+```json
+{"Time":"2025-09-04T20:49:20.36376-05:00","Action":"pass","Package":"github.com/cloudposse/atmos/errors","Test":"TestCheckErrorAndPrint","Elapsed":0}
+```
+
+**fail** - Test/package failed:
+```json
+{"Time":"2025-09-04T20:56:48.066285-05:00","Action":"fail","Package":"github.com/cloudposse/atmos/internal/aws_utils","Test":"TestLoadAWSConfig","Elapsed":0.01}
+```
+
+**skip** - Test/package skipped (no test files):
+```json
+{"Time":"2025-09-04T20:51:10.560116-05:00","Action":"skip","Package":"github.com/cloudposse/atmos/internal/tui/atmos","Elapsed":0}
+```
+
+#### Package Lifecycle
+A package completes when a package-level action (pass/fail/skip) has:
+- Package name in Package field
+- **Empty Test field** (`"Test":""`)
+- Elapsed time
+
+This is the key indicator for buffering - display package results only after receiving this completion event.
+
 ## Acceptance Criteria
 
 ### Core Functionality
@@ -384,14 +742,23 @@ Existing tools failed to provide:
 ### GitHub Integration
 - ✅ **Job summaries**: GitHub Actions job summaries generated and displayed correctly
 - ✅ **PR comments**: Test results posted as PR comments with proper formatting
+- ✅ **Multi-job comments**: Each CI job posts separate comment with platform discriminator
+- ✅ **Flexible posting strategies**: Support always/never/adaptive/on-failure/on-skip/os-specific
+- ✅ **Default behavior**: `--post-comment` without value defaults to "always"
+- ✅ **Boolean compatibility**: true/false/1/0/yes/no aliases work as expected
+- ✅ **Platform detection**: Uses runtime.GOOS for reliable OS detection
+- ✅ **Skip reason display**: Test skip reasons captured and shown in comments
 - ✅ **Coverage badges**: Coverage percentages displayed with appropriate color coding
 - ✅ **Error handling**: Graceful degradation when GitHub API is unavailable
 
 ### Output Quality
 - ✅ **Visual consistency**: All output uses consistent Charm ecosystem styling
 - ✅ **Information hierarchy**: Important information (failures) prominently displayed
+- ✅ **Visual hierarchy colors**: Package headers use blue/bold, test symbols use status colors (green/red/amber), test names use light gray, durations use dark gray
 - ✅ **Performance**: Tool completes processing within reasonable time limits
 - ✅ **Accessibility**: Output readable in various terminal configurations
+- ✅ **Subtest visualization**: Tests with subtests display inline summary `[X/Y passed]` and detailed breakdown on failure
+- ✅ **Package delineation**: Clear visual separation between test packages with styled headers and "No tests" indication for empty packages
 
 ### Configuration Management
 - ✅ **YAML config**: `.gotcha.yaml` files loaded and applied correctly

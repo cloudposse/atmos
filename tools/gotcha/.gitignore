@@ -9,6 +9,6 @@ coverage.out
 coverage.html
 
 # Test output
-gotcha-results.json
 test-results.json
+test-summary.md
 *.out

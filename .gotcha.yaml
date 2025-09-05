@@ -12,10 +12,10 @@ packages:
 testargs: "-timeout 40m"
 
 # Filter displayed tests: all, failed, passed, skipped
-show: all
+show: failed
 
 # Output file for test results
-output: gotcha-results.json
+output: test-results.json
 
 # Coverage profile file for detailed analysis
 coverprofile: coverage.out
