@@ -50,5 +50,6 @@ internal/exec/output.*
 
 # Coverage files
 coverage.out
+coverage.out.tmp
 coverage.html
 tests.test
