@@ -733,8 +733,19 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 
 // displayTest outputs a single test result with proper formatting.
 func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
+	// Check if test has failed subtests (for --show=failed filter)
+	hasFailedSubtests := false
+	if p.showFilter == "failed" && len(test.Subtests) > 0 {
+		for _, subtest := range test.Subtests {
+			if subtest.Status == "fail" {
+				hasFailedSubtests = true
+				break
+			}
+		}
+	}
+	
 	// Check if we should display this test based on filter
-	if !p.shouldShowTestStatus(test.Status) {
+	if !p.shouldShowTestStatus(test.Status) && !hasFailedSubtests {
 		return
 	}
 	

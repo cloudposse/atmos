@@ -286,6 +286,7 @@ func (m *TestModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.startTestsCmd(),
 		m.spinner.Tick,
+		m.progress.Init(), // Initialize progress bar animation
 	)
 }
 
@@ -509,9 +510,9 @@ func (m *TestModel) View() string {
 			info += strings.Repeat(" ", padding)
 		}
 	} else {
-		info = DurationStyle.Render("Starting tests...")
+		info = "Starting tests..."
 		// Pad to match the width when showing a test
-		info += strings.Repeat(" ", maxTestWidth - 10) // Adjust for "Starting tests..." length
+		info += strings.Repeat(" ", maxTestWidth + 8 - len("Starting tests..."))
 	}
 
 	prog := m.progress.View()
@@ -534,10 +535,8 @@ func (m *TestModel) View() string {
 		// Format test count with "tests" in dark gray
 		testCount = fmt.Sprintf("%3d/%-3d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
 		
-		// Update progress bar with the calculated percentage
-		if percentFloat > 0 {
-			m.progress.SetPercent(percentFloat)
-		}
+		// Always update progress bar with the calculated percentage
+		m.progress.SetPercent(percentFloat)
 	} else {
 		// Very early, before any run events
 		percentage = "  0%"
@@ -561,9 +560,10 @@ func (m *TestModel) View() string {
 	rightWidth := getDisplayWidth(rightSection)
 	
 	// Calculate gap to right-align the time/buffer
-	gapWidth := terminalWidth - leftWidth - middleWidth - rightWidth - 2
-	if gapWidth < 1 {
-		gapWidth = 1
+	// Account for actual display widths properly
+	gapWidth := terminalWidth - leftWidth - middleWidth - rightWidth
+	if gapWidth < 2 {
+		gapWidth = 2 // Minimum gap to prevent cutoff
 	}
 	gap := strings.Repeat(" ", gapWidth)
 	
@@ -1004,8 +1004,19 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 			continue
 		}
 		
+		// Check if test has failed subtests (for --show=failed filter)
+		hasFailedSubtests := false
+		if m.showFilter == "failed" && len(test.Subtests) > 0 {
+			for _, subtest := range test.Subtests {
+				if subtest.Status == "fail" {
+					hasFailedSubtests = true
+					break
+				}
+			}
+		}
+		
 		// Check if we should display this test based on filter
-		if !m.shouldShowTest(test.Status) && m.showFilter != "collapsed" {
+		if !m.shouldShowTest(test.Status) && !hasFailedSubtests && m.showFilter != "collapsed" {
 			continue
 		}
 		
