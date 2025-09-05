@@ -153,7 +153,7 @@ func EmitAlert(enabled bool) {
 }
 
 // runSimpleStream runs tests with simple non-interactive streaming output.
-func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, outputMode string) int {
+func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, verbosityLevel string) int {
 	// Configure colors and initialize styles for stream mode
 	profile := tui.ConfigureColors()
 
@@ -184,7 +184,7 @@ func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, 
 	args = append(args, testPackages...)
 
 	// Run the tests
-	exitCode := RunTestsWithSimpleStreaming(args, outputFile, showFilter, outputMode)
+	exitCode := RunTestsWithSimpleStreaming(args, outputFile, showFilter, verbosityLevel)
 
 	// Emit alert at completion
 	EmitAlert(alert)
@@ -231,7 +231,7 @@ type StreamProcessor struct {
 	subtestStats map[string]*SubtestStats // Track subtest statistics per parent test
 	jsonWriter   io.Writer
 	showFilter   string
-	outputMode   string // Output format: standard, full, minimal, or verbose
+	verbosityLevel string // Verbosity level: standard, with-output, minimal, or verbose
 	startTime    time.Time
 	currentTest    string // Track current test for package-level output
 	
@@ -253,7 +253,7 @@ type StreamProcessor struct {
 }
 
 // runTestsWithSimpleStreaming runs tests and processes output in real-time.
-func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter string, outputMode string) int {
+func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter string, verbosityLevel string) int {
 	// Create the command
 	cmd := exec.Command("go", testArgs...)
 	cmd.Stderr = os.Stderr // Pass through stderr
@@ -291,9 +291,9 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		packageHasTests: make(map[string]bool),
 		packageNoTestsPrinted: make(map[string]bool),
 		
-		jsonWriter:   jsonFile,
-		showFilter:   showFilter,
-		outputMode:   outputMode,
+		jsonWriter:     jsonFile,
+		showFilter:     showFilter,
+		verbosityLevel: verbosityLevel,
 		startTime:    time.Now(),
 	}
 
@@ -879,7 +879,7 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 	
 	// Display test output for failures (respecting show filter)
 	if test.Status == "fail" && len(test.Output) > 0 && p.showFilter != "none" {
-		if p.outputMode == "full" || p.outputMode == "verbose" {
+		if p.verbosityLevel == "with-output" || p.verbosityLevel == "verbose" {
 			// With full output, properly render tabs and maintain formatting
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
@@ -934,8 +934,8 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 						indent, tui.FailStyle.Render("✘"), len(failed))
 					for _, subtest := range failed {
 						fmt.Fprintf(os.Stderr, "%s      • %s\n", indent, subtest.Name)
-						// Show subtest output if output mode is full or verbose
-						if (p.outputMode == "full" || p.outputMode == "verbose") && len(subtest.Output) > 0 {
+						// Show subtest output if verbosity level is with-output or verbose
+						if (p.verbosityLevel == "with-output" || p.verbosityLevel == "verbose") && len(subtest.Output) > 0 {
 							for _, outputLine := range subtest.Output {
 								formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 								formatted = strings.ReplaceAll(formatted, `\n`, "\n")

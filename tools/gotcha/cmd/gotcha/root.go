@@ -301,7 +301,7 @@ step summaries and markdown reports.`,
 	rootCmd.Flags().String("include", ".*", "Regex patterns to include packages (comma-separated)")
 	rootCmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	rootCmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
-	rootCmd.Flags().String("format", "standard", "Output format: standard, full, minimal, or verbose")
+	rootCmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
 
 	// Add subcommands
 	rootCmd.AddCommand(newStreamCmd(globalLogger))
@@ -355,7 +355,7 @@ Pre-calculates total test count for accurate progress tracking.`,
 	cmd.Flags().String("include", ".*", "Regex patterns to include packages (comma-separated)")
 	cmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	cmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
-	cmd.Flags().String("format", "standard", "Output format: standard, full, minimal, or verbose")
+	cmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
 
 	return cmd
 }
@@ -425,7 +425,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	_ = viper.BindPFlag("include", cmd.Flags().Lookup("include"))
 	_ = viper.BindPFlag("exclude", cmd.Flags().Lookup("exclude"))
 	_ = viper.BindPFlag("alert", cmd.Flags().Lookup("alert"))
-	_ = viper.BindPFlag("format", cmd.Flags().Lookup("format"))
+	_ = viper.BindPFlag("verbosity", cmd.Flags().Lookup("verbosity"))
 
 	// Get configuration values (from flags, env, or config file)
 	packages := viper.GetString("packages")
@@ -436,10 +436,10 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	include := viper.GetString("include")
 	exclude := viper.GetString("exclude")
 	alert := viper.GetBool("alert")
-	outputMode := viper.GetString("format")
-	// Default to full output for backward compatibility and as requested
-	if outputMode == "" {
-		outputMode = "full"
+	verbosityLevel := viper.GetString("verbosity")
+	// Default to with-output for backward compatibility
+	if verbosityLevel == "" {
+		verbosityLevel = "with-output"
 	}
 
 	// Validate show filter
@@ -524,7 +524,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	logger.Debug("TTY detection", "is_tty", utils.IsTTY())
 	if utils.IsTTY() {
 		// Create and run the Bubble Tea program
-		model := tui.NewTestModel(testPackages, testArgsStr, outputFile, coverprofile, show, alert, outputMode)
+		model := tui.NewTestModel(testPackages, testArgsStr, outputFile, coverprofile, show, alert, verbosityLevel)
 		// Use default Bubble Tea configuration
 		p := tea.NewProgram(&model)
 
@@ -564,7 +564,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		}
 	} else {
 		// Fallback to simple streaming for CI/non-TTY environments
-		exitCode := utils.RunSimpleStream(testPackages, testArgsStr, outputFile, coverprofile, show, alert, outputMode)
+		exitCode := utils.RunSimpleStream(testPackages, testArgsStr, outputFile, coverprofile, show, alert, verbosityLevel)
 		if exitCode != 0 {
 			return fmt.Errorf("%w with exit code %d", types.ErrTestsFailed, exitCode)
 		}

@@ -162,7 +162,7 @@ type TestModel struct {
 	outputFile string
 	showFilter string // "all", "failed", "passed", "skipped"
 	alert      bool   // whether to emit terminal bell on completion
-	outputMode string // Output format: standard, full, minimal, or verbose
+	verbosityLevel string // Verbosity level: standard, with-output, minimal, or verbose
 
 	// Results tracking
 	passCount      int
@@ -220,7 +220,7 @@ type streamOutputMsg struct {
 }
 
 // NewTestModel creates a new test model for the TUI.
-func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, outputMode string) TestModel {
+func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, verbosityLevel string) TestModel {
 	// Create progress bar with default gradient (purple theme used in Atmos)
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -263,7 +263,7 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		outputFile:     outputFile,
 		showFilter:     showFilter,
 		alert:          alert,
-		outputMode:     outputMode,
+		verbosityLevel: verbosityLevel,
 		spinner:        s,
 		progress:       p,
 		testBuffers:    make(map[string][]string),
@@ -1149,7 +1149,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 	// Show test output for failed tests if not in collapsed mode
 	if test.Status == "fail" && m.showFilter != "collapsed" && len(test.Output) > 0 {
 		output.WriteString("\n")
-		if m.outputMode == "full" || m.outputMode == "verbose" {
+		if m.verbosityLevel == "with-output" || m.verbosityLevel == "verbose" {
 			// With full output, properly render tabs and maintain formatting
 			for _, line := range test.Output {
 				// Replace literal \t with actual tabs and \n with newlines
@@ -1203,7 +1203,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 						
 						// Show subtest output if available
 						if subtest := test.Subtests[name]; subtest != nil && len(subtest.Output) > 0 {
-							if m.outputMode == "full" || m.outputMode == "verbose" {
+							if m.verbosityLevel == "with-output" || m.verbosityLevel == "verbose" {
 								// With full output, properly render tabs and maintain formatting
 								for _, line := range subtest.Output {
 									formatted := strings.ReplaceAll(line, `\t`, "\t")

@@ -56,7 +56,7 @@ func (m model) View() string {
 
 func main() {
 	prog := progress.New(progress.WithDefaultGradient())
-	if _, err := tea.NewProgram(model{progress: prog}).Run(); err \!= nil {
+	if _, err := tea.NewProgram(model{progress: prog}).Run(); err != nil {
 		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
