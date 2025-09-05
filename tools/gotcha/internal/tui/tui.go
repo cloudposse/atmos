@@ -484,21 +484,34 @@ func (m *TestModel) View() string {
 		return "\n"
 	}
 
+	// Get terminal width for layout calculations
+	terminalWidth := getTerminalWidth()
+	if terminalWidth == 0 {
+		terminalWidth = 80 // Default fallback
+	}
+
 	// Build the status line components
 	spin := m.spinner.View() + " "
 
-	// Fixed width for test name to prevent layout shifting
-	const maxTestWidth = 40
+	// Test name with fixed display width
+	const maxTestWidth = 35
 	var info string
 	if m.currentTest != "" {
 		testName := m.currentTest
 		if len(testName) > maxTestWidth {
 			testName = testName[:maxTestWidth-3] + "..."
 		}
-		// Pad to fixed width
-		info = fmt.Sprintf("Running %-*s", maxTestWidth, TestNameStyle.Render(testName))
+		styledName := TestNameStyle.Render(testName)
+		info = fmt.Sprintf("Running %s", styledName)
+		// Pad to fixed display width
+		padding := maxTestWidth - len(testName) + 8 // +8 for "Running " 
+		if padding > 0 {
+			info += strings.Repeat(" ", padding)
+		}
 	} else {
-		info = fmt.Sprintf("%-*s", maxTestWidth+7, "Starting tests...")
+		info = DurationStyle.Render("Starting tests...")
+		// Pad to match the width when showing a test
+		info += strings.Repeat(" ", maxTestWidth - 10) // Adjust for "Starting tests..." length
 	}
 
 	prog := m.progress.View()
@@ -521,36 +534,40 @@ func (m *TestModel) View() string {
 		testCount = fmt.Sprintf("%3d/%-3d tests", m.completedTests, m.totalTests) // Fixed width
 		
 		// Update progress bar with the calculated percentage
-		m.progress.SetPercent(percentFloat)
+		if percentFloat > 0 {
+			m.progress.SetPercent(percentFloat)
+		}
 	} else {
 		// Very early, before any run events
 		percentage = "  0%"
-		testCount = "discovering tests"
+		testCount = DurationStyle.Render("discovering tests")
 	}
 	
-	// Format the rest of the status with fixed widths
-	timeStr := fmt.Sprintf("(%4ds)", elapsedSeconds) // Fixed width for time
-	bufferStr := fmt.Sprintf("%7.1fKB", bufferSizeKB) // Fixed width for buffer
-
-	// Build the status line in the requested order:
-	// [Spinner] Running TestStackProcess... [████████░░] 75%  15/20 tests  (4s) 28.3KB
-	statusComponents := []string{
-		spin,
-		info,
-		" ",
-		prog,
-		" ",
-		percentage,
-		"  ",
-		testCount,
-		"  ",
-		timeStr,
-		" ",
-		bufferStr,
-	}
+	// Format time and buffer with fixed widths
+	timeStr := fmt.Sprintf("(%4ds)", elapsedSeconds)
+	bufferStr := fmt.Sprintf("%8.1fKB", bufferSizeKB)
 	
-	// Join all components
-	statusLine := strings.Join(statusComponents, "")
+	// Build the right-aligned section
+	rightSection := timeStr + " " + bufferStr
+	
+	// Calculate the middle section
+	middleSection := prog + " " + percentage + "  " + testCount
+	
+	// Calculate available space
+	leftSection := spin + info
+	leftWidth := getDisplayWidth(spin) + maxTestWidth + 8
+	middleWidth := getDisplayWidth(middleSection)
+	rightWidth := getDisplayWidth(rightSection)
+	
+	// Calculate gap to right-align the time/buffer
+	gapWidth := terminalWidth - leftWidth - middleWidth - rightWidth - 2
+	if gapWidth < 1 {
+		gapWidth = 1
+	}
+	gap := strings.Repeat(" ", gapWidth)
+	
+	// Assemble the complete status line
+	statusLine := leftSection + middleSection + gap + rightSection
 	
 	return statusLine + "\n"
 }
@@ -853,10 +870,8 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 		switch event.Action {
 		case "run":
 			m.currentTest = event.Test
-			// Only count top-level tests, not subtests
-			if !isSubtest {
-				m.totalTests++
-			}
+			// Count all tests including subtests for accurate progress
+			m.totalTests++
 			
 			if isSubtest {
 				// This is a subtest
@@ -909,10 +924,8 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 			}
 			
 		case "pass", "fail", "skip":
-			// Only count top-level tests, not subtests
-			if !isSubtest {
-				m.completedTests++
-			}
+			// Count all tests including subtests for accurate progress
+			m.completedTests++
 			
 			// Update counts
 			switch event.Action {
