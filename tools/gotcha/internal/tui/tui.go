@@ -162,7 +162,7 @@ type TestModel struct {
 	outputFile string
 	showFilter string // "all", "failed", "passed", "skipped"
 	alert      bool   // whether to emit terminal bell on completion
-	fullOutput bool   // whether to show complete output for failed tests
+	outputMode string // Output format: standard, full, minimal, or verbose
 
 	// Results tracking
 	passCount      int
@@ -220,7 +220,7 @@ type streamOutputMsg struct {
 }
 
 // NewTestModel creates a new test model for the TUI.
-func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, fullOutput bool) TestModel {
+func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, outputMode string) TestModel {
 	// Create progress bar
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -263,7 +263,7 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		outputFile:     outputFile,
 		showFilter:     showFilter,
 		alert:          alert,
-		fullOutput:     fullOutput,
+		outputMode:     outputMode,
 		spinner:        s,
 		progress:       p,
 		testBuffers:    make(map[string][]string),
@@ -531,7 +531,8 @@ func (m *TestModel) View() string {
 		percentFloat := float64(m.completedTests) / float64(m.totalTests)
 		percent := int(percentFloat * 100)
 		percentage = fmt.Sprintf("%3d%%", percent) // Fixed width
-		testCount = fmt.Sprintf("%3d/%-3d tests", m.completedTests, m.totalTests) // Fixed width
+		// Format test count with "tests" in dark gray
+		testCount = fmt.Sprintf("%3d/%-3d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
 		
 		// Update progress bar with the calculated percentage
 		if percentFloat > 0 {
@@ -543,9 +544,9 @@ func (m *TestModel) View() string {
 		testCount = DurationStyle.Render("discovering tests")
 	}
 	
-	// Format time and buffer with fixed widths
-	timeStr := fmt.Sprintf("(%4ds)", elapsedSeconds)
-	bufferStr := fmt.Sprintf("%8.1fKB", bufferSizeKB)
+	// Format time and buffer with units in dark gray
+	timeStr := fmt.Sprintf("(%4d%s)", elapsedSeconds, DurationStyle.Render("s"))
+	bufferStr := fmt.Sprintf("%7.1f%s", bufferSizeKB, DurationStyle.Render("KB"))
 	
 	// Build the right-aligned section
 	rightSection := timeStr + " " + bufferStr
@@ -1093,7 +1094,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 	// Show test output for failed tests if not in collapsed mode
 	if test.Status == "fail" && m.showFilter != "collapsed" && len(test.Output) > 0 {
 		output.WriteString("\n")
-		if m.fullOutput {
+		if m.outputMode == "full" || m.outputMode == "verbose" {
 			// With full output, properly render tabs and maintain formatting
 			for _, line := range test.Output {
 				// Replace literal \t with actual tabs and \n with newlines
@@ -1147,7 +1148,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 						
 						// Show subtest output if available
 						if subtest := test.Subtests[name]; subtest != nil && len(subtest.Output) > 0 {
-							if m.fullOutput {
+							if m.outputMode == "full" || m.outputMode == "verbose" {
 								// With full output, properly render tabs and maintain formatting
 								for _, line := range subtest.Output {
 									formatted := strings.ReplaceAll(line, `\t`, "\t")

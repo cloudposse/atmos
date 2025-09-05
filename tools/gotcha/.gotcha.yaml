@@ -1,0 +1,67 @@
+# Gotcha Configuration File
+# This file configures the default behavior of the gotcha test runner
+
+# Output format for test results
+# Options: standard, full, minimal, verbose
+# - standard: Default output with moderate detail
+# - full: Complete output with proper formatting for failed tests (recommended)
+# - minimal: Only show essential information
+# - verbose: Maximum detail including all debug information
+output: full
+
+# Show filter for test display
+# Options: all, failed, passed, skipped, collapsed, none
+# - all: Show all tests
+# - failed: Only show failed tests
+# - passed: Only show passed tests
+# - skipped: Only show skipped tests
+# - collapsed: Show tests in collapsed format
+# - none: Don't show individual tests, only summary
+show: all
+
+# Alert when tests complete
+# Set to true to emit a terminal bell when tests finish
+alert: false
+
+# Log level for debugging
+# Options: debug, info, warn, error, fatal
+log:
+  level: error
+
+# Test execution settings
+test:
+  # Timeout for tests (e.g., "30m", "1h")
+  timeout: 30m
+  
+  # Number of parallel test executions
+  # Set to 0 for default (number of CPUs)
+  parallel: 0
+
+# Coverage settings
+coverage:
+  # Enable coverage reporting
+  enabled: true
+  
+  # Coverage profile output file
+  profile: coverage.out
+  
+  # Minimum coverage percentage required
+  # Tests will fail if coverage is below this threshold
+  threshold: 0
+
+# GitHub integration
+github:
+  # Enable GitHub Actions specific features
+  actions: true
+  
+  # Create step summary when running in GitHub Actions
+  step_summary: true
+
+# TUI (Terminal User Interface) settings
+tui:
+  # Enable terminal bell alerts in TUI mode
+  alert: true
+  
+  # Color profile for terminal output
+  # Options: auto, always, never
+  colors: auto

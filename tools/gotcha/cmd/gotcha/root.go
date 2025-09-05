@@ -301,7 +301,7 @@ step summaries and markdown reports.`,
 	rootCmd.Flags().String("include", ".*", "Regex patterns to include packages (comma-separated)")
 	rootCmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	rootCmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
-	rootCmd.Flags().Bool("full-output", false, "Show complete output for failed tests with proper formatting")
+	rootCmd.Flags().String("output", "standard", "Output format: standard, full, minimal, or verbose")
 
 	// Add subcommands
 	rootCmd.AddCommand(newStreamCmd(globalLogger))
@@ -355,7 +355,7 @@ Pre-calculates total test count for accurate progress tracking.`,
 	cmd.Flags().String("include", ".*", "Regex patterns to include packages (comma-separated)")
 	cmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	cmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
-	cmd.Flags().Bool("full-output", false, "Show complete output for failed tests with proper formatting")
+	cmd.Flags().String("output", "standard", "Output format: standard, full, minimal, or verbose")
 
 	return cmd
 }
@@ -425,7 +425,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	_ = viper.BindPFlag("include", cmd.Flags().Lookup("include"))
 	_ = viper.BindPFlag("exclude", cmd.Flags().Lookup("exclude"))
 	_ = viper.BindPFlag("alert", cmd.Flags().Lookup("alert"))
-	_ = viper.BindPFlag("full-output", cmd.Flags().Lookup("full-output"))
+	_ = viper.BindPFlag("output", cmd.Flags().Lookup("output"))
 
 	// Get configuration values (from flags, env, or config file)
 	packages := viper.GetString("packages")
@@ -436,7 +436,11 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	include := viper.GetString("include")
 	exclude := viper.GetString("exclude")
 	alert := viper.GetBool("alert")
-	fullOutput := viper.GetBool("full-output")
+	outputMode := viper.GetString("output")
+	// Default to full output for backward compatibility and as requested
+	if outputMode == "" {
+		outputMode = "full"
+	}
 
 	// Validate show filter
 	if !utils.IsValidShowFilter(show) {
@@ -520,7 +524,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	logger.Debug("TTY detection", "is_tty", utils.IsTTY())
 	if utils.IsTTY() {
 		// Create and run the Bubble Tea program
-		model := tui.NewTestModel(testPackages, testArgsStr, outputFile, coverprofile, show, alert, fullOutput)
+		model := tui.NewTestModel(testPackages, testArgsStr, outputFile, coverprofile, show, alert, outputMode)
 		// Use default Bubble Tea configuration
 		p := tea.NewProgram(&model)
 
@@ -560,7 +564,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		}
 	} else {
 		// Fallback to simple streaming for CI/non-TTY environments
-		exitCode := utils.RunSimpleStream(testPackages, testArgsStr, outputFile, coverprofile, show, alert, fullOutput)
+		exitCode := utils.RunSimpleStream(testPackages, testArgsStr, outputFile, coverprofile, show, alert, outputMode)
 		if exitCode != 0 {
 			return fmt.Errorf("%w with exit code %d", types.ErrTestsFailed, exitCode)
 		}
