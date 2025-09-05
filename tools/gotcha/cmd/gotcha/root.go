@@ -301,6 +301,9 @@ step summaries and markdown reports.`,
 	rootCmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	rootCmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 	rootCmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
+	rootCmd.Flags().Bool("post-comment", false, "Post test summary as GitHub PR comment after completion")
+	rootCmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
+	rootCmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
 	// Add subcommands
 	rootCmd.AddCommand(newStreamCmd(globalLogger))
@@ -355,6 +358,9 @@ Pre-calculates total test count for accurate progress tracking.`,
 	cmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	cmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 	cmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
+	cmd.Flags().Bool("post-comment", false, "Post test summary as GitHub PR comment after completion")
+	cmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
+	cmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
 	return cmd
 }
@@ -570,6 +576,31 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	}
 
 	logger.Info("Stream mode completed successfully")
+
+	// Handle GitHub comment posting if requested
+	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
+	postComment := viper.GetBool("post-comment")
+	if postComment && outputFile != "" {
+		logger.Info("Processing results for GitHub comment")
+		
+		// Parse the JSON file we just created
+		if inputFile, err := os.Open(outputFile); err == nil {
+			defer inputFile.Close()
+			
+			// Parse with coverage if available
+			excludeMocks := viper.GetBool("exclude-mocks")
+			if summary, err := parser.ParseTestJSON(inputFile, coverprofile, excludeMocks); err == nil {
+				if err := postGitHubComment(summary, cmd, logger); err != nil {
+					logger.Warn("Failed to post GitHub comment", "error", err)
+				}
+			} else {
+				logger.Warn("Failed to parse results for GitHub comment", "error", err)
+			}
+		} else {
+			logger.Warn("Failed to open results file for GitHub comment", "error", err)
+		}
+	}
+
 	return nil
 }
 

@@ -78,15 +78,15 @@ endif
 $(GOTCHA_BIN):
 	@$(MAKE) -C tools/gotcha install
 
-# Test target for CI with gotcha
+# Test target for CI with gotcha (single command with integrated comment posting)
 testacc-ci: get $(GOTCHA_BIN)
 	$(GOTCHA_BIN) stream ./... \
 		--show=all \
 		--timeout=40m \
 		--coverprofile=coverage.out \
 		--output=test-results.json \
+		--post-comment \
 		-- -coverpkg=github.com/cloudposse/atmos/... $(TESTARGS)
-	$(GOTCHA_BIN) parse test-results.json --format=github --coverprofile=coverage.out --post-comment
 
 # Clean test artifacts
 clean-test:

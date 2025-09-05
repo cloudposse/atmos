@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/viper"
 )
 
@@ -103,7 +105,8 @@ func FilterPackages(packages []string, includePatterns, excludePatterns string) 
 	return filtered, nil
 }
 
-// isTTY checks if we're running in a terminal and Bubble Tea can actually use it.
+// IsTTY checks if we're running in a terminal and Bubble Tea can actually use it.
+// Uses cross-platform detection that works on Windows, macOS, and Linux.
 func IsTTY() bool {
 	// Provide an environment override
 	_ = viper.BindEnv("GOTCHA_FORCE_NO_TTY", "FORCE_NO_TTY")
@@ -114,36 +117,24 @@ func IsTTY() bool {
 	// Debug: Force TTY mode for testing (but only if TTY is actually usable)
 	_ = viper.BindEnv("GOTCHA_FORCE_TTY", "FORCE_TTY")
 	if viper.GetString("GOTCHA_FORCE_TTY") != "" {
-		// Still check if we can actually open /dev/tty
-		if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
-			tty.Close()
-			return true
-		}
-		// If we can't open /dev/tty, fall back to normal detection
+		// Use cross-platform TTY detection
+		stdoutTTY := isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
+		stdinTTY := isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
+		return stdoutTTY && stdinTTY
 	}
 
-	// Check if both stdin and stdout are terminals
-	stat, err := os.Stdout.Stat()
-	if err != nil {
+	// Cross-platform TTY detection using go-isatty
+	// Works correctly on Windows, macOS, and Linux
+	stdoutTTY := isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
+	stdinTTY := isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
+
+	// Windows CI environments often report as TTY but aren't really interactive
+	// Disable TUI mode in CI environments on Windows to prevent issues
+	if runtime.GOOS == "windows" && (os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "") {
 		return false
 	}
-	isStdoutTTY := (stat.Mode() & os.ModeCharDevice) == os.ModeCharDevice
 
-	stat, err = os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	isStdinTTY := (stat.Mode() & os.ModeCharDevice) == os.ModeCharDevice
-
-	// Most importantly, check if we can actually open /dev/tty
-	// This is what Bubble Tea will try to do
-	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err != nil {
-		return false
-	} else {
-		tty.Close()
-	}
-
-	return isStdoutTTY && isStdinTTY
+	return stdoutTTY && stdinTTY
 }
 
 // emitAlert outputs a terminal bell (\a) if alert is enabled.
@@ -660,6 +651,10 @@ func (p *StreamProcessor) shouldShowTestEvent(action string) bool {
 
 // printSummary prints a final test summary with statistics.
 func (p *StreamProcessor) printSummary() {
+	// FIX: Must hold lock when accessing shared maps to prevent concurrent read panic
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	total := p.passed + p.failed + p.skipped
 	if total == 0 {
 		return
@@ -701,6 +696,12 @@ func (p *StreamProcessor) printSummary() {
 	// Ensure output is flushed
 	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 		os.Stderr.Sync()
+	}
+
+	// Additional defensive flush for Windows to prevent race conditions
+	if runtime.GOOS == "windows" {
+		os.Stderr.Sync()
+		os.Stdout.Sync()
 	}
 }
 
