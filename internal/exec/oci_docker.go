@@ -150,17 +150,30 @@ func tryCredentialHelpers(registry string, credHelpers map[string]string) (authn
 
 // tryGlobalCredentialStore attempts to authenticate using the global credential store.
 func tryGlobalCredentialStore(registry, credsStore string) (authn.Authenticator, error) {
-	if credsStore == "" {
-		return nil, errNoGlobalCredentialStore
-	}
+    if credsStore == "" {
+        return nil, errNoGlobalCredentialStore
+    }
 
-	if auth, err := getCredentialStoreAuth(registry, credsStore); err == nil {
-		log.Debug("Using global credential store authentication", logFieldRegistry, registry, "store", credsStore)
-		return auth, nil
-	} else {
-		log.Debug("Global credential store authentication failed", logFieldRegistry, registry, "store", credsStore, "error", err)
-		return nil, err
-	}
+    // Try common server-URL variants before giving up.
+    variants := []string{
+        registry,
+        "https://" + registry,
+        "http://" + registry,
+        "https://" + registry + "/v1/",
+        "http://" + registry + "/v1/",
+    }
+    var lastErr error
+    for _, r := range variants {
+        if auth, err := getCredentialStoreAuth(r, credsStore); err == nil {
+            log.Debug("Using global credential store authentication", logFieldRegistry, r, "store", credsStore)
+            return auth, nil
+        } else {
+            lastErr = err
+            log.Debug("Global credential store authentication failed", logFieldRegistry, r, "store", credsStore, "error", err)
+        }
+    }
+
+    return nil, lastErr
 }
 
 // tryDirectAuth attempts to authenticate using direct auth strings in the config.
