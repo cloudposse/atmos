@@ -221,14 +221,12 @@ type streamOutputMsg struct {
 
 // NewTestModel creates a new test model for the TUI.
 func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, outputMode string) TestModel {
-	// Create progress bar
+	// Create progress bar with scaled gradient for smooth animation
 	p := progress.New(
-		progress.WithDefaultGradient(),
+		progress.WithScaledGradient("#FF0000", "#00FF00"),
 		progress.WithWidth(40),
 		progress.WithoutPercentage(),
 	)
-	// Initialize progress to 0
-	p.SetPercent(0.0)
 
 	// Create spinner
 	s := spinner.New()
@@ -404,6 +402,16 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		cmds = append(cmds, nextCmd, m.spinner.Tick)
 		
+		// Update progress bar if we have tests
+		if m.totalTests > 0 && m.completedTests > 0 {
+			percentFloat := float64(m.completedTests) / float64(m.totalTests)
+			// Use SetPercent and ensure we return the animation command
+			cmd := m.progress.SetPercent(percentFloat)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		
 		for _, pkg := range m.packageOrder {
 			if result, exists := m.packageResults[pkg]; exists && result.Status != "running" {
 				// Package is complete, check if we've already displayed it
@@ -424,8 +432,9 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case testsDoneMsg:
 		// Update progress to 100% before marking as done
+		var finalCmd tea.Cmd
 		if m.totalTests > 0 {
-			m.progress.SetPercent(1.0)
+			finalCmd = m.progress.SetPercent(1.0)
 		}
 
 		// Generate the final summary output before setting done
@@ -444,10 +453,14 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Don't show final summary if aborted
 		if !m.aborted {
-			return m, tea.Sequence(
+			cmds := []tea.Cmd{
 				tea.Printf("%s", summaryOutput),
 				tea.Quit,
-			)
+			}
+			if finalCmd != nil {
+				cmds = append([]tea.Cmd{finalCmd}, cmds...)
+			}
+			return m, tea.Sequence(cmds...)
 		}
 		return m, tea.Quit
 
@@ -942,11 +955,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 				m.skipCount++
 			}
 			
-			// Update progress bar percentage
-			if m.totalTests > 0 {
-				percentFloat := float64(m.completedTests) / float64(m.totalTests)
-				m.progress.SetPercent(percentFloat)
-			}
+			// Progress will be updated in Update method via streamOutputMsg
 			
 			// Update test result
 			if isSubtest {
