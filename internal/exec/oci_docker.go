@@ -40,7 +40,6 @@ var (
 	errNoGlobalCredentialStore            = errors.New("no global credential store configured")
 	errFailedToDecodeAuthForRegistry      = errors.New("failed to decode auth for registry")
 	errNoDirectAuthFound                  = errors.New("no direct auth found for registry")
-	errNoAuthenticationFound              = errors.New("no authentication found in Docker config for registry")
 	errInvalidRegistryName                = errors.New("invalid registry name")
 	errInvalidCredentialStoreName         = errors.New("invalid credential store name")
 	errCredentialHelperNotFound           = errors.New("credential helper not found")
@@ -57,20 +56,20 @@ func resolveDockerConfigPath(atmosConfig *schema.AtmosConfiguration) (string, er
 	v := viper.New()
 	bindEnv(v, "docker_config", "ATMOS_OCI_DOCKER_CONFIG", "DOCKER_CONFIG")
 
- 	// Resolve Docker config path (env has precedence).
- 	configDir := v.GetString("docker_config")
- 	if configDir == "" {
- 		configDir = atmosConfig.Settings.OCI.DockerConfig
- 	}
- 	if configDir == "" {
- 		homeDir, err := os.UserHomeDir()
- 		if err != nil {
- 			return "", fmt.Errorf("%w: %w", errFailedToGetUserHomeDir, err)
- 		}
- 		configDir = filepath.Join(homeDir, ".docker")
- 	}
- 	return filepath.Join(configDir, "config.json"), nil
- }
+	// Resolve Docker config path (env has precedence).
+	configDir := v.GetString("docker_config")
+	if configDir == "" {
+		configDir = atmosConfig.Settings.OCI.DockerConfig
+	}
+	if configDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("%w: %v", errFailedToGetUserHomeDir, err)
+		}
+		configDir = filepath.Join(homeDir, ".docker")
+	}
+	return filepath.Join(configDir, "config.json"), nil
+}
 
 // loadDockerConfig loads and parses the Docker config file.
 func loadDockerConfig(configPath string) (DockerConfig, error) {
@@ -82,13 +81,13 @@ func loadDockerConfig(configPath string) (DockerConfig, error) {
 	// Read Docker config file
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
-		return DockerConfig{}, fmt.Errorf("%w: %w", errFailedToReadDockerConfigFile, err)
+		return DockerConfig{}, fmt.Errorf("%w: %v", errFailedToReadDockerConfigFile, err)
 	}
 
 	// Parse Docker config JSON
 	var dockerConfig DockerConfig
 	if err := json.Unmarshal(configData, &dockerConfig); err != nil {
-		return DockerConfig{}, fmt.Errorf("%w: %w", errFailedToParseDockerConfigJSON, err)
+		return DockerConfig{}, fmt.Errorf("%w: %v", errFailedToParseDockerConfigJSON, err)
 	}
 
 	return dockerConfig, nil
@@ -100,7 +99,8 @@ func tryCredentialHelper(registry, helperKey, helper string) (authn.Authenticato
 		return nil, errNoCredentialHelperFound
 	}
 
-	auth, err := getCredentialStoreAuth(registry, helper)
+	// Use the exact helper key (server URL) that matched in config.
+	auth, err := getCredentialStoreAuth(helperKey, helper)
 	if err == nil {
 		log.Debug("Using per-registry credential helper", logFieldRegistry, helperKey, "helper", helper)
 		return auth, nil
@@ -152,8 +152,7 @@ func tryGlobalCredentialStore(registry, credsStore string) (authn.Authenticator,
 // tryDirectAuth attempts to authenticate using direct auth strings in the config.
 func tryDirectAuth(registry string, auths map[string]struct {
 	Auth string `json:"auth"`
-},
-) (authn.Authenticator, error) {
+}) (authn.Authenticator, error) {
 	// Try different registry formats
 	registryVariants := []string{
 		registry,
@@ -252,7 +251,7 @@ func getCredentialStoreAuth(registry, credsStore string) (authn.Authenticator, e
 	}
 
 	if err := json.Unmarshal(output, &creds); err != nil {
-		return nil, fmt.Errorf("%w: %w", errFailedToParseCredentialStoreOutput, err)
+		return nil, fmt.Errorf("%w: %v", errFailedToParseCredentialStoreOutput, err)
 	}
 
 	if creds.Username == "" || creds.Secret == "" {
@@ -270,7 +269,7 @@ func decodeDockerAuth(authString string) (string, string, error) {
 	// Decode base64
 	decoded, err := base64.StdEncoding.DecodeString(authString)
 	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", errFailedToDecodeBase64AuthString, err)
+		return "", "", fmt.Errorf("%w: %v", errFailedToDecodeBase64AuthString, err)
 	}
 
 	// Split username:password

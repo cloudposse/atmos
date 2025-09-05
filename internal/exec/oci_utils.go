@@ -35,6 +35,7 @@ var (
 	errFailedToCreateZipReader    = errors.New("failed to create ZIP reader")
 	errFailedToResolveDestination = errors.New("failed to resolve destination directory")
 	errZipSizeExceeded            = errors.New("ZIP file size exceeds maximum allowed size")
+	errNoAuthenticationFound      = errors.New("no authentication found")
 )
 
 const (
@@ -42,7 +43,7 @@ const (
 	// Additional supported artifact types
 	opentofuArtifactType  = "application/vnd.opentofu.modulepkg"           // OpenTofu module package
 	terraformArtifactType = "application/vnd.terraform.module.v1+tar+gzip" // Terraform module package
-	githubTokenEnv        = "GITHUB_TOKEN"
+	logFieldRegistry      = "registry"
 	logFieldIndex         = "index"
 	logFieldDigest        = "digest"
 	logFieldError         = "error"
@@ -128,8 +129,13 @@ func pullImage(ref name.Reference, atmosConfig *schema.AtmosConfiguration) (*rem
 	// Try to get authentication from various sources
 	auth, err := getRegistryAuth(registry, atmosConfig)
 	if err != nil {
-		log.Debug("No authentication found, using anonymous", logFieldRegistry, registry)
-		opts = append(opts, remote.WithAuth(authn.Anonymous))
+		if errors.Is(err, errNoAuthenticationFound) {
+			log.Debug("No authentication found, using anonymous.", logFieldRegistry, registry)
+			opts = append(opts, remote.WithAuth(authn.Anonymous))
+		} else {
+			log.Error("Registry auth error.", logFieldRegistry, registry, logFieldError, err)
+			return nil, fmt.Errorf("resolve registry auth: %w", err)
+		}
 	} else {
 		opts = append(opts, remote.WithAuth(auth))
 		log.Debug("Using authentication for registry", logFieldRegistry, registry)
@@ -421,7 +427,7 @@ func resolveZipFilePath(destDir, fileName string) (string, error) {
 	// Ensure destination directory is absolute and clean
 	cleanDest, err := filepath.Abs(filepath.Clean(destDir))
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errFailedToResolveDestination, err)
+		return "", fmt.Errorf("%w: %v", errFailedToResolveDestination, err)
 	}
 
 	// Join the paths and clean the result
@@ -496,21 +502,21 @@ func shouldSkipZipFile(file *zip.File) (bool, string) {
 // extractZipFile extracts a ZIP file from an io.Reader into the destination directory.
 func extractZipFile(reader io.Reader, destDir string) error {
 	// Read the ZIP data with size limit to prevent decompression bomb attacks
-	limitedReader := io.LimitReader(reader, maxZipSize)
+	limitedReader := io.LimitReader(reader, int64(maxZipSize)+1)
 	zipData, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errFailedToReadZipData, err)
+		return fmt.Errorf("%w: %v", errFailedToReadZipData, err)
 	}
 
-	// Check if we hit the size limit (indicates potential decompression bomb)
-	if len(zipData) == maxZipSize {
+	// Reject if ZIP exceeds configured max size.
+	if len(zipData) > maxZipSize {
 		return fmt.Errorf("%w: %d bytes", errZipSizeExceeded, maxZipSize)
 	}
 
 	// Create a ZIP reader
 	zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
-		return fmt.Errorf("%w: %w", errFailedToCreateZipReader, err)
+		return fmt.Errorf("%w: %v", errFailedToCreateZipReader, err)
 	}
 
 	// Extract each file in the ZIP

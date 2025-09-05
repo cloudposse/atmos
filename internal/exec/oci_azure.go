@@ -24,11 +24,6 @@ import (
 // httpClient is used for outbound HTTP in this package; override in tests.
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-const (
-	// Log field names
-	logFieldRegistry = "registry"
-)
-
 var (
 	// Static errors for Azure authentication
 	errInvalidACRRegistryFormat        = errors.New("invalid Azure Container Registry format")
@@ -67,20 +62,18 @@ func gatherAzureCredentials(atmosConfig *schema.AtmosConfiguration) (clientID, c
 	bindEnv(v, "azure_client_secret", "ATMOS_OCI_AZURE_CLIENT_SECRET", "AZURE_CLIENT_SECRET")
 	bindEnv(v, "azure_tenant_id", "ATMOS_OCI_AZURE_TENANT_ID", "AZURE_TENANT_ID")
 
-	// Check for Azure Service Principal credentials first
-	clientID = atmosConfig.Settings.OCI.AzureClientID
-	clientSecret = atmosConfig.Settings.OCI.AzureClientSecret
-	tenantID = atmosConfig.Settings.OCI.AzureTenantID
-
-	// Fallback to environment variables for backward compatibility
+	// Resolve from env first, then config.
+	clientID = v.GetString("azure_client_id")
 	if clientID == "" {
-		clientID = v.GetString("azure_client_id")
+		clientID = atmosConfig.Settings.OCI.AzureClientID
 	}
+	clientSecret = v.GetString("azure_client_secret")
 	if clientSecret == "" {
-		clientSecret = v.GetString("azure_client_secret")
+		clientSecret = atmosConfig.Settings.OCI.AzureClientSecret
 	}
+	tenantID = v.GetString("azure_tenant_id")
 	if tenantID == "" {
-		tenantID = v.GetString("azure_tenant_id")
+		tenantID = atmosConfig.Settings.OCI.AzureTenantID
 	}
 
 	return clientID, clientSecret, tenantID
@@ -130,7 +123,7 @@ func exchangeAADForACRRefreshToken(ctx context.Context, registry, tenantID, aadT
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", oauthURL, strings.NewReader(formData.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errFailedToCreateTokenExchangeReq, err)
+		return "", fmt.Errorf("%w: %v", errFailedToCreateTokenExchangeReq, err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -138,7 +131,7 @@ func exchangeAADForACRRefreshToken(ctx context.Context, registry, tenantID, aadT
 	// Execute the request
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errFailedToExecuteTokenExchangeReq, err)
+		return "", fmt.Errorf("%w: %v", errFailedToExecuteTokenExchangeReq, err)
 	}
 	defer resp.Body.Close()
 
@@ -154,7 +147,7 @@ func exchangeAADForACRRefreshToken(ctx context.Context, registry, tenantID, aadT
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
-		return "", fmt.Errorf("%w: %w", errFailedToDecodeTokenExchangeResp, err)
+		return "", fmt.Errorf("%w: %v", errFailedToDecodeTokenExchangeResp, err)
 	}
 
 	// Return the refresh token (preferred) or access token as fallback
@@ -181,7 +174,7 @@ func extractTenantIDFromToken(tokenString string) (string, error) {
 	// Decode Base64URL (no padding)
 	decoded, err := base64.RawURLEncoding.DecodeString(payload)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errFailedToDecodeJWTPayload, err)
+		return "", fmt.Errorf("%w: %v", errFailedToDecodeJWTPayload, err)
 	}
 
 	// Parse JSON payload
@@ -190,7 +183,7 @@ func extractTenantIDFromToken(tokenString string) (string, error) {
 	}
 
 	if err := json.Unmarshal(decoded, &payloadData); err != nil {
-		return "", fmt.Errorf("%w: %w", errFailedToParseJWTPayload, err)
+		return "", fmt.Errorf("%w: %v", errFailedToParseJWTPayload, err)
 	}
 
 	if payloadData.TID == "" {
@@ -205,7 +198,7 @@ func getACRAuthViaServicePrincipal(registry, acrName, clientID, clientSecret, te
 	// Create Azure credential using Service Principal
 	cred, err := azidentity.NewClientSecretCredential(tenantID, clientID, clientSecret, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errFailedToCreateAzureCredential, err)
+		return nil, fmt.Errorf("%w: %v", errFailedToCreateAzureCredential, err)
 	}
 
 	// Get AAD token for ACR scope
@@ -214,13 +207,13 @@ func getACRAuthViaServicePrincipal(registry, acrName, clientID, clientSecret, te
 		Scopes: []string{"https://management.azure.com/.default"},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errFailedToGetAzureToken, err)
+		return nil, fmt.Errorf("%w: %v", errFailedToGetAzureToken, err)
 	}
 
 	// Exchange AAD token for ACR refresh token
 	refresh, err := exchangeAADForACRRefreshToken(ctx, registry, tenantID, aad.Token)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errACRTokenExchangeFailed, err)
+		return nil, fmt.Errorf("%w: %v", errACRTokenExchangeFailed, err)
 	}
 	log.Debug("Obtained ACR refresh token via Service Principal", logFieldRegistry, registry, "acrName", acrName)
 	return &authn.Basic{
@@ -234,7 +227,7 @@ func getACRAuthViaDefaultCredential(registry, acrName string) (authn.Authenticat
 	// Create Azure credential using Default Credential (Managed Identity, Azure CLI, etc.)
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errFailedToCreateAzureDefaultCred, err)
+		return nil, fmt.Errorf("%w: %v", errFailedToCreateAzureDefaultCred, err)
 	}
 
 	// Get AAD token for ACR scope
@@ -243,14 +236,14 @@ func getACRAuthViaDefaultCredential(registry, acrName string) (authn.Authenticat
 		Scopes: []string{"https://management.azure.com/.default"},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errFailedToGetAzureToken, err)
+		return nil, fmt.Errorf("%w: %v", errFailedToGetAzureToken, err)
 	}
 
 	// Exchange AAD token for ACR refresh token
 	// Tenant is optional here; if unknown, pass empty and let ACR infer.
 	refresh, err := exchangeAADForACRRefreshToken(ctx, registry, "", aad.Token)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errACRTokenExchangeFailed, err)
+		return nil, fmt.Errorf("%w: %v", errACRTokenExchangeFailed, err)
 	}
 	log.Debug("Obtained ACR refresh token via Default Credential", logFieldRegistry, registry, "acrName", acrName)
 

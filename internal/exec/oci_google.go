@@ -26,7 +26,7 @@ func getGCRAuth(registry string) (authn.Authenticator, error) {
 	creds, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
 	if err != nil {
 		log.Debug("Failed to find Google Cloud credentials", logFieldRegistry, registry, "error", err)
-		return nil, fmt.Errorf("%w: %w", errFailedToFindGoogleCloudCredentials, err)
+		return nil, fmt.Errorf("%w: %v", errFailedToFindGoogleCloudCredentials, err)
 	}
 
 	if creds == nil || creds.TokenSource == nil {
@@ -38,7 +38,7 @@ func getGCRAuth(registry string) (authn.Authenticator, error) {
 	token, err := creds.TokenSource.Token()
 	if err != nil {
 		log.Debug("Failed to get Google Cloud token", logFieldRegistry, registry, "error", err)
-		return nil, fmt.Errorf("%w: %w", errFailedToGetGoogleCloudToken, err)
+		return nil, fmt.Errorf("%w: %v", errFailedToGetGoogleCloudToken, err)
 	}
 
 	// For GCR/Artifact Registry, use an OAuth2 access token as the password with

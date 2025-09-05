@@ -55,7 +55,7 @@ func getECRAuthToken(ctx context.Context, ecrClient *ecr.Client, accountID strin
 	}
 	authTokenOutput, err := ecrClient.GetAuthorizationToken(ctx, authTokenInput)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errFailedToGetECRAuthToken, err)
+		return nil, fmt.Errorf("%w: %v", errFailedToGetECRAuthToken, err)
 	}
 	if len(authTokenOutput.AuthorizationData) == 0 {
 		return nil, fmt.Errorf("%w for account %s", errNoECRAuthorizationData, accountID)
@@ -71,7 +71,7 @@ func parseECRCredentials(authData *types.AuthorizationData, registry string) (us
 
 	token, err := base64.StdEncoding.DecodeString(*authData.AuthorizationToken)
 	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", errFailedToDecodeECRAuthToken, err)
+		return "", "", fmt.Errorf("%w: %v", errFailedToDecodeECRAuthToken, err)
 	}
 
 	parts := strings.SplitN(string(token), ":", 2)
@@ -100,7 +100,7 @@ func getECRAuth(registry string) (authn.Authenticator, error) {
 	// Load AWS config for the target region
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errFailedToLoadAWSConfig, err)
+		return nil, fmt.Errorf("%w: %v", errFailedToLoadAWSConfig, err)
 	}
 	ecrClient := ecr.NewFromConfig(cfg)
 
