@@ -345,6 +345,7 @@ func (p *StreamProcessor) processStream(input io.Reader) error {
 	// After processing all events, check for incomplete packages
 	// These are packages that started but never completed (no pass/fail/skip event)
 	p.mu.Lock()
+	var incompletePackages []*PackageResult
 	for pkgName := range p.activePackages {
 		if pkg, exists := p.packageResults[pkgName]; exists {
 			if pkg.Status == "running" {
@@ -352,21 +353,26 @@ func (p *StreamProcessor) processStream(input io.Reader) error {
 				pkg.Status = "fail"
 				pkg.EndTime = time.Now()
 				pkg.HasTests = true // Assume it has tests that failed to run
-				
-				// Display the failed package
-				p.displayPackageResult(pkg)
+				incompletePackages = append(incompletePackages, pkg)
 				delete(p.activePackages, pkgName)
 			}
 		}
 	}
 	p.mu.Unlock()
 	
+	// Display incomplete packages after releasing the lock
+	for _, pkg := range incompletePackages {
+		p.displayPackageResult(pkg)
+	}
+	
 	return scanner.Err()
 }
 
 func (p *StreamProcessor) processEvent(event *types.TestEvent) {
+	// We'll collect any package that needs to be displayed
+	var packageToDisplay *PackageResult
+	
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	// Handle package-level events
 	if event.Test == "" {
@@ -397,8 +403,8 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				pkg.EndTime = time.Now()
 				delete(p.activePackages, event.Package)
 				
-				// Display buffered package results
-				p.displayPackageResult(pkg)
+				// Mark package for display after lock release
+				packageToDisplay = pkg
 			}
 		} else if event.Action == "output" && event.Package != "" && event.Test == "" {
 			// Package-level output (coverage, build errors, etc.)
@@ -469,8 +475,8 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 					pkg.HasTests = false
 				}
 				
-				// Display buffered package results
-				p.displayPackageResult(pkg)
+				// Mark package for display after lock release
+				packageToDisplay = pkg
 			}
 		} else if event.Action == "fail" && event.Package != "" && event.Test == "" {
 			// Package failed
@@ -486,8 +492,8 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 					pkg.HasTests = true
 				}
 				
-				// Display buffered package results
-				p.displayPackageResult(pkg)
+				// Mark package for display after lock release
+				packageToDisplay = pkg
 			}
 		} else if event.Action == "output" && p.currentTest != "" {
 			// Package-level output might contain important command output
@@ -606,6 +612,14 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 		
 		// Clear buffer
 		delete(p.buffers, event.Test)
+	}
+	
+	// Release lock before doing I/O
+	p.mu.Unlock()
+	
+	// Display package if needed (after releasing lock to avoid deadlock)
+	if packageToDisplay != nil {
+		p.displayPackageResult(packageToDisplay)
 	}
 }
 
