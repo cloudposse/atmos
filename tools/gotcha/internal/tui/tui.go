@@ -503,47 +503,47 @@ func (m *TestModel) View() string {
 	// Calculate buffer size
 	bufferSizeKB := m.getBufferSizeKB()
 
-	// Show test progress with accurate counts
-	var count string
+	// Build the ordered status components
+	var percentage string
+	var testCount string
 	if m.totalTests > 0 {
-		percentage := 0
+		percent := 0
 		if m.totalTests > 0 {
-			percentage = (m.completedTests * 100) / m.totalTests
+			percent = (m.completedTests * 100) / m.totalTests
 		}
-		count = fmt.Sprintf(" %d/%d tests (%d%%) (%ds) %.1fKB",
-			m.completedTests, m.totalTests, percentage, elapsedSeconds, bufferSizeKB)
+		percentage = fmt.Sprintf("%d%%", percent)
+		testCount = fmt.Sprintf("%d/%d tests", m.completedTests, m.totalTests)
 	} else {
 		// Very early, before any run events
-		count = fmt.Sprintf(" discovering tests... (%ds)", elapsedSeconds)
+		percentage = "0%"
+		testCount = "discovering tests"
 	}
+	
+	// Format the rest of the status
+	timeStr := fmt.Sprintf("(%ds)", elapsedSeconds)
+	bufferStr := fmt.Sprintf("%.1fKB", bufferSizeKB)
 
-	// Use our own terminal width detection instead of Bubble Tea's
-	terminalWidth := getTerminalWidth()
-	// Use display width to ignore ANSI color codes
-	usedWidth := getDisplayWidth(spin) + getDisplayWidth(prog) + getDisplayWidth(count)
-	availableWidth := max(0, terminalWidth-usedWidth)
-
-	// Truncate info if necessary, but always show something
-	if getDisplayWidth(info) > availableWidth {
-		if availableWidth > 10 {
-			info = info[:availableWidth-3] + "..."
-		} else if availableWidth > 3 {
-			// Show abbreviated version
-			info = "Run..."
-		} else {
-			// Very narrow terminal, show minimal info
-			info = "..."
-		}
+	// Build the status line in the requested order:
+	// [Spinner] Running TestStackProcess... [████████░░] 75%  15/20 tests  (4s) 28.3KB
+	statusComponents := []string{
+		spin,
+		info,
+		" ",
+		prog,
+		" ",
+		percentage,
+		"  ",
+		testCount,
+		"  ",
+		timeStr,
+		" ",
+		bufferStr,
 	}
-
-	// Calculate gap using our terminal width
-	gap := ""
-	if terminalWidth > 0 {
-		gapWidth := max(0, terminalWidth-getDisplayWidth(spin)-getDisplayWidth(info)-getDisplayWidth(prog)-getDisplayWidth(count))
-		gap = strings.Repeat(" ", gapWidth)
-	}
-
-	return spin + info + gap + prog + count + "\n"
+	
+	// Join all components
+	statusLine := strings.Join(statusComponents, "")
+	
+	return statusLine + "\n"
 }
 
 func max(a, b int) int {
@@ -672,17 +672,34 @@ func (m *TestModel) generateFinalSummary() string {
 	return output.String()
 }
 
-// getBufferSizeKB calculates the total size of all test buffers in KB.
+// getBufferSizeKB calculates the total size of all buffered package results in KB.
 func (m *TestModel) getBufferSizeKB() float64 {
-	m.bufferMu.Lock()
-	defer m.bufferMu.Unlock()
-
 	totalBytes := 0
-	for _, lines := range m.testBuffers {
-		for _, line := range lines {
-			totalBytes += len(line) + 1 // +1 for newline character
+	
+	// Calculate size of all package results
+	for _, pkg := range m.packageResults {
+		// Package name and status
+		totalBytes += len(pkg.Package) + 20 // package header overhead
+		
+		// Coverage info
+		totalBytes += len(pkg.Coverage)
+		
+		// All test results
+		for _, test := range pkg.Tests {
+			totalBytes += len(test.Name) + 20 // test header overhead
+			for _, output := range test.Output {
+				totalBytes += len(output)
+			}
+			// Subtests
+			for _, subtest := range test.Subtests {
+				totalBytes += len(subtest.Name) + 20
+				for _, output := range subtest.Output {
+					totalBytes += len(output)
+				}
+			}
 		}
 	}
+	
 	return float64(totalBytes) / 1024.0
 }
 
@@ -893,7 +910,8 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 			
 			// Update progress
 			if m.totalTests > 0 {
-				m.progress.SetPercent(float64(m.completedTests) / float64(m.totalTests))
+				percent := float64(m.completedTests) / float64(m.totalTests)
+				m.progress.SetPercent(percent)
 			}
 		}
 	}
