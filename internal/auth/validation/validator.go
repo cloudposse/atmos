@@ -2,6 +2,7 @@ package validation
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/cloudposse/atmos/internal/auth/types"
@@ -84,6 +85,8 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 		return v.validateSSOProvider(provider)
 	case "aws/assume-role":
 		return v.validateAssumeRoleProvider(provider)
+	case "aws/saml":
+		return v.validateSAMLProvider(provider)
 	default:
 		return fmt.Errorf("unsupported provider kind: %s", provider.Kind)
 	}
@@ -180,6 +183,23 @@ func (v *validator) validateAssumeRoleProvider(provider *schema.Provider) error 
 	return nil
 }
 
+// validateSAMLProvider validates AWS SAML provider configuration
+func (v *validator) validateSAMLProvider(provider *schema.Provider) error {
+	if provider.URL == "" {
+		return fmt.Errorf("url is required for AWS SAML provider")
+	}
+
+	if provider.Region == "" {
+		return fmt.Errorf("region is required for AWS SAML provider")
+	}
+
+	// Validate URL format
+	if _, err := url.Parse(provider.URL); err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	return nil
+}
 
 // validatePermissionSetIdentity validates AWS permission set identity configuration
 func (v *validator) validatePermissionSetIdentity(identity *schema.Identity) error {

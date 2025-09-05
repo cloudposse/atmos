@@ -16,6 +16,8 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return awsProviders.NewSSOProvider(name, config)
 	case "aws/assume-role":
 		return awsProviders.NewAssumeRoleProvider(name, config)
+	case "aws/saml":
+		return awsProviders.NewSAMLProvider(name, config)
 	default:
 		return nil, fmt.Errorf("unsupported provider kind: %s", config.Kind)
 	}

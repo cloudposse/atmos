@@ -750,14 +750,56 @@ providers:
 
 #### AWS SAML
 
+The AWS SAML provider uses the `github.com/versent/saml2aws/v2` package with Playwright for browser automation to authenticate against SAML identity providers and assume AWS roles.
+
+**Basic Configuration:**
 ```yaml
 providers:
   aws-saml:
     kind: aws/saml
-    url: https://accounts.google.com/o/saml2/initsso?...
-    idp_arn: arn:aws:iam::123456789012:saml-provider/GoogleApps
+    url: https://accounts.google.com/o/saml2/initsso?idpid=C01abc23&spid=123456789&forceauthn=false
     region: us-east-1
+    username: user@company.com
+    provider_type: GoogleApps  # Optional: auto-detected if not specified
+    download_browser_driver: true  # Optional: auto-download Playwright drivers
 ```
+
+**Advanced Configuration with Authentication Details:**
+```yaml
+providers:
+  okta-saml:
+    kind: aws/saml
+    url: https://company.okta.com/app/amazon_aws/exk1234567890/sso/saml
+    region: us-west-2
+    username: john.doe@company.com
+    password: "${SAML_PASSWORD}"  # Optional: will prompt if not provided
+    provider_type: Okta
+    download_browser_driver: true
+    session:
+      duration: 1h
+```
+
+**Supported SAML Provider Types:**
+- `GoogleApps` - Google Workspace SAML
+- `Okta` - Okta SAML
+- `ADFS` - Active Directory Federation Services
+- `ADFS2` - ADFS 2.0
+- `AzureAD` - Azure Active Directory
+- `PingFed` - PingFederate
+- `KeyCloak` - Keycloak
+- `Auth0` - Auth0
+- `OneLogin` - OneLogin
+- `Browser` - Generic browser-based SAML (auto-detected)
+
+**Environment Variables:**
+- `SAML2AWS_AUTO_BROWSER_DOWNLOAD=true` - Auto-download Playwright browser drivers
+- `SAML_PASSWORD` - SAML password (if not provided in config)
+
+**Usage Notes:**
+- First run will download Playwright browser drivers automatically if `download_browser_driver: true`
+- Browser automation handles MFA challenges automatically
+- Supports headless browser operation for CI/CD environments
+- SAML assertions are cached for session duration to reduce authentication frequency
 
 #### GitHub Actions OIDC
 
@@ -1151,7 +1193,63 @@ identities:
 
 ### 5.1 Chain-Based Authentication Scenarios
 
-#### Scenario 1: Simple Chain (SSO → Permission Set)
+#### Scenario 1: AWS SAML Provider with Assume Role Chain
+
+**Configuration:**
+
+```yaml
+providers:
+  okta-saml:
+    kind: aws/saml
+    url: https://company.okta.com/app/amazon_aws/exk1234567890/sso/saml
+    region: us-west-2
+    username: john.doe@company.com
+    provider_type: Okta
+    download_browser_driver: true
+    session:
+      duration: 1h
+
+identities:
+  # Direct SAML role assumption
+  saml-admin:
+    kind: aws/assume-role
+    via: { provider: okta-saml }
+    principal:
+      role_arn: arn:aws:iam::123456789012:role/SAMLAdminRole
+    alias: saml-admin
+    
+  # Chained: SAML → Cross-account role
+  prod-deployer:
+    kind: aws/assume-role
+    via: { identity: saml-admin }
+    principal:
+      role_arn: arn:aws:iam::987654321098:role/DeployerRole
+    alias: prod-deployer
+```
+
+**Authentication Flow:**
+
+1. **Target**: `prod-deployer` identity
+2. **Chain**: `okta-saml` → `saml-admin` → `prod-deployer`
+3. **Cache Check**: Check `aws-saml/okta-saml/prod-deployer` cache key
+4. **SAML Authentication**: Browser opens Okta SAML page, handles MFA
+5. **Role Selection**: Extract available roles from SAML assertion
+6. **First Assume**: Assume `SAMLAdminRole` using SAML assertion
+7. **Second Assume**: Use `SAMLAdminRole` credentials to assume `DeployerRole`
+8. **Result**: Final credentials for `DeployerRole` in production account
+
+**Expected Output:**
+```bash
+$ atmos terraform plan vpc --stack prod-us-west-2
+🔐 Starting SAML authentication for provider: okta-saml
+🌐 Opening browser for SAML authentication...
+✅ SAML authentication successful
+🔄 Assuming role: arn:aws:iam::123456789012:role/SAMLAdminRole
+🔄 Assuming role: arn:aws:iam::987654321098:role/DeployerRole
+✅ Authentication complete for identity: prod-deployer
+```
+
+#### Scenario 2: Simple Chain (SSO → Permission Set)
 
 **Configuration:**
 

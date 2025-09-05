@@ -155,7 +155,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 			environment.MergeIdentityEnvOverrides(stackInfo, awsEnvVars)
 		} else if provider, exists := mergedAuthConfig.Providers[rootProviderName]; exists {
 			// Check if this is an AWS provider
-			if provider.Kind == "aws/iam-identity-center" || provider.Kind == "aws/assume-role" {
+			if provider.Kind == "aws/iam-identity-center" || provider.Kind == "aws/assume-role" || provider.Kind == "aws/saml" {
 				// Setup AWS files (recreates them if deleted)
 				if err := authManager.SetupAWSFiles(ctx, rootProviderName, targetIdentityName, whoami.Credentials); err != nil {
 					return fmt.Errorf("failed to setup AWS files: %w", err)

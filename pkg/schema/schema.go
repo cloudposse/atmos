@@ -985,12 +985,17 @@ type AuthConfig struct {
 
 // Provider defines an authentication provider configuration
 type Provider struct {
-	Kind     string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	StartURL string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
-	Region   string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
-	Session  *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
-	Default  bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
-	Spec     map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
+	Kind                 string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
+	StartURL             string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
+	URL                  string                 `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
+	Region               string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+	Username             string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Password             string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
+	ProviderType         string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"`
+	DownloadBrowserDriver bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
+	Session              *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	Default              bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Spec                 map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
 }
 
 // SessionConfig defines session configuration for providers
