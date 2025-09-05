@@ -502,6 +502,12 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				p.buffers[p.currentTest] = append(p.buffers[p.currentTest], event.Output)
 			}
 		}
+		
+		// Release lock and display package if needed before returning
+		p.mu.Unlock()
+		if packageToDisplay != nil {
+			p.displayPackageResult(packageToDisplay)
+		}
 		return
 	}
 
