@@ -394,6 +394,14 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				// Keep legacy tracking for compatibility
 				p.currentPackage = event.Package
 				p.packageHasTests[event.Package] = false
+				
+				// In CI/non-TTY environments, show immediate feedback when package starts
+				if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+					// Release lock before I/O to prevent deadlock
+					p.mu.Unlock()
+					fmt.Fprintf(os.Stderr, "\n▶ Testing %s...\n", tui.PackageHeaderStyle.Render(event.Package))
+					p.mu.Lock()
+				}
 			}
 		} else if event.Action == "skip" && event.Package != "" && event.Test == "" {
 			// Package was skipped (usually means no test files)
@@ -585,7 +593,14 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Track statistics
 		p.passed++
-
+		
+		// In CI/non-TTY environments, show immediate feedback for test completion
+		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+			// Only show top-level tests (not subtests) to avoid too much output
+			if !strings.Contains(event.Test, "/") {
+				fmt.Fprintf(os.Stderr, "  %s %s (%.2fs)\n", tui.PassStyle.Render(tui.CheckPass), event.Test, event.Elapsed)
+			}
+		}
 		// Clear buffer
 		delete(p.buffers, event.Test)
 
@@ -600,7 +615,14 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Track statistics
 		p.failed++
-
+		
+		// In CI/non-TTY environments, show immediate feedback for test failures
+		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+			// Only show top-level tests (not subtests) to avoid too much output
+			if !strings.Contains(event.Test, "/") {
+				fmt.Fprintf(os.Stderr, "  %s %s (%.2fs)\n", tui.FailStyle.Render(tui.CheckFail), event.Test, event.Elapsed)
+			}
+		}
 		// Clear buffer
 		delete(p.buffers, event.Test)
 
@@ -615,7 +637,14 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Track statistics
 		p.skipped++
-
+		
+		// In CI/non-TTY environments, show immediate feedback for skipped tests
+		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+			// Only show top-level tests (not subtests) to avoid too much output
+			if !strings.Contains(event.Test, "/") {
+				fmt.Fprintf(os.Stderr, "  %s %s (%.2fs)\n", tui.SkipStyle.Render(tui.CheckSkip), event.Test, event.Elapsed)
+			}
+		}
 		// Clear buffer
 		delete(p.buffers, event.Test)
 	}
