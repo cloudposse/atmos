@@ -3,8 +3,9 @@ package parser
 import (
 	"reflect"
 	"strings"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 func TestProcessLine(t *testing.T) {

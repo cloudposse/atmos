@@ -87,11 +87,11 @@ func detectColorProfile() termenv.Profile {
 // ConfigureColors sets up the color profile for terminal output.
 func ConfigureColors() termenv.Profile {
 	profile := detectColorProfile()
-	
+
 	// Set the color profile for lipgloss
 	// This works even when output is piped, unlike custom renderers
 	lipgloss.SetColorProfile(profile)
-	
+
 	// Clear any custom renderer to use the global profile
 	SetRenderer(nil)
 

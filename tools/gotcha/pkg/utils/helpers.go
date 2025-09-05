@@ -200,52 +200,52 @@ type SubtestStats struct {
 
 // PackageResult stores complete information about a tested package.
 type PackageResult struct {
-	Package      string
-	StartTime    time.Time
-	EndTime      time.Time
-	Status       string              // "pass", "fail", "skip", "running"
-	Tests        map[string]*TestResult
-	TestOrder    []string            // Maintain test execution order
-	Coverage     string              // e.g., "coverage: 75.2% of statements"
-	Output       []string            // Package-level output (build errors, etc.)
-	Elapsed      float64
-	HasTests     bool
+	Package   string
+	StartTime time.Time
+	EndTime   time.Time
+	Status    string // "pass", "fail", "skip", "running"
+	Tests     map[string]*TestResult
+	TestOrder []string // Maintain test execution order
+	Coverage  string   // e.g., "coverage: 75.2% of statements"
+	Output    []string // Package-level output (build errors, etc.)
+	Elapsed   float64
+	HasTests  bool
 }
 
 // TestResult stores individual test information.
 type TestResult struct {
 	Name         string
-	FullName     string              // Full test name including package
-	Status       string              // "pass", "fail", "skip", "running"
+	FullName     string // Full test name including package
+	Status       string // "pass", "fail", "skip", "running"
 	Elapsed      float64
-	Output       []string            // All output lines from this test
-	Parent       string              // Parent test name for subtests
+	Output       []string // All output lines from this test
+	Parent       string   // Parent test name for subtests
 	Subtests     map[string]*TestResult
 	SubtestOrder []string
 }
 
 // StreamProcessor handles real-time test output with buffering.
 type StreamProcessor struct {
-	mu           sync.Mutex
-	buffers      map[string][]string
-	subtestStats map[string]*SubtestStats // Track subtest statistics per parent test
-	jsonWriter   io.Writer
-	showFilter   string
+	mu             sync.Mutex
+	buffers        map[string][]string
+	subtestStats   map[string]*SubtestStats // Track subtest statistics per parent test
+	jsonWriter     io.Writer
+	showFilter     string
 	verbosityLevel string // Verbosity level: standard, with-output, minimal, or verbose
-	startTime    time.Time
+	startTime      time.Time
 	currentTest    string // Track current test for package-level output
-	
+
 	// Buffered output fields
-	packageResults  map[string]*PackageResult  // Complete package results
-	packageOrder    []string                   // Order packages were started
-	activePackages  map[string]bool            // Currently running packages
-	
+	packageResults map[string]*PackageResult // Complete package results
+	packageOrder   []string                  // Order packages were started
+	activePackages map[string]bool           // Currently running packages
+
 	// Legacy fields for compatibility (will be removed)
-	currentPackage string // Track current package being tested
-	packagesWithNoTests map[string]bool // Track packages that have no test files
-	packageHasTests map[string]bool // Track if package had any test run events
+	currentPackage        string          // Track current package being tested
+	packagesWithNoTests   map[string]bool // Track packages that have no test files
+	packageHasTests       map[string]bool // Track if package had any test run events
 	packageNoTestsPrinted map[string]bool // Track if we already printed "No tests" for a package
-	
+
 	// Statistics tracking
 	passed  int
 	failed  int
@@ -280,21 +280,21 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	processor := &StreamProcessor{
 		buffers:      make(map[string][]string),
 		subtestStats: make(map[string]*SubtestStats),
-		
+
 		// New buffered output fields
-		packageResults:  make(map[string]*PackageResult),
-		packageOrder:    []string{},
-		activePackages:  make(map[string]bool),
-		
+		packageResults: make(map[string]*PackageResult),
+		packageOrder:   []string{},
+		activePackages: make(map[string]bool),
+
 		// Legacy fields (will be removed)
-		packagesWithNoTests: make(map[string]bool),
-		packageHasTests: make(map[string]bool),
+		packagesWithNoTests:   make(map[string]bool),
+		packageHasTests:       make(map[string]bool),
 		packageNoTestsPrinted: make(map[string]bool),
-		
+
 		jsonWriter:     jsonFile,
 		showFilter:     showFilter,
 		verbosityLevel: verbosityLevel,
-		startTime:    time.Now(),
+		startTime:      time.Now(),
 	}
 
 	// Process the stream
@@ -359,19 +359,19 @@ func (p *StreamProcessor) processStream(input io.Reader) error {
 		}
 	}
 	p.mu.Unlock()
-	
+
 	// Display incomplete packages after releasing the lock
 	for _, pkg := range incompletePackages {
 		p.displayPackageResult(pkg)
 	}
-	
+
 	return scanner.Err()
 }
 
 func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	// We'll collect any package that needs to be displayed
 	var packageToDisplay *PackageResult
-	
+
 	p.mu.Lock()
 
 	// Handle package-level events
@@ -390,7 +390,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				}
 				p.packageOrder = append(p.packageOrder, event.Package)
 				p.activePackages[event.Package] = true
-				
+
 				// Keep legacy tracking for compatibility
 				p.currentPackage = event.Package
 				p.packageHasTests[event.Package] = false
@@ -402,7 +402,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				pkg.Elapsed = event.Elapsed
 				pkg.EndTime = time.Now()
 				delete(p.activePackages, event.Package)
-				
+
 				// Mark package for display after lock release
 				packageToDisplay = pkg
 			}
@@ -410,7 +410,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			// Package-level output (coverage, build errors, etc.)
 			if pkg, exists := p.packageResults[event.Package]; exists {
 				pkg.Output = append(pkg.Output, event.Output)
-				
+
 				// Check for coverage
 				if strings.Contains(event.Output, "coverage:") {
 					// Extract coverage information properly
@@ -439,13 +439,13 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 						}
 					}
 				}
-				
+
 				// Check for "no test files" message
 				if strings.Contains(event.Output, "[no test files]") {
 					// Mark for legacy compatibility
 					p.packagesWithNoTests[event.Package] = true
 				}
-				
+
 				// Check for package-level FAIL in output (e.g., TestMain failures)
 				// This catches "FAIL\tpackage.name\t0.123s" which go test outputs
 				if strings.Contains(event.Output, "FAIL\t"+event.Package) {
@@ -468,13 +468,13 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				pkg.Elapsed = event.Elapsed
 				pkg.EndTime = time.Now()
 				delete(p.activePackages, event.Package)
-				
+
 				// Check if package had no tests
 				if !pkg.HasTests || p.packagesWithNoTests[event.Package] {
 					// Package has no runnable tests
 					pkg.HasTests = false
 				}
-				
+
 				// Mark package for display after lock release
 				packageToDisplay = pkg
 			}
@@ -485,13 +485,13 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				pkg.Elapsed = event.Elapsed
 				pkg.EndTime = time.Now()
 				delete(p.activePackages, event.Package)
-				
+
 				// If no tests were recorded but package failed, it likely has tests that couldn't run
 				// (e.g., TestMain failure, compilation error, etc.)
 				if len(pkg.Tests) == 0 && !p.packagesWithNoTests[event.Package] {
 					pkg.HasTests = true
 				}
-				
+
 				// Mark package for display after lock release
 				packageToDisplay = pkg
 			}
@@ -502,7 +502,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				p.buffers[p.currentTest] = append(p.buffers[p.currentTest], event.Output)
 			}
 		}
-		
+
 		// Release lock and display package if needed before returning
 		p.mu.Unlock()
 		if packageToDisplay != nil {
@@ -522,7 +522,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	switch event.Action {
 	case "run":
 		p.currentTest = event.Test
-		
+
 		// Create test result entry in package
 		if pkg, exists := p.packageResults[event.Package]; exists {
 			test := &TestResult{
@@ -533,16 +533,16 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				Subtests:     make(map[string]*TestResult),
 				SubtestOrder: []string{},
 			}
-			
+
 			// Handle subtests
 			if strings.Contains(event.Test, "/") {
 				parts := strings.SplitN(event.Test, "/", 2)
 				parentName := parts[0]
 				subtestName := parts[1]
-				
+
 				if parent, ok := pkg.Tests[parentName]; ok {
 					test.Parent = parentName
-					test.Name = subtestName  // Store just the subtest name
+					test.Name = subtestName // Store just the subtest name
 					parent.Subtests[event.Test] = test
 					parent.SubtestOrder = append(parent.SubtestOrder, event.Test)
 				}
@@ -554,7 +554,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				pkg.HasTests = true
 			}
 		}
-		
+
 		// Keep legacy buffer for compatibility
 		if p.buffers[event.Test] == nil {
 			p.buffers[event.Test] = []string{}
@@ -567,7 +567,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				test.Output = append(test.Output, event.Output)
 			}
 		}
-		
+
 		// Keep legacy buffer for compatibility
 		if p.buffers[event.Test] == nil {
 			p.buffers[event.Test] = []string{}
@@ -582,10 +582,10 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				test.Elapsed = event.Elapsed
 			}
 		}
-		
+
 		// Track statistics
 		p.passed++
-		
+
 		// Clear buffer
 		delete(p.buffers, event.Test)
 
@@ -597,10 +597,10 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				test.Elapsed = event.Elapsed
 			}
 		}
-		
+
 		// Track statistics
 		p.failed++
-		
+
 		// Clear buffer
 		delete(p.buffers, event.Test)
 
@@ -612,17 +612,17 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				test.Elapsed = event.Elapsed
 			}
 		}
-		
+
 		// Track statistics
 		p.skipped++
-		
+
 		// Clear buffer
 		delete(p.buffers, event.Test)
 	}
-	
+
 	// Release lock before doing I/O
 	p.mu.Unlock()
-	
+
 	// Display package if needed (after releasing lock to avoid deadlock)
 	if packageToDisplay != nil {
 		p.displayPackageResult(packageToDisplay)
@@ -711,7 +711,7 @@ func (p *StreamProcessor) findTest(pkg *PackageResult, testName string) *TestRes
 		// This is a subtest
 		parts := strings.SplitN(testName, "/", 2)
 		parentName := parts[0]
-		
+
 		if parent, exists := pkg.Tests[parentName]; exists {
 			if subtest, exists := parent.Subtests[testName]; exists {
 				return subtest
@@ -719,7 +719,7 @@ func (p *StreamProcessor) findTest(pkg *PackageResult, testName string) *TestRes
 		}
 		return nil
 	}
-	
+
 	// Top-level test
 	return pkg.Tests[testName]
 }
@@ -729,12 +729,12 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Display package header - ▶ icon in white, package name in cyan
 	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
-	
+
 	// Check for package-level failures (e.g., TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
 		// Package failed without running any tests (likely TestMain failure)
 		fmt.Fprintf(os.Stderr, "  %s Package failed to run tests\n", tui.FailStyle.Render(tui.CheckFail))
-		
+
 		// Display any package-level output (error messages)
 		if len(pkg.Output) > 0 {
 			for _, line := range pkg.Output {
@@ -745,13 +745,13 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		}
 		return
 	}
-	
+
 	// Check if package has no tests
 	if !pkg.HasTests {
 		fmt.Fprintf(os.Stderr, " %s\n", tui.DurationStyle.Render("No tests"))
 		return
 	}
-	
+
 	// Count test results for this package
 	var passedCount, failedCount, skippedCount int
 	for _, test := range pkg.Tests {
@@ -764,13 +764,13 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 			skippedCount++
 		}
 	}
-	
+
 	// Display tests based on show filter
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
 		p.displayTest(test, "")
 	}
-	
+
 	// Display summary line with test counts and coverage
 	totalTests := passedCount + failedCount + skippedCount
 	if totalTests > 0 {
@@ -779,7 +779,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		if pkg.Coverage != "" {
 			coverageStr = fmt.Sprintf(" (%s coverage)", pkg.Coverage)
 		}
-		
+
 		if failedCount > 0 {
 			// Show failure summary
 			summaryLine = fmt.Sprintf("  %s %d tests failed, %d passed%s\n",
@@ -800,7 +800,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 				skippedCount,
 				coverageStr)
 		}
-		
+
 		if summaryLine != "" {
 			fmt.Fprintf(os.Stderr, "\n%s", summaryLine)
 		}
@@ -819,12 +819,12 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 			}
 		}
 	}
-	
+
 	// Check if we should display this test based on filter
 	if !p.shouldShowTestStatus(test.Status) && !hasFailedSubtests {
 		return
 	}
-	
+
 	// Determine status icon
 	var statusIcon string
 	switch test.Status {
@@ -837,27 +837,27 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 	default:
 		return // Don't display running tests
 	}
-	
+
 	// Build display line
 	var line strings.Builder
 	line.WriteString(indent + " ")
 	line.WriteString(statusIcon)
 	line.WriteString(" ")
 	line.WriteString(tui.TestNameStyle.Render(test.Name))
-	
+
 	// Add duration for completed tests
 	if test.Elapsed > 0 {
 		line.WriteString(" ")
 		line.WriteString(tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
 	}
-	
+
 	// Check if test has subtests
 	if len(test.Subtests) > 0 {
 		// Calculate subtest statistics
 		passed := 0
 		failed := 0
 		skipped := 0
-		
+
 		for _, subtest := range test.Subtests {
 			switch subtest.Status {
 			case "pass":
@@ -868,21 +868,21 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 				skipped++
 			}
 		}
-		
+
 		total := passed + failed + skipped
 		if total > 0 {
 			// Add mini progress indicator
 			miniProgress := p.generateSubtestProgress(passed, total)
 			percentage := (passed * 100) / total
-			
+
 			line.WriteString(" ")
 			line.WriteString(miniProgress)
 			line.WriteString(fmt.Sprintf(" %d%% passed", percentage))
 		}
 	}
-	
+
 	fmt.Fprintln(os.Stderr, line.String())
-	
+
 	// Display test output for failures (respecting show filter)
 	if test.Status == "fail" && len(test.Output) > 0 && p.showFilter != "none" {
 		if p.verbosityLevel == "with-output" || p.verbosityLevel == "verbose" {
@@ -899,7 +899,7 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 			}
 		}
 	}
-	
+
 	// Display subtests if test failed or show filter is "all"
 	if len(test.Subtests) > 0 && (test.Status == "fail" || p.showFilter == "all") {
 		// Display subtest summary for failed tests
@@ -907,7 +907,7 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 			passed := []*TestResult{}
 			failed := []*TestResult{}
 			skipped := []*TestResult{}
-			
+
 			for _, subtestName := range test.SubtestOrder {
 				subtest := test.Subtests[subtestName]
 				switch subtest.Status {
@@ -919,12 +919,12 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 					skipped = append(skipped, subtest)
 				}
 			}
-			
+
 			total := len(passed) + len(failed) + len(skipped)
 			if total > 0 {
 				fmt.Fprintf(os.Stderr, "\n%s    Subtest Summary: %d passed, %d failed of %d total\n",
 					indent, len(passed), len(failed), total)
-				
+
 				// Show passed subtests
 				if len(passed) > 0 {
 					fmt.Fprintf(os.Stderr, "\n%s    %s Passed (%d):\n",
@@ -933,7 +933,7 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 						fmt.Fprintf(os.Stderr, "%s      • %s\n", indent, subtest.Name)
 					}
 				}
-				
+
 				// Show failed subtests
 				if len(failed) > 0 {
 					fmt.Fprintf(os.Stderr, "\n%s    %s Failed (%d):\n",
@@ -950,7 +950,7 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 						}
 					}
 				}
-				
+
 				// Show skipped subtests
 				if len(skipped) > 0 {
 					fmt.Fprintf(os.Stderr, "\n%s    %s Skipped (%d):\n",

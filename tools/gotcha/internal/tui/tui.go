@@ -111,26 +111,26 @@ type SubtestStats struct {
 
 // PackageResult holds the complete test results for a package.
 type PackageResult struct {
-	Package      string
-	StartTime    time.Time
-	EndTime      time.Time
-	Status       string              // "pass", "fail", "skip", "running"
-	Tests        map[string]*TestResult
-	TestOrder    []string            // Order in which tests were run
-	Coverage     string              // Coverage percentage if available
-	Output       []string            // Package-level output
-	Elapsed      float64
-	HasTests     bool                // Track if any tests ran
+	Package   string
+	StartTime time.Time
+	EndTime   time.Time
+	Status    string // "pass", "fail", "skip", "running"
+	Tests     map[string]*TestResult
+	TestOrder []string // Order in which tests were run
+	Coverage  string   // Coverage percentage if available
+	Output    []string // Package-level output
+	Elapsed   float64
+	HasTests  bool // Track if any tests ran
 }
 
 // TestResult holds the result of an individual test.
 type TestResult struct {
 	Name         string
-	FullName     string              // Full test name including package
-	Status       string              // "pass", "fail", "skip"
+	FullName     string // Full test name including package
+	Status       string // "pass", "fail", "skip"
 	Elapsed      float64
-	Output       []string            // All output from the test
-	Parent       string              // Parent test name if this is a subtest
+	Output       []string // All output from the test
+	Parent       string   // Parent test name if this is a subtest
 	Subtests     map[string]*TestResult
 	SubtestOrder []string
 }
@@ -138,30 +138,30 @@ type TestResult struct {
 // TestModel represents the test UI model.
 type TestModel struct {
 	// Test tracking
-	totalTests     int // Total number of tests that will run (from "run" events)
-	completedTests int // Number of tests that have completed (pass/fail/skip)
-	currentIndex   int // Legacy counter - will be removed
-	currentTest    string
-	currentPackage string // Current package being tested
-	packagesWithNoTests map[string]bool // Track packages that have "[no test files]" in output
-	packageHasTests map[string]bool // Track if package had any test run events
+	totalTests            int // Total number of tests that will run (from "run" events)
+	completedTests        int // Number of tests that have completed (pass/fail/skip)
+	currentIndex          int // Legacy counter - will be removed
+	currentTest           string
+	currentPackage        string          // Current package being tested
+	packagesWithNoTests   map[string]bool // Track packages that have "[no test files]" in output
+	packageHasTests       map[string]bool // Track if package had any test run events
 	packageNoTestsPrinted map[string]bool // Track if we already printed "No tests" for a package
-	width          int
-	height         int
-	done           bool
-	aborted        bool
-	startTime      time.Time
-	elapsedTime    time.Duration // Store elapsed time for logging after TUI exits
+	width                 int
+	height                int
+	done                  bool
+	aborted               bool
+	startTime             time.Time
+	elapsedTime           time.Duration // Store elapsed time for logging after TUI exits
 
 	// UI components
 	spinner  spinner.Model
 	progress progress.Model
 
 	// Test execution
-	cmd        *exec.Cmd
-	outputFile string
-	showFilter string // "all", "failed", "passed", "skipped"
-	alert      bool   // whether to emit terminal bell on completion
+	cmd            *exec.Cmd
+	outputFile     string
+	showFilter     string // "all", "failed", "passed", "skipped"
+	alert          bool   // whether to emit terminal bell on completion
 	verbosityLevel string // Verbosity level: standard, with-output, minimal, or verbose
 
 	// Results tracking
@@ -174,10 +174,10 @@ type TestModel struct {
 	bufferMu       sync.Mutex
 
 	// Buffered output
-	packageResults map[string]*PackageResult // Complete package results
-	packageOrder   []string                  // Order packages were completed
-	activePackages map[string]bool           // Track which packages are currently running
-	displayedPackages map[string]bool        // Track which packages have been displayed
+	packageResults    map[string]*PackageResult // Complete package results
+	packageOrder      []string                  // Order packages were completed
+	activePackages    map[string]bool           // Track which packages are currently running
+	displayedPackages map[string]bool           // Track which packages have been displayed
 
 	// JSON output
 	jsonFile *os.File
@@ -259,26 +259,26 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 	// Command runs from current directory (which should be repo root)
 
 	return TestModel{
-		cmd:            cmd,
-		outputFile:     outputFile,
-		showFilter:     showFilter,
-		alert:          alert,
-		verbosityLevel: verbosityLevel,
-		spinner:        s,
-		progress:       p,
-		testBuffers:    make(map[string][]string),
-		subtestOutputs: make(map[string][]string),
-		subtestStats:   make(map[string]*SubtestStats),
-		packagesWithNoTests: make(map[string]bool),
-		packageHasTests: make(map[string]bool),
+		cmd:                   cmd,
+		outputFile:            outputFile,
+		showFilter:            showFilter,
+		alert:                 alert,
+		verbosityLevel:        verbosityLevel,
+		spinner:               s,
+		progress:              p,
+		testBuffers:           make(map[string][]string),
+		subtestOutputs:        make(map[string][]string),
+		subtestStats:          make(map[string]*SubtestStats),
+		packagesWithNoTests:   make(map[string]bool),
+		packageHasTests:       make(map[string]bool),
 		packageNoTestsPrinted: make(map[string]bool),
-		packageResults:    make(map[string]*PackageResult),
-		packageOrder:      []string{},
-		activePackages:    make(map[string]bool),
-		displayedPackages: make(map[string]bool),
-		totalTests:     0, // Will be incremented by "run" events
-		completedTests: 0, // Will be incremented by pass/fail/skip events
-		startTime:      time.Now(),
+		packageResults:        make(map[string]*PackageResult),
+		packageOrder:          []string{},
+		activePackages:        make(map[string]bool),
+		displayedPackages:     make(map[string]bool),
+		totalTests:            0, // Will be incremented by "run" events
+		completedTests:        0, // Will be incremented by pass/fail/skip events
+		startTime:             time.Now(),
 	}
 }
 
@@ -397,11 +397,11 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Process event with buffering
 		m.processEvent(&event)
-		
+
 		// Check if any packages completed and display them once
 		var cmds []tea.Cmd
 		cmds = append(cmds, nextCmd, m.spinner.Tick)
-		
+
 		// Update progress bar if we have tests
 		if m.totalTests > 0 && m.completedTests > 0 {
 			percentFloat := float64(m.completedTests) / float64(m.totalTests)
@@ -411,7 +411,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 		}
-		
+
 		for _, pkg := range m.packageOrder {
 			if result, exists := m.packageResults[pkg]; exists && result.Status != "running" {
 				// Package is complete, check if we've already displayed it
@@ -426,7 +426,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		
+
 		// Continue reading
 		return m, tea.Batch(cmds...)
 
@@ -439,8 +439,8 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					pkg.Status = "fail"
 					pkg.EndTime = time.Now()
 					pkg.HasTests = true // Assume it has tests that failed to run
-					m.failCount++ // Count as a failure
-					
+					m.failCount++       // Count as a failure
+
 					// Ensure it's in the package order
 					if !contains(m.packageOrder, pkgName) {
 						m.packageOrder = append(m.packageOrder, pkgName)
@@ -448,7 +448,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		
+
 		// Update progress to 100% before marking as done
 		var finalCmd tea.Cmd
 		if m.totalTests > 0 {
@@ -567,15 +567,15 @@ func (m *TestModel) View() string {
 		percentage = "  0%"
 		testCount = fmt.Sprintf("%-15s", DurationStyle.Render("discovering tests"))
 	}
-	
+
 	// Format time and buffer with fixed widths for stability
 	timeStr := fmt.Sprintf("%3d%s", elapsedSeconds, DurationStyle.Render("s"))
 	bufferStr := fmt.Sprintf("%7.1f%s", bufferSizeKB, DurationStyle.Render("KB"))
-	
+
 	// Assemble the complete status line with fixed spacing
 	// All sections are now fixed-width, so no jumping should occur
 	statusLine := spin + info + "  " + prog + " " + percentage + " " + testCount + "  " + timeStr + " " + bufferStr
-	
+
 	return statusLine + "\n"
 }
 
@@ -708,20 +708,20 @@ func (m *TestModel) generateFinalSummary() string {
 // getBufferSizeKB calculates the total size of all buffered package results in KB.
 func (m *TestModel) getBufferSizeKB() float64 {
 	totalBytes := 0
-	
+
 	// Calculate size of all package results and their output
 	for _, pkg := range m.packageResults {
 		// Package name and status
 		totalBytes += len(pkg.Package) + 20 // package header overhead
-		
+
 		// Coverage info
 		totalBytes += len(pkg.Coverage)
-		
+
 		// Package-level output
 		for _, line := range pkg.Output {
 			totalBytes += len(line)
 		}
-		
+
 		// All test results
 		for _, test := range pkg.Tests {
 			totalBytes += len(test.Name) + len(test.Status) + 20 // test header overhead
@@ -737,14 +737,14 @@ func (m *TestModel) getBufferSizeKB() float64 {
 			}
 		}
 	}
-	
+
 	// Also count data from active/incomplete packages
 	for pkg, active := range m.activePackages {
 		if active {
 			totalBytes += len(pkg) + 100 // estimate for active package overhead
 		}
 	}
-	
+
 	return float64(totalBytes) / 1024.0
 }
 
@@ -810,7 +810,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 				if strings.Contains(event.Output, "[no test files]") {
 					m.packagesWithNoTests[event.Package] = true
 				}
-				
+
 				// Check for package-level FAIL in output (e.g., TestMain failures)
 				// This catches "FAIL\tpackage.name\t0.123s" which go test outputs
 				if strings.Contains(event.Output, "FAIL\t"+event.Package) {
@@ -823,7 +823,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 						pkg.HasTests = true // It has tests, they just failed to run
 					}
 				}
-				
+
 				// Buffer package-level output
 				if pkg := m.packageResults[event.Package]; pkg != nil {
 					pkg.Output = append(pkg.Output, event.Output)
@@ -853,7 +853,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 					if !contains(m.packageOrder, event.Package) {
 						m.packageOrder = append(m.packageOrder, event.Package)
 					}
-					
+
 					// If package failed with no tests recorded, it likely has tests that couldn't run
 					// (e.g., TestMain failure, compilation error, etc.)
 					if event.Action == "fail" && len(pkg.Tests) == 0 && !m.packagesWithNoTests[event.Package] {
@@ -881,10 +881,10 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 			m.packageResults[event.Package] = pkg
 			m.activePackages[event.Package] = true
 		}
-		
+
 		// Mark that this package has tests
 		pkg.HasTests = true
-		
+
 		// Parse test hierarchy
 		var parentTest string
 		var isSubtest bool
@@ -893,13 +893,13 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 			parentTest = parts[0]
 			isSubtest = true
 		}
-		
+
 		switch event.Action {
 		case "run":
 			m.currentTest = event.Test
 			// Count all tests including subtests for accurate progress
 			m.totalTests++
-			
+
 			if isSubtest {
 				// This is a subtest
 				parent := pkg.Tests[parentTest]
@@ -914,7 +914,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 					}
 					pkg.Tests[parentTest] = parent
 				}
-				
+
 				subtest := &TestResult{
 					Name:     event.Test,
 					FullName: event.Test,
@@ -935,7 +935,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 				pkg.Tests[event.Test] = test
 				pkg.TestOrder = append(pkg.TestOrder, event.Test)
 			}
-			
+
 		case "output":
 			// Buffer the output
 			if isSubtest {
@@ -949,11 +949,11 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 					test.Output = append(test.Output, event.Output)
 				}
 			}
-			
+
 		case "pass", "fail", "skip":
 			// Count all tests including subtests for accurate progress
 			m.completedTests++
-			
+
 			// Update counts
 			switch event.Action {
 			case "pass":
@@ -963,9 +963,9 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 			case "skip":
 				m.skipCount++
 			}
-			
+
 			// Progress will be updated in Update method via streamOutputMsg
-			
+
 			// Update test result
 			if isSubtest {
 				if parent := pkg.Tests[parentTest]; parent != nil {
@@ -992,7 +992,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 					test.Elapsed = event.Elapsed
 				}
 			}
-			
+
 			// Progress is now updated in View() method to avoid duplication
 		}
 	}
@@ -1001,17 +1001,17 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 // displayPackageResult generates the display output for a completed package.
 func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	var output strings.Builder
-	
+
 	// Package header
 	// Display package header - ▶ icon in white, package name in cyan
 	output.WriteString(fmt.Sprintf("\n▶ %s\n\n", PackageHeaderStyle.Render(pkg.Package)))
-	
+
 	// Check for "No tests"
 	// Check for package-level failures (e.g., TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
 		// Package failed without running any tests (likely TestMain failure)
 		output.WriteString(fmt.Sprintf("  %s Package failed to run tests\n", FailStyle.Render(CheckFail)))
-		
+
 		// Display any package-level output (error messages)
 		if len(pkg.Output) > 0 {
 			for _, line := range pkg.Output {
@@ -1022,12 +1022,12 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		}
 		return output.String()
 	}
-	
+
 	if pkg.Status == "skip" || m.packagesWithNoTests[pkg.Package] || !pkg.HasTests {
 		output.WriteString(fmt.Sprintf("  %s\n", DurationStyle.Render("No tests")))
 		return output.String()
 	}
-	
+
 	// Count test results for this package
 	var passedCount, failedCount, skippedCount int
 	for _, test := range pkg.Tests {
@@ -1040,14 +1040,14 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 			skippedCount++
 		}
 	}
-	
+
 	// Display tests in order
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
 		if test == nil {
 			continue
 		}
-		
+
 		// Check if test has failed subtests (for --show=failed filter)
 		hasFailedSubtests := false
 		if m.showFilter == "failed" && len(test.Subtests) > 0 {
@@ -1058,16 +1058,16 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 				}
 			}
 		}
-		
+
 		// Check if we should display this test based on filter
 		if !m.shouldShowTest(test.Status) && !hasFailedSubtests && m.showFilter != "collapsed" {
 			continue
 		}
-		
+
 		// Display test result
 		m.displayTest(&output, test)
 	}
-	
+
 	// Display summary line with test counts and coverage
 	totalTests := passedCount + failedCount + skippedCount
 	if totalTests > 0 {
@@ -1076,7 +1076,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		if pkg.Coverage != "" {
 			coverageStr = fmt.Sprintf(" (%s coverage)", pkg.Coverage)
 		}
-		
+
 		if failedCount > 0 {
 			// Show failure summary
 			summaryLine = fmt.Sprintf("  %s %d tests failed, %d passed%s",
@@ -1097,12 +1097,12 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 				skippedCount,
 				coverageStr)
 		}
-		
+
 		if summaryLine != "" {
 			output.WriteString(fmt.Sprintf("\n%s\n", summaryLine))
 		}
 	}
-	
+
 	return output.String()
 }
 
@@ -1110,7 +1110,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 	// Check if this test has subtests
 	hasSubtests := len(test.Subtests) > 0
-	
+
 	// Build the test display
 	var styledIcon string
 	switch test.Status {
@@ -1123,29 +1123,29 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 	default:
 		return // Don't display running tests
 	}
-	
+
 	// Display the test
 	output.WriteString(fmt.Sprintf("  %s %s", styledIcon, TestNameStyle.Render(test.Name)))
-	
+
 	// Add duration if available
 	if test.Elapsed > 0 {
 		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed))))
 	}
-	
+
 	// Add subtest progress indicator if it has subtests
 	if hasSubtests && m.subtestStats[test.Name] != nil {
 		stats := m.subtestStats[test.Name]
 		totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
-		
+
 		if totalSubtests > 0 {
 			miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
 			percentage := (len(stats.passed) * 100) / totalSubtests
 			output.WriteString(fmt.Sprintf(" %s %d%% passed", miniProgress, percentage))
 		}
 	}
-	
+
 	output.WriteString("\n")
-	
+
 	// Show test output for failed tests if not in collapsed mode
 	if test.Status == "fail" && m.showFilter != "collapsed" && len(test.Output) > 0 {
 		output.WriteString("\n")
@@ -1165,7 +1165,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 		}
 		output.WriteString("\n")
 	}
-	
+
 	// Show detailed subtest results for failed parent tests
 	if test.Status == "fail" && hasSubtests && m.showFilter != "collapsed" {
 		stats := m.subtestStats[test.Name]
@@ -1174,7 +1174,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 			if totalSubtests > 0 {
 				output.WriteString(fmt.Sprintf("\n    Subtest Summary: %d passed, %d failed of %d total\n",
 					len(stats.passed), len(stats.failed), totalSubtests))
-				
+
 				// Show passed subtests
 				if len(stats.passed) > 0 {
 					output.WriteString(fmt.Sprintf("\n    %s Passed (%d):\n", PassStyle.Render("✔"), len(stats.passed)))
@@ -1188,7 +1188,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 						output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
 					}
 				}
-				
+
 				// Show failed subtests with their output
 				if len(stats.failed) > 0 {
 					output.WriteString(fmt.Sprintf("\n    %s Failed (%d):\n", FailStyle.Render("✘"), len(stats.failed)))
@@ -1200,7 +1200,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 							subtestName = parts[1]
 						}
 						output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
-						
+
 						// Show subtest output if available
 						if subtest := test.Subtests[name]; subtest != nil && len(subtest.Output) > 0 {
 							if m.verbosityLevel == "with-output" || m.verbosityLevel == "verbose" {
@@ -1218,7 +1218,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 						}
 					}
 				}
-				
+
 				// Show skipped subtests if any
 				if len(stats.skipped) > 0 {
 					output.WriteString(fmt.Sprintf("\n    %s Skipped (%d):\n", SkipStyle.Render("⊘"), len(stats.skipped)))

@@ -86,7 +86,7 @@ func TestNoTestsDetection(t *testing.T) {
 			expectedOutput: []string{
 				"▶ example.com/empty1",
 				"No tests",
-				"▶ example.com/withtests", 
+				"▶ example.com/withtests",
 				"✔ TestExample",
 				"▶ example.com/empty2",
 				"No tests",
@@ -108,13 +108,13 @@ func TestNoTestsDetection(t *testing.T) {
 
 			// Capture output
 			output := captureStreamProcessorOutput(&jsonStream)
-			
+
 			// Debug: print the actual output
 			t.Logf("Test: %s\nOutput: %q", tt.name, output)
 
 			// Check expected output
 			for _, expected := range tt.expectedOutput {
-				assert.Contains(t, output, expected, 
+				assert.Contains(t, output, expected,
 					fmt.Sprintf("%s: Expected to find '%s' in output\nActual output: %s", tt.description, expected, output))
 			}
 
