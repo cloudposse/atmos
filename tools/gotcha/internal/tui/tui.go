@@ -520,7 +520,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 
 					// Display parent test with subtest summary in line
-					displayOutput = fmt.Sprintf("%s %s %s %s %d%% passed\n",
+					displayOutput = fmt.Sprintf("  %s %s %s %s %d%% passed\n",
 						PassStyle.Render(CheckPass),
 						TestNameStyle.Render(event.Test),
 						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
@@ -528,7 +528,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						percentage)
 				} else {
 					// Regular test without subtests
-					displayOutput = fmt.Sprintf("%s %s %s\n",
+					displayOutput = fmt.Sprintf("  %s %s %s\n",
 						PassStyle.Render(CheckPass),
 						TestNameStyle.Render(event.Test),
 						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
@@ -631,7 +631,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 
 					// Display parent test with subtest summary in line
-					displayOutput = fmt.Sprintf("\n%s %s %s %s %d%% passed",
+					displayOutput = fmt.Sprintf("\n  %s %s %s %s %d%% passed",
 						FailStyle.Render(CheckFail),
 						TestNameStyle.Render(event.Test),
 						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
@@ -672,7 +672,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				} else {
 					// Regular test or subtest - display normally
-					displayOutput = fmt.Sprintf("\n%s %s %s",
+					displayOutput = fmt.Sprintf("\n  %s %s %s",
 						FailStyle.Render(CheckFail),
 						TestNameStyle.Render(event.Test),
 						DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
@@ -744,7 +744,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Don't print skipped tests immediately to avoid overwriting progress bar
 			if m.shouldShowTest("skip") {
 				// Only show skipped tests if explicitly requested
-				output := fmt.Sprintf("%s %s\n",
+				output := fmt.Sprintf("  %s %s\n",
 					SkipStyle.Render(CheckSkip),
 					TestNameStyle.Render(event.Test))
 				displayCmd = tea.Printf("%s", output)

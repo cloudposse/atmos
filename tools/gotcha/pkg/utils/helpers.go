@@ -412,7 +412,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Show success with actual test name
 		if p.shouldShowTestEvent("pass") {
-			fmt.Fprintf(os.Stderr, " %s %s %s\n",
+			fmt.Fprintf(os.Stderr, "  %s %s %s\n",
 				tui.PassStyle.Render(tui.CheckPass),
 				tui.TestNameStyle.Render(event.Test),
 				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
@@ -457,7 +457,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			} else {
 				statusIcon = tui.FailStyle.Render(tui.CheckFail)
 			}
-			fmt.Fprintf(os.Stderr, " %s %s %s %s %d%% passed\n",
+			fmt.Fprintf(os.Stderr, "  %s %s %s %s %d%% passed\n",
 				statusIcon,
 				tui.TestNameStyle.Render(event.Test),
 				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)),
@@ -498,7 +498,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			}
 		} else {
 			// Regular test or subtest - display normally
-			fmt.Fprintf(os.Stderr, " %s %s %s\n",
+			fmt.Fprintf(os.Stderr, "  %s %s %s\n",
 				tui.FailStyle.Render(tui.CheckFail),
 				tui.TestNameStyle.Render(event.Test),
 				tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", event.Elapsed)))
@@ -545,7 +545,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Show skip with actual test name
 		if p.shouldShowTestEvent("skip") {
-			fmt.Fprintf(os.Stderr, " %s %s\n",
+			fmt.Fprintf(os.Stderr, "  %s %s\n",
 				tui.SkipStyle.Render(tui.CheckSkip),
 				tui.TestNameStyle.Render(event.Test))
 		}
