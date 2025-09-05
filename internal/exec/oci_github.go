@@ -12,10 +12,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	// Static errors for GitHub authentication
-	errNoGitHubAuthenticationFound = errors.New("no GitHub authentication found for registry")
-)
+// Static errors for GitHub authentication
+var errNoGitHubAuthenticationFound = errors.New("no GitHub authentication found for registry")
 
 // getGitHubAuth attempts to get GitHub Container Registry authentication.
 func getGitHubAuth(registry string, atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, error) {

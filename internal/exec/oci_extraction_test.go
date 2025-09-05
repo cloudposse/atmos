@@ -59,7 +59,8 @@ func runZipExtractionTestSuite(t *testing.T, tests []struct {
 	zipContent  map[string]string
 	expectError bool
 	errorMsg    string
-}) {
+},
+) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runZipExtractionTest(t, tt.zipContent, tt.expectError, tt.errorMsg)

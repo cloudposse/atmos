@@ -152,7 +152,8 @@ func tryGlobalCredentialStore(registry, credsStore string) (authn.Authenticator,
 // tryDirectAuth attempts to authenticate using direct auth strings in the config.
 func tryDirectAuth(registry string, auths map[string]struct {
 	Auth string `json:"auth"`
-}) (authn.Authenticator, error) {
+},
+) (authn.Authenticator, error) {
 	// Try different registry formats
 	registryVariants := []string{
 		registry,
