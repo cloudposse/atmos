@@ -113,7 +113,7 @@ func TestRemoveSymlinks_NonexistentRoot_PropagatesError(t *testing.T) {
 func TestRemoveSymlinks_WalkError_Propagates(t *testing.T) {
 	// Permission-denied dir (Unix only; Windows semantics differ)
 	if runtime.GOOS == "windows" {
-		t.Skip("permission-based Walk error test skipped on Windows")
+		t.Skipf("Skipping permission-based Walk error test on Windows: permissions work differently")
 	}
 	root := t.TempDir()
 	denyDir := filepath.Join(root, "deny")
@@ -182,7 +182,7 @@ func TestCustomGitGetter_Get_RemoveSymlinkError(t *testing.T) {
 	// This test is similar to the success case, but we'll use a read-only directory
 	// to force a permission error during symlink removal
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping read-only directory test on Windows")
+		t.Skipf("Skipping read-only directory test on Windows: read-only semantics differ")
 	}
 
 	// Create a read-only directory
