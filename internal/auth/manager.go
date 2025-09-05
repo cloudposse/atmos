@@ -136,7 +136,7 @@ func (m *manager) SetupAWSFiles(ctx context.Context, providerName, identityName 
 			region = provider.Region
 		}
 	}
-	if err := m.awsFileManager.WriteConfig(providerName, identityName, region); err != nil {
+	if err := m.awsFileManager.WriteConfig(providerName, identityName, region, ""); err != nil {
 		return fmt.Errorf("failed to write AWS config: %w", err)
 	}
 

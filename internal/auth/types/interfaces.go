@@ -87,7 +87,7 @@ type AWSFileManager interface {
 	WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error
 
 	// WriteConfig writes AWS config to the provider-specific file with identity profile
-	WriteConfig(providerName, identityName, region string) error
+	WriteConfig(providerName, identityName, region, outputFormat string) error
 
 	// GetCredentialsPath returns the path to the credentials file for the provider
 	GetCredentialsPath(providerName string) string

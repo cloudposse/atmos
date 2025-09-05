@@ -70,7 +70,7 @@ func (m *awsFileManager) WriteCredentials(providerName, identityName string, cre
 }
 
 // WriteConfig writes AWS config to the provider-specific file with identity profile
-func (m *awsFileManager) WriteConfig(providerName, identityName, region string) error {
+func (m *awsFileManager) WriteConfig(providerName, identityName, region, outputFormat string) error {
 	configPath := m.GetConfigPath(providerName)
 	
 	// Ensure directory exists
@@ -97,9 +97,21 @@ func (m *awsFileManager) WriteConfig(providerName, identityName, region string) 
 		return fmt.Errorf("failed to create profile section: %w", err)
 	}
 
-	// Set config values
-	section.Key("region").SetValue(region)
-	section.Key("output").SetValue("json")
+	// Set config values only if they are not empty
+	if region != "" {
+		section.Key("region").SetValue(region)
+	} else {
+		// Remove region key if not present
+		section.DeleteKey("region")
+	}
+	
+	// Set output format only if explicitly provided
+	if outputFormat != "" {
+		section.Key("output").SetValue(outputFormat)
+	} else {
+		// Remove output key if not present
+		section.DeleteKey("output")
+	}
 
 	// Save file with proper permissions
 	if err := cfg.SaveTo(configPath); err != nil {

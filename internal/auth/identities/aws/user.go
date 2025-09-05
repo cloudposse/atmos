@@ -63,12 +63,7 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 	
 	// If MFA ARN is configured, get session token with MFA
 	if creds.AWS.MfaArn != "" {
-		secret := userSecret{
-			AccessKeyID:     creds.AWS.AccessKeyID,
-			SecretAccessKey: creds.AWS.SecretAccessKey,
-			MfaArn:          creds.AWS.MfaArn,
-		}
-		return i.authenticateWithMFA(ctx, secret, region)
+		return i.authenticateWithMFA(ctx, creds, region)
 	}
 	
 	// Write credentials to AWS files using "aws-user" as mock provider
@@ -89,7 +84,7 @@ func (i *userIdentity) writeAWSFiles(creds *schema.Credentials, region string) e
 	}
 	
 	// Write config to ~/.aws/atmos/aws-user/config
-	if err := awsFileManager.WriteConfig("aws-user", i.name, region); err != nil {
+	if err := awsFileManager.WriteConfig("aws-user", i.name, region, ""); err != nil {
 		return fmt.Errorf("failed to write AWS config: %w", err)
 	}
 	
@@ -97,13 +92,13 @@ func (i *userIdentity) writeAWSFiles(creds *schema.Credentials, region string) e
 }
 
 // authenticateWithMFA handles MFA authentication for AWS User identities
-func (i *userIdentity) authenticateWithMFA(ctx context.Context, secret userSecret, region string) (*schema.Credentials, error) {
+func (i *userIdentity) authenticateWithMFA(ctx context.Context, creds *schema.Credentials, region string) (*schema.Credentials, error) {
 	// Create AWS config with base credentials
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			secret.AccessKeyID,
-			secret.SecretAccessKey,
+			creds.AWS.AccessKeyID,
+			creds.AWS.SecretAccessKey,
 			"", // no session token for base credentials
 		)),
 	)
@@ -120,7 +115,7 @@ func (i *userIdentity) authenticateWithMFA(ctx context.Context, secret userSecre
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Enter MFA Token").
-				Description(fmt.Sprintf("MFA Device: %s", secret.MfaArn)).
+				Description(fmt.Sprintf("MFA Device: %s", creds.AWS.MfaArn)).
 				Value(&mfaToken).
 				Validate(func(s string) error {
 					if s == "" {
@@ -140,7 +135,7 @@ func (i *userIdentity) authenticateWithMFA(ctx context.Context, secret userSecre
 
 	// Get session token with MFA
 	input := &sts.GetSessionTokenInput{
-		SerialNumber: aws.String(secret.MfaArn),
+		SerialNumber: aws.String(creds.AWS.MfaArn),
 		TokenCode:    aws.String(mfaToken),
 		DurationSeconds: aws.Int32(3600), // 1 hour session
 	}
@@ -151,7 +146,7 @@ func (i *userIdentity) authenticateWithMFA(ctx context.Context, secret userSecre
 	}
 
 	// Convert to standard credentials format
-	creds := &schema.Credentials{
+	newCreds := &schema.Credentials{
 		AWS: &schema.AWSCredentials{
 			AccessKeyID:     *result.Credentials.AccessKeyId,
 			SecretAccessKey: *result.Credentials.SecretAccessKey,
@@ -162,26 +157,19 @@ func (i *userIdentity) authenticateWithMFA(ctx context.Context, secret userSecre
 	}
 
 	// Write credentials to AWS files using "aws-user" as mock provider
-	if err := i.writeAWSFiles(creds, region); err != nil {
+	if err := i.writeAWSFiles(newCreds, region); err != nil {
 		return nil, fmt.Errorf("failed to write AWS files: %w", err)
 	}
 
 	// Store credentials in credential store for caching
 	credStore := atmosCredentials.NewCredentialStore()
-	if err := credStore.Store(i.name, creds); err != nil {
+	if err := credStore.Store(i.name, newCreds); err != nil {
 		return nil, fmt.Errorf("failed to store credentials: %w", err)
 	}
 
-	return creds, nil
+	return newCreds, nil
 }
 
-// userSecret defines the structure used by auth user configure command
-type userSecret struct {
-	AccessKeyID     string    `json:"access_key_id"`
-	SecretAccessKey string    `json:"secret_access_key"`
-	MfaArn          string    `json:"mfa_arn,omitempty"`
-	LastUpdated     time.Time `json:"last_updated"`
-}
 
 // Validate validates the identity configuration
 func (i *userIdentity) Validate() error {
