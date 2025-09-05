@@ -509,7 +509,7 @@ auth:
     managers-base:
       kind: aws/permission-set
       via: { provider: company-sso }
-      spec:
+      principal:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
@@ -518,7 +518,7 @@ auth:
     prod-cross-account-admin:
       kind: aws/assume-role
       via: { identity: managers-base } # Chain from permission set, not provider
-      spec:
+      principal:
         assume_role: arn:aws:iam::999999999999:role/CrossAccountProductionAdmin
         session_name: atmos-prod-access
       alias: prod-admin
@@ -594,7 +594,7 @@ auth:
     dev-admin:
       kind: aws/permission-set
       via: { provider: aws-sso }
-      spec:
+      principal:
         name: DeveloperAccess
         account.name: development
 ```
@@ -612,7 +612,7 @@ identities:
   dev-admin:
     kind: aws/permission-set
     via: { provider: aws-sso }
-    spec:
+    principal:
       name: DeveloperAccess
       account.name: development
     env:
@@ -710,7 +710,24 @@ For identity chains (e.g., AWS SSO → Permission Set → Assume Role):
 
 ## 5. Configuration Schema
 
-### 5.1 Provider Types
+### 5.1 Schema Design Principles
+
+#### Separation of Concerns
+
+The Atmos Auth schema follows a clear separation of concerns:
+
+- **`via` = HOW** you obtain base credentials (SSO/SAML/OIDC or from another identity)
+- **`principal` = WHO** you become (permission set, role, service account, app)
+- **`credentials` = WHAT** you provide (only for `aws/user` identities)
+
+#### Field Usage by Identity Type
+
+- **Target Identities** (`aws/permission-set`, `aws/assume-role`, `azure/role`, `gcp/impersonate-sa`, `okta/app`): Use `principal` field to specify the target identity to assume
+- **AWS User Identities** (`aws/user`): Use `credentials` field to specify access keys and configuration
+
+This design makes the discriminator (`kind`) explicit while keeping the schema clear and type-safe.
+
+### 5.2 Provider Types
 
 **Supported Provider Types:**
 
@@ -790,7 +807,7 @@ identities:
     kind: aws/permission-set
     default: true
     via: { provider: cplive-sso }
-    spec:
+    principal:
       name: IdentityManagersTeamAccess
       account:
         name: core-identity
@@ -821,7 +838,7 @@ identities:
   prod-admin:
     kind: aws/permission-set
     via: { provider: aws-sso }
-    spec:
+    principal:
       name: ProductionAdmin
       account:
         name: production
@@ -856,9 +873,10 @@ identities:
   dev-access:
     kind: aws/permission-set
     via: { provider: aws-sso }
-    spec:
+    principal:
       name: DeveloperAccess
-      account.name: development
+      account:
+        name: dev
     alias: dev
     env:
       - key: AWS_PROFILE
@@ -874,27 +892,30 @@ identities:
   prod-admin:
     kind: aws/assume-role
     via: { identity: dev-access }
-    spec:
+    principal:
       assume_role: arn:aws:iam::123456789012:role/ProductionAdmin
     alias: prod
 ```
 
 #### AWS User (Break-glass)
 
-AWS User identities are standalone and do not require a `via` provider configuration. They authenticate directly using AWS access keys stored in the system keyring.
+AWS User identities are standalone and do not require a `via` provider configuration. They authenticate directly using AWS access keys.
 
 ```yaml
 identities:
-  superuser:
+  break-glass:
     kind: aws/user
-    spec:
-      region: us-east-1
-      # MFA ARN is optional and stored in AWSCredentials schema
+    credentials:
+      access_key_id: !env AWS_ACCESS_KEY_ID
+      secret_access_key: !env AWS_SECRET_ACCESS_KEY
+      mfa_arn: !env AWS_MFA_ARN
+      region: !env AWS_DEFAULT_REGION
     alias: superuser
 
   emergency-admin:
     kind: aws/user
-    spec:
+    credentials:
+      # If not defined, the credentials will try to be pulled from the keyring.
       region: us-east-1
     alias: emergency
 ```
@@ -935,9 +956,10 @@ identities:
   azure-admin:
     kind: azure/role
     via: { provider: azure-entra }
-    spec:
+    principal:
       role_definition_id: b24988ac-6180-42a0-ab88-20f7382dd24c
-      subscription_id: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+      scope: /subscriptions/12345678-1234-1234-1234-123456789012
+    alias: azure-admin
 ```
 
 #### GCP Service Account Impersonation
@@ -946,10 +968,11 @@ identities:
 identities:
   gcp-admin:
     kind: gcp/impersonate-sa
-    via: { provider: gcp-oidc }
-    spec:
-      service_account: admin@my-project.iam.gserviceaccount.com
-      project_id: my-project
+    via: { provider: gcp-workload }
+    principal:
+      service_account: admin@project.iam.gserviceaccount.com
+      project: my-project
+    alias: gcp-admin
 ```
 
 #### Okta Application
@@ -959,7 +982,7 @@ identities:
   monitoring-app:
     kind: okta/app
     via: { provider: okta }
-    spec:
+    principal:
       app: datadog-admin
     alias: monitoring
 ```
@@ -988,7 +1011,7 @@ auth:
       kind: aws/permission-set
       default: false # Not default globally
       via: { provider: cplive-sso }
-      spec:
+      principal:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
@@ -997,7 +1020,9 @@ auth:
     superuser:
       kind: aws/user
       # No via provider required - AWS User identities are self-contained
-      spec:
+      credentials:
+        access_key_id: !env SUPERUSER_AWS_ACCESS_KEY_ID
+        secret_access_key: !env SUPERUSER_AWS_SECRET_ACCESS_KEY
         region: us-east-1
 ```
 
@@ -1034,7 +1059,7 @@ components:
         security-admin:
           kind: aws/permission-set
           via: { provider: cplive-sso }
-          spec:
+          principal:
             name: SecurityAdminAccess
             account:
               name: security
@@ -1087,7 +1112,7 @@ identities:
     kind: aws/permission-set
     default: true # Overridden from false to true by component
     via: { provider: cplive-sso }
-    spec:
+    principal:
       name: IdentityManagersTeamAccess
       account:
         name: core-identity
@@ -1105,7 +1130,7 @@ identities:
     kind: aws/permission-set
     default: false # Overridden to disable for security components
     via: { provider: cplive-sso }
-    spec:
+    principal:
       name: IdentityManagersTeamAccess
       account:
         name: core-identity
@@ -1113,7 +1138,7 @@ identities:
   security-admin: # Component-specific identity
     kind: aws/permission-set
     via: { provider: cplive-sso }
-    spec:
+    principal:
       name: SecurityAdminAccess
       account:
         name: security
@@ -1170,14 +1195,14 @@ identities:
   managers:
     kind: aws/permission-set
     via: { provider: cplive-sso }
-    spec:
+    principal:
       name: IdentityManagersTeamAccess
       account: { name: core-identity }
 
   sandbox-admin:
     kind: aws/assume-role
     via: { identity: managers }
-    spec:
+    principal:
       assume_role: arn:aws:iam::539916835077:role/cplive-plat-gbl-sandbox-admin
 ```
 
@@ -1206,13 +1231,13 @@ identities:
   cross-account-admin:
     kind: aws/assume-role
     via: { identity: managers }
-    spec:
+    principal:
       assume_role: arn:aws:iam::123456789012:role/CrossAccountAccess
 
   production-admin:
     kind: aws/assume-role
     via: { identity: cross-account-admin }
-    spec:
+    principal:
       assume_role: arn:aws:iam::987654321098:role/ProductionAdmin
 ```
 
@@ -1287,7 +1312,7 @@ identities:
   production-terraform-admin:
     kind: aws/permission-set
     via: { provider: company-sso }
-    spec:
+    principal:
       name: TerraformAdminAccess
       account.name: production
     alias: tf-prod
@@ -1297,7 +1322,7 @@ identities:
   identity1:
     kind: aws/permission-set
     via: { provider: sso }
-    spec:
+    principal:
       name: Admin
       account.id: "123456789012"
 ```
