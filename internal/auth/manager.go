@@ -599,5 +599,5 @@ func extractIdentityFromAlias(alias string) string {
 
 // isAWSProvider checks if the provider kind is AWS-related
 func isAWSProvider(kind string) bool {
-	return kind == "aws/iam-identity-center" || kind == "aws/assume-role" || kind == "aws/user"
+	return kind == "aws/iam-identity-center" || kind == "aws/assume-role"
 }

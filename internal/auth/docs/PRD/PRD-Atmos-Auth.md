@@ -712,6 +712,13 @@ For identity chains (e.g., AWS SSO → Permission Set → Assume Role):
 
 ### 5.1 Provider Types
 
+**Supported Provider Types:**
+
+- `aws/iam-identity-center` - AWS IAM Identity Center (AWS SSO)
+- `aws/saml` - AWS SAML provider
+
+**Note:** `aws/user` and `aws/assume-role` are NOT provider types. These are identity types only.
+
 #### AWS IAM Identity Center
 
 ```yaml
@@ -874,35 +881,52 @@ identities:
 
 #### AWS User (Break-glass)
 
-AWS User identities are standalone and do not require a `via` provider configuration. They authenticate directly using AWS access keys.
+AWS User identities are standalone and do not require a `via` provider configuration. They authenticate directly using AWS access keys stored in the system keyring.
 
 ```yaml
 identities:
   superuser:
     kind: aws/user
     spec:
-      # Credentials can be specified in spec (takes precedence)
-      access_key_id: !env AWS_SUPERUSER_ACCESS_KEY_ID
-      secret_access_key: !env AWS_SUPERUSER_SECRET_ACCESS_KEY
       region: us-east-1
+      # MFA ARN is optional and stored in AWSCredentials schema
     alias: superuser
 
-  # Alternative: credentials retrieved from keyring when not in spec
-  emergency-keyring:
+  emergency-admin:
     kind: aws/user
     spec:
       region: us-east-1
-      # access_key_id and secret_access_key retrieved from keyring
-      # Configure with: atmos auth user configure
-    alias: emergency-keyring
+    alias: emergency
 ```
 
 **Key Characteristics:**
 
 - No `via` provider required - AWS User identities are self-contained
-- Credentials sourced from environment variables or OS keychain
+- Credentials stored securely in system keyring using `schema.Credentials` format with AWS wrapper
+- Configure credentials using `atmos auth user configure` interactive command
+- MFA ARN support integrated directly into `AWSCredentials` schema
 - Primarily used for break-glass scenarios and emergency access
 - Direct AWS API authentication using access key pairs
+- AWS files written to `~/.aws/atmos/aws-user/credentials` and `~/.aws/atmos/aws-user/config`
+
+**Credential Storage Format:**
+
+Credentials are stored in the system keyring using the `schema.Credentials` format:
+
+```go
+type Credentials struct {
+    AWS *AWSCredentials `json:"aws,omitempty"`
+}
+
+type AWSCredentials struct {
+    AccessKeyID     string `json:"access_key_id,omitempty"`
+    SecretAccessKey string `json:"secret_access_key,omitempty"`
+    SessionToken    string `json:"session_token,omitempty"`
+    Region          string `json:"region,omitempty"`
+    Expiration      string `json:"expiration,omitempty"`
+    MfaArn          string `json:"mfa_arn,omitempty"`
+}
+```
 
 #### Azure Role
 
