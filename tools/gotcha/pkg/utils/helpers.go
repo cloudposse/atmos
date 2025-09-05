@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -664,12 +665,33 @@ func (p *StreamProcessor) printSummary() {
 		return
 	}
 
+	// Calculate overall coverage
+	var totalCoverage float64
+	var packagesWithCoverage int
+	for _, pkg := range p.packageResults {
+		if pkg.Coverage != "" && pkg.Coverage != "0.0%" {
+			// Parse percentage from string like "75.2%"
+			coverageStr := strings.TrimSuffix(pkg.Coverage, "%")
+			if coverageVal, err := strconv.ParseFloat(coverageStr, 64); err == nil {
+				totalCoverage += coverageVal
+				packagesWithCoverage++
+			}
+		}
+	}
+
 	fmt.Fprintf(os.Stderr, "\n\n")
 	fmt.Fprintf(os.Stderr, "%s\n", tui.StatsHeaderStyle.Render("Test Results:"))
 	fmt.Fprintf(os.Stderr, "  %s Passed:  %d\n", tui.PassStyle.Render(tui.CheckPass), p.passed)
 	fmt.Fprintf(os.Stderr, "  %s Failed:  %d\n", tui.FailStyle.Render(tui.CheckFail), p.failed)
 	fmt.Fprintf(os.Stderr, "  %s Skipped: %d\n", tui.SkipStyle.Render(tui.CheckSkip), p.skipped)
 	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
+	
+	// Display average coverage if available
+	if packagesWithCoverage > 0 {
+		avgCoverage := totalCoverage / float64(packagesWithCoverage)
+		fmt.Fprintf(os.Stderr, "  Coverage:  %.1f%%\n", avgCoverage)
+	}
+	
 	fmt.Fprintf(os.Stderr, "\n")
 
 	// Log completion time as info message
