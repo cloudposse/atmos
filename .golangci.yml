@@ -35,8 +35,10 @@ linters:
       threshold: 150
     forbidigo:
       forbid:
-        - pattern: os\.Getenv
+        - pattern: 'os\.Getenv'
           msg: Use `viper.BindEnv` for new environment variables instead of `os.Getenv`
+        - pattern: 'os\.Setenv'
+          msg: Use `viper` for environment variables instead of `os.Setenv`
         - pattern: '\.Skip\('
           msg: Use `t.Skipf` with a descriptive reason instead of `t.Skip`
     funlen:
@@ -132,34 +134,35 @@ linters:
           severity: warning
           disabled: false
         - name: var-declaration
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    rules:
-      - linters:
-          - err113
-          - errcheck
-          - forbidigo
-          - funlen
-          - gocognit
-          - gosec
-          - revive
-        path: _test\.go$
-      - linters:
-          - cyclop
-        path: (.+)_test\.go
-    paths:
-      - experiments/.*
-      - third_party$
-      - builtin$
-      - examples$
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-rules:
+    # Exclude os.Getenv/Setenv forbidigo errors in test files but keep other checks like t.Skip
+    - path: '_test\.go$'
+      text: 'os\.(Getenv|Setenv)'
+    
+    # Exclude os.Getenv/Setenv errors in test_preconditions.go
+    - path: 'tests/test_preconditions\.go$'
+      text: 'os\.(Getenv|Setenv)'
+    
+    # Also exclude for cli_test.go 
+    - path: 'tests/cli_test\.go$'
+      text: 'os\.(Getenv|Setenv)'
+    
+    # Existing test file exclusions for other linters
+    - path: '_test\.go$'
+      linters:
+        - err113
+        - errcheck
+        - funlen
+        - gocognit
+        - gosec
+        - revive
+    
+    - path: '(.+)_test\.go$'
+      linters:
+        - cyclop
 severity:
   default: error
   rules:

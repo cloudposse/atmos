@@ -1,3 +1,4 @@
+//nolint:forbidigo // Test files need os.Getenv/Setenv for test setup
 package tests
 
 import (

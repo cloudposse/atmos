@@ -1,3 +1,4 @@
+//nolint:forbidigo // Test helper package needs os.Getenv/Setenv for precondition checks
 package tests
 
 import (
