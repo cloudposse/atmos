@@ -61,6 +61,10 @@ gotcha stream -- -run TestConfigLoad
 gotcha stream -- -run "TestConfig.*"
 gotcha stream -- -run TestStackProcess -race
 
+# Configure coverage packages (useful for monorepos)
+gotcha stream --coverprofile=coverage.out -- -coverpkg=github.com/cloudposse/atmos/...
+gotcha stream --coverprofile=coverage.out -- -coverpkg=./pkg/...,./internal/...
+
 # Combine gotcha flags with go test flags
 gotcha stream --show=failed -- -run "Test.*Load" -v
 
@@ -93,7 +97,7 @@ gotcha parse --coverprofile=coverage.out --format=both
 - `--packages`: Space-separated packages to test (default: `./...`)
 - `--show`: Filter displayed tests: `all`, `failed`, `passed`, `skipped` (default: `all`)
 - `--timeout`: Test timeout duration (default: `40m`)
-- `--output`: Output file for JSON results (default: `gotcha-results.json`)
+- `--output`: Output file for JSON results (default: `test-results.json` in temp dir)
 - `--coverprofile`: Coverage profile file for detailed analysis
 - `--include`: Regex patterns to include packages (comma-separated, default: `.*`)
 - `--exclude`: Regex patterns to exclude packages (comma-separated)
@@ -104,6 +108,10 @@ gotcha parse --coverprofile=coverage.out --format=both
 - `--output`: Output file (default: stdout for stdin/markdown)
 - `--coverprofile`: Coverage profile file for detailed analysis
 - `--exclude-mocks`: Exclude mock files from coverage calculations (default: `true`)
+- `--post-comment`: Post test summary as GitHub PR comment (default: `false`)
+- `--generate-summary`: Write test summary to test-summary.md file (default: `false`)
+- `--github-token`: GitHub token for authentication (defaults to GITHUB_TOKEN env)
+- `--comment-uuid`: UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)
 
 ## Input Format
 

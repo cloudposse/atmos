@@ -16,6 +16,16 @@ on:
       - "test/**"
 
   workflow_dispatch:
+    inputs:
+      enable-tmate:
+        description: 'Enable tmate debugging'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+          - 'on-failure'
 
 env:
   TERRAFORM_VERSION: "1.9.7"
@@ -97,6 +107,8 @@ jobs:
     runs-on: ${{ matrix.flavor.os }}
     env:
       GOTCHA_COMMENT_UUID: e7b3c8f2-4d5a-4c9b-8e1f-2a3b4c5d6e7f
+      GOTCHA_JOB_DISCRIMINATOR: ${{ matrix.flavor.target }}
+      GOTCHA_POST_COMMENT: adaptive
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -194,6 +206,16 @@ jobs:
       #        ]
       #       }
 
+      # Setup tmate session for debugging (activate by creating a label 'debug-with-tmate' on the PR or enable-tmate input)
+      # Skip for bot accounts since they don't have SSH keys
+      - name: Setup tmate session
+        if: ${{ !endsWith(github.actor, '[bot]') && ((github.event_name == 'workflow_dispatch' && github.event.inputs.enable-tmate == 'true') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'debug-with-tmate'))) && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+          detached: true
+        timeout-minutes: 15
+
       - name: Acceptance tests
         timeout-minutes: 30
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -202,6 +224,15 @@ jobs:
           # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-ci
+      
+      # Setup tmate session for debugging after failure (activate by creating a label 'debug-on-failure' on the PR or enable-tmate=on-failure input)
+      # Skip for bot accounts since they don't have SSH keys
+      - name: Setup tmate session on failure
+        if: ${{ failure() && !endsWith(github.actor, '[bot]') && ((github.event_name == 'workflow_dispatch' && github.event.inputs.enable-tmate == 'on-failure') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'debug-on-failure'))) && ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+        timeout-minutes: 30
 
 
       - name: Upload test artifacts for debugging
