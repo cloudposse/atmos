@@ -154,6 +154,24 @@ viper.SetEnvPrefix("ATMOS")
 - Target >80% coverage, especially for `pkg/` and `internal/exec/`
 - **Comments must end with periods**: All comments should be complete sentences ending with a period (enforced by golangci-lint)
 
+### Test Skipping Conventions (MANDATORY)
+- **ALWAYS use `t.Skipf()` instead of `t.Skip()`** - Provide clear reasons for skipped tests
+- **NEVER use `t.Skip()` without a reason** - This is enforced by golangci-lint's `forbidigo` linter
+- Examples:
+  ```go
+  // WRONG: No reason provided
+  t.Skip("Skipping test")
+  
+  // CORRECT: Clear reason with context
+  t.Skipf("Skipping symlink test on Windows: symlinks require special privileges")
+  t.Skipf("Skipping test: %s", dynamicReason)
+  ```
+- **For CLI tests that depend on rebuilt binaries**:
+  - Package-level `skipReason` variable is set in `TestMain`
+  - Individual test functions check and skip with `t.Skipf()` if set
+  - TestMain MUST always call `m.Run()` to allow proper test skipping
+  - Never use `log.Fatal()` for missing/stale binaries
+
 ### CLI Command Structure & Examples
 Atmos uses **embedded markdown files** for maintainable examples:
 

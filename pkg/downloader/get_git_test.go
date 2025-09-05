@@ -520,7 +520,7 @@ func TestCheckGitVersion_CommandError(t *testing.T) {
 
 func TestCheckGitVersion_WindowsSuffix_Stripped(t *testing.T) {
 	if runtime.GOOS != "windows" {
-		t.Skip("windows-specific behavior")
+		t.Skipf("Skipping test: Windows-specific git behavior differs from Unix systems")
 	}
 	// On Windows, version string may contain ".windows." and should be stripped
 	writeFakeGit(t, "git version 2.20.1.windows.1", 0)

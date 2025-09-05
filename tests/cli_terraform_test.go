@@ -13,6 +13,10 @@ import (
 )
 
 func TestCLITerraformClean(t *testing.T) {
+	if skipReason != "" {
+		t.Skipf("%s", skipReason)
+	}
+	
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_BASE_PATH")
