@@ -15,7 +15,7 @@ import (
 
 // authExecCmd executes a command with authentication environment variables
 var authExecCmd = &cobra.Command{
-	Use:   "exec [command] [args...]",
+	Use:   "exec",
 	Short: "Execute a command with authentication environment variables",
 	Long:  "Execute a command with the authenticated identity's environment variables set.",
 	Args:  cobra.MinimumNArgs(1),
@@ -92,7 +92,7 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 	// Prepare the command
 	cmdName := args[0]
 	cmdArgs := args[1:]
-	
+
 	// Look for the command in PATH
 	cmdPath, err := exec.LookPath(cmdName)
 	if err != nil {

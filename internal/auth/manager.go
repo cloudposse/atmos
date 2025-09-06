@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/internal/auth/identities/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // manager implements the AuthManager interface
@@ -160,12 +163,59 @@ func (m *manager) SetupAWSFiles(ctx context.Context, providerName, identityName 
 
 // GetDefaultIdentity returns the name of the default identity, if any
 func (m *manager) GetDefaultIdentity() (string, error) {
+	// Find all default identities
+	var defaultIdentities []string
 	for name, identity := range m.config.Identities {
 		if identity.Default {
-			return name, nil
+			defaultIdentities = append(defaultIdentities, name)
 		}
 	}
-	return "", fmt.Errorf("no default identity configured")
+
+	// Handle different scenarios based on number of default identities found
+	switch len(defaultIdentities) {
+	case 0:
+		// No default identities found
+		if telemetry.IsCI() {
+			return "", fmt.Errorf("no default identity configured")
+		}
+		// In interactive mode, prompt user to choose from all identities
+		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
+
+	case 1:
+		// Exactly one default identity found - use it
+		return defaultIdentities[0], nil
+
+	default:
+		// Multiple default identities found
+		if telemetry.IsCI() {
+			return "", fmt.Errorf("multiple default identities found: %v", defaultIdentities)
+		}
+		// In interactive mode, prompt user to choose from default identities
+		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
+	}
+}
+
+// promptForIdentity prompts the user to select an identity from the given list
+func (m *manager) promptForIdentity(message string, identities []string) (string, error) {
+	if len(identities) == 0 {
+		return "", fmt.Errorf("no identities available")
+	}
+
+	var selectedIdentity string
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(message).
+				Options(huh.NewOptions(identities...)...).
+				Value(&selectedIdentity),
+		),
+	)
+
+	if err := form.Run(); err != nil {
+		return "", fmt.Errorf("failed to select identity: %w", err)
+	}
+
+	return selectedIdentity, nil
 }
 
 // ListIdentities returns all available identity names
@@ -323,85 +373,87 @@ func (m *manager) findFirstValidCachedCredentials(chain []string, targetIdentity
 
 // authenticateFromIndex performs authentication starting from the given index in the chain
 func (m *manager) authenticateFromIndex(ctx context.Context, chain []string, startIndex int, targetIdentity string) (*schema.Credentials, error) {
-	bold := lipgloss.NewStyle().Bold(true)
+	// Handle special case: standalone AWS user identity
+	if aws.IsStandaloneAWSUserChain(chain, m.config.Identities) {
+		return aws.AuthenticateStandaloneAWSUser(ctx, chain[0], m.identities)
+	}
+
+	// Handle regular provider-based authentication chains
+	return m.authenticateProviderChain(ctx, chain, startIndex, targetIdentity)
+}
+
+// authenticateProviderChain handles authentication for provider-based identity chains
+func (m *manager) authenticateProviderChain(ctx context.Context, chain []string, startIndex int, targetIdentity string) (*schema.Credentials, error) {
 	var currentCreds *schema.Credentials
 	var err error
 
-	// Determine starting point
-	actualStartIndex := startIndex
-	if startIndex == -1 {
-		actualStartIndex = 0 // Start from provider if no valid cached credentials
-	}
-
-	// If we have valid cached credentials, retrieve them as starting point
-	if startIndex > 0 {
-		identityName := chain[startIndex]
-		currentCreds, err = m.credentialStore.Retrieve(identityName)
+	// Determine actual starting point for authentication
+	actualStartIndex := m.determineStartingIndex(chain, startIndex)
+	
+	// Retrieve cached credentials if starting from a cached point
+	if actualStartIndex > 0 {
+		currentCreds, err = m.retrieveCachedCredentials(chain, startIndex)
 		if err != nil {
 			log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
 			actualStartIndex = 0
-		} else {
-			log.Debug("Starting authentication from cached credentials", "startIndex", startIndex)
-			actualStartIndex = startIndex + 1 // Start from next step after cached credentials
 		}
 	}
 
 	// Step 1: Authenticate with provider if needed
 	if actualStartIndex == 0 {
-		providerName := chain[0]
-		provider, exists := m.providers[providerName]
-		if !exists {
-			return nil, fmt.Errorf("provider %q not found", providerName)
-		}
-
-		log.Debug("Authenticating with provider", "provider", providerName)
-		currentCreds, err = provider.Authenticate(ctx)
+		currentCreds, err = m.authenticateWithProvider(ctx, chain[0])
 		if err != nil {
-			return nil, fmt.Errorf("provider %q authentication failed: %w", providerName, err)
+			return nil, err
 		}
-
-		// Cache provider credentials
-		if err := m.credentialStore.Store(providerName, currentCreds); err != nil {
-			log.Debug("Failed to cache provider credentials", "error", err)
-		} else {
-			log.Debug("Cached provider credentials", "providerName", providerName)
-		}
-
-		log.Debug("Provider authenticated", "provider", providerName)
 		actualStartIndex = 1
 	}
 
 	// Step 2: Authenticate through identity chain
-	for i := actualStartIndex; i < len(chain); i++ {
-		identityStep := chain[i]
-		identity, exists := m.identities[identityStep]
-		if !exists {
-			log.Error("❌ Chaining identity %s → %s", bold.Render(getPreviousStepName(chain, i)), bold.Render(identityStep))
-			return nil, fmt.Errorf("identity %q not found in chain step %d", identityStep, i)
-		}
+	return m.authenticateIdentityChain(ctx, chain, actualStartIndex, currentCreds)
+}
 
-		log.Debug("Authenticating identity step", "step", i, "identity", identityStep, "kind", identity.Kind())
+// determineStartingIndex determines where to start authentication based on cached credentials
+func (m *manager) determineStartingIndex(chain []string, startIndex int) int {
+	if startIndex == -1 {
+		return 0 // Start from provider if no valid cached credentials
+	}
+	return startIndex
+}
 
-		// Each identity receives credentials from the previous step
-		nextCreds, err := identity.Authenticate(ctx, currentCreds)
-		if err != nil {
-			log.Error("❌ Chaining identity %s → %s", bold.Render(getPreviousStepName(chain, i)), bold.Render(identityStep))
-			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
-		}
+// retrieveCachedCredentials retrieves cached credentials from the specified starting point
+func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*schema.Credentials, error) {
+	identityName := chain[startIndex]
+	currentCreds, err := m.credentialStore.Retrieve(identityName)
+	if err != nil {
+		return nil, err
+	}
+	
+	log.Debug("Starting authentication from cached credentials", "startIndex", startIndex)
+	return currentCreds, nil
+}
 
-		currentCreds = nextCreds
-
-		// Cache credentials for this level
-		if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
-			log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
-		} else {
-			log.Debug("Cached credentials", "identityStep", identityStep)
-		}
-
-		log.Infof("✅ Chaining identity %s → %s", bold.Render(getPreviousStepName(chain, i)), bold.Render(identityStep))
+// authenticateWithProvider handles provider authentication
+func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (*schema.Credentials, error) {
+	provider, exists := m.providers[providerName]
+	if !exists {
+		return nil, fmt.Errorf("provider %q not found", providerName)
 	}
 
-	return currentCreds, nil
+	log.Debug("Authenticating with provider", "provider", providerName)
+	credentials, err := provider.Authenticate(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("provider %q authentication failed: %w", providerName, err)
+	}
+
+	// Cache provider credentials
+	if err := m.credentialStore.Store(providerName, credentials); err != nil {
+		log.Debug("Failed to cache provider credentials", "error", err)
+	} else {
+		log.Debug("Cached provider credentials", "providerName", providerName)
+	}
+
+	log.Debug("Provider authenticated", "provider", providerName)
+	return credentials, nil
 }
 
 // Helper functions for logging
@@ -420,65 +472,19 @@ func getPreviousStepName(chain []string, currentIndex int) string {
 }
 
 // authenticateIdentityChain performs sequential authentication through an identity chain
-func (m *manager) authenticateIdentityChain(ctx context.Context, identityName string) (*schema.Credentials, error) {
+func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string, startIndex int, initialCreds *schema.Credentials) (*schema.Credentials, error) {
 	bold := lipgloss.NewStyle().Bold(true)
 
-	// Build the authentication chain from target identity back to source provider
-	chain, err := m.buildAuthenticationChain(identityName)
+	log.Debug("Authenticating identity chain", "chainLength", len(chain), "startIndex", startIndex, "chain", chain)
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
-	}
+	currentCreds := initialCreds
 
-	log.Debug("Authentication chain built", "identity", identityName, "chainLength", len(chain), "chain", chain)
-
-	var currentCreds *schema.Credentials
-	var startIndex int
-
-	// Check if this is an AWS User identity (standalone, no provider)
-	if len(chain) == 1 {
-		// Single identity in chain - check if it's AWS User
-		identityName := chain[0]
-		if identity, exists := m.config.Identities[identityName]; exists && identity.Kind == "aws/user" {
-			// AWS User identity - authenticate directly without provider
-			identityInstance, exists := m.identities[identityName]
-			if !exists {
-				return nil, fmt.Errorf("AWS User identity %q not found", identityName)
-			}
-
-			// AWS User identities authenticate with nil credentials (no provider chain)
-			currentCreds, err = identityInstance.Authenticate(ctx, nil)
-			if err != nil {
-				return nil, fmt.Errorf("AWS User identity %q authentication failed: %w", identityName, err)
-			}
-
-			log.Debug("AWS User authenticated directly", "identity", identityName, "hasAWSCreds", currentCreds.AWS != nil)
-			return currentCreds, nil
-		}
-	}
-
-	// Standard provider-based authentication chain
-	// Step 1: Authenticate with the source provider
-	providerName := chain[0]
-	provider, exists := m.providers[providerName]
-	if !exists {
-		return nil, fmt.Errorf("provider %q not found", providerName)
-	}
-
-	currentCreds, err = provider.Authenticate(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("provider %q authentication failed: %w", providerName, err)
-	}
-
-	log.Debug("Provider authenticated", "provider", providerName, "hasAWSCreds", currentCreds.AWS != nil)
-	startIndex = 1
-
-	// Step 2: Authenticate through each identity in the chain
+	// Step 2: Authenticate through identity chain starting from startIndex
 	for i := startIndex; i < len(chain); i++ {
 		identityStep := chain[i]
 		identity, exists := m.identities[identityStep]
 		if !exists {
-			log.Error("❌ Chaining identity %s → %s", bold.Render(chain[i-1]), bold.Render(identityStep))
+			log.Error("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
 			return nil, fmt.Errorf("identity %q not found in chain step %d", identityStep, i)
 		}
 
@@ -487,12 +493,20 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, identityName st
 		// Each identity receives credentials from the previous step
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			log.Error("❌ Chaining identity %s → %s", bold.Render(chain[i-1]), bold.Render(identityStep))
+			log.Error("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
 			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
 		}
 
 		currentCreds = nextCreds
-		log.Infof("✅ Chaining identity %s → %s", bold.Render(chain[i-1]), bold.Render(identityStep))
+
+		// Cache credentials for this level
+		if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
+			log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
+		} else {
+			log.Debug("Cached credentials", "identityStep", identityStep)
+		}
+
+		log.Infof("✅ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
 	}
 
 	return currentCreds, nil

@@ -42,12 +42,33 @@ func (i *userIdentity) Kind() string {
 
 // Authenticate performs authentication by retrieving long-lived credentials and generating session tokens
 func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
-	// For AWS User identities, retrieve long-lived credentials from credential store
-	credStore := atmosCredentials.NewCredentialStore()
+	var longLivedCreds *schema.Credentials
+	var err error
 	
-	longLivedCreds, err := credStore.Retrieve(i.name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve AWS User credentials for %q: %w", i.name, err)
+	// Check if credentials are configured in atmos.yaml (environment templating)
+	if accessKeyID, ok := i.config.Credentials["access_key_id"].(string); ok && accessKeyID != "" {
+		// Credentials are configured in atmos.yaml - use them directly
+		secretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
+		mfaArn, _ := i.config.Credentials["mfa_arn"].(string)
+		
+		longLivedCreds = &schema.Credentials{
+			AWS: &schema.AWSCredentials{
+				AccessKeyID:     accessKeyID,
+				SecretAccessKey: secretAccessKey,
+				MfaArn:          mfaArn,
+			},
+		}
+		
+		log.Debug("Using credentials from atmos.yaml configuration", "identity", i.name, "hasAccessKey", accessKeyID != "", "hasMFA", mfaArn != "")
+	} else {
+		// Fallback to credential store (keyring) for stored credentials
+		credStore := atmosCredentials.NewCredentialStore()
+		longLivedCreds, err = credStore.Retrieve(i.name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve AWS User credentials for %q: %w", i.name, err)
+		}
+		
+		log.Debug("Using credentials from keyring", "identity", i.name)
 	}
 	
 	// Get region from identity credentials
@@ -242,4 +263,38 @@ func (i *userIdentity) Merge(component *schema.Identity) types.Identity {
 	}
 
 	return merged
+}
+
+// IsStandaloneAWSUserChain checks if the authentication chain represents a standalone AWS user identity
+func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Identity) bool {
+	if len(chain) != 1 {
+		return false
+	}
+	
+	identityName := chain[0]
+	if identity, exists := identities[identityName]; exists {
+		return identity.Kind == "aws/user"
+	}
+	
+	return false
+}
+
+// AuthenticateStandaloneAWSUser handles authentication for standalone AWS user identities
+func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, identities map[string]types.Identity) (*schema.Credentials, error) {
+	log.Debug("Authenticating AWS user identity directly", "identity", identityName)
+	
+	// Get the identity instance
+	userIdentity, exists := identities[identityName]
+	if !exists {
+		return nil, fmt.Errorf("AWS user identity %q not found", identityName)
+	}
+	
+	// AWS user identities authenticate directly without provider credentials
+	credentials, err := userIdentity.Authenticate(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("AWS user identity %q authentication failed: %w", identityName, err)
+	}
+	
+	log.Debug("AWS user identity authenticated successfully", "identity", identityName)
+	return credentials, nil
 }
