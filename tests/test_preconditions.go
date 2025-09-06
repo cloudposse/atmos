@@ -26,6 +26,8 @@ const (
 	httpOKStatus = 200
 	// GithubAPIRateLimitWarning is the threshold for warning about low GitHub API rate limits.
 	githubAPIRateLimitWarning = 10
+	// EnvAWSProfile is the environment variable for AWS profile.
+	envAWSProfile = "AWS_PROFILE"
 )
 
 // ShouldCheckPreconditions returns true if precondition checks should be performed.
@@ -40,21 +42,21 @@ func setAWSProfileEnv(profileName string) func() {
 		return func() {}
 	}
 
-	currentProfile := os.Getenv("AWS_PROFILE")
+	currentProfile := os.Getenv(envAWSProfile)
 	if currentProfile == profileName {
 		return func() {}
 	}
 
 	// Set the new profile
-	oldProfile := os.Getenv("AWS_PROFILE")
-	os.Setenv("AWS_PROFILE", profileName)
+	oldProfile := os.Getenv(envAWSProfile)
+	os.Setenv(envAWSProfile, profileName)
 
 	// Return cleanup function
 	return func() {
 		if oldProfile != "" {
-			os.Setenv("AWS_PROFILE", oldProfile)
+			os.Setenv(envAWSProfile, oldProfile)
 		} else {
-			os.Unsetenv("AWS_PROFILE")
+			os.Unsetenv(envAWSProfile)
 		}
 	}
 }
