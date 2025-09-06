@@ -16,15 +16,15 @@ type CacheFile struct {
 
 // CacheMetadata contains metadata about the cache file itself.
 type CacheMetadata struct {
-	LastUpdated    time.Time `yaml:"last_updated"`
-	GotchaVersion  string    `yaml:"gotcha_version,omitempty"`
+	LastUpdated   time.Time `yaml:"last_updated"`
+	GotchaVersion string    `yaml:"gotcha_version,omitempty"`
 }
 
 // DiscoveryCache contains test discovery and counting information.
 type DiscoveryCache struct {
-	TestCounts     map[string]TestCountEntry  `yaml:"test_counts"`
-	TestLists      map[string]TestListEntry   `yaml:"test_lists,omitempty"`
-	PackageDetails map[string]PackageDetail   `yaml:"package_details,omitempty"`
+	TestCounts     map[string]TestCountEntry `yaml:"test_counts"`
+	TestLists      map[string]TestListEntry  `yaml:"test_lists,omitempty"`
+	PackageDetails map[string]PackageDetail  `yaml:"package_details,omitempty"`
 }
 
 // TestCountEntry represents cached test count for a specific pattern.
@@ -37,7 +37,7 @@ type TestCountEntry struct {
 
 // TestListEntry represents cached test names for a specific pattern.
 type TestListEntry struct {
-	Tests           []string  `yaml:"tests"`           // List of test names discovered
+	Tests           []string  `yaml:"tests"` // List of test names discovered
 	Timestamp       time.Time `yaml:"timestamp"`
 	GoModTime       time.Time `yaml:"go_mod_time"`
 	PackagesScanned int       `yaml:"packages_scanned"`
@@ -79,15 +79,15 @@ type HistoryCache struct {
 
 // RunHistory represents a single test run.
 type RunHistory struct {
-	ID          string    `yaml:"id"`
-	Timestamp   time.Time `yaml:"timestamp"`
-	Pattern     string    `yaml:"pattern"`
-	Total       int       `yaml:"total"`
-	Passed      int       `yaml:"passed"`
-	Failed      int       `yaml:"failed"`
-	Skipped     int       `yaml:"skipped"`
-	DurationMs  int64     `yaml:"duration_ms"`
-	Flags       []string  `yaml:"flags,omitempty"`
+	ID         string    `yaml:"id"`
+	Timestamp  time.Time `yaml:"timestamp"`
+	Pattern    string    `yaml:"pattern"`
+	Total      int       `yaml:"total"`
+	Passed     int       `yaml:"passed"`
+	Failed     int       `yaml:"failed"`
+	Skipped    int       `yaml:"skipped"`
+	DurationMs int64     `yaml:"duration_ms"`
+	Flags      []string  `yaml:"flags,omitempty"`
 }
 
 // VCSCache stores VCS integration metadata.
