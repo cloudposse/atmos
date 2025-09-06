@@ -123,7 +123,7 @@ func TestAuthWhoamiCmd(t *testing.T) {
 				RunE: func(cmd *cobra.Command, args []string) error {
 					config := tt.setupConfig()
 					outputFormat, _ := cmd.Flags().GetString("output")
-					
+
 					// Find default identity
 					var defaultIdentity string
 					for name, identity := range config.Auth.Identities {
@@ -132,13 +132,13 @@ func TestAuthWhoamiCmd(t *testing.T) {
 							break
 						}
 					}
-					
+
 					if defaultIdentity == "" {
 						cmd.Println("**No default identity configured**")
 						cmd.Println("Configure auth in atmos.yaml and run `atmos auth login` to authenticate.")
 						return nil
 					}
-					
+
 					// Mock whoami info
 					expTime, _ := time.Parse(time.RFC3339, "2024-01-01T12:00:00Z")
 					whoamiInfo := schema.WhoamiInfo{
@@ -149,7 +149,7 @@ func TestAuthWhoamiCmd(t *testing.T) {
 						Expiration:  &expTime,
 						Credentials: &schema.Credentials{},
 					}
-					
+
 					if outputFormat == "json" {
 						jsonData, _ := json.MarshalIndent(whoamiInfo, "", "  ")
 						cmd.Println(string(jsonData))
@@ -162,7 +162,7 @@ func TestAuthWhoamiCmd(t *testing.T) {
 							cmd.Printf("**Expiration**: %s\n", whoamiInfo.Expiration.Format(time.RFC3339))
 						}
 					}
-					
+
 					return nil
 				},
 			}
@@ -198,7 +198,7 @@ func TestAuthWhoamiCmdFlags(t *testing.T) {
 		Use: "whoami",
 	}
 	cmd.Flags().StringP("output", "o", "", "Output format (json)")
-	
+
 	// Test that output flag is present
 	outputFlag := cmd.Flags().Lookup("output")
 	require.NotNil(t, outputFlag)

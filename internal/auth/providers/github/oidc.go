@@ -22,11 +22,11 @@ func NewOIDCProvider(name string, config *schema.Provider) (types.Provider, erro
 	if config == nil {
 		return nil, fmt.Errorf("provider config is required")
 	}
-	
+
 	if name == "" {
 		return nil, fmt.Errorf("provider name is required")
 	}
-	
+
 	if config.Region == "" {
 		return nil, fmt.Errorf("region is required")
 	}
@@ -96,7 +96,7 @@ func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToke
 	// This would typically make an HTTP request to GitHub's OIDC endpoint
 	// For now, we'll check if the token is available directly from the environment
 	// In a real implementation, we'd make a request to requestURL with the requestToken
-	
+
 	// GitHub Actions provides the token directly in some cases
 	if directToken := os.Getenv("ACTIONS_ID_TOKEN"); directToken != "" {
 		return directToken, nil

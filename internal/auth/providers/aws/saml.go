@@ -118,7 +118,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	}
 
 	log.Debug("SAML assertion received", "length", len(samlAssertion))
-	
+
 	// Log first 1000 characters of SAML assertion for debugging
 	debugLength := 1000
 	if len(samlAssertion) < debugLength {
@@ -129,7 +129,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	// For Google Apps SAML, we need to extract the assertion from the Response
 	// The response contains a saml2p:Response with embedded saml2:Assertion
 	processedAssertion := p.preprocessGoogleSAMLResponse(samlAssertion)
-	
+
 	// Log the processed assertion for debugging
 	if len(processedAssertion) > 0 {
 		// Decode and log the processed assertion content
@@ -143,12 +143,12 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	roleStrings, err := saml2aws.ExtractAwsRoles([]byte(processedAssertion))
 	if err != nil {
 		log.Debug("Failed with processed assertion, trying original", "error", err)
-		
+
 		// Try with original assertion
 		roleStrings, err = saml2aws.ExtractAwsRoles([]byte(samlAssertion))
 		if err != nil {
 			log.Debug("Failed with original assertion, trying decoded", "error", err)
-			
+
 			// Try with decoded assertion (if it was Base64 encoded)
 			if decoded, decodeErr := base64.StdEncoding.DecodeString(samlAssertion); decodeErr == nil {
 				roleStrings, err = saml2aws.ExtractAwsRoles(decoded)
@@ -158,7 +158,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 					log.Debug("Success with decoded assertion format")
 				}
 			}
-			
+
 			// If still failing, try with the decoded processed assertion
 			if err != nil && len(processedAssertion) > 0 {
 				if decoded, decodeErr := base64.StdEncoding.DecodeString(processedAssertion); decodeErr == nil {
@@ -170,7 +170,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 					}
 				}
 			}
-			
+
 			if err != nil {
 				log.Error("All SAML assertion formats failed", "error", err)
 				return nil, fmt.Errorf("failed to extract AWS roles from SAML assertion (tried multiple formats): %w", err)
@@ -225,10 +225,10 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 
 	// Assume role with SAML
 	input := &sts.AssumeRoleWithSAMLInput{
-		RoleArn:          aws.String(role.RoleARN),
-		PrincipalArn:     aws.String(role.PrincipalARN),
-		SAMLAssertion:    aws.String(samlAssertion),
-		DurationSeconds:  aws.Int64(3600), // 1 hour
+		RoleArn:         aws.String(role.RoleARN),
+		PrincipalArn:    aws.String(role.PrincipalARN),
+		SAMLAssertion:   aws.String(samlAssertion),
+		DurationSeconds: aws.Int64(3600), // 1 hour
 	}
 
 	result, err := stsClient.AssumeRoleWithSAML(input)
@@ -292,7 +292,7 @@ func (p *samlProvider) Validate() error {
 // Environment returns environment variables for this provider
 func (p *samlProvider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
-	
+
 	// Set AWS region
 	env["AWS_DEFAULT_REGION"] = p.region
 	env["AWS_REGION"] = p.region
@@ -311,12 +311,12 @@ func (p *samlProvider) setupBrowserAutomation() error {
 	if p.config.DownloadBrowserDriver {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
 	}
-	
+
 	// For Google Apps SAML, we need to use Browser provider type
 	if strings.Contains(p.url, "accounts.google.com") {
 		log.Debug("Detected Google Apps SAML, using Browser provider")
 	}
-	
+
 	return nil
 }
 
@@ -328,34 +328,34 @@ func (p *samlProvider) preprocessGoogleSAMLResponse(samlResponse string) string 
 		decodedResponse = string(decoded)
 		log.Debug("Successfully decoded Base64 SAML response", "originalLength", len(samlResponse), "decodedLength", len(decodedResponse))
 	}
-	
+
 	// Check if this looks like a Google Apps SAML response
 	if !strings.Contains(decodedResponse, "saml2p:Response") {
 		log.Debug("Not a Google Apps SAML response, returning original")
 		return samlResponse // Return original encoded response
 	}
-	
+
 	// Find the assertion within the response
 	assertionStart := strings.Index(decodedResponse, "<saml2:Assertion")
 	if assertionStart == -1 {
 		log.Debug("No saml2:Assertion found in decoded response, returning original")
 		return samlResponse
 	}
-	
+
 	assertionEnd := strings.Index(decodedResponse[assertionStart:], "</saml2:Assertion>")
 	if assertionEnd == -1 {
 		log.Debug("No closing saml2:Assertion tag found, returning original")
 		return samlResponse
 	}
-	
+
 	// Extract the assertion including the closing tag
 	assertion := decodedResponse[assertionStart : assertionStart+assertionEnd+len("</saml2:Assertion>")]
 	log.Debug("Extracted assertion from Google SAML response", "length", len(assertion))
-	
+
 	// Re-encode the extracted assertion as Base64 for saml2aws
 	encodedAssertion := base64.StdEncoding.EncodeToString([]byte(assertion))
 	log.Debug("Re-encoded assertion as Base64", "encodedLength", len(encodedAssertion))
-	
+
 	return encodedAssertion
 }
 
@@ -367,7 +367,7 @@ func (p *samlProvider) setupSAML2AWSConfig() error {
 	}
 
 	configDir := filepath.Join(homeDir, ".saml2aws")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return fmt.Errorf("failed to create saml2aws config directory: %w", err)
 	}
 

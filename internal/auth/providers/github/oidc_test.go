@@ -13,11 +13,11 @@ import (
 
 func TestNewOIDCProvider(t *testing.T) {
 	tests := []struct {
-		name        string
+		name         string
 		providerName string
-		config      *schema.Provider
-		expectError bool
-		errorMsg    string
+		config       *schema.Provider
+		expectError  bool
+		errorMsg     string
 	}{
 		{
 			name:         "valid config",
@@ -38,9 +38,9 @@ func TestNewOIDCProvider(t *testing.T) {
 		{
 			name:         "missing region",
 			providerName: "github-oidc",
-			config:      &schema.Provider{Kind: "github/oidc"},
-			expectError: true,
-			errorMsg:    "region is required",
+			config:       &schema.Provider{Kind: "github/oidc"},
+			expectError:  true,
+			errorMsg:     "region is required",
 		},
 		{
 			name:         "empty name",
@@ -101,7 +101,7 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 				os.Unsetenv("GITHUB_ACTIONS")
 				os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 			},
-			cleanupEnv: func() {},
+			cleanupEnv:  func() {},
 			expectError: true,
 			errorMsg:    "GitHub OIDC authentication is only available in GitHub Actions environment",
 		},

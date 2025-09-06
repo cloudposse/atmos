@@ -319,7 +319,6 @@ func (m *manager) GetProviderForIdentity(identityName string) string {
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation
 func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, targetIdentity string) (*schema.Credentials, error) {
-
 	// Step 1: Bottom-up validation - check cached credentials from target to root
 	validFromIndex := m.findFirstValidCachedCredentials(chain, targetIdentity)
 
@@ -389,7 +388,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 
 	// Determine actual starting point for authentication
 	actualStartIndex := m.determineStartingIndex(chain, startIndex)
-	
+
 	// Retrieve cached credentials if starting from a cached point
 	if actualStartIndex > 0 {
 		currentCreds, err = m.retrieveCachedCredentials(chain, startIndex)
@@ -427,7 +426,7 @@ func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*sc
 	if err != nil {
 		return nil, err
 	}
-	
+
 	log.Debug("Starting authentication from cached credentials", "startIndex", startIndex)
 	return currentCreds, nil
 }

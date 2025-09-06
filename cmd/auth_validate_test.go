@@ -23,8 +23,8 @@ func TestAuthValidateCmd(t *testing.T) {
 					Auth: schema.AuthConfig{
 						Providers: map[string]schema.Provider{
 							"test-provider": {
-								Kind:   "aws/iam-identity-center",
-								Region: "us-east-1",
+								Kind:     "aws/iam-identity-center",
+								Region:   "us-east-1",
 								StartURL: "https://test.awsapps.com/start",
 							},
 						},
@@ -162,14 +162,14 @@ func TestAuthValidateCmd(t *testing.T) {
 				Use: "validate",
 				RunE: func(cmd *cobra.Command, args []string) error {
 					config := tt.setupConfig()
-					
+
 					// Mock validation logic
 					if err := mockValidateAuthConfig(&config.Auth); err != nil {
 						cmd.Printf("**❌ Authentication configuration validation failed:**\n")
 						cmd.Printf("%s\n", err.Error())
 						return nil
 					}
-					
+
 					cmd.Printf("**✅ Authentication configuration is valid**\n")
 					cmd.Printf("All providers and identities are properly configured.\n")
 					return nil
@@ -201,7 +201,7 @@ func mockValidateAuthConfig(config *schema.AuthConfig) error {
 		}
 		_ = name // Use the variable to avoid unused variable error
 	}
-	
+
 	// Check for nonexistent provider references
 	for _, identity := range config.Identities {
 		if identity.Via != nil && identity.Via.Provider != "" {
@@ -210,7 +210,7 @@ func mockValidateAuthConfig(config *schema.AuthConfig) error {
 			}
 		}
 	}
-	
+
 	// Check for circular references (simplified)
 	visited := make(map[string]bool)
 	for name, identity := range config.Identities {
@@ -219,7 +219,7 @@ func mockValidateAuthConfig(config *schema.AuthConfig) error {
 				return assert.AnError
 			}
 			visited[name] = true
-			
+
 			// Check if referenced identity points back
 			if refIdentity, exists := config.Identities[identity.Via.Identity]; exists {
 				if refIdentity.Via != nil && refIdentity.Via.Identity == name {
@@ -228,7 +228,7 @@ func mockValidateAuthConfig(config *schema.AuthConfig) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -239,7 +239,7 @@ func TestAuthValidateCmdIntegration(t *testing.T) {
 		Short: "Validate authentication configuration",
 		Long:  "Validate the authentication configuration in atmos.yaml for syntax and logical errors.",
 	}
-	
+
 	assert.Equal(t, "validate", cmd.Use)
 	assert.Equal(t, "Validate authentication configuration", cmd.Short)
 	assert.Contains(t, cmd.Long, "Validate the authentication configuration")

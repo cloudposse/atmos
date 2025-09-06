@@ -11,16 +11,16 @@ import (
 
 func TestManager_GetDefaultIdentity(t *testing.T) {
 	tests := []struct {
-		name           string
-		identities     map[string]schema.Identity
-		isCI           bool
-		expectedResult string
-		expectedError  string
+		name            string
+		identities      map[string]schema.Identity
+		isCI            bool
+		expectedResult  string
+		expectedError   string
 		skipInteractive bool // Skip tests that require user interaction
 	}{
 		{
-			name:           "no default identities - CI mode",
-			identities:     map[string]schema.Identity{
+			name: "no default identities - CI mode",
+			identities: map[string]schema.Identity{
 				"identity1": {Kind: "aws/user", Default: false},
 				"identity2": {Kind: "aws/user", Default: false},
 			},
@@ -28,8 +28,8 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			expectedError: "no default identity configured",
 		},
 		{
-			name:           "no default identities - interactive mode",
-			identities:     map[string]schema.Identity{
+			name: "no default identities - interactive mode",
+			identities: map[string]schema.Identity{
 				"identity1": {Kind: "aws/user", Default: false},
 				"identity2": {Kind: "aws/user", Default: false},
 			},
@@ -37,8 +37,8 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			skipInteractive: true, // Skip because it requires user interaction
 		},
 		{
-			name:           "single default identity - CI mode",
-			identities:     map[string]schema.Identity{
+			name: "single default identity - CI mode",
+			identities: map[string]schema.Identity{
 				"identity1": {Kind: "aws/user", Default: true},
 				"identity2": {Kind: "aws/user", Default: false},
 			},
@@ -46,8 +46,8 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			expectedResult: "identity1",
 		},
 		{
-			name:           "single default identity - interactive mode",
-			identities:     map[string]schema.Identity{
+			name: "single default identity - interactive mode",
+			identities: map[string]schema.Identity{
 				"identity1": {Kind: "aws/user", Default: true},
 				"identity2": {Kind: "aws/user", Default: false},
 			},
@@ -55,8 +55,8 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			expectedResult: "identity1",
 		},
 		{
-			name:           "multiple default identities - CI mode",
-			identities:     map[string]schema.Identity{
+			name: "multiple default identities - CI mode",
+			identities: map[string]schema.Identity{
 				"identity1": {Kind: "aws/user", Default: true},
 				"identity2": {Kind: "aws/user", Default: true},
 				"identity3": {Kind: "aws/user", Default: false},
@@ -65,8 +65,8 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			expectedError: "multiple default identities found: [identity1 identity2]",
 		},
 		{
-			name:           "multiple default identities - interactive mode",
-			identities:     map[string]schema.Identity{
+			name: "multiple default identities - interactive mode",
+			identities: map[string]schema.Identity{
 				"identity1": {Kind: "aws/user", Default: true},
 				"identity2": {Kind: "aws/user", Default: true},
 				"identity3": {Kind: "aws/user", Default: false},
@@ -75,14 +75,14 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			skipInteractive: true, // Skip because it requires user interaction
 		},
 		{
-			name:           "no identities at all - CI mode",
-			identities:     map[string]schema.Identity{},
+			name:          "no identities at all - CI mode",
+			identities:    map[string]schema.Identity{},
 			isCI:          true,
 			expectedError: "no default identity configured",
 		},
 		{
-			name:           "no identities at all - interactive mode",
-			identities:     map[string]schema.Identity{},
+			name:            "no identities at all - interactive mode",
+			identities:      map[string]schema.Identity{},
 			isCI:            false,
 			skipInteractive: true, // Skip because it requires user interaction
 		},
@@ -153,7 +153,7 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 
 	_, err := manager.GetDefaultIdentity()
 	require.Error(t, err)
-	
+
 	// The error should contain all three default identities
 	errorMsg := err.Error()
 	assert.Contains(t, errorMsg, "multiple default identities found:")
@@ -178,7 +178,7 @@ func TestManager_ListIdentities(t *testing.T) {
 	}
 
 	result := manager.ListIdentities()
-	
+
 	// Should return all identity names
 	assert.Len(t, result, 3)
 	assert.Contains(t, result, "identity1")

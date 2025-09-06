@@ -69,7 +69,7 @@ func (m *merger) MergeIdentity(global *schema.Identity, component *schema.Identi
 		Principal:   make(map[string]interface{}),
 		Credentials: make(map[string]interface{}),
 		Alias:       global.Alias,
-		Env: global.Env,
+		Env:         global.Env,
 	}
 
 	// Copy global principal

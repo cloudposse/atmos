@@ -28,9 +28,9 @@ func NewAWSFileManager() types.AWSFileManager {
 // WriteCredentials writes AWS credentials to the provider-specific file with identity profile
 func (m *awsFileManager) WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error {
 	credentialsPath := m.GetCredentialsPath(providerName)
-	
+
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(credentialsPath), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(credentialsPath), 0o700); err != nil {
 		return fmt.Errorf("failed to create credentials directory: %w", err)
 	}
 
@@ -63,7 +63,7 @@ func (m *awsFileManager) WriteCredentials(providerName, identityName string, cre
 	}
 
 	// Set proper file permissions
-	if err := os.Chmod(credentialsPath, 0600); err != nil {
+	if err := os.Chmod(credentialsPath, 0o600); err != nil {
 		return fmt.Errorf("failed to set credentials file permissions: %w", err)
 	}
 
@@ -73,9 +73,9 @@ func (m *awsFileManager) WriteCredentials(providerName, identityName string, cre
 // WriteConfig writes AWS config to the provider-specific file with identity profile
 func (m *awsFileManager) WriteConfig(providerName, identityName, region, outputFormat string) error {
 	configPath := m.GetConfigPath(providerName)
-	
+
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -100,7 +100,7 @@ func (m *awsFileManager) WriteConfig(providerName, identityName, region, outputF
 
 	// Debug logging for region
 	log.Debug("AWS WriteConfig", "providerName", providerName, "identityName", identityName, "region", region, "outputFormat", outputFormat)
-	
+
 	// Set config values only if they are not empty
 	if region != "" {
 		section.Key("region").SetValue(region)
@@ -108,7 +108,7 @@ func (m *awsFileManager) WriteConfig(providerName, identityName, region, outputF
 		// Remove region key if not present
 		section.DeleteKey("region")
 	}
-	
+
 	// Set output format only if explicitly provided
 	if outputFormat != "" {
 		section.Key("output").SetValue(outputFormat)
@@ -123,7 +123,7 @@ func (m *awsFileManager) WriteConfig(providerName, identityName, region, outputF
 	}
 
 	// Set proper file permissions
-	if err := os.Chmod(configPath, 0600); err != nil {
+	if err := os.Chmod(configPath, 0o600); err != nil {
 		return fmt.Errorf("failed to set config file permissions: %w", err)
 	}
 
@@ -171,11 +171,10 @@ func (m *awsFileManager) GetEnvironmentVariables(providerName, identityName stri
 // Cleanup removes AWS files for the provider
 func (m *awsFileManager) Cleanup(providerName string) error {
 	providerDir := filepath.Join(m.baseDir, providerName)
-	
+
 	if err := os.RemoveAll(providerDir); err != nil {
 		return fmt.Errorf("failed to cleanup AWS files: %w", err)
 	}
 
 	return nil
 }
-

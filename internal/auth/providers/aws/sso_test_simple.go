@@ -109,7 +109,7 @@ func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	// In a real test, we'd mock the AWS SDK clients
 	ctx := context.Background()
 	_, err = provider.Authenticate(ctx)
-	
+
 	// We expect this to fail in test environment without proper SSO setup
 	assert.Error(t, err)
 }

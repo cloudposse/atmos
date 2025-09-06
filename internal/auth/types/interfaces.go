@@ -10,19 +10,19 @@ import (
 type CloudProvider interface {
 	// GetName returns the name of the cloud provider (e.g., "aws", "azure", "gcp")
 	GetName() string
-	
+
 	// SetupEnvironment sets up cloud-specific environment variables and files
 	SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *schema.Credentials) error
-	
+
 	// GetEnvironmentVariables returns cloud-specific environment variables for tools like Terraform
 	GetEnvironmentVariables(providerName, identityName string) map[string]string
-	
+
 	// Cleanup removes temporary files and resources created by this provider
 	Cleanup(ctx context.Context, providerName, identityName string) error
-	
+
 	// ValidateCredentials validates that the provided credentials are valid for this cloud provider
 	ValidateCredentials(ctx context.Context, credentials *schema.Credentials) error
-	
+
 	// GetCredentialFilePaths returns the paths to credential files managed by this provider
 	GetCredentialFilePaths(providerName string) map[string]string
 }
@@ -31,7 +31,7 @@ type CloudProvider interface {
 type CloudProviderFactory interface {
 	// GetCloudProvider returns the appropriate cloud provider for the given provider kind
 	GetCloudProvider(providerKind string) (CloudProvider, error)
-	
+
 	// RegisterCloudProvider registers a new cloud provider
 	RegisterCloudProvider(name string, provider CloudProvider)
 }
@@ -40,10 +40,10 @@ type CloudProviderFactory interface {
 type CloudProviderManager interface {
 	// SetupEnvironment sets up cloud environment for the given provider kind and identity
 	SetupEnvironment(ctx context.Context, providerKind, providerName, identityName string, credentials *schema.Credentials) error
-	
+
 	// GetEnvironmentVariables returns environment variables for the given provider kind and identity
 	GetEnvironmentVariables(providerKind, providerName, identityName string) (map[string]string, error)
-	
+
 	// Cleanup removes temporary resources for the given provider kind and identity
 	Cleanup(ctx context.Context, providerKind, providerName, identityName string) error
 }

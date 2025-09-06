@@ -44,13 +44,13 @@ func (i *userIdentity) Kind() string {
 func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
 	var longLivedCreds *schema.Credentials
 	var err error
-	
+
 	// Check if credentials are configured in atmos.yaml (environment templating)
 	if accessKeyID, ok := i.config.Credentials["access_key_id"].(string); ok && accessKeyID != "" {
 		// Credentials are configured in atmos.yaml - use them directly
 		secretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
 		mfaArn, _ := i.config.Credentials["mfa_arn"].(string)
-		
+
 		longLivedCreds = &schema.Credentials{
 			AWS: &schema.AWSCredentials{
 				AccessKeyID:     accessKeyID,
@@ -58,7 +58,7 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 				MfaArn:          mfaArn,
 			},
 		}
-		
+
 		log.Debug("Using credentials from atmos.yaml configuration", "identity", i.name, "hasAccessKey", accessKeyID != "", "hasMFA", mfaArn != "")
 	} else {
 		// Fallback to credential store (keyring) for stored credentials
@@ -67,24 +67,24 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve AWS User credentials for %q: %w", i.name, err)
 		}
-		
+
 		log.Debug("Using credentials from keyring", "identity", i.name)
 	}
-	
+
 	// Get region from identity credentials
 	region := "us-east-1" // default
 	if r, ok := i.config.Credentials["region"].(string); ok && r != "" {
 		region = r
 	}
-	
+
 	// Debug logging
 	log.Debug("AWS User region extraction", "identity", i.name, "region", region, "credentials", i.config.Credentials)
-	
+
 	// Set region in credentials if not already set
 	if longLivedCreds.AWS.Region == "" {
 		longLivedCreds.AWS.Region = region
 	}
-	
+
 	// Always generate session tokens (with or without MFA)
 	return i.generateSessionToken(ctx, longLivedCreds, region)
 }
@@ -92,20 +92,20 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider
 func (i *userIdentity) writeAWSFiles(creds *schema.Credentials, region string) error {
 	awsFileManager := environment.NewAWSFileManager()
-	
+
 	// Debug logging
 	log.Debug("Writing AWS files", "identity", i.name, "region", region, "creds_region", creds.AWS.Region)
-	
+
 	// Write credentials to ~/.aws/atmos/aws-user/credentials
 	if err := awsFileManager.WriteCredentials("aws-user", i.name, creds.AWS); err != nil {
 		return fmt.Errorf("failed to write AWS credentials: %w", err)
 	}
-	
+
 	// Write config to ~/.aws/atmos/aws-user/config
 	if err := awsFileManager.WriteConfig("aws-user", i.name, region, ""); err != nil {
 		return fmt.Errorf("failed to write AWS config: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -128,7 +128,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	stsClient := sts.NewFromConfig(cfg)
 
 	var input *sts.GetSessionTokenInput
-	
+
 	// Check if MFA is required
 	if longLivedCreds.AWS.MfaArn != "" {
 		// Prompt for MFA token
@@ -157,8 +157,8 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 
 		// Get session token with MFA
 		input = &sts.GetSessionTokenInput{
-			SerialNumber: aws.String(longLivedCreds.AWS.MfaArn),
-			TokenCode:    aws.String(mfaToken),
+			SerialNumber:    aws.String(longLivedCreds.AWS.MfaArn),
+			TokenCode:       aws.String(mfaToken),
 			DurationSeconds: aws.Int32(3600), // 1 hour session
 		}
 	} else {
@@ -191,10 +191,9 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 
 	// Note: We keep the long-lived credentials in the keystore unchanged
 	// Only the session tokens are written to AWS config/credentials files
-	
+
 	return sessionCreds, nil
 }
-
 
 // Validate validates the identity configuration
 func (i *userIdentity) Validate() error {
@@ -205,16 +204,16 @@ func (i *userIdentity) Validate() error {
 // Environment returns environment variables for this identity
 func (i *userIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
-	
+
 	// Get AWS file environment variables using "aws-user" as mock provider
 	awsFileManager := environment.NewAWSFileManager()
 	awsEnvVars := awsFileManager.GetEnvironmentVariables("aws-user", i.name)
-	
+
 	// Convert to map format
 	for _, envVar := range awsEnvVars {
 		env[envVar.Key] = envVar.Value
 	}
-	
+
 	// Add environment variables from identity config
 	for _, envVar := range i.config.Env {
 		env[envVar.Key] = envVar.Value
@@ -234,7 +233,7 @@ func (i *userIdentity) Merge(component *schema.Identity) types.Identity {
 			Principal:   make(map[string]interface{}),
 			Credentials: make(map[string]interface{}),
 			Alias:       i.config.Alias,
-			Env: i.config.Env,
+			Env:         i.config.Env,
 		},
 	}
 
@@ -270,31 +269,31 @@ func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Ident
 	if len(chain) != 1 {
 		return false
 	}
-	
+
 	identityName := chain[0]
 	if identity, exists := identities[identityName]; exists {
 		return identity.Kind == "aws/user"
 	}
-	
+
 	return false
 }
 
 // AuthenticateStandaloneAWSUser handles authentication for standalone AWS user identities
 func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, identities map[string]types.Identity) (*schema.Credentials, error) {
 	log.Debug("Authenticating AWS user identity directly", "identity", identityName)
-	
+
 	// Get the identity instance
 	userIdentity, exists := identities[identityName]
 	if !exists {
 		return nil, fmt.Errorf("AWS user identity %q not found", identityName)
 	}
-	
+
 	// AWS user identities authenticate directly without provider credentials
 	credentials, err := userIdentity.Authenticate(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("AWS user identity %q authentication failed: %w", identityName, err)
 	}
-	
+
 	log.Debug("AWS user identity authenticated successfully", "identity", identityName)
 	return credentials, nil
 }

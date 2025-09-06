@@ -38,7 +38,7 @@ func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, i
 
 	// Create AWS directory structure
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
-	if err := os.MkdirAll(awsDir, 0755); err != nil {
+	if err := os.MkdirAll(awsDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create AWS directory: %w", err)
 	}
 
@@ -60,7 +60,7 @@ func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, i
 // GetEnvironmentVariables returns AWS-specific environment variables
 func (p *AWSCloudProvider) GetEnvironmentVariables(providerName, identityName string) map[string]string {
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
-	
+
 	return map[string]string{
 		"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(awsDir, "credentials"),
 		"AWS_CONFIG_FILE":             filepath.Join(awsDir, "config"),
@@ -99,7 +99,7 @@ func (p *AWSCloudProvider) ValidateCredentials(ctx context.Context, credentials 
 // GetCredentialPaths returns paths where AWS credentials are stored
 func (p *AWSCloudProvider) GetCredentialPaths(providerName, identityName string) (map[string]string, error) {
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
-	
+
 	return map[string]string{
 		"credentials": filepath.Join(awsDir, "credentials"),
 		"config":      filepath.Join(awsDir, "config"),
@@ -141,7 +141,6 @@ func (p *AWSCloudProvider) Cleanup(ctx context.Context, providerName, identityNa
 	return nil
 }
 
-
 // GetCredentialFilePaths returns the paths to credential files managed by this provider
 func (p *AWSCloudProvider) GetCredentialFilePaths(providerName string) map[string]string {
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
@@ -159,39 +158,39 @@ func (p *AWSCloudProvider) updateProfileInFile(path, profileName, content string
 		// If file doesn't exist, create empty INI
 		cfg = ini.Empty()
 	}
-	
+
 	// Parse the content to extract key-value pairs
 	lines := strings.Split(strings.TrimSpace(content), "\n")
 	if len(lines) == 0 {
 		return fmt.Errorf("invalid content format")
 	}
-	
+
 	// Skip the section header line (e.g., "[profile name]" or "[name]")
 	sectionName := strings.Trim(lines[0], "[]")
-	
+
 	// Get or create the section
 	section, err := cfg.NewSection(sectionName)
 	if err != nil {
 		return fmt.Errorf("failed to create section %s: %w", sectionName, err)
 	}
-	
+
 	// Add key-value pairs from remaining lines
 	for _, line := range lines[1:] {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		
+
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
 			continue
 		}
-		
+
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 		section.Key(key).SetValue(value)
 	}
-	
+
 	// Save the file with proper permissions
 	return cfg.SaveTo(path)
 }

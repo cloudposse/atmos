@@ -15,13 +15,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-type Provider = types.Provider
-type Identity = types.Identity
-type AuthManager = types.AuthManager
-type CredentialStore = types.CredentialStore
-type AWSFileManager = types.AWSFileManager
-type ConfigMerger = types.ConfigMerger
-type Validator = types.Validator
+type (
+	Provider        = types.Provider
+	Identity        = types.Identity
+	AuthManager     = types.AuthManager
+	CredentialStore = types.CredentialStore
+	AWSFileManager  = types.AWSFileManager
+	ConfigMerger    = types.ConfigMerger
+	Validator       = types.Validator
+)
 
 // TerraformPreHook runs before Terraform commands to set up authentication
 func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
@@ -45,7 +47,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	awsFileManager := environment.NewAWSFileManager()
 	configMerger := config.NewConfigMerger()
 	validator := validation.NewValidator()
-	
+
 	// Create cloud provider manager
 	cloudProviderManager := cloud.NewCloudProviderManager()
 
@@ -147,27 +149,27 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	// Setup cloud provider environment if provider is configured
 	if rootProviderName != "" {
 		var providerKind string
-		
+
 		// Handle AWS User identities (standalone, no provider config)
 		if rootProviderName == "aws-user" {
 			providerKind = "aws/user"
 		} else if provider, exists := mergedAuthConfig.Providers[rootProviderName]; exists {
 			providerKind = provider.Kind
 		}
-		
+
 		// Setup cloud provider environment if we have a provider kind
 		if providerKind != "" {
 			// Setup cloud provider environment (files, credentials, etc.)
 			if err := cloudProviderManager.SetupEnvironment(ctx, providerKind, rootProviderName, targetIdentityName, whoami.Credentials); err != nil {
 				return fmt.Errorf("failed to setup cloud provider environment: %w", err)
 			}
-			
+
 			// Get cloud provider environment variables
 			cloudEnvVars, err := cloudProviderManager.GetEnvironmentVariables(providerKind, rootProviderName, targetIdentityName)
 			if err != nil {
 				return fmt.Errorf("failed to get cloud provider environment variables: %w", err)
 			}
-			
+
 			// Convert map[string]string to []schema.EnvironmentVariable
 			var envVars []schema.EnvironmentVariable
 			for key, value := range cloudEnvVars {
@@ -176,7 +178,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 					Value: value,
 				})
 			}
-			
+
 			// Merge cloud provider environment variables
 			environment.MergeIdentityEnvOverrides(stackInfo, envVars)
 		}
@@ -187,4 +189,3 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvSection)
 	return nil
 }
-

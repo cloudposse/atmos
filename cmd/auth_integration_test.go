@@ -92,7 +92,7 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 
 	t.Run("Cloud Provider Factory Integration", func(t *testing.T) {
 		factory := cloud.NewCloudProviderFactory()
-		
+
 		// Test AWS provider creation
 		awsProvider, err := factory.GetCloudProvider("aws")
 		assert.NoError(t, err)
@@ -231,9 +231,9 @@ func TestAuthCommandsWithRealCloudProvider(t *testing.T) {
 		// Test that the provider can generate file paths
 		homeDir, err := os.UserHomeDir()
 		require.NoError(t, err)
-		
+
 		envVars := awsProvider.GetEnvironmentVariables("test-provider", "test-identity")
-		
+
 		// Verify paths are under user's home directory
 		for key, value := range envVars {
 			if key == "AWS_SHARED_CREDENTIALS_FILE" || key == "AWS_CONFIG_FILE" {
@@ -266,17 +266,17 @@ func TestAuthCommandsWithRealCloudProvider(t *testing.T) {
 		// Verify files were created
 		homeDir, err := os.UserHomeDir()
 		require.NoError(t, err)
-		
+
 		credentialsPath := filepath.Join(homeDir, ".aws", "atmos", "test-provider", "credentials")
 		configPath := filepath.Join(homeDir, ".aws", "atmos", "test-provider", "config")
-		
+
 		// Check if files exist (they should be created by SetupEnvironment)
 		_, err = os.Stat(credentialsPath)
 		if err == nil {
 			// If file exists, clean it up
 			defer os.Remove(credentialsPath)
 		}
-		
+
 		_, err = os.Stat(configPath)
 		if err == nil {
 			// If file exists, clean it up

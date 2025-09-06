@@ -25,7 +25,7 @@ var authValidateCmd = &cobra.Command{
 func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	// Get verbose flag
 	verbose, _ := cmd.Flags().GetBool("verbose")
-	
+
 	if verbose {
 		u.PrintfMarkdown("**Validating authentication configuration...**\n")
 	}

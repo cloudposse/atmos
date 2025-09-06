@@ -50,7 +50,7 @@ func (p *awsCloudProvider) SetupEnvironment(ctx context.Context, providerName, i
 
 	// Create AWS directory structure
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
-	if err := os.MkdirAll(awsDir, 0700); err != nil {
+	if err := os.MkdirAll(awsDir, 0o700); err != nil {
 		return fmt.Errorf("failed to create AWS directory: %w", err)
 	}
 
@@ -216,7 +216,7 @@ func (f *DefaultCloudProviderFactory) GetCloudProvider(providerKind string) (Clo
 	// Extract cloud provider name from provider kind
 	// Examples: "aws/sso" -> "aws", "azure/ad" -> "azure", "github/oidc" -> "aws" (for downstream AWS usage)
 	cloudName := f.extractCloudName(providerKind)
-	
+
 	provider, exists := f.providers[cloudName]
 	if !exists {
 		return nil, fmt.Errorf("unsupported cloud provider: %s (from provider kind: %s)", cloudName, providerKind)

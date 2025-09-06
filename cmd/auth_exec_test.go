@@ -183,10 +183,10 @@ func TestAuthExecCmd(t *testing.T) {
 					if len(args) == 0 {
 						return assert.AnError
 					}
-					
+
 					config := tt.setupConfig()
 					identityName, _ := cmd.Flags().GetString("identity")
-					
+
 					// Determine target identity
 					if identityName == "" {
 						// Find default identity
@@ -205,7 +205,7 @@ func TestAuthExecCmd(t *testing.T) {
 							return assert.AnError
 						}
 					}
-					
+
 					// Mock command execution with environment variables
 					if len(args) >= 2 && args[0] == "sh" && args[1] == "-c" {
 						// Mock shell command that uses environment variables
@@ -216,7 +216,7 @@ func TestAuthExecCmd(t *testing.T) {
 						// Mock echo command
 						cmd.Println(args[1])
 					}
-					
+
 					return nil
 				},
 			}
@@ -253,7 +253,7 @@ func TestAuthExecCmdFlags(t *testing.T) {
 		Use: "exec",
 	}
 	cmd.Flags().StringP("identity", "i", "", "Identity to use for authentication")
-	
+
 	// Test that identity flag is present
 	identityFlag := cmd.Flags().Lookup("identity")
 	require.NotNil(t, identityFlag)
@@ -275,7 +275,7 @@ func TestCommandExecution(t *testing.T) {
 		originalEnv[env.Key] = os.Getenv(env.Key)
 		os.Setenv(env.Key, env.Value)
 	}
-	
+
 	// Cleanup
 	defer func() {
 		for key, value := range originalEnv {
@@ -333,7 +333,7 @@ func TestCommandArgumentParsing(t *testing.T) {
 func TestExitCodeHandling(t *testing.T) {
 	// Test that exit codes are properly handled
 	// This is a mock test since we can't easily test actual process exit codes
-	
+
 	tests := []struct {
 		name         string
 		command      string
@@ -360,7 +360,7 @@ func TestExitCodeHandling(t *testing.T) {
 			} else {
 				exitCode = 0
 			}
-			
+
 			assert.Equal(t, tt.expectedCode, exitCode)
 		})
 	}
