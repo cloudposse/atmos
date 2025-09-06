@@ -416,6 +416,24 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 - **Use "no-release" label** for documentation-only changes
 - **Ensure all CI checks pass** before requesting review
 
+### Checking PR Security Alerts and CI Status
+Use the GitHub CLI (`gh`) to inspect PR checks and security alerts:
+
+```bash
+# View PR checks status
+gh pr checks {pr-number} --repo {owner/repo}
+
+# Get check run annotations for a specific check (e.g., linting issues)
+gh api repos/{owner/repo}/check-runs/{check-run-id}/annotations
+
+# Get code scanning alerts for the repository
+gh api repos/{owner/repo}/code-scanning/alerts
+
+# Example for Atmos repository:
+gh pr checks 1450 --repo cloudposse/atmos
+gh api repos/cloudposse/atmos/check-runs/49737026433/annotations
+```
+
 ### Adding Template Function
 1. Implement in `internal/exec/template_funcs.go`
 2. Register in template function map
