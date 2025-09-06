@@ -56,7 +56,7 @@ func NewManager(logger *log.Logger) (*Manager, error) {
 	}
 
 	// Ensure cache directory exists
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		logger.Warn("Failed to create cache directory", "dir", cacheDir, "error", err)
 		return m, nil // Return manager anyway, it will work without persistence
 	}
@@ -113,8 +113,8 @@ func (m *Manager) load() error {
 
 	// Check schema version compatibility
 	if cache.Metadata.SchemaVersion != CurrentSchemaVersion {
-		m.logger.Warn("Cache schema version mismatch, reinitializing", 
-			"found", cache.Metadata.SchemaVersion, 
+		m.logger.Warn("Cache schema version mismatch, reinitializing",
+			"found", cache.Metadata.SchemaVersion,
 			"expected", CurrentSchemaVersion)
 		m.file = m.newCacheFile()
 		return nil
@@ -127,7 +127,6 @@ func (m *Manager) load() error {
 // save writes the cache file to disk.
 // Note: This method assumes the mutex is already held by the caller
 func (m *Manager) saveUnlocked() error {
-
 	if m.file == nil {
 		m.logger.Warn("Cannot save cache: no cache file initialized")
 		return fmt.Errorf("no cache to save")
@@ -140,12 +139,12 @@ func (m *Manager) saveUnlocked() error {
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2) // Use 2 spaces for indentation
-	
+
 	if err := encoder.Encode(m.file); err != nil {
 		m.logger.Error("Failed to marshal cache", "error", err)
 		return fmt.Errorf("failed to marshal cache: %w", err)
 	}
-	
+
 	data := buf.Bytes()
 
 	// Log the path we're trying to write to
@@ -153,7 +152,7 @@ func (m *Manager) saveUnlocked() error {
 
 	// Write atomically by writing to temp file first
 	tempPath := m.path + ".tmp"
-	if err := os.WriteFile(tempPath, data, 0644); err != nil {
+	if err := os.WriteFile(tempPath, data, 0o644); err != nil {
 		m.logger.Error("Failed to write temp cache file", "path", tempPath, "error", err)
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
@@ -244,7 +243,7 @@ func (m *Manager) UpdateTestCount(pattern string, count int, packagesScanned int
 		GoModTime:       goModTime,
 		PackagesScanned: packagesScanned,
 	}
-	
+
 	// Save to disk (while still holding the lock)
 	if err := m.saveUnlocked(); err != nil {
 		m.logger.Warn("Failed to save cache", "error", err)
@@ -277,7 +276,7 @@ func (m *Manager) UpdateTestList(pattern string, testNames []string, packagesSca
 		GoModTime:       goModTime,
 		PackagesScanned: packagesScanned,
 	}
-	
+
 	// Also update the count for backward compatibility
 	if m.file.Discovery.TestCounts == nil {
 		m.file.Discovery.TestCounts = make(map[string]TestCountEntry)
@@ -288,7 +287,7 @@ func (m *Manager) UpdateTestList(pattern string, testNames []string, packagesSca
 		GoModTime:       goModTime,
 		PackagesScanned: packagesScanned,
 	}
-	
+
 	// Save to disk (while still holding the lock)
 	if err := m.saveUnlocked(); err != nil {
 		m.logger.Warn("Failed to save cache", "error", err)
@@ -367,7 +366,7 @@ func (m *Manager) AddRunHistory(run RunHistory) error {
 	if len(m.file.History.Runs) > m.file.History.MaxEntries {
 		m.file.History.Runs = m.file.History.Runs[:m.file.History.MaxEntries]
 	}
-	
+
 	// Save to disk (while still holding the lock)
 	err := m.saveUnlocked()
 	m.mu.Unlock()

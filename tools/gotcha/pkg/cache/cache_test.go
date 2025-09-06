@@ -60,7 +60,7 @@ func TestNewManager(t *testing.T) {
 					},
 				}
 				data, _ := yaml.Marshal(cache)
-				os.WriteFile(filepath.Join(tempDir, CacheFileName), data, 0644)
+				os.WriteFile(filepath.Join(tempDir, CacheFileName), data, 0o644)
 			},
 			expectError: false,
 		},
@@ -86,7 +86,7 @@ func TestNewManager(t *testing.T) {
 func TestGetTestCount(t *testing.T) {
 	tempDir := t.TempDir()
 	logger := log.New(os.Stderr)
-	
+
 	viper.Reset()
 	viper.Set("cache.enabled", true)
 	viper.Set("cache.dir", tempDir)
@@ -127,7 +127,7 @@ func TestGetTestCount(t *testing.T) {
 func TestUpdateTestCount(t *testing.T) {
 	tempDir := t.TempDir()
 	logger := log.New(os.Stderr)
-	
+
 	viper.Reset()
 	viper.Set("cache.enabled", true)
 	viper.Set("cache.dir", tempDir)
@@ -165,7 +165,7 @@ func TestUpdateTestCount(t *testing.T) {
 func TestAddRunHistory(t *testing.T) {
 	tempDir := t.TempDir()
 	logger := log.New(os.Stderr)
-	
+
 	viper.Reset()
 	viper.Set("cache.enabled", true)
 	viper.Set("cache.dir", tempDir)
@@ -176,13 +176,13 @@ func TestAddRunHistory(t *testing.T) {
 	// Add run history entries
 	for i := 0; i < 5; i++ {
 		run := RunHistory{
-			ID:        fmt.Sprintf("run_%d", i),
-			Timestamp: time.Now(),
-			Pattern:   "./...",
-			Total:     100 + i,
-			Passed:    90 + i,
-			Failed:    10,
-			Skipped:   0,
+			ID:         fmt.Sprintf("run_%d", i),
+			Timestamp:  time.Now(),
+			Pattern:    "./...",
+			Total:      100 + i,
+			Passed:     90 + i,
+			Failed:     10,
+			Skipped:    0,
 			DurationMs: int64(5000 + i*100),
 		}
 		err = manager.AddRunHistory(run)
@@ -192,7 +192,7 @@ func TestAddRunHistory(t *testing.T) {
 	// Verify history was saved
 	assert.NotNil(t, manager.file.History)
 	assert.Len(t, manager.file.History.Runs, 5)
-	
+
 	// Verify most recent is first
 	assert.Equal(t, "run_4", manager.file.History.Runs[0].ID)
 	assert.Equal(t, "run_3", manager.file.History.Runs[1].ID)
@@ -201,7 +201,7 @@ func TestAddRunHistory(t *testing.T) {
 func TestCachePersistence(t *testing.T) {
 	tempDir := t.TempDir()
 	logger := log.New(os.Stderr)
-	
+
 	viper.Reset()
 	viper.Set("cache.enabled", true)
 	viper.Set("cache.dir", tempDir)
@@ -214,12 +214,12 @@ func TestCachePersistence(t *testing.T) {
 	require.NoError(t, err)
 
 	run := RunHistory{
-		ID:        "test_run",
-		Timestamp: time.Now(),
-		Pattern:   "./...",
-		Total:     300,
-		Passed:    295,
-		Failed:    5,
+		ID:         "test_run",
+		Timestamp:  time.Now(),
+		Pattern:    "./...",
+		Total:      300,
+		Passed:     295,
+		Failed:     5,
 		DurationMs: 10000,
 	}
 	err = manager1.AddRunHistory(run)
@@ -243,7 +243,7 @@ func TestCachePersistence(t *testing.T) {
 func TestClearCache(t *testing.T) {
 	tempDir := t.TempDir()
 	logger := log.New(os.Stderr)
-	
+
 	viper.Reset()
 	viper.Set("cache.enabled", true)
 	viper.Set("cache.dir", tempDir)

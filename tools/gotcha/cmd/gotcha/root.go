@@ -27,7 +27,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/vcs"
-	
+
 	// Import VCS providers to register them
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/vcs/github"
 )
@@ -516,7 +516,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Process testPackages to detect any test names that were passed as arguments
 	detectedTestFilter := ""
 	filteredTestPackages := []string{}
-	
+
 	for _, arg := range testPackages {
 		// Check if this looks like a test name rather than a package path
 		if utils.IsLikelyTestName(arg) {
@@ -531,23 +531,23 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 			filteredTestPackages = append(filteredTestPackages, arg)
 		}
 	}
-	
+
 	// If we detected test names but no packages, default to ./...
 	if detectedTestFilter != "" && len(filteredTestPackages) == 0 {
 		filteredTestPackages = []string{"./..."}
-		logger.Info("Auto-detected test name(s), using default package path", 
+		logger.Info("Auto-detected test name(s), using default package path",
 			"filter", detectedTestFilter, "path", "./...")
 	}
-	
+
 	// If we have a test filter and no explicit -run flag, add it
 	if detectedTestFilter != "" && !utils.HasRunFlag(passthroughArgs) {
 		passthroughArgs = append([]string{"-run", detectedTestFilter}, passthroughArgs...)
 		logger.Info("Auto-applying test filter", "filter", detectedTestFilter)
 	}
-	
+
 	// Use the filtered test packages
 	testPackages = filteredTestPackages
-	
+
 	// Apply package filtering
 	filteredPackages, err := utils.FilterPackages(testPackages, include, exclude)
 	if err != nil {
@@ -582,7 +582,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	var cacheManager *cache.Manager
 	var estimatedTestCount int
 	packagePattern := strings.Join(testPackages, " ")
-	
+
 	// Try to use cache for test count estimation (enabled by default)
 	// The cache manager will set its own defaults and check if explicitly disabled
 	cacheManager, err = cache.NewManager(logger)
@@ -592,24 +592,24 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		// Try to get cached test count, considering any filter
 		if count, ok := cacheManager.GetTestCountForFilter(packagePattern, actualTestFilter); ok {
 			if actualTestFilter != "" {
-				logger.Info("Found cached test count for filtered pattern", 
+				logger.Info("Found cached test count for filtered pattern",
 					"pattern", packagePattern, "filter", actualTestFilter, "estimated_tests", count)
 			} else {
-				logger.Info("Found cached test count, using for progress estimation", 
+				logger.Info("Found cached test count, using for progress estimation",
 					"pattern", packagePattern, "estimated_tests", count)
 			}
 			estimatedTestCount = count
 		} else {
 			if actualTestFilter != "" {
-				logger.Info("No cached test count found for filtered pattern", 
+				logger.Info("No cached test count found for filtered pattern",
 					"pattern", packagePattern, "filter", actualTestFilter)
 			} else {
-				logger.Info("No cached test count found for pattern, will cache after run", 
+				logger.Info("No cached test count found for pattern, will cache after run",
 					"pattern", packagePattern, "cache_file", ".gotcha/cache.yaml")
 			}
 		}
 	}
-	
+
 	// Log test patterns to be discovered
 	logger.Info("Starting test execution", "patterns", len(testPackages))
 
@@ -674,13 +674,13 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		if inputFile, err := os.Open(outputFile); err == nil {
 			func() {
 				defer inputFile.Close()
-				
+
 				// Parse with coverage if available
 				excludeMocks := viper.GetBool("exclude-mocks")
 				if summary, err := parser.ParseTestJSON(inputFile, coverprofile, excludeMocks); err == nil && summary != nil {
 					totalTests := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
 					packagesScanned := len(testPackages)
-					
+
 					// Update cache appropriately based on whether we had a filter
 					if actualTestFilter == "" {
 						// No filter - save the complete test list for future filtering
@@ -694,7 +694,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 						for _, test := range summary.Skipped {
 							testNames = append(testNames, test.Test)
 						}
-						
+
 						if err := cacheManager.UpdateTestList(packagePattern, testNames, packagesScanned); err != nil {
 							logger.Debug("Failed to update test list cache", "error", err)
 						} else {
@@ -702,10 +702,10 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 						}
 					} else {
 						// Had a filter - don't pollute the cache
-						logger.Debug("Skipping cache update for filtered test run", 
+						logger.Debug("Skipping cache update for filtered test run",
 							"pattern", packagePattern, "filter", actualTestFilter, "count", totalTests)
 					}
-					
+
 					// Always add run history, including failed runs
 					runHistory := cache.RunHistory{
 						ID:         fmt.Sprintf("run_%s", time.Now().Format(time.RFC3339)),
@@ -777,7 +777,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	if testExitCode != 0 {
 		return fmt.Errorf("%w with exit code %d", types.ErrTestsFailed, testExitCode)
 	}
-	
+
 	return nil
 }
 
@@ -936,7 +936,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	// Detect VCS context
 	ctx, err := provider.DetectContext()
 	if err != nil {
-		logger.Info("Skipping comment posting", 
+		logger.Info("Skipping comment posting",
 			"reason", "VCS context not detected",
 			"platform", provider.GetPlatform(),
 			"error", err)
@@ -999,7 +999,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		vcs.Context
 		SetCommentUUID(string)
 	}
-	
+
 	if ctxWithUUID, ok := ctx.(contextWithUUID); ok {
 		ctxWithUUID.SetCommentUUID(uuid)
 		// Update ctx to use the modified version

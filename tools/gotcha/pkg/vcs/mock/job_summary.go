@@ -16,25 +16,25 @@ type MockJobSummaryWriter struct {
 func (w *MockJobSummaryWriter) WriteJobSummary(content string) (string, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	if w.config.ShouldFailSummary {
 		if w.config.SummaryError != nil {
 			return "", w.config.SummaryError
 		}
 		return "", fmt.Errorf("mock summary write failed")
 	}
-	
+
 	// Store the summary content
 	w.config.WrittenSummaries = append(w.config.WrittenSummaries, content)
-	
+
 	// Optionally write to actual file for testing
 	if w.config.JobSummaryPath != "" && w.config.JobSummaryPath != "/tmp/mock-summary.md" {
-		err := os.WriteFile(w.config.JobSummaryPath, []byte(content), 0644)
+		err := os.WriteFile(w.config.JobSummaryPath, []byte(content), 0o644)
 		if err != nil {
 			return "", err
 		}
 	}
-	
+
 	return w.config.JobSummaryPath, nil
 }
 
@@ -62,20 +62,20 @@ type MockArtifactPublisher struct {
 func (p *MockArtifactPublisher) PublishArtifact(name string, path string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if p.config.ShouldFailArtifact {
 		if p.config.ArtifactError != nil {
 			return p.config.ArtifactError
 		}
 		return fmt.Errorf("mock artifact publish failed")
 	}
-	
+
 	// Store the artifact information
 	if p.config.PublishedArtifacts == nil {
 		p.config.PublishedArtifacts = make(map[string]string)
 	}
 	p.config.PublishedArtifacts[name] = path
-	
+
 	return nil
 }
 

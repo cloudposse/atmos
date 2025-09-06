@@ -6,7 +6,7 @@ const (
 	FormatMarkdown = "markdown" // Markdown file output
 	FormatGitHub   = "github"   // GitHub Actions step summary
 	FormatBoth     = "both"     // Terminal + Markdown output
-	
+
 	// Deprecated: Use FormatTerminal instead
 	FormatStdin = "terminal" // Alias for backward compatibility
 	// File handling constants.

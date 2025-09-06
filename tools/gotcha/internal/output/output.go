@@ -137,7 +137,7 @@ func HandleOutput(summary *types.TestSummary, format, outputFile string, generat
 	if format == "stdin" {
 		format = "terminal"
 	}
-	
+
 	switch format {
 	case "terminal":
 		return HandleConsoleOutput(summary)
