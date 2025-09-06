@@ -16,6 +16,18 @@ import (
 	giturl "github.com/kubescape/go-git-url"
 )
 
+// Constants for network and API limits.
+const (
+	// HttpTimeout is the timeout for HTTP requests in seconds.
+	httpTimeout = 5 * time.Second
+	// HttpErrorStatusThreshold is the minimum HTTP status code considered an error.
+	httpErrorStatusThreshold = 400
+	// HttpOKStatus is the HTTP status code for successful requests.
+	httpOKStatus = 200
+	// GithubAPIRateLimitWarning is the threshold for warning about low GitHub API rate limits.
+	githubAPIRateLimitWarning = 10
+)
+
 // ShouldCheckPreconditions returns true if precondition checks should be performed.
 // Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to bypass all precondition checks.
 func ShouldCheckPreconditions() bool {
@@ -119,6 +131,61 @@ type GitHubRateLimitInfo struct {
 	Reset     time.Time
 }
 
+// checkGitHubRateLimit checks GitHub API rate limits and handles the response.
+func checkGitHubRateLimit(t *testing.T, client *http.Client) *GitHubRateLimitInfo {
+	t.Helper()
+
+	apiResp, err := client.Get("https://api.github.com/rate_limit")
+	if err != nil {
+		t.Logf("Warning: Cannot check GitHub API rate limits: %v", err)
+		return nil
+	}
+	defer apiResp.Body.Close()
+
+	if apiResp.StatusCode != httpOKStatus {
+		return nil
+	}
+
+	var rateLimitResponse struct {
+		Rate struct {
+			Limit     int   `json:"limit"`
+			Remaining int   `json:"remaining"`
+			Reset     int64 `json:"reset"`
+		} `json:"rate"`
+	}
+
+	body, err := io.ReadAll(apiResp.Body)
+	if err != nil {
+		return nil
+	}
+
+	err = json.Unmarshal(body, &rateLimitResponse)
+	if err != nil {
+		return nil
+	}
+
+	info := &GitHubRateLimitInfo{
+		Limit:     rateLimitResponse.Rate.Limit,
+		Remaining: rateLimitResponse.Rate.Remaining,
+		Reset:     time.Unix(rateLimitResponse.Rate.Reset, 0),
+	}
+
+	// Skip if rate limited
+	if info.Remaining == 0 {
+		waitTime := time.Until(info.Reset)
+		t.Skipf("GitHub API rate limit exceeded. Resets at %s (in %v). Use authenticated requests or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
+			info.Reset.Format(time.RFC3339), waitTime)
+	}
+
+	// Warn if getting close to limit
+	if info.Remaining < githubAPIRateLimitWarning {
+		t.Logf("Warning: Only %d GitHub API requests remaining (resets at %s)",
+			info.Remaining, info.Reset.Format(time.RFC3339))
+	}
+
+	return info
+}
+
 // RequireGitHubAccess checks network connectivity and rate limits for GitHub.
 func RequireGitHubAccess(t *testing.T) *GitHubRateLimitInfo {
 	t.Helper()
@@ -128,7 +195,7 @@ func RequireGitHubAccess(t *testing.T) *GitHubRateLimitInfo {
 	}
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: httpTimeout,
 	}
 
 	// First check basic connectivity
@@ -138,57 +205,12 @@ func RequireGitHubAccess(t *testing.T) *GitHubRateLimitInfo {
 	}
 	resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= httpErrorStatusThreshold {
 		t.Skipf("GitHub returned status %d. Check service status or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true", resp.StatusCode)
 	}
 
-	// Check API rate limits (unauthenticated)
-	apiResp, err := client.Get("https://api.github.com/rate_limit")
-	if err != nil {
-		// API might be down but general GitHub is up, warn but don't skip
-		t.Logf("Warning: Cannot check GitHub API rate limits: %v", err)
-		return nil
-	}
-	defer apiResp.Body.Close()
-
-	if apiResp.StatusCode == 200 {
-		var rateLimitResponse struct {
-			Rate struct {
-				Limit     int   `json:"limit"`
-				Remaining int   `json:"remaining"`
-				Reset     int64 `json:"reset"`
-			} `json:"rate"`
-		}
-
-		body, err := io.ReadAll(apiResp.Body)
-		if err == nil {
-			err = json.Unmarshal(body, &rateLimitResponse)
-			if err == nil {
-				info := &GitHubRateLimitInfo{
-					Limit:     rateLimitResponse.Rate.Limit,
-					Remaining: rateLimitResponse.Rate.Remaining,
-					Reset:     time.Unix(rateLimitResponse.Rate.Reset, 0),
-				}
-
-				// Skip if rate limited
-				if info.Remaining == 0 {
-					waitTime := time.Until(info.Reset)
-					t.Skipf("GitHub API rate limit exceeded. Resets at %s (in %v). Use authenticated requests or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
-						info.Reset.Format(time.RFC3339), waitTime)
-				}
-
-				// Warn if getting close to limit
-				if info.Remaining < 10 {
-					t.Logf("Warning: Only %d GitHub API requests remaining (resets at %s)",
-						info.Remaining, info.Reset.Format(time.RFC3339))
-				}
-
-				return info
-			}
-		}
-	}
-
-	return nil
+	// Check API rate limits
+	return checkGitHubRateLimit(t, client)
 }
 
 // RequireNetworkAccess checks general network connectivity to a URL.
@@ -200,7 +222,7 @@ func RequireNetworkAccess(t *testing.T, url string) {
 	}
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: httpTimeout,
 	}
 
 	resp, err := client.Head(url)
@@ -209,7 +231,7 @@ func RequireNetworkAccess(t *testing.T, url string) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= httpErrorStatusThreshold {
 		t.Skipf("%s returned status %d. Check service availability or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			url, resp.StatusCode)
 	}

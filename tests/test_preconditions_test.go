@@ -1,14 +1,14 @@
-//nolint:forbidigo // Test files need os.Getenv/Setenv for testing
 package tests
 
 import (
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// Test ShouldCheckPreconditions
+// TestShouldCheckPreconditions tests the ShouldCheckPreconditions function.
 func TestShouldCheckPreconditions(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -66,7 +66,7 @@ func TestShouldCheckPreconditions(t *testing.T) {
 	}
 }
 
-// Test RequireAWSProfile with bypass
+// TestRequireAWSProfile_WithBypass tests RequireAWSProfile with bypass.
 func TestRequireAWSProfile_WithBypass(t *testing.T) {
 	// Set bypass
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
@@ -77,7 +77,7 @@ func TestRequireAWSProfile_WithBypass(t *testing.T) {
 	// If we get here, it worked (didn't skip)
 }
 
-// Test RequireGitRepository with bypass
+// TestRequireGitRepository_WithBypass tests RequireGitRepository with bypass.
 func TestRequireGitRepository_WithBypass(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -86,7 +86,7 @@ func TestRequireGitRepository_WithBypass(t *testing.T) {
 	assert.Nil(t, repo) // Should return nil when bypassed
 }
 
-// Test RequireGitRemoteWithValidURL with bypass
+// TestRequireGitRemoteWithValidURL_WithBypass tests RequireGitRemoteWithValidURL with bypass.
 func TestRequireGitRemoteWithValidURL_WithBypass(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -95,7 +95,7 @@ func TestRequireGitRemoteWithValidURL_WithBypass(t *testing.T) {
 	assert.Empty(t, url) // Should return empty when bypassed
 }
 
-// Test RequireNetworkAccess with bypass
+// TestRequireNetworkAccess_WithBypass tests RequireNetworkAccess with bypass.
 func TestRequireNetworkAccess_WithBypass(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -104,7 +104,7 @@ func TestRequireNetworkAccess_WithBypass(t *testing.T) {
 	RequireNetworkAccess(t, "http://invalid-domain-that-does-not-exist-12345.example.com")
 }
 
-// Test RequireExecutable with bypass
+// TestRequireExecutable_WithBypass tests RequireExecutable with bypass.
 func TestRequireExecutable_WithBypass(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -112,7 +112,7 @@ func TestRequireExecutable_WithBypass(t *testing.T) {
 	RequireExecutable(t, "non-existent-binary-that-does-not-exist-12345", "testing")
 }
 
-// Test RequireEnvVar with bypass
+// TestRequireEnvVar_WithBypass tests RequireEnvVar with bypass.
 func TestRequireEnvVar_WithBypass(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -120,7 +120,7 @@ func TestRequireEnvVar_WithBypass(t *testing.T) {
 	RequireEnvVar(t, "NON_EXISTENT_VAR_THAT_DOES_NOT_EXIST_12345", "testing")
 }
 
-// Test RequireFilePath with bypass
+// TestRequireFilePath_WithBypass tests RequireFilePath with bypass.
 func TestRequireFilePath_WithBypass(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -128,7 +128,7 @@ func TestRequireFilePath_WithBypass(t *testing.T) {
 	RequireFilePath(t, "/non/existent/path/that/does/not/exist/12345", "testing")
 }
 
-// Test RequireOCIAuthentication with bypass
+// TestRequireOCIAuthentication_WithBypass tests RequireOCIAuthentication with bypass.
 func TestRequireOCIAuthentication_WithBypass(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -154,7 +154,7 @@ func TestRequireOCIAuthentication_WithBypass(t *testing.T) {
 	RequireOCIAuthentication(t)
 }
 
-// Test LogPreconditionOverride
+// TestLogPreconditionOverride tests the LogPreconditionOverride function.
 func TestLogPreconditionOverride(t *testing.T) {
 	// Test with bypass enabled
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
@@ -168,7 +168,7 @@ func TestLogPreconditionOverride(t *testing.T) {
 	LogPreconditionOverride(t)
 }
 
-// Test RequireGitHubAccess with bypass
+// TestRequireGitHubAccess_WithBypass tests RequireGitHubAccess with bypass.
 func TestRequireGitHubAccess_WithBypass(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -177,7 +177,7 @@ func TestRequireGitHubAccess_WithBypass(t *testing.T) {
 	assert.Nil(t, info) // Should return nil when bypassed
 }
 
-// Test real skip scenarios - these will actually skip the subtest
+// TestPreconditionSkipping tests real skip scenarios - these will actually skip the subtest.
 func TestPreconditionSkipping(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -205,7 +205,7 @@ func TestPreconditionSkipping(t *testing.T) {
 	})
 }
 
-// Test RequireEnvVar with existing variable
+// TestRequireEnvVar_WithExistingVar tests RequireEnvVar with existing variable.
 func TestRequireEnvVar_WithExistingVar(t *testing.T) {
 	// Set a test env var
 	os.Setenv("TEST_VAR_FOR_TESTING", "some_value")
@@ -217,7 +217,7 @@ func TestRequireEnvVar_WithExistingVar(t *testing.T) {
 	assert.True(t, true, "Test continued after RequireEnvVar with existing var")
 }
 
-// Test RequireExecutable with existing executable
+// TestRequireExecutable_WithExistingBinary tests RequireExecutable with existing executable.
 func TestRequireExecutable_WithExistingBinary(t *testing.T) {
 	// Use 'go' as it should exist in test environment
 	RequireExecutable(t, "go", "testing")
@@ -226,7 +226,7 @@ func TestRequireExecutable_WithExistingBinary(t *testing.T) {
 	assert.True(t, true, "Test continued after RequireExecutable with existing binary")
 }
 
-// Test RequireOCIAuthentication with token set
+// TestRequireOCIAuthentication_WithToken tests RequireOCIAuthentication with token set.
 func TestRequireOCIAuthentication_WithToken(t *testing.T) {
 	// Set a GitHub token
 	os.Setenv("GITHUB_TOKEN", "test-token")
@@ -238,7 +238,7 @@ func TestRequireOCIAuthentication_WithToken(t *testing.T) {
 	assert.True(t, true, "Test continued after RequireOCIAuthentication with token")
 }
 
-// Test RequireOCIAuthentication with ATMOS_GITHUB_TOKEN
+// TestRequireOCIAuthentication_WithAtmosToken tests RequireOCIAuthentication with ATMOS_GITHUB_TOKEN.
 func TestRequireOCIAuthentication_WithAtmosToken(t *testing.T) {
 	// Ensure GITHUB_TOKEN is not set
 	origGH := os.Getenv("GITHUB_TOKEN")
@@ -259,7 +259,7 @@ func TestRequireOCIAuthentication_WithAtmosToken(t *testing.T) {
 	assert.True(t, true, "Test continued after RequireOCIAuthentication with ATMOS token")
 }
 
-// Test RequireOCIAuthentication without token
+// TestRequireOCIAuthentication_WithoutToken tests RequireOCIAuthentication without token.
 func TestRequireOCIAuthentication_WithoutToken(t *testing.T) {
 	// Ensure no tokens are set
 	origGH := os.Getenv("GITHUB_TOKEN")
@@ -281,7 +281,7 @@ func TestRequireOCIAuthentication_WithoutToken(t *testing.T) {
 	t.Error("Should have skipped when no token is set")
 }
 
-// Test RequireFilePath with existing path
+// TestRequireFilePath_WithExistingPath tests RequireFilePath with existing path.
 func TestRequireFilePath_WithExistingPath(t *testing.T) {
 	// Use current directory which should exist
 	RequireFilePath(t, ".", "current directory")
@@ -290,7 +290,7 @@ func TestRequireFilePath_WithExistingPath(t *testing.T) {
 	assert.True(t, true, "Test continued after RequireFilePath with existing path")
 }
 
-// Test RequireNetworkAccess with bypass and invalid URL
+// TestRequireNetworkAccess_InvalidURLWithBypass tests RequireNetworkAccess with bypass and invalid URL.
 func TestRequireNetworkAccess_InvalidURLWithBypass(t *testing.T) {
 	os.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
 	defer os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -299,7 +299,7 @@ func TestRequireNetworkAccess_InvalidURLWithBypass(t *testing.T) {
 	RequireNetworkAccess(t, "not-a-valid-url")
 }
 
-// Test LogPreconditionOverride variations
+// TestLogPreconditionOverride_Variations tests LogPreconditionOverride variations.
 func TestLogPreconditionOverride_Variations(t *testing.T) {
 	// Test without bypass first
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -311,7 +311,7 @@ func TestLogPreconditionOverride_Variations(t *testing.T) {
 	LogPreconditionOverride(t)
 }
 
-// Test RequireAWSProfile with non-existent profile (will skip)
+// TestRequireAWSProfile_NonExistent tests RequireAWSProfile with non-existent profile (will skip).
 func TestRequireAWSProfile_NonExistent(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -323,7 +323,7 @@ func TestRequireAWSProfile_NonExistent(t *testing.T) {
 	t.Error("Should have skipped with non-existent profile")
 }
 
-// Test RequireGitRepository when not in a repo (will skip)
+// TestRequireGitRepository_NotInRepo tests RequireGitRepository when not in a repo (will skip).
 func TestRequireGitRepository_NotInRepo(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -342,7 +342,7 @@ func TestRequireGitRepository_NotInRepo(t *testing.T) {
 	}
 }
 
-// Test RequireGitRepository in actual repo
+// TestRequireGitRepository_InRepo tests RequireGitRepository in actual repo.
 func TestRequireGitRepository_InRepo(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -357,7 +357,7 @@ func TestRequireGitRepository_InRepo(t *testing.T) {
 	// If repo is nil, test was skipped which is ok
 }
 
-// Test RequireGitRemoteWithValidURL when remote exists
+// TestRequireGitRemoteWithValidURL_WithRemote tests RequireGitRemoteWithValidURL when remote exists.
 func TestRequireGitRemoteWithValidURL_WithRemote(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -369,7 +369,7 @@ func TestRequireGitRemoteWithValidURL_WithRemote(t *testing.T) {
 	_ = url
 }
 
-// Test RequireGitHubAccess without token (will likely skip or rate limit)
+// TestRequireGitHubAccess_NoToken tests RequireGitHubAccess without token (will likely skip or rate limit).
 func TestRequireGitHubAccess_NoToken(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -395,7 +395,7 @@ func TestRequireGitHubAccess_NoToken(t *testing.T) {
 	_ = info
 }
 
-// Test RequireNetworkAccess with valid URL
+// TestRequireNetworkAccess_ValidURL tests RequireNetworkAccess with valid URL.
 func TestRequireNetworkAccess_ValidURL(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -406,7 +406,7 @@ func TestRequireNetworkAccess_ValidURL(t *testing.T) {
 	// If we get here, network access worked
 }
 
-// Test RequireNetworkAccess with invalid URL (will skip)
+// TestRequireNetworkAccess_InvalidURL tests RequireNetworkAccess with invalid URL (will skip).
 func TestRequireNetworkAccess_InvalidURL(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
@@ -416,4 +416,102 @@ func TestRequireNetworkAccess_InvalidURL(t *testing.T) {
 
 	// Should not reach here
 	t.Error("Should have skipped with invalid URL")
+}
+
+// TestRequireGitRemoteWithValidURL_InRealRepo tests RequireGitRemoteWithValidURL in a real git repo with remotes.
+func TestRequireGitRemoteWithValidURL_InRealRepo(t *testing.T) {
+	// Ensure precondition checks are enabled
+	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	
+	// Create a temporary git repo with a remote
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	
+	// Initialize git repo
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Skipf("Cannot change to temp directory: %v", err)
+	}
+	
+	// Run git init
+	cmd := exec.Command("git", "init")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Cannot initialize git repo: %v", err)
+	}
+	
+	// Add a remote
+	cmd = exec.Command("git", "remote", "add", "origin", "https://github.com/test/repo.git")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Cannot add git remote: %v", err)
+	}
+	
+	// Now test should work
+	url := RequireGitRemoteWithValidURL(t)
+	assert.Equal(t, "https://github.com/test/repo.git", url)
+}
+
+// TestRequireGitRemoteWithValidURL_InvalidRemote tests RequireGitRemoteWithValidURL with invalid remote URL.
+func TestRequireGitRemoteWithValidURL_InvalidRemote(t *testing.T) {
+	// Ensure precondition checks are enabled
+	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	
+	// Create a temporary git repo with invalid remote
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	
+	// Initialize git repo
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Skipf("Cannot change to temp directory: %v", err)
+	}
+	
+	// Run git init
+	cmd := exec.Command("git", "init")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Cannot initialize git repo: %v", err)
+	}
+	
+	// Add an invalid remote URL
+	cmd = exec.Command("git", "remote", "add", "origin", "not-a-valid-url")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Cannot add git remote: %v", err)
+	}
+	
+	// Should skip due to invalid URL
+	url := RequireGitRemoteWithValidURL(t)
+	
+	// Should not reach here or url should be empty
+	if url != "" {
+		t.Error("Should have skipped with invalid remote URL")
+	}
+}
+
+// TestRequireGitRemoteWithValidURL_NoRemotes tests RequireGitRemoteWithValidURL with no remotes.
+func TestRequireGitRemoteWithValidURL_NoRemotes(t *testing.T) {
+	// Ensure precondition checks are enabled
+	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	
+	// Create a temporary git repo without remotes
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	
+	// Initialize git repo
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Skipf("Cannot change to temp directory: %v", err)
+	}
+	
+	// Run git init
+	cmd := exec.Command("git", "init")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Cannot initialize git repo: %v", err)
+	}
+	
+	// No remotes added - should skip
+	url := RequireGitRemoteWithValidURL(t)
+	
+	// Should not reach here or url should be empty
+	if url != "" {
+		t.Error("Should have skipped with no remotes")
+	}
 }
