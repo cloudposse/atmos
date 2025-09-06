@@ -24,36 +24,36 @@ type MockProvider struct {
 // MockConfig allows configuring the mock provider's behavior.
 type MockConfig struct {
 	// Provider behavior
-	IsAvailable          bool
-	ShouldFailDetection  bool
-	DetectionError       error
-	
+	IsAvailable         bool
+	ShouldFailDetection bool
+	DetectionError      error
+
 	// Context configuration
-	ContextSupported     bool
-	Owner                string
-	Repo                 string
-	PRNumber             int
-	CommentUUID          string
-	Token                string
-	EventName            string
-	
+	ContextSupported bool
+	Owner            string
+	Repo             string
+	PRNumber         int
+	CommentUUID      string
+	Token            string
+	EventName        string
+
 	// Comment manager behavior
-	ShouldFailComment    bool
-	CommentError         error
-	Comments             map[string]string // UUID -> content
-	
+	ShouldFailComment bool
+	CommentError      error
+	Comments          map[string]string // UUID -> content
+
 	// Job summary behavior
-	JobSummarySupported  bool
-	JobSummaryPath       string
-	ShouldFailSummary    bool
-	SummaryError         error
-	WrittenSummaries     []string
-	
+	JobSummarySupported bool
+	JobSummaryPath      string
+	ShouldFailSummary   bool
+	SummaryError        error
+	WrittenSummaries    []string
+
 	// Artifact behavior
-	ArtifactsSupported   bool
-	ShouldFailArtifact   bool
-	ArtifactError        error
-	PublishedArtifacts   map[string]string // name -> path
+	ArtifactsSupported bool
+	ShouldFailArtifact bool
+	ArtifactError      error
+	PublishedArtifacts map[string]string // name -> path
 }
 
 // NewMockProvider creates a new mock VCS provider.
@@ -96,14 +96,14 @@ func DefaultMockConfig() *MockConfig {
 func (p *MockProvider) DetectContext() (vcs.Context, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	if p.config.ShouldFailDetection {
 		if p.config.DetectionError != nil {
 			return nil, p.config.DetectionError
 		}
 		return nil, vcs.ErrContextNotDetected
 	}
-	
+
 	return &MockContext{
 		config: p.config,
 	}, nil
@@ -113,7 +113,7 @@ func (p *MockProvider) DetectContext() (vcs.Context, error) {
 func (p *MockProvider) CreateCommentManager(ctx vcs.Context, logger *log.Logger) vcs.CommentManager {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	return &MockCommentManager{
 		config: p.config,
 		logger: logger,
@@ -124,11 +124,11 @@ func (p *MockProvider) CreateCommentManager(ctx vcs.Context, logger *log.Logger)
 func (p *MockProvider) GetJobSummaryWriter() vcs.JobSummaryWriter {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	if !p.config.JobSummarySupported {
 		return nil
 	}
-	
+
 	return &MockJobSummaryWriter{
 		config: p.config,
 	}
@@ -138,11 +138,11 @@ func (p *MockProvider) GetJobSummaryWriter() vcs.JobSummaryWriter {
 func (p *MockProvider) GetArtifactPublisher() vcs.ArtifactPublisher {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	if !p.config.ArtifactsSupported {
 		return nil
 	}
-	
+
 	return &MockArtifactPublisher{
 		config: p.config,
 	}
@@ -157,12 +157,12 @@ func (p *MockProvider) GetPlatform() vcs.Platform {
 func (p *MockProvider) IsAvailable() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	// Check for GOTCHA_USE_MOCK environment variable
 	if os.Getenv("GOTCHA_USE_MOCK") == "true" {
 		return true
 	}
-	
+
 	return p.config.IsAvailable
 }
 
@@ -184,7 +184,7 @@ func (p *MockProvider) GetConfig() *MockConfig {
 func (p *MockProvider) GetComments() map[string]string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	// Return a copy to avoid race conditions
 	comments := make(map[string]string)
 	for k, v := range p.config.Comments {
@@ -197,7 +197,7 @@ func (p *MockProvider) GetComments() map[string]string {
 func (p *MockProvider) GetWrittenSummaries() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	// Return a copy
 	summaries := make([]string, len(p.config.WrittenSummaries))
 	copy(summaries, p.config.WrittenSummaries)
@@ -209,13 +209,13 @@ type MockContext struct {
 	config *MockConfig
 }
 
-func (c *MockContext) GetOwner() string       { return c.config.Owner }
-func (c *MockContext) GetRepo() string        { return c.config.Repo }
-func (c *MockContext) GetPRNumber() int       { return c.config.PRNumber }
-func (c *MockContext) GetCommentUUID() string { return c.config.CommentUUID }
-func (c *MockContext) GetToken() string       { return c.config.Token }
-func (c *MockContext) GetEventName() string   { return c.config.EventName }
-func (c *MockContext) IsSupported() bool      { return c.config.ContextSupported }
+func (c *MockContext) GetOwner() string          { return c.config.Owner }
+func (c *MockContext) GetRepo() string           { return c.config.Repo }
+func (c *MockContext) GetPRNumber() int          { return c.config.PRNumber }
+func (c *MockContext) GetCommentUUID() string    { return c.config.CommentUUID }
+func (c *MockContext) GetToken() string          { return c.config.Token }
+func (c *MockContext) GetEventName() string      { return c.config.EventName }
+func (c *MockContext) IsSupported() bool         { return c.config.ContextSupported }
 func (c *MockContext) GetPlatform() vcs.Platform { return vcs.Platform("mock") }
 func (c *MockContext) String() string {
 	return fmt.Sprintf("Mock Context: %s/%s PR#%d", c.config.Owner, c.config.Repo, c.config.PRNumber)

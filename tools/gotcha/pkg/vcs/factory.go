@@ -2,7 +2,7 @@ package vcs
 
 import (
 	"os"
-	
+
 	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 )
@@ -30,7 +30,7 @@ func DetectProvider(logger *log.Logger) Provider {
 			logger.Warn("Unknown VCS platform specified", "platform", platform)
 		}
 	}
-	
+
 	// Check for mock provider first if GOTCHA_USE_MOCK is set
 	if os.Getenv("GOTCHA_USE_MOCK") == "true" {
 		if factory, ok := providers[Platform("mock")]; ok {
@@ -41,14 +41,14 @@ func DetectProvider(logger *log.Logger) Provider {
 			}
 		}
 	}
-	
+
 	// Auto-detect based on environment
 	// Try providers in a specific order for predictable behavior
 	orderedPlatforms := []Platform{
 		PlatformGitHub,
 		// Add other platforms here as they are implemented
 	}
-	
+
 	for _, platform := range orderedPlatforms {
 		if factory, ok := providers[platform]; ok {
 			provider := factory(logger)
@@ -58,7 +58,7 @@ func DetectProvider(logger *log.Logger) Provider {
 			}
 		}
 	}
-	
+
 	logger.Debug("No VCS provider detected in current environment")
 	return nil
 }
@@ -100,12 +100,12 @@ func IsCI() bool {
 		"CIRCLECI",
 		"TRAVIS",
 	}
-	
+
 	for _, envVar := range ciEnvVars {
 		if os.Getenv(envVar) != "" {
 			return true
 		}
 	}
-	
+
 	return false
 }

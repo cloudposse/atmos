@@ -145,7 +145,7 @@ type TestModel struct {
 	usingEstimate         bool   // Whether we're still using the estimate or have actual count
 	completedTests        int    // Number of tests that have completed (pass/fail/skip)
 	testFilter            string // Test filter applied via -run flag (if any)
-	currentIndex          int  // Legacy counter - will be removed
+	currentIndex          int    // Legacy counter - will be removed
 	currentTest           string
 	currentPackage        string          // Current package being tested
 	packagesWithNoTests   map[string]bool // Track packages that have "[no test files]" in output
@@ -294,11 +294,11 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		packageOrder:          []string{},
 		activePackages:        make(map[string]bool),
 		displayedPackages:     make(map[string]bool),
-		totalTests:            estimatedTestCount, // Use cached estimate if available, will be updated by "run" events
-		estimatedTestCount:    estimatedTestCount, // Preserve original estimate
+		totalTests:            estimatedTestCount,     // Use cached estimate if available, will be updated by "run" events
+		estimatedTestCount:    estimatedTestCount,     // Preserve original estimate
 		usingEstimate:         estimatedTestCount > 0, // Track if we're using an estimate
-		completedTests:        0,                   // Will be incremented by pass/fail/skip events
-		testFilter:            testFilter,          // Store the test filter for display
+		completedTests:        0,                      // Will be incremented by pass/fail/skip events
+		testFilter:            testFilter,             // Store the test filter for display
 		startTime:             time.Now(),
 	}
 }
@@ -574,7 +574,7 @@ func (m *TestModel) View() string {
 	// Build the ordered status components
 	var percentage string
 	var testCount string
-	
+
 	// Always use estimate if we have one and are still using it
 	if m.usingEstimate && m.estimatedTestCount > 0 {
 		// Using cached estimate
@@ -972,7 +972,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 			// Count all tests including subtests for accurate progress
 			// Always increment the actual test count
 			m.actualTestCount++
-			
+
 			if !m.usingEstimate {
 				// Not using estimate, update totalTests with actual count
 				m.totalTests = m.actualTestCount
@@ -1040,7 +1040,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 		case "pass", "fail", "skip":
 			// Count all tests including subtests for accurate progress
 			m.completedTests++
-			
+
 			// Check if we should switch from estimate to actual count
 			if m.usingEstimate && m.actualTestCount > 0 {
 				// Only switch from estimate to actual when we're confident:
@@ -1050,7 +1050,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 					// Actual count exceeded estimate, switch to actual
 					m.usingEstimate = false
 					m.totalTests = m.actualTestCount
-				} else if m.completedTests > int(float64(m.estimatedTestCount) * 0.9) {
+				} else if m.completedTests > int(float64(m.estimatedTestCount)*0.9) {
 					// We've completed 90% of estimated tests, likely near the end
 					// Switch to actual count for accuracy
 					m.usingEstimate = false

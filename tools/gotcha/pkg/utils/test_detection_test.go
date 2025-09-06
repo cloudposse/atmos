@@ -18,19 +18,19 @@ func TestIsLikelyTestName(t *testing.T) {
 		{"test with numbers", "TestCase123", true},
 		{"test with subtest", "TestFoo/subtest", true},
 		{"test with nested subtest", "TestFoo/bar/baz", true},
-		
+
 		// Example functions
 		{"example function", "ExampleFoo", true},
 		{"example with underscore", "Example_bar", true},
-		
+
 		// Benchmark functions
 		{"benchmark function", "BenchmarkFoo", true},
 		{"benchmark with underscore", "Benchmark_bar", true},
-		
+
 		// Multiple tests
 		{"multiple tests", "TestA|TestB", true},
 		{"multiple mixed", "TestFoo|ExampleBar|BenchmarkBaz", true},
-		
+
 		// Not test names
 		{"package path", "./...", false},
 		{"relative path", "./pkg/utils", false},
@@ -64,16 +64,16 @@ func TestIsPackagePath(t *testing.T) {
 		{"recursive pattern", "./...", true},
 		{"deep recursive", "./pkg/...", true},
 		{"absolute path", "/home/user/project", true},
-		
+
 		// Module paths
 		{"module path", "github.com/cloudposse/atmos", true},
 		{"module subpath", "github.com/cloudposse/atmos/pkg", true},
-		
+
 		// Not package paths (test names)
 		{"test name", "TestFoo", false},
 		{"example name", "ExampleBar", false},
 		{"benchmark name", "BenchmarkBaz", false},
-		
+
 		// Ambiguous cases
 		{"single word", "utils", false}, // Could be package or test
 	}
@@ -98,7 +98,7 @@ func TestHasRunFlag(t *testing.T) {
 		{"run with equals", []string{"-run=TestFoo"}, true},
 		{"run with equals double dash", []string{"--run=TestFoo"}, true},
 		{"run in middle", []string{"-v", "-run", "TestFoo", "-race"}, true},
-		
+
 		// No -run flag
 		{"no flags", []string{"TestFoo"}, false},
 		{"other flags", []string{"-v", "-race", "-cover"}, false},

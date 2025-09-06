@@ -14,18 +14,18 @@ func (w *GitHubJobSummaryWriter) WriteJobSummary(content string) (string, error)
 	if summaryPath == "" {
 		return "", nil
 	}
-	
-	file, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+	file, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return "", fmt.Errorf("failed to open GitHub step summary file: %w", err)
 	}
 	defer file.Close()
-	
+
 	_, err = file.WriteString(content)
 	if err != nil {
 		return "", fmt.Errorf("failed to write to GitHub step summary: %w", err)
 	}
-	
+
 	return summaryPath, nil
 }
 

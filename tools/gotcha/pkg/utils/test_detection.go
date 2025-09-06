@@ -7,9 +7,9 @@ import (
 
 // Common test name patterns in Go.
 var (
-	testNamePattern      = regexp.MustCompile(`^(Test|Example|Benchmark)([A-Z]|_).*`)
-	subtestPattern       = regexp.MustCompile(`^(Test|Example|Benchmark)([A-Z]|_).*/.*`)
-	multipleTestPattern  = regexp.MustCompile(`^(Test|Example|Benchmark)([A-Z]|_).*\|(Test|Example|Benchmark)([A-Z]|_).*`)
+	testNamePattern     = regexp.MustCompile(`^(Test|Example|Benchmark)([A-Z]|_).*`)
+	subtestPattern      = regexp.MustCompile(`^(Test|Example|Benchmark)([A-Z]|_).*/.*`)
+	multipleTestPattern = regexp.MustCompile(`^(Test|Example|Benchmark)([A-Z]|_).*\|(Test|Example|Benchmark)([A-Z]|_).*`)
 )
 
 // IsLikelyTestName checks if a string looks like a Go test name.
@@ -18,30 +18,30 @@ func IsLikelyTestName(s string) bool {
 	if testNamePattern.MatchString(s) {
 		return true
 	}
-	
+
 	// Check for subtest patterns (TestFoo/subtest)
 	if subtestPattern.MatchString(s) {
 		return true
 	}
-	
+
 	// Check for multiple tests with | separator
 	if multipleTestPattern.MatchString(s) {
 		return true
 	}
-	
+
 	return false
 }
 
 // ExtractTestNamesFromArgs processes arguments to extract test names and package paths.
 func ExtractTestNamesFromArgs(args []string) (testFilter string, packages []string) {
 	var testNames []string
-	
+
 	for _, arg := range args {
 		// Skip flags and flag values
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
-		
+
 		// Check if it looks like a test name
 		if IsLikelyTestName(arg) {
 			testNames = append(testNames, arg)
@@ -50,12 +50,12 @@ func ExtractTestNamesFromArgs(args []string) (testFilter string, packages []stri
 			packages = append(packages, arg)
 		}
 	}
-	
+
 	// Combine test names with | for regex OR
 	if len(testNames) > 0 {
 		testFilter = strings.Join(testNames, "|")
 	}
-	
+
 	return testFilter, packages
 }
 
@@ -87,34 +87,34 @@ func IsPackagePath(s string) bool {
 	if s == "." || s == ".." {
 		return true
 	}
-	
+
 	// Paths starting with ./ or ../
 	if strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") {
 		return true
 	}
-	
+
 	// Recursive pattern
 	if strings.HasSuffix(s, "/...") {
 		return true
 	}
-	
+
 	// Absolute paths
 	if strings.HasPrefix(s, "/") {
 		return true
 	}
-	
+
 	// Module paths (contains dots but not starting with Test/Example/Benchmark)
 	if strings.Contains(s, "/") && !IsLikelyTestName(s) {
 		return true
 	}
-	
+
 	return false
 }
 
 // ProcessTestArguments intelligently processes command arguments to detect test names.
 func ProcessTestArguments(args []string) (packages []string, testFilter string) {
 	var detectedTests []string
-	
+
 	for _, arg := range args {
 		// First check if it's definitely a package path
 		if IsPackagePath(arg) {
@@ -128,11 +128,11 @@ func ProcessTestArguments(args []string) (packages []string, testFilter string) 
 			packages = append(packages, arg)
 		}
 	}
-	
+
 	// Combine test names for -run filter
 	if len(detectedTests) > 0 {
 		testFilter = strings.Join(detectedTests, "|")
 	}
-	
+
 	return packages, testFilter
 }
