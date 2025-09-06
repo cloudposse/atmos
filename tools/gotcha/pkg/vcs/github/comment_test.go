@@ -242,7 +242,7 @@ func TestPostOrUpdateCommentUnsupportedEvent(t *testing.T) {
 	err := manager.PostOrUpdateComment(ctx, ghCtx, "test markdown")
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "event type 'push' is not supported")
+	assert.Contains(t, err.Error(), "event type is not supported for PR comments")
 }
 
 func TestPostOrUpdateCommentLargeContent(t *testing.T) {
@@ -269,7 +269,7 @@ func TestPostOrUpdateCommentLargeContent(t *testing.T) {
 
 	// Verify content was truncated
 	createdComment := client.CreatedComments[0]
-	assert.Less(t, len(*createdComment.Body), MaxCommentSize)
+	assert.LessOrEqual(t, len(*createdComment.Body), MaxCommentSize)
 	assert.Contains(t, *createdComment.Body, "Comment truncated due to size limits")
 }
 

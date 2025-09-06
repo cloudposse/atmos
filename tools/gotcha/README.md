@@ -104,8 +104,8 @@ gotcha parse --coverprofile=coverage.out --format=both
 
 #### Parse Mode Flags
 - `--input`: Input file (JSON from `go test -json`). Use `-` or omit for stdin
-- `--format`: Output format: `stdin`, `markdown`, `both`, `github` (default: `stdin`)
-- `--output`: Output file (default: stdout for stdin/markdown)
+- `--format`: Output format: `terminal`, `markdown`, `both`, `github` (default: `terminal`)
+- `--output`: Output file (default: stdout for terminal/markdown)
 - `--coverprofile`: Coverage profile file for detailed analysis
 - `--exclude-mocks`: Exclude mock files from coverage calculations (default: `true`)
 - `--post-comment`: Post test summary as GitHub PR comment (default: `false`)

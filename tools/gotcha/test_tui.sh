@@ -1,8 +1,16 @@
-#!/bin/bash
-echo "Testing TUI progress bar animation..."
-echo "Watch the progress bar below - it should animate from 0% to 100%"
+#\!/bin/bash
+echo "Testing TUI with cached count..."
+echo "Cache file shows test count:"
+grep "count:" .gotcha/cache.yaml | head -1
+
 echo ""
-# Run gotcha in TUI mode (needs a TTY)
-timeout 5 ./gotcha stream --packages="./internal/tui ./internal/parser" --show=none || true
+echo "Running gotcha (Press Ctrl+C after 2 seconds)..."
+./gotcha-binary --show=none ./pkg/utils 2>&1 &
+PID=$\!
+sleep 2
+kill -INT $PID 2>/dev/null
+wait $PID 2>/dev/null
+
 echo ""
-echo "Test completed."
+echo "Cache should not be updated after abort. Checking..."
+grep "count:" .gotcha/cache.yaml | head -1

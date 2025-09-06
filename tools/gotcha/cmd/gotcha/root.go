@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/fang"
@@ -22,9 +23,13 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
-	gh "github.com/cloudposse/atmos/tools/gotcha/pkg/github"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/vcs"
+
+	// Import VCS providers to register them
+	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/vcs/github"
 )
 
 // Main package static errors.
@@ -375,7 +380,7 @@ formatted summaries, reports, and analysis.
 
 Supports multiple output formats including markdown, GitHub step summaries,
 and console output with rich formatting.`,
-		Example: `  # Process results from stdin
+		Example: `  # Process results from stdin with terminal output
   go test -json ./... | gotcha parse
   
   # Process results from file  
@@ -385,7 +390,7 @@ and console output with rich formatting.`,
   # Generate GitHub step summary
   gotcha parse --format=github --output=step-summary.md
   
-  # Include coverage analysis
+  # Terminal output plus markdown file
   gotcha parse --coverprofile=coverage.out --format=both`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runParse(cmd, args, logger)
@@ -394,8 +399,8 @@ and console output with rich formatting.`,
 
 	// Add parse-specific flags
 	cmd.Flags().String("input", "", "Input file (JSON from go test -json). Use '-' or omit for stdin")
-	cmd.Flags().String("format", "stdin", "Output format: stdin, markdown, both, github")
-	cmd.Flags().String("output", "", "Output file (default: stdout for stdin/markdown)")
+	cmd.Flags().String("format", "terminal", "Output format: terminal (console output), markdown (file), github (GitHub Actions), both (terminal+markdown)")
+	cmd.Flags().String("output", "", "Output file (default: stdout for terminal/markdown)")
 	cmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
 	cmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
 	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
@@ -507,6 +512,42 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		testPackages = []string{"./..."}
 	}
 
+	// Smart test name detection (non-intrusive, within existing flow)
+	// Process testPackages to detect any test names that were passed as arguments
+	detectedTestFilter := ""
+	filteredTestPackages := []string{}
+
+	for _, arg := range testPackages {
+		// Check if this looks like a test name rather than a package path
+		if utils.IsLikelyTestName(arg) {
+			// Build up the test filter
+			if detectedTestFilter != "" {
+				detectedTestFilter += "|"
+			}
+			detectedTestFilter += arg
+			logger.Debug("Detected test name in arguments", "test", arg)
+		} else {
+			// It's a package path
+			filteredTestPackages = append(filteredTestPackages, arg)
+		}
+	}
+
+	// If we detected test names but no packages, default to ./...
+	if detectedTestFilter != "" && len(filteredTestPackages) == 0 {
+		filteredTestPackages = []string{"./..."}
+		logger.Info("Auto-detected test name(s), using default package path",
+			"filter", detectedTestFilter, "path", "./...")
+	}
+
+	// If we have a test filter and no explicit -run flag, add it
+	if detectedTestFilter != "" && !utils.HasRunFlag(passthroughArgs) {
+		passthroughArgs = append([]string{"-run", detectedTestFilter}, passthroughArgs...)
+		logger.Info("Auto-applying test filter", "filter", detectedTestFilter)
+	}
+
+	// Use the filtered test packages
+	testPackages = filteredTestPackages
+
 	// Apply package filtering
 	filteredPackages, err := utils.FilterPackages(testPackages, include, exclude)
 	if err != nil {
@@ -523,14 +564,64 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		logger.Debug("Pass-through arguments detected", "args", passthroughArgs)
 	}
 
+	// Determine the actual test filter being used (from detected or explicit -run flag)
+	var actualTestFilter string
+	if detectedTestFilter != "" {
+		actualTestFilter = detectedTestFilter
+	} else {
+		// Check for explicit -run flag in passthrough args
+		for i := 0; i < len(passthroughArgs)-1; i++ {
+			if passthroughArgs[i] == "-run" {
+				actualTestFilter = passthroughArgs[i+1]
+				break
+			}
+		}
+	}
+
+	// Initialize cache manager for test count estimation
+	var cacheManager *cache.Manager
+	var estimatedTestCount int
+	packagePattern := strings.Join(testPackages, " ")
+
+	// Try to use cache for test count estimation (enabled by default)
+	// The cache manager will set its own defaults and check if explicitly disabled
+	cacheManager, err = cache.NewManager(logger)
+	if err != nil {
+		logger.Info("Cache system disabled or unavailable", "reason", err.Error())
+	} else if cacheManager != nil {
+		// Try to get cached test count, considering any filter
+		if count, ok := cacheManager.GetTestCountForFilter(packagePattern, actualTestFilter); ok {
+			if actualTestFilter != "" {
+				logger.Info("Found cached test count for filtered pattern",
+					"pattern", packagePattern, "filter", actualTestFilter, "estimated_tests", count)
+			} else {
+				logger.Info("Found cached test count, using for progress estimation",
+					"pattern", packagePattern, "estimated_tests", count)
+			}
+			estimatedTestCount = count
+		} else {
+			if actualTestFilter != "" {
+				logger.Info("No cached test count found for filtered pattern",
+					"pattern", packagePattern, "filter", actualTestFilter)
+			} else {
+				logger.Info("No cached test count found for pattern, will cache after run",
+					"pattern", packagePattern, "cache_file", ".gotcha/cache.yaml")
+			}
+		}
+	}
+
 	// Log test patterns to be discovered
 	logger.Info("Starting test execution", "patterns", len(testPackages))
+
+	// Track test exit code and abort status for later return
+	var testExitCode int
+	var testsAborted bool
 
 	// Check if we have a TTY for interactive mode
 	logger.Debug("TTY detection", "is_tty", utils.IsTTY())
 	if utils.IsTTY() {
-		// Create and run the Bubble Tea program
-		model := tui.NewTestModel(testPackages, testArgsStr, outputFile, coverprofile, show, alert, verbosityLevel)
+		// Create and run the Bubble Tea program with estimated test count from cache
+		model := tui.NewTestModel(testPackages, testArgsStr, outputFile, coverprofile, show, alert, verbosityLevel, estimatedTestCount)
 		// Use default Bubble Tea configuration
 		p := tea.NewProgram(&model)
 
@@ -539,7 +630,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 			return fmt.Errorf("failed to run test UI: %w", err)
 		}
 
-		// Extract exit code and log info messages after TUI exits
+		// Extract exit code and check if aborted after TUI exits
 		if m, ok := finalModel.(*tui.TestModel); ok {
 			// The TUI might have changed the global color profile
 			// Re-detect and configure colors properly
@@ -563,20 +654,85 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 				globalLogger.Info(fmt.Sprintf("Tests completed in %.2fs", elapsed.Seconds()))
 			}
 
-			exitCode := m.GetExitCode()
-			if exitCode != 0 {
-				return fmt.Errorf("%w with exit code %d", types.ErrTestsFailed, exitCode)
-			}
+			testExitCode = m.GetExitCode()
+			testsAborted = m.IsAborted()
 		}
 	} else {
 		// Fallback to simple streaming for CI/non-TTY environments
-		exitCode := utils.RunSimpleStream(testPackages, testArgsStr, outputFile, coverprofile, show, alert, verbosityLevel)
-		if exitCode != 0 {
-			return fmt.Errorf("%w with exit code %d", types.ErrTestsFailed, exitCode)
-		}
+		testExitCode = utils.RunSimpleStream(testPackages, testArgsStr, outputFile, coverprofile, show, alert, verbosityLevel)
 	}
 
-	logger.Info("Stream mode completed successfully")
+	if testExitCode == 0 {
+		logger.Info("Stream mode completed successfully")
+	} else {
+		logger.Info("Tests completed with failures", "exit_code", testExitCode)
+	}
+
+	// Update cache with test results, but skip if tests were aborted
+	if cacheManager != nil && outputFile != "" && !testsAborted {
+		// Try to parse the JSON file to get test counts
+		if inputFile, err := os.Open(outputFile); err == nil {
+			func() {
+				defer inputFile.Close()
+
+				// Parse with coverage if available
+				excludeMocks := viper.GetBool("exclude-mocks")
+				if summary, err := parser.ParseTestJSON(inputFile, coverprofile, excludeMocks); err == nil && summary != nil {
+					totalTests := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
+					packagesScanned := len(testPackages)
+
+					// Update cache appropriately based on whether we had a filter
+					if actualTestFilter == "" {
+						// No filter - save the complete test list for future filtering
+						testNames := make([]string, 0, totalTests)
+						for _, test := range summary.Passed {
+							testNames = append(testNames, test.Test)
+						}
+						for _, test := range summary.Failed {
+							testNames = append(testNames, test.Test)
+						}
+						for _, test := range summary.Skipped {
+							testNames = append(testNames, test.Test)
+						}
+
+						if err := cacheManager.UpdateTestList(packagePattern, testNames, packagesScanned); err != nil {
+							logger.Debug("Failed to update test list cache", "error", err)
+						} else {
+							logger.Info("Updated test list cache", "pattern", packagePattern, "count", totalTests)
+						}
+					} else {
+						// Had a filter - don't pollute the cache
+						logger.Debug("Skipping cache update for filtered test run",
+							"pattern", packagePattern, "filter", actualTestFilter, "count", totalTests)
+					}
+
+					// Always add run history, including failed runs
+					runHistory := cache.RunHistory{
+						ID:         fmt.Sprintf("run_%s", time.Now().Format(time.RFC3339)),
+						Timestamp:  time.Now(),
+						Pattern:    packagePattern,
+						Total:      totalTests,
+						Passed:     len(summary.Passed),
+						Failed:     len(summary.Failed),
+						Skipped:    len(summary.Skipped),
+						DurationMs: int64(summary.TotalElapsedTime * 1000),
+						Flags:      passthroughArgs,
+					}
+					if err := cacheManager.AddRunHistory(runHistory); err != nil {
+						logger.Debug("Failed to add run history", "error", err)
+					} else {
+						logger.Debug("Added run history", "total", totalTests, "passed", len(summary.Passed), "failed", len(summary.Failed))
+					}
+				} else if err != nil {
+					logger.Debug("Could not parse test results for cache update", "error", err)
+				}
+			}()
+		} else {
+			logger.Debug("Could not open test results file for cache update", "error", err)
+		}
+	} else if testsAborted {
+		logger.Info("Tests aborted, skipping cache update")
+	}
 
 	// Handle GitHub comment posting if requested
 	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
@@ -586,7 +742,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	normalizedStrategy := normalizePostingStrategy(postStrategy, flagPresent)
 
 	if outputFile != "" {
-		// Parse the JSON file we just created
+		// Parse the JSON file we just created (again for GitHub comment)
 		if inputFile, err := os.Open(outputFile); err == nil {
 			defer inputFile.Close()
 
@@ -615,6 +771,11 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		} else if normalizedStrategy != "" && normalizedStrategy != "never" {
 			logger.Warn("Failed to open results file for GitHub comment", "error", err)
 		}
+	}
+
+	// Return error if tests failed, but only after cache update and GitHub comment
+	if testExitCode != 0 {
+		return fmt.Errorf("%w with exit code %d", types.ErrTestsFailed, testExitCode)
 	}
 
 	return nil
@@ -765,17 +926,28 @@ func shouldPostCommentWithOS(strategy string, summary *types.TestSummary, goos s
 }
 
 func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *log.Logger) error {
-	// Detect GitHub context
-	ctx, err := gh.DetectContext()
+	// Detect VCS provider
+	provider := vcs.DetectProvider(logger)
+	if provider == nil {
+		logger.Info("Skipping comment posting", "reason", "no VCS provider detected")
+		return nil
+	}
+
+	// Detect VCS context
+	ctx, err := provider.DetectContext()
 	if err != nil {
-		logger.Info("Skipping GitHub comment posting", "reason", "not in GitHub Actions context")
+		logger.Info("Skipping comment posting",
+			"reason", "VCS context not detected",
+			"platform", provider.GetPlatform(),
+			"error", err)
 		return nil
 	}
 
 	if !ctx.IsSupported() {
-		logger.Info("Skipping GitHub comment posting",
+		logger.Info("Skipping comment posting",
 			"reason", "unsupported event type",
-			"event", ctx.EventName)
+			"platform", provider.GetPlatform(),
+			"event", ctx.GetEventName())
 		return nil
 	}
 
@@ -794,8 +966,9 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		}
 	}
 
-	logger.Info("Posting GitHub comment",
-		"platform", platform,
+	logger.Info("Posting VCS comment",
+		"vcs_platform", provider.GetPlatform(),
+		"os_platform", platform,
 		"failed", len(summary.Failed),
 		"skipped", len(summary.Skipped),
 		"passed", len(summary.Passed))
@@ -804,16 +977,10 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
 	_ = viper.BindPFlag("comment-uuid", cmd.Flags().Lookup("comment-uuid"))
 
-	// Get token from viper (flag, env, or config) or context
-	token := viper.GetString("github-token")
-	if token == "" {
-		token = ctx.Token
-	}
-
 	// Get UUID from viper (flag, env, or config) or context
 	uuid := viper.GetString("comment-uuid")
 	if uuid == "" {
-		uuid = ctx.CommentUUID
+		uuid = ctx.GetCommentUUID()
 	}
 
 	if uuid == "" {
@@ -826,19 +993,33 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		logger.Debug("Using discriminated UUID", "uuid", uuid, "discriminator", jobDiscriminator)
 	}
 
-	// Update the context with the discriminated UUID so it's used for finding existing comments
-	ctx.CommentUUID = uuid
+	// Update the context with the discriminated UUID if it supports it
+	// This is needed for GitHub to find existing comments with the discriminated UUID
+	type contextWithUUID interface {
+		vcs.Context
+		SetCommentUUID(string)
+	}
 
-	logger.Info("Posting GitHub comment",
-		"owner", ctx.Owner,
-		"repo", ctx.Repo,
-		"pr", ctx.PRNumber,
-		"event", ctx.EventName,
+	if ctxWithUUID, ok := ctx.(contextWithUUID); ok {
+		ctxWithUUID.SetCommentUUID(uuid)
+		// Update ctx to use the modified version
+		ctx = ctxWithUUID
+	}
+
+	logger.Info("Posting comment",
+		"platform", provider.GetPlatform(),
+		"owner", ctx.GetOwner(),
+		"repo", ctx.GetRepo(),
+		"pr", ctx.GetPRNumber(),
+		"event", ctx.GetEventName(),
 		"uuid", uuid)
 
-	// Create client and manager
-	client := gh.NewClient(token)
-	manager := gh.NewCommentManager(client, logger)
+	// Create comment manager
+	commentManager := provider.CreateCommentManager(ctx, logger)
+	if commentManager == nil {
+		logger.Warn("Comment manager not available for platform", "platform", provider.GetPlatform())
+		return nil
+	}
 
 	// Generate adaptive markdown content that uses full content when possible
 	// Include platform in the header for clarity
@@ -850,5 +1031,5 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		"using_full", len(markdownContent) <= 65536)
 
 	// Post or update comment
-	return manager.PostOrUpdateComment(context.Background(), ctx, markdownContent)
+	return commentManager.PostOrUpdateComment(context.Background(), ctx, markdownContent)
 }

@@ -223,6 +223,7 @@ type StreamProcessor struct {
 	subtestStats   map[string]*SubtestStats // Track subtest statistics per parent test
 	jsonWriter     io.Writer
 	showFilter     string
+	testFilter     string // Test filter applied via -run flag (if any)
 	verbosityLevel string // Verbosity level: standard, with-output, minimal, or verbose
 	startTime      time.Time
 	currentTest    string // Track current test for package-level output
@@ -246,6 +247,15 @@ type StreamProcessor struct {
 
 // runTestsWithSimpleStreaming runs tests and processes output in real-time.
 func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter string, verbosityLevel string) int {
+	// Extract test filter from args if present
+	var testFilter string
+	for i := 0; i < len(testArgs)-1; i++ {
+		if testArgs[i] == "-run" {
+			testFilter = testArgs[i+1]
+			break
+		}
+	}
+
 	// Create the command
 	cmd := exec.Command("go", testArgs...)
 	cmd.Stderr = os.Stderr // Pass through stderr
@@ -285,6 +295,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 		jsonWriter:     jsonFile,
 		showFilter:     showFilter,
+		testFilter:     testFilter,
 		verbosityLevel: verbosityLevel,
 		startTime:      time.Now(),
 	}
@@ -793,7 +804,12 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 
 	// Check if package has no tests
 	if !pkg.HasTests {
-		fmt.Fprintf(os.Stderr, " %s\n", tui.DurationStyle.Render("No tests"))
+		// Show more specific message if a filter is applied
+		if p.testFilter != "" {
+			fmt.Fprintf(os.Stderr, " %s\n", tui.DurationStyle.Render("No tests matching filter"))
+		} else {
+			fmt.Fprintf(os.Stderr, " %s\n", tui.DurationStyle.Render("No tests"))
+		}
 		return
 	}
 
