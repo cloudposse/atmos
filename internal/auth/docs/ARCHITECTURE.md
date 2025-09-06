@@ -1,0 +1,257 @@
+# Atmos Auth Package Architecture
+
+## Overview
+
+The Atmos Auth package provides a comprehensive authentication framework for cloud providers, supporting identity chaining, credential management, and environment setup for tools like Terraform. The architecture is designed to be extensible, allowing easy addition of new cloud providers and authentication methods.
+
+## Package Structure
+
+```
+internal/auth/
+├── cloud/                    # Cloud provider implementations
+│   ├── aws/                 # AWS-specific cloud provider
+│   ├── azure/               # Azure-specific cloud provider (placeholder)
+│   ├── gcp/                 # GCP-specific cloud provider (placeholder)
+│   ├── factory.go           # Cloud provider factory
+│   ├── interfaces.go        # Cloud provider interfaces
+│   └── manager.go           # Cloud provider manager
+├── config/                  # Configuration merging
+│   └── merger.go            # Auth config merger
+├── credentials/             # Credential storage
+│   └── store.go             # Encrypted credential store
+├── docs/                    # Documentation
+│   ├── ARCHITECTURE.md      # This file
+│   ├── ADDING_PROVIDERS.md  # Guide for adding new providers
+│   └── USER_GUIDE.md        # User getting started guide
+├── environment/             # Environment management
+│   ├── aws_files.go         # AWS credentials/config file management
+│   └── merger.go            # Environment variable merging
+├── identities/              # Identity implementations
+│   └── aws/                 # AWS identity types
+│       ├── assume_role.go   # AWS assume role identity
+│       ├── permission_set.go # AWS permission set identity
+│       └── user.go          # AWS user identity
+├── providers/               # Provider implementations
+│   ├── aws/                 # AWS providers
+│   │   ├── assume_role.go   # AWS assume role provider
+│   │   ├── saml.go          # AWS SAML provider
+│   │   └── sso.go           # AWS SSO provider
+│   └── github/              # GitHub providers
+│       └── oidc.go          # GitHub OIDC provider
+├── types/                   # Core interfaces and types
+│   └── interfaces.go        # All auth interfaces
+├── ui/                      # User interface components
+├── validation/              # Configuration validation
+│   └── validator.go         # Auth config validator
+├── factory.go               # Provider/Identity factory
+├── hooks.go                 # Terraform integration hooks
+├── manager.go               # Main auth manager
+└── test_helpers.go          # Test utilities
+```
+
+## Core Interfaces
+
+### AuthManager
+The central orchestrator that manages the entire authentication process:
+- **Authenticate()**: Performs authentication for a specified identity
+- **Whoami()**: Returns information about identity credentials
+- **GetDefaultIdentity()**: Handles multiple defaults with CI detection
+- **SetupAWSFiles()**: Manages AWS credential/config files
+
+### Provider
+Represents authentication providers (e.g., AWS SSO, SAML):
+- **Authenticate()**: Performs provider-level authentication
+- **Kind()**: Returns provider type (e.g., "aws/iam-identity-center")
+- **Validate()**: Validates provider configuration
+
+### Identity
+Represents authentication identities that use provider credentials:
+- **Authenticate()**: Performs identity-level authentication using base credentials
+- **Kind()**: Returns identity type (e.g., "aws/permission-set")
+- **Merge()**: Merges with component-level overrides
+
+### CloudProvider
+Manages cloud-specific operations:
+- **SetupEnvironment()**: Sets up cloud-specific environment variables and files
+- **GetEnvironmentVariables()**: Returns environment variables for tools
+- **ValidateCredentials()**: Validates credentials for the cloud provider
+
+## Authentication Flow
+
+### 1. Identity Chain Resolution
+```
+Component Request → Identity → Provider Chain → Root Provider
+```
+
+Example: `terraform apply` with identity `sandbox-admin`:
+1. Resolve identity chain: `sandbox-admin` → `managers` → `cplive-sso`
+2. Build authentication chain: `[cplive-sso, managers, sandbox-admin]`
+3. Execute sequential authentication
+
+### 2. Sequential Authentication
+```go
+// Step 1: Provider authentication
+providerCreds := provider.Authenticate(ctx)
+
+// Step 2: Identity chain authentication
+for each identity in chain {
+    creds = identity.Authenticate(ctx, creds)
+}
+```
+
+### 3. Environment Setup
+```go
+// Setup cloud-specific environment
+cloudProvider.SetupEnvironment(ctx, providerName, identityName, creds)
+
+// Set environment variables
+envVars := cloudProvider.GetEnvironmentVariables(providerName, identityName)
+```
+
+## Key Design Patterns
+
+### Factory Pattern
+- `NewProvider()` and `NewIdentity()` create instances based on configuration
+- Extensible for adding new provider/identity types
+- Type-safe construction with validation
+
+### Chain of Responsibility
+- Identity chains allow credential transformation through multiple steps
+- Each identity receives credentials from the previous step
+- Supports complex authentication scenarios (SSO → Permission Set → Assume Role)
+
+### Strategy Pattern
+- Different cloud providers implement the same `CloudProvider` interface
+- Allows switching between AWS, Azure, GCP implementations
+- Environment setup varies by cloud provider
+
+### Repository Pattern
+- `CredentialStore` abstracts credential persistence
+- Supports multiple storage backends (keyring, file, etc.)
+- Encrypted storage with expiration handling
+
+## Configuration Schema
+
+### Providers
+```yaml
+providers:
+  cplive-sso:
+    kind: aws/iam-identity-center
+    region: us-east-1
+    start_url: https://cplive.awsapps.com/start
+```
+
+### Identities
+```yaml
+identities:
+  sandbox-admin:
+    kind: aws/permission-set
+    default: true
+    via:
+      provider: cplive-sso
+    principal:
+      name: AdminAccess
+      account:
+        name: "123456789012"
+```
+
+### Identity Chaining
+```yaml
+identities:
+  final-role:
+    kind: aws/assume-role
+    via:
+      identity: sandbox-admin  # Chain through another identity
+    principal:
+      assume_role: arn:aws:iam::999999999999:role/FinalRole
+```
+
+## Error Handling
+
+### Validation Errors
+- Configuration validation occurs at startup
+- Circular dependency detection in identity chains
+- Provider/identity reference validation
+
+### Authentication Errors
+- Graceful handling of expired credentials
+- Clear error messages indicating which step failed
+- Automatic retry for transient failures
+
+### Environment Errors
+- File permission handling for credential files
+- Environment variable conflict detection
+- Cleanup on failure scenarios
+
+## Testing Strategy
+
+### Unit Tests
+- Individual component testing with mocks
+- Interface compliance testing
+- Error condition coverage
+
+### Integration Tests
+- End-to-end authentication flows
+- CLI command testing with golden snapshots
+- Multi-provider scenario testing
+
+### Test Helpers
+- Mock implementations for all interfaces
+- Test credential generation utilities
+- Environment isolation for tests
+
+## Performance Considerations
+
+### Credential Caching
+- Encrypted credential storage with expiration
+- Avoid re-authentication for valid credentials
+- Cache invalidation on configuration changes
+
+### File Operations
+- Atomic file writes for credential files
+- Proper file permissions (0600) for security
+- Cleanup of temporary files
+
+### Memory Management
+- Secure credential handling in memory
+- Zero-out sensitive data after use
+- Minimal credential lifetime in memory
+
+## Security Features
+
+### Credential Protection
+- Encrypted storage using OS keyring
+- Secure memory handling for credentials
+- Automatic credential expiration
+
+### File Security
+- Restricted file permissions (0600)
+- Provider-specific credential isolation
+- No modification of user's existing AWS files
+
+### Environment Isolation
+- Provider-specific environment variables
+- No global environment pollution
+- Clean separation between different auth contexts
+
+## Extensibility Points
+
+### Adding New Cloud Providers
+1. Implement `CloudProvider` interface
+2. Register in `CloudProviderFactory`
+3. Add provider-specific environment setup
+4. Implement credential validation
+
+### Adding New Providers/Identities
+1. Implement `Provider` or `Identity` interface
+2. Add to factory functions in `factory.go`
+3. Add validation rules in `validator.go`
+4. Create tests and documentation
+
+### Adding New Storage Backends
+1. Implement `CredentialStore` interface
+2. Add configuration options
+3. Implement encryption/security requirements
+4. Add migration utilities if needed
+
+This architecture provides a solid foundation for multi-cloud authentication while maintaining security, performance, and extensibility requirements.

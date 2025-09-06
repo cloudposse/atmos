@@ -1,0 +1,147 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  # Multiple Default Identities Tests
+  - name: atmos auth whoami (multiple defaults - CI)
+    enabled: true
+    snapshot: true
+    description: "Test auth whoami with multiple default identities in CI mode"
+    workdir: "fixtures/scenarios/auth-multiple-defaults/"
+    env:
+      CI: "true"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+    expect:
+      diff: []
+      stderr:
+        - "multiple default identities found"
+        - "admin-1"
+        - "admin-2"
+      exit_code: 1
+
+  - name: atmos auth env (multiple defaults - CI)
+    enabled: true
+    snapshot: true
+    description: "Test auth env with multiple default identities in CI mode"
+    workdir: "fixtures/scenarios/auth-multiple-defaults/"
+    env:
+      CI: "true"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+    expect:
+      diff: []
+      stderr:
+        - "multiple default identities found"
+        - "admin-1"
+        - "admin-2"
+      exit_code: 1
+
+  - name: atmos auth login (multiple defaults - CI)
+    enabled: true
+    snapshot: true
+    description: "Test auth login with multiple default identities in CI mode"
+    workdir: "fixtures/scenarios/auth-multiple-defaults/"
+    env:
+      CI: "true"
+    command: "atmos"
+    args:
+      - "auth"
+      - "login"
+    expect:
+      diff: []
+      stderr:
+        - "multiple default identities found"
+        - "admin-1"
+        - "admin-2"
+      exit_code: 1
+
+  # No Default Identities Tests
+  - name: atmos auth whoami (no defaults - CI)
+    enabled: true
+    snapshot: true
+    description: "Test auth whoami with no default identities in CI mode"
+    workdir: "fixtures/scenarios/auth-no-defaults/"
+    env:
+      CI: "true"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+    expect:
+      diff: []
+      stderr:
+        - "no default identity configured"
+      exit_code: 1
+
+  - name: atmos auth env (no defaults - CI)
+    enabled: true
+    snapshot: true
+    description: "Test auth env with no default identities in CI mode"
+    workdir: "fixtures/scenarios/auth-no-defaults/"
+    env:
+      CI: "true"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+    expect:
+      diff: []
+      stderr:
+        - "no default identity configured"
+      exit_code: 1
+
+  - name: atmos auth login (no defaults - CI)
+    enabled: true
+    snapshot: true
+    description: "Test auth login with no default identities in CI mode"
+    workdir: "fixtures/scenarios/auth-no-defaults/"
+    env:
+      CI: "true"
+    command: "atmos"
+    args:
+      - "auth"
+      - "login"
+    expect:
+      diff: []
+      stderr:
+        - "no default identity configured"
+      exit_code: 1
+
+  # Explicit Identity Selection Tests
+  - name: atmos auth whoami --identity admin (multiple defaults)
+    enabled: true
+    snapshot: true
+    description: "Test auth whoami with explicit identity when multiple defaults exist"
+    workdir: "fixtures/scenarios/auth-multiple-defaults/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+      - "--identity"
+      - "admin-1"
+    expect:
+      diff: []
+      stderr:
+        - "failed to authenticate"
+      exit_code: 1
+
+  - name: atmos auth env --identity readonly (no defaults)
+    enabled: true
+    snapshot: true
+    description: "Test auth env with explicit identity when no defaults exist"
+    workdir: "fixtures/scenarios/auth-no-defaults/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--identity"
+      - "readonly"
+    expect:
+      diff: []
+      stderr:
+        - "failed to authenticate"
+      exit_code: 1

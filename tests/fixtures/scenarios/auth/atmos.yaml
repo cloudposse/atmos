@@ -1,0 +1,77 @@
+cli:
+  colors: false
+
+logs:
+  verbose: false
+  colors: false
+
+auth:
+  providers:
+    test-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://test.awsapps.com/start
+      
+    test-assume-role:
+      kind: aws/assume-role
+      region: us-west-2
+      spec:
+        role_arn: arn:aws:iam::123456789012:role/TestRole
+      
+  identities:
+    test-admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: test-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: "123456789012"
+        
+    test-readonly:
+      kind: aws/permission-set
+      via:
+        provider: test-sso
+      principal:
+        name: ReadOnlyAccess
+        account:
+          name: "123456789012"
+        
+    test-user:
+      kind: aws/user
+      credentials:
+        access_key_id: AKIAIOSFODNN7EXAMPLE
+        secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+        region: us-east-1
+        
+    test-role:
+      kind: aws/assume-role
+      via:
+        provider: test-assume-role
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/TestRole
+        session_name: test-session
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+schemas:
+  jsonschema:
+    base_path: "schemas/jsonschema"
+  opa:
+    base_path: "schemas/opa"
+  atmos:
+    manifest: "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"

@@ -1,0 +1,335 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  # Auth Validate Tests
+  - name: atmos auth validate
+    enabled: true
+    snapshot: true
+    description: "Test auth validate command with valid configuration"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "validate"
+    expect:
+      diff: []
+      stdout:
+        - "Authentication configuration is valid"
+      exit_code: 0
+
+  - name: atmos auth validate --help
+    enabled: true
+    snapshot: true
+    description: "Test auth validate help output"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "validate"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Validate authentication configuration"
+        - "Usage:"
+        - "atmos auth validate"
+      exit_code: 0
+
+  # Auth Whoami Tests
+  - name: atmos auth whoami --help
+    enabled: true
+    snapshot: true
+    description: "Test auth whoami help output"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Show current authentication status"
+        - "Usage:"
+        - "atmos auth whoami"
+      exit_code: 0
+
+  - name: atmos auth whoami --identity test-user
+    enabled: true
+    snapshot: true
+    description: "Test auth whoami with specific identity"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  # Auth Env Tests
+  - name: atmos auth env --help
+    enabled: true
+    snapshot: true
+    description: "Test auth env help output"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Export authentication environment variables"
+        - "Usage:"
+        - "atmos auth env"
+        - "--format"
+        - "export"
+        - "json"
+        - "dotenv"
+      exit_code: 0
+
+  - name: atmos auth env --format json --identity test-user
+    enabled: true
+    snapshot: true
+    description: "Test auth env with JSON format"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--format"
+      - "json"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  - name: atmos auth env --format export --identity test-user
+    enabled: true
+    snapshot: true
+    description: "Test auth env with export format"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--format"
+      - "export"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  - name: atmos auth env --format dotenv --identity test-user
+    enabled: true
+    snapshot: true
+    description: "Test auth env with dotenv format"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--format"
+      - "dotenv"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  # Auth Exec Tests
+  - name: atmos auth exec --help
+    enabled: true
+    snapshot: true
+    description: "Test auth exec help output"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "exec"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Execute commands with authentication environment variables"
+        - "Usage:"
+        - "atmos auth exec"
+        - "--identity"
+      exit_code: 0
+
+  - name: atmos auth exec --identity test-user -- echo hello
+    enabled: true
+    snapshot: true
+    description: "Test auth exec with simple command"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "exec"
+      - "--identity"
+      - "test-user"
+      - "--"
+      - "echo"
+      - "hello"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  # Auth Login Tests
+  - name: atmos auth login --help
+    enabled: true
+    snapshot: true
+    description: "Test auth login help output"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "login"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Authenticate with identity providers"
+        - "Usage:"
+        - "atmos auth login"
+        - "--identity"
+      exit_code: 0
+
+  - name: atmos auth login --identity test-user
+    enabled: true
+    snapshot: true
+    description: "Test auth login with AWS user identity"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "login"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  # Auth User Configure Tests
+  - name: atmos auth user configure --help
+    enabled: true
+    snapshot: true
+    description: "Test auth user configure help output"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "user"
+      - "configure"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Configure AWS user credentials"
+        - "Usage:"
+        - "atmos auth user configure"
+        - "--alias"
+      exit_code: 0
+
+  # Error Cases
+  - name: atmos auth invalid-command
+    enabled: true
+    snapshot: true
+    description: "Test invalid auth subcommand"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "invalid-command"
+    expect:
+      diff: []
+      stderr:
+        - "unknown command"
+      exit_code: 1
+
+  - name: atmos auth env --format invalid
+    enabled: true
+    snapshot: true
+    description: "Test auth env with invalid format"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--format"
+      - "invalid"
+    expect:
+      diff: []
+      stderr:
+        - "invalid argument"
+      exit_code: 1
+
+  - name: atmos auth whoami --identity nonexistent
+    enabled: true
+    snapshot: true
+    description: "Test auth whoami with nonexistent identity"
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+      - "--identity"
+      - "nonexistent"
+    expect:
+      diff: []
+      stderr:
+        - "identity \"nonexistent\" not found"
+      exit_code: 1
+
+  # CI Environment Tests
+  - name: atmos auth whoami (CI mode)
+    enabled: true
+    snapshot: true
+    description: "Test auth whoami in CI environment"
+    workdir: "fixtures/scenarios/auth/"
+    env:
+      CI: "true"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+    expect:
+      diff: []
+      stdout:
+        - "test-admin"
+      exit_code: 0
+
+  - name: atmos auth env (CI mode)
+    enabled: true
+    snapshot: true
+    description: "Test auth env in CI environment"
+    workdir: "fixtures/scenarios/auth/"
+    env:
+      CI: "true"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+    expect:
+      diff: []
+      stderr:
+        - "failed to authenticate"
+      exit_code: 1
