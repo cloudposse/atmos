@@ -12,3 +12,6 @@ coverage.html
 test-results.json
 test-summary.md
 *.out
+
+# Cache directory
+.gotcha/

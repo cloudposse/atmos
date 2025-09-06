@@ -139,9 +139,13 @@ type TestResult struct {
 // TestModel represents the test UI model.
 type TestModel struct {
 	// Test tracking
-	totalTests            int // Total number of tests that will run (from "run" events)
-	completedTests        int // Number of tests that have completed (pass/fail/skip)
-	currentIndex          int // Legacy counter - will be removed
+	totalTests            int    // Total number of tests that will run (from "run" events or estimate)
+	estimatedTestCount    int    // Original estimate from cache (preserved for display)
+	actualTestCount       int    // Actual count of tests from "run" events
+	usingEstimate         bool   // Whether we're still using the estimate or have actual count
+	completedTests        int    // Number of tests that have completed (pass/fail/skip)
+	testFilter            string // Test filter applied via -run flag (if any)
+	currentIndex          int  // Legacy counter - will be removed
 	currentTest           string
 	currentPackage        string          // Current package being tested
 	packagesWithNoTests   map[string]bool // Track packages that have "[no test files]" in output
@@ -221,7 +225,7 @@ type streamOutputMsg struct {
 }
 
 // NewTestModel creates a new test model for the TUI.
-func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, verbosityLevel string) TestModel {
+func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, verbosityLevel string, estimatedTestCount int) TestModel {
 	// Create progress bar with default gradient (purple theme used in Atmos)
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -233,6 +237,19 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 	s := spinner.New()
 	s.Style = spinnerStyle
 	s.Spinner = spinner.Dot
+
+	// Extract test filter from args if present
+	var testFilter string
+	if testArgs != "" {
+		// Look for -run flag in the arguments
+		args := strings.Fields(testArgs)
+		for i := 0; i < len(args)-1; i++ {
+			if args[i] == "-run" {
+				testFilter = args[i+1]
+				break
+			}
+		}
+	}
 
 	// Build go test command args
 	args := []string{"test", "-json"}
@@ -277,8 +294,11 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 		packageOrder:          []string{},
 		activePackages:        make(map[string]bool),
 		displayedPackages:     make(map[string]bool),
-		totalTests:            0, // Will be incremented by "run" events
-		completedTests:        0, // Will be incremented by pass/fail/skip events
+		totalTests:            estimatedTestCount, // Use cached estimate if available, will be updated by "run" events
+		estimatedTestCount:    estimatedTestCount, // Preserve original estimate
+		usingEstimate:         estimatedTestCount > 0, // Track if we're using an estimate
+		completedTests:        0,                   // Will be incremented by pass/fail/skip events
+		testFilter:            testFilter,          // Store the test filter for display
 		startTime:             time.Now(),
 	}
 }
@@ -556,15 +576,29 @@ func (m *TestModel) View() string {
 	// Build the ordered status components
 	var percentage string
 	var testCount string
-	if m.totalTests > 0 {
-		// Calculate percentage as float first for accuracy
+	
+	// Always use estimate if we have one and are still using it
+	if m.usingEstimate && m.estimatedTestCount > 0 {
+		// Using cached estimate
+		if m.completedTests > 0 {
+			// Tests are running, show progress against estimate
+			percentFloat := float64(m.completedTests) / float64(m.estimatedTestCount)
+			percent := int(percentFloat * 100)
+			percentage = fmt.Sprintf("%3d%%", percent)
+		} else {
+			// No tests completed yet
+			percentage = "  0%"
+		}
+		// Show completed/estimated format with tilde prefix (since whole fraction is estimated)
+		testCount = fmt.Sprintf("~%d/%d %s", m.completedTests, m.estimatedTestCount, DurationStyle.Render("tests"))
+	} else if m.totalTests > 0 {
+		// Not using estimate, have actual count
 		percentFloat := float64(m.completedTests) / float64(m.totalTests)
 		percent := int(percentFloat * 100)
-		percentage = fmt.Sprintf("%3d%%", percent) // Fixed width
-		// Format test count with fixed width for stability
+		percentage = fmt.Sprintf("%3d%%", percent)
 		testCount = fmt.Sprintf("%4d/%-4d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
 	} else {
-		// Very early, before any run events - pad to match width
+		// No estimate and no tests discovered yet
 		percentage = "  0%"
 		testCount = fmt.Sprintf("%-15s", DurationStyle.Render("discovering tests"))
 	}
@@ -621,6 +655,11 @@ func (m *TestModel) GetExitCode() int {
 		return 1
 	}
 	return 0
+}
+
+// IsAborted returns true if the test run was aborted by the user.
+func (m *TestModel) IsAborted() bool {
+	return m.aborted
 }
 
 // generateSubtestProgress creates a visual progress indicator for subtest results.
@@ -899,7 +938,14 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 		case "run":
 			m.currentTest = event.Test
 			// Count all tests including subtests for accurate progress
-			m.totalTests++
+			// Always increment the actual test count
+			m.actualTestCount++
+			
+			if !m.usingEstimate {
+				// Not using estimate, update totalTests with actual count
+				m.totalTests = m.actualTestCount
+			}
+			// If using estimate, keep totalTests as the estimate value
 
 			if isSubtest {
 				// This is a subtest
@@ -962,6 +1008,24 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 		case "pass", "fail", "skip":
 			// Count all tests including subtests for accurate progress
 			m.completedTests++
+			
+			// Check if we should switch from estimate to actual count
+			if m.usingEstimate && m.actualTestCount > 0 {
+				// Only switch from estimate to actual when we're confident:
+				// 1. If actual count exceeds the estimate (estimate was too low)
+				// 2. If we've completed a significant portion of the estimated tests
+				if m.actualTestCount > m.estimatedTestCount {
+					// Actual count exceeded estimate, switch to actual
+					m.usingEstimate = false
+					m.totalTests = m.actualTestCount
+				} else if m.completedTests > int(float64(m.estimatedTestCount) * 0.9) {
+					// We've completed 90% of estimated tests, likely near the end
+					// Switch to actual count for accuracy
+					m.usingEstimate = false
+					m.totalTests = m.actualTestCount
+				}
+				// Otherwise keep showing the estimate to avoid jarring updates
+			}
 
 			// Update counts
 			switch event.Action {
@@ -1034,7 +1098,12 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	}
 
 	if pkg.Status == "skip" || m.packagesWithNoTests[pkg.Package] || !pkg.HasTests {
-		output.WriteString(fmt.Sprintf("  %s\n", DurationStyle.Render("No tests")))
+		// Show more specific message if a filter is applied
+		if m.testFilter != "" {
+			output.WriteString(fmt.Sprintf("  %s\n", DurationStyle.Render("No tests matching filter")))
+		} else {
+			output.WriteString(fmt.Sprintf("  %s\n", DurationStyle.Render("No tests")))
+		}
 		return output.String()
 	}
 

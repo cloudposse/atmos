@@ -35,7 +35,7 @@ func TestRunStreamAndParseIntegration(t *testing.T) {
 	}
 
 	// Test different output formats
-	formats := []string{"stdin", "markdown"}
+	formats := []string{"terminal", "stdin", "markdown"}
 
 	for _, format := range formats {
 		t.Run("format_"+format, func(t *testing.T) {
@@ -53,7 +53,7 @@ func TestHandleOutputWithFailedSummary(t *testing.T) {
 		Failed: []types.TestResult{{Package: "test/pkg", Test: "TestFail", Status: "fail", Duration: 1.0}},
 	}
 
-	err := output.HandleOutput(summary, "stdin", "", false)
+	err := output.HandleOutput(summary, "terminal", "", false)
 	if err != nil {
 		t.Errorf("HandleOutput() with failed tests = %v, want nil", err)
 	}
@@ -61,8 +61,8 @@ func TestHandleOutputWithFailedSummary(t *testing.T) {
 
 func TestConstants(t *testing.T) {
 	// Test that constants are properly defined.
-	if constants.FormatStdin != "stdin" {
-		t.Errorf("FormatStdin = %v, want 'stdin'", constants.FormatStdin)
+	if constants.FormatTerminal != "terminal" {
+		t.Errorf("FormatTerminal = %v, want 'terminal'", constants.FormatTerminal)
 	}
 	if constants.FormatMarkdown != "markdown" {
 		t.Errorf("FormatMarkdown = %v, want 'markdown'", constants.FormatMarkdown)
@@ -73,8 +73,9 @@ func TestConstants(t *testing.T) {
 	if constants.FormatBoth != "both" {
 		t.Errorf("FormatBoth = %v, want 'both'", constants.FormatBoth)
 	}
-	if constants.FormatStream != "stream" {
-		t.Errorf("FormatStream = %v, want 'stream'", constants.FormatStream)
+	// Test backward compatibility alias
+	if constants.FormatStdin != "terminal" {
+		t.Errorf("FormatStdin (backward compat) = %v, want 'terminal'", constants.FormatStdin)
 	}
 	if constants.StdinMarker != "-" {
 		t.Errorf("StdinMarker = %v, want '-'", constants.StdinMarker)

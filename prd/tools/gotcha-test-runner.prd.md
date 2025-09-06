@@ -36,12 +36,16 @@
 
 1. **Beautiful CLI Experience**: Leverage Charm ecosystem for modern, visually appealing interface
 2. **Real-time Progress Tracking**: Provide immediate feedback during test execution with Bubble Tea TUI
-3. **CI/CD Integration**: Native GitHub Actions support with PR comments and job summaries
-4. **Flexible Configuration**: Support YAML config files and environment variables via Viper
-5. **Cross-platform Compatibility**: Work consistently across Linux, macOS, and Windows
-6. **Pass-through Arguments**: Support `--` separator for direct `go test` argument passing
-7. **Coverage Visualization**: Transform coverage data into visual, actionable insights
-8. **Multiple Output Formats**: Support terminal, markdown, and GitHub-specific formats
+3. **Multi-VCS Support**: Abstract VCS operations to support GitHub, GitLab, Bitbucket, and Azure DevOps
+4. **CI/CD Integration**: Native support for various CI platforms with PR/MR comments and job summaries
+5. **Flexible Configuration**: Support YAML config files and environment variables via Viper
+6. **Cross-platform Compatibility**: Work consistently across Linux, macOS, and Windows
+7. **Pass-through Arguments**: Support `--` separator for direct `go test` argument passing
+8. **Coverage Visualization**: Transform coverage data into visual, actionable insights
+9. **Multiple Output Formats**: Support terminal, markdown, and platform-specific formats
+10. **Intelligent Test Filtering**: Automatically detect test names in arguments and apply `-run` filters
+11. **Performance Optimization**: Cache test counts and metadata for improved startup times
+12. **Graceful Degradation**: Skip tests requiring external dependencies when not available
 
 ## Out of Scope
 
@@ -462,6 +466,157 @@ filter:
 - **Statistics generation**: Comprehensive test run metrics
 - **Subtest analysis**: Detailed breakdown of subtest results with pass/fail counts
 
+### Cache System
+
+Gotcha implements a local cache system to improve performance and user experience through intelligent data persistence.
+
+#### Cache File Structure
+- **Location**: `.gotcha/cache.yaml` (configurable via `GOTCHA_CACHE_DIR`)
+- **Format**: YAML with extensible hierarchy for future enhancements
+- **Version Control**: Automatically added to `.gitignore`
+- **Atomic Operations**: Write to temp file and rename for consistency
+
+#### Cache Hierarchy
+```yaml
+version: "1.0"
+metadata:
+  last_updated: timestamp
+  gotcha_version: version
+  schema_version: "1.0"
+
+discovery:        # Test discovery and counting
+  test_counts:    # Package pattern -> test count mapping
+  package_details: # Per-package metadata
+
+performance:      # Performance metrics and analysis
+  slowest_tests:  # Track slowest test execution times
+  slowest_packages: # Package-level performance data
+
+history:         # Execution history and trends
+  runs:          # Recent test run results
+  max_entries: 100
+
+preferences:     # User preferences and defaults
+  default_timeout: "40m"
+  default_show_filter: "all"
+
+vcs:            # VCS integration metadata
+  github:       # GitHub-specific cache data
+```
+
+#### Configuration
+- `GOTCHA_CACHE_ENABLED`: Enable/disable caching (default: true)
+- `GOTCHA_CACHE_DIR`: Cache directory location (default: `.gotcha`)
+- `GOTCHA_CACHE_MAX_AGE`: Maximum cache entry age (default: 24h)
+
+#### Cache Invalidation
+- **Timestamp-based expiration**: Entries expire after max age
+- **go.mod tracking**: Invalidate when go.mod modification time changes
+- **Manual invalidation**: `--no-cache` flag to skip cache
+- **Automatic cleanup**: Remove stale entries on save
+
+#### Benefits
+- **Instant progress bars**: Use cached test counts for immediate progress visualization
+- **Reduced startup time**: Skip expensive test discovery in large codebases
+- **Historical tracking**: Analyze test performance trends over time
+- **Persistent preferences**: Remember user settings across sessions
+- **Smart defaults**: Learn from usage patterns
+
+### Smart Test Filtering
+
+Gotcha automatically detects test names in command arguments and applies appropriate filters for improved developer experience.
+
+#### Test Name Detection
+- **Patterns recognized**: `Test*`, `Example*`, `Benchmark*`
+- **Subtest support**: `TestFoo/subtest` patterns
+- **Multiple tests**: `TestA TestB` → `-run "TestA|TestB"`
+- **Mixed arguments**: Distinguishes between test names and package paths
+
+#### Automatic Behavior
+- **Default package**: When only test name provided, assumes `./...`
+- **Filter application**: Adds `-run` flag automatically when test names detected
+- **Explicit override**: Respects user-provided `-run` flags
+- **Smart inference**: `gotcha TestFoo` → `go test ./... -run TestFoo`
+
+#### Examples
+```bash
+# Automatic test filtering
+gotcha TestExecute           # → go test ./... -run TestExecute
+gotcha TestA TestB           # → go test ./... -run "TestA|TestB"
+gotcha ./pkg TestConfig      # → go test ./pkg/... -run TestConfig
+
+# Explicit paths still work
+gotcha ./...                 # → go test ./...
+gotcha ./pkg/utils           # → go test ./pkg/utils/...
+
+# Pass-through still supported
+gotcha -- -run TestSpecific -v  # Explicit -run flag respected
+```
+
+### VCS Platform Integration
+
+Gotcha uses a provider-based architecture to support multiple Version Control System (VCS) platforms, enabling test result reporting across different CI/CD environments.
+
+#### Supported Platforms
+- **GitHub Actions**: Full support for PR comments and job summaries via `$GITHUB_STEP_SUMMARY`
+- **GitLab CI** (future): Support for merge request comments and job artifacts
+- **Bitbucket Pipelines** (future): Support for PR comments and pipeline artifacts
+- **Azure DevOps** (future): Support for PR comments and build summaries
+
+#### VCS Interface Architecture
+
+##### Core Interfaces
+The VCS abstraction is built on several key interfaces:
+
+1. **Provider Interface**: Main interface for VCS platform detection and capability access
+   - `DetectContext()`: Detects VCS-specific context from environment
+   - `CreateCommentManager()`: Creates platform-specific comment manager
+   - `GetJobSummaryWriter()`: Returns job summary writer (optional capability)
+   - `GetArtifactPublisher()`: Returns artifact publisher (optional capability)
+   - `GetPlatform()`: Returns the platform identifier
+   - `IsAvailable()`: Checks if platform is available in current environment
+
+2. **Context Interface**: Provides VCS-specific context information
+   - `GetOwner()`: Repository owner/organization
+   - `GetRepo()`: Repository name
+   - `GetPRNumber()`: Pull/merge request number
+   - `GetCommentUUID()`: Unique identifier for comments
+   - `GetToken()`: Authentication token
+   - `GetEventName()`: CI event type
+   - `IsSupported()`: Checks if current context supports operations
+   - `GetPlatform()`: Platform identifier
+
+3. **CommentManager Interface**: Handles VCS comment operations
+   - `PostOrUpdateComment()`: Creates or updates PR/MR comments
+   - `FindExistingComment()`: Finds existing comments by UUID
+
+4. **JobSummaryWriter Interface**: Manages CI/CD job summary generation (optional)
+   - `WriteJobSummary()`: Writes summary to platform's summary mechanism
+   - `IsJobSummarySupported()`: Checks if summaries are supported
+   - `GetJobSummaryPath()`: Returns summary file path
+
+5. **ArtifactPublisher Interface**: Handles artifact publishing (optional)
+   - `PublishArtifact()`: Publishes files as CI/CD artifacts
+   - `IsArtifactSupported()`: Checks if artifacts are supported
+
+##### Platform Detection
+- **Automatic detection**: Based on environment variables (CI, GITHUB_ACTIONS, GITLAB_CI, etc.)
+- **Manual override**: Via `--vcs-platform` flag or `GOTCHA_VCS_PLATFORM` environment variable
+- **Fallback behavior**: Graceful degradation when no VCS is detected
+- **Registration pattern**: Providers self-register via init() functions
+
+##### Capability Model
+Each VCS provider declares its capabilities:
+- **Required capabilities**: Context detection, comment management
+- **Optional capabilities**: Job summaries, artifact publishing, test reports
+- **Graceful degradation**: Missing capabilities return nil, allowing fallback behavior
+
+#### Configuration
+- **CLI Flag**: `--vcs-platform` to force specific platform
+- **Environment Variable**: `GOTCHA_VCS_PLATFORM` for platform override
+- **Auto-detection order**: GitHub → GitLab → Bitbucket → Azure DevOps
+- **Provider registry**: Extensible system for adding new platforms
+
 ### GitHub Actions Integration
 
 #### Job Summary Generation
@@ -652,19 +807,24 @@ Existing tools failed to provide:
 - **Interface-driven**: Use interfaces for testability and future extensibility
 - **Error handling**: Comprehensive error handling with proper exit codes
 - **Performance**: Efficient streaming with minimal memory overhead
+- **VCS abstraction**: Provider-based architecture for multi-platform support
+- **Non-intrusive enhancements**: All features work within existing Cobra/Fang command structure
+- **Graceful degradation**: Features degrade gracefully when dependencies unavailable
 
 ### Key Dependencies
 - **Fang**: Provides beautiful CLI wrapper around Cobra with signal handling
 - **Bubble Tea**: Enables rich terminal UI with proper event handling
 - **Lipgloss**: Consistent styling with hex color support
 - **Charmbracelet Log**: Structured logging with color profile management
-- **Viper**: Configuration management with environment variable binding
+- **Viper**: Configuration management with environment variable binding (also used for cache I/O)
 
 ### Design Patterns
 - **Observer pattern**: For real-time test result updates
 - **Strategy pattern**: For different output formats
 - **Factory pattern**: For creating appropriate renderers based on environment
 - **Command pattern**: For structured CLI command handling
+- **Provider pattern**: For VCS platform abstraction and registration
+- **Interface segregation**: Optional capabilities via separate interfaces
 
 ### Security Considerations
 - **GitHub token handling**: Secure storage and transmission of API tokens

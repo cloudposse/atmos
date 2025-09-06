@@ -1,0 +1,40 @@
+package github
+
+import (
+	"fmt"
+	"os"
+)
+
+// GitHubJobSummaryWriter implements vcs.JobSummaryWriter for GitHub Actions.
+type GitHubJobSummaryWriter struct{}
+
+// WriteJobSummary writes content to the GitHub Actions step summary.
+func (w *GitHubJobSummaryWriter) WriteJobSummary(content string) (string, error) {
+	summaryPath := os.Getenv("GITHUB_STEP_SUMMARY")
+	if summaryPath == "" {
+		return "", nil
+	}
+	
+	file, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to open GitHub step summary file: %w", err)
+	}
+	defer file.Close()
+	
+	_, err = file.WriteString(content)
+	if err != nil {
+		return "", fmt.Errorf("failed to write to GitHub step summary: %w", err)
+	}
+	
+	return summaryPath, nil
+}
+
+// IsJobSummarySupported checks if GitHub step summaries are supported.
+func (w *GitHubJobSummaryWriter) IsJobSummarySupported() bool {
+	return os.Getenv("GITHUB_STEP_SUMMARY") != ""
+}
+
+// GetJobSummaryPath returns the path to the GitHub step summary file.
+func (w *GitHubJobSummaryWriter) GetJobSummaryPath() string {
+	return os.Getenv("GITHUB_STEP_SUMMARY")
+}

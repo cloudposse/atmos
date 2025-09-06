@@ -133,8 +133,13 @@ func openGitHubOutput(outputFile string) (io.Writer, string, error) {
 
 // HandleOutput handles writing output in the specified format.
 func HandleOutput(summary *types.TestSummary, format, outputFile string, generateSummary bool) error {
+	// Normalize format for backward compatibility
+	if format == "stdin" {
+		format = "terminal"
+	}
+	
 	switch format {
-	case "stdin":
+	case "terminal":
 		return HandleConsoleOutput(summary)
 	case "markdown":
 		if generateSummary {

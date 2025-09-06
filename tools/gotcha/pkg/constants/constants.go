@@ -2,11 +2,13 @@ package constants
 
 const (
 	// Format constants.
-	FormatStdin    = "stdin"
-	FormatMarkdown = "markdown"
-	FormatGitHub   = "github"
-	FormatBoth     = "both"
-	FormatStream   = "stream"
+	FormatTerminal = "terminal" // Terminal/console output
+	FormatMarkdown = "markdown" // Markdown file output
+	FormatGitHub   = "github"   // GitHub Actions step summary
+	FormatBoth     = "both"     // Terminal + Markdown output
+	
+	// Deprecated: Use FormatTerminal instead
+	FormatStdin = "terminal" // Alias for backward compatibility
 	// File handling constants.
 	StdinMarker        = "-"
 	StdoutPath         = "stdout"

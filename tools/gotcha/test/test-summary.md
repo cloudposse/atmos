@@ -29,7 +29,7 @@ go test test/pkg -run ^TestFail$ -v
 
 </details>
 
-# Test Coverage
+## 📊 Test Coverage
 
 | Metric | Coverage | Details |
 |--------|----------|----------|
