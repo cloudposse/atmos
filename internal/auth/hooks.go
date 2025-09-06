@@ -42,7 +42,6 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	var authConfig schema.AuthConfig
 	err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig)
 
-
 	// Skip if no auth config
 	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
 		log.Debug("No auth configuration found, skipping authentication")
@@ -56,7 +55,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	// Create cloud provider manager
 	cloudProviderManager := cloud.NewCloudProviderManager()
-	
+
 	// Create auth manager with merged configuration
 	authManager, err := NewAuthManager(
 		&authConfig,

@@ -151,7 +151,6 @@ type AWSFileManager interface {
 	Cleanup(providerName string) error
 }
 
-
 // Validator defines the interface for validating auth configurations
 type Validator interface {
 	// ValidateAuthConfig validates the entire auth configuration
