@@ -68,6 +68,8 @@ jobs:
           make -C demo/screengrabs build-all install
           git add -A
           git status
+        env:
+          ATMOS_PAGER: "false"
 
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v7
