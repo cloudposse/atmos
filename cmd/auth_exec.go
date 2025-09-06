@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/cloudposse/atmos/internal/auth/cloud"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
@@ -44,38 +43,17 @@ var authExecCmd = &cobra.Command{
 			identityName = defaultIdentity
 		}
 
-		// Authenticate to ensure credentials are available
+		// Authenticate and get environment variables
 		ctx := context.Background()
-		_, err = authManager.Authenticate(ctx, identityName)
+		whoami, err := authManager.Authenticate(ctx, identityName)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		// Get the root provider for this identity (handles identity chaining correctly)
-		providerName := authManager.GetProviderForIdentity(identityName)
-		if providerName == "" {
-			return fmt.Errorf("no provider found for identity %s", identityName)
-		}
-
-		// Get provider configuration to determine cloud provider kind
-		var providerKind string
-		if provider, exists := atmosConfig.Auth.Providers[providerName]; exists {
-			providerKind = provider.Kind
-		} else {
-			// Handle AWS user identities which don't have a provider entry
-			if identity, exists := atmosConfig.Auth.Identities[identityName]; exists && identity.Kind == "aws/user" {
-				providerKind = "aws"
-				providerName = "aws-user"
-			} else {
-				return fmt.Errorf("provider %s not found in configuration", providerName)
-			}
-		}
-
-		// Create cloud provider manager and get environment variables
-		cloudProviderManager := cloud.NewCloudProviderManager()
-		envVars, err := cloudProviderManager.GetEnvironmentVariables(providerKind, providerName, identityName)
-		if err != nil {
-			return fmt.Errorf("failed to get environment variables: %w", err)
+		// Get environment variables from authentication result
+		envVars := whoami.Environment
+		if envVars == nil {
+			envVars = make(map[string]string)
 		}
 
 		// Execute the command with authentication environment

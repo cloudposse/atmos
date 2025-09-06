@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cloudposse/atmos/internal/auth/cloud"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -41,30 +40,17 @@ var authEnvCmd = &cobra.Command{
 			identityName = defaultIdentity
 		}
 
-		// Authenticate to ensure credentials are available
+		// Authenticate and get environment variables
 		ctx := context.Background()
-		_, err = authManager.Authenticate(ctx, identityName)
+		whoami, err := authManager.Authenticate(ctx, identityName)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		// Get the root provider for this identity (handles identity chaining correctly)
-		providerName := authManager.GetProviderForIdentity(identityName)
-		if providerName == "" {
-			return fmt.Errorf("no provider found for identity %s", identityName)
-		}
-
-		// Get provider kind from the identity (eliminates special case handling)
-		providerKind, err := authManager.GetProviderKindForIdentity(identityName)
-		if err != nil {
-			return fmt.Errorf("failed to get provider kind for identity %s: %w", identityName, err)
-		}
-
-		// Create cloud provider manager and get environment variables
-		cloudProviderManager := cloud.NewCloudProviderManager()
-		envVars, err := cloudProviderManager.GetEnvironmentVariables(providerKind, providerName, identityName)
-		if err != nil {
-			return fmt.Errorf("failed to get environment variables: %w", err)
+		// Get environment variables from authentication result
+		envVars := whoami.Environment
+		if envVars == nil {
+			envVars = make(map[string]string)
 		}
 
 		// Get output format

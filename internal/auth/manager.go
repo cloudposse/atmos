@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/internal/auth/cloud"
 	"github.com/cloudposse/atmos/internal/auth/identities/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -17,12 +16,11 @@ import (
 
 // manager implements the AuthManager interface
 type manager struct {
-	config               *schema.AuthConfig
-	providers            map[string]types.Provider
-	identities           map[string]types.Identity
-	credentialStore      types.CredentialStore
-	validator            types.Validator
-	cloudProviderManager cloud.CloudProviderManager
+	config          *schema.AuthConfig
+	providers       map[string]types.Provider
+	identities      map[string]types.Identity
+	credentialStore types.CredentialStore
+	validator       types.Validator
 }
 
 // NewAuthManager creates a new AuthManager instance
@@ -30,19 +28,17 @@ func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
 	validator types.Validator,
-	cloudProviderManager cloud.CloudProviderManager,
 ) (types.AuthManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("auth config cannot be nil")
 	}
 
 	m := &manager{
-		config:               config,
-		providers:            make(map[string]types.Provider),
-		identities:           make(map[string]types.Identity),
-		credentialStore:      credentialStore,
-		validator:            validator,
-		cloudProviderManager: cloudProviderManager,
+		config:          config,
+		providers:       make(map[string]types.Provider),
+		identities:      make(map[string]types.Identity),
+		credentialStore: credentialStore,
+		validator:       validator,
 	}
 
 	// Initialize providers
@@ -87,7 +83,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 	if identity, exists := m.identities[identityName]; exists {
 		if hook, hasHook := identity.(types.PostAuthHook); hasHook {
 			providerName := chain[0]
-			if err := hook.PostAuthenticate(ctx, providerName, identityName, finalCreds, m.cloudProviderManager); err != nil {
+			if err := hook.PostAuthenticate(ctx, providerName, identityName, finalCreds); err != nil {
 				return nil, fmt.Errorf("post-authentication hook failed: %w", err)
 			}
 		}

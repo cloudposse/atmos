@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/internal/auth/cloud"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/internal/auth/validation"
@@ -53,15 +52,11 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
 
-	// Create cloud provider manager
-	cloudProviderManager := cloud.NewCloudProviderManager()
-
 	// Create auth manager with merged configuration
 	authManager, err := NewAuthManager(
 		&authConfig,
 		credStore,
 		validator,
-		cloudProviderManager,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create auth manager: %w", err)

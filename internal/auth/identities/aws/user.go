@@ -264,7 +264,9 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 
 // PostAuthenticate implements the PostAuthHook interface to set up AWS files after authentication
 func (i *userIdentity) PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error {
-	// For now, return nil since we need to figure out how to access AWS file manager
-	// without making the interface cloud-specific
+	// Setup AWS files using shared AWS cloud package
+	if err := awsCloud.SetupFiles(ctx, providerName, identityName, creds); err != nil {
+		return fmt.Errorf("failed to setup AWS files: %w", err)
+	}
 	return nil
 }

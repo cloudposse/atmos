@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/log"
+	awsCloud "github.com/cloudposse/atmos/internal/auth/cloud/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -171,7 +172,10 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 }
 
 // PostAuthenticate implements the PostAuthHook interface to set up AWS files after authentication
-func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials, cloudProviderManager CloudProviderManager) error {
-	cloudProviderManager.SetAWSFiles()
+func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error {
+	// Setup AWS files using shared AWS cloud package
+	if err := awsCloud.SetupFiles(ctx, providerName, identityName, creds); err != nil {
+		return fmt.Errorf("failed to setup AWS files: %w", err)
+	}
 	return nil
 }

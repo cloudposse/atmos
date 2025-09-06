@@ -80,16 +80,13 @@ type Identity interface {
 
 	// Environment returns environment variables that should be set for this identity
 	Environment() (map[string]string, error)
-
-	// Merge merges this identity configuration with component-level overrides
-	Merge(component *schema.Identity) Identity
 }
 
 // PostAuthHook defines an optional interface that identities can implement
 // to perform actions after successful authentication
 type PostAuthHook interface {
 	// PostAuthenticate is called after successful authentication with the final credentials
-	PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials, cloudProviderManager CloudProviderManager) error
+	PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error
 }
 
 // AuthManager manages the overall authentication process
