@@ -60,13 +60,13 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 	var permissionSetName string
 	var ok bool
 	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
-			return nil, fmt.Errorf("permission set name is required in principal")
+		return nil, fmt.Errorf("permission set name is required in principal")
 	}
 
 	// Get account info from principal or spec (backward compatibility)
 	var accountSpec map[string]interface{}
 	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
-			return nil, fmt.Errorf("account specification is required in principal")
+		return nil, fmt.Errorf("account specification is required in principal")
 	}
 	if !ok {
 		return nil, fmt.Errorf("account specification is required")
@@ -157,13 +157,13 @@ func (i *permissionSetIdentity) Validate() error {
 	var permissionSetName string
 	var ok bool
 	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
-			return fmt.Errorf("permission set name is required in principal")
+		return fmt.Errorf("permission set name is required in principal")
 	}
 
 	// Check account info in principal
 	var accountSpec map[string]interface{}
 	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
-			return fmt.Errorf("account specification is required in principal")
+		return fmt.Errorf("account specification is required in principal")
 	}
 
 	accountName, ok := accountSpec["name"].(string)

@@ -37,9 +37,9 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 				}
 			},
 			mockInput: []string{
-				"test-user",           // Identity name
-				"AKIATEST123456789",   // Access Key ID
-				"secretkey123456789",  // Secret Access Key
+				"test-user",          // Identity name
+				"AKIATEST123456789",  // Access Key ID
+				"secretkey123456789", // Secret Access Key
 				"us-east-1",          // Region
 				"",                   // MFA ARN (optional)
 			},
@@ -169,7 +169,7 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 				Use: "configure",
 				RunE: func(cmd *cobra.Command, args []string) error {
 					config := tt.setupConfig()
-					
+
 					// Mock user input
 					inputIndex := 0
 					getInput := func(prompt string) string {
@@ -180,33 +180,33 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 						}
 						return ""
 					}
-					
+
 					// Mock identity name input
 					identityName := getInput("Enter identity name: ")
 					if identityName == "" {
 						return assert.AnError
 					}
-					
+
 					// Validate identity exists and is AWS user
 					identity, exists := config.Auth.Identities[identityName]
 					if !exists || identity.Kind != "aws/user" {
 						return assert.AnError
 					}
-					
+
 					// Mock credential inputs
 					accessKeyID := getInput("Enter AWS Access Key ID: ")
 					if accessKeyID == "" {
 						return assert.AnError
 					}
-					
+
 					secretAccessKey := getInput("Enter AWS Secret Access Key: ")
 					if secretAccessKey == "" {
 						return assert.AnError
 					}
-					
+
 					region := getInput("Enter AWS Region: ")
 					mfaArn := getInput("Enter MFA ARN (optional): ")
-					
+
 					// Mock successful configuration
 					cmd.Printf("**AWS User credentials configured successfully**\n")
 					cmd.Printf("**Identity**: %s\n", identityName)
@@ -216,7 +216,7 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 						cmd.Printf("**MFA ARN**: %s\n", mfaArn)
 					}
 					cmd.Printf("Credentials have been securely stored.\n")
-					
+
 					return nil
 				},
 			}
@@ -261,18 +261,18 @@ func TestAuthUserCmdStructure(t *testing.T) {
 		Short: "Manage AWS user credentials",
 		Long:  "Manage AWS user credentials for atmos auth",
 	}
-	
+
 	configureCmd := &cobra.Command{
 		Use:   "configure",
 		Short: "Configure AWS user credentials",
 	}
 	cmd.AddCommand(configureCmd)
-	
+
 	// Test command structure
 	assert.Equal(t, "user", cmd.Use)
 	assert.Equal(t, "Manage AWS user credentials", cmd.Short)
 	assert.Contains(t, cmd.Long, "Manage AWS user credentials")
-	
+
 	// Test subcommands
 	subcommands := cmd.Commands()
 	assert.Len(t, subcommands, 1)
@@ -286,7 +286,7 @@ func TestAuthUserConfigureCmdStructure(t *testing.T) {
 		Short: "Configure AWS user credentials",
 		Long:  "Configure AWS user credentials and store them securely in keyring",
 	}
-	
+
 	assert.Equal(t, "configure", configureCmd.Use)
 	assert.Equal(t, "Configure AWS user credentials", configureCmd.Short)
 	assert.Contains(t, configureCmd.Long, "Configure AWS user credentials")
@@ -347,7 +347,7 @@ func TestCredentialValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Mock credential validation
 			hasError := tt.accessKey == "" || tt.secretKey == ""
-			
+
 			if tt.expectError {
 				assert.True(t, hasError)
 			} else {

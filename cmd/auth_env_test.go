@@ -170,7 +170,7 @@ func TestAuthEnvCmd(t *testing.T) {
 					config := tt.setupConfig()
 					identityName, _ := cmd.Flags().GetString("identity")
 					format, _ := cmd.Flags().GetString("format")
-					
+
 					// Determine target identity
 					if identityName == "" {
 						// Find default identity
@@ -189,14 +189,14 @@ func TestAuthEnvCmd(t *testing.T) {
 							return assert.AnError
 						}
 					}
-					
+
 					// Mock environment variables
 					envVars := []schema.EnvironmentVariable{
 						{Key: "AWS_SHARED_CREDENTIALS_FILE", Value: "/home/user/.aws/atmos/test-provider/credentials"},
 						{Key: "AWS_CONFIG_FILE", Value: "/home/user/.aws/atmos/test-provider/config"},
 						{Key: "AWS_PROFILE", Value: identityName},
 					}
-					
+
 					// Output in requested format
 					switch format {
 					case "json":
@@ -215,7 +215,7 @@ func TestAuthEnvCmd(t *testing.T) {
 							cmd.Printf("export %s=%s\n", env.Key, env.Value)
 						}
 					}
-					
+
 					return nil
 				},
 			}
@@ -254,12 +254,12 @@ func TestAuthEnvCmdFlags(t *testing.T) {
 	}
 	cmd.Flags().StringP("identity", "i", "", "Identity to get environment for")
 	cmd.Flags().StringP("format", "f", "export", "Output format (export, json, dotenv)")
-	
+
 	// Test that required flags are present
 	identityFlag := cmd.Flags().Lookup("identity")
 	require.NotNil(t, identityFlag)
 	assert.Equal(t, "i", identityFlag.Shorthand)
-	
+
 	formatFlag := cmd.Flags().Lookup("format")
 	require.NotNil(t, formatFlag)
 	assert.Equal(t, "f", formatFlag.Shorthand)
@@ -302,7 +302,7 @@ func TestFormatEnvironmentVariables(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.format, func(t *testing.T) {
 			var output strings.Builder
-			
+
 			switch tt.format {
 			case "json":
 				envMap := make(map[string]string)
@@ -320,7 +320,7 @@ func TestFormatEnvironmentVariables(t *testing.T) {
 					output.WriteString("export " + env.Key + "=" + env.Value + "\n")
 				}
 			}
-			
+
 			result := output.String()
 			for _, expected := range tt.expected {
 				assert.Contains(t, result, expected)

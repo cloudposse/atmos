@@ -131,12 +131,12 @@ func TestAuthLoginCmd(t *testing.T) {
 				RunE: func(cmd *cobra.Command, args []string) error {
 					// Mock implementation for testing
 					identityName, _ := cmd.Flags().GetString("identity")
-					
+
 					config := tt.setupConfig()
 					if len(config.Auth.Identities) == 0 {
 						return assert.AnError
 					}
-					
+
 					if identityName != "" {
 						if _, exists := config.Auth.Identities[identityName]; !exists {
 							return assert.AnError
@@ -154,7 +154,7 @@ func TestAuthLoginCmd(t *testing.T) {
 							return assert.AnError
 						}
 					}
-					
+
 					return nil
 				},
 			}
@@ -191,7 +191,7 @@ func TestAuthLoginCmdFlags(t *testing.T) {
 		Use: "login",
 	}
 	cmd.Flags().StringP("identity", "i", "", "Specify the identity to authenticate to")
-	
+
 	// Test that required flags are present
 	identityFlag := cmd.Flags().Lookup("identity")
 	require.NotNil(t, identityFlag)

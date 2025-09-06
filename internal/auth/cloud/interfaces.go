@@ -27,10 +27,10 @@ type CloudProviderFactory interface {
 type CloudProviderManager interface {
 	// SetupEnvironment sets up cloud environment for the given provider kind and identity
 	SetupEnvironment(ctx context.Context, providerKind, providerName, identityName string, credentials *schema.Credentials) error
-	
+
 	// GetEnvironmentVariables returns environment variables for the given provider kind and identity
 	GetEnvironmentVariables(providerKind, providerName, identityName string) (map[string]string, error)
-	
+
 	// Cleanup removes temporary resources for the given provider kind and identity
 	Cleanup(ctx context.Context, providerKind, providerName, identityName string) error
 }

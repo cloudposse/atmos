@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/cloudposse/atmos/internal/auth/identities/aws"
-	"github.com/cloudposse/atmos/internal/auth/types"
 	awsProviders "github.com/cloudposse/atmos/internal/auth/providers/aws"
 	githubProviders "github.com/cloudposse/atmos/internal/auth/providers/github"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 

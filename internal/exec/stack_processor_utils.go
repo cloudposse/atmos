@@ -2078,7 +2078,7 @@ func processIdentities(atmosConfig *schema.AtmosConfiguration, componentIdentiti
 	for k, v := range atmosConfig.Auth.Identities {
 		globalIdentities[k] = v
 	}
-	
+
 	mergedIdentities, err := m.Merge(
 		atmosConfig,
 		[]map[string]any{

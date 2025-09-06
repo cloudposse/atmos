@@ -77,7 +77,7 @@ var authEnvCmd = &cobra.Command{
 
 		// Get output format
 		format, _ := cmd.Flags().GetString("format")
-		
+
 		switch format {
 		case "json":
 			return outputEnvAsJSON(envVars)
@@ -90,7 +90,6 @@ var authEnvCmd = &cobra.Command{
 		}
 	},
 }
-
 
 // outputEnvAsJSON outputs environment variables as JSON
 func outputEnvAsJSON(envVars map[string]string) error {

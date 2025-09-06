@@ -60,7 +60,7 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 	var roleArn string
 	var ok bool
 	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
-			return nil, fmt.Errorf("assume_role is required in principal")
+		return nil, fmt.Errorf("assume_role is required in principal")
 	}
 
 	// Create AWS config using base credentials
@@ -139,7 +139,7 @@ func (i *assumeRoleIdentity) Validate() error {
 	var roleArn string
 	var ok bool
 	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
-			return fmt.Errorf("assume_role is required in principal")
+		return fmt.Errorf("assume_role is required in principal")
 	}
 
 	return nil

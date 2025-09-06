@@ -99,12 +99,12 @@ func (p *assumeRoleProvider) Validate() error {
 	if p.config.Spec == nil {
 		return fmt.Errorf("spec is required")
 	}
-	
+
 	roleArn, ok := p.config.Spec["role_arn"].(string)
 	if !ok || roleArn == "" {
 		return fmt.Errorf("role_arn is required in spec")
 	}
-	
+
 	return nil
 }
 
