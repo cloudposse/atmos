@@ -87,7 +87,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 	if identity, exists := m.identities[identityName]; exists {
 		if hook, hasHook := identity.(types.PostAuthHook); hasHook {
 			providerName := chain[0]
-			if err := hook.PostAuthenticate(ctx, providerName, identityName, finalCreds); err != nil {
+			if err := hook.PostAuthenticate(ctx, providerName, identityName, finalCreds, m.cloudProviderManager); err != nil {
 				return nil, fmt.Errorf("post-authentication hook failed: %w", err)
 			}
 		}

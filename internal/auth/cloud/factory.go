@@ -258,9 +258,6 @@ func (f *DefaultCloudProviderFactory) ListCloudProviders() []string {
 func (f *DefaultCloudProviderFactory) extractCloudName(providerKind string) string {
 	// Handle special cases first
 	switch {
-	case strings.HasPrefix(providerKind, "github/"):
-		// GitHub OIDC providers typically target AWS for downstream usage
-		return "aws"
 	case strings.HasPrefix(providerKind, "aws/"):
 		return "aws"
 	case strings.HasPrefix(providerKind, "azure/"):

@@ -89,7 +89,7 @@ type Identity interface {
 // to perform actions after successful authentication
 type PostAuthHook interface {
 	// PostAuthenticate is called after successful authentication with the final credentials
-	PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error
+	PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials, cloudProviderManager CloudProviderManager) error
 }
 
 // AuthManager manages the overall authentication process
