@@ -37,6 +37,7 @@ require (
 	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.16.2
+	github.com/go-viper/mapstructure/v2 v2.3.0
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-yaml v1.18.0
 	github.com/gofrs/flock v0.12.1
@@ -211,7 +212,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
-	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect

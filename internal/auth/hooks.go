@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mitchellh/mapstructure"
-
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth/cloud"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
@@ -14,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/internal/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/go-viper/mapstructure/v2"
 )
 
 type (
@@ -41,10 +40,12 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	// Converted to typed struct when needed
 	var authConfig schema.AuthConfig
 	err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig)
+	if err != nil {
+		return fmt.Errorf("failed to decode component auth config: %w", err)
+	}
 
-
-	// Skip if no auth config
-	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
+	// Skip if no auth config (check the merged config, not the original)
+	if len(authConfig.Providers) == 0 && len(authConfig.Identities) == 0 {
 		log.Debug("No auth configuration found, skipping authentication")
 		return nil
 	}
@@ -56,7 +57,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	// Create cloud provider manager
 	cloudProviderManager := cloud.NewCloudProviderManager()
-	
+
 	// Create auth manager with merged configuration
 	authManager, err := NewAuthManager(
 		&authConfig,
