@@ -34,6 +34,31 @@ func ShouldCheckPreconditions() bool {
 	return os.Getenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS") != "true"
 }
 
+// setAWSProfileEnv temporarily sets the AWS_PROFILE environment variable.
+func setAWSProfileEnv(profileName string) func() {
+	if profileName == "" {
+		return func() {}
+	}
+
+	currentProfile := os.Getenv("AWS_PROFILE")
+	if currentProfile == profileName {
+		return func() {}
+	}
+
+	// Set the new profile
+	oldProfile := os.Getenv("AWS_PROFILE")
+	os.Setenv("AWS_PROFILE", profileName)
+
+	// Return cleanup function
+	return func() {
+		if oldProfile != "" {
+			os.Setenv("AWS_PROFILE", oldProfile)
+		} else {
+			os.Unsetenv("AWS_PROFILE")
+		}
+	}
+}
+
 // RequireAWSProfile checks if AWS can be configured with the given profile.
 // It uses the AWS SDK to validate that the profile can be loaded.
 func RequireAWSProfile(t *testing.T, profileName string) {
@@ -43,29 +68,13 @@ func RequireAWSProfile(t *testing.T, profileName string) {
 		return
 	}
 
-	// Try to load AWS config with the specific profile
-	ctx := context.Background()
-	cfgOpts := []func(*config.LoadOptions) error{}
-
-	// Set the profile if specified
-	if profileName != "" {
-		// Check if profile is already set via environment
-		currentProfile := os.Getenv("AWS_PROFILE")
-		if currentProfile != profileName {
-			// Temporarily set the profile
-			oldProfile := os.Getenv("AWS_PROFILE")
-			os.Setenv("AWS_PROFILE", profileName)
-			defer func() {
-				if oldProfile != "" {
-					os.Setenv("AWS_PROFILE", oldProfile)
-				} else {
-					os.Unsetenv("AWS_PROFILE")
-				}
-			}()
-		}
-	}
+	// Set the profile if needed and defer cleanup
+	cleanup := setAWSProfileEnv(profileName)
+	defer cleanup()
 
 	// Try to load the AWS config
+	ctx := context.Background()
+	cfgOpts := []func(*config.LoadOptions) error{}
 	_, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
 		t.Skipf("AWS profile '%s' not available: %v. Configure AWS credentials or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true", profileName, err)
