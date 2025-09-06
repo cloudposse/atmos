@@ -412,14 +412,13 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Skip non-JSON lines, continue reading
 			return m, tea.Batch(m.readNextLine(), m.spinner.Tick)
 		}
-		
 
 		// Convert to appropriate test message and continue streaming
 		nextCmd := m.readNextLine()
 
 		// Process event with buffering
 		// Debug: Log event processing
-		if f, err := os.OpenFile("/tmp/gotcha-events.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+		if f, err := os.OpenFile("/tmp/gotcha-events.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "[EVENT] Action=%s, Package=%s, Test=%s\n", event.Action, event.Package, event.Test)
 			if event.Action == "output" && event.Test != "" {
 				fmt.Fprintf(f, "  Output=%q\n", event.Output)
@@ -777,7 +776,7 @@ func (m *TestModel) generateFinalSummary() string {
 	output.WriteString(border)
 	output.WriteString("\n")
 	output.WriteString("Test Summary:\n")
-	
+
 	// Calculate the maximum width needed for numbers
 	maxNum := totalTests
 	if m.passCount > maxNum {
@@ -794,7 +793,7 @@ func (m *TestModel) generateFinalSummary() string {
 	if numWidth < 4 {
 		numWidth = 4 // Minimum width of 4 for alignment
 	}
-	
+
 	output.WriteString(fmt.Sprintf("  %s Passed:  %*d\n", PassStyle.Render(CheckPass), numWidth, m.passCount))
 	output.WriteString(fmt.Sprintf("  %s Failed:  %*d\n", FailStyle.Render(CheckFail), numWidth, m.failCount))
 	output.WriteString(fmt.Sprintf("  %s Skipped: %*d\n", SkipStyle.Render(CheckSkip), numWidth, m.skipCount))
@@ -1045,7 +1044,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 
 		case "output":
 			// Log all output events for debugging
-			if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+			if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 				fmt.Fprintf(f, "[OUTPUT] Test=%s, Output=%q\n", event.Test, event.Output)
 				f.Close()
 			}
@@ -1057,9 +1056,9 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 						// Capture skip reason if this is a skip output
 						// Skip lines like "--- SKIP: TestName (0.00s)"
 						if !strings.HasPrefix(strings.TrimSpace(event.Output), "---") &&
-						   (strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "SKIP ") || 
-						    strings.Contains(event.Output, "skipping:") || strings.Contains(event.Output, "Skipping ") ||
-						    strings.Contains(event.Output, "Skip(") || strings.Contains(event.Output, "Skipf(")) {
+							(strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "SKIP ") ||
+								strings.Contains(event.Output, "skipping:") || strings.Contains(event.Output, "Skipping ") ||
+								strings.Contains(event.Output, "Skip(") || strings.Contains(event.Output, "Skipf(")) {
 							// Extract just the reason part, not the full output
 							reason := strings.TrimSpace(event.Output)
 							// Remove file:line: prefix if present (e.g., "skip_test.go:9: ")
@@ -1093,9 +1092,9 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 					// Capture skip reason if this is a skip output
 					// Skip lines like "--- SKIP: TestName (0.00s)"
 					if !strings.HasPrefix(strings.TrimSpace(event.Output), "---") &&
-					   (strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "SKIP ") || 
-					    strings.Contains(event.Output, "skipping:") || strings.Contains(event.Output, "Skipping ") ||
-					    strings.Contains(event.Output, "Skip(") || strings.Contains(event.Output, "Skipf(")) {
+						(strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "SKIP ") ||
+							strings.Contains(event.Output, "skipping:") || strings.Contains(event.Output, "Skipping ") ||
+							strings.Contains(event.Output, "Skip(") || strings.Contains(event.Output, "Skipf(")) {
 						// Extract just the reason part, not the full output
 						reason := strings.TrimSpace(event.Output)
 						// Remove file:line: prefix if present (e.g., "skip_test.go:9: ")
@@ -1120,7 +1119,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 						if reason != "" && !strings.HasPrefix(reason, "---") {
 							test.SkipReason = reason
 							// Log to file for debugging
-							if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+							if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 								fmt.Fprintf(f, "[DEBUG] Captured skip reason for %s: %q\n", test.Name, reason)
 								f.Close()
 							}
