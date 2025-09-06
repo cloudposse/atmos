@@ -41,6 +41,7 @@
 # Ignore cache files
 **/.atmos/cache.yaml
 **/cache.*.txt
+.gotcha/cache.yaml
 
 # Ignore components vendored during tests
 examples/demo-vendoring/components/**

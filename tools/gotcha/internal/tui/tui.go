@@ -418,6 +418,14 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nextCmd := m.readNextLine()
 
 		// Process event with buffering
+		// Debug: Log event processing
+		if f, err := os.OpenFile("/tmp/gotcha-events.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+			fmt.Fprintf(f, "[EVENT] Action=%s, Package=%s, Test=%s\n", event.Action, event.Package, event.Test)
+			if event.Action == "output" && event.Test != "" {
+				fmt.Fprintf(f, "  Output=%q\n", event.Output)
+			}
+			f.Close()
+		}
 		m.processEvent(&event)
 
 		// Check if any packages completed and display them once
@@ -583,10 +591,10 @@ func (m *TestModel) View() string {
 			// Tests are running, show progress against estimate
 			percentFloat := float64(m.completedTests) / float64(m.estimatedTestCount)
 			percent := int(percentFloat * 100)
-			percentage = fmt.Sprintf("%3d%%", percent)
+			percentage = fmt.Sprintf("%3d%s", percent, DurationStyle.Render("%"))
 		} else {
 			// No tests completed yet
-			percentage = "  0%"
+			percentage = fmt.Sprintf("  0%s", DurationStyle.Render("%"))
 		}
 		// Show completed/estimated format with tilde prefix (since whole fraction is estimated)
 		testCount = fmt.Sprintf("~%d/%d %s", m.completedTests, m.estimatedTestCount, DurationStyle.Render("tests"))
@@ -594,11 +602,11 @@ func (m *TestModel) View() string {
 		// Not using estimate, have actual count
 		percentFloat := float64(m.completedTests) / float64(m.totalTests)
 		percent := int(percentFloat * 100)
-		percentage = fmt.Sprintf("%3d%%", percent)
+		percentage = fmt.Sprintf("%3d%s", percent, DurationStyle.Render("%"))
 		testCount = fmt.Sprintf("%4d/%-4d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
 	} else {
 		// No estimate and no tests discovered yet
-		percentage = "  0%"
+		percentage = fmt.Sprintf("  0%s", DurationStyle.Render("%"))
 		testCount = fmt.Sprintf("%-15s", DurationStyle.Render("discovering tests"))
 	}
 
@@ -1035,6 +1043,11 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 			}
 
 		case "output":
+			// Log all output events for debugging
+			if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+				fmt.Fprintf(f, "[OUTPUT] Test=%s, Output=%q\n", event.Test, event.Output)
+				f.Close()
+			}
 			// Buffer the output
 			if isSubtest {
 				if parent := pkg.Tests[parentTest]; parent != nil {
@@ -1105,6 +1118,11 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 						// Only set if we have a meaningful reason
 						if reason != "" && !strings.HasPrefix(reason, "---") {
 							test.SkipReason = reason
+							// Log to file for debugging
+							if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+								fmt.Fprintf(f, "[DEBUG] Captured skip reason for %s: %q\n", test.Name, reason)
+								f.Close()
+							}
 						}
 					}
 				}
@@ -1183,7 +1201,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 
 	// Package header
 	// Display package header - ▶ icon in white, package name in cyan
-	output.WriteString(fmt.Sprintf("\n▶ %s\n", PackageHeaderStyle.Render(pkg.Package)))
+	output.WriteString(fmt.Sprintf("\n▶ %s [MODIFIED]\n", PackageHeaderStyle.Render(pkg.Package)))
 
 	// Check for "No tests"
 	// Check for package-level failures (e.g., TestMain failures)
@@ -1315,21 +1333,16 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 	}
 
 	// Display the test
-	output.WriteString(fmt.Sprintf("  %s %s", styledIcon, TestNameStyle.Render(test.Name)))
+	output.WriteString(fmt.Sprintf(" %s %s", styledIcon, TestNameStyle.Render(test.Name)))
 
 	// Add duration if available
 	if test.Elapsed > 0 {
 		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed))))
 	}
 
-	// Add skip reason if available (or debug message if not)
-	if test.Status == "skip" {
-		if test.SkipReason != "" {
-			output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("- %s", test.SkipReason))))
-		} else {
-			// Debug: Show that no reason was captured
-			output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render("[no reason captured]")))
-		}
+	// Add skip reason if available
+	if test.Status == "skip" && test.SkipReason != "" {
+		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("- %s", test.SkipReason))))
 	}
 
 	// Add subtest progress indicator if it has subtests
