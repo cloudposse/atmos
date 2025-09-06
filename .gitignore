@@ -64,3 +64,11 @@ gotcha-results.json
 /gotcha
 /tools/gotcha/gotcha
 /tools/gotcha/build/
+gotcha-binary
+gotcha-test
+/tools/gotcha/gotcha-test
+/tools/gotcha/gotcha-binary
+
+# Test scripts
+/tools/gotcha/test*.sh
+/tools/gotcha/test/test-summary.md

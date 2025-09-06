@@ -776,28 +776,12 @@ func (m *TestModel) generateFinalSummary() string {
 	output.WriteString(border)
 	output.WriteString("\n")
 	output.WriteString("Test Summary:\n")
-
-	// Calculate the maximum width needed for numbers
-	maxNum := totalTests
-	if m.passCount > maxNum {
-		maxNum = m.passCount
-	}
-	if m.failCount > maxNum {
-		maxNum = m.failCount
-	}
-	if m.skipCount > maxNum {
-		maxNum = m.skipCount
-	}
-	// Calculate width needed for the largest number
-	numWidth := len(fmt.Sprintf("%d", maxNum))
-	if numWidth < 4 {
-		numWidth = 4 // Minimum width of 4 for alignment
-	}
-
-	output.WriteString(fmt.Sprintf("  %s Passed:  %*d\n", PassStyle.Render(CheckPass), numWidth, m.passCount))
-	output.WriteString(fmt.Sprintf("  %s Failed:  %*d\n", FailStyle.Render(CheckFail), numWidth, m.failCount))
-	output.WriteString(fmt.Sprintf("  %s Skipped: %*d\n", SkipStyle.Render(CheckSkip), numWidth, m.skipCount))
-	output.WriteString(fmt.Sprintf("  Total:    %*d tests\n", numWidth, totalTests))
+	
+	// Use fixed width formatting for proper alignment
+	output.WriteString(fmt.Sprintf("  %s %-8s %5d\n", PassStyle.Render(CheckPass), "Passed:", m.passCount))
+	output.WriteString(fmt.Sprintf("  %s %-8s %5d\n", FailStyle.Render(CheckFail), "Failed:", m.failCount))
+	output.WriteString(fmt.Sprintf("  %s %-8s %5d\n", SkipStyle.Render(CheckSkip), "Skipped:", m.skipCount))
+	output.WriteString(fmt.Sprintf("    %-8s %5d tests\n", "Total:", totalTests))
 	output.WriteString(border)
 	output.WriteString("\n")
 
