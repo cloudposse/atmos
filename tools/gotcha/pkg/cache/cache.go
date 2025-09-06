@@ -21,8 +21,6 @@ const (
 	CacheFileName = "cache.yaml"
 	// DefaultMaxAge is the default maximum age for cache entries.
 	DefaultMaxAge = 24 * time.Hour
-	// CurrentSchemaVersion is the current cache schema version.
-	CurrentSchemaVersion = "1.0"
 	// CurrentCacheVersion is the current cache format version.
 	CurrentCacheVersion = "1.0"
 )
@@ -86,10 +84,10 @@ func (m *Manager) newCacheFile() *CacheFile {
 		Metadata: CacheMetadata{
 			LastUpdated:   time.Now(),
 			GotchaVersion: viper.GetString("version"), // Assuming version is set in viper
-			SchemaVersion: CurrentSchemaVersion,
 		},
 		Discovery: DiscoveryCache{
 			TestCounts:     make(map[string]TestCountEntry),
+			TestLists:      make(map[string]TestListEntry),
 			PackageDetails: make(map[string]PackageDetail),
 		},
 	}
@@ -111,14 +109,7 @@ func (m *Manager) load() error {
 		return fmt.Errorf("failed to unmarshal cache: %w", err)
 	}
 
-	// Check schema version compatibility
-	if cache.Metadata.SchemaVersion != CurrentSchemaVersion {
-		m.logger.Warn("Cache schema version mismatch, reinitializing", 
-			"found", cache.Metadata.SchemaVersion, 
-			"expected", CurrentSchemaVersion)
-		m.file = m.newCacheFile()
-		return nil
-	}
+	// No schema version check needed - we only have one version
 
 	m.file = &cache
 	return nil
@@ -391,29 +382,6 @@ func (m *Manager) UpdatePerformanceMetrics(slowestTests []TestPerformance, slowe
 	return m.save()
 }
 
-// GetPreferences retrieves cached user preferences.
-func (m *Manager) GetPreferences() *PreferencesCache {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if m.file == nil || m.file.Preferences == nil {
-		return nil
-	}
-
-	return m.file.Preferences
-}
-
-// UpdatePreferences updates user preferences in the cache.
-func (m *Manager) UpdatePreferences(prefs *PreferencesCache) error {
-	m.mu.Lock()
-	if m.file == nil {
-		m.file = m.newCacheFile()
-	}
-	m.file.Preferences = prefs
-	m.mu.Unlock()
-
-	return m.save()
-}
 
 // Clear removes all cached data.
 func (m *Manager) Clear() error {

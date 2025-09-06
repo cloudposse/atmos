@@ -157,12 +157,6 @@ func TestHandleOutputWithGenerateSummary(t *testing.T) {
 			generateSummary: true,
 			wantFile:        false,
 		},
-		{
-			name:            "stdin format (backward compat) ignores generate-summary",
-			format:          "stdin",
-			generateSummary: true,
-			wantFile:        false,
-		},
 	}
 
 	for _, tt := range tests {

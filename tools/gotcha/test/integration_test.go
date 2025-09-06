@@ -27,11 +27,6 @@ func TestHandleOutput(t *testing.T) {
 			wantError: false,
 		},
 		{
-			name:      "stdin format (backward compat)",
-			format:    "stdin",
-			wantError: false,
-		},
-		{
 			name:      "markdown format",
 			format:    "markdown",
 			wantError: false,

@@ -11,15 +11,13 @@ type CacheFile struct {
 	Discovery   DiscoveryCache    `yaml:"discovery"`
 	Performance *PerformanceCache `yaml:"performance,omitempty"`
 	History     *HistoryCache     `yaml:"history,omitempty"`
-	Preferences *PreferencesCache `yaml:"preferences,omitempty"`
 	VCS         *VCSCache         `yaml:"vcs,omitempty"`
 }
 
 // CacheMetadata contains metadata about the cache file itself.
 type CacheMetadata struct {
 	LastUpdated    time.Time `yaml:"last_updated"`
-	GotchaVersion  string    `yaml:"gotcha_version"`
-	SchemaVersion  string    `yaml:"schema_version"`
+	GotchaVersion  string    `yaml:"gotcha_version,omitempty"`
 }
 
 // DiscoveryCache contains test discovery and counting information.
@@ -90,13 +88,6 @@ type RunHistory struct {
 	Skipped     int       `yaml:"skipped"`
 	DurationMs  int64     `yaml:"duration_ms"`
 	Flags       []string  `yaml:"flags,omitempty"`
-}
-
-// PreferencesCache stores user preferences.
-type PreferencesCache struct {
-	DefaultTimeout    string `yaml:"default_timeout,omitempty"`
-	DefaultShowFilter string `yaml:"default_show_filter,omitempty"`
-	PreferredVerbosity string `yaml:"preferred_verbosity,omitempty"`
 }
 
 // VCSCache stores VCS integration metadata.

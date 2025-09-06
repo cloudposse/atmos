@@ -46,10 +46,8 @@ func TestNewManager(t *testing.T) {
 				viper.Set("cache.dir", tempDir)
 				// Create a cache file
 				cache := &CacheFile{
-					Version: CurrentCacheVersion,
-					Metadata: CacheMetadata{
-						SchemaVersion: CurrentSchemaVersion,
-					},
+					Version: "1.0",
+					Metadata: CacheMetadata{},
 					Discovery: DiscoveryCache{
 						TestCounts: map[string]TestCountEntry{
 							"./...": {
@@ -156,8 +154,7 @@ func TestUpdateTestCount(t *testing.T) {
 	err = yaml.Unmarshal(data, &cache)
 	require.NoError(t, err)
 
-	assert.Equal(t, CurrentCacheVersion, cache.Version)
-	assert.Equal(t, CurrentSchemaVersion, cache.Metadata.SchemaVersion)
+	assert.Equal(t, "1.0", cache.Version)
 	assert.Equal(t, 200, cache.Discovery.TestCounts["./..."].Count)
 	assert.Equal(t, 15, cache.Discovery.TestCounts["./..."].PackagesScanned)
 }
