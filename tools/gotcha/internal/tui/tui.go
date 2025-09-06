@@ -1208,7 +1208,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	// Check for package-level failures (e.g., TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
 		// Package failed without running any tests (likely TestMain failure)
-		output.WriteString(fmt.Sprintf("  %s Package failed to run tests\n", FailStyle.Render(CheckFail)))
+		output.WriteString(fmt.Sprintf("\n  %s Package failed to run tests\n", FailStyle.Render(CheckFail)))
 
 		// Display any package-level output (error messages)
 		if len(pkg.Output) > 0 {
@@ -1224,9 +1224,9 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	if pkg.Status == "skip" || m.packagesWithNoTests[pkg.Package] || !pkg.HasTests {
 		// Show more specific message if a filter is applied
 		if m.testFilter != "" {
-			output.WriteString(fmt.Sprintf("  %s\n", DurationStyle.Render("No tests matching filter")))
+			output.WriteString(fmt.Sprintf("\n  %s\n", DurationStyle.Render("No tests matching filter")))
 		} else {
-			output.WriteString(fmt.Sprintf("  %s\n", DurationStyle.Render("No tests")))
+			output.WriteString(fmt.Sprintf("\n  %s\n", DurationStyle.Render("No tests")))
 		}
 		return output.String()
 	}
@@ -1245,6 +1245,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	}
 
 	// Display tests in order
+	firstTestDisplayed := false
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
 		if test == nil {
@@ -1266,6 +1267,12 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		shouldShow := m.shouldShowTest(test.Status)
 		if !shouldShow && !hasFailedSubtests && m.showFilter != "collapsed" {
 			continue
+		}
+
+		// Add blank line before first test
+		if !firstTestDisplayed {
+			output.WriteString("\n")
+			firstTestDisplayed = true
 		}
 
 		// Display test result
@@ -1334,7 +1341,7 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 	}
 
 	// Display the test
-	output.WriteString(fmt.Sprintf(" %s %s", styledIcon, TestNameStyle.Render(test.Name)))
+	output.WriteString(fmt.Sprintf("  %s %s", styledIcon, TestNameStyle.Render(test.Name)))
 
 	// Add duration if available
 	if test.Elapsed > 0 {
