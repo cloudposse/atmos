@@ -10,9 +10,13 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
+	// Check for Git repository with valid remotes and GitHub access (for cloning)
+	tests.RequireGitRemoteWithValidURL(t)
+	tests.RequireGitHubAccess(t)
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -51,6 +55,9 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 }
 
 func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
+	// Check for Git repository with valid remotes precondition
+	tests.RequireGitRemoteWithValidURL(t)
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)

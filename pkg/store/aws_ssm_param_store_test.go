@@ -14,6 +14,8 @@ import (
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/cloudposse/atmos/tests"
 )
 
 // MockSSMClient is a mock implementation of the SSMClient interface.
@@ -551,6 +553,9 @@ func TestSSMStore_Get(t *testing.T) {
 }
 
 func TestNewSSMStore(t *testing.T) {
+	// Check for AWS profile precondition
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+
 	tests := []struct {
 		name    string
 		options SSMStoreOptions

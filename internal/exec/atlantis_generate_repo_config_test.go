@@ -8,6 +8,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestExecuteAtlantisGenerateRepoConfigWithStackNameTemplate(t *testing.T) {
@@ -37,6 +38,9 @@ func TestExecuteAtlantisGenerateRepoConfigWithStackNameTemplate(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
+	// Check for Git repository with valid remotes precondition
+	tests.RequireGitRemoteWithValidURL(t)
+
 	stacksPath := "../../tests/fixtures/scenarios/atlantis-generate-repo-config"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
