@@ -201,15 +201,22 @@ func (i *assumeRoleIdentity) Merge(component *schema.Identity) types.Identity {
 
 // Note: Caching is now handled at the manager level to prevent duplicate entries
 
-// getProviderName extracts the provider name from the identity configuration
-func (i *assumeRoleIdentity) getProviderName() string {
+// GetProviderName extracts the provider name from the identity configuration
+func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {
-		return i.config.Via.Provider
+		return i.config.Via.Provider, nil
 	}
 	if i.config.Via != nil && i.config.Via.Identity != "" {
 		// This assume role identity chains through another identity
 		// For caching purposes, we'll use the chained identity name
-		return i.config.Via.Identity
+		return i.config.Via.Identity, nil
 	}
-	return "unknown"
+	return "", fmt.Errorf("assume role identity %q has no valid via configuration", i.name)
+}
+
+// PostAuthenticate implements the PostAuthHook interface to set up AWS files after authentication
+func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error {
+	// For now, return nil since we need to figure out how to access AWS file manager
+	// without making the interface cloud-specific
+	return nil
 }

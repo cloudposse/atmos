@@ -15,7 +15,7 @@ type CloudProvider interface {
 	SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *schema.Credentials) error
 
 	// GetEnvironmentVariables returns cloud-specific environment variables for tools like Terraform
-	GetEnvironmentVariables(providerName, identityName string) map[string]string
+	GetEnvironmentVariables(providerName, identityName string) (map[string]string, error)
 
 	// Cleanup removes temporary files and resources created by this provider
 	Cleanup(ctx context.Context, providerName, identityName string) error
@@ -68,6 +68,10 @@ type Identity interface {
 	// Kind returns the identity kind (e.g., "aws/permission-set")
 	Kind() string
 
+	// GetProviderName returns the provider name for this identity
+	// AWS user identities return "aws-user", others return their via.provider
+	GetProviderName() (string, error)
+
 	// Authenticate performs authentication using the provided base credentials
 	Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error)
 
@@ -81,6 +85,13 @@ type Identity interface {
 	Merge(component *schema.Identity) Identity
 }
 
+// PostAuthHook defines an optional interface that identities can implement
+// to perform actions after successful authentication
+type PostAuthHook interface {
+	// PostAuthenticate is called after successful authentication with the final credentials
+	PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error
+}
+
 // AuthManager manages the overall authentication process
 type AuthManager interface {
 	// Authenticate performs authentication for the specified identity
@@ -92,9 +103,6 @@ type AuthManager interface {
 	// Validate validates the entire auth configuration
 	Validate() error
 
-	// SetupAWSFiles writes AWS credentials and config files for the specified identity
-	SetupAWSFiles(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error
-
 	// GetDefaultIdentity returns the name of the default identity, if any
 	GetDefaultIdentity() (string, error)
 
@@ -104,6 +112,9 @@ type AuthManager interface {
 	// GetProviderForIdentity returns the root provider name for the given identity
 	// Recursively resolves through identity chains to find the root provider
 	GetProviderForIdentity(identityName string) string
+
+	// GetProviderKindForIdentity returns the provider kind for the given identity
+	GetProviderKindForIdentity(identityName string) (string, error)
 
 	// ListProviders returns all available provider names
 	ListProviders() []string
@@ -150,7 +161,6 @@ type AWSFileManager interface {
 	// Cleanup removes AWS files for the provider
 	Cleanup(providerName string) error
 }
-
 
 // Validator defines the interface for validating auth configurations
 type Validator interface {

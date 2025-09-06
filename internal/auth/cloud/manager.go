@@ -67,6 +67,9 @@ func (m *DefaultCloudProviderManager) GetEnvironmentVariables(providerKind, prov
 		return nil, fmt.Errorf("failed to get cloud provider for %s: %w", providerKind, err)
 	}
 
-	envVars := cloudProvider.GetEnvironmentVariables(providerName, identityName)
+	envVars, err := cloudProvider.GetEnvironmentVariables(providerName, identityName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment variables: %w", err)
+	}
 	return envVars, nil
 }

@@ -1,4 +1,4 @@
-package environment
+package aws
 
 import (
 	"fmt"
@@ -12,21 +12,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// awsFileManager implements the AWSFileManager interface
-type awsFileManager struct {
+// AWSFileManager implements the AWSFileManager interface
+type AWSFileManager struct {
 	baseDir string
 }
 
 // NewAWSFileManager creates a new AWS file manager instance
 func NewAWSFileManager() types.AWSFileManager {
 	homeDir, _ := os.UserHomeDir()
-	return &awsFileManager{
+	return &AWSFileManager{
 		baseDir: filepath.Join(homeDir, ".aws", "atmos"),
 	}
 }
 
 // WriteCredentials writes AWS credentials to the provider-specific file with identity profile
-func (m *awsFileManager) WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error {
+func (m *AWSFileManager) WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error {
 	credentialsPath := m.GetCredentialsPath(providerName)
 
 	// Ensure directory exists
@@ -71,7 +71,7 @@ func (m *awsFileManager) WriteCredentials(providerName, identityName string, cre
 }
 
 // WriteConfig writes AWS config to the provider-specific file with identity profile
-func (m *awsFileManager) WriteConfig(providerName, identityName, region, outputFormat string) error {
+func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputFormat string) error {
 	configPath := m.GetConfigPath(providerName)
 
 	// Ensure directory exists
@@ -131,17 +131,17 @@ func (m *awsFileManager) WriteConfig(providerName, identityName, region, outputF
 }
 
 // GetCredentialsPath returns the path to the credentials file for the provider
-func (m *awsFileManager) GetCredentialsPath(providerName string) string {
+func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "credentials")
 }
 
 // GetConfigPath returns the path to the config file for the provider
-func (m *awsFileManager) GetConfigPath(providerName string) string {
+func (m *AWSFileManager) GetConfigPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "config")
 }
 
 // SetEnvironmentVariables sets the AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE environment variables
-func (m *awsFileManager) SetEnvironmentVariables(providerName string) error {
+func (m *AWSFileManager) SetEnvironmentVariables(providerName string) error {
 	credentialsPath := m.GetCredentialsPath(providerName)
 	configPath := m.GetConfigPath(providerName)
 
@@ -157,7 +157,7 @@ func (m *awsFileManager) SetEnvironmentVariables(providerName string) error {
 }
 
 // GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
-func (m *awsFileManager) GetEnvironmentVariables(providerName, identityName string) []schema.EnvironmentVariable {
+func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName string) []schema.EnvironmentVariable {
 	credentialsPath := m.GetCredentialsPath(providerName)
 	configPath := m.GetConfigPath(providerName)
 
@@ -169,7 +169,7 @@ func (m *awsFileManager) GetEnvironmentVariables(providerName, identityName stri
 }
 
 // Cleanup removes AWS files for the provider
-func (m *awsFileManager) Cleanup(providerName string) error {
+func (m *AWSFileManager) Cleanup(providerName string) error {
 	providerDir := filepath.Join(m.baseDir, providerName)
 
 	if err := os.RemoveAll(providerDir); err != nil {

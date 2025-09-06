@@ -9,7 +9,6 @@ import (
 	"github.com/cloudposse/atmos/internal/auth"
 	"github.com/cloudposse/atmos/internal/auth/cloud"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
-	"github.com/cloudposse/atmos/internal/auth/environment"
 	"github.com/cloudposse/atmos/internal/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -61,14 +60,14 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 	t.Run("AuthManager Integration", func(t *testing.T) {
 		// Create auth manager with all dependencies
 		credStore := credentials.NewCredentialStore()
-		awsFileManager := environment.NewAWSFileManager()
 		validator := validation.NewValidator()
+		cloudProviderManager := cloud.NewCloudProviderManager()
 
 		authManager, err := auth.NewAuthManager(
 			authConfig,
 			credStore,
-			awsFileManager,
 			validator,
+			cloudProviderManager,
 		)
 		require.NoError(t, err)
 		assert.NotNil(t, authManager)
@@ -148,7 +147,8 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 		assert.Error(t, err) // Expected in test environment
 
 		// Test environment variable generation
-		envVars := awsProvider.GetEnvironmentVariables("test-provider", "test-identity")
+		envVars, err := awsProvider.GetEnvironmentVariables("test-provider", "test-identity")
+		assert.NoError(t, err)
 		assert.NotEmpty(t, envVars)
 
 		// Verify AWS file paths are generated correctly
@@ -229,7 +229,8 @@ func TestAuthCommandsWithRealCloudProvider(t *testing.T) {
 		homeDir, err := os.UserHomeDir()
 		require.NoError(t, err)
 
-		envVars := awsProvider.GetEnvironmentVariables("test-provider", "test-identity")
+		envVars, err := awsProvider.GetEnvironmentVariables("test-provider", "test-identity")
+		require.NoError(t, err)
 
 		// Verify paths are under user's home directory
 		for key, value := range envVars {

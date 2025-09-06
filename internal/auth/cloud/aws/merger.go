@@ -1,4 +1,4 @@
-package environment
+package aws
 
 import (
 	"github.com/charmbracelet/log"

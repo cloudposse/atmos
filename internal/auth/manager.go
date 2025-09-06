@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/internal/auth/cloud"
 	"github.com/cloudposse/atmos/internal/auth/identities/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -16,32 +17,32 @@ import (
 
 // manager implements the AuthManager interface
 type manager struct {
-	config          *schema.AuthConfig
-	providers       map[string]types.Provider
-	identities      map[string]types.Identity
-	credentialStore types.CredentialStore
-	awsFileManager  types.AWSFileManager
-	validator       types.Validator
+	config               *schema.AuthConfig
+	providers            map[string]types.Provider
+	identities           map[string]types.Identity
+	credentialStore      types.CredentialStore
+	validator            types.Validator
+	cloudProviderManager cloud.CloudProviderManager
 }
 
 // NewAuthManager creates a new AuthManager instance
 func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
-	awsFileManager types.AWSFileManager,
 	validator types.Validator,
+	cloudProviderManager cloud.CloudProviderManager,
 ) (types.AuthManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("auth config cannot be nil")
 	}
 
 	m := &manager{
-		config:          config,
-		providers:       make(map[string]types.Provider),
-		identities:      make(map[string]types.Identity),
-		credentialStore: credentialStore,
-		awsFileManager:  awsFileManager,
-		validator:       validator,
+		config:               config,
+		providers:            make(map[string]types.Provider),
+		identities:           make(map[string]types.Identity),
+		credentialStore:      credentialStore,
+		validator:            validator,
+		cloudProviderManager: cloudProviderManager,
 	}
 
 	// Initialize providers
@@ -59,8 +60,6 @@ func NewAuthManager(
 
 // Authenticate performs hierarchical authentication for the specified identity
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
-	log.SetPrefix("[atmos-auth]")
-	defer log.SetPrefix("")
 	// If no identity specified, use default
 	if identityName == "" {
 		defaultIdentity, err := m.GetDefaultIdentity()
@@ -84,16 +83,29 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 		return nil, fmt.Errorf("hierarchical authentication failed: %w", err)
 	}
 
-	// Setup AWS files if this is an AWS provider (chain[0] is always the provider name)
-	providerName := chain[0]
-	provider, exists := m.providers[providerName]
-	if exists && isAWSProvider(provider.Kind()) {
-		if err := m.SetupAWSFiles(ctx, providerName, identityName, finalCreds); err != nil {
-			return nil, fmt.Errorf("failed to setup AWS files: %w", err)
+	// Call post-authentication hooks for the target identity
+	if identity, exists := m.identities[identityName]; exists {
+		if hook, hasHook := identity.(types.PostAuthHook); hasHook {
+			providerName := chain[0]
+			if err := hook.PostAuthenticate(ctx, providerName, identityName, finalCreds); err != nil {
+				return nil, fmt.Errorf("post-authentication hook failed: %w", err)
+			}
 		}
 	}
 
-	return m.buildWhoamiInfo(identityName, finalCreds), nil
+	whoamiInfo := m.buildWhoamiInfo(identityName, finalCreds)
+
+	// Add identity environment variables to whoami info for component environment merging
+	if identity, exists := m.config.Identities[identityName]; exists && len(identity.Env) > 0 {
+		if whoamiInfo.Environment == nil {
+			whoamiInfo.Environment = make(map[string]string)
+		}
+		for _, envVar := range identity.Env {
+			whoamiInfo.Environment[envVar.Key] = envVar.Value
+		}
+	}
+
+	return whoamiInfo, nil
 }
 
 // Whoami returns information about the specified identity's credentials
@@ -115,47 +127,6 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*schema.Whoa
 // Validate validates the entire auth configuration
 func (m *manager) Validate() error {
 	return m.validator.ValidateAuthConfig(m.config)
-}
-
-// SetupAWSFiles writes AWS credentials and config files for the specified identity
-func (m *manager) SetupAWSFiles(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error {
-	if creds.AWS == nil {
-		return fmt.Errorf("no AWS credentials found")
-	}
-
-	// Write credentials file to provider directory with identity profile
-	if err := m.awsFileManager.WriteCredentials(providerName, identityName, creds.AWS); err != nil {
-		return fmt.Errorf("failed to write AWS credentials: %w", err)
-	}
-
-	// Write config file to provider directory with identity profile
-	region := creds.AWS.Region
-	if region == "" {
-		// For AWS user identities, get region from identity credentials config
-		if providerName == "aws-user" {
-			if identity, exists := m.config.Identities[identityName]; exists {
-				if r, ok := identity.Credentials["region"].(string); ok && r != "" {
-					region = r
-				}
-			}
-		}
-		// Fallback to provider config
-		if region == "" {
-			if provider, exists := m.config.Providers[providerName]; exists {
-				region = provider.Region
-			}
-		}
-	}
-	if err := m.awsFileManager.WriteConfig(providerName, identityName, region, ""); err != nil {
-		return fmt.Errorf("failed to write AWS config: %w", err)
-	}
-
-	// Set environment variables using provider name for file paths
-	if err := m.awsFileManager.SetEnvironmentVariables(providerName); err != nil {
-		return fmt.Errorf("failed to set AWS environment variables: %w", err)
-	}
-
-	return nil
 }
 
 // GetDefaultIdentity returns the name of the default identity, if any
@@ -258,51 +229,28 @@ func (m *manager) initializeIdentities() error {
 }
 
 // getProviderForIdentity returns the provider name for the given identity
-// Recursively resolves through identity chains to find the root provider
+// Uses the identity's GetProviderName() method to eliminate complex conditionals
 func (m *manager) getProviderForIdentity(identityName string) string {
-	visited := make(map[string]bool)
-	return m.getProviderForIdentityRecursive(identityName, visited)
-}
-
-// getProviderForIdentityRecursive recursively resolves provider through identity chains
-func (m *manager) getProviderForIdentityRecursive(identityName string, visited map[string]bool) string {
-	// Check for circular dependencies
-	if visited[identityName] {
-		return "" // Circular dependency detected
-	}
-	visited[identityName] = true
-
 	// First try to find by identity name
-	identity, exists := m.config.Identities[identityName]
-	if !exists {
-		// If not found by name, try to find by alias
-		for name, ident := range m.config.Identities {
-			if ident.Alias == identityName {
-				identity = ident
-				exists = true
-				// Update visited with the actual identity name to prevent cycles
-				visited[name] = true
-				break
-			}
+	if identity, exists := m.identities[identityName]; exists {
+		providerName, err := identity.GetProviderName()
+		if err != nil {
+			log.Debug("Failed to get provider name for identity", "identity", identityName, "error", err)
+			return ""
 		}
+		return providerName
 	}
 
-	if !exists {
-		return ""
-	}
-
-	if identity.Via == nil {
-		return ""
-	}
-
-	// If this identity points to a provider, return it
-	if identity.Via.Provider != "" {
-		return identity.Via.Provider
-	}
-
-	// If this identity points to another identity, recurse
-	if identity.Via.Identity != "" {
-		return m.getProviderForIdentityRecursive(identity.Via.Identity, visited)
+	// If not found by name, try to find by alias
+	for name, identity := range m.identities {
+		if m.config.Identities[name].Alias == identityName {
+			providerName, err := identity.GetProviderName()
+			if err != nil {
+				log.Debug("Failed to get provider name for identity alias", "identity", identityName, "actualName", name, "error", err)
+				return ""
+			}
+			return providerName
+		}
 	}
 
 	return ""
@@ -312,6 +260,34 @@ func (m *manager) getProviderForIdentityRecursive(identityName string, visited m
 // Recursively resolves through identity chains to find the root provider
 func (m *manager) GetProviderForIdentity(identityName string) string {
 	return m.getProviderForIdentity(identityName)
+}
+
+// GetProviderKindForIdentity returns the provider kind for the given identity
+// by building the authentication chain and getting the root provider's kind
+func (m *manager) GetProviderKindForIdentity(identityName string) (string, error) {
+	// Build the complete authentication chain
+	chain, err := m.buildAuthenticationChain(identityName)
+	if err != nil {
+		return "", fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
+	}
+
+	if len(chain) == 0 {
+		return "", fmt.Errorf("empty authentication chain for identity %q", identityName)
+	}
+
+	// The first element in the chain is the root provider name
+	providerName := chain[0]
+
+	// Look up the provider configuration and return its kind
+	if provider, exists := m.config.Providers[providerName]; exists {
+		return provider.Kind, nil
+	}
+
+	if identity, exists := m.config.Identities[providerName]; exists {
+		return identity.Kind, nil
+	}
+
+	return "", fmt.Errorf("provider %q not found in configuration", providerName)
 }
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation
@@ -621,9 +597,4 @@ func extractIdentityFromAlias(alias string) string {
 		}
 	}
 	return alias
-}
-
-// isAWSProvider checks if the provider kind is AWS-related
-func isAWSProvider(kind string) bool {
-	return kind == "aws/iam-identity-center" || kind == "aws/assume-role"
 }

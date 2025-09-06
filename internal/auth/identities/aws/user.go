@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	atmosCredentials "github.com/cloudposse/atmos/internal/auth/credentials"
-	"github.com/cloudposse/atmos/internal/auth/environment"
+	awsCloud "github.com/cloudposse/atmos/internal/auth/cloud/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -39,6 +39,13 @@ func NewUserIdentity(name string, config *schema.Identity) (types.Identity, erro
 func (i *userIdentity) Kind() string {
 	return "aws/user"
 }
+
+// GetProviderName returns the provider name for this identity
+// AWS user identities always return "aws-user" as they are standalone
+func (i *userIdentity) GetProviderName() (string, error) {
+	return "aws-user", nil
+}
+
 
 // Authenticate performs authentication by retrieving long-lived credentials and generating session tokens
 func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
@@ -91,7 +98,7 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider
 func (i *userIdentity) writeAWSFiles(creds *schema.Credentials, region string) error {
-	awsFileManager := environment.NewAWSFileManager()
+	awsFileManager := awsCloud.NewAWSFileManager()
 
 	// Debug logging
 	log.Debug("Writing AWS files", "identity", i.name, "region", region, "creds_region", creds.AWS.Region)
@@ -206,7 +213,7 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
 	// Get AWS file environment variables using "aws-user" as mock provider
-	awsFileManager := environment.NewAWSFileManager()
+	awsFileManager := awsCloud.NewAWSFileManager()
 	awsEnvVars := awsFileManager.GetEnvironmentVariables("aws-user", i.name)
 
 	// Convert to map format
@@ -296,4 +303,11 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 
 	log.Debug("AWS user identity authenticated successfully", "identity", identityName)
 	return credentials, nil
+}
+
+// PostAuthenticate implements the PostAuthHook interface to set up AWS files after authentication
+func (i *userIdentity) PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error {
+	// For now, return nil since we need to figure out how to access AWS file manager
+	// without making the interface cloud-specific
+	return nil
 }

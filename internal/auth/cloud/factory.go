@@ -69,13 +69,13 @@ func (p *awsCloudProvider) SetupEnvironment(ctx context.Context, providerName, i
 	return nil
 }
 
-func (p *awsCloudProvider) GetEnvironmentVariables(providerName, identityName string) map[string]string {
+func (p *awsCloudProvider) GetEnvironmentVariables(providerName, identityName string) (map[string]string, error) {
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
 	return map[string]string{
 		"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(awsDir, "credentials"),
 		"AWS_CONFIG_FILE":             filepath.Join(awsDir, "config"),
 		"AWS_PROFILE":                 identityName,
-	}
+	}, nil
 }
 
 func (p *awsCloudProvider) Cleanup(ctx context.Context, providerName, identityName string) error {
@@ -133,10 +133,10 @@ func (p *azureCloudProvider) SetupEnvironment(ctx context.Context, providerName,
 	return fmt.Errorf("Azure environment setup not yet implemented")
 }
 
-func (p *azureCloudProvider) GetEnvironmentVariables(providerName, identityName string) map[string]string {
+func (p *azureCloudProvider) GetEnvironmentVariables(providerName, identityName string) (map[string]string, error) {
 	return map[string]string{
 		"AZURE_CONFIG_DIR": fmt.Sprintf("~/.azure/atmos/%s", providerName),
-	}
+	}, nil
 }
 
 func (p *azureCloudProvider) Cleanup(ctx context.Context, providerName, identityName string) error {
@@ -167,10 +167,10 @@ func (p *gcpCloudProvider) SetupEnvironment(ctx context.Context, providerName, i
 	return fmt.Errorf("GCP environment setup not yet implemented")
 }
 
-func (p *gcpCloudProvider) GetEnvironmentVariables(providerName, identityName string) map[string]string {
+func (p *gcpCloudProvider) GetEnvironmentVariables(providerName, identityName string) (map[string]string, error) {
 	return map[string]string{
 		"GOOGLE_APPLICATION_CREDENTIALS": fmt.Sprintf("~/.gcp/atmos/%s/credentials.json", providerName),
-	}
+	}, nil
 }
 
 func (p *gcpCloudProvider) Cleanup(ctx context.Context, providerName, identityName string) error {

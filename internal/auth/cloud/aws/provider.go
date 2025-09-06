@@ -58,14 +58,14 @@ func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, i
 }
 
 // GetEnvironmentVariables returns AWS-specific environment variables
-func (p *AWSCloudProvider) GetEnvironmentVariables(providerName, identityName string) map[string]string {
+func (p *AWSCloudProvider) GetEnvironmentVariables(providerName, identityName string) (map[string]string, error) {
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
 
 	return map[string]string{
 		"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(awsDir, "credentials"),
 		"AWS_CONFIG_FILE":             filepath.Join(awsDir, "config"),
 		"AWS_PROFILE":                 identityName,
-	}
+	}, nil
 }
 
 // CleanupEnvironment removes AWS temporary files and resources

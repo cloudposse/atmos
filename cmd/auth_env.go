@@ -54,18 +54,10 @@ var authEnvCmd = &cobra.Command{
 			return fmt.Errorf("no provider found for identity %s", identityName)
 		}
 
-		// Get provider configuration to determine cloud provider kind
-		var providerKind string
-		if provider, exists := atmosConfig.Auth.Providers[providerName]; exists {
-			providerKind = provider.Kind
-		} else {
-			// Handle AWS user identities which don't have a provider entry
-			if identity, exists := atmosConfig.Auth.Identities[identityName]; exists && identity.Kind == "aws/user" {
-				providerKind = "aws"
-				providerName = "aws-user"
-			} else {
-				return fmt.Errorf("provider %s not found in configuration", providerName)
-			}
+		// Get provider kind from the identity (eliminates special case handling)
+		providerKind, err := authManager.GetProviderKindForIdentity(identityName)
+		if err != nil {
+			return fmt.Errorf("failed to get provider kind for identity %s: %w", identityName, err)
 		}
 
 		// Create cloud provider manager and get environment variables
@@ -113,7 +105,6 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 }
 
 func init() {
-	authEnvCmd.Flags().StringP("identity", "i", "", "Specify the identity to get environment variables for")
 	authEnvCmd.Flags().StringP("format", "f", "export", "Output format: export, json, dotenv")
 	authCmd.AddCommand(authEnvCmd)
 }

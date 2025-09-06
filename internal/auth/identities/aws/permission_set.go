@@ -230,10 +230,11 @@ func (i *permissionSetIdentity) Merge(component *schema.Identity) types.Identity
 
 // Note: Caching is now handled at the manager level to prevent duplicate entries
 
-// getProviderName extracts the provider name from the identity configuration
-func (i *permissionSetIdentity) getProviderName() string {
+// GetProviderName extracts the provider name from the identity configuration
+func (i *permissionSetIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {
-		return i.config.Via.Provider
+		return i.config.Via.Provider, nil
 	}
-	return "unknown"
+	return "", fmt.Errorf("permission set identity %q has no valid via provider configuration", i.name)
 }
+
