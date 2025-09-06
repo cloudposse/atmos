@@ -668,7 +668,8 @@ func (m *TestModel) shouldShowTest(status string) bool {
 	case "all":
 		return true
 	case "failed":
-		return status == "fail"
+		// Show failed tests AND skipped tests when in failed mode
+		return status == "fail" || status == "skip"
 	case "passed":
 		return status == "pass"
 	case "skipped":
@@ -1201,7 +1202,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 
 	// Package header
 	// Display package header - ▶ icon in white, package name in cyan
-	output.WriteString(fmt.Sprintf("\n▶ %s [MODIFIED]\n", PackageHeaderStyle.Render(pkg.Package)))
+	output.WriteString(fmt.Sprintf("\n▶ %s\n", PackageHeaderStyle.Render(pkg.Package)))
 
 	// Check for "No tests"
 	// Check for package-level failures (e.g., TestMain failures)

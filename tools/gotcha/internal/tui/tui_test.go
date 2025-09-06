@@ -134,6 +134,12 @@ func TestShouldShowTest(t *testing.T) {
 			want:       true,
 		},
 		{
+			name:       "show failed - skip",
+			showFilter: "failed",
+			status:     "skip",
+			want:       true, // Skipped tests should show with failed filter
+		},
+		{
 			name:       "show passed - pass",
 			showFilter: "passed",
 			status:     "pass",
