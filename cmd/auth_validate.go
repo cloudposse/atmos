@@ -23,6 +23,13 @@ var authValidateCmd = &cobra.Command{
 }
 
 func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
+	// Get verbose flag
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	
+	if verbose {
+		u.PrintfMarkdown("**Validating authentication configuration...**\n")
+	}
+
 	// Load atmos config
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
@@ -44,5 +51,6 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 }
 
 func init() {
+	authValidateCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 	authCmd.AddCommand(authValidateCmd)
 }

@@ -188,8 +188,6 @@
   },
   "auth": {
     "providers": null,
-    "identities": null,
-    "default_region": "",
-    "default_profile": ""
+    "identities": null
   }
 }
