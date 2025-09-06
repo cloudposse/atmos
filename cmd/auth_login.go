@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/cloudposse/atmos/internal/auth"
-	"github.com/cloudposse/atmos/internal/auth/config"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/environment"
 	"github.com/cloudposse/atmos/internal/auth/validation"
@@ -72,10 +71,9 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 func createAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
 	credStore := credentials.NewCredentialStore()
 	awsFileManager := environment.NewAWSFileManager()
-	configMerger := config.NewConfigMerger()
 	validator := validation.NewValidator()
 
-	return auth.NewAuthManager(authConfig, credStore, awsFileManager, configMerger, validator)
+	return auth.NewAuthManager(authConfig, credStore, awsFileManager, validator)
 }
 
 func init() {

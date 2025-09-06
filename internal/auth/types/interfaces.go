@@ -151,17 +151,6 @@ type AWSFileManager interface {
 	Cleanup(providerName string) error
 }
 
-// ConfigMerger defines the interface for merging auth configurations
-type ConfigMerger interface {
-	// MergeAuthConfig merges component auth config with global auth config
-	MergeAuthConfig(global *schema.AuthConfig, component *schema.ComponentAuthConfig) (*schema.AuthConfig, error)
-
-	// MergeIdentity merges component identity config with global identity config
-	MergeIdentity(global *schema.Identity, component *schema.Identity) *schema.Identity
-
-	// MergeProvider merges component provider config with global provider config
-	MergeProvider(global *schema.Provider, component *schema.Provider) *schema.Provider
-}
 
 // Validator defines the interface for validating auth configurations
 type Validator interface {

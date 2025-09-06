@@ -21,7 +21,6 @@ type manager struct {
 	identities      map[string]types.Identity
 	credentialStore types.CredentialStore
 	awsFileManager  types.AWSFileManager
-	configMerger    types.ConfigMerger
 	validator       types.Validator
 }
 
@@ -30,7 +29,6 @@ func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
 	awsFileManager types.AWSFileManager,
-	configMerger types.ConfigMerger,
 	validator types.Validator,
 ) (types.AuthManager, error) {
 	if config == nil {
@@ -43,7 +41,6 @@ func NewAuthManager(
 		identities:      make(map[string]types.Identity),
 		credentialStore: credentialStore,
 		awsFileManager:  awsFileManager,
-		configMerger:    configMerger,
 		validator:       validator,
 	}
 

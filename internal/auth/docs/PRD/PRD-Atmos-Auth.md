@@ -593,10 +593,21 @@ auth:
   identities:
     dev-admin:
       kind: aws/permission-set
+      default: false # Not default globally
       via: { provider: aws-sso }
       principal:
         name: DeveloperAccess
-        account.name: development
+        account:
+          name: development
+      alias: dev-admin
+
+    superuser:
+      kind: aws/user
+      # No via provider required - AWS User identities are self-contained
+      credentials:
+        access_key_id: !env SUPERUSER_AWS_ACCESS_KEY_ID
+        secret_access_key: !env SUPERUSER_AWS_SECRET_ACCESS_KEY
+        region: us-east-1
 ```
 
 **Responsibilities**:
@@ -614,11 +625,15 @@ identities:
     via: { provider: aws-sso }
     principal:
       name: DeveloperAccess
-      account.name: development
+      account:
+        name: development
+    alias: dev-admin
     env:
       - key: AWS_PROFILE
         value: dev-admin
-      - key: TERRAFORM_WORKSPACE
+      - key: TEAM_ROLE
+        value: dev-admin
+      - key: DEPLOYMENT_ENVIRONMENT
         value: development
 ```
 
@@ -753,6 +768,7 @@ providers:
 The AWS SAML provider uses the `github.com/versent/saml2aws/v2` package with Playwright for browser automation to authenticate against SAML identity providers and assume AWS roles.
 
 **Basic Configuration:**
+
 ```yaml
 providers:
   aws-saml:
@@ -760,11 +776,12 @@ providers:
     url: https://accounts.google.com/o/saml2/initsso?idpid=C01abc23&spid=123456789&forceauthn=false
     region: us-east-1
     username: user@company.com
-    provider_type: GoogleApps  # Optional: auto-detected if not specified
-    download_browser_driver: true  # Optional: auto-download Playwright drivers
+    provider_type: GoogleApps # Optional: auto-detected if not specified
+    download_browser_driver: true # Optional: auto-download Playwright drivers
 ```
 
 **Advanced Configuration with Authentication Details:**
+
 ```yaml
 providers:
   okta-saml:
@@ -772,7 +789,7 @@ providers:
     url: https://company.okta.com/app/amazon_aws/exk1234567890/sso/saml
     region: us-west-2
     username: john.doe@company.com
-    password: "${SAML_PASSWORD}"  # Optional: will prompt if not provided
+    password: "${SAML_PASSWORD}" # Optional: will prompt if not provided
     provider_type: Okta
     download_browser_driver: true
     session:
@@ -780,6 +797,7 @@ providers:
 ```
 
 **Supported SAML Provider Types:**
+
 - `GoogleApps` - Google Workspace SAML
 - `Okta` - Okta SAML
 - `ADFS` - Active Directory Federation Services
@@ -792,10 +810,12 @@ providers:
 - `Browser` - Generic browser-based SAML (auto-detected)
 
 **Environment Variables:**
+
 - `SAML2AWS_AUTO_BROWSER_DOWNLOAD=true` - Auto-download Playwright browser drivers
 - `SAML_PASSWORD` - SAML password (if not provided in config)
 
 **Usage Notes:**
+
 - First run will download Playwright browser drivers automatically if `download_browser_driver: true`
 - Browser automation handles MFA challenges automatically
 - Supports headless browser operation for CI/CD environments
@@ -809,6 +829,7 @@ providers:
 The GitHub OIDC provider authenticates using GitHub Actions OIDC tokens and is designed to work with AWS assume role identities for CI/CD workflows.
 
 **Basic Configuration:**
+
 ```yaml
 providers:
   github-oidc:
@@ -817,6 +838,7 @@ providers:
 ```
 
 **Usage with AWS Assume Role Identity:**
+
 ```yaml
 providers:
   github-oidc:
@@ -829,14 +851,16 @@ identities:
     via: { provider: github-oidc }
     principal:
       role_arn: arn:aws:iam::123456789012:role/GitHubActionsRole
-      session_name: github-actions-${GITHUB_RUN_ID}
+    alias: ci-role
 ```
 
 **Environment Variables (GitHub Actions):**
+
 - `ACTIONS_ID_TOKEN_REQUEST_TOKEN` - GitHub Actions OIDC token (automatically set)
 - `ACTIONS_ID_TOKEN_REQUEST_URL` - GitHub Actions OIDC endpoint (automatically set)
 
 **Usage Notes:**
+
 - Only works within GitHub Actions environment
 - Requires GitHub Actions workflow to have `id-token: write` permission
 - OIDC token is automatically retrieved from GitHub Actions environment
@@ -970,7 +994,6 @@ identities:
     via: { identity: dev-access }
     principal:
       assume_role: arn:aws:iam::123456789012:role/ProductionAdmin
-    alias: prod
 ```
 
 #### AWS User (Break-glass)
@@ -1005,25 +1028,6 @@ identities:
 - Primarily used for break-glass scenarios and emergency access
 - Direct AWS API authentication using access key pairs
 - AWS files written to `~/.aws/atmos/aws-user/credentials` and `~/.aws/atmos/aws-user/config`
-
-**Credential Storage Format:**
-
-Credentials are stored in the system keyring using the `schema.Credentials` format:
-
-```go
-type Credentials struct {
-    AWS *AWSCredentials `json:"aws,omitempty"`
-}
-
-type AWSCredentials struct {
-    AccessKeyID     string `json:"access_key_id,omitempty"`
-    SecretAccessKey string `json:"secret_access_key,omitempty"`
-    SessionToken    string `json:"session_token,omitempty"`
-    Region          string `json:"region,omitempty"`
-    Expiration      string `json:"expiration,omitempty"`
-    MfaArn          string `json:"mfa_arn,omitempty"`
-}
-```
 
 #### Azure Role
 
@@ -1109,9 +1113,10 @@ components:
   terraform:
     vpc:
       # Component-specific auth overrides
-      identities:
-        managers:
-          default: true # Override: make this the default for VPC component
+      auth:
+        identities:
+          managers:
+            default: true # Override: make this the default for VPC component
 
       # Regular component configuration
       metadata:
@@ -1131,24 +1136,25 @@ components:
   terraform:
     security-vpc:
       # Component-specific auth overrides
-      identities:
-        security-admin:
-          kind: aws/permission-set
-          via: { provider: cplive-sso }
-          principal:
-            name: SecurityAdminAccess
-            account:
-              name: security
-          env:
-            - key: SECURITY_MODE
-              value: strict
-        managers:
-          default: false # Disable managers as default for security components
+      auth:
+        identities:
+          security-admin:
+            kind: aws/permission-set
+            via: { provider: cplive-sso }
+            principal:
+              name: SecurityAdminAccess
+              account:
+                name: security
+            env:
+              - key: SECURITY_MODE
+                value: strict
+          managers:
+            default: false # Disable managers as default for security components
 
-      providers:
-        cplive-sso:
-          session:
-            duration: 30m # Override session duration for security operations
+        providers:
+          cplive-sso:
+            session:
+              duration: 30m # Override session duration for security operations
 
       vars:
         vpc_cidr: "10.1.0.0/16"
@@ -1173,54 +1179,59 @@ The `atmos describe component` command shows merged auth configuration:
 # Show all component information including auth
 atmos describe component vpc -s plat-ue2-sandbox
 
-# Filter to show only identities
-atmos describe component vpc -s plat-ue2-sandbox -q .identities
+# Filter to show only auth section
+atmos describe component vpc -s plat-ue2-sandbox -q .auth
 
-# Filter to show only providers
-atmos describe component vpc -s plat-ue2-sandbox -q .providers
+# Filter to show only identities within auth section
+atmos describe component vpc -s plat-ue2-sandbox -q .auth.identities
+
+# Filter to show only providers within auth section
+atmos describe component vpc -s plat-ue2-sandbox -q .auth.providers
 ```
 
-**Expected Output for VPC Component Identities**:
+**Expected Output for VPC Component Auth Section**:
 
 ```yaml
-identities:
-  managers:
-    kind: aws/permission-set
-    default: true # Overridden from false to true by component
-    via: { provider: cplive-sso }
-    principal:
-      name: IdentityManagersTeamAccess
-      account:
-        name: core-identity
-    alias: managers-core
-    # AWS files automatically managed:
-    # ~/.aws/atmos/cplive-sso/credentials
-    # ~/.aws/atmos/cplive-sso/config
+auth:
+  identities:
+    managers:
+      kind: aws/permission-set
+      default: true # Overridden from false to true by component
+      via: { provider: cplive-sso }
+      principal:
+        name: IdentityManagersTeamAccess
+        account:
+          name: core-identity
+      alias: managers-core
+      # AWS files automatically managed:
+      # ~/.aws/atmos/cplive-sso/credentials
+      # ~/.aws/atmos/cplive-sso/config
 ```
 
-**Expected Output for Security-VPC Component Identities**:
+**Expected Output for Security-VPC Component Auth Section**:
 
 ```yaml
-identities:
-  managers:
-    kind: aws/permission-set
-    default: false # Overridden to disable for security components
-    via: { provider: cplive-sso }
-    principal:
-      name: IdentityManagersTeamAccess
-      account:
-        name: core-identity
-    alias: managers-core
-  security-admin: # Component-specific identity
-    kind: aws/permission-set
-    via: { provider: cplive-sso }
-    principal:
-      name: SecurityAdminAccess
-      account:
-        name: security
-    env:
-      - key: SECURITY_MODE
-        value: strict
+auth:
+  identities:
+    managers:
+      kind: aws/permission-set
+      default: false # Overridden to disable for security components
+      via: { provider: cplive-sso }
+      principal:
+        name: IdentityManagersTeamAccess
+        account:
+          name: core-identity
+      alias: managers-core
+    security-admin: # Component-specific identity
+      kind: aws/permission-set
+      via: { provider: cplive-sso }
+      principal:
+        name: SecurityAdminAccess
+        account:
+          name: security
+      env:
+        - key: SECURITY_MODE
+          value: strict
 ```
 
 ## 5. Hierarchical Authentication Flow Examples
@@ -1251,7 +1262,7 @@ identities:
     principal:
       role_arn: arn:aws:iam::123456789012:role/SAMLAdminRole
     alias: saml-admin
-    
+
   # Chained: SAML → Cross-account role
   prod-deployer:
     kind: aws/assume-role
@@ -1273,6 +1284,7 @@ identities:
 8. **Result**: Final credentials for `DeployerRole` in production account
 
 **Expected Output:**
+
 ```bash
 $ atmos terraform plan vpc --stack prod-us-west-2
 🔐 Starting SAML authentication for provider: okta-saml
@@ -1335,7 +1347,7 @@ identities:
     kind: aws/assume-role
     via: { identity: managers }
     principal:
-      assume_role: arn:aws:iam::539916835077:role/cplive-plat-gbl-sandbox-admin
+      role_arn: arn:aws:iam::539916835077:role/cplive-plat-gbl-sandbox-admin
 ```
 
 **Authentication Flow:**

@@ -72,7 +72,7 @@ const (
 	PackerSectionName                 = "packer"
 	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
-	IdentitiesSectionName             = "identities"
+	AuthSectionName                   = "auth"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"

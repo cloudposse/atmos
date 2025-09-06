@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/mitchellh/mapstructure"
+
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/auth/cloud"
-	"github.com/cloudposse/atmos/internal/auth/config"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/environment"
 	"github.com/cloudposse/atmos/internal/auth/types"
@@ -21,7 +22,6 @@ type (
 	AuthManager     = types.AuthManager
 	CredentialStore = types.CredentialStore
 	AWSFileManager  = types.AWSFileManager
-	ConfigMerger    = types.ConfigMerger
 	Validator       = types.Validator
 )
 
@@ -36,6 +36,13 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	log.SetLevel(authLogLevel)
 	defer log.SetLevel(atmosLogLevel)
 
+	// Use the merged auth configuration from stackInfo
+	// ComponentAuthSection already contains the deep-merged auth config from component + inherits + atmos.yaml
+	// Converted to typed struct when needed
+	var authConfig schema.AuthConfig
+	err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig)
+
+
 	// Skip if no auth config
 	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
 		log.Debug("No auth configuration found, skipping authentication")
@@ -45,55 +52,16 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	// Create auth manager components
 	credStore := credentials.NewCredentialStore()
 	awsFileManager := environment.NewAWSFileManager()
-	configMerger := config.NewConfigMerger()
 	validator := validation.NewValidator()
 
 	// Create cloud provider manager
 	cloudProviderManager := cloud.NewCloudProviderManager()
-
-	// Merge component auth config with global auth config
-	mergedAuthConfig := &atmosConfig.Auth
-	if stackInfo != nil && stackInfo.ComponentIdentitiesSection != nil {
-		log.Debug("Merging component auth configuration")
-		// Convert ComponentIdentitiesSection to ComponentAuthConfig
-		componentConfig := &schema.ComponentAuthConfig{
-			Identities: make(map[string]schema.Identity),
-		}
-
-		// Parse component identities
-		for name, identityData := range stackInfo.ComponentIdentitiesSection {
-			if identityMap, ok := identityData.(map[string]interface{}); ok {
-				// Start with global identity if it exists
-				identity := schema.Identity{}
-				if globalIdentity, exists := atmosConfig.Auth.Identities[name]; exists {
-					identity = globalIdentity
-				}
-
-				// Apply component overrides
-				if defaultVal, exists := identityMap["default"]; exists {
-					if defaultBool, ok := defaultVal.(bool); ok {
-						identity.Default = defaultBool
-					}
-				}
-
-				componentConfig.Identities[name] = identity
-			}
-		}
-
-		// Merge configurations
-		var err error
-		mergedAuthConfig, err = configMerger.MergeAuthConfig(&atmosConfig.Auth, componentConfig)
-		if err != nil {
-			return fmt.Errorf("failed to merge component auth config: %w", err)
-		}
-	}
-
+	
 	// Create auth manager with merged configuration
 	authManager, err := NewAuthManager(
-		mergedAuthConfig,
+		&authConfig,
 		credStore,
 		awsFileManager,
-		configMerger,
 		validator,
 	)
 	if err != nil {
@@ -127,7 +95,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	// Always set up environment variables and AWS files
 	// Get identity environment variables and merge into component environment section
-	if identity, exists := mergedAuthConfig.Identities[targetIdentityName]; exists {
+	if identity, exists := authConfig.Identities[targetIdentityName]; exists {
 		if len(identity.Env) > 0 {
 			environment.MergeIdentityEnvOverrides(stackInfo, identity.Env)
 		}
@@ -137,7 +105,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	// Get root provider name - use "aws-user" for AWS user identities, otherwise get from identity chain
 	rootProviderName := ""
-	if identity, exists := mergedAuthConfig.Identities[targetIdentityName]; exists {
+	if identity, exists := authConfig.Identities[targetIdentityName]; exists {
 		if identity.Kind == "aws/user" && identity.Via == nil {
 			rootProviderName = "aws-user"
 		} else {
@@ -153,7 +121,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 		// Handle AWS User identities (standalone, no provider config)
 		if rootProviderName == "aws-user" {
 			providerKind = "aws/user"
-		} else if provider, exists := mergedAuthConfig.Providers[rootProviderName]; exists {
+		} else if provider, exists := authConfig.Providers[rootProviderName]; exists {
 			providerKind = provider.Kind
 		}
 

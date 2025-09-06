@@ -211,6 +211,7 @@ func createComponentStackMap(
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var authSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
 	var backendTypeSection string
@@ -269,6 +270,7 @@ func createComponentStackMap(
 						ComponentSettingsSection:  settingsSection,
 						ComponentEnvSection:       envSection,
 						ComponentProvidersSection: providersSection,
+						ComponentAuthSection:      authSection,
 						ComponentOverridesSection: overridesSection,
 						ComponentBackendSection:   backendSection,
 						ComponentBackendType:      backendTypeSection,

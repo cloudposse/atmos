@@ -8,7 +8,6 @@ import (
 
 	"github.com/cloudposse/atmos/internal/auth"
 	"github.com/cloudposse/atmos/internal/auth/cloud"
-	"github.com/cloudposse/atmos/internal/auth/config"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/environment"
 	"github.com/cloudposse/atmos/internal/auth/validation"
@@ -62,7 +61,6 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 	t.Run("AuthManager Integration", func(t *testing.T) {
 		// Create auth manager with all dependencies
 		credStore := credentials.NewCredentialStore()
-		configMerger := config.NewConfigMerger()
 		awsFileManager := environment.NewAWSFileManager()
 		validator := validation.NewValidator()
 
@@ -70,7 +68,6 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 			authConfig,
 			credStore,
 			awsFileManager,
-			configMerger,
 			validator,
 		)
 		require.NoError(t, err)

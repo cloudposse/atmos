@@ -20,6 +20,7 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 			input: schema.ConfigAndStacksInfo{
 				ComponentSection: map[string]any{
 					cfg.ProvidersSectionName:   map[string]any{"aws": map[string]any{"region": "us-west-2"}},
+					cfg.AuthSectionName:        map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-west-2"}}},
 					cfg.VarsSectionName:        map[string]any{"environment": "dev"},
 					cfg.SettingsSectionName:    map[string]any{"enabled": true},
 					cfg.EnvSectionName:         map[string]any{"DB_PASSWORD": "secret"},
@@ -34,6 +35,7 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 			},
 			expected: schema.ConfigAndStacksInfo{
 				ComponentProvidersSection: map[string]any{"aws": map[string]any{"region": "us-west-2"}},
+				ComponentAuthSection:      schema.AuthConfig{Providers: map[string]schema.Provider{"aws": {Region: "us-west-2"}}},
 				ComponentVarsSection:      map[string]any{"environment": "dev"},
 				ComponentSettingsSection:  map[string]any{"enabled": true},
 				ComponentEnvSection:       map[string]any{"DB_PASSWORD": "secret"},
@@ -82,6 +84,7 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 
 			// Compare each expected field individually for better error messages
 			assert.Equal(t, tt.expected.ComponentProvidersSection, input.ComponentProvidersSection, "ComponentProvidersSection mismatch")
+			assert.Equal(t, tt.expected.ComponentAuthSection, input.ComponentAuthSection, "ComponentAuthSection mismatch")
 			assert.Equal(t, tt.expected.ComponentVarsSection, input.ComponentVarsSection, "ComponentVarsSection mismatch")
 			assert.Equal(t, tt.expected.ComponentSettingsSection, input.ComponentSettingsSection, "ComponentSettingsSection mismatch")
 			assert.Equal(t, tt.expected.ComponentEnvSection, input.ComponentEnvSection, "ComponentEnvSection mismatch")

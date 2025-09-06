@@ -35,7 +35,7 @@ func ProcessComponentConfig(
 	var componentHooksSection map[string]any
 	var componentImportsSection []string
 	var componentEnvSection map[string]any
-	var componentIdentitiesSection map[string]any
+	var componentAuthSection map[string]any
 	var componentBackendSection map[string]any
 	var componentBackendType string
 	var command string
@@ -102,8 +102,8 @@ func ProcessComponentConfig(
 		componentEnvSection = map[string]any{}
 	}
 
-	if componentIdentitiesSection, ok = componentSection[cfg.IdentitiesSectionName].(map[string]any); !ok {
-		componentIdentitiesSection = map[string]any{}
+	if componentAuthSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+		componentAuthSection = map[string]any{}
 	}
 
 	if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
@@ -141,7 +141,7 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentProvidersSection = componentProvidersSection
 	configAndStacksInfo.ComponentHooksSection = componentHooksSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
-	configAndStacksInfo.ComponentIdentitiesSection = componentIdentitiesSection
+	configAndStacksInfo.ComponentAuthSection = componentAuthSection
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
 	configAndStacksInfo.BaseComponentPath = baseComponentName
@@ -637,6 +637,10 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
 		configAndStacksInfo.ComponentProvidersSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.AuthSectionName].(map[string]any); ok {
+		configAndStacksInfo.ComponentAuthSection = i
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[string]any); ok {

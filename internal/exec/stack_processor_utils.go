@@ -930,11 +930,11 @@ func ProcessStackConfig(
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.hooks' section in the file '%s'", component, stackName)
 					}
 				}
-				componentIdentities := map[string]any{}
-				if i, ok := componentMap[cfg.IdentitiesSectionName]; ok {
-					componentIdentities, ok = i.(map[string]any)
+				componentAuth := map[string]any{}
+				if i, ok := componentMap[cfg.AuthSectionName]; ok {
+					componentAuth, ok = i.(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.identities' section in the file '%s'", component, stackName)
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.auth' section in the file '%s'", component, stackName)
 					}
 				}
 				// Component metadata.
@@ -1404,7 +1404,7 @@ func ProcessStackConfig(
 					return nil, err
 				}
 
-				mergedIdentities, err := processIdentities(atmosConfig, componentIdentities)
+				mergedAuth, err := processAuthConfig(atmosConfig, componentAuth)
 				if err != nil {
 					return nil, err
 				}
@@ -1420,7 +1420,7 @@ func ProcessStackConfig(
 				comp[cfg.CommandSectionName] = finalComponentTerraformCommand
 				comp[cfg.InheritanceSectionName] = componentInheritanceChain
 				comp[cfg.MetadataSectionName] = componentMetadata
-				comp[cfg.IdentitiesSectionName] = mergedIdentities
+				comp[cfg.AuthSectionName] = mergedAuth
 				comp[cfg.OverridesSectionName] = componentOverrides
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
 				comp[cfg.HooksSectionName] = finalComponentHooks
@@ -2058,38 +2058,37 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 	return settings, nil
 }
 
-// processIdentities deep-merges the `identities` section from stack manifests with
-// the `auth.identities` section from `atmos.yaml`
-func processIdentities(atmosConfig *schema.AtmosConfiguration, componentIdentities map[string]any) (map[string]any, error) {
-	// If no component identities, just return the empty map
-	if len(componentIdentities) == 0 {
-		return componentIdentities, nil
+// processAuthConfig deep-merges the `auth` section from stack manifests with
+// the `auth` section from `atmos.yaml`. Component auth config takes precedence
+// over global auth config.
+func processAuthConfig(atmosConfig *schema.AtmosConfiguration, authConfig map[string]any) (map[string]any, error) {
+	if len(authConfig) == 0 {
+		return authConfig, nil
 	}
 
-	// Check if atmos config has Auth.Identities
-	if atmosConfig.Auth.Identities == nil {
-		return componentIdentities, nil
+	// Convert the global auth config struct to map[string]any for merging
+	var globalAuthConfig map[string]any
+	err := mapstructure.Decode(atmosConfig.Auth, &globalAuthConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert global auth config to map: %w", err)
 	}
 
-	// Deep-merge component identities with global identities from atmos.yaml
-	// Component identities take precedence over global identities
-	// Convert schema.Identity map to map[string]any
-	globalIdentities := make(map[string]any)
-	for k, v := range atmosConfig.Auth.Identities {
-		globalIdentities[k] = v
+	// If global auth config is empty, just return the component auth config
+	if len(globalAuthConfig) == 0 {
+		return authConfig, nil
 	}
 
-	mergedIdentities, err := m.Merge(
+	mergedAuthConfig, err := m.Merge(
 		atmosConfig,
 		[]map[string]any{
-			globalIdentities,
-			componentIdentities,
+			globalAuthConfig,
+			authConfig,
 		})
 	if err != nil {
 		return nil, err
 	}
 
-	return mergedIdentities, nil
+	return mergedAuthConfig, nil
 }
 
 // FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined.
