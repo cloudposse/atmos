@@ -776,7 +776,7 @@ func (m *TestModel) generateFinalSummary() string {
 	output.WriteString(border)
 	output.WriteString("\n")
 	output.WriteString("Test Summary:\n")
-	
+
 	// Use fixed width formatting for proper alignment
 	output.WriteString(fmt.Sprintf("  %s %-8s %5d\n", PassStyle.Render(CheckPass), "Passed:", m.passCount))
 	output.WriteString(fmt.Sprintf("  %s %-8s %5d\n", FailStyle.Render(CheckFail), "Failed:", m.failCount))
