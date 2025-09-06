@@ -622,30 +622,30 @@ func (m *TestModel) View() string {
 	testCountWidth := getDisplayWidth(testCount)
 	timeWidth := getDisplayWidth(timeStr)
 	bufferWidth := getDisplayWidth(bufferStr)
-	
+
 	// Calculate total fixed width (including spaces)
 	// spin + info + "  " + [progress] + " " + percentage + " " + testCount + "  " + time + " " + buffer
 	fixedWidth := spinWidth + infoWidth + 2 + 1 + percentageWidth + 1 + testCountWidth + 2 + timeWidth + 1 + bufferWidth
-	
+
 	// Calculate available width for progress bar (with some padding)
 	availableWidth := terminalWidth - fixedWidth - 2 // 2 chars padding for safety
-	
+
 	// Set minimum and maximum progress bar width
 	const minProgressWidth = 20
 	const maxProgressWidth = 100
-	
+
 	progressWidth := availableWidth
 	if progressWidth < minProgressWidth {
 		progressWidth = minProgressWidth
 	} else if progressWidth > maxProgressWidth {
 		progressWidth = maxProgressWidth
 	}
-	
+
 	// Update progress bar width if it's different
 	if m.progress.Width != progressWidth {
 		m.progress.Width = progressWidth
 	}
-	
+
 	prog := m.progress.View()
 
 	// Assemble the complete status line with fixed spacing

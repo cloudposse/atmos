@@ -46,7 +46,7 @@ func TestNewManager(t *testing.T) {
 				viper.Set("cache.dir", tempDir)
 				// Create a cache file
 				cache := &CacheFile{
-					Version: "1.0",
+					Version:  "1.0",
 					Metadata: CacheMetadata{},
 					Discovery: DiscoveryCache{
 						TestCounts: map[string]TestCountEntry{
