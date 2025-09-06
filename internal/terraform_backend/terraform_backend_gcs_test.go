@@ -45,7 +45,7 @@ func TestReadTerraformBackendGCS_InvalidConfig(t *testing.T) {
 		},
 	}
 
-	// Create a mock client that should never be called due to validation errors
+	// Create a mock client that should never be called due to validation errors.
 	mockClient := &mockGCSClient{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -65,7 +65,7 @@ func TestReadTerraformBackendGCS_InvalidConfig(t *testing.T) {
 	}
 }
 
-// Mock implementations for testing
+// Mock implementations for testing.
 type mockGCSClient struct{}
 
 func (m *mockGCSClient) Bucket(name string) tb.GCSBucketHandle {
@@ -86,8 +86,8 @@ type mockGCSObjectHandle struct {
 }
 
 func (o *mockGCSObjectHandle) NewReader(ctx context.Context) (io.ReadCloser, error) {
-	// Accept multiple path patterns for different test scenarios
-	// Correct GCS backend path format: <prefix>/<workspace>.tfstate
+	// Accept multiple path patterns for different test scenarios.
+	// Correct GCS backend path format: <prefix>/<workspace>.tfstate.
 	validPaths := []string{
 		"test-prefix/test-workspace.tfstate",
 		"test-workspace.tfstate", // For no prefix
@@ -99,7 +99,7 @@ func (o *mockGCSObjectHandle) NewReader(ctx context.Context) (io.ReadCloser, err
 			pathMatches = true
 			break
 		}
-		// Also check test-bucket for nested config test
+		// Also check test-bucket for nested config test.
 		if o.bucketName == "test-bucket" && o.objectName == validPath {
 			pathMatches = true
 			break
@@ -140,7 +140,7 @@ func TestReadTerraformBackendGCSInternal(t *testing.T) {
 }
 
 func TestReadTerraformBackendGCS_NestedConfig(t *testing.T) {
-	// Test with nested configuration (like when called from !terraform.state)
+	// Test with nested configuration (like when called from !terraform.state).
 	componentData := map[string]any{
 		"workspace": "test-workspace",
 		"backend": map[string]any{
@@ -154,7 +154,7 @@ func TestReadTerraformBackendGCS_NestedConfig(t *testing.T) {
 
 	client := &mockGCSClient{}
 
-	// We need to test the internal function since the main function would try to create a real GCS client
+	// We need to test the internal function since the main function would try to create a real GCS client.
 	backend := map[string]any{
 		"bucket": "test-bucket",
 		"prefix": "test-prefix",
@@ -166,7 +166,7 @@ func TestReadTerraformBackendGCS_NestedConfig(t *testing.T) {
 	assert.Contains(t, string(content), "mocked-gcs-output")
 }
 
-// Error testing mock
+// Error testing mock.
 type erroringGCSClient struct {
 	err  error
 	body io.ReadCloser
@@ -439,8 +439,8 @@ func TestGCSRetryLogic(t *testing.T) {
 }
 
 func TestGCSClientCaching(t *testing.T) {
-	// This test verifies that GCS clients are cached properly to avoid recreation
-	// Note: This is testing the internal caching mechanism, not the actual GCS client
+	// This test verifies that GCS clients are cached properly to avoid recreation.
+	// Note: This is testing the internal caching mechanism, not the actual GCS client.
 	backend1 := map[string]any{
 		"bucket":      "test-bucket-1",
 		"credentials": "/path/to/creds1.json",
@@ -448,27 +448,27 @@ func TestGCSClientCaching(t *testing.T) {
 
 	backend2 := map[string]any{
 		"bucket":      "test-bucket-2",
-		"credentials": "/path/to/creds1.json", // Same credentials, different bucket
+		"credentials": "/path/to/creds1.json", // Same credentials, different bucket.
 	}
 
 	backend3 := map[string]any{
 		"bucket":      "test-bucket-1",
-		"credentials": "/path/to/creds2.json", // Different credentials
+		"credentials": "/path/to/creds2.json", // Different credentials.
 	}
 
-	// Verify different backends with same auth config should have same cache key
+	// Verify different backends with same auth config should have same cache key.
 	assert.Equal(t,
 		tb.GetGCSBackendCredentials(&backend1),
 		tb.GetGCSBackendCredentials(&backend2),
 		"Backends with same credentials should have same cache key component")
 
-	// Verify different auth configs have different cache keys
+	// Verify different auth configs have different cache keys.
 	assert.NotEqual(t,
 		tb.GetGCSBackendCredentials(&backend1),
 		tb.GetGCSBackendCredentials(&backend3),
 		"Backends with different credentials should have different cache key components")
 
-	// Test impersonation in cache key
+	// Test impersonation in cache key.
 	backendWithImpersonation := map[string]any{
 		"bucket":                      "test-bucket",
 		"impersonate_service_account": "test@project.iam.gserviceaccount.com",

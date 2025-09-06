@@ -55,7 +55,7 @@ type GCSObjectHandle interface {
 	NewReader(ctx context.Context) (io.ReadCloser, error)
 }
 
-// Concrete implementations for production use
+// Concrete implementations for production use.
 type gcsClientImpl struct {
 	client *storage.Client
 }
@@ -88,20 +88,20 @@ func getCachedGCSClient(backend *map[string]any) (GCSClient, error) {
 	credentials := GetGCSBackendCredentials(backend)
 	impersonateServiceAccount := GetGCSBackendImpersonateServiceAccount(backend)
 
-	// Build a deterministic cache key (hash credentials to avoid exposing sensitive data in cache key)
-	// Create a proper hash to avoid collisions
+	// Build a deterministic cache key (hash credentials to avoid exposing sensitive data in cache key).
+	// Create a proper hash to avoid collisions.
 	h := sha256.Sum256([]byte(credentials))
 	cacheKey := fmt.Sprintf("credentials_hash=%s;impersonate=%s",
-		hex.EncodeToString(h[:8]), // Use first 8 bytes for brevity
+		hex.EncodeToString(h[:8]), // Use first 8 bytes for brevity.
 		impersonateServiceAccount)
 
-	// Check the cache
+	// Check the cache.
 	if cached, ok := gcsClientCache.Load(cacheKey); ok {
 		return cached.(GCSClient), nil
 	}
 
-	// Build the GCS client if not cached
-	// 30 sec timeout to configure a GCS client
+	// Build the GCS client if not cached.
+	// 30 sec timeout to configure a GCS client.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -122,12 +122,12 @@ func ReadTerraformBackendGCS(
 ) ([]byte, error) {
 	backend := GetComponentBackend(componentSections)
 
-	// Extract the GCS-specific configuration section (same pattern as stack processor)
+	// Extract the GCS-specific configuration section (same pattern as stack processor).
 	gcsBackend := map[string]any{}
 	if gcsSection, ok := backend["gcs"].(map[string]any); ok {
 		gcsBackend = gcsSection
 	} else {
-		// If no nested gcs section, assume the backend config is already flattened (e.g., from stack processor)
+		// If no nested gcs section, assume the backend config is already flattened (e.g., from stack processor).
 		gcsBackend = backend
 	}
 
@@ -145,7 +145,7 @@ func createGCSClient(ctx context.Context, backend *map[string]any) (GCSClient, e
 	credentials := GetGCSBackendCredentials(backend)
 	impersonateServiceAccount := GetGCSBackendImpersonateServiceAccount(backend)
 
-	// Use unified GCP authentication
+	// Use unified GCP authentication.
 	opts := gcp.GetClientOptions(gcp.AuthOptions{
 		Credentials: credentials,
 	})
@@ -160,18 +160,18 @@ func createGCSClient(ctx context.Context, backend *map[string]any) (GCSClient, e
 		log.Debug("Using default GCS credentials (ADC)")
 	}
 
-	// TODO: Handle service account impersonation properly
-	// This requires using impersonate.CredentialsTokenSource from google.golang.org/api/impersonate
+	// TODO: Handle service account impersonation properly.
+	// This requires using impersonate.CredentialsTokenSource from google.golang.org/api/impersonate.
 	if impersonateServiceAccount != "" {
 		log.Debug("Service account impersonation requested but not yet implemented", "account", impersonateServiceAccount)
-		// For now, we'll log a warning that this feature needs proper implementation
-		// In a production environment, this should use impersonate.CredentialsTokenSource
+		// For now, we'll log a warning that this feature needs proper implementation.
+		// In a production environment, this should use impersonate.CredentialsTokenSource.
 	}
 
-	// Create the storage client
+	// Create the storage client.
 	client, err := storage.NewClient(ctx, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrCreateGCSClient, err)
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrCreateGCSClient, err)
 	}
 
 	return &gcsClientImpl{client: client}, nil
@@ -183,23 +183,23 @@ func ReadTerraformBackendGCSInternal(
 	componentSections *map[string]any,
 	backend *map[string]any,
 ) ([]byte, error) {
-	// Build the path to the tfstate file in the GCS bucket
-	// According to Terraform docs: "Named states for workspaces are stored in an object called `<prefix>/<workspace>.tfstate`"
+	// Build the path to the tfstate file in the GCS bucket.
+	// According to Terraform docs: "Named states for workspaces are stored in an object called `<prefix>/<workspace>.tfstate`".
 	prefix := GetBackendAttribute(backend, "prefix")
 	workspace := GetTerraformWorkspace(componentSections)
 
 	var tfStateFilePath string
 	if prefix == "" {
-		// If no prefix is set, store at root level: <workspace>.tfstate
+		// If no prefix is set, store at root level: <workspace>.tfstate.
 		tfStateFilePath = workspace + ".tfstate"
 	} else {
-		// If prefix is set: <prefix>/<workspace>.tfstate
+		// If prefix is set: <prefix>/<workspace>.tfstate.
 		tfStateFilePath = path.Join(prefix, workspace+".tfstate")
 	}
 
 	bucket := GetBackendAttribute(backend, "bucket")
 	if bucket == "" {
-		return nil, fmt.Errorf("%w: bucket name is required for GCS backend", errUtils.ErrInvalidBackendConfig)
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidBackendConfig, "bucket name is required for GCS backend")
 	}
 
 	var lastErr error
@@ -207,13 +207,13 @@ func ReadTerraformBackendGCSInternal(
 		// 30 sec timeout to read the state file from the GCS bucket.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
-		// Get the object from GCS
+		// Get the object from GCS.
 		objectHandle := gcsClient.Bucket(bucket).Object(tfStateFilePath)
 		reader, err := objectHandle.NewReader(ctx)
 		if err != nil {
 			cancel() // Cancel immediately after use
-			// Check if the error is because the object doesn't exist
-			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error
+					// Check if the error is because the object doesn't exist.
+		// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
 			if status.Code(err) == codes.NotFound {
 				log.Debug("Terraform state file doesn't exist in the GCS bucket; returning 'null'", "file", tfStateFilePath, "bucket", bucket)
 				return nil, nil
@@ -225,17 +225,17 @@ func ReadTerraformBackendGCSInternal(
 				time.Sleep(time.Second * 2) // backoff
 				continue
 			}
-			return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromGCS, lastErr)
+			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrGetObjectFromGCS, lastErr)
 		}
 
 		content, err := io.ReadAll(reader)
 		_ = reader.Close() // Explicit close instead of defer
 		cancel()           // Cancel immediately after use
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadGCSObjectBody, err)
+			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrReadGCSObjectBody, err)
 		}
 		return content, nil
 	}
 
-	return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromGCS, lastErr)
+	return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrGetObjectFromGCS, lastErr)
 }

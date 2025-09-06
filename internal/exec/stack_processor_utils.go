@@ -1269,7 +1269,7 @@ func ProcessStackConfig(
 				// If it does not, use the component name instead
 				// https://developer.hashicorp.com/terraform/language/settings/backends/gcs
 				// https://developer.hashicorp.com/terraform/language/settings/backends/gcs#prefix
-				if finalComponentBackendType == "gcs" {
+				if finalComponentBackendType == cfg.BackendTypeGCS {
 					if p, ok := finalComponentBackend["prefix"].(string); !ok || p == "" {
 						prefix := component
 						if baseComponentName != "" {
@@ -1283,7 +1283,7 @@ func ProcessStackConfig(
 				// Check if component `backend` section has `key` for `azurerm` backend type
 				// If it does not, use the component name instead and format it with the global backend key name to auto generate a unique Terraform state key
 				// The backend state file will be formatted like so: {global key name}/{component name}.terraform.tfstate
-				if finalComponentBackendType == "azurerm" {
+				if finalComponentBackendType == cfg.BackendTypeAzurerm {
 					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[string]any); !componentAzurermExists {
 						if _, componentAzurermKeyExists := componentAzurerm["key"].(string); !componentAzurermKeyExists {
 							azureKeyPrefixComponent := component

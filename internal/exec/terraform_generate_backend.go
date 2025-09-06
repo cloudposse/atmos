@@ -10,6 +10,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // ExecuteTerraformGenerateBackendCmd executes `terraform generate backend` command
@@ -78,16 +79,16 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	log.Debug("Component backend", "config", componentBackendConfig)
 
 	// Check if the `backend` section has `workspace_key_prefix` when `backend_type` is `s3`
-	if info.ComponentBackendType == "s3" {
+	if info.ComponentBackendType == cfg.BackendTypeS3 {
 		if _, ok := info.ComponentBackendSection["workspace_key_prefix"].(string); !ok {
 			return fmt.Errorf("backend config for the '%s' component is missing 'workspace_key_prefix'", component)
 		}
 	}
 
 	// Check if the `backend` section has `bucket` when `backend_type` is `gcs`
-	if info.ComponentBackendType == "gcs" {
+	if info.ComponentBackendType == cfg.BackendTypeGCS {
 		if _, ok := info.ComponentBackendSection["bucket"].(string); !ok {
-			return fmt.Errorf("backend config for the '%s' component is missing 'bucket'", component)
+			return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidBackendConfig, fmt.Sprintf("backend config for the '%s' component is missing 'bucket'", component))
 		}
 	}
 
