@@ -422,29 +422,29 @@ func TestRequireNetworkAccess_InvalidURL(t *testing.T) {
 func TestRequireGitRemoteWithValidURL_InRealRepo(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// Create a temporary git repo with a remote
 	tmpDir := t.TempDir()
 	origDir, _ := os.Getwd()
 	defer os.Chdir(origDir)
-	
+
 	// Initialize git repo
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Skipf("Cannot change to temp directory: %v", err)
 	}
-	
+
 	// Run git init
 	cmd := exec.Command("git", "init")
 	if err := cmd.Run(); err != nil {
 		t.Skipf("Cannot initialize git repo: %v", err)
 	}
-	
+
 	// Add a remote
 	cmd = exec.Command("git", "remote", "add", "origin", "https://github.com/test/repo.git")
 	if err := cmd.Run(); err != nil {
 		t.Skipf("Cannot add git remote: %v", err)
 	}
-	
+
 	// Now test should work
 	url := RequireGitRemoteWithValidURL(t)
 	assert.Equal(t, "https://github.com/test/repo.git", url)
@@ -454,32 +454,32 @@ func TestRequireGitRemoteWithValidURL_InRealRepo(t *testing.T) {
 func TestRequireGitRemoteWithValidURL_InvalidRemote(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// Create a temporary git repo with invalid remote
 	tmpDir := t.TempDir()
 	origDir, _ := os.Getwd()
 	defer os.Chdir(origDir)
-	
+
 	// Initialize git repo
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Skipf("Cannot change to temp directory: %v", err)
 	}
-	
+
 	// Run git init
 	cmd := exec.Command("git", "init")
 	if err := cmd.Run(); err != nil {
 		t.Skipf("Cannot initialize git repo: %v", err)
 	}
-	
+
 	// Add an invalid remote URL
 	cmd = exec.Command("git", "remote", "add", "origin", "not-a-valid-url")
 	if err := cmd.Run(); err != nil {
 		t.Skipf("Cannot add git remote: %v", err)
 	}
-	
+
 	// Should skip due to invalid URL
 	url := RequireGitRemoteWithValidURL(t)
-	
+
 	// Should not reach here or url should be empty
 	if url != "" {
 		t.Error("Should have skipped with invalid remote URL")
@@ -490,26 +490,26 @@ func TestRequireGitRemoteWithValidURL_InvalidRemote(t *testing.T) {
 func TestRequireGitRemoteWithValidURL_NoRemotes(t *testing.T) {
 	// Ensure precondition checks are enabled
 	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
-	
+
 	// Create a temporary git repo without remotes
 	tmpDir := t.TempDir()
 	origDir, _ := os.Getwd()
 	defer os.Chdir(origDir)
-	
+
 	// Initialize git repo
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Skipf("Cannot change to temp directory: %v", err)
 	}
-	
+
 	// Run git init
 	cmd := exec.Command("git", "init")
 	if err := cmd.Run(); err != nil {
 		t.Skipf("Cannot initialize git repo: %v", err)
 	}
-	
+
 	// No remotes added - should skip
 	url := RequireGitRemoteWithValidURL(t)
-	
+
 	// Should not reach here or url should be empty
 	if url != "" {
 		t.Error("Should have skipped with no remotes")
