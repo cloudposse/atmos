@@ -412,6 +412,7 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Skip non-JSON lines, continue reading
 			return m, tea.Batch(m.readNextLine(), m.spinner.Tick)
 		}
+		
 
 		// Convert to appropriate test message and continue streaming
 		nextCmd := m.readNextLine()
@@ -547,7 +548,7 @@ func (m *TestModel) View() string {
 	spin := m.spinner.View() + " "
 
 	// Test name with fixed width for stability
-	const maxTestWidth = 45
+	const maxTestWidth = 55
 	var info string
 	if m.currentTest != "" {
 		testName := m.currentTest
@@ -767,10 +768,28 @@ func (m *TestModel) generateFinalSummary() string {
 	output.WriteString(border)
 	output.WriteString("\n")
 	output.WriteString("Test Summary:\n")
-	output.WriteString(fmt.Sprintf("  %s Passed:  %d\n", PassStyle.Render(CheckPass), m.passCount))
-	output.WriteString(fmt.Sprintf("  %s Failed:  %d\n", FailStyle.Render(CheckFail), m.failCount))
-	output.WriteString(fmt.Sprintf("  %s Skipped: %d\n", SkipStyle.Render(CheckSkip), m.skipCount))
-	output.WriteString(fmt.Sprintf("  Total:    %d tests\n", totalTests))
+	
+	// Calculate the maximum width needed for numbers
+	maxNum := totalTests
+	if m.passCount > maxNum {
+		maxNum = m.passCount
+	}
+	if m.failCount > maxNum {
+		maxNum = m.failCount
+	}
+	if m.skipCount > maxNum {
+		maxNum = m.skipCount
+	}
+	// Calculate width needed for the largest number
+	numWidth := len(fmt.Sprintf("%d", maxNum))
+	if numWidth < 4 {
+		numWidth = 4 // Minimum width of 4 for alignment
+	}
+	
+	output.WriteString(fmt.Sprintf("  %s Passed:  %*d\n", PassStyle.Render(CheckPass), numWidth, m.passCount))
+	output.WriteString(fmt.Sprintf("  %s Failed:  %*d\n", FailStyle.Render(CheckFail), numWidth, m.failCount))
+	output.WriteString(fmt.Sprintf("  %s Skipped: %*d\n", SkipStyle.Render(CheckSkip), numWidth, m.skipCount))
+	output.WriteString(fmt.Sprintf("  Total:    %*d tests\n", numWidth, totalTests))
 	output.WriteString(border)
 	output.WriteString("\n")
 
@@ -938,7 +957,7 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 	}
 
 	// Handle test-level events
-	if event.Package != "" {
+	if event.Package != "" && event.Test != "" {
 		pkg := m.packageResults[event.Package]
 		if pkg == nil {
 			// Create package if it doesn't exist (can happen with out-of-order events)
@@ -1022,8 +1041,35 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 					if subtest := parent.Subtests[event.Test]; subtest != nil {
 						subtest.Output = append(subtest.Output, event.Output)
 						// Capture skip reason if this is a skip output
-						if strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "skipping:") {
-							subtest.SkipReason = strings.TrimSpace(event.Output)
+						// Skip lines like "--- SKIP: TestName (0.00s)"
+						if !strings.HasPrefix(strings.TrimSpace(event.Output), "---") &&
+						   (strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "SKIP ") || 
+						    strings.Contains(event.Output, "skipping:") || strings.Contains(event.Output, "Skipping ") ||
+						    strings.Contains(event.Output, "Skip(") || strings.Contains(event.Output, "Skipf(")) {
+							// Extract just the reason part, not the full output
+							reason := strings.TrimSpace(event.Output)
+							// Remove file:line: prefix if present (e.g., "skip_test.go:9: ")
+							if idx := strings.LastIndex(reason, ": "); idx >= 0 && idx < len(reason)-2 {
+								// Check if this looks like a file:line prefix
+								prefix := reason[:idx]
+								if strings.Contains(prefix, ".go:") || strings.Contains(prefix, "_test.go:") {
+									reason = strings.TrimSpace(reason[idx+2:])
+								}
+							}
+							// Now extract the actual skip message
+							if idx := strings.Index(reason, "SKIP:"); idx >= 0 {
+								reason = strings.TrimSpace(reason[idx+5:])
+							} else if idx := strings.Index(reason, "SKIP "); idx >= 0 {
+								reason = strings.TrimSpace(reason[idx+5:])
+							} else if idx := strings.Index(reason, "skipping:"); idx >= 0 {
+								reason = strings.TrimSpace(reason[idx+9:])
+							} else if idx := strings.Index(reason, "Skipping "); idx >= 0 {
+								reason = strings.TrimSpace(reason[idx+9:])
+							}
+							// Only set if we have a meaningful reason
+							if reason != "" && !strings.HasPrefix(reason, "---") {
+								subtest.SkipReason = reason
+							}
 						}
 					}
 				}
@@ -1031,8 +1077,35 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 				if test := pkg.Tests[event.Test]; test != nil {
 					test.Output = append(test.Output, event.Output)
 					// Capture skip reason if this is a skip output
-					if strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "skipping:") {
-						test.SkipReason = strings.TrimSpace(event.Output)
+					// Skip lines like "--- SKIP: TestName (0.00s)"
+					if !strings.HasPrefix(strings.TrimSpace(event.Output), "---") &&
+					   (strings.Contains(event.Output, "SKIP:") || strings.Contains(event.Output, "SKIP ") || 
+					    strings.Contains(event.Output, "skipping:") || strings.Contains(event.Output, "Skipping ") ||
+					    strings.Contains(event.Output, "Skip(") || strings.Contains(event.Output, "Skipf(")) {
+						// Extract just the reason part, not the full output
+						reason := strings.TrimSpace(event.Output)
+						// Remove file:line: prefix if present (e.g., "skip_test.go:9: ")
+						if idx := strings.LastIndex(reason, ": "); idx >= 0 && idx < len(reason)-2 {
+							// Check if this looks like a file:line prefix
+							prefix := reason[:idx]
+							if strings.Contains(prefix, ".go:") || strings.Contains(prefix, "_test.go:") {
+								reason = strings.TrimSpace(reason[idx+2:])
+							}
+						}
+						// Now extract the actual skip message
+						if idx := strings.Index(reason, "SKIP:"); idx >= 0 {
+							reason = strings.TrimSpace(reason[idx+5:])
+						} else if idx := strings.Index(reason, "SKIP "); idx >= 0 {
+							reason = strings.TrimSpace(reason[idx+5:])
+						} else if idx := strings.Index(reason, "skipping:"); idx >= 0 {
+							reason = strings.TrimSpace(reason[idx+9:])
+						} else if idx := strings.Index(reason, "Skipping "); idx >= 0 {
+							reason = strings.TrimSpace(reason[idx+9:])
+						}
+						// Only set if we have a meaningful reason
+						if reason != "" && !strings.HasPrefix(reason, "---") {
+							test.SkipReason = reason
+						}
 					}
 				}
 			}
@@ -1110,7 +1183,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 
 	// Package header
 	// Display package header - ▶ icon in white, package name in cyan
-	output.WriteString(fmt.Sprintf("\n▶ %s\n\n", PackageHeaderStyle.Render(pkg.Package)))
+	output.WriteString(fmt.Sprintf("\n▶ %s\n", PackageHeaderStyle.Render(pkg.Package)))
 
 	// Check for "No tests"
 	// Check for package-level failures (e.g., TestMain failures)
@@ -1171,7 +1244,8 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		}
 
 		// Check if we should display this test based on filter
-		if !m.shouldShowTest(test.Status) && !hasFailedSubtests && m.showFilter != "collapsed" {
+		shouldShow := m.shouldShowTest(test.Status)
+		if !shouldShow && !hasFailedSubtests && m.showFilter != "collapsed" {
 			continue
 		}
 
@@ -1203,9 +1277,14 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 				coverageStr)
 		} else if skippedCount > 0 {
 			// Only skipped tests
-			summaryLine = fmt.Sprintf("  %s %d tests skipped%s",
+			testWord := "tests"
+			if skippedCount == 1 {
+				testWord = "test"
+			}
+			summaryLine = fmt.Sprintf("  %s %d %s skipped%s",
 				SkipStyle.Render(CheckSkip),
 				skippedCount,
+				testWord,
 				coverageStr)
 		}
 
@@ -1243,9 +1322,14 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed))))
 	}
 
-	// Add skip reason if available
-	if test.Status == "skip" && test.SkipReason != "" {
-		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("[%s]", test.SkipReason))))
+	// Add skip reason if available (or debug message if not)
+	if test.Status == "skip" {
+		if test.SkipReason != "" {
+			output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("- %s", test.SkipReason))))
+		} else {
+			// Debug: Show that no reason was captured
+			output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render("[no reason captured]")))
+		}
 	}
 
 	// Add subtest progress indicator if it has subtests
