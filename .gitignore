@@ -59,6 +59,7 @@ tests.test
 test-results.json
 test-summary.md
 gotcha-results.json
+test.json
 
 # Gotcha binaries and test artifacts
 /gotcha
