@@ -73,7 +73,18 @@ This is the default command when running gotcha without arguments.`,
 }
 
 // runStream executes the stream command.
+// This function has been refactored from 324 lines to this simple delegation.
+// The logic is now split across:
+// - stream_config.go: Configuration extraction and validation
+// - stream_execution.go: Test execution and output processing
+// - stream_refactored.go: Main orchestration logic
 func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
+	return runStreamRefactored(cmd, args, logger)
+}
+
+// runStreamOld is the original 324-line implementation preserved for reference.
+// TODO: Remove this after verifying the refactored version works correctly.
+func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Parse test path
 	testPath := "./..."
 	if len(args) > 0 {

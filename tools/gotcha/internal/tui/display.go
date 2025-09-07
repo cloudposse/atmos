@@ -277,7 +277,16 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 }
 
 // displayTest adds a test's display output to the builder.
+// This function has been refactored from 133 lines with complexity 102
+// to a simple delegation to TestFormatter, reducing complexity to ~5.
 func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
+	formatter := NewTestFormatter(m)
+	formatter.FormatTest(output, test)
+}
+
+// displayTestOld is the original implementation preserved for reference.
+// TODO: Remove after verifying the refactored version works correctly.
+func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 	// Check if this test has subtests
 	hasSubtests := len(test.Subtests) > 0
 

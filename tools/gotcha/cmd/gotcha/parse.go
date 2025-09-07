@@ -13,6 +13,7 @@ import (
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
+	pkgErrors "github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 )
 
 // newParseCmd creates the parse subcommand.
@@ -130,7 +131,7 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		logger.Info("Markdown summary written", "file", outputFile)
 
 	default:
-		return fmt.Errorf("unsupported format: %s", format)
+		return fmt.Errorf("%w: %s", pkgErrors.ErrUnsupportedFormat, format)
 	}
 
 	// Generate summary file if requested

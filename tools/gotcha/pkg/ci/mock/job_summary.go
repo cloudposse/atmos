@@ -1,9 +1,10 @@
 package mock
 
 import (
-	"fmt"
 	"os"
 	"sync"
+
+	pkgErrors "github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 )
 
 // MockJobSummaryWriter implements ci.JobSummaryWriter for testing.
@@ -21,7 +22,7 @@ func (w *MockJobSummaryWriter) WriteJobSummary(content string) (string, error) {
 		if w.config.SummaryError != nil {
 			return "", w.config.SummaryError
 		}
-		return "", fmt.Errorf("mock summary write failed")
+		return "", pkgErrors.ErrMockSummaryFailed
 	}
 
 	// Store the summary content
@@ -67,7 +68,7 @@ func (p *MockArtifactPublisher) PublishArtifact(name string, path string) error 
 		if p.config.ArtifactError != nil {
 			return p.config.ArtifactError
 		}
-		return fmt.Errorf("mock artifact publish failed")
+		return pkgErrors.ErrMockArtifactFailed
 	}
 
 	// Store the artifact information

@@ -12,6 +12,8 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+
+	pkgErrors "github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 )
 
 const (
@@ -42,7 +44,7 @@ func NewManager(logger *log.Logger) (*Manager, error) {
 
 	// Check if cache is explicitly disabled
 	if viper.IsSet("cache.enabled") && !viper.GetBool("cache.enabled") {
-		return nil, fmt.Errorf("cache is disabled")
+		return nil, pkgErrors.ErrCacheDisabled
 	}
 
 	cacheDir := viper.GetString("cache.dir")
@@ -120,7 +122,7 @@ func (m *Manager) load() error {
 func (m *Manager) saveUnlocked() error {
 	if m.file == nil {
 		m.logger.Warn("Cannot save cache: no cache file initialized")
-		return fmt.Errorf("no cache to save")
+		return pkgErrors.ErrNoCacheToSave
 	}
 
 	// Update metadata

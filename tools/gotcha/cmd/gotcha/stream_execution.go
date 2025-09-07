@@ -1,0 +1,224 @@
+package cmd
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
+)
+
+// runStreamInteractive runs tests in interactive TUI mode.
+func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, error) {
+	logger.Debug("Starting interactive TUI mode")
+
+	// Create the Bubble Tea model
+	model := tui.NewTestModel(
+		config.TestPackages,
+		strings.Join(config.TestArgs, " "),
+		config.OutputFile,
+		config.CoverProfile,
+		config.ShowFilter,
+		config.Alert,
+		config.VerbosityLevel,
+		config.EstimatedTestCount,
+	)
+
+	// Configure coverage options if needed
+	if config.Cover && config.CoverPkg != "" {
+		logger.Debug("Coverage package filter", "coverpkg", config.CoverPkg)
+	}
+
+	// Create Bubble Tea program
+	p := tea.NewProgram(&model,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
+
+	// Run the TUI
+	finalModel, err := p.Run()
+	if err != nil {
+		return 1, fmt.Errorf("error running TUI: %w", err)
+	}
+
+	// Get the exit code from the model
+	var exitCode int
+	if m, ok := finalModel.(*tui.TestModel); ok {
+		exitCode = m.GetExitCode()
+		
+		// Update cache if successful
+		if !m.IsAborted() && config.EstimatedTestCount > 0 {
+			updateTestCache(config, logger)
+		}
+	}
+
+	return exitCode, nil
+}
+
+// runStreamInCI runs tests in CI mode (non-interactive).
+func runStreamInCI(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, error) {
+	logger.Debug("Starting CI streaming mode", "format", config.Format)
+
+	// Run tests in simple mode
+	exitCode := stream.RunSimpleStream(
+		config.TestPackages,
+		strings.Join(config.TestArgs, " "),
+		config.OutputFile,
+		config.CoverProfile,
+		config.ShowFilter,
+		config.Alert,
+		config.VerbosityLevel,
+	)
+
+	// Process and format output
+	if err := processTestOutput(config, cmd, logger); err != nil {
+		return exitCode, err
+	}
+
+	return exitCode, nil
+}
+
+// processTestOutput processes test output for non-terminal formats.
+func processTestOutput(config *StreamConfig, cmd *cobra.Command, logger *log.Logger) error {
+	// Read and parse the JSON output
+	jsonData, err := os.ReadFile(config.OutputFile)
+	if err != nil {
+		return fmt.Errorf("failed to read test output: %w", err)
+	}
+
+	// Parse the test events
+	jsonReader := bytes.NewReader(jsonData)
+	summary, err := parser.ParseTestJSON(jsonReader, config.CoverProfile, config.ExcludeMocks)
+	if err != nil {
+		return fmt.Errorf("failed to parse test output: %w", err)
+	}
+
+	// Handle different output formats
+	if err := formatAndWriteOutput(summary, config, logger); err != nil {
+		return err
+	}
+
+	// Handle CI comment posting if enabled
+	if config.CIMode {
+		return handleCICommentPosting(summary, config, cmd, logger)
+	}
+
+	return nil
+}
+
+// formatAndWriteOutput formats and writes test output based on format type.
+func formatAndWriteOutput(summary *types.TestSummary, config *StreamConfig, logger *log.Logger) error {
+	switch config.Format {
+	case "json":
+		if err := output.WriteSummary(summary, "json", config.OutputFile); err != nil {
+			return fmt.Errorf("failed to write JSON output: %w", err)
+		}
+		logger.Info("JSON output written", "file", config.OutputFile)
+
+	case "markdown":
+		outputPath := strings.TrimSuffix(config.OutputFile, filepath.Ext(config.OutputFile)) + ".md"
+		if err := output.WriteSummary(summary, "markdown", outputPath); err != nil {
+			return fmt.Errorf("failed to write markdown output: %w", err)
+		}
+		logger.Info("Markdown output written", "file", outputPath)
+	}
+
+	return nil
+}
+
+// handleCICommentPosting handles posting comments to CI systems.
+func handleCICommentPosting(summary *types.TestSummary, config *StreamConfig, cmd *cobra.Command, logger *log.Logger) error {
+	logger.Debug("Checking if should post comment",
+		"ciMode", config.CIMode,
+		"postStrategy", config.PostStrategy,
+		"passed", len(summary.Passed),
+		"failed", len(summary.Failed),
+		"skipped", len(summary.Skipped))
+
+	shouldPost := shouldPostComment(config.PostStrategy, summary)
+	logger.Debug("Should post comment decision",
+		"shouldPost", shouldPost,
+		"strategy", config.PostStrategy)
+
+	if config.CIMode && shouldPost {
+		logger.Info("Attempting to post GitHub comment")
+		if err := postGitHubComment(summary, cmd, logger); err != nil {
+			logger.Error("Failed to post GitHub comment", "error", err)
+			// Don't fail the command if comment posting fails
+			// Just log the error and continue
+		}
+	}
+
+	return nil
+}
+
+// prepareTestPackages prepares and filters test packages.
+func prepareTestPackages(config *StreamConfig, logger *log.Logger) error {
+	// Parse test packages from path
+	config.parseTestPackages()
+
+	// Apply filters to packages
+	filteredPackages, err := utils.FilterPackages(
+		config.TestPackages,
+		config.IncludePatterns,
+		config.ExcludePatterns,
+	)
+	if err != nil {
+		return err
+	}
+
+	if len(filteredPackages) == 0 {
+		logger.Warn("No packages matched the filters")
+		return fmt.Errorf("no packages matched the filters")
+	}
+
+	config.TestPackages = filteredPackages
+	logger.Debug("Test packages", "packages", config.TestPackages)
+	
+	return nil
+}
+
+// loadTestCountFromCache loads estimated test count from cache.
+func loadTestCountFromCache(config *StreamConfig, cmd *cobra.Command, logger *log.Logger) {
+	// Only use cache if we're not running tests multiple times
+	if cmd.Flags().Changed("count") {
+		return
+	}
+
+	cacheManager, err := cache.NewManager(logger)
+	if err != nil || cacheManager == nil {
+		return
+	}
+
+	// Convert packages to pattern string for cache lookup
+	pattern := strings.Join(config.TestPackages, " ")
+	if count, found := cacheManager.GetTestCount(pattern); found {
+		config.EstimatedTestCount = count
+		logger.Debug("Using cached test count", "count", config.EstimatedTestCount)
+	} else {
+		logger.Debug("No cached test count available")
+	}
+}
+
+// updateTestCache updates the test count cache.
+func updateTestCache(config *StreamConfig, logger *log.Logger) {
+	cacheManager, err := cache.NewManager(logger)
+	if err != nil || cacheManager == nil {
+		return
+	}
+
+	pattern := strings.Join(config.TestPackages, " ")
+	_ = cacheManager.UpdateTestCount(pattern, config.EstimatedTestCount, len(config.TestPackages))
+}
