@@ -323,26 +323,44 @@ func (m *manager) findFirstValidCachedCredentials(chain []string, targetIdentity
 		identityName := chain[i]
 
 		// Check if we have cached credentials for this level
-		if cachedCreds, err := m.credentialStore.Retrieve(identityName); err == nil {
-			// Check if credentials are still valid (>5 minutes remaining)
-			if expired, err := m.credentialStore.IsExpired(identityName); err == nil && !expired {
-				// Additional check for AWS credentials expiration
-				if cachedCreds.AWS != nil && cachedCreds.AWS.Expiration != "" {
-					if expTime, err := time.Parse(time.RFC3339, cachedCreds.AWS.Expiration); err == nil {
-						if expTime.After(time.Now().Add(5 * time.Minute)) {
-							log.Debug("Found valid cached credentials", "chainIndex", i, "identityName", identityName, "expiration", expTime)
-							return i
-						}
-					}
-				} else {
-					// Non-AWS credentials or no expiration info, assume valid
-					log.Debug("Found valid cached credentials (non-AWS)", "chainIndex", i, "identityName", identityName)
-					return i
-				}
+		cachedCreds, err := m.credentialStore.Retrieve(identityName)
+		if err != nil {
+			continue
+		}
+
+		if valid, expTime := m.isCredentialValid(identityName, cachedCreds); valid {
+			if expTime != nil {
+				log.Debug("Found valid cached credentials", "chainIndex", i, "identityName", identityName, "expiration", *expTime)
+			} else {
+				// Non-AWS credentials or no expiration info, assume valid
+				log.Debug("Found valid cached credentials (non-AWS)", "chainIndex", i, "identityName", identityName)
 			}
+			return i
 		}
 	}
 	return -1 // No valid cached credentials found
+}
+
+// isCredentialValid checks if the cached credentials are valid and not expired.
+// Returns whether the credentials are valid and, if AWS expiration is present and valid, the parsed expiration time.
+func (m *manager) isCredentialValid(identityName string, cachedCreds *schema.Credentials) (bool, *time.Time) {
+	expired, err := m.credentialStore.IsExpired(identityName)
+	if err != nil || expired {
+		return false, nil
+	}
+
+	// For AWS creds with an explicit expiration, ensure >5 minutes remaining
+	if cachedCreds.AWS != nil && cachedCreds.AWS.Expiration != "" {
+		if expTime, err := time.Parse(time.RFC3339, cachedCreds.AWS.Expiration); err == nil {
+			if expTime.After(time.Now().Add(5 * time.Minute)) {
+				return true, &expTime
+			}
+		}
+		return false, nil
+	}
+
+	// Non-AWS credentials or no expiration info, assume valid
+	return true, nil
 }
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
