@@ -75,8 +75,9 @@ func DetectContext() (*Context, error) {
 		return nil, ErrCommentUUIDNotSet
 	}
 
-	// Get GitHub token - check both viper and env directly
-	token := viper.GetString("GOTCHA_GITHUB_TOKEN")
+	// Get GitHub token - check both GOTCHA_GITHUB_TOKEN and GITHUB_TOKEN
+	// Use os.Getenv directly for reliability in CI environments
+	token := os.Getenv("GOTCHA_GITHUB_TOKEN")
 	if token == "" {
 		token = os.Getenv("GITHUB_TOKEN")
 	}
