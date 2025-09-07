@@ -144,12 +144,25 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	}
 
 	// Handle CI comment posting if enabled
-	if ciMode && shouldPostComment(postStrategy, summary) {
+	logger.Debug("Checking if should post comment", 
+		"ciMode", ciMode, 
+		"postStrategy", postStrategy,
+		"passed", len(summary.Passed),
+		"failed", len(summary.Failed),
+		"skipped", len(summary.Skipped))
+		
+	shouldPost := shouldPostComment(postStrategy, summary)
+	logger.Debug("Should post decision", "shouldPost", shouldPost)
+	
+	if ciMode && shouldPost {
+		logger.Info("Attempting to post GitHub comment", "strategy", postStrategy)
 		// Post comment to CI system
 		if err := postGitHubComment(summary, cmd, logger); err != nil {
 			// Log error but don't fail the command
 			logger.Error("Failed to post CI comment", "error", err)
 		}
+	} else {
+		logger.Debug("Not posting comment", "ciMode", ciMode, "shouldPost", shouldPost)
 	}
 
 	// Return with appropriate exit code based on test results

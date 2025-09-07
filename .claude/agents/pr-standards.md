@@ -83,7 +83,8 @@ This agent helps create and validate pull requests according to the project's co
 ## what
 - High-level description of changes in plain English
 - Use bullet points for clarity
-- Focus on WHAT changed, not implementation details
+- Include implementation details when they help understand the change
+- Describe the end state, not the development journey
 
 ## why  
 - Business justification for the changes
@@ -95,9 +96,54 @@ This agent helps create and validate pull requests according to the project's co
 - Link to supporting GitHub issues or documentation
 - Use `closes #123` if PR closes an issue
 - Link to related PRs or discussions
-- Reference PR that introduced the bug (if fixing a regression)
+- Reference PR that introduced the bug (ONLY if fixing a pre-existing regression)
 - Link to related issues even if not directly closing them
 ```
+
+### Critical PR Description Guidelines
+
+**IMPORTANT**: Only document fixes for problems that existed BEFORE your PR, not problems you created and fixed during development.
+
+**DO include:**
+- ✅ Implementation details that help reviewers understand the change
+- ✅ Technical specifics about how you accomplished the goal
+- ✅ Problems that existed in main/master that your PR fixes
+- ✅ What functionality the PR adds or improves
+- ✅ The final state of the codebase after merging
+
+**DO NOT include:**
+- ❌ Bugs you introduced and fixed within the same PR
+- ❌ "Fixed missing flags" (if YOU removed them earlier in the PR)
+- ❌ "Restored functionality" (if YOU broke it earlier in the PR)  
+- ❌ "Fixed compilation errors" (if YOUR changes caused them)
+- ❌ Any problem that didn't exist before you started work
+
+**Example - WRONG (documenting self-inflicted problems):**
+```markdown
+## what
+- Refactored gotcha into smaller modules
+- Fixed compilation errors I introduced when refactoring
+- Added back missing --github-token flag I accidentally removed
+- Restored Viper bindings I forgot to implement
+- Fixed nil pointer I caused by moving code around
+```
+
+**Example - RIGHT (documenting accomplishments and implementation):**
+```markdown
+## what
+- Refactored gotcha tool into 15 focused modules for better maintainability
+- Extracted TUI, streaming, and parsing logic into dedicated packages
+- Created pkg/stream package with StreamProcessor and event handlers
+- Moved CLI command definitions to separate files (stream.go, parse.go, version.go)
+- Implemented proper Viper bindings for all configuration options
+- Maintained full backwards compatibility with all existing CLI commands
+```
+
+**The key distinction:**
+- If a problem existed in main branch → "Fixed X" ✅
+- If you created the problem in your PR → Don't mention it ❌
+- Implementation details are welcome → "Extracted X to Y" ✅
+- Development missteps are not → "Accidentally broke X then fixed it" ❌
 
 ## Validation Rules
 

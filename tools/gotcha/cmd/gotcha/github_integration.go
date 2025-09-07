@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 
@@ -66,29 +67,46 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 // shouldPostComment determines if a comment should be posted based on strategy.
 func shouldPostComment(strategy string, summary *types.TestSummary) bool {
 	// Delegate to OS-aware function with runtime.GOOS
-	return shouldPostCommentWithOS(strategy, summary, runtime.GOOS)
+	result := shouldPostCommentWithOS(strategy, summary, runtime.GOOS)
+	// Debug logging to trace decision
+	if globalLogger != nil {
+		globalLogger.Debug("shouldPostComment decision", 
+			"strategy", strategy,
+			"os", runtime.GOOS,
+			"result", result)
+	}
+	return result
 }
 
 // shouldPostCommentWithOS determines if a comment should be posted based on strategy and OS.
 func shouldPostCommentWithOS(strategy string, summary *types.TestSummary, goos string) bool {
-	switch strategy {
+	// Normalize strategy (remove dashes for alternative forms)
+	normalizedStrategy := strings.ReplaceAll(strategy, "-", "")
+	
+	switch normalizedStrategy {
 	case "always":
 		return true
-	case "on-failure":
-		// Post if tests failed or if on Windows (which often has flaky tests)
-		if len(summary.Failed) > 0 {
-			return true
-		}
-		// Always post on Windows due to potential issues
-		if goos == "windows" {
-			return true
-		}
+	case "never", "off", "":
 		return false
-	case "off", "never":
-		return false
-	default:
-		// Default to on-failure behavior
+	case "onfailure":
 		return len(summary.Failed) > 0
+	case "onskip":
+		return len(summary.Skipped) > 0
+	case "adaptive":
+		// Adaptive: behavior depends on OS
+		// On Linux: always post
+		// On other OS: only post if there are failures or skips
+		if goos == "linux" {
+			return true
+		}
+		return len(summary.Failed) > 0 || len(summary.Skipped) > 0
+	default:
+		// Check if strategy matches the OS name (linux, darwin, windows, etc.)
+		if normalizedStrategy == goos {
+			return true
+		}
+		// For unrecognized strategies, default to never
+		return false
 	}
 }
 
@@ -105,40 +123,67 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 
 	// Comment UUID is required for posting
 	if commentUUID == "" {
+		logger.Error("Comment UUID is required but not set", 
+			"GOTCHA_COMMENT_UUID", os.Getenv("GOTCHA_COMMENT_UUID"),
+			"COMMENT_UUID", os.Getenv("COMMENT_UUID"))
 		return fmt.Errorf("%w", ErrCommentUUIDRequired)
 	}
+	
+	logger.Debug("Comment UUID found", "uuid", commentUUID)
 
 	// Get the CI provider
 	provider := ci.DetectIntegration(logger)
 	if provider == nil {
-		logger.Warn("No CI provider detected")
+		logger.Warn("No CI provider detected",
+			"CI", os.Getenv("CI"),
+			"GITHUB_ACTIONS", os.Getenv("GITHUB_ACTIONS"),
+			"GITHUB_RUN_ID", os.Getenv("GITHUB_RUN_ID"))
 		return nil
 	}
 
-	logger.Debug("CI provider detected", "provider", provider.Provider())
+	logger.Info("CI provider detected", "provider", provider.Provider())
 
 	// Get context
 	ctx, err := provider.DetectContext()
 	if err != nil {
+		logger.Error("Failed to detect CI context", "error", err)
 		return fmt.Errorf("failed to detect CI context: %w", err)
 	}
+	
+	logger.Debug("CI context detected", 
+		"repo", ctx.GetRepoName(),
+		"pr", ctx.GetPRNumber())
 
 	// Get comment manager
 	commentManager := provider.CreateCommentManager(ctx, logger)
 	if commentManager == nil {
-		logger.Warn("Comment manager not available for this CI provider")
+		logger.Warn("Comment manager not available for this CI provider",
+			"provider", provider.Provider())
 		return nil
 	}
+	
+	logger.Debug("Comment manager created successfully")
 
 	// Generate the comment content
 	commentContent := markdown.GenerateGitHubComment(summary, commentUUID)
 
 	// Post the comment
+	logger.Info("Posting comment to GitHub PR", 
+		"contentLength", len(commentContent),
+		"repo", ctx.GetRepoName(),
+		"pr", ctx.GetPRNumber())
+		
 	if err := commentManager.PostOrUpdateComment(context.Background(), ctx, commentContent); err != nil {
+		logger.Error("Failed to post comment to GitHub", 
+			"error", err,
+			"repo", ctx.GetRepoName(),
+			"pr", ctx.GetPRNumber())
 		return fmt.Errorf("failed to post comment: %w", err)
 	}
 
-	logger.Info("Comment posted successfully")
+	logger.Info("Comment posted successfully",
+		"repo", ctx.GetRepoName(),
+		"pr", ctx.GetPRNumber())
 
 	// Also write to job summary if supported
 	if writer := provider.GetJobSummaryWriter(); writer != nil {

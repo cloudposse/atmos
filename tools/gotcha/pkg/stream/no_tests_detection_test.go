@@ -1,4 +1,4 @@
-package utils
+package stream
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/stretchr/testify/assert"
@@ -142,17 +141,10 @@ func captureStreamProcessorOutput(jsonStream io.Reader) string {
 	defer os.Remove(tmpFile.Name())
 
 	// Create processor
-	processor := &StreamProcessor{
-		buffers:             make(map[string][]string),
-		subtestStats:        make(map[string]*SubtestStats),
-		packagesWithNoTests: make(map[string]bool),
-		jsonWriter:          tmpFile,
-		showFilter:          "all",
-		startTime:           time.Now(),
-	}
+	processor := NewStreamProcessor(tmpFile, "all", "", "standard")
 
 	// Process the stream
-	processor.processStream(jsonStream)
+	processor.ProcessStream(jsonStream)
 
 	// Close writer and restore stderr
 	w.Close()
