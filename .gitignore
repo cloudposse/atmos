@@ -60,14 +60,18 @@ test-results.json
 test-summary.md
 gotcha-results.json
 
-# Gotcha binary
+# Gotcha binaries and test artifacts
 /gotcha
 /tools/gotcha/gotcha
+/tools/gotcha/gotcha-simple
+/tools/gotcha/gotcha_test
 /tools/gotcha/build/
 gotcha-binary
 gotcha-test
 /tools/gotcha/gotcha-test
 /tools/gotcha/gotcha-binary
+/tools/gotcha/test-output.json
+/tools/gotcha/test-output.md
 
 # Test scripts
 /tools/gotcha/test*.sh

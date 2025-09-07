@@ -527,6 +527,28 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 - Tests exclude mock files: `**/mock_*.go`, `mock_*.go`, `**/mock/*.go`
 - Run `make testacc-coverage` to generate coverage reports
 
+### Binary File Management (MANDATORY)
+- **NEVER commit binary files to the repository** - Binaries bloat git history and cause merge conflicts
+- **Examples of prohibited files**: 
+  - Compiled executables: `gotcha`, `atmos`, `gotcha_test`, `gotcha-simple`
+  - Test output artifacts: `test-output.json`, `test-output.md`, `gotcha-results.json`
+  - Build artifacts: `*.exe`, `*.bin`, compiled Go binaries
+- **Use `.gitignore` patterns** to prevent accidental commits:
+  ```gitignore
+  # Build artifacts
+  /build/
+  gotcha
+  gotcha_test
+  gotcha-simple
+  *-results.json
+  test-output.*
+  ```
+- **Test fixtures are allowed**: Keep JSON/YAML test data in `tests/` and `fixtures/` directories
+- **If binaries are accidentally committed**: 
+  - Remove from git history using `git rm --cached <file>`
+  - Add to `.gitignore` to prevent future commits
+  - Never use `git add .` without reviewing changes first
+
 ### Environment Variable Conventions (MANDATORY)
 - **ALWAYS use `viper.BindEnv()`** for environment variable binding
 - **EVERY env var MUST have an ATMOS_ alternative**: 
