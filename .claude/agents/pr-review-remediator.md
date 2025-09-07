@@ -602,7 +602,7 @@ fi
 Use `no-release` for changes that **DO NOT** modify the Atmos binary or runtime behavior:
 - Documentation updates (`*.md`, `*.mdx`, `website/`, `docs/`)
 - CI/CD configuration (`.github/workflows/`, `.github/actions/`)
-- Development tooling (`.claude/`, `.cursor/`, `.vscode/`)
+- Development tooling (`tools/`, `.claude/`, `.cursor/`, `.vscode/`)
 - Configuration examples that don't change code
 - Test fixtures that don't change functionality
 - Comments or formatting-only changes
@@ -651,7 +651,7 @@ CHANGED_FILES=$(gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/files \
 
 # Check if changes affect the Atmos binary
 # Files that DO NOT affect the binary: docs, CI, tooling, examples
-NON_RELEASE_PATTERN='^\.(md|mdx|txt)$|^website/|^docs/|^\.github/|^\.claude/|^\.cursor/|^examples/|^\.vscode/'
+NON_RELEASE_PATTERN='^\.(md|mdx|txt)$|^website/|^docs/|^\.github/|^\.claude/|^\.cursor/|^tools/|^examples/|^\.vscode/'
 GO_CODE_PATTERN='^(pkg|cmd|internal)/.*\.go$'
 
 # Count files that would trigger a release
