@@ -54,12 +54,12 @@ This agent helps create and validate pull requests according to the project's co
 
 **IMPORTANT**: PR titles should communicate value, not compliance.
 
-### Good PR Titles (Specific and Clear)
-- ✅ `refactor(gotcha): extract TUI, streaming, and CLI commands into 15 dedicated files`
-- ✅ `feat(auth): add SAML 2.0 and OIDC support for enterprise SSO`
-- ✅ `fix(parser): prevent 2GB memory leak when parsing files over 10MB`
-- ✅ `perf(cli): reduce startup from 3s to 400ms using lazy module loading`
-- ✅ `docs: add 12 real-world examples for stack configuration`
+### Good PR Titles (Problem-Focused and Clear)
+- ✅ `refactor(gotcha): break up 1000+ line files to make code easier to find and modify`
+- ✅ `feat(auth): enable enterprise customers to use their existing SAML/OIDC providers`
+- ✅ `fix(parser): stop parser from consuming 2GB RAM on large files`
+- ✅ `perf(cli): make CLI start 7x faster by deferring module loading`
+- ✅ `docs: help new users understand stack configuration with 12 examples`
 
 ### Bad PR Titles (Too Generic or Compliance-Focused)
 - ❌ `refactor(gotcha): improve code organization and maintainability` (too vague)
@@ -71,11 +71,11 @@ This agent helps create and validate pull requests according to the project's co
 - ❌ `docs: update documentation` (what documentation? why?)
 
 ### Title Writing Tips
-1. **Be specific**: Include numbers, component names, or measurable improvements
-2. **Avoid generic phrases**: "improve", "enhance", "optimize" without specifics
-3. **Use active voice**: "Extract" not "Extracting", "Add" not "Adding"
-4. **Include concrete details**: "15 files", "3s to 400ms", "SAML 2.0"
-5. **Answer "what exactly changed?"**: Not just "improved performance" but "reduced startup time by 87%"
+1. **Frame as problem/solution**: What problem does this solve for developers/users?
+2. **Be specific about impact**: "make code easier to find" vs "improve organization"
+3. **Include concrete details**: "1000+ line files", "3s to 400ms", "SAML 2.0"
+4. **Avoid meaningless buzzwords**: "best practices", "improve", "enhance" without context
+5. **Answer "why should I care?"**: Not just what changed, but why it matters
 
 ## PR Template Structure
 
