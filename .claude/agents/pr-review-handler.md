@@ -165,7 +165,8 @@ gh pr view $PR_NUMBER --repo cloudposse/atmos --json files,title,state
 
 # 2. Get list of changed files (for targeted linting)
 CHANGED_FILES=$(gh pr view $PR_NUMBER --repo cloudposse/atmos --json files --jq '.files[].path')
-echo "Changed files: $CHANGED_FILES"
+echo "Changed files:"
+echo "$CHANGED_FILES"
 
 # 3. Get all review comments
 gh pr view $PR_NUMBER --repo cloudposse/atmos --comments > pr_comments.txt
@@ -232,19 +233,24 @@ Only after user approval:
 make lint  # This already uses --new-from-rev=origin/main
 
 # 2. Apply specific fixes to changed files only
-for file in $CHANGED_FILES; do
+echo "$CHANGED_FILES" | while read -r file; do
   if [[ $file == *.go ]]; then
     # Format only if it's a Go file that was changed
-    gofumpt -w $file
-    goimports -w $file
+    gofumpt -w "$file"
+    goimports -w "$file"
   fi
 done
 
-# 3. Run tests for changed packages
-for file in $CHANGED_FILES; do
+# 3. Run tests for changed packages (deduplicate directories)
+CHANGED_DIRS=$(echo "$CHANGED_FILES" | while read -r file; do
   if [[ $file == *.go ]]; then
-    pkg_dir=$(dirname $file)
-    go test ./$pkg_dir -v
+    dirname "$file"
+  fi
+done | sort -u)
+
+echo "$CHANGED_DIRS" | while read -r pkg_dir; do
+  if [[ -n $pkg_dir ]]; then
+    go test "./$pkg_dir" -v
   fi
 done
 
