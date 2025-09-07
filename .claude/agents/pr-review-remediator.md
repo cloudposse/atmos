@@ -5,7 +5,17 @@ description: >
   automated feedback. Analyzes CodeRabbit suggestions, human review comments, 
   and failing status checks, then implements validated fixes. Automatically 
   invoked for PR feedback remediation and CI/CD failure resolution.
-tools: Read, Grep, Glob, Bash, Edit, MultiEdit, Write, WebFetch, Task, TodoWrite
+tools:
+  - Read
+  - Grep
+  - Glob
+  - Bash
+  - Edit
+  - MultiEdit
+  - Write
+  - WebFetch
+  - Task
+  - TodoWrite
 ---
 
 You are a specialized PR review remediation agent for the Atmos project, focused on actively fixing issues identified in reviews and CI/CD checks.
@@ -64,6 +74,10 @@ gh api repos/cloudposse/atmos/issues/<PR_NUMBER>/comments \
 # Get CodeRabbit's review with detailed feedback
 gh pr view <PR_NUMBER> --repo cloudposse/atmos --json reviews \
   --jq '.reviews[] | select(.author.login == "coderabbitai") | .body'
+
+# Get inline review comments (per-file)
+gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/comments \
+  --jq '.[] | select(.user.login == "coderabbitai") | {path, line: .line, body: .body}'
 ```
 
 #### CodeRabbit Comment Structure
@@ -113,30 +127,35 @@ context.actor.
 
 **CRITICAL**: Use AI Agent prompts to understand intent, then implement correctly:
 
-1. **Extract the AI Agent Prompt**:
-   - Find the "🤖 Prompt for AI Agents" section
-   - Read the natural language explanation
-   - Understand the problem being addressed
+1. **Extract and Parse the AI Agent Prompt**:
+   - Locate the "🤖 Prompt for AI Agents" section in CodeRabbit comments
+   - Read the natural language explanation carefully
+   - Identify the specific file, line numbers, and context
+   - Understand the root cause and intended fix
 
-2. **Validate the suggestion makes sense**:
-   - Does it align with Atmos coding standards in CLAUDE.md?
-   - Is it actually fixing a real issue or just a preference?
-   - Will it break existing functionality?
-   - Can you implement it better than the suggested code?
+2. **Validate Against Project Standards**:
+   - ✅ Does it align with Atmos coding standards in CLAUDE.md?
+   - ✅ Is it fixing a real issue vs. stylistic preference?
+   - ✅ Will the fix maintain backward compatibility?
+   - ✅ Can you implement a better solution than suggested?
+   - ✅ Does it follow Go idioms and best practices?
 
-3. **Check for conflicts**:
-   - Does it conflict with human reviewer feedback?
-   - Is it consistent with the existing codebase patterns?
-   - Does it respect golden snapshots in tests/test-cases/?
+3. **Check for Conflicts and Side Effects**:
+   - ⚠️ Does it conflict with human reviewer feedback?
+   - ⚠️ Is it consistent with existing codebase patterns?
+   - ⚠️ Does it respect golden snapshots in tests/test-cases/?
+   - ⚠️ Will it affect other parts of the codebase?
+   - ⚠️ Does it introduce new dependencies?
 
-4. **Implement based on understanding, not copying**:
-   - Use the AI prompt to understand the issue
-   - Write the fix according to project standards
+4. **Implement Based on Understanding**:
+   - Parse the AI prompt to understand the core issue
+   - Write the fix according to project standards, not copying diffs
    - Ensure comments end with periods (CLAUDE.md requirement)
    - Use proper error wrapping from errors/errors.go
-   - Follow all other project conventions
+   - Follow all other project conventions and patterns
+   - Test the fix locally before committing
 
-3. **Present analysis to user**:
+5. **Present analysis to user**:
 ```markdown
 ## CodeRabbit Feedback Analysis
 
@@ -238,29 +257,31 @@ Only after user approval:
 
 ```bash
 # 1. Run linting ONLY on changed files
+set -euo pipefail
+git fetch origin main --quiet || true
 make lint  # This already uses --new-from-rev=origin/main
 
 # 2. Apply specific fixes to changed files only
-echo "$CHANGED_FILES" | while read -r file; do
-  if [[ $file == *.go ]]; then
+while IFS= read -r file; do
+  if [[ -n "$file" && "$file" == *.go ]]; then
     # Format only if it's a Go file that was changed
     gofumpt -w "$file"
     goimports -w "$file"
   fi
-done
+done <<< "$CHANGED_FILES"
 
 # 3. Run tests for changed packages (deduplicate directories)
-CHANGED_DIRS=$(echo "$CHANGED_FILES" | while read -r file; do
-  if [[ $file == *.go ]]; then
+CHANGED_DIRS=$(while IFS= read -r file; do
+  if [[ -n "$file" && "$file" == *.go ]]; then
     dirname "$file"
   fi
-done | sort -u)
+done <<< "$CHANGED_FILES" | sort -u)
 
-echo "$CHANGED_DIRS" | while read -r pkg_dir; do
-  if [[ -n $pkg_dir ]]; then
+while IFS= read -r pkg_dir; do
+  if [[ -n "$pkg_dir" ]]; then
     go test "./$pkg_dir" -v
   fi
-done
+done <<< "$CHANGED_DIRS"
 
 # 4. Validate the build still works
 make build
@@ -496,19 +517,26 @@ Analyze PR changes to suggest appropriate label:
 ```bash
 # Check if only documentation files changed
 CHANGED_FILES=$(gh pr view <PR_NUMBER> --repo cloudposse/atmos --json files --jq '.files[].path')
-NON_DOC_FILES=$(echo "$CHANGED_FILES" | grep -v -E '\.(md|mdx|txt)$|^website/|^docs/|^\.github/' | wc -l)
+NON_DOC_FILES=$(echo "$CHANGED_FILES" | grep -v -E '\.(md|mdx|txt)$|^website/|^docs/|^\.github/|^\.claude/' | wc -l)
 
 if [[ $NON_DOC_FILES -eq 0 ]]; then
   echo "Suggested label: no-release (documentation/CI changes only)"
-elif echo "$CHANGED_FILES" | grep -q "^pkg/.*\.go$"; then
-  # Check commit messages for hints
+else
+  # Check commit messages and file changes for hints
   COMMITS=$(gh pr view <PR_NUMBER> --repo cloudposse/atmos --json commits --jq '.commits[].commit.message')
-  if echo "$COMMITS" | grep -qi "fix\|bug\|patch\|correct"; then
-    echo "Suggested label: patch (bug fixes detected)"
-  elif echo "$COMMITS" | grep -qi "breaking\|major\|migration\|incompatible"; then
+  
+  # More comprehensive detection patterns
+  if echo "$COMMITS" | grep -qi "breaking\|major\|migration\|incompatible\|remove\|delete"; then
     echo "Suggested label: major (breaking changes detected)"
-  else
+  elif echo "$COMMITS" | grep -qi "fix\|bug\|patch\|correct\|typo\|hotfix"; then
+    echo "Suggested label: patch (bug fixes detected)"
+  elif echo "$COMMITS" | grep -qi "feat\|add\|new\|enhance\|improve"; then
     echo "Suggested label: minor (new features/enhancements)"
+  elif echo "$CHANGED_FILES" | grep -q "^pkg/.*\.go$\|^cmd/.*\.go$"; then
+    # Default for code changes without clear indicators
+    echo "Suggested label: minor (code changes without breaking indicators)"
+  else
+    echo "Suggested label: patch (default for unclear changes)"
   fi
 fi
 ```

@@ -11,7 +11,7 @@ Please analyze PR #{{PR_NUMBER}} in the cloudposse/atmos repository:
 4. Create a remediation plan
 5. Present the plan for my approval
 
-Use the pr-review-remediator agent if available.
+Use the pr-review-remediator agent if available (see ../agents/pr-review-remediator.md).
 
 Focus on:
 - Validating CodeRabbit suggestions make sense
