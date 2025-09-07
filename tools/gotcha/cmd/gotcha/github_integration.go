@@ -151,7 +151,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	}
 
 	logger.Debug("CI context detected",
-		"repo", ctx.GetRepoName(),
+		"repo", ctx.GetRepo(),
 		"pr", ctx.GetPRNumber())
 
 	// Get comment manager
@@ -170,19 +170,19 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	// Post the comment
 	logger.Info("Posting comment to GitHub PR",
 		"contentLength", len(commentContent),
-		"repo", ctx.GetRepoName(),
+		"repo", ctx.GetRepo(),
 		"pr", ctx.GetPRNumber())
 
 	if err := commentManager.PostOrUpdateComment(context.Background(), ctx, commentContent); err != nil {
 		logger.Error("Failed to post comment to GitHub",
 			"error", err,
-			"repo", ctx.GetRepoName(),
+			"repo", ctx.GetRepo(),
 			"pr", ctx.GetPRNumber())
 		return fmt.Errorf("failed to post comment: %w", err)
 	}
 
 	logger.Info("Comment posted successfully",
-		"repo", ctx.GetRepoName(),
+		"repo", ctx.GetRepo(),
 		"pr", ctx.GetPRNumber())
 
 	// Also write to job summary if supported
