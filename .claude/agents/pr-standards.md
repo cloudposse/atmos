@@ -37,6 +37,13 @@ This agent helps create and validate pull requests according to the project's co
    - References PRs that introduced bugs being fixed
    - Ensures proper issue tracking and context
 
+6. **Build and Test Verification** (CRITICAL)
+   - **ALWAYS compile the code before committing**
+   - **ALWAYS run tests before pushing changes**
+   - Never assume code works without verification
+   - Fix all compilation errors immediately
+   - Address test failures before creating PR
+
 ## PR Template Structure
 
 ```markdown
@@ -203,6 +210,53 @@ When creating or updating a PR, the agent should:
    - partially addresses #321 - Larger epic this contributes to
    - See discussion in #654 for design decisions
    ```
+
+## Pre-Commit Verification Checklist
+
+**MANDATORY**: Before creating any commit or PR, verify:
+
+1. **Compilation Check**:
+   ```bash
+   # For Go projects
+   go build ./...
+   
+   # For Atmos
+   make build
+   
+   # For gotcha
+   cd tools/gotcha && go build ./cmd/gotcha
+   ```
+
+2. **Test Execution**:
+   ```bash
+   # Run all tests
+   go test ./...
+   
+   # Or use make targets
+   make test
+   make testacc
+   ```
+
+3. **Lint Check**:
+   ```bash
+   # Run linters
+   make lint
+   
+   # Or directly
+   golangci-lint run
+   ```
+
+4. **File Verification**:
+   - Ensure all new files are staged (`git status`)
+   - Check no files are accidentally ignored
+   - Verify refactored code includes all split files
+
+5. **Common Mistakes to Avoid**:
+   - ❌ Assuming code works without building
+   - ❌ Committing with compilation errors
+   - ❌ Forgetting to add new files after refactoring
+   - ❌ Ignoring test failures
+   - ❌ Not checking git status before committing
 
 ## Command Integration
 

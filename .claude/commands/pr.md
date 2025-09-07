@@ -28,18 +28,25 @@ Create a pull request following Cloud Posse standards.
 
 ## What this command does
 
-1. Searches GitHub for related issues and PRs
+1. **Verifies code builds and tests pass** (CRITICAL FIRST STEP)
+   - Runs compilation check (`go build ./...` or `make build`)
+   - Executes test suite (`go test ./...` or `make test`)
+   - Runs linters (`make lint` or `golangci-lint run`)
+   - Stops if any verification fails
+2. Searches GitHub for related issues and PRs
    - Looks for open/closed issues related to the changes
    - Identifies PRs that may have introduced bugs being fixed
    - Gathers context from related discussions
-2. Stages and commits all changes with a proper commit message
-3. Pushes the branch to origin
-4. Creates a PR with properly formatted description following the template:
+3. Stages and commits all changes with a proper commit message
+   - Verifies all new files are included
+   - Checks nothing is accidentally ignored
+4. Pushes the branch to origin
+5. Creates a PR with properly formatted description following the template:
    - **what**: High-level description of changes
    - **why**: Business justification
    - **references**: Links to discovered issues, related PRs, and documentation
-5. Applies appropriate version labels based on semantic versioning
-6. Ensures the PR follows Cloud Posse standards from CLAUDE.md
+6. Applies appropriate version labels based on semantic versioning
+7. Ensures the PR follows Cloud Posse standards from CLAUDE.md
 
 ## Version Label Guidelines
 
