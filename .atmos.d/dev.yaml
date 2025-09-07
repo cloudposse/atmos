@@ -47,15 +47,30 @@ commands:
         echo "✅ Development environment setup complete!"
         echo ""
         echo "Run 'atmos dev check' to run pre-commit hooks on staged files"
+        echo "Run 'atmos dev check-pr' to run pre-commit hooks on PR changes"
         echo "Run 'atmos dev check-all' to run pre-commit hooks on all files"
 
   - name: check
-    description: Run pre-commit hooks on staged files
+    description: Run pre-commit hooks on staged files (for local development)
     steps:
       - pre-commit run
 
+  - name: check-pr
+    description: Run pre-commit hooks on PR changes (compares with main branch)
+    steps:
+      - |
+        if [ -z "${GITHUB_BASE_REF:-}" ]; then
+          # Local development - compare with main branch
+          echo "🔍 Checking files changed from main branch..."
+          pre-commit run --from-ref origin/main --to-ref HEAD
+        else
+          # CI environment - use GitHub PR refs
+          echo "🔍 Checking files changed in PR..."
+          pre-commit run --from-ref "origin/${GITHUB_BASE_REF}" --to-ref HEAD
+        fi
+
   - name: check-all
-    description: Run pre-commit hooks on all files
+    description: Run pre-commit hooks on all files (use sparingly)
     steps:
       - pre-commit run --all-files
 
@@ -104,7 +119,8 @@ commands:
         echo "Available Atmos dev commands:"
         echo ""
         echo "  atmos dev setup       - Set up local development environment"
-        echo "  atmos dev check       - Run pre-commit hooks on staged files"
+        echo "  atmos dev check       - Run pre-commit hooks on staged files (local dev)"
+        echo "  atmos dev check-pr    - Run pre-commit hooks on PR changes"
         echo "  atmos dev check-all   - Run pre-commit hooks on all files"
         echo "  atmos dev fix         - Auto-fix Go formatting issues"
         echo "  atmos dev lint        - Run golangci-lint"

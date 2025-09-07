@@ -29,7 +29,8 @@ We use Atmos custom commands for development (dogfooding our own tool). This ens
 
 ```bash
 atmos dev help         # Show all available dev commands
-atmos dev check        # Run pre-commit hooks on staged files
+atmos dev check        # Run pre-commit hooks on staged files (local dev)
+atmos dev check-pr     # Run pre-commit hooks on PR changes
 atmos dev check-all    # Run pre-commit hooks on all files
 atmos dev lint         # Run golangci-lint
 atmos dev test         # Run tests
@@ -51,6 +52,13 @@ make lint              # Run golangci-lint on changed files
 ## Pre-commit Hooks
 
 We use pre-commit hooks to ensure code quality. The following hooks run automatically on `git commit`:
+
+### Running Checks
+
+Different commands for different contexts:
+- **`atmos dev check`** - Checks only staged files (best for local development before commit)
+- **`atmos dev check-pr`** - Checks files changed from main branch (best for PR reviews)
+- **`atmos dev check-all`** - Checks all files in the repository (use sparingly, can be slow)
 
 ### Go-specific Hooks
 - **go-fumpt**: Enforces consistent Go formatting (stricter than gofmt)
