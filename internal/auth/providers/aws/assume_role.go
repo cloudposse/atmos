@@ -49,7 +49,7 @@ func (p *assumeRoleProvider) Name() string {
 }
 
 // PreAuthenticate is a no-op for assume-role provider.
-func (p *assumeRoleProvider) PreAuthenticate(_ types.AuthManager, _ []string) error {
+func (p *assumeRoleProvider) PreAuthenticate(_ types.AuthManager) error {
 	return nil
 }
 

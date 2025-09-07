@@ -58,7 +58,8 @@ type Provider interface {
 	// so that it can set up any provider-specific preferences based on downstream identities (e.g.,
 	// preferred role ARN for SAML based on the next identity in the chain).
 	// Implementations should be side-effect free beyond local provider state.
-	PreAuthenticate(manager AuthManager, chain []string) error
+	// Providers can access the current chain via manager.GetChain().
+	PreAuthenticate(manager AuthManager) error
 	// Authenticate performs provider-specific authentication and returns credentials.
 	Authenticate(ctx context.Context) (*schema.Credentials, error)
 
@@ -115,6 +116,10 @@ type AuthManager interface {
 
 	// GetProviderKindForIdentity returns the provider kind for the given identity.
 	GetProviderKindForIdentity(identityName string) (string, error)
+
+	// GetChain returns the most recently constructed authentication chain
+	// in the format: [providerName, identity1, identity2, ..., targetIdentity].
+	GetChain() []string
 
 	// GetStackInfo returns the current stack info pointer associated with this manager.
 	GetStackInfo() *schema.ConfigAndStacksInfo

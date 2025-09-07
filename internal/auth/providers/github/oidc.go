@@ -43,7 +43,7 @@ func (p *oidcProvider) Name() string {
 }
 
 // PreAuthenticate is a no-op for GitHub OIDC provider.
-func (p *oidcProvider) PreAuthenticate(_ types.AuthManager, _ []string) error { //nolint:revive // interface contract
+func (p *oidcProvider) PreAuthenticate(_ types.AuthManager) error { //nolint:revive // interface contract
 	return nil
 }
 

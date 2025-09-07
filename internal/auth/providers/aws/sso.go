@@ -57,7 +57,7 @@ func (p *ssoProvider) Name() string {
 }
 
 // PreAuthenticate is a no-op for SSO provider.
-func (p *ssoProvider) PreAuthenticate(_ authTypes.AuthManager, _ []string) error { //nolint:revive // interface contract
+func (p *ssoProvider) PreAuthenticate(_ authTypes.AuthManager) error { //nolint:revive // interface contract
 	return nil
 }
 

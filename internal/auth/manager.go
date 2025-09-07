@@ -23,9 +23,12 @@ type manager struct {
 	credentialStore types.CredentialStore
 	validator       types.Validator
 	stackInfo       *schema.ConfigAndStacksInfo
+	// chain holds the most recently constructed authentication chain
+	// where index 0 is the provider name, followed by identities in order.
+	chain []string
 }
 
-// NewAuthmanager creates a new Authmanager instance.
+// NewAuthManager creates a new Authmanager instance.
 func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
@@ -81,6 +84,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 
 	log.Debug("Authentication chain discovered", "identity", identityName, "chainLength", len(chain), "chain", chain)
 
+	// Persist the chain for later retrieval by providers or callers
+	m.chain = chain
+
 	// Perform hierarchical credential validation (bottom-up)
 	finalCreds, err := m.authenticateHierarchical(ctx, chain, identityName)
 	if err != nil {
@@ -108,6 +114,12 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 	}
 
 	return whoamiInfo, nil
+}
+
+// GetChain returns the most recently built authentication chain.
+// The chain is in the format: [providerName, identity1, identity2, ..., targetIdentity].
+func (m *manager) GetChain() []string {
+	return m.chain
 }
 
 // Whoami returns information about the specified identity's credentials.
@@ -149,7 +161,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 			return "", fmt.Errorf("%w: no default identity configured", errUtils.ErrInvalidAuthConfig)
 		}
 		// In interactive mode, prompt user to choose from all identities
-		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.Listidentities())
+		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
 
 	case 1:
 		// Exactly one default identity found - use it
@@ -189,7 +201,7 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 }
 
 // Listidentities returns all available identity names.
-func (m *manager) Listidentities() []string {
+func (m *manager) ListIdentities() []string {
 	var names []string
 	for name := range m.config.Identities {
 		names = append(names, name)
@@ -401,7 +413,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 	if actualStartIndex == 0 {
 		// Allow provider to inspect the chain and prepare pre-auth preferences
 		if provider, exists := m.providers[chain[0]]; exists {
-			if err := provider.PreAuthenticate(m, chain); err != nil {
+			if err := provider.PreAuthenticate(m); err != nil {
 				log.Debug("Provider pre-authenticate failed", "provider", chain[0], "error", err)
 			}
 		}
@@ -418,12 +430,12 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 
 // GetIdentities returns the map of identities.
 func (m *manager) GetIdentities() map[string]schema.Identity {
-	return m.identities
+	return m.config.Identities
 }
 
 // GetProviders returns the map of providers.
 func (m *manager) GetProviders() map[string]schema.Provider {
-	return m.providers
+	return m.config.Providers
 }
 
 // GetConfig returns the config.

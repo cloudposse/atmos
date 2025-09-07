@@ -66,16 +66,20 @@ func (p *samlProvider) Name() string {
 }
 
 // PreAuthenticate records a hint (next identity name) to help role selection.
-func (p *samlProvider) PreAuthenticate(manager types.AuthManager, chain []string) error {
+func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 	// chain: [provider, identity1, identity2, ...]
+	chain := manager.GetChain()
+	log.Debug("SAML pre-auth: chain", "chain", chain)
 	if len(chain) > 1 {
 		identities := manager.GetIdentities()
 		identity, exists := identities[chain[1]]
+		log.Debug("SAML pre-auth: identity", "identity", identity, "exists", exists)
 		if !exists {
 			return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, chain[1])
 		}
 		var roleArn string
-		if roleArn, ok := identity.Principal["assume_role"].(string); !ok || roleArn == "" {
+		var ok bool
+		if roleArn, ok = identity.Principal["assume_role"].(string); !ok || roleArn == "" {
 			return fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidIdentityConfig)
 		}
 		p.RoleToAssumeFromAssertion = roleArn
@@ -195,7 +199,7 @@ func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRol
 	hint := strings.ToLower(p.RoleToAssumeFromAssertion)
 	for _, r := range awsRoles {
 		if strings.Contains(strings.ToLower(r.RoleARN), hint) || strings.Contains(strings.ToLower(r.PrincipalARN), hint) {
-			log.Info("Selecting role matching preferred hint", "role", r.RoleARN, "hint", p.RoleToAssumeFromAssertion)
+			log.Debug("Selecting role matching preferred hint", "role", r.RoleARN, "hint", p.RoleToAssumeFromAssertion)
 			return r
 		}
 	}
@@ -220,7 +224,7 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 		SAMLAssertion: aws.String(samlAssertion),
 		DurationSeconds: aws.Int32(func() int32 {
 			// Respect requested duration within STS/account limits.
-			if p.config.Session.Duration != "" {
+			if p.config != nil && p.config.Session != nil && p.config.Session.Duration != "" {
 				if duration, err := time.ParseDuration(p.config.Session.Duration); err == nil {
 					return int32(duration.Seconds())
 				}
