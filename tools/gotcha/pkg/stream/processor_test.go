@@ -1,8 +1,7 @@
-package utils
+package stream
 
 import (
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -89,11 +88,7 @@ func TestStreamProcessorBuffering(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processor := &StreamProcessor{
-				mu:         sync.Mutex{},
-				buffers:    make(map[string][]string),
-				showFilter: "all",
-			}
+			processor := NewStreamProcessor(nil, "all", "", "standard")
 
 			// Process events
 			for _, event := range tt.events {
@@ -217,13 +212,7 @@ func processStreamEvent(p *StreamProcessor, event *types.TestEvent) {
 }
 
 func TestStreamProcessorStatistics(t *testing.T) {
-	processor := &StreamProcessor{
-		mu:      sync.Mutex{},
-		buffers: make(map[string][]string),
-		passed:  0,
-		failed:  0,
-		skipped: 0,
-	}
+	processor := NewStreamProcessor(nil, "all", "", "standard")
 
 	events := []types.TestEvent{
 		{Action: "run", Test: "Test1"},

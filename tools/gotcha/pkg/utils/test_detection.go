@@ -35,6 +35,7 @@ func IsLikelyTestName(s string) bool {
 // ExtractTestNamesFromArgs processes arguments to extract test names and package paths.
 func ExtractTestNamesFromArgs(args []string) (testFilter string, packages []string) {
 	var testNames []string
+	packages = []string{} // Initialize to empty slice instead of nil
 
 	for _, arg := range args {
 		// Skip flags and flag values
@@ -114,6 +115,7 @@ func IsPackagePath(s string) bool {
 // ProcessTestArguments intelligently processes command arguments to detect test names.
 func ProcessTestArguments(args []string) (packages []string, testFilter string) {
 	var detectedTests []string
+	packages = []string{} // Initialize to empty slice instead of nil
 
 	for _, arg := range args {
 		// First check if it's definitely a package path

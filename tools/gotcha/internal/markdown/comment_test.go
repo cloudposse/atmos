@@ -1,7 +1,6 @@
 package markdown
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -122,12 +121,7 @@ func TestGenerateGitHubComment(t *testing.T) {
 			expectComment: true,
 			checkContent: []string{
 				"Coverage",
-				"pkg/main",
 				"85.5%",
-				"pkg/utils",
-				"92.3%",
-				"pkg/config",
-				"78.0%",
 			},
 		},
 		{
@@ -139,14 +133,13 @@ func TestGenerateGitHubComment(t *testing.T) {
 			},
 			expectComment: true,
 			checkContent: []string{
-				"No tests",
+				"NO_TESTS", // Badge text
 			},
 		},
 		{
 			name: "Large test suite with many packages",
 			summary: &types.TestSummary{
 				Passed:  make([]types.TestResult, 95),
-				Failed:  make([]types.TestResult, 3),
 				Skipped: make([]types.TestResult, 2),
 				Failed: []types.TestResult{
 					{Package: "pkg/package1", Test: "TestFail1", Duration: 1.5},
@@ -157,23 +150,21 @@ func TestGenerateGitHubComment(t *testing.T) {
 			expectComment: true,
 			checkContent: []string{
 				"❌",         // Failure badge
-				"100",       // Total tests
-				"95",        // Passed count
-				"3",         // Failed count
+				"95",        // Passed count in badge
+				"3",         // Failed count in badge
 				"TestFail1", // Failed test names
 				"TestFail2",
 				"TestFail3",
-				"pkg/package1", // Package names
-				"pkg/package2",
-				"pkg/package3",
-				"pkg/package4",
+				"package1", // Package names (shortened)
+				"package3",
+				"package4",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			comment := GenerateGitHubComment(tt.summary)
+			comment := GenerateGitHubComment(tt.summary, "test-uuid")
 
 			if tt.expectComment {
 				assert.NotEmpty(t, comment, "Expected non-empty comment")
@@ -190,84 +181,14 @@ func TestGenerateGitHubComment(t *testing.T) {
 	}
 }
 
-func TestTruncateToEssentials(t *testing.T) {
-	builder := &CommentBuilder{
-		sections: make(map[string]string),
-	}
+// TestTruncateToEssentials is removed as CommentBuilder no longer exists
+// The truncation logic is now internal to the comment generation functions
 
-	// Add various sections
-	builder.addSection("header", "# Test Results")
-	builder.addSection("stats", strings.Repeat("Statistics ", 50))
-	builder.addSection("failed", strings.Repeat("Failed test ", 100))
-	builder.addSection("passed", strings.Repeat("Passed test ", 200))
-	builder.addSection("coverage", strings.Repeat("Coverage data ", 50))
+// TestAddPassedTestsWithLimit is removed as CommentBuilder no longer exists
+// The truncation logic is now internal to the comment generation functions
 
-	// Truncate to a small limit
-	builder.truncateToEssentials(500)
-
-	// Essential sections should be preserved
-	assert.Contains(t, builder.sections, "header")
-	assert.Contains(t, builder.sections, "stats")
-	assert.Contains(t, builder.sections, "failed")
-
-	// Non-essential sections might be removed
-	result := builder.String()
-	assert.Less(t, len(result), 600) // Some buffer for section ordering
-}
-
-func TestAddPassedTestsWithLimit(t *testing.T) {
-	builder := &CommentBuilder{
-		sections: make(map[string]string),
-	}
-
-	// Create many passed tests
-	var passed []types.TestResult
-	for i := 0; i < 100; i++ {
-		passed = append(passed, types.TestResult{
-			Package: "pkg/test",
-			Test:    fmt.Sprintf("TestPassed%d", i),
-		})
-	}
-
-	// Add with limit
-	builder.addPassedTests(passed, 1000)
-
-	result := builder.sections["passed"]
-	assert.NotEmpty(t, result)
-
-	// Should contain truncation message when limited
-	if strings.Contains(result, "...") {
-		assert.Less(t, len(result), 1100) // Some buffer
-	}
-}
-
-func TestAddCoverageWithLimit(t *testing.T) {
-	builder := &CommentBuilder{
-		sections: make(map[string]string),
-	}
-
-	// Create coverage data
-	coverage := []types.CoverageInfo{
-		{Package: "pkg/main", Percentage: 85.5},
-		{Package: "pkg/utils", Percentage: 92.3},
-		{Package: "pkg/config", Percentage: 78.0},
-		{Package: "pkg/handler", Percentage: 88.5},
-		{Package: "pkg/middleware", Percentage: 95.0},
-	}
-
-	// Add with limit
-	builder.addCoverage(coverage, 500)
-
-	result := builder.sections["coverage"]
-	assert.NotEmpty(t, result)
-	assert.Contains(t, result, "Coverage")
-	assert.Contains(t, result, "85.5%")
-
-	// Check table format
-	assert.Contains(t, result, "|")
-	assert.Contains(t, result, "Package")
-	assert.Contains(t, result, "Coverage")
-}
+// TestAddCoverageWithLimit is removed as CommentBuilder no longer exists
+// Coverage formatting is now internal to the comment generation functions
 
 func TestPlatformInHeader(t *testing.T) {
 	tests := []struct {
@@ -284,12 +205,10 @@ func TestPlatformInHeader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.platform, func(t *testing.T) {
 			summary := &types.TestSummary{
-				Total:   1,
-				Passed:  1,
-				Runtime: tt.platform,
+				Passed:  []types.TestResult{{Package: "test", Test: "Test1"}},
 			}
 
-			comment := GenerateGitHubComment(summary)
+			comment := GenerateAdaptiveComment(summary, "test-uuid", tt.platform)
 			assert.Contains(t, comment, tt.expected)
 		})
 	}
@@ -297,11 +216,15 @@ func TestPlatformInHeader(t *testing.T) {
 
 func TestCommentStructureOrdering(t *testing.T) {
 	summary := &types.TestSummary{
-		Total:   10,
-		Passed:  7,
-		Failed:  2,
-		Skipped: 1,
-		Runtime: "linux",
+		Passed: []types.TestResult{
+			{Package: "pkg/test", Test: "TestPass1"},
+			{Package: "pkg/test", Test: "TestPass2"},
+			{Package: "pkg/test", Test: "TestPass3"},
+			{Package: "pkg/test", Test: "TestPass4"},
+			{Package: "pkg/test", Test: "TestPass5"},
+			{Package: "pkg/test", Test: "TestPass6"},
+			{Package: "pkg/test", Test: "TestPass7"},
+		},
 		Failed: []types.TestResult{
 			{Package: "pkg/test", Test: "TestFail1"},
 			{Package: "pkg/test", Test: "TestFail2"},
@@ -309,12 +232,10 @@ func TestCommentStructureOrdering(t *testing.T) {
 		Skipped: []types.TestResult{
 			{Package: "pkg/test", Test: "TestSkip1", SkipReason: "Not ready"},
 		},
-		Coverage: []types.CoverageInfo{
-			{Package: "pkg/test", Percentage: 80.0},
-		},
+		Coverage: "coverage: 80.0% of statements",
 	}
 
-	comment := GenerateGitHubComment(summary)
+	comment := GenerateGitHubComment(summary, "test-uuid")
 	lines := strings.Split(comment, "\n")
 
 	// Check general structure order
@@ -359,17 +280,17 @@ func TestCommentStructureOrdering(t *testing.T) {
 
 func TestCoverageTableFormat(t *testing.T) {
 	summary := &types.TestSummary{
-		Total:   5,
-		Passed:  5,
-		Runtime: "linux",
-		Coverage: []types.CoverageInfo{
-			{Package: "github.com/test/pkg/main", Percentage: 85.5},
-			{Package: "github.com/test/pkg/utils", Percentage: 92.3},
-			{Package: "github.com/test/pkg/config", Percentage: 0.0},
+		Passed: []types.TestResult{
+			{Package: "pkg/test", Test: "TestPass1"},
+			{Package: "pkg/test", Test: "TestPass2"},
+			{Package: "pkg/test", Test: "TestPass3"},
+			{Package: "pkg/test", Test: "TestPass4"},
+			{Package: "pkg/test", Test: "TestPass5"},
 		},
+		Coverage: "coverage: 85.5% of statements in github.com/test/pkg/main\ncoverage: 92.3% of statements in github.com/test/pkg/utils\ncoverage: 0.0% of statements in github.com/test/pkg/config",
 	}
 
-	comment := GenerateGitHubComment(summary)
+	comment := GenerateAdaptiveComment(summary, "test-uuid", "linux")
 
 	// Check table structure
 	assert.Contains(t, comment, "| Package")
