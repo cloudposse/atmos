@@ -1,0 +1,39 @@
+---
+title: atmos toolchain exec
+sidebar_label: exec
+sidebar_class_name: command
+id: exec
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note purpose
+Use this command to execute the cli tools from the aqua repositories.
+:::
+
+<Screengrab title="atmos toolchain exec --help" slug="atmos-toolchain-exec--help" />
+
+## Usage
+
+Execute the `atmos toolchain exec` command like this:
+
+```shell
+atmos toolchain exec <tool> <arguments>
+```
+
+## Examples
+
+```shell
+atmos toolchain run terraform --version         # Uses latest version
+atmos toolchain run terraform@1.9.8 --version   # Uses specific version
+atmos toolchain run opentofu@1.10.1 init
+atmos toolchain run terraform@1.5.7 plan -var-file=prod.tfvars```
+
+## Arguments
+
+<dl>
+    <dt>`tool` <em>(required)</em></dt>
+    <dd>
+        Tool to use to exec the command
+    </dd>
+</dl>

@@ -107,5 +107,5 @@ func formatToolInfoAsTable(toolName, owner, repo string, tool *Tool, version str
 		}
 	}
 
-	return strings.Join(rows, "\n")
+	return strings.Join(rows, "\n") + "\n"
 }

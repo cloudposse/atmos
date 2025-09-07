@@ -3,6 +3,8 @@ package toolchain
 import (
 	"errors"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // --- Fake Installer for testing ---
@@ -55,6 +57,7 @@ func mockExec(path string, args []string, env []string) error {
 }
 
 func resetExecMock() {
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
 	calledExecPath = ""
 	calledExecArgs = nil
 	calledExecEnv = nil
@@ -72,15 +75,17 @@ func TestRunExecCommand_Success(t *testing.T) {
 		binaryErr:    nil,
 	}
 
-	args := []string{"terraform@1.9.8", "--version"}
-
+	args := []string{"terraform@1.13.1", "--version"}
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
+	AddToolToVersions(GetToolVersionsFilePath(), "terraform", "1.13.1")
+	t.Log(ensureToolInstalled("terraform@1.13.1"))
 	err := RunExecCommand(fake, args)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if calledExecPath != "/fake/path/terraform" {
-		t.Errorf("expected exec path '/fake/path/terraform', got %s", calledExecPath)
+	if calledExecPath != ".tools/bin/hashicorp/terraform/1.13.1/terraform" {
+		t.Errorf("expected exec path '.tools/bin/hashicorp/terraform/1.13.1/terraform', got %s", calledExecPath)
 	}
 
 	if calledExecArgs[1] != "--version" {
@@ -118,7 +123,7 @@ func TestRunExecCommand_BinaryNotFound(t *testing.T) {
 		binaryErr:    errors.New("binary not found"),
 	}
 
-	args := []string{"terraform@1.9.8"}
+	args := []string{"unknown@1.9.8"}
 
 	err := RunExecCommand(fake, args)
 	if err == nil {
