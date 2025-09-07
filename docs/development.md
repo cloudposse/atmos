@@ -28,15 +28,22 @@ We use Atmos custom commands for development (dogfooding our own tool). This ens
 ### Available Commands
 
 ```bash
-atmos dev help         # Show all available dev commands
-atmos dev check        # Run pre-commit hooks on staged files (local dev)
-atmos dev check-pr     # Run pre-commit hooks on PR changes
-atmos dev check-all    # Run pre-commit hooks on all files
+# Checking Commands (Read-only, no modifications)
+atmos dev check        # Check staged files for issues
+atmos dev check-pr     # Check PR changes for issues  
+atmos dev check-all    # Check all files for issues
 atmos dev lint         # Run golangci-lint
+
+# Formatting Commands (Modifies files)
+atmos dev format       # Auto-format staged files
+atmos dev format-pr    # Auto-format PR changes
+atmos dev format-all   # ⚠️ DANGEROUS: Auto-format ALL files
+
+# Build and Test Commands
 atmos dev test         # Run tests
 atmos dev build        # Build the Atmos binary
 atmos dev quick        # Quick build and test
-atmos dev fix          # Auto-fix Go formatting issues
+atmos dev help         # Show all available dev commands
 ```
 
 ### Alternative Make Commands
@@ -53,12 +60,23 @@ make lint              # Run golangci-lint on changed files
 
 We use pre-commit hooks to ensure code quality. The following hooks run automatically on `git commit`:
 
-### Running Checks
+### Checking vs Formatting
 
-Different commands for different contexts:
-- **`atmos dev check`** - Checks only staged files (best for local development before commit)
+**Important distinction:**
+- **Check commands** are read-only and will NOT modify any files. They only report issues.
+- **Format commands** WILL modify files to fix issues automatically.
+
+#### Check Commands (Safe, read-only)
+- **`atmos dev check`** - Checks only staged files (best before committing)
 - **`atmos dev check-pr`** - Checks files changed from main branch (best for PR reviews)
-- **`atmos dev check-all`** - Checks all files in the repository (use sparingly, can be slow)
+- **`atmos dev check-all`** - Checks all files in the repository
+
+#### Format Commands (Modifies files)
+- **`atmos dev format`** - Auto-formats only staged files
+- **`atmos dev format-pr`** - Auto-formats files changed from main branch
+- **`atmos dev format-all`** - ⚠️ **DANGEROUS**: Auto-formats ALL files (use with extreme caution)
+
+**Note:** Golden snapshots and test fixtures are always protected from formatting.
 
 ### Go-specific Hooks
 - **go-fumpt**: Enforces consistent Go formatting (stricter than gofmt)
