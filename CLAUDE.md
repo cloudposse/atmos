@@ -468,6 +468,8 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   ```
 - **Use "no-release" label** for documentation-only changes
 - **Ensure all CI checks pass** before requesting review
+- **Use the PR standards agent** - See `.claude/agents/pr-standards.md` for automated PR creation and validation
+- **Use `/pr` command** - See `.claude/commands/pr.md` for creating compliant PRs automatically
 
 ### Adding Template Function
 1. Implement in `internal/exec/template_funcs.go`
