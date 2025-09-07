@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// listAliases handles the business logic for retrieving and formatting aliases
+// listAliases handles the business logic for retrieving and formatting aliases.
 func ListAliases() error {
 	configFilePath := GetToolsConfigFilePath()
 	// Load local configuration
@@ -34,7 +34,7 @@ func ListAliases() error {
 	return nil
 }
 
-// formatAliasesAsTable formats aliases as a table using lipgloss
+// formatAliasesAsTable formats aliases as a table using lipgloss.
 func formatAliasesAsTable(aliases []string, aliasMap map[string]string) string {
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63")).Width(20)
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))

@@ -305,7 +305,7 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 	return nil
 }
 
-// fetchGitHubVersions fetches available versions and titles from GitHub releases
+// fetchGitHubVersions fetches available versions and titles from GitHub releases.
 func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
 	// GitHub API endpoint for releases with per_page parameter to get more releases
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", owner, repo)
@@ -391,7 +391,7 @@ func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
 	return items, nil
 }
 
-// formatReleaseNotes formats the release notes for display
+// formatReleaseNotes formats the release notes for display.
 func formatReleaseNotes(name, tagName, body, publishedAt string) string {
 	var result strings.Builder
 
@@ -417,7 +417,7 @@ func formatReleaseNotes(name, tagName, body, publishedAt string) string {
 	return result.String()
 }
 
-// renderMarkdown renders markdown content using glamour
+// renderMarkdown renders markdown content using glamour.
 func renderMarkdown(content string, width int) string {
 	// Create a glamour renderer with dracula theme but override borders
 	r, err := glamour.NewTermRenderer(
@@ -454,7 +454,7 @@ func renderMarkdown(content string, width int) string {
 	return output
 }
 
-// Custom list delegate to show "releases" instead of "items"
+// Custom list delegate to show "releases" instead of "items".
 type customDelegate struct {
 	list.DefaultDelegate
 }

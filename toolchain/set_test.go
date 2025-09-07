@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test data structures
+// Test data structures.
 type mockInstallerSet struct {
 	parseToolSpecFunc func(string) (string, string, error)
 	findToolFunc      func(string, string, string) (*mockTool, error)
@@ -49,13 +49,13 @@ func (m *mockInstallerSet) findTool(owner, repo, version string) (*mockTool, err
 	return &mockTool{Type: "github_release"}, nil
 }
 
-// Mock functions for dependencies that need to be injected
+// Mock functions for dependencies that need to be injected.
 var (
 	newInstallerFunc      = func() *mockInstallerSet { return &mockInstallerSet{} }
 	addToolToVersionsFunc func(string, string, string) error
 )
 
-// Test helper functions
+// Test helper functions.
 func setupTest() {
 	viper.Reset()
 }
@@ -64,7 +64,7 @@ func teardownTest() {
 	viper.Reset()
 }
 
-// Tests for versionListModel
+// Tests for versionListModel.
 func TestVersionListModelInit(t *testing.T) {
 	m := versionListModel{}
 	cmd := m.Init()
@@ -242,7 +242,7 @@ func TestVersionListModelView(t *testing.T) {
 	})
 }
 
-// Mock HTTP server for testing GitHub API
+// Mock HTTP server for testing GitHub API.
 func createMockGitHubServer(releases []map[string]interface{}, statusCode int) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -416,7 +416,7 @@ func TestFetchGitHubVersions(t *testing.T) {
 	})
 }
 
-// Helper function to test with custom URL
+// Helper function to test with custom URL.
 func fetchGitHubVersionsWithCustomURL(owner, repo, apiURL string) ([]versionItem, error) {
 	token := viper.GetString("github-token")
 
@@ -630,7 +630,7 @@ func TestSetToolVersionWithMocks(t *testing.T) {
 	})
 }
 
-// Mock version of SetToolVersion for testing
+// Mock version of SetToolVersion for testing.
 func setToolVersionWithMocks(filePath, toolName, version string, scrollSpeed int) error {
 	installer := newInstallerFunc()
 	owner, repo, err := installer.parseToolSpec(toolName)
@@ -663,7 +663,7 @@ func setToolVersionWithMocks(filePath, toolName, version string, scrollSpeed int
 	return nil
 }
 
-// Test the model's behavior with different window sizes
+// Test the model's behavior with different window sizes.
 func TestVersionListModelWindowResize(t *testing.T) {
 	items := []list.Item{
 		versionItem{version: "1.0.0", title: "Version 1.0.0", releaseNotes: "Test notes"},
@@ -707,7 +707,7 @@ func TestVersionListModelWindowResize(t *testing.T) {
 	}
 }
 
-// Test edge cases for versionItem methods
+// Test edge cases for versionItem methods.
 func TestVersionItemEdgeCases(t *testing.T) {
 	t.Run("Empty values", func(t *testing.T) {
 		item := versionItem{}
@@ -739,7 +739,7 @@ func TestVersionItemEdgeCases(t *testing.T) {
 	})
 }
 
-// Test viewport navigation edge cases
+// Test viewport navigation edge cases.
 func TestViewportNavigationEdgeCases(t *testing.T) {
 	items := []list.Item{
 		versionItem{version: "1.0.0", title: "Version 1.0.0", releaseNotes: "Line 1\nLine 2\nLine 3"},
@@ -774,7 +774,7 @@ func TestViewportNavigationEdgeCases(t *testing.T) {
 	}
 }
 
-// Test model update with no selected item
+// Test model update with no selected item.
 func TestVersionListModelNoSelection(t *testing.T) {
 	// Empty list
 	l := list.New([]list.Item{}, newCustomDelegate(), 50, 10)
@@ -795,7 +795,7 @@ func TestVersionListModelNoSelection(t *testing.T) {
 	}
 }
 
-// Test formatReleaseNotes edge cases
+// Test formatReleaseNotes edge cases.
 func TestFormatReleaseNotesEdgeCases(t *testing.T) {
 	t.Run("All empty fields", func(t *testing.T) {
 		result := formatReleaseNotes("", "", "", "")
@@ -828,7 +828,7 @@ func TestFormatReleaseNotesEdgeCases(t *testing.T) {
 	})
 }
 
-// Test renderMarkdown with various content types
+// Test renderMarkdown with various content types.
 func TestRenderMarkdownEdgeCases(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -865,7 +865,7 @@ func TestRenderMarkdownEdgeCases(t *testing.T) {
 	}
 }
 
-// Test custom delegate with edge cases
+// Test custom delegate with edge cases.
 func TestCustomDelegateEdgeCases(t *testing.T) {
 	delegate := newCustomDelegate()
 
@@ -890,7 +890,7 @@ func TestCustomDelegateEdgeCases(t *testing.T) {
 	}
 }
 
-// Test fetchGitHubVersions network edge cases
+// Test fetchGitHubVersions network edge cases.
 func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 	t.Run("Network timeout simulation", func(t *testing.T) {
 		// Create a server that delays response
@@ -1014,7 +1014,7 @@ func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 	})
 }
 
-// Test the View method with different focus states
+// Test the View method with different focus states.
 func TestVersionListModelViewFocusStates(t *testing.T) {
 	items := []list.Item{
 		versionItem{version: "1.0.0", title: "Version 1.0.0", desc: "First version"},
@@ -1096,7 +1096,7 @@ func TestVersionListModelViewFocusStates(t *testing.T) {
 // 	_ = newContent
 // }
 
-// First, let's create interfaces that can be mocked
+// First, let's create interfaces that can be mocked.
 type ToolInstaller interface {
 	parseToolSpec(toolName string) (string, string, error)
 	findTool(owner, repo, version string) (*Tool, error)
@@ -1110,7 +1110,7 @@ type GitHubClient interface {
 	FetchVersions(owner, repo string) ([]versionItem, error)
 }
 
-// Mock implementations
+// Mock implementations.
 type MockToolInstaller struct {
 	parseToolSpecFunc func(string) (string, string, error)
 	findToolFunc      func(string, string, string) (*Tool, error)
@@ -1152,7 +1152,7 @@ func (m *MockGitHubClient) FetchVersions(owner, repo string) ([]versionItem, err
 	return nil, fmt.Errorf("not implemented")
 }
 
-// Refactored SetToolVersion function that accepts dependencies
+// Refactored SetToolVersion function that accepts dependencies.
 func SetToolVersionWithDeps(toolName, version string, scrollSpeed int, installer ToolInstaller, versionManager VersionManager, githubClient GitHubClient, configFilePath string) error {
 	// Resolve the tool name to handle aliases
 	owner, repo, err := installer.parseToolSpec(toolName)
@@ -1409,7 +1409,7 @@ func TestSetToolVersionWithDeps_InteractiveSelection(t *testing.T) {
 	}
 }
 
-// Real GitHub client implementation for testing
+// Real GitHub client implementation for testing.
 type RealGitHubClient struct {
 	BaseURL string
 	Token   string
@@ -1732,7 +1732,7 @@ func TestCustomDelegate(t *testing.T) {
 	assert.Contains(t, footer, "2 releases")
 }
 
-// Minimal mock that satisfies the list.Model interface for testing
+// Minimal mock that satisfies the list.Model interface for testing.
 type testListModel struct {
 	itemCount int
 }
@@ -1745,7 +1745,7 @@ func (m *testListModel) Items() []list.Item {
 	return items
 }
 
-// Integration test helper
+// Integration test helper.
 func setupTestVersionsFile(t *testing.T) string {
 	tmpDir := t.TempDir()
 	testVersionsFile := filepath.Join(tmpDir, "versions.yaml")
@@ -1757,7 +1757,7 @@ func setupTestVersionsFile(t *testing.T) string {
 	return testVersionsFile
 }
 
-// Example of how you might test the original function by wrapping it
+// Example of how you might test the original function by wrapping it.
 func TestOriginalSetToolVersion_Wrapper(t *testing.T) {
 	t.Skip("This test would require modifying the original function to accept dependencies or using build tags")
 

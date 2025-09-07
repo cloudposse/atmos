@@ -8,17 +8,17 @@ import (
 )
 
 // Define an interface for Resolve for testability
-// This allows both *Installer and *fakeInstaller to be used
+// This allows both *Installer and *fakeInstaller to be used.
 type toolNameResolver interface {
 	Resolve(toolName string) (string, string, error)
 }
 
-// ToolVersions represents the .tool-versions file format (asdf-compatible: tool -> list of versions, first is default)
+// ToolVersions represents the .tool-versions file format (asdf-compatible: tool -> list of versions, first is default).
 type ToolVersions struct {
 	Tools map[string][]string
 }
 
-// LoadToolVersions loads a .tool-versions file (asdf-compatible: tool version1 [version2 ...])
+// LoadToolVersions loads a .tool-versions file (asdf-compatible: tool version1 [version2 ...]).
 func LoadToolVersions(filePath string) (*ToolVersions, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -47,7 +47,7 @@ func LoadToolVersions(filePath string) (*ToolVersions, error) {
 	return toolVersions, nil
 }
 
-// SaveToolVersions saves a ToolVersions struct to a .tool-versions file (asdf-compatible)
+// SaveToolVersions saves a ToolVersions struct to a .tool-versions file (asdf-compatible).
 func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
 	if toolVersions == nil || toolVersions.Tools == nil {
 		return fmt.Errorf("toolVersions or toolVersions.Tools is nil")
@@ -77,7 +77,7 @@ func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
 	return os.WriteFile(filePath, []byte(content), 0o644)
 }
 
-// AddVersionToTool adds a version to a tool, optionally as default (front of list)
+// AddVersionToTool adds a version to a tool, optionally as default (front of list).
 func AddVersionToTool(toolVersions *ToolVersions, tool, version string, asDefault bool) {
 	versions := toolVersions.Tools[tool]
 	for i, v := range versions {
@@ -97,7 +97,7 @@ func AddVersionToTool(toolVersions *ToolVersions, tool, version string, asDefaul
 	}
 }
 
-// RemoveVersionFromTool removes a version from a tool
+// RemoveVersionFromTool removes a version from a tool.
 func RemoveVersionFromTool(toolVersions *ToolVersions, tool, version string) {
 	versions := toolVersions.Tools[tool]
 	newVersions := make([]string, 0, len(versions))
@@ -113,7 +113,7 @@ func RemoveVersionFromTool(toolVersions *ToolVersions, tool, version string) {
 	}
 }
 
-// GetDefaultVersion returns the default (first) version for a tool
+// GetDefaultVersion returns the default (first) version for a tool.
 func GetDefaultVersion(toolVersions *ToolVersions, tool string) (string, bool) {
 	versions := toolVersions.Tools[tool]
 	if len(versions) == 0 {
@@ -122,26 +122,26 @@ func GetDefaultVersion(toolVersions *ToolVersions, tool string) (string, bool) {
 	return versions[0], true
 }
 
-// GetAllVersions returns all versions for a tool
+// GetAllVersions returns all versions for a tool.
 func GetAllVersions(toolVersions *ToolVersions, tool string) []string {
 	return toolVersions.Tools[tool]
 }
 
 // AddToolToVersions adds a tool/version combination to the .tool-versions file
 // If the tool already exists, it updates the version
-// If the aliased version already exists, it skips adding the non-aliased version to prevent duplicates
+// If the aliased version already exists, it skips adding the non-aliased version to prevent duplicates.
 func AddToolToVersions(filePath, tool, version string) error {
 	return addToolToVersionsInternal(filePath, tool, version, false)
 }
 
 // AddToolToVersionsAsDefault adds a tool and version to the .tool-versions file as the default
-// If the tool already exists, it updates the version and sets it as default
+// If the tool already exists, it updates the version and sets it as default.
 func AddToolToVersionsAsDefault(filePath, tool, version string) error {
 	return addToolToVersionsInternal(filePath, tool, version, true)
 }
 
 // addToolToVersionsInternal is the single path for adding tools to .tool-versions
-// All other functions should use this to ensure consistent duplicate checking
+// All other functions should use this to ensure consistent duplicate checking.
 func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) error {
 	if version == "" {
 		return fmt.Errorf("cannot add tool '%s' without a version", tool)
@@ -219,7 +219,7 @@ func wouldCreateDuplicate(toolVersions *ToolVersions, tool, version string) bool
 	return false
 }
 
-// RemoveToolFromVersions removes a tool from the .tool-versions file
+// RemoveToolFromVersions removes a tool from the .tool-versions file.
 func RemoveToolFromVersions(filePath, tool string) error {
 	// Load existing tool versions
 	toolVersions, err := LoadToolVersions(filePath)
@@ -234,7 +234,7 @@ func RemoveToolFromVersions(filePath, tool string) error {
 	return SaveToolVersions(filePath, toolVersions)
 }
 
-// GetToolVersion gets the version for a specific tool from the .tool-versions file
+// GetToolVersion gets the version for a specific tool from the .tool-versions file.
 func GetToolVersion(filePath, tool string) (string, bool, error) {
 	toolVersions, err := LoadToolVersions(filePath)
 	if err != nil {
@@ -248,7 +248,7 @@ func GetToolVersion(filePath, tool string) (string, bool, error) {
 	return versions[0], true, nil
 }
 
-// HasToolVersion checks if a tool/version combination exists in the .tool-versions file
+// HasToolVersion checks if a tool/version combination exists in the .tool-versions file.
 func HasToolVersion(filePath, tool, version string) (bool, error) {
 	toolVersions, err := LoadToolVersions(filePath)
 	if err != nil {
@@ -265,7 +265,7 @@ func HasToolVersion(filePath, tool, version string) (bool, error) {
 }
 
 // ParseToolVersionsLine parses a single line from a .tool-versions file
-// Returns tool name, version, and whether the line is valid
+// Returns tool name, version, and whether the line is valid.
 func ParseToolVersionsLine(line string) (string, string, bool) {
 	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, "#") {
@@ -283,7 +283,7 @@ func ParseToolVersionsLine(line string) (string, string, bool) {
 	return "", "", false
 }
 
-// ValidateToolVersionsFile validates the format of a .tool-versions file
+// ValidateToolVersionsFile validates the format of a .tool-versions file.
 func ValidateToolVersionsFile(filePath string) error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -310,7 +310,7 @@ func ValidateToolVersionsFile(filePath string) error {
 	return nil
 }
 
-// GetToolVersionsFileContent returns the raw content of a .tool-versions file
+// GetToolVersionsFileContent returns the raw content of a .tool-versions file.
 func GetToolVersionsFileContent(filePath string) (string, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -319,7 +319,7 @@ func GetToolVersionsFileContent(filePath string) (string, error) {
 	return string(data), nil
 }
 
-// MergeToolVersions merges two ToolVersions structs, with the second one taking precedence
+// MergeToolVersions merges two ToolVersions structs, with the second one taking precedence.
 func MergeToolVersions(base, override *ToolVersions) *ToolVersions {
 	result := &ToolVersions{
 		Tools: make(map[string][]string),

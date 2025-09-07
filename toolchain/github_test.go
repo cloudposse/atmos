@@ -7,13 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockGitHubAPI implements GitHubAPI for testing
+// MockGitHubAPI implements GitHubAPI for testing.
 type MockGitHubAPI struct {
 	releases map[string][]string
 	errors   map[string]error
 }
 
-// NewMockGitHubAPI creates a new mock GitHub API
+// NewMockGitHubAPI creates a new mock GitHub API.
 func NewMockGitHubAPI() *MockGitHubAPI {
 	return &MockGitHubAPI{
 		releases: make(map[string][]string),
@@ -21,19 +21,19 @@ func NewMockGitHubAPI() *MockGitHubAPI {
 	}
 }
 
-// SetReleases sets the mock releases for a specific owner/repo
+// SetReleases sets the mock releases for a specific owner/repo.
 func (m *MockGitHubAPI) SetReleases(owner, repo string, releases []string) {
 	key := owner + "/" + repo
 	m.releases[key] = releases
 }
 
-// SetError sets an error for a specific owner/repo
+// SetError sets an error for a specific owner/repo.
 func (m *MockGitHubAPI) SetError(owner, repo string, err error) {
 	key := owner + "/" + repo
 	m.errors[key] = err
 }
 
-// FetchReleases implements GitHubAPI interface
+// FetchReleases implements GitHubAPI interface.
 func (m *MockGitHubAPI) FetchReleases(owner, repo string, limit int) ([]string, error) {
 	key := owner + "/" + repo
 
