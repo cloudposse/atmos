@@ -4,7 +4,7 @@ This directory contains Claude Code agents for automating PR review feedback rem
 
 ## Structure
 
-```
+```text
 .claude/
 ├── agents/
 │   └── pr-review-remediator.md    # Main PR review remediation agent
@@ -95,14 +95,14 @@ The agent will automatically be invoked based on the task description.
 
 ```bash
 # Get changed files in PR
-gh pr view <PR> --repo cloudposse/atmos --json files --jq '.files[].path'
+gh pr view <PR_NUMBER> --repo cloudposse/atmos --json files --jq '.files[].path'
 
 # Find CodeRabbit comments
 gh api repos/cloudposse/atmos/issues/<PR>/comments \
   --jq '.[] | select(.user.login == "coderabbitai")'
 
 # Extract AI Agent prompts (PREFERRED)
-gh pr view <PR> --repo cloudposse/atmos --comments | \
+gh pr view <PR_NUMBER> --repo cloudposse/atmos --comments | \
   grep -A 50 "Prompt for AI Agents"
 
 # Lint only changed files
@@ -112,7 +112,7 @@ make lint  # Uses --new-from-rev=origin/main
 go test ./pkg/merge -v
 
 # Check PR status
-gh pr checks <PR> --repo cloudposse/atmos
+gh pr checks <PR_NUMBER> --repo cloudposse/atmos
 ```
 
 ## Validation Process

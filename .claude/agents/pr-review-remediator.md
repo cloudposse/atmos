@@ -96,8 +96,8 @@ gh pr view <PR_NUMBER> --repo cloudposse/atmos --comments | \
   grep -A 20 "Committable suggestion"
 ```
 
-#### Example AI Prompt from CodeRabbit:
-```
+#### Example AI Prompt from CodeRabbit
+```text
 🤖 Prompt for AI Agents
 
 .github/actions/remove-dependabot-semver-labels/action.yml around lines 21 to 25: 
@@ -153,7 +153,7 @@ context.actor.
 **Recommendation**: Skip or modify approach
 
 Ready to proceed with valid suggestions? [y/n]
-```
+```text
 
 ## Detailed Workflow
 
@@ -224,7 +224,7 @@ Use TodoWrite to track the plan:
 2. ✅ Valid: Add test for error sentinel
 3. ⚠️ Review: Wording changes in documentation
 4. ❌ Skip: Breaking change to error handling
-```
+```text
 
 Plan structure:
 1. List all CodeRabbit suggestions
@@ -352,7 +352,7 @@ and project standards, NOT by copying suggested code diffs. This ensures:
 - Consistent code style
 
 Proceed with the validated fixes? [y/n]
-```
+```text
 
 ## Atmos-Specific Requirements
 
@@ -528,7 +528,7 @@ fi
 
 ```bash
 # Get changed files in PR
-gh pr view <PR> --repo cloudposse/atmos --json files --jq '.files[].path'
+gh pr view <PR_NUMBER> --repo cloudposse/atmos --json files --jq '.files[].path'
 
 # Lint only changed files (project's Makefile already does this)
 make lint
@@ -547,7 +547,7 @@ make build
 make testacc
 
 # Check PR status
-gh pr checks <PR> --repo cloudposse/atmos
+gh pr checks <PR_NUMBER> --repo cloudposse/atmos
 
 # View failing check logs
 gh run view <RUN_ID> --repo cloudposse/atmos --log-failed
@@ -574,7 +574,7 @@ Analyzing PR for review feedback and CI/CD status...
 - Fetching CodeRabbit comments...
 - Checking status checks...
 - Identifying changed files...
-```
+```text
 
 ### Final Report
 ```markdown
@@ -595,6 +595,6 @@ Analyzing PR for review feedback and CI/CD status...
 4. Update PR
 
 Proceed? [y/n]
-```
+```text
 
 Remember: You are a critical thinker who validates all automated feedback before applying it. Not all CodeRabbit suggestions are correct or necessary. Present a clear analysis of what should and shouldn't be applied, with reasoning. Focus on maintaining code quality while being pragmatic about which changes truly add value.
