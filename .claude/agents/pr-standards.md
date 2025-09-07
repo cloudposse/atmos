@@ -54,26 +54,28 @@ This agent helps create and validate pull requests according to the project's co
 
 **IMPORTANT**: PR titles should communicate value, not compliance.
 
-### Good PR Titles (Value-Focused)
-- ✅ `refactor(gotcha): improve code organization and maintainability with focused modules`
-- ✅ `feat(auth): add SSO support for enterprise customers`
-- ✅ `fix(parser): resolve memory leak in large file processing`
-- ✅ `perf(cli): reduce startup time by 50% with lazy loading`
-- ✅ `docs: clarify configuration options with real-world examples`
+### Good PR Titles (Specific and Clear)
+- ✅ `refactor(gotcha): extract TUI, streaming, and CLI commands into 15 dedicated files`
+- ✅ `feat(auth): add SAML 2.0 and OIDC support for enterprise SSO`
+- ✅ `fix(parser): prevent 2GB memory leak when parsing files over 10MB`
+- ✅ `perf(cli): reduce startup from 3s to 400ms using lazy module loading`
+- ✅ `docs: add 12 real-world examples for stack configuration`
 
-### Bad PR Titles (Compliance-Focused)
-- ❌ `refactor(gotcha): split files to meet 500-line lint requirement`
-- ❌ `feat(auth): add feature requested in ticket ABC-123`
-- ❌ `fix(parser): fix bug to pass CI checks`
-- ❌ `perf(cli): make changes to satisfy performance requirements`
-- ❌ `docs: update documentation as required by PR template`
+### Bad PR Titles (Too Generic or Compliance-Focused)
+- ❌ `refactor(gotcha): improve code organization and maintainability` (too vague)
+- ❌ `refactor(gotcha): implement best practices` (meaningless)
+- ❌ `refactor(gotcha): split files to meet 500-line lint requirement` (compliance-focused)
+- ❌ `feat(auth): add new authentication feature` (too generic)
+- ❌ `fix(parser): fix memory issue` (not specific enough)
+- ❌ `perf(cli): improve performance` (how much? what aspect?)
+- ❌ `docs: update documentation` (what documentation? why?)
 
 ### Title Writing Tips
-1. **Lead with the benefit**: What does this change accomplish?
-2. **Use active voice**: "Improve" not "Improving", "Add" not "Adding"
-3. **Be specific but concise**: Mention the key improvement without details
-4. **Avoid technical jargon**: Unless the audience is deeply technical
-5. **Focus on outcomes**: What's better after this change?
+1. **Be specific**: Include numbers, component names, or measurable improvements
+2. **Avoid generic phrases**: "improve", "enhance", "optimize" without specifics
+3. **Use active voice**: "Extract" not "Extracting", "Add" not "Adding"
+4. **Include concrete details**: "15 files", "3s to 400ms", "SAML 2.0"
+5. **Answer "what exactly changed?"**: Not just "improved performance" but "reduced startup time by 87%"
 
 ## PR Template Structure
 

@@ -30,17 +30,17 @@ Create a pull request following Cloud Posse standards.
 
 When using `--title` or when the command generates a title:
 
-**Focus on value, not compliance:**
-- ✅ Good: `improve code organization with focused modules`
-- ❌ Bad: `split files to meet lint requirement`
+**Be specific, not generic:**
+- ✅ Good: `extract TUI and CLI commands into 15 dedicated files`
+- ❌ Bad: `improve code organization` (too vague)
 
-**Describe the benefit:**
-- ✅ Good: `reduce memory usage in large file processing`
-- ❌ Bad: `fix memory issue found in testing`
+**Include measurable details:**
+- ✅ Good: `reduce memory usage by 2GB for files over 10MB`
+- ❌ Bad: `fix memory issue` (how? what issue?)
 
-**Use active voice:**
-- ✅ Good: `add SSO support for enterprise users`
-- ❌ Bad: `adding SSO as requested`
+**Avoid meaningless phrases:**
+- ✅ Good: `add SAML 2.0 support for enterprise SSO`
+- ❌ Bad: `implement best practices` (which practices?)
 
 ## What this command does
 
