@@ -62,7 +62,7 @@ func (p *ssoProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 }
 
 // Authenticate performs AWS SSO authentication.
-func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
+func (p *ssoProvider) Authenticate(ctx context.Context) (*authTypes.Credentials, error) {
 	// Note: SSO provider no longer caches credentials directly
 	// Caching is handled at the manager level to prevent duplicates
 
@@ -154,8 +154,8 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 	// Note: Caching is now handled by identities that use this provider
 	// since they have access to the identity name required for the cache key
 
-	return &schema.Credentials{
-		AWS: &schema.AWSCredentials{
+	return &authTypes.Credentials{
+		AWS: &authTypes.AWSCredentials{
 			AccessKeyID: accessToken, // This will be used by identities to get actual credentials
 			Region:      p.region,
 			Expiration:  expiration.Format(time.RFC3339),

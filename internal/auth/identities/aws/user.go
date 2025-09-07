@@ -48,8 +48,8 @@ func (i *userIdentity) GetProviderName() (string, error) {
 }
 
 // Authenticate performs authentication by retrieving long-lived credentials and generating session tokens.
-func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
-	var longLivedCreds *schema.Credentials
+func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *types.Credentials) (*types.Credentials, error) {
+	var longLivedCreds *types.Credentials
 	var err error
 
 	// Check if credentials are configured in atmos.yaml (environment templating)
@@ -58,8 +58,8 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 		secretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
 		mfaArn, _ := i.config.Credentials["mfa_arn"].(string)
 
-		longLivedCreds = &schema.Credentials{
-			AWS: &schema.AWSCredentials{
+		longLivedCreds = &types.Credentials{
+			AWS: &types.AWSCredentials{
 				AccessKeyID:     accessKeyID,
 				SecretAccessKey: secretAccessKey,
 				MfaArn:          mfaArn,
@@ -99,7 +99,7 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 }
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider.
-func (i *userIdentity) writeAWSFiles(creds *schema.Credentials, region string) error {
+func (i *userIdentity) writeAWSFiles(creds *types.Credentials, region string) error {
 	awsFileManager := awsCloud.NewAWSFileManager()
 
 	// Write credentials to ~/.aws/atmos/aws-user/credentials
@@ -116,7 +116,7 @@ func (i *userIdentity) writeAWSFiles(creds *schema.Credentials, region string) e
 }
 
 // generateSessionToken generates session tokens for AWS User identities (with or without MFA).
-func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds *schema.Credentials, region string) (*schema.Credentials, error) {
+func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds *types.Credentials, region string) (*types.Credentials, error) {
 	// Create AWS config with long-lived credentials
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(region),
@@ -164,8 +164,8 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	}
 
 	// Create session credentials (temporary tokens for AWS files)
-	sessionCreds := &schema.Credentials{
-		AWS: &schema.AWSCredentials{
+	sessionCreds := &types.Credentials{
+		AWS: &types.AWSCredentials{
 			AccessKeyID:     *result.Credentials.AccessKeyId,
 			SecretAccessKey: *result.Credentials.SecretAccessKey,
 			SessionToken:    *result.Credentials.SessionToken,
@@ -185,7 +185,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	return sessionCreds, nil
 }
 
-func newMfaForm(longLivedCreds *schema.Credentials, mfaToken *string) *huh.Form {
+func newMfaForm(longLivedCreds *types.Credentials, mfaToken *string) *huh.Form {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
@@ -248,7 +248,7 @@ func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Ident
 }
 
 // AuthenticateStandaloneAWSUser handles authentication for standalone AWS user identities.
-func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, identities map[string]types.Identity) (*schema.Credentials, error) {
+func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, identities map[string]types.Identity) (*types.Credentials, error) {
 	log.Debug("Authenticating AWS user identity directly", "identity", identityName)
 
 	// Get the identity instance
@@ -268,7 +268,7 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 }
 
 // PostAuthenticate sets up AWS files after authentication.
-func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *schema.Credentials) error {
+func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *types.Credentials) error {
 	// Setup AWS files using shared AWS cloud package
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)

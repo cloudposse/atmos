@@ -8,7 +8,7 @@ This guide explains how to extend the Atmos Auth framework to support new cloud 
 
 - [ ] Implement `CloudProvider` interface
 - [ ] Create provider-specific implementations
-- [ ] Create identity-specific implementations  
+- [ ] Create identity-specific implementations
 - [ ] Add factory registration
 - [ ] Add validation rules
 - [ ] Create tests
@@ -42,21 +42,21 @@ func (p *gcpProvider) GetName() string {
     return "gcp"
 }
 
-func (p *gcpProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *schema.Credentials) error {
+func (p *gcpProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *types.Credentials) error {
     // Setup GCP-specific environment (service account keys, etc.)
     if credentials.GCP == nil {
         return fmt.Errorf("no GCP credentials provided")
     }
-    
+
     // Write service account key file
     keyPath := filepath.Join(os.TempDir(), fmt.Sprintf("gcp-%s-%s.json", providerName, identityName))
     if err := p.writeServiceAccountKey(keyPath, credentials.GCP); err != nil {
         return fmt.Errorf("failed to write service account key: %w", err)
     }
-    
+
     // Set GOOGLE_APPLICATION_CREDENTIALS
     os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", keyPath)
-    
+
     return nil
 }
 
@@ -74,16 +74,16 @@ func (p *gcpProvider) Cleanup(ctx context.Context, providerName, identityName st
     return os.Remove(keyPath)
 }
 
-func (p *gcpProvider) ValidateCredentials(ctx context.Context, credentials *schema.Credentials) error {
+func (p *gcpProvider) ValidateCredentials(ctx context.Context, credentials *types.Credentials) error {
     if credentials.GCP == nil {
         return fmt.Errorf("GCP credentials are required")
     }
-    
+
     // Validate service account key format
     if credentials.GCP.ServiceAccountKey == "" {
         return fmt.Errorf("service account key is required")
     }
-    
+
     // Test credentials by making a simple API call
     return p.testCredentials(ctx, credentials.GCP)
 }
@@ -118,7 +118,7 @@ func NewWorkloadIdentityProvider(name string, config *schema.Provider) (types.Pr
     if config.Region == "" {
         return nil, fmt.Errorf("region is required for GCP Workload Identity provider")
     }
-    
+
     return &workloadIdentityProvider{
         name:   name,
         config: config,
@@ -129,23 +129,23 @@ func (p *workloadIdentityProvider) Kind() string {
     return "gcp/workload-identity"
 }
 
-func (p *workloadIdentityProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
+func (p *workloadIdentityProvider) Authenticate(ctx context.Context) (*types.Credentials, error) {
     // Implement GCP Workload Identity authentication
     // 1. Get OIDC token from metadata service
     // 2. Exchange for GCP access token
     // 3. Return credentials
-    
+
     token, err := p.getWorkloadIdentityToken(ctx)
     if err != nil {
         return nil, fmt.Errorf("failed to get workload identity token: %w", err)
     }
-    
+
     accessToken, err := p.exchangeToken(ctx, token)
     if err != nil {
         return nil, fmt.Errorf("failed to exchange token: %w", err)
     }
-    
-    return &schema.Credentials{
+
+    return &types.Credentials{
         GCP: &schema.GCPCredentials{
             AccessToken: accessToken,
             ProjectID:   p.config.Spec["project_id"].(string),
@@ -157,11 +157,11 @@ func (p *workloadIdentityProvider) Validate() error {
     if p.config.Spec == nil {
         return fmt.Errorf("spec is required for workload identity provider")
     }
-    
+
     if _, ok := p.config.Spec["service_account_email"]; !ok {
         return fmt.Errorf("service_account_email is required in spec")
     }
-    
+
     return nil
 }
 
@@ -202,21 +202,21 @@ func (i *serviceAccountIdentity) Kind() string {
     return "gcp/service-account"
 }
 
-func (i *serviceAccountIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
+func (i *serviceAccountIdentity) Authenticate(ctx context.Context, baseCreds *types.Credentials) (*types.Credentials, error) {
     // Use base credentials to impersonate service account
     if baseCreds.GCP == nil {
         return nil, fmt.Errorf("GCP base credentials required")
     }
-    
+
     serviceAccountEmail := i.config.Principal["email"].(string)
-    
+
     // Impersonate service account using base credentials
     impersonatedToken, err := i.impersonateServiceAccount(ctx, baseCreds.GCP, serviceAccountEmail)
     if err != nil {
         return nil, fmt.Errorf("failed to impersonate service account: %w", err)
     }
-    
-    return &schema.Credentials{
+
+    return &types.Credentials{
         GCP: &schema.GCPCredentials{
             AccessToken:          impersonatedToken,
             ServiceAccountEmail:  serviceAccountEmail,
@@ -229,11 +229,11 @@ func (i *serviceAccountIdentity) Validate() error {
     if i.config.Principal == nil {
         return fmt.Errorf("principal is required for service account identity")
     }
-    
+
     if _, ok := i.config.Principal["email"]; !ok {
         return fmt.Errorf("service account email is required in principal")
     }
-    
+
     return nil
 }
 
@@ -249,7 +249,7 @@ func (i *serviceAccountIdentity) Merge(component *schema.Identity) types.Identit
             merged.Principal[k] = v
         }
     }
-    
+
     return &serviceAccountIdentity{
         name:   i.name,
         config: &merged,
@@ -310,12 +310,12 @@ func NewCloudProviderFactory() types.CloudProviderFactory {
     factory := &cloudProviderFactory{
         providers: make(map[string]types.CloudProvider),
     }
-    
+
     // Register built-in providers
     factory.RegisterCloudProvider("aws", aws.NewAWSProvider("aws"))
     factory.RegisterCloudProvider("gcp", gcp.NewGCPProvider("gcp"))
     factory.RegisterCloudProvider("azure", azure.NewAzureProvider("azure"))
-    
+
     return factory
 }
 ```
@@ -328,7 +328,7 @@ Extend the validator to support your new provider types:
 // internal/auth/validation/validator.go
 func (v *validator) ValidateProvider(name string, provider *schema.Provider) error {
     // ... existing validation ...
-    
+
     switch provider.Kind {
     // ... existing cases ...
     case "gcp/workload-identity":
@@ -344,15 +344,15 @@ func (v *validator) validateGCPWorkloadIdentityProvider(provider *schema.Provide
     if provider.Region == "" {
         return fmt.Errorf("region is required for GCP Workload Identity provider")
     }
-    
+
     if provider.Spec == nil {
         return fmt.Errorf("spec is required for GCP Workload Identity provider")
     }
-    
+
     if _, ok := provider.Spec["service_account_email"]; !ok {
         return fmt.Errorf("service_account_email is required in spec")
     }
-    
+
     return nil
 }
 ```
@@ -413,7 +413,7 @@ func TestWorkloadIdentityProvider_Authenticate(t *testing.T) {
         },
         // Add more test cases...
     }
-    
+
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             provider, err := NewWorkloadIdentityProvider("test", tt.config)
@@ -421,14 +421,14 @@ func TestWorkloadIdentityProvider_Authenticate(t *testing.T) {
                 assert.Error(t, err)
                 return
             }
-            
+
             assert.NoError(t, err)
             assert.NotNil(t, provider)
-            
+
             // Test authentication (may require mocking)
             ctx := context.Background()
             creds, err := provider.Authenticate(ctx)
-            
+
             // Add assertions based on your implementation
         })
     }
@@ -464,6 +464,7 @@ func init() {
 ## Configuration Examples
 
 ### GCP Workload Identity Provider
+
 ```yaml
 providers:
   gcp-workload:
@@ -475,6 +476,7 @@ providers:
 ```
 
 ### GCP Service Account Identity
+
 ```yaml
 identities:
   gcp-admin:
@@ -489,24 +491,28 @@ identities:
 ## Best Practices
 
 ### Security
+
 - Never log credentials or sensitive information
 - Use secure credential storage (OS keyring)
 - Implement proper credential expiration
 - Clean up temporary files and environment variables
 
 ### Error Handling
+
 - Provide clear, actionable error messages
 - Include context about which step failed
 - Handle network timeouts and retries gracefully
 - Validate configurations early
 
 ### Testing
+
 - Mock external API calls in unit tests
 - Test error conditions and edge cases
 - Use integration tests for end-to-end flows
 - Test credential expiration scenarios
 
 ### Documentation
+
 - Document all configuration options
 - Provide working examples
 - Include troubleshooting guides
@@ -515,6 +521,7 @@ identities:
 ## Common Patterns
 
 ### Token Exchange
+
 Many cloud providers use OAuth2 or similar token exchange patterns:
 
 ```go
@@ -528,6 +535,7 @@ func (p *provider) exchangeToken(ctx context.Context, sourceToken string) (*Cred
 ```
 
 ### Credential Refresh
+
 Implement automatic credential refresh for long-running processes:
 
 ```go
@@ -535,13 +543,14 @@ func (p *provider) refreshCredentials(ctx context.Context, creds *Credentials) (
     if !p.isExpired(creds) {
         return creds, nil
     }
-    
+
     // Refresh logic here
     return p.Authenticate(ctx)
 }
 ```
 
 ### Environment Setup
+
 Follow consistent patterns for environment variable management:
 
 ```go

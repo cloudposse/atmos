@@ -10,7 +10,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/ini.v1"
 )
 
@@ -40,7 +39,7 @@ func (p *AWSCloudProvider) GetName() string {
 }
 
 // SetupEnvironment configures AWS-specific environment variables and files.
-func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *schema.Credentials) error {
+func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *types.Credentials) error {
 	if credentials == nil || credentials.AWS == nil {
 		return fmt.Errorf("%w: AWS credentials are required", errUtils.ErrAwsAuth)
 	}
@@ -85,7 +84,7 @@ func (p *AWSCloudProvider) CleanupEnvironment(ctx context.Context, providerName,
 }
 
 // ValidateCredentials validates AWS credentials.
-func (p *AWSCloudProvider) ValidateCredentials(ctx context.Context, credentials *schema.Credentials) error {
+func (p *AWSCloudProvider) ValidateCredentials(ctx context.Context, credentials *types.Credentials) error {
 	if credentials == nil {
 		return fmt.Errorf("%w: credentials cannot be nil", errUtils.ErrAwsAuth)
 	}
@@ -117,7 +116,7 @@ func (p *AWSCloudProvider) GetCredentialPaths(providerName, identityName string)
 }
 
 // writeCredentialsFile writes AWS credentials to the specified file.
-func (p *AWSCloudProvider) writeCredentialsFile(path, identityName string, creds *schema.AWSCredentials) error {
+func (p *AWSCloudProvider) writeCredentialsFile(path, identityName string, creds *types.AWSCredentials) error {
 	content := fmt.Sprintf(`[%s]
 aws_access_key_id = %s
 aws_secret_access_key = %s

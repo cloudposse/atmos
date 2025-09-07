@@ -11,6 +11,7 @@ This directory is reserved for Google Cloud Platform cloud provider implementati
 When implemented, the GCP cloud provider would support:
 
 - **Google Cloud Authentication**
+
   - Service Account Key authentication
   - Workload Identity Federation
   - Application Default Credentials (ADC)
@@ -18,6 +19,7 @@ When implemented, the GCP cloud provider would support:
   - OAuth2 device flow for interactive authentication
 
 - **Environment Management**
+
   - Service Account key files (`~/.gcp/atmos/<provider>/credentials.json`)
   - gcloud configuration directories
   - Environment variables for Terraform Google provider
@@ -34,21 +36,24 @@ When implemented, the GCP cloud provider would support:
 To implement GCP support, follow the [Adding Providers Guide](../docs/ADDING_PROVIDERS.md) and implement:
 
 1. **CloudProvider Interface** (`gcp/provider.go`)
+
    ```go
    type GCPCloudProvider struct{}
-   
-   func (p *GCPCloudProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *schema.Credentials) error
+
+   func (p *GCPCloudProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *types.Credentials) error
    func (p *GCPCloudProvider) GetEnvironmentVariables(providerName, identityName string) map[string]string
-   func (p *GCPCloudProvider) ValidateCredentials(ctx context.Context, credentials *schema.Credentials) error
+   func (p *GCPCloudProvider) ValidateCredentials(ctx context.Context, credentials *types.Credentials) error
    ```
 
 2. **Authentication Providers** (`providers/gcp/`)
+
    - `service_account_key.go` - Service Account Key authentication
    - `workload_identity.go` - Workload Identity Federation
    - `application_default.go` - Application Default Credentials
    - `oauth2.go` - OAuth2 device flow
 
 3. **Identity Types** (`identities/gcp/`)
+
    - `service_account.go` - Service Account impersonation
    - `workload_identity.go` - Workload Identity identity
 
@@ -66,6 +71,7 @@ To implement GCP support, follow the [Adding Providers Guide](../docs/ADDING_PRO
 ## Configuration Examples
 
 ### Service Account Key Provider
+
 ```yaml
 providers:
   gcp-sa-key:
@@ -75,6 +81,7 @@ providers:
 ```
 
 ### Workload Identity Provider
+
 ```yaml
 providers:
   gcp-workload:
@@ -86,6 +93,7 @@ providers:
 ```
 
 ### Service Account Identity
+
 ```yaml
 identities:
   gcp-admin:
@@ -100,6 +108,7 @@ identities:
 ```
 
 ### Application Default Credentials
+
 ```yaml
 providers:
   gcp-adc:
@@ -142,18 +151,21 @@ Implementation would require:
 ## Authentication Flows
 
 ### Service Account Key Flow
+
 1. Load service account key from environment or file
 2. Create JWT token using private key
 3. Exchange JWT for access token
 4. Write credentials to provider-specific location
 
 ### Workload Identity Flow
+
 1. Get OIDC token from metadata service or external provider
 2. Exchange OIDC token for Google access token using STS
 3. Optionally impersonate service account
 4. Return structured credentials
 
 ### Application Default Credentials Flow
+
 1. Check for explicit service account key
 2. Check for gcloud credentials
 3. Check for metadata service (GCE/Cloud Run/etc.)

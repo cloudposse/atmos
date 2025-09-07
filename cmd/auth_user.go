@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -91,8 +92,8 @@ var authUserConfigureCmd = &cobra.Command{
 		store := credentials.NewCredentialStore()
 
 		// Create credentials in the proper schema format with AWS wrapper
-		creds := &schema.Credentials{
-			AWS: &schema.AWSCredentials{
+		creds := &types.Credentials{
+			AWS: &types.AWSCredentials{
 				AccessKeyID:     accessKeyID,
 				SecretAccessKey: secretAccessKey,
 				MfaArn:          mfaArn,

@@ -54,7 +54,7 @@ func NewAuthManager(
 	}
 
 	// Initialize identities
-	if err := m.initializeidentities(); err != nil {
+	if err := m.initializeIdentities(); err != nil {
 		return nil, fmt.Errorf("%w: failed to initialize identities: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 
@@ -67,7 +67,7 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 }
 
 // Authenticate performs hierarchical authentication for the specified identity.
-func (m *manager) Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
+func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
 		return nil, fmt.Errorf("%w: no identity specified", errUtils.ErrInvalidAuthConfig)
@@ -123,7 +123,7 @@ func (m *manager) GetChain() []string {
 }
 
 // Whoami returns information about the specified identity's credentials.
-func (m *manager) Whoami(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
+func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// Try to retrieve credentials for this specific identity
 	creds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
@@ -220,7 +220,7 @@ func (m *manager) ListProviders() []string {
 
 // initializeProviders creates provider instances from configuration.
 func (m *manager) initializeProviders() error {
-	// nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
+	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, providerConfig := range m.config.Providers {
 		provider, err := NewProvider(name, &providerConfig)
 		if err != nil {
@@ -231,9 +231,8 @@ func (m *manager) initializeProviders() error {
 	return nil
 }
 
-// initializeidentities creates identity instances from configuration.
-func (m *manager) initializeidentities() error {
-	// nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
+// initializeIdentities creates identity instances from configuration.
+func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := NewIdentity(name, &identityConfig)
 		if err != nil {
@@ -307,7 +306,7 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 }
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation.
-func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity string) (*schema.Credentials, error) {
+func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity string) (*types.Credentials, error) {
 	// Step 1: Bottom-up validation - check cached credentials from target to root
 	validFromIndex := m.findFirstValidCachedCredentials()
 
@@ -356,7 +355,7 @@ func (m *manager) findFirstValidCachedCredentials() int {
 
 // isCredentialValid checks if the cached credentials are valid and not expired.
 // Returns whether the credentials are valid and, if AWS expiration is present and valid, the parsed expiration time.
-func (m *manager) isCredentialValid(identityName string, cachedCreds *schema.Credentials) (bool, *time.Time) {
+func (m *manager) isCredentialValid(identityName string, cachedCreds *types.Credentials) (bool, *time.Time) {
 	expired, err := m.credentialStore.IsExpired(identityName)
 	if err != nil || expired {
 		return false, nil
@@ -377,7 +376,7 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds *schema.Cre
 }
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
-func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (*schema.Credentials, error) {
+func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (*types.Credentials, error) {
 	// Todo Ideally this wouldn't be here, and would be handled by an identity interface function
 	// Handle special case: standalone AWS user identity
 	if aws.IsStandaloneAWSUserChain(m.chain, m.config.Identities) {
@@ -389,8 +388,8 @@ func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (*s
 }
 
 // authenticateProviderChain handles authentication for provider-based identity chains.
-func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int) (*schema.Credentials, error) {
-	var currentCreds *schema.Credentials
+func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int) (*types.Credentials, error) {
+	var currentCreds *types.Credentials
 	var err error
 
 	// Determine actual starting point for authentication
@@ -407,9 +406,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 	if actualStartIndex == 0 {
 		// Allow provider to inspect the chain and prepare pre-auth preferences
 		if provider, exists := m.providers[m.chain[0]]; exists {
-			if err := provider.PreAuthenticate(m); err != nil {
-				log.Debug("Provider pre-authenticate failed", "provider", m.chain[0], "error", err)
-			}
+			_ = provider.PreAuthenticate(m)
 		}
 		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
 		if err != nil {
@@ -422,7 +419,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 	return m.authenticateIdentityChain(ctx, actualStartIndex, currentCreds)
 }
 
-func (m *manager) fetchCachedCredentials(startIndex int) (*schema.Credentials, int) {
+func (m *manager) fetchCachedCredentials(startIndex int) (*types.Credentials, int) {
 	currentCreds, err := m.retrieveCachedCredentials(m.chain, startIndex)
 	if err != nil {
 		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
@@ -456,7 +453,7 @@ func (m *manager) determineStartingIndex(startIndex int) int {
 }
 
 // retrieveCachedCredentials retrieves cached credentials from the specified starting point.
-func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*schema.Credentials, error) {
+func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*types.Credentials, error) {
 	identityName := chain[startIndex]
 	currentCreds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
@@ -468,7 +465,7 @@ func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*sc
 }
 
 // authenticateWithProvider handles provider authentication.
-func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (*schema.Credentials, error) {
+func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (*types.Credentials, error) {
 	provider, exists := m.providers[providerName]
 	if !exists {
 		return nil, fmt.Errorf("%w: provider %q not found", errUtils.ErrInvalidAuthConfig, providerName)
@@ -500,7 +497,7 @@ func (m *manager) getChainStepName(index int) string {
 }
 
 // authenticateIdentityChain performs sequential authentication through an identity chain.
-func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int, initialCreds *schema.Credentials) (*schema.Credentials, error) {
+func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int, initialCreds *types.Credentials) (*types.Credentials, error) {
 	bold := lipgloss.NewStyle().Bold(true)
 
 	log.Debug("Authenticating identity chain", "chainLength", len(m.chain), "startIndex", startIndex, "chain", m.chain)
@@ -615,10 +612,10 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 }
 
 // buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials.
-func (m *manager) buildWhoamiInfo(identityName string, creds *schema.Credentials) *schema.WhoamiInfo {
+func (m *manager) buildWhoamiInfo(identityName string, creds *types.Credentials) *types.WhoamiInfo {
 	providerName := m.getProviderForIdentity(identityName)
 
-	info := &schema.WhoamiInfo{
+	info := &types.WhoamiInfo{
 		Provider:    providerName,
 		Identity:    identityName,
 		Credentials: creds,

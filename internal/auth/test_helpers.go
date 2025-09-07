@@ -3,6 +3,7 @@ package auth
 import (
 	"time"
 
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -24,9 +25,9 @@ func CreateTestIdentity(kind string) *schema.Identity {
 }
 
 // CreateTestCredentials creates test AWS credentials.
-func CreateTestCredentials(accessKeyID, secretKey, region string) *schema.Credentials {
-	return &schema.Credentials{
-		AWS: &schema.AWSCredentials{
+func CreateTestCredentials(accessKeyID, secretKey, region string) *types.Credentials {
+	return &types.Credentials{
+		AWS: &types.AWSCredentials{
 			AccessKeyID:     accessKeyID,
 			SecretAccessKey: secretKey,
 			Region:          region,
@@ -35,9 +36,9 @@ func CreateTestCredentials(accessKeyID, secretKey, region string) *schema.Creden
 }
 
 // CreateTestOIDCCredentials creates test OIDC credentials.
-func CreateTestOIDCCredentials(token, provider string) *schema.Credentials {
-	return &schema.Credentials{
-		OIDC: &schema.OIDCCredentials{
+func CreateTestOIDCCredentials(token, provider string) *types.Credentials {
+	return &types.Credentials{
+		OIDC: &types.OIDCCredentials{
 			Token:    token,
 			Provider: provider,
 		},
@@ -45,8 +46,8 @@ func CreateTestOIDCCredentials(token, provider string) *schema.Credentials {
 }
 
 // CreateTestWhoamiInfo creates test whoami information.
-func CreateTestWhoamiInfo(provider, identity, principal string) *schema.WhoamiInfo {
-	return &schema.WhoamiInfo{
+func CreateTestWhoamiInfo(provider, identity, principal string) *types.WhoamiInfo {
+	return &types.WhoamiInfo{
 		Provider:    provider,
 		Identity:    identity,
 		Principal:   principal,

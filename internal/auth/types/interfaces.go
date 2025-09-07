@@ -12,7 +12,7 @@ type CloudProvider interface {
 	GetName() string
 
 	// SetupEnvironment sets up cloud-specific environment variables and files.
-	SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *schema.Credentials) error
+	SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *Credentials) error
 
 	// GetEnvironmentVariables returns cloud-specific environment variables for tools like Terraform.
 	GetEnvironmentVariables(providerName, identityName string) (map[string]string, error)
@@ -21,7 +21,7 @@ type CloudProvider interface {
 	Cleanup(ctx context.Context, providerName, identityName string) error
 
 	// ValidateCredentials validates that the provided credentials are valid for this cloud provider.
-	ValidateCredentials(ctx context.Context, credentials *schema.Credentials) error
+	ValidateCredentials(ctx context.Context, credentials *Credentials) error
 
 	// GetCredentialFilePaths returns the paths to credential files managed by this provider.
 	GetCredentialFilePaths(providerName string) map[string]string
@@ -39,7 +39,7 @@ type CloudProviderFactory interface {
 // CloudProviderManager provides high-level cloud provider operations.
 type CloudProviderManager interface {
 	// SetupEnvironment sets up cloud environment for the given provider kind and identity.
-	SetupEnvironment(ctx context.Context, providerKind, providerName, identityName string, credentials *schema.Credentials) error
+	SetupEnvironment(ctx context.Context, providerKind, providerName, identityName string, credentials *Credentials) error
 
 	// GetEnvironmentVariables returns environment variables for the given provider kind and identity.
 	GetEnvironmentVariables(providerKind, providerName, identityName string) (map[string]string, error)
@@ -61,7 +61,7 @@ type Provider interface {
 	// Providers can access the current chain via manager.GetChain().
 	PreAuthenticate(manager AuthManager) error
 	// Authenticate performs provider-specific authentication and returns credentials.
-	Authenticate(ctx context.Context) (*schema.Credentials, error)
+	Authenticate(ctx context.Context) (*Credentials, error)
 
 	// Validate validates the provider configuration.
 	Validate() error
@@ -80,7 +80,7 @@ type Identity interface {
 	GetProviderName() (string, error)
 
 	// Authenticate performs authentication using the provided base credentials.
-	Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error)
+	Authenticate(ctx context.Context, baseCreds *Credentials) (*Credentials, error)
 
 	// Validate validates the identity configuration.
 	Validate() error
@@ -90,16 +90,16 @@ type Identity interface {
 
 	// PostAuthenticate is called after successful authentication with the final credentials.
 	// Implementations can use the manager to perform provider-specific file setup or other side effects.
-	PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *schema.Credentials) error
+	PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *Credentials) error
 }
 
 // AuthManager manages the overall authentication process.
 type AuthManager interface {
 	// Authenticate performs authentication for the specified identity.
-	Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error)
+	Authenticate(ctx context.Context, identityName string) (*WhoamiInfo, error)
 
 	// Whoami returns information about the specified identity's credentials.
-	Whoami(ctx context.Context, identityName string) (*schema.WhoamiInfo, error)
+	Whoami(ctx context.Context, identityName string) (*WhoamiInfo, error)
 
 	// Validate validates the entire auth configuration.
 	Validate() error
@@ -137,10 +137,10 @@ type AuthManager interface {
 // CredentialStore defines the interface for storing and retrieving credentials.
 type CredentialStore interface {
 	// Store stores credentials for the given alias.
-	Store(alias string, creds *schema.Credentials) error
+	Store(alias string, creds *Credentials) error
 
 	// Retrieve retrieves credentials for the given alias.
-	Retrieve(alias string) (*schema.Credentials, error)
+	Retrieve(alias string) (*Credentials, error)
 
 	// Delete deletes credentials for the given alias.
 	Delete(alias string) error
@@ -165,4 +165,8 @@ type Validator interface {
 
 	// ValidateChains validates identity chains for cycles and invalid references.
 	ValidateChains(identities map[string]*schema.Identity, providers map[string]*schema.Provider) error
+}
+
+type ICredentials interface {
+	IsExpired() bool
 }

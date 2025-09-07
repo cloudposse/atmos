@@ -10,6 +10,7 @@ import (
 	ini "gopkg.in/ini.v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -33,7 +34,7 @@ func NewAWSFileManager() *AWSFileManager {
 }
 
 // WriteCredentials writes AWS credentials to the provider-specific file with identity profile.
-func (m *AWSFileManager) WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error {
+func (m *AWSFileManager) WriteCredentials(providerName, identityName string, creds *types.AWSCredentials) error {
 	credentialsPath := m.GetCredentialsPath(providerName)
 
 	// Ensure directory exists

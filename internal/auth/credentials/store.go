@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/zalando/go-keyring"
 
 	"github.com/cloudposse/atmos/internal/auth/types"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ErrCredentialStore is the static sentinel for credential-store failures.
@@ -33,7 +31,7 @@ func NewCredentialStore() types.CredentialStore {
 }
 
 // Store stores credentials for the given alias.
-func (s *keyringStore) Store(alias string, creds *schema.Credentials) error {
+func (s *keyringStore) Store(alias string, creds *types.Credentials) error {
 	data, err := json.Marshal(creds)
 	if err != nil {
 		return fmt.Errorf("%w: failed to marshal credentials: %v", ErrCredentialStore, err)
@@ -47,13 +45,13 @@ func (s *keyringStore) Store(alias string, creds *schema.Credentials) error {
 }
 
 // Retrieve retrieves credentials for the given alias.
-func (s *keyringStore) Retrieve(alias string) (*schema.Credentials, error) {
+func (s *keyringStore) Retrieve(alias string) (*types.Credentials, error) {
 	data, err := keyring.Get(alias, KeyringUser)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to retrieve credentials from keyring: %v", ErrCredentialStore, err)
 	}
 
-	var creds schema.Credentials
+	var creds types.Credentials
 	if err := json.Unmarshal([]byte(data), &creds); err != nil {
 		return nil, fmt.Errorf("%w: failed to unmarshal credentials: %v", ErrCredentialStore, err)
 	}
@@ -85,31 +83,9 @@ func (s *keyringStore) IsExpired(alias string) (bool, error) {
 		return true, err
 	}
 
-	// Check AWS credentials expiration
-	if creds.AWS != nil && creds.AWS.Expiration != "" {
-		expTime, err := time.Parse(time.RFC3339, creds.AWS.Expiration)
-		if err != nil {
-			return true, fmt.Errorf("%w: failed to parse expiration time: %v", ErrCredentialStore, err)
-		}
-		return time.Now().After(expTime), nil
-	}
-
-	// Check Azure credentials expiration
-	if creds.Azure != nil && creds.Azure.Expiration != "" {
-		expTime, err := time.Parse(time.RFC3339, creds.Azure.Expiration)
-		if err != nil {
-			return true, fmt.Errorf("%w: failed to parse expiration time: %v", ErrCredentialStore, err)
-		}
-		return time.Now().After(expTime), nil
-	}
-
-	// Check GCP credentials expiration
-	if creds.GCP != nil && creds.GCP.Expiration != "" {
-		expTime, err := time.Parse(time.RFC3339, creds.GCP.Expiration)
-		if err != nil {
-			return true, fmt.Errorf("%w: failed to parse expiration time: %v", ErrCredentialStore, err)
-		}
-		return time.Now().After(expTime), nil
+	// Check if creds implements the iCredentials interface, and if so, run the isExpired function
+	if icreds, ok := creds.(iCredentials); ok {
+		return icreds.isExpired(), nil
 	}
 
 	// If no expiration info, assume not expired

@@ -4,12 +4,13 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/internal/auth/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // SetupFiles sets up AWS credentials and config files for the given identity.
-func SetupFiles(providerName, identityName string, creds *schema.Credentials) error {
+func SetupFiles(providerName, identityName string, creds *types.Credentials) error {
 	if creds.AWS == nil {
 		return nil // No AWS credentials to setup
 	}

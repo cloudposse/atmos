@@ -39,7 +39,7 @@ func (i *assumeRoleIdentity) Kind() string {
 }
 
 // Authenticate performs authentication using assume role.
-func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
+func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *types.Credentials) (*types.Credentials, error) {
 	// Note: Caching is now handled at the manager level to prevent duplicates.
 
 	if baseCreds == nil || baseCreds.AWS == nil {
@@ -110,8 +110,8 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 		expiration = result.Credentials.Expiration.Format(time.RFC3339)
 	}
 
-	creds := &schema.Credentials{
-		AWS: &schema.AWSCredentials{
+	creds := &types.Credentials{
+		AWS: &types.AWSCredentials{
 			AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
 			SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
 			SessionToken:    aws.ToString(result.Credentials.SessionToken),
@@ -166,7 +166,7 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 }
 
 // PostAuthenticate sets up AWS files after authentication.
-func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *schema.Credentials) error {
+func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *types.Credentials) error {
 	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)

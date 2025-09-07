@@ -11,12 +11,14 @@ This directory is reserved for Azure cloud provider implementation in the Atmos 
 When implemented, the Azure cloud provider would support:
 
 - **Azure Active Directory (AAD) Authentication**
+
   - Service Principal authentication
   - Managed Identity support
   - Device code flow for interactive authentication
   - Azure CLI integration
 
 - **Environment Management**
+
   - Azure CLI configuration files (`~/.azure/atmos/<provider>/config`)
   - Service principal credential files
   - Environment variables for Terraform Azure provider
@@ -33,20 +35,23 @@ When implemented, the Azure cloud provider would support:
 To implement Azure support, follow the [Adding Providers Guide](../docs/ADDING_PROVIDERS.md) and implement:
 
 1. **CloudProvider Interface** (`azure/provider.go`)
+
    ```go
    type AzureCloudProvider struct{}
-   
-   func (p *AzureCloudProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *schema.Credentials) error
+
+   func (p *AzureCloudProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *types.Credentials) error
    func (p *AzureCloudProvider) GetEnvironmentVariables(providerName, identityName string) map[string]string
-   func (p *AzureCloudProvider) ValidateCredentials(ctx context.Context, credentials *schema.Credentials) error
+   func (p *AzureCloudProvider) ValidateCredentials(ctx context.Context, credentials *types.Credentials) error
    ```
 
 2. **Authentication Providers** (`providers/azure/`)
+
    - `service_principal.go` - Service Principal authentication
    - `managed_identity.go` - Managed Identity authentication
    - `device_code.go` - Interactive device code flow
 
 3. **Identity Types** (`identities/azure/`)
+
    - `service_principal.go` - Service Principal identity
    - `managed_identity.go` - Managed Identity identity
 
@@ -65,6 +70,7 @@ To implement Azure support, follow the [Adding Providers Guide](../docs/ADDING_P
 ## Configuration Examples
 
 ### Service Principal Provider
+
 ```yaml
 providers:
   azure-sp:
@@ -75,6 +81,7 @@ providers:
 ```
 
 ### Managed Identity Provider
+
 ```yaml
 providers:
   azure-mi:
@@ -83,6 +90,7 @@ providers:
 ```
 
 ### Service Principal Identity
+
 ```yaml
 identities:
   azure-admin:

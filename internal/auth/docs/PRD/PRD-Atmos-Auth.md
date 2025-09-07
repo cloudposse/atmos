@@ -1020,7 +1020,7 @@ identities:
 **Key Characteristics:**
 
 - No `via` provider required - AWS User identities are self-contained
-- Credentials stored securely in system keyring using `schema.Credentials` format with AWS wrapper
+- Credentials stored securely in system keyring using `types.Credentials` format with AWS wrapper
 - Configure credentials using `atmos auth user configure` interactive command
 - MFA ARN support integrated directly into `AWSCredentials` schema
 - Primarily used for break-glass scenarios and emergency access
