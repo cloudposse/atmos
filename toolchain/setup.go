@@ -11,7 +11,7 @@ var (
 	DefaultToolsConfig          = ".tools-config"
 )
 
-// Define checkmark styles for use across the application
+// Define checkmark styles for use across the application.
 var (
 	checkMark = lipgloss.NewStyle().Foreground(lipgloss.Color("#00D700")).SetString("✓")
 	xMark     = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).SetString("x")
@@ -23,7 +23,7 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 	atmosConfig = config
 }
 
-// GetToolVersionsFilePath returns the path to the tool-versions file
+// GetToolVersionsFilePath returns the path to the tool-versions file.
 func GetToolVersionsFilePath() string {
 	if atmosConfig.Toolchain.FilePath == "" {
 		return DefaultToolVersionsFilePath
@@ -31,7 +31,7 @@ func GetToolVersionsFilePath() string {
 	return atmosConfig.Toolchain.FilePath
 }
 
-// GetToolsDirPath returns the path to the tools directory
+// GetToolsDirPath returns the path to the tools directory.
 func GetToolsDirPath() string {
 	if atmosConfig.Toolchain.ToolsDir == "" {
 		return DefaultToolsDir
@@ -39,7 +39,7 @@ func GetToolsDirPath() string {
 	return atmosConfig.Toolchain.ToolsDir
 }
 
-// GetToolsConfigFilePath returns the path to the tools configuration file
+// GetToolsConfigFilePath returns the path to the tools configuration file.
 func GetToolsConfigFilePath() string {
 	if atmosConfig.Toolchain.ToolsConfigFile == "" {
 		return DefaultToolsConfig

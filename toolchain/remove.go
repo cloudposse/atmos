@@ -3,7 +3,7 @@ package toolchain
 import (
 	"fmt"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
 // RemoveToolVersion removes either the entire tool or a specific version.

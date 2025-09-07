@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// InfoExec handles the core logic for retrieving and formatting tool information
+// InfoExec handles the core logic for retrieving and formatting tool information.
 func InfoExec(toolName, outputFormat string) error {
 	// Create installer inside the function
 	installer := NewInstaller()
@@ -52,7 +52,7 @@ func InfoExec(toolName, outputFormat string) error {
 	return nil
 }
 
-// formatToolInfoAsTable formats tool information as a proper table using lipgloss
+// formatToolInfoAsTable formats tool information as a proper table using lipgloss.
 func formatToolInfoAsTable(toolName, owner, repo string, tool *Tool, version string, installer *Installer) string {
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63")).Width(15)
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))

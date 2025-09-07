@@ -8,7 +8,7 @@ import (
 
 var execFunc = syscall.Exec
 
-// ToolRunner defines the interface for running and resolving tools (for real and mock installers)
+// ToolRunner defines the interface for running and resolving tools (for real and mock installers).
 type ToolRunner interface {
 	FindBinaryPath(owner, repo, version string) (string, error)
 	GetResolver() ToolResolver

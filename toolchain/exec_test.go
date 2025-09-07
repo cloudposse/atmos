@@ -7,7 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// --- Fake Installer for testing ---
+// --- Fake Installer for testing ---.
 type fakeInstaller struct {
 	resolveOwner string
 	resolveRepo  string
@@ -42,7 +42,7 @@ type Resolver interface {
 	Resolve(tool string) (string, string, error)
 }
 
-// --- Mock syscall.Exec ---
+// --- Mock syscall.Exec ---.
 var (
 	calledExecPath string
 	calledExecArgs []string
@@ -63,7 +63,7 @@ func resetExecMock() {
 	calledExecEnv = nil
 }
 
-// --- Tests ---
+// --- Tests ---.
 func TestRunExecCommand_Success(t *testing.T) {
 	resetExecMock()
 	execFunc = mockExec // swap syscall.Exec with mock

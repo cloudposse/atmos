@@ -128,7 +128,7 @@ func ListToolVersions(showAll bool, limit int, toolName string) error {
 	return nil
 }
 
-// sortVersionsSemver sorts versions in semantic version order
+// sortVersionsSemver sorts versions in semantic version order.
 func sortVersionsSemver(versions []string) ([]string, error) {
 	// Create a slice of semver versions
 	var semverVersions []*semver.Version
@@ -167,7 +167,7 @@ func sortVersionsSemver(versions []string) ([]string, error) {
 	return result, nil
 }
 
-// isSpecialVersion checks if a version string is a special version (not semver)
+// isSpecialVersion checks if a version string is a special version (not semver).
 func isSpecialVersion(version string) bool {
 	specialVersions := []string{
 		"latest", "system", "current", "stable", "nightly", "dev", "master", "main",

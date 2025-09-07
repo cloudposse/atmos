@@ -10,10 +10,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
-// Table row data structure
+// Table row data structure.
 type toolRow struct {
 	alias       string
 	registry    string
@@ -371,7 +371,7 @@ func RunList() error {
 	return nil
 }
 
-// renderTableWithConditionalStyling renders the table with proper conditional styling
+// renderTableWithConditionalStyling renders the table with proper conditional styling.
 func renderTableWithConditionalStyling(t table.Model, rows []toolRow, defaultStyle, uninstalledStyle table.Styles) string {
 	// Get the base table view
 	tableView := t.View()
@@ -406,7 +406,7 @@ func renderTableWithConditionalStyling(t table.Model, rows []toolRow, defaultSty
 	return strings.Join(lines, "\n")
 }
 
-// min returns the smaller of two integers
+// min returns the smaller of two integers.
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -414,7 +414,7 @@ func min(a, b int) int {
 	return b
 }
 
-// formatFileSize formats file size in human readable format
+// formatFileSize formats file size in human readable format.
 func formatFileSize(size int64) string {
 	const unit = 1024
 	if size < unit {

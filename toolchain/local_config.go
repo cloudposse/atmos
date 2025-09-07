@@ -8,13 +8,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LocalConfig represents the local tools.yaml configuration
+// LocalConfig represents the local tools.yaml configuration.
 type LocalConfig struct {
 	Aliases map[string]string    `yaml:"aliases"`
 	Tools   map[string]LocalTool `yaml:"tools"`
 }
 
-// LocalTool represents a tool definition in the local config
+// LocalTool represents a tool definition in the local config.
 type LocalTool struct {
 	Type               string                   `yaml:"type"`
 	URL                string                   `yaml:"url"`
@@ -26,7 +26,7 @@ type LocalTool struct {
 	VersionConstraints []LocalVersionConstraint `yaml:"version_constraints"`
 }
 
-// LocalVersionConstraint represents a version constraint in local config
+// LocalVersionConstraint represents a version constraint in local config.
 type LocalVersionConstraint struct {
 	Constraint string `yaml:"constraint"`
 	Asset      string `yaml:"asset"`
@@ -34,17 +34,17 @@ type LocalVersionConstraint struct {
 	BinaryName string `yaml:"binary_name"`
 }
 
-// LocalConfigManager handles local configuration
+// LocalConfigManager handles local configuration.
 type LocalConfigManager struct {
 	config *LocalConfig
 }
 
-// NewLocalConfigManager creates a new local config manager
+// NewLocalConfigManager creates a new local config manager.
 func NewLocalConfigManager() *LocalConfigManager {
 	return &LocalConfigManager{}
 }
 
-// Load loads the local tools.yaml configuration
+// Load loads the local tools.yaml configuration.
 func (lcm *LocalConfigManager) Load(configPath string) error {
 	if configPath == "" {
 		configPath = "tools.yaml"
@@ -69,7 +69,7 @@ func (lcm *LocalConfigManager) Load(configPath string) error {
 	return nil
 }
 
-// GetTool returns a local tool definition if it exists
+// GetTool returns a local tool definition if it exists.
 func (lcm *LocalConfigManager) GetTool(owner, repo string) (*LocalTool, bool) {
 	if lcm.config == nil {
 		return nil, false
@@ -84,7 +84,7 @@ func (lcm *LocalConfigManager) GetTool(owner, repo string) (*LocalTool, bool) {
 	return &tool, true
 }
 
-// ResolveAlias resolves a tool name to its owner/repo path using aliases
+// ResolveAlias resolves a tool name to its owner/repo path using aliases.
 func (lcm *LocalConfigManager) ResolveAlias(toolName string) (string, bool) {
 	if lcm.config == nil || lcm.config.Aliases == nil {
 		return "", false
@@ -98,7 +98,7 @@ func (lcm *LocalConfigManager) ResolveAlias(toolName string) (string, bool) {
 	return alias, true
 }
 
-// GetToolConfig returns a tool configuration by owner/repo path
+// GetToolConfig returns a tool configuration by owner/repo path.
 func (lcm *LocalConfigManager) GetToolConfig(ownerRepo string) (*LocalTool, bool) {
 	if lcm.config == nil {
 		return nil, false
@@ -112,7 +112,7 @@ func (lcm *LocalConfigManager) GetToolConfig(ownerRepo string) (*LocalTool, bool
 	return &tool, true
 }
 
-// ResolveVersionConstraint resolves the appropriate version constraint for a given version
+// ResolveVersionConstraint resolves the appropriate version constraint for a given version.
 func (lcm *LocalConfigManager) ResolveVersionConstraint(tool *LocalTool, version string) *LocalVersionConstraint {
 	if len(tool.VersionConstraints) == 0 {
 		return nil
@@ -141,7 +141,7 @@ func (lcm *LocalConfigManager) ResolveVersionConstraint(tool *LocalTool, version
 	return nil
 }
 
-// GetToolWithVersion returns a Tool for the given owner/repo and version, using local config (asdf-style versioned local tool lookup)
+// GetToolWithVersion returns a Tool for the given owner/repo and version, using local config (asdf-style versioned local tool lookup).
 func (lcm *LocalConfigManager) GetToolWithVersion(owner, repo, version string) (*Tool, error) {
 	tool, exists := lcm.GetTool(owner, repo)
 	if !exists {

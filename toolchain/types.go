@@ -6,12 +6,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ToolRegistry represents the structure of a tool registry YAML file
+// ToolRegistry represents the structure of a tool registry YAML file.
 type ToolRegistry struct {
 	Tools []Tool `yaml:"tools"`
 }
 
-// Tool represents a single tool in the registry
+// Tool represents a single tool in the registry.
 type Tool struct {
 	Name         string            `yaml:"name"`
 	Registry     string            `yaml:"registry"`
@@ -29,13 +29,13 @@ type Tool struct {
 	BinaryName   string            `yaml:"binary_name"`
 }
 
-// File represents a file to be extracted from the archive
+// File represents a file to be extracted from the archive.
 type File struct {
 	Name string `yaml:"name"`
 	Src  string `yaml:"src"`
 }
 
-// Override represents platform-specific overrides
+// Override represents platform-specific overrides.
 type Override struct {
 	GOOS   string `yaml:"goos"`
 	GOARCH string `yaml:"goarch"`
@@ -43,7 +43,7 @@ type Override struct {
 	Files  []File `yaml:"files"`
 }
 
-// SupportedIf represents conditions for when a tool is supported
+// SupportedIf represents conditions for when a tool is supported.
 type SupportedIf struct {
 	GOOS   string `yaml:"goos"`
 	GOARCH string `yaml:"goarch"`
@@ -78,12 +78,12 @@ type VersionOverride struct {
 	Rosetta2          bool   `yaml:"rosetta2"`
 }
 
-// AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key)
+// AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key).
 type AquaRegistryFile struct {
 	Packages []AquaPackage `yaml:"packages"`
 }
 
-// toolToYAML converts a Tool struct to YAML string representation
+// toolToYAML converts a Tool struct to YAML string representation.
 func toolToYAML(tool *Tool) (string, error) {
 	yamlData, err := yaml.Marshal(tool)
 	if err != nil {
@@ -92,7 +92,7 @@ func toolToYAML(tool *Tool) (string, error) {
 	return string(yamlData), nil
 }
 
-// getEvaluatedToolYAML creates a YAML representation with all templates processed
+// getEvaluatedToolYAML creates a YAML representation with all templates processed.
 func getEvaluatedToolYAML(tool *Tool, version string, installer *Installer) (string, error) {
 	// Create a copy of the tool with processed templates
 	evaluatedTool := *tool

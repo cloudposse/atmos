@@ -12,23 +12,23 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 )
 
-// AquaRegistry represents the Aqua registry structure
+// AquaRegistry represents the Aqua registry structure.
 type AquaRegistry struct {
 	client *http.Client
 	cache  *RegistryCache
 	local  *LocalConfigManager
 }
 
-// RegistryCache handles caching of registry files
+// RegistryCache handles caching of registry files.
 type RegistryCache struct {
 	baseDir string
 }
 
-// NewAquaRegistry creates a new Aqua registry client
+// NewAquaRegistry creates a new Aqua registry client.
 func NewAquaRegistry() *AquaRegistry {
 	return &AquaRegistry{
 		client: NewDefaultHTTPClient(),
@@ -39,12 +39,12 @@ func NewAquaRegistry() *AquaRegistry {
 	}
 }
 
-// LoadLocalConfig loads the local configuration
+// LoadLocalConfig loads the local configuration.
 func (ar *AquaRegistry) LoadLocalConfig(configPath string) error {
 	return ar.local.Load(configPath)
 }
 
-// GetTool fetches tool metadata from the Aqua registry
+// GetTool fetches tool metadata from the Aqua registry.
 func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 	// Check local configuration first
 	if localTool, exists := ar.local.GetTool(owner, repo); exists {
@@ -71,7 +71,7 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 	return nil, fmt.Errorf("tool %s/%s not found in any registry", owner, repo)
 }
 
-// GetToolWithVersion fetches tool metadata and resolves version-specific overrides
+// GetToolWithVersion fetches tool metadata and resolves version-specific overrides.
 func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*Tool, error) {
 	tool, err := ar.GetTool(owner, repo)
 	if err != nil {
@@ -87,7 +87,7 @@ func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*Tool, 
 	return tool, nil
 }
 
-// resolveVersionOverrides fetches the full registry file and resolves version-specific overrides
+// resolveVersionOverrides fetches the full registry file and resolves version-specific overrides.
 func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*Tool, error) {
 	// Fetch the registry file again to get version overrides
 	registryURL := fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/%s/registry.yaml", owner, repo)
@@ -178,7 +178,7 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*T
 	return tool, nil
 }
 
-// fetchFromRegistry fetches tool metadata from a specific registry
+// fetchFromRegistry fetches tool metadata from a specific registry.
 func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Tool, error) {
 	// Create cache directory
 	if err := os.MkdirAll(ar.cache.baseDir, 0o755); err != nil {
@@ -201,7 +201,7 @@ func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Too
 	return nil, fmt.Errorf("tool not found in registry")
 }
 
-// fetchRegistryFile fetches and parses a registry.yaml file
+// fetchRegistryFile fetches and parses a registry.yaml file.
 func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Tool, error) {
 	// Create cache key
 	cacheKey := strings.ReplaceAll(url, "/", "_")
@@ -239,7 +239,7 @@ func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Tool, error
 	return ar.parseRegistryFile(data, owner, repo)
 }
 
-// parseRegistryFile parses Aqua registry YAML data
+// parseRegistryFile parses Aqua registry YAML data.
 func (ar *AquaRegistry) parseRegistryFile(data []byte, owner, repo string) (*Tool, error) {
 	// Try AquaRegistryFile (packages)
 	var aquaRegistry AquaRegistryFile
@@ -270,7 +270,7 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte, owner, repo string) (*Too
 	return nil, fmt.Errorf("no tools or packages found in registry file")
 }
 
-// BuildAssetURL constructs the download URL for a tool version
+// BuildAssetURL constructs the download URL for a tool version.
 func (ar *AquaRegistry) BuildAssetURL(tool *Tool, version string) (string, error) {
 	if tool.Asset == "" {
 		return "", fmt.Errorf("no asset template defined for tool")
@@ -337,7 +337,7 @@ func (ar *AquaRegistry) BuildAssetURL(tool *Tool, version string) (string, error
 	return url, nil
 }
 
-// convertLocalToolToTool converts a local tool definition to a Tool
+// convertLocalToolToTool converts a local tool definition to a Tool.
 func (ar *AquaRegistry) convertLocalToolToTool(localTool *LocalTool, owner, repo string) *Tool {
 	tool := &Tool{
 		Name:      repo,
@@ -361,7 +361,7 @@ func (ar *AquaRegistry) convertLocalToolToTool(localTool *LocalTool, owner, repo
 	return tool
 }
 
-// GetLatestVersion fetches the latest non-prerelease version from GitHub releases
+// GetLatestVersion fetches the latest non-prerelease version from GitHub releases.
 func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	// GitHub API endpoint for releases
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
@@ -403,7 +403,7 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	return "", fmt.Errorf("no non-prerelease versions found for %s/%s", owner, repo)
 }
 
-// GetAvailableVersions fetches all available versions from GitHub releases
+// GetAvailableVersions fetches all available versions from GitHub releases.
 func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, error) {
 	// GitHub API endpoint for releases
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
@@ -450,7 +450,7 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 	return versions, nil
 }
 
-// getOS returns the current operating system
+// getOS returns the current operating system.
 func getOS() string {
 	switch runtime.GOOS {
 	case "darwin":
@@ -464,7 +464,7 @@ func getOS() string {
 	}
 }
 
-// getArch returns the current architecture
+// getArch returns the current architecture.
 func getArch() string {
 	switch runtime.GOARCH {
 	case "amd64":

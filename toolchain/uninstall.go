@@ -30,7 +30,7 @@ Examples:
 	RunE: runUninstall,
 }
 
-// Refactored runUninstall to accept an optional installer parameter for testability
+// Refactored runUninstall to accept an optional installer parameter for testability.
 func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Installer) error {
 	// If no arguments, uninstall from tool-versions file
 	if len(args) == 0 {
@@ -163,12 +163,12 @@ func RunUninstall(toolSpec string) error {
 	return err
 }
 
-// Keep the original runUninstall for CLI usage
+// Keep the original runUninstall for CLI usage.
 func runUninstall(cmd *cobra.Command, args []string) error {
 	return runUninstallWithInstaller(cmd, args, nil)
 }
 
-// Change uninstallSingleTool to accept showProgressBar
+// Change uninstallSingleTool to accept showProgressBar.
 func uninstallSingleTool(installer *Installer, owner, repo, version string, showProgressBar bool) error {
 	// Check if the tool is actually installed first
 	_, err := installer.FindBinaryPath(owner, repo, version)
@@ -237,7 +237,7 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 	return nil
 }
 
-// Update uninstallFromToolVersions to accept an optional installer
+// Update uninstallFromToolVersions to accept an optional installer.
 func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) error {
 	if installer == nil {
 		installer = NewInstaller()
@@ -344,7 +344,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	return nil
 }
 
-// uninstallAllVersionsOfTool uninstalls all versions of a specific tool
+// uninstallAllVersionsOfTool uninstalls all versions of a specific tool.
 func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error {
 	// Get the tool directory path
 	toolDir := filepath.Join(installer.binDir, owner, repo)

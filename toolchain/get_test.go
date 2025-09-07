@@ -9,12 +9,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Define toolVersions struct based on assumed structure
+// Define toolVersions struct based on assumed structure.
 type toolVersions struct {
 	Tools map[string][]string
 }
 
-// Setup temporary .tool-versions file for testing
+// Setup temporary .tool-versions file for testing.
 func createTempToolVersionsFile(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -26,7 +26,7 @@ func createTempToolVersionsFile(t *testing.T, content string) string {
 	return filePath
 }
 
-// Setup temporary binary path for testing findBinaryPath
+// Setup temporary binary path for testing findBinaryPath.
 func createTempBinary(t *testing.T, owner, repo, version string) string {
 	t.Helper()
 	dir := t.TempDir()

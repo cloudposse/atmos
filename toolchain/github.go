@@ -10,18 +10,18 @@ import (
 	"github.com/spf13/viper"
 )
 
-// GitHubAPI defines the interface for GitHub API operations
+// GitHubAPI defines the interface for GitHub API operations.
 type GitHubAPI interface {
 	FetchReleases(owner, repo string, limit int) ([]string, error)
 }
 
-// GitHubAPIClient implements GitHubAPI with real HTTP calls
+// GitHubAPIClient implements GitHubAPI with real HTTP calls.
 type GitHubAPIClient struct {
 	client  *http.Client
 	baseURL string
 }
 
-// NewGitHubAPIClient creates a new GitHub API client
+// NewGitHubAPIClient creates a new GitHub API client.
 func NewGitHubAPIClient() *GitHubAPIClient {
 	return &GitHubAPIClient{
 		client:  &http.Client{},
@@ -29,7 +29,7 @@ func NewGitHubAPIClient() *GitHubAPIClient {
 	}
 }
 
-// NewGitHubAPIClientWithBaseURL creates a new GitHub API client with a custom base URL (for testing)
+// NewGitHubAPIClientWithBaseURL creates a new GitHub API client with a custom base URL (for testing).
 func NewGitHubAPIClientWithBaseURL(baseURL string) *GitHubAPIClient {
 	return &GitHubAPIClient{
 		client:  &http.Client{},
@@ -37,7 +37,7 @@ func NewGitHubAPIClientWithBaseURL(baseURL string) *GitHubAPIClient {
 	}
 }
 
-// FetchReleases fetches all available versions from GitHub API
+// FetchReleases fetches all available versions from GitHub API.
 func (g *GitHubAPIClient) FetchReleases(owner, repo string, limit int) ([]string, error) {
 	// GitHub API endpoint for releases with per_page parameter
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", g.baseURL, owner, repo, limit)
@@ -97,20 +97,20 @@ func (g *GitHubAPIClient) FetchReleases(owner, repo string, limit int) ([]string
 	return versions, nil
 }
 
-// Global GitHub API client instance
+// Global GitHub API client instance.
 var defaultGitHubAPI GitHubAPI = NewGitHubAPIClient()
 
-// SetGitHubAPI sets the global GitHub API client (for testing)
+// SetGitHubAPI sets the global GitHub API client (for testing).
 func SetGitHubAPI(api GitHubAPI) {
 	defaultGitHubAPI = api
 }
 
-// ResetGitHubAPI resets the global GitHub API client to the default
+// ResetGitHubAPI resets the global GitHub API client to the default.
 func ResetGitHubAPI() {
 	defaultGitHubAPI = NewGitHubAPIClient()
 }
 
-// fetchAllGitHubVersions is the public function that uses the global GitHub API client
+// fetchAllGitHubVersions is the public function that uses the global GitHub API client.
 func fetchAllGitHubVersions(owner, repo string, limit int) ([]string, error) {
 	return defaultGitHubAPI.FetchReleases(owner, repo, limit)
 }

@@ -100,7 +100,7 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	return nil
 }
 
-// ToolPath represents a tool with its version and path
+// ToolPath represents a tool with its version and path.
 type ToolPath struct {
 	Tool    string `json:"tool"`
 	Version string `json:"version"`
