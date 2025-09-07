@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/internal/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/ini.v1"
 )
@@ -19,9 +20,9 @@ type AWSCloudProvider struct {
 
 // NewAWSCloudProvider creates a new AWS cloud provider instance
 func NewAWSCloudProvider() types.CloudProvider {
-	homeDir, _ := os.UserHomeDir()
+	homedirDir, _ := homedir.Dir()
 	return &AWSCloudProvider{
-		homeDir: homeDir,
+		homeDir: homedirDir,
 	}
 }
 

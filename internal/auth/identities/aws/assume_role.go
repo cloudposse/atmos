@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/log"
+	awsCloud "github.com/cloudposse/atmos/internal/auth/cloud/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -157,50 +158,6 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
-// Merge merges this identity configuration with component-level overrides
-func (i *assumeRoleIdentity) Merge(component *schema.Identity) types.Identity {
-	merged := &assumeRoleIdentity{
-		name: i.name,
-		config: &schema.Identity{
-			Kind:        i.config.Kind,
-			Default:     component.Default, // Component can override default
-			Via:         i.config.Via,
-			Principal:   make(map[string]interface{}),
-			Credentials: make(map[string]interface{}),
-			Alias:       i.config.Alias,
-			Env:         i.config.Env,
-		},
-	}
-
-	// Merge principal
-	for k, v := range i.config.Principal {
-		merged.config.Principal[k] = v
-	}
-	for k, v := range component.Principal {
-		merged.config.Principal[k] = v // Component overrides
-	}
-
-	// Merge credentials
-	for k, v := range i.config.Credentials {
-		merged.config.Credentials[k] = v
-	}
-	for k, v := range component.Credentials {
-		merged.config.Credentials[k] = v // Component overrides
-	}
-
-	// Merge environment variables
-	merged.config.Env = append(merged.config.Env, component.Env...)
-
-	// Override alias if provided
-	if component.Alias != "" {
-		merged.config.Alias = component.Alias
-	}
-
-	return merged
-}
-
-// Note: Caching is now handled at the manager level to prevent duplicate entries
-
 // GetProviderName extracts the provider name from the identity configuration
 func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {
@@ -214,9 +171,14 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 	return "", fmt.Errorf("assume role identity %q has no valid via configuration", i.name)
 }
 
-// PostAuthenticate implements the PostAuthHook interface to set up AWS files after authentication
-func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error {
-	// For now, return nil since we need to figure out how to access AWS file manager
-	// without making the interface cloud-specific
+// PostAuthenticate sets up AWS files after authentication
+func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *schema.Credentials) error {
+	// Setup AWS files using shared AWS cloud package
+	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
+		return fmt.Errorf("failed to setup AWS files: %w", err)
+	}
+	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
+		return fmt.Errorf("failed to set environment variables: %w", err)
+	}
 	return nil
 }

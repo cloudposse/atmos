@@ -1,13 +1,10 @@
 package cmd
 
 import (
-	"context"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/cloudposse/atmos/internal/auth"
-	"github.com/cloudposse/atmos/internal/auth/cloud"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -61,13 +58,12 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 		// Create auth manager with all dependencies
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
-		cloudProviderManager := cloud.NewCloudProviderManager()
 
 		authManager, err := auth.NewAuthManager(
 			authConfig,
 			credStore,
 			validator,
-			cloudProviderManager,
+			nil,
 		)
 		require.NoError(t, err)
 		assert.NotNil(t, authManager)
@@ -86,76 +82,7 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 		assert.Equal(t, "aws-user", userProvider)
 	})
 
-	t.Run("Cloud Provider Factory Integration", func(t *testing.T) {
-		factory := cloud.NewCloudProviderFactory()
 
-		// Test AWS provider creation
-		awsProvider, err := factory.GetCloudProvider("aws")
-		assert.NoError(t, err)
-		assert.NotNil(t, awsProvider)
-
-		// Test Azure provider creation (should be placeholder)
-		azureProvider, err := factory.GetCloudProvider("azure")
-		assert.NoError(t, err)
-		assert.NotNil(t, azureProvider)
-
-		// Test GCP provider creation (should be placeholder)
-		gcpProvider, err := factory.GetCloudProvider("gcp")
-		assert.NoError(t, err)
-		assert.NotNil(t, gcpProvider)
-
-		// Test invalid provider
-		_, err = factory.GetCloudProvider("invalid")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unsupported cloud provider")
-	})
-
-	t.Run("Cloud Provider Manager Integration", func(t *testing.T) {
-		manager := cloud.NewCloudProviderManager()
-
-		// Test environment variable retrieval for AWS
-		envVars, err := manager.GetEnvironmentVariables("aws", "test-provider", "test-identity")
-		assert.NoError(t, err)
-		assert.NotEmpty(t, envVars)
-
-		// Verify expected AWS environment variables
-		envMap := envVars
-		assert.Contains(t, envMap, "AWS_SHARED_CREDENTIALS_FILE")
-		assert.Contains(t, envMap, "AWS_CONFIG_FILE")
-		assert.Contains(t, envMap, "AWS_PROFILE")
-		assert.Equal(t, "test-identity", envMap["AWS_PROFILE"])
-	})
-
-	t.Run("AWS Provider File Management", func(t *testing.T) {
-		factory := cloud.NewCloudProviderFactory()
-		awsProvider, err := factory.GetCloudProvider("aws")
-		require.NoError(t, err)
-
-		// Test credential validation (should pass for mock credentials)
-		mockCreds := &schema.Credentials{
-			AWS: &schema.AWSCredentials{
-				AccessKeyID:     "AKIATEST123456789",
-				SecretAccessKey: "testsecretkey",
-				SessionToken:    "testtoken",
-				Region:          "us-east-1",
-			},
-		}
-
-		err = awsProvider.ValidateCredentials(context.Background(), mockCreds)
-		// This will fail in test environment, but we're testing the interface
-		// In a real environment with valid credentials, this would pass
-		assert.Error(t, err) // Expected in test environment
-
-		// Test environment variable generation
-		envVars, err := awsProvider.GetEnvironmentVariables("test-provider", "test-identity")
-		assert.NoError(t, err)
-		assert.NotEmpty(t, envVars)
-
-		// Verify AWS file paths are generated correctly
-		envMap := envVars
-		assert.Contains(t, envMap["AWS_SHARED_CREDENTIALS_FILE"], "test-provider")
-		assert.Contains(t, envMap["AWS_CONFIG_FILE"], "test-provider")
-	})
 
 	t.Run("Environment Variable Integration", func(t *testing.T) {
 		// Test that environment variables are properly formatted
@@ -212,76 +139,3 @@ func formatEnvironmentVariables(envVars []schema.EnvironmentVariable, format str
 	}
 }
 
-func TestAuthCommandsWithRealCloudProvider(t *testing.T) {
-	// This test verifies that the CLI commands can work with the actual cloud provider interface
-	// Skip if no real auth configuration is available
-	if os.Getenv("ATMOS_AUTH_TEST") == "" {
-		t.Skip("Skipping real cloud provider tests - set ATMOS_AUTH_TEST=1 to enable")
-	}
-
-	t.Run("Real AWS Provider Integration", func(t *testing.T) {
-		// Test that we can create a real AWS provider and it implements the interface correctly
-		factory := cloud.NewCloudProviderFactory()
-		awsProvider, err := factory.GetCloudProvider("aws")
-		require.NoError(t, err)
-
-		// Test that the provider can generate file paths
-		homeDir, err := os.UserHomeDir()
-		require.NoError(t, err)
-
-		envVars, err := awsProvider.GetEnvironmentVariables("test-provider", "test-identity")
-		require.NoError(t, err)
-
-		// Verify paths are under user's home directory
-		for key, value := range envVars {
-			if key == "AWS_SHARED_CREDENTIALS_FILE" || key == "AWS_CONFIG_FILE" {
-				assert.Contains(t, value, homeDir)
-				assert.Contains(t, value, ".aws/atmos/test-provider")
-			}
-		}
-	})
-
-	t.Run("File System Integration", func(t *testing.T) {
-		// Test that AWS files can be created in the correct locations
-		factory := cloud.NewCloudProviderFactory()
-		awsProvider, err := factory.GetCloudProvider("aws")
-		require.NoError(t, err)
-
-		// Create temporary credentials for testing
-		testCreds := &schema.Credentials{
-			AWS: &schema.AWSCredentials{
-				AccessKeyID:     "AKIATEST123456789",
-				SecretAccessKey: "testsecretkey",
-				SessionToken:    "testtoken",
-				Region:          "us-east-1",
-			},
-		}
-
-		// Test environment setup (this creates the files)
-		err = awsProvider.SetupEnvironment(context.Background(), "test-provider", "test-identity", testCreds)
-		assert.NoError(t, err)
-
-		// Verify files were created
-		homeDir, err := os.UserHomeDir()
-		require.NoError(t, err)
-
-		credentialsPath := filepath.Join(homeDir, ".aws", "atmos", "test-provider", "credentials")
-		configPath := filepath.Join(homeDir, ".aws", "atmos", "test-provider", "config")
-
-		// Check if files exist (they should be created by SetupEnvironment)
-		_, err = os.Stat(credentialsPath)
-		if err == nil {
-			// If file exists, clean it up
-			defer os.Remove(credentialsPath)
-		}
-
-		_, err = os.Stat(configPath)
-		if err == nil {
-			// If file exists, clean it up
-			defer os.Remove(configPath)
-		}
-
-		// Clean up the directory structure
-		defer os.RemoveAll(filepath.Join(homeDir, ".aws", "atmos", "test-provider"))
-	})
-}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/internal/auth/cloud"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/internal/auth/validation"
@@ -19,21 +18,24 @@ type (
 	Identity        = types.Identity
 	AuthManager     = types.AuthManager
 	CredentialStore = types.CredentialStore
-	AWSFileManager  = types.AWSFileManager
 	Validator       = types.Validator
 )
 
 // TerraformPreHook runs before Terraform commands to set up authentication
 func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
-	// Set up authentication logging
+	// Set up logging
+	// atmos-auth prefix is used to distinguish auth logs from atmos logs
+	logPrefix := log.GetPrefix()
 	log.SetPrefix("[atmos-auth]")
-	defer log.SetPrefix("")
+	defer log.SetPrefix(logPrefix)
 
+	// Set log level to atmos auth log level, then reset to atmos log level after hook
 	atmosLogLevel, _ := log.ParseLevel(atmosConfig.Logs.Level)
 	authLogLevel, _ := log.ParseLevel(atmosConfig.Auth.Logs.Level)
 	log.SetLevel(authLogLevel)
 	defer log.SetLevel(atmosLogLevel)
 
+	// TODO: verify if we need to use Decode, or if we can use the merged auth config directly
 	// Use the merged auth configuration from stackInfo
 	// ComponentAuthSection already contains the deep-merged auth config from component + inherits + atmos.yaml
 	// Converted to typed struct when needed
@@ -53,16 +55,14 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
 
-	// Create cloud provider manager
-	cloudProviderManager := cloud.NewCloudProviderManager()
-
-	// Create auth manager with merged configuration
+	// Create auth manager with merged configuration and stack info (so identities can mutate it)
 	authManager, err := NewAuthManager(
 		&authConfig,
 		credStore,
 		validator,
-		cloudProviderManager,
+		stackInfo,
 	)
+	log.Info("Auth manager created", "authManager", authManager, "stackInfo", stackInfo)
 	if err != nil {
 		return fmt.Errorf("failed to create auth manager: %w", err)
 	}

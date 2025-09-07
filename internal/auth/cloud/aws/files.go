@@ -1,49 +1,163 @@
 package aws
 
 import (
-	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
-	"github.com/cloudposse/atmos/internal/auth/types"
+	"github.com/charmbracelet/log"
+	ini "gopkg.in/ini.v1"
+
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// SetupAWSFiles is a shared function that AWS identities can use to set up AWS credential files
-func SetupAWSFiles(ctx context.Context, awsFileManager types.AWSFileManager, providerName, identityName string, creds *schema.Credentials, config *schema.AuthConfig) error {
-	if creds.AWS == nil {
-		return fmt.Errorf("no AWS credentials found")
+// AWSFileManager provides helpers to manage AWS credentials/config files
+type AWSFileManager struct {
+	baseDir string
+}
+
+// NewAWSFileManager creates a new AWS file manager instance
+func NewAWSFileManager() *AWSFileManager {
+	homeDir, _ := homedir.Dir()
+	return &AWSFileManager{
+		baseDir: filepath.Join(homeDir, ".aws", "atmos"),
+	}
+}
+
+// WriteCredentials writes AWS credentials to the provider-specific file with identity profile
+func (m *AWSFileManager) WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error {
+	credentialsPath := m.GetCredentialsPath(providerName)
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(credentialsPath), 0o700); err != nil {
+		return fmt.Errorf("failed to create credentials directory: %w", err)
 	}
 
-	// Write credentials file to provider directory with identity profile
-	if err := awsFileManager.WriteCredentials(providerName, identityName, creds.AWS); err != nil {
-		return fmt.Errorf("failed to write AWS credentials: %w", err)
+	// Load existing INI file or create new one
+	cfg, err := ini.Load(credentialsPath)
+	if err != nil {
+		// File doesn't exist or is invalid, create new one
+		cfg = ini.Empty()
 	}
 
-	// Write config file to provider directory with identity profile
-	region := creds.AWS.Region
-	if region == "" {
-		// For AWS user identities, get region from identity credentials config
-		if providerName == "aws-user" {
-			if identity, exists := config.Identities[identityName]; exists {
-				if r, ok := identity.Credentials["region"].(string); ok && r != "" {
-					region = r
-				}
-			}
-		}
-		// Fallback to provider config
-		if region == "" {
-			if provider, exists := config.Providers[providerName]; exists {
-				region = provider.Region
-			}
-		}
-	}
-	if err := awsFileManager.WriteConfig(providerName, identityName, region, ""); err != nil {
-		return fmt.Errorf("failed to write AWS config: %w", err)
+	// Get or create the profile section
+	section, err := cfg.NewSection(identityName)
+	if err != nil {
+		return fmt.Errorf("failed to create profile section: %w", err)
 	}
 
-	// Set environment variables using provider name for file paths
-	if err := awsFileManager.SetEnvironmentVariables(providerName); err != nil {
-		return fmt.Errorf("failed to set AWS environment variables: %w", err)
+	// Set credentials
+	section.Key("aws_access_key_id").SetValue(creds.AccessKeyID)
+	section.Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
+	if creds.SessionToken != "" {
+		section.Key("aws_session_token").SetValue(creds.SessionToken)
+	} else {
+		// Remove session token if not present
+		section.DeleteKey("aws_session_token")
+	}
+
+	// Save file with proper permissions
+	if err := cfg.SaveTo(credentialsPath); err != nil {
+		return fmt.Errorf("failed to write credentials file: %w", err)
+	}
+
+	// Set proper file permissions
+	if err := os.Chmod(credentialsPath, 0o600); err != nil {
+		return fmt.Errorf("failed to set credentials file permissions: %w", err)
+	}
+
+	return nil
+}
+
+// WriteConfig writes AWS config to the provider-specific file with identity profile
+func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputFormat string) error {
+	configPath := m.GetConfigPath(providerName)
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Load existing INI file or create new one
+	cfg, err := ini.Load(configPath)
+	if err != nil {
+		// File doesn't exist or is invalid, create new one
+		cfg = ini.Empty()
+	}
+
+	// Get or create the profile section (AWS config uses "profile name" format, except for "default")
+	var profileSectionName string
+	if identityName == "default" {
+		profileSectionName = "default"
+	} else {
+		profileSectionName = fmt.Sprintf("profile %s", identityName)
+	}
+	section, err := cfg.NewSection(profileSectionName)
+	if err != nil {
+		return fmt.Errorf("failed to create profile section: %w", err)
+	}
+
+	// Debug logging for region
+	log.Debug("AWS WriteConfig", "providerName", providerName, "identityName", identityName, "region", region, "outputFormat", outputFormat)
+
+	// Set config values only if they are not empty
+	if region != "" {
+		section.Key("region").SetValue(region)
+	} else {
+		// Remove region key if not present
+		section.DeleteKey("region")
+	}
+
+	// Set output format only if explicitly provided
+	if outputFormat != "" {
+		section.Key("output").SetValue(outputFormat)
+	} else {
+		// Remove output key if not present
+		section.DeleteKey("output")
+	}
+
+	// Save file with proper permissions
+	if err := cfg.SaveTo(configPath); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	// Set proper file permissions
+	if err := os.Chmod(configPath, 0o600); err != nil {
+		return fmt.Errorf("failed to set config file permissions: %w", err)
+	}
+
+	return nil
+}
+
+// GetCredentialsPath returns the path to the credentials file for the provider
+func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
+	return filepath.Join(m.baseDir, providerName, "credentials")
+}
+
+// GetConfigPath returns the path to the config file for the provider
+func (m *AWSFileManager) GetConfigPath(providerName string) string {
+	return filepath.Join(m.baseDir, providerName, "config")
+}
+
+// GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
+func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName string) []schema.EnvironmentVariable {
+	credentialsPath := m.GetCredentialsPath(providerName)
+	configPath := m.GetConfigPath(providerName)
+
+	return []schema.EnvironmentVariable{
+		{Key: "AWS_SHARED_CREDENTIALS_FILE", Value: credentialsPath},
+		{Key: "AWS_CONFIG_FILE", Value: configPath},
+		{Key: "AWS_PROFILE", Value: identityName},
+	}
+}
+
+// Cleanup removes AWS files for the provider
+func (m *AWSFileManager) Cleanup(providerName string) error {
+	providerDir := filepath.Join(m.baseDir, providerName)
+
+	if err := os.RemoveAll(providerDir); err != nil {
+		return fmt.Errorf("failed to cleanup AWS files: %w", err)
 	}
 
 	return nil
