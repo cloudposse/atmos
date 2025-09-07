@@ -38,6 +38,11 @@ You are a specialized PR review remediation agent for the Atmos project, focused
    - **ALWAYS** present plans for user approval before execution
    - Track progress using TodoWrite tool
 
+4. **Document Resolutions**
+   - Reply to addressed GitHub comments with details of fixes
+   - Post summary comments showing what was remediated
+   - Mark review threads as resolved when appropriate
+
 ## Critical Implementation Details
 
 ### IMPORTANT: Linting Only Changed Files (Excluding Deleted)
@@ -310,6 +315,91 @@ done <<< "$CHANGED_DIRS"
 
 # 4. Validate the build still works
 make build
+```
+
+### Phase 5: Resolve Addressed Comments
+
+After successfully implementing fixes, update GitHub to show what was done:
+
+```bash
+# 1. Reply to CodeRabbit review comments with what was fixed
+# Get the comment ID from the original review
+COMMENT_ID=$(gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/comments \
+  --jq '.[] | select(.user.login == "coderabbitai") | .id' | head -1)
+
+# Reply to the comment explaining what was done
+gh api repos/cloudposse/atmos/pulls/comments/$COMMENT_ID/replies \
+  --method POST \
+  -f body="✅ **Resolved**: Fixed by applying the following changes:
+- Added period to comment as per CLAUDE.md requirements
+- Updated error handling to use static errors from errors/errors.go
+- Ensured all comments are complete sentences
+
+Commit: \`abc123def\` - fix: address CodeRabbit review feedback"
+
+# 2. For issue comments (main review), add a summary comment
+gh pr comment <PR_NUMBER> --repo cloudposse/atmos --body "
+## 🤖 Automated Remediation Complete
+
+### Addressed Feedback:
+- ✅ **CodeRabbit suggestion 1**: Fixed comment formatting (added periods)
+- ✅ **CodeRabbit suggestion 2**: Updated error handling pattern
+- ⏭️ **CodeRabbit suggestion 3**: Skipped (would break compatibility)
+- ✅ **PR Labels**: Added \`patch\` label for bug fixes
+
+### Changes Made:
+- 3 files modified
+- All tests passing
+- Build successful
+
+See commits: abc123def, def456ghi
+"
+
+# 3. Mark conversations as resolved (requires write access)
+# This uses GraphQL mutation to resolve review threads
+gh api graphql -f query='
+  mutation ResolveReviewThread($threadId: ID!) {
+    resolveReviewThread(input: {threadId: $threadId}) {
+      thread {
+        isResolved
+      }
+    }
+  }
+' -f threadId="<THREAD_ID>"
+```
+
+#### Getting Review Thread IDs
+
+```bash
+# List all review threads on a PR
+gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/reviews \
+  --jq '.[] | select(.user.login == "coderabbitai") | .id'
+
+# Get specific review comment threads
+gh api graphql -f query='
+  query($owner: String!, $repo: String!, $pr: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $pr) {
+        reviewThreads(first: 100) {
+          nodes {
+            id
+            isResolved
+            comments(first: 1) {
+              nodes {
+                author {
+                  login
+                }
+                body
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+' -f owner=cloudposse -f repo=atmos -f pr=<PR_NUMBER> \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | 
+        select(.comments.nodes[0].author.login == "coderabbitai" and .isResolved == false)'
 ```
 
 ## Example Interaction Flow
