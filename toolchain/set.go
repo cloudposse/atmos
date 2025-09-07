@@ -459,7 +459,11 @@ type customDelegate struct {
 	list.DefaultDelegate
 }
 
-func (d customDelegate) RenderFooter(w int, m list.Model) string {
+type ModelI interface {
+	Items() []list.Item
+}
+
+func (d customDelegate) RenderFooter(w int, m ModelI) string {
 	return fmt.Sprintf(" %d releases", len(m.Items()))
 }
 
