@@ -15,12 +15,18 @@ import (
 // authExecCmd executes a command with authentication environment variables
 var authExecCmd = &cobra.Command{
 	Use:   "exec",
-	Short: "Execute a command with authentication environment variables",
-	Long:  "Execute a command with the authenticated identity's environment variables set.",
-	Args:  cobra.MinimumNArgs(1),
+	Short: "Execute a command with authentication environment variables.",
+	Long:  "Execute a command with the authenticated identity's environment variables set. Use `--` to separate Atmos flags from the command's native arguments.",
+	Example: `  # Run terraform with the authenticated identity
+  atmos auth exec -- terraform plan -var-file=env.tfvars`,
+	Args:                cobra.MinimumNArgs(1),
+	DisableFlagParsing:  true,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// ...
+	},
+}
 		// Load atmos configuration
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		if err != nil {
@@ -63,46 +69,46 @@ var authExecCmd = &cobra.Command{
 
 // executeCommandWithEnv executes a command with additional environment variables
 func executeCommandWithEnv(args []string, envVars map[string]string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no command specified")
-	}
+    if len(args) == 0 {
+       return fmt.Errorf("%w: no command specified", errUtils.ErrStaticError)
+    }
 
-	// Prepare the command
-	cmdName := args[0]
-	cmdArgs := args[1:]
+    // Prepare the command
+    cmdName := args[0]
+    cmdArgs := args[1:]
 
-	// Look for the command in PATH
-	cmdPath, err := exec.LookPath(cmdName)
-	if err != nil {
-		return fmt.Errorf("command not found: %s", cmdName)
-	}
+    // Look for the command in PATH
+    cmdPath, err := exec.LookPath(cmdName)
+    if err != nil {
+       return fmt.Errorf("%w: command not found: %s", errUtils.ErrStaticError, cmdName)
+    }
 
-	// Prepare environment variables
-	env := os.Environ()
-	for key, value := range envVars {
-		env = append(env, fmt.Sprintf("%s=%s", key, value))
-	}
+    // Prepare environment variables
+    env := os.Environ()
+    for key, value := range envVars {
+        env = append(env, fmt.Sprintf("%s=%s", key, value))
+    }
 
-	// Execute the command
-	execCmd := exec.Command(cmdPath, cmdArgs...)
-	execCmd.Env = env
-	execCmd.Stdin = os.Stdin
-	execCmd.Stdout = os.Stdout
-	execCmd.Stderr = os.Stderr
+    // Execute the command
+    execCmd := exec.Command(cmdPath, cmdArgs...)
+    execCmd.Env = env
+    execCmd.Stdin = os.Stdin
+    execCmd.Stdout = os.Stdout
+    execCmd.Stderr = os.Stderr
 
-	// Run the command and wait for completion
-	err = execCmd.Run()
-	if err != nil {
-		// If it's an exit error, preserve the exit code
-		if exitError, ok := err.(*exec.ExitError); ok {
-			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				os.Exit(status.ExitStatus())
-			}
-		}
-		return fmt.Errorf("command execution failed: %w", err)
-	}
+    // Run the command and wait for completion
+    err = execCmd.Run()
+    if err != nil {
+        // If it's an exit error, preserve the exit code
+        if exitError, ok := err.(*exec.ExitError); ok {
+            if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
+                os.Exit(status.ExitStatus())
+            }
+        }
+       return fmt.Errorf("%w: command execution failed: %v", errUtils.ErrStaticError, err)
+    }
 
-	return nil
+    return nil
 }
 
 func init() {

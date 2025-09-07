@@ -30,12 +30,19 @@ var authUserConfigureCmd = &cobra.Command{
 			return err
 		}
 
-		// Gather identities that use a provider of type aws/user
+		// Gather identities that use a provider of type aws/user.
 		var selectable []string
+		if atmosConfig.Auth == nil || atmosConfig.Auth.Identities == nil {
+			return fmt.Errorf("%w: no auth identities configured in atmos.yaml", errUtils.ErrStaticError)
+		}
+		defaultChoice := ""
 		for ident := range atmosConfig.Auth.Identities {
 			identity := atmosConfig.Auth.Identities[ident]
 			if identity.Kind == "aws/user" {
 				selectable = append(selectable, ident)
+				if identity.Default && defaultChoice == "" {
+					defaultChoice = ident
+				}
 			}
 		}
 		if len(selectable) == 0 {

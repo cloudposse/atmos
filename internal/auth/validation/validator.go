@@ -9,10 +9,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// validator implements the Validator interface
+// validator implements the Validator interface.
 type validator struct{}
 
-// NewValidator creates a new validator instance
+// NewValidator creates a new validator instance.
 func NewValidator() types.Validator {
 	return &validator{}
 }

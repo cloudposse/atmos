@@ -70,10 +70,9 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	identityFlag, err := flags.GetString("identity")
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: failed to read --identity flag: %v", errUtils.ErrStaticError, err)
 	}
 	info.Identity = identityFlag
-
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")

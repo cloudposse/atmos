@@ -1,14 +1,15 @@
 package cmd
 
 import (
-	"bytes"
-	"os"
-	"testing"
+    "bytes"
+    "fmt"
+    "os"
+    "testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+    "github.com/cloudposse/atmos/pkg/schema"
+    "github.com/spf13/cobra"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
 )
 
 func TestAuthLoginCmd(t *testing.T) {
@@ -134,12 +135,12 @@ func TestAuthLoginCmd(t *testing.T) {
 
 					config := tt.setupConfig()
 					if len(config.Auth.Identities) == 0 {
-						return assert.AnError
+						return fmt.Errorf("no default identity configured")
 					}
 
 					if identityName != "" {
 						if _, exists := config.Auth.Identities[identityName]; !exists {
-							return assert.AnError
+							return fmt.Errorf("identity %q not found", identityName)
 						}
 					} else {
 						// Check for default identity
@@ -151,10 +152,11 @@ func TestAuthLoginCmd(t *testing.T) {
 							}
 						}
 						if !hasDefault {
-							return assert.AnError
+							return fmt.Errorf("no default identity configured")
 						}
 					}
 
+					cmd.Println("Successfully authenticated")
 					return nil
 				},
 			}

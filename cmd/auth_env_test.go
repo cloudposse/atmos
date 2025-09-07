@@ -181,14 +181,23 @@ func TestAuthEnvCmd(t *testing.T) {
 							}
 						}
 						if identityName == "" {
-							return assert.AnError
-						}
-					} else {
-						// Validate specified identity exists
-						if _, exists := config.Auth.Identities[identityName]; !exists {
-							return assert.AnError
-						}
-					}
+if identityName == "" {
+    // Find default identity
+    for name, identity := range config.Auth.Identities {
+        if identity.Default {
+            identityName = name
+            break
+        }
+    }
+    if identityName == "" {
+        return fmt.Errorf("no default identity configured")
+    }
+} else {
+    // Validate specified identity exists
+    if _, exists := config.Auth.Identities[identityName]; !exists {
+        return fmt.Errorf("identity %q not found", identityName)
+    }
+}
 
 					// Mock environment variables
 					envVars := []schema.EnvironmentVariable{
