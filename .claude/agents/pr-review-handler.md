@@ -177,6 +177,13 @@ gh api repos/cloudposse/atmos/issues/$PR_NUMBER/comments \
 
 # 5. Get status checks
 gh pr checks $PR_NUMBER --repo cloudposse/atmos
+
+# 6. Check specifically for PR Semver Labels failure
+if gh pr checks $PR_NUMBER --repo cloudposse/atmos | grep -q "PR Semver Labels.*fail"; then
+  echo "❌ PR Semver Labels check is failing - need to add a semver label"
+  echo "Current labels:"
+  gh pr view $PR_NUMBER --repo cloudposse/atmos --json labels --jq '.labels[].name'
+fi
 ```
 
 ### Phase 2: Analyze CodeRabbit Feedback
@@ -274,6 +281,12 @@ Agent: I'll analyze PR #1440 for review feedback and failing checks.
 - pkg/merge/merge_test.go
 - .github/actions/remove-dependabot-semver-labels/action.yml
 
+### Status Checks
+- ✅ Tests: Passing
+- ✅ Build: Success  
+- ❌ **PR Semver Labels: FAILING** - Missing required version label
+- ✅ CodeQL: No security issues
+
 ### CodeRabbit Feedback Summary
 **AI Agent Prompts Found**: 2
 **Actionable Comments**: 1
@@ -317,6 +330,14 @@ Agent: I'll analyze PR #1440 for review feedback and failing checks.
    ✅ **VALID**: Improves test coverage and error handling validation
 
 ### Proposed Action Plan
+
+#### Immediate Fix Required:
+0. **Add PR Semver Label** (BLOCKING CI)
+   - This PR adds new features (agent for PR review)
+   - Recommended label: `minor` (new functionality, non-breaking)
+   - Command: `gh pr edit 1440 --repo cloudposse/atmos --add-label minor`
+
+#### Code Fixes:
 1. Fix Dependabot detection in GitHub action (based on AI prompt understanding)
 2. Add period to comment in merge_test.go
 3. Add test case for invalid strategy error
@@ -426,10 +447,76 @@ else
 fi
 ```
 
+### PR Semver Labels
+
+**IMPORTANT**: PRs require semantic versioning labels to pass CI checks. The "PR Semver Labels" check will fail without them.
+
+#### Required Labels (choose ONE):
+
+| Label | When to Use | Description |
+|-------|-------------|-------------|
+| `patch` | Bug fixes, minor corrections | Changes that fix existing functionality |
+| `minor` | New features, enhancements | Non-breaking changes that add functionality |
+| `major` | Breaking changes | Changes requiring users to update configuration |
+| `no-release` | Docs, CI, non-code changes | Changes that don't affect Go code or app functionality |
+
+#### Handling Failed "PR Semver Labels" Check
+
+When the check fails:
+
+```bash
+# 1. Check current labels on the PR
+gh pr view <PR_NUMBER> --repo cloudposse/atmos --json labels --jq '.labels[].name'
+
+# 2. Analyze the changes to determine appropriate label
+# - Bug fixes only → patch
+# - New features → minor  
+# - Breaking changes → major
+# - Docs/CI only → no-release
+
+# 3. Add the appropriate label
+gh pr edit <PR_NUMBER> --repo cloudposse/atmos --add-label <LABEL>
+
+# Examples:
+gh pr edit 1440 --repo cloudposse/atmos --add-label patch      # For bug fixes
+gh pr edit 1440 --repo cloudposse/atmos --add-label minor      # For new features
+gh pr edit 1440 --repo cloudposse/atmos --add-label major      # For breaking changes
+gh pr edit 1440 --repo cloudposse/atmos --add-label no-release # For docs/CI changes
+
+# 4. Verify the label was added and check passes
+gh pr view <PR_NUMBER> --repo cloudposse/atmos --json labels
+gh pr checks <PR_NUMBER> --repo cloudposse/atmos | grep "PR Semver"
+```
+
+#### Automated Label Detection
+
+Analyze PR changes to suggest appropriate label:
+
+```bash
+# Check if only documentation files changed
+CHANGED_FILES=$(gh pr view <PR_NUMBER> --repo cloudposse/atmos --json files --jq '.files[].path')
+NON_DOC_FILES=$(echo "$CHANGED_FILES" | grep -v -E '\.(md|mdx|txt)$|^website/|^docs/|^\.github/' | wc -l)
+
+if [[ $NON_DOC_FILES -eq 0 ]]; then
+  echo "Suggested label: no-release (documentation/CI changes only)"
+elif echo "$CHANGED_FILES" | grep -q "^pkg/.*\.go$"; then
+  # Check commit messages for hints
+  COMMITS=$(gh pr view <PR_NUMBER> --repo cloudposse/atmos --json commits --jq '.commits[].commit.message')
+  if echo "$COMMITS" | grep -qi "fix\|bug\|patch\|correct"; then
+    echo "Suggested label: patch (bug fixes detected)"
+  elif echo "$COMMITS" | grep -qi "breaking\|major\|migration\|incompatible"; then
+    echo "Suggested label: major (breaking changes detected)"
+  else
+    echo "Suggested label: minor (new features/enhancements)"
+  fi
+fi
+```
+
 ### Remediation Strategies by Check Type
 
 | Check Type | Common Issues | Remediation Strategy |
 |------------|--------------|---------------------|
+| PR Semver Labels | Missing version label | Add patch/minor/major/no-release label |
 | golangci-lint | Style violations, unused code | Run `make lint` on changed files |
 | CodeQL | Security vulnerabilities | Review and fix security issues |
 | Tests | Test failures, panics | Debug and fix test logic |
