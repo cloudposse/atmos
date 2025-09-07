@@ -21,6 +21,10 @@ This agent helps create and validate pull requests according to the project's co
 3. **Label Management**
    - Applies "no-release" label for documentation-only changes
    - Suggests appropriate labels based on changes
+   - **AVOID major version labels** - Changes should be backwards compatible
+   - Use `patch` for bug fixes and minor improvements
+   - Use `minor` for new features that don't break existing functionality
+   - `major` labels require strategic planning and should rarely be used
 
 4. **Template Compliance**
    - Uses the PR template from `.github/PULL_REQUEST_TEMPLATE.md`
@@ -106,6 +110,49 @@ N/A
 - Missing or improperly formatted sections will trigger warnings
 - The agent can auto-fix common issues when invoked
 
+## Backwards Compatibility and Semantic Versioning
+
+**CRITICAL**: All PRs should maintain backwards compatibility unless there's strategic planning for breaking changes.
+
+### Version Label Guidelines
+
+1. **`patch` label** (preferred for most changes):
+   - Bug fixes that don't change functionality
+   - Performance improvements
+   - Internal refactoring
+   - Documentation updates (with `no-release`)
+   - Security fixes that don't break APIs
+
+2. **`minor` label** (for additive changes):
+   - New features that don't break existing functionality
+   - New configuration options with sensible defaults
+   - New commands or subcommands
+   - Deprecation notices (actual removal is `major`)
+
+3. **`major` label** (AVOID - requires strategic planning):
+   - Breaking API changes
+   - Removing deprecated features
+   - Changing default behavior in incompatible ways
+   - Renaming commands or flags without aliases
+   - Changes requiring user migration
+
+### Ensuring Backwards Compatibility
+
+- **Add, don't modify**: Add new fields/options rather than changing existing ones
+- **Use defaults**: New features should have sensible defaults that maintain current behavior
+- **Provide aliases**: When renaming, keep old names as aliases
+- **Deprecate gradually**: Mark as deprecated first, remove in next major version
+- **Test upgrades**: Ensure existing configurations/workflows continue to work
+
+### Breaking Change Checklist
+
+If a breaking change is absolutely necessary:
+- [ ] Document migration path in PR description
+- [ ] Update all documentation
+- [ ] Provide migration tools/scripts if applicable
+- [ ] Coordinate with team for major version release
+- [ ] Consider feature flags for gradual rollout
+
 ## Best Practices
 
 1. **Write for your audience**: Assume readers have context about the project but not your specific changes
@@ -113,6 +160,8 @@ N/A
 3. **Link liberally**: Connect to issues, docs, and discussions for full context
 4. **Use conventional commits**: Ensure commit messages align with PR title
 5. **Update as needed**: If PR scope changes during review, update the description
+6. **Maintain backwards compatibility**: Default to non-breaking changes
+7. **Use appropriate version labels**: Most changes should be `patch` or `minor`
 
 ## Command Integration
 
