@@ -24,12 +24,12 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/vcs"
 
-	// Import VCS providers to register them
-	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/vcs/github"
+	// Import CI integrations to register them
+	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github"
 )
 
 // Main package static errors.
@@ -307,7 +307,7 @@ step summaries and markdown reports.`,
 	rootCmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	rootCmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 	rootCmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
-	rootCmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
+	rootCmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
 	rootCmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
 	rootCmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
@@ -364,7 +364,7 @@ Pre-calculates total test count for accurate progress tracking.`,
 	cmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	cmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 	cmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
-	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
+	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
 	cmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
 	cmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
@@ -403,7 +403,7 @@ and console output with rich formatting.`,
 	cmd.Flags().String("output", "", "Output file (default: stdout for terminal/markdown)")
 	cmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
 	cmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
-	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
+	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
 	cmd.Flags().Bool("generate-summary", false, "Write test summary to test-summary.md file")
 	cmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
 	cmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
@@ -876,9 +876,9 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 	// Trim spaces
 	strategy = strings.TrimSpace(strategy)
 
-	// Handle the special case where flag is present but empty
-	if flagPresent && strategy == "" {
-		return "always"
+	// Default to "never" when no value is provided
+	if strategy == "" {
+		return "never"
 	}
 
 	// Handle boolean aliases
@@ -926,19 +926,19 @@ func shouldPostCommentWithOS(strategy string, summary *types.TestSummary, goos s
 }
 
 func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *log.Logger) error {
-	// Detect VCS provider
-	provider := vcs.DetectProvider(logger)
-	if provider == nil {
-		logger.Info("Skipping comment posting", "reason", "no VCS provider detected")
+	// Detect CI integration
+	integration := ci.DetectIntegration(logger)
+	if integration == nil {
+		logger.Info("Skipping comment posting", "reason", "no CI integration detected")
 		return nil
 	}
 
-	// Detect VCS context
-	ctx, err := provider.DetectContext()
+	// Detect CI context
+	ctx, err := integration.DetectContext()
 	if err != nil {
 		logger.Info("Skipping comment posting",
-			"reason", "VCS context not detected",
-			"platform", provider.GetPlatform(),
+			"reason", "CI context not detected",
+			"provider", integration.Provider(),
 			"error", err)
 		return nil
 	}
@@ -946,7 +946,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	if !ctx.IsSupported() {
 		logger.Info("Skipping comment posting",
 			"reason", "unsupported event type",
-			"platform", provider.GetPlatform(),
+			"provider", integration.Provider(),
 			"event", ctx.GetEventName())
 		return nil
 	}
@@ -966,8 +966,8 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		}
 	}
 
-	logger.Info("Posting VCS comment",
-		"vcs_platform", provider.GetPlatform(),
+	logger.Info("Posting CI comment",
+		"ci_provider", integration.Provider(),
 		"os_platform", platform,
 		"failed", len(summary.Failed),
 		"skipped", len(summary.Skipped),
@@ -996,7 +996,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	// Update the context with the discriminated UUID if it supports it
 	// This is needed for GitHub to find existing comments with the discriminated UUID
 	type contextWithUUID interface {
-		vcs.Context
+		ci.Context
 		SetCommentUUID(string)
 	}
 
@@ -1007,7 +1007,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	}
 
 	logger.Info("Posting comment",
-		"platform", provider.GetPlatform(),
+		"platform", integration.Provider(),
 		"owner", ctx.GetOwner(),
 		"repo", ctx.GetRepo(),
 		"pr", ctx.GetPRNumber(),
@@ -1015,9 +1015,9 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		"uuid", uuid)
 
 	// Create comment manager
-	commentManager := provider.CreateCommentManager(ctx, logger)
+	commentManager := integration.CreateCommentManager(ctx, logger)
 	if commentManager == nil {
-		logger.Warn("Comment manager not available for platform", "platform", provider.GetPlatform())
+		logger.Warn("Comment manager not available for platform", "platform", integration.Provider())
 		return nil
 	}
 

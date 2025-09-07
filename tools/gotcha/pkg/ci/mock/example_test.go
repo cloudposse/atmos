@@ -6,29 +6,29 @@ import (
 	"os"
 
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/vcs"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/vcs/mock"
-	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/vcs/mock" // Register provider
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"
+	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock" // Register integration
 )
 
-func Example_usingMockProvider() {
-	// Enable mock provider via environment
+func Example_usingMockIntegration() {
+	// Enable mock integration via environment
 	os.Setenv("GOTCHA_USE_MOCK", "true")
 	defer os.Unsetenv("GOTCHA_USE_MOCK")
 
 	logger := log.New(nil)
 
-	// Auto-detect provider (will find mock when GOTCHA_USE_MOCK=true)
-	provider := vcs.DetectProvider(logger)
-	if provider == nil {
-		fmt.Println("No provider detected")
+	// Auto-detect integration (will find mock when GOTCHA_USE_MOCK=true)
+	integration := ci.DetectIntegration(logger)
+	if integration == nil {
+		fmt.Println("No integration detected")
 		return
 	}
 
-	fmt.Printf("Detected provider: %s\n", provider.GetPlatform())
+	fmt.Printf("Detected provider: %s\n", integration.Provider())
 
 	// Get context
-	ctx, err := provider.DetectContext()
+	ctx, err := integration.DetectContext()
 	if err != nil {
 		fmt.Printf("Failed to detect context: %v\n", err)
 		return
@@ -38,7 +38,7 @@ func Example_usingMockProvider() {
 	fmt.Printf("PR Number: %d\n", ctx.GetPRNumber())
 
 	// Create comment manager
-	commentManager := provider.CreateCommentManager(ctx, logger)
+	commentManager := integration.CreateCommentManager(ctx, logger)
 
 	// Post a comment
 	err = commentManager.PostOrUpdateComment(context.Background(), ctx, "Test results: All passed!")
@@ -56,7 +56,7 @@ func Example_usingMockProvider() {
 	// Comment posted successfully
 }
 
-func Example_configurableMockProvider() {
+func Example_configurableMockIntegration() {
 	logger := log.New(nil)
 
 	// Create a custom configuration
@@ -73,18 +73,18 @@ func Example_configurableMockProvider() {
 		WrittenSummaries:    []string{},
 	}
 
-	// Create mock provider with custom config
-	provider := mock.NewMockProviderWithConfig(logger, config)
+	// Create mock integration with custom config
+	integration := mock.NewMockIntegrationWithConfig(logger, config)
 
 	// Use it for testing
-	ctx, _ := provider.DetectContext()
-	cm := provider.CreateCommentManager(ctx, logger)
+	ctx, _ := integration.DetectContext()
+	cm := integration.CreateCommentManager(ctx, logger)
 
 	// Post a comment
 	cm.PostOrUpdateComment(context.Background(), ctx, "Custom test comment")
 
 	// Verify the comment was stored
-	comments := provider.GetComments()
+	comments := integration.GetComments()
 	fmt.Printf("Stored comments: %d\n", len(comments))
 	fmt.Printf("Comment content: %s\n", comments["test-run-456"])
 
@@ -108,10 +108,10 @@ func Example_testingWithFailures() {
 		Comments:          make(map[string]string),
 	}
 
-	provider := mock.NewMockProviderWithConfig(logger, config)
+	integration := mock.NewMockIntegrationWithConfig(logger, config)
 
-	ctx, _ := provider.DetectContext()
-	cm := provider.CreateCommentManager(ctx, logger)
+	ctx, _ := integration.DetectContext()
+	cm := integration.CreateCommentManager(ctx, logger)
 
 	// Try to post a comment (will fail)
 	err := cm.PostOrUpdateComment(context.Background(), ctx, "This will fail")

@@ -5,10 +5,10 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/vcs"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 )
 
-// MockCommentManager implements vcs.CommentManager for testing.
+// MockCommentManager implements ci.CommentManager for testing.
 type MockCommentManager struct {
 	config *MockConfig
 	logger *log.Logger
@@ -16,7 +16,7 @@ type MockCommentManager struct {
 }
 
 // PostOrUpdateComment simulates posting or updating a comment.
-func (m *MockCommentManager) PostOrUpdateComment(ctx context.Context, vcsCtx vcs.Context, content string) error {
+func (m *MockCommentManager) PostOrUpdateComment(ctx context.Context, ciCtx ci.Context, content string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -24,11 +24,11 @@ func (m *MockCommentManager) PostOrUpdateComment(ctx context.Context, vcsCtx vcs
 		if m.config.CommentError != nil {
 			return m.config.CommentError
 		}
-		return vcs.ErrCommentCreateFailed
+		return ci.ErrCommentCreateFailed
 	}
 
 	// Extract UUID from context
-	uuid := vcsCtx.GetCommentUUID()
+	uuid := ciCtx.GetCommentUUID()
 
 	// Store or update the comment
 	if m.config.Comments == nil {
@@ -45,10 +45,10 @@ func (m *MockCommentManager) PostOrUpdateComment(ctx context.Context, vcsCtx vcs
 	m.config.Comments[uuid] = content
 
 	m.logger.Info("Mock comment posted successfully",
-		"platform", "mock",
-		"owner", vcsCtx.GetOwner(),
-		"repo", vcsCtx.GetRepo(),
-		"pr", vcsCtx.GetPRNumber(),
+		"provider", "mock",
+		"owner", ciCtx.GetOwner(),
+		"repo", ciCtx.GetRepo(),
+		"pr", ciCtx.GetPRNumber(),
 		"uuid", uuid,
 	)
 
@@ -56,7 +56,7 @@ func (m *MockCommentManager) PostOrUpdateComment(ctx context.Context, vcsCtx vcs
 }
 
 // FindExistingComment simulates finding an existing comment.
-func (m *MockCommentManager) FindExistingComment(ctx context.Context, vcsCtx vcs.Context, uuid string) (interface{}, error) {
+func (m *MockCommentManager) FindExistingComment(ctx context.Context, ciCtx ci.Context, uuid string) (interface{}, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

@@ -85,6 +85,7 @@ testacc-ci: get $(GOTCHA_BIN)
 		--timeout=40m \
 		--coverprofile=coverage.out \
 		--output=test-results.json \
+		--post-comment=adaptive \
 		-- -coverpkg=github.com/cloudposse/atmos/... $(TESTARGS)
 
 # Clean test artifacts

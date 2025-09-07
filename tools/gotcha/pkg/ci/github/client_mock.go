@@ -94,8 +94,12 @@ func (m *MockClient) CreateComment(ctx context.Context, owner, repo string, issu
 	// Create a new comment with generated ID
 	newID := int64(len(m.Comments) + len(m.CreatedComments) + 1)
 	newComment := &github.IssueComment{
-		ID:   github.Int64(newID),
-		Body: comment.Body,
+		ID: github.Int64(newID),
+	}
+
+	// Handle nil comment gracefully
+	if comment != nil {
+		newComment.Body = comment.Body
 	}
 
 	m.CreatedComments = append(m.CreatedComments, newComment)
@@ -115,9 +119,14 @@ func (m *MockClient) UpdateComment(ctx context.Context, owner, repo string, comm
 	for i, existingComment := range m.Comments {
 		if existingComment.ID != nil && *existingComment.ID == commentID {
 			updatedComment := &github.IssueComment{
-				ID:   github.Int64(commentID),
-				Body: comment.Body,
+				ID: github.Int64(commentID),
 			}
+
+			// Handle nil comment gracefully
+			if comment != nil {
+				updatedComment.Body = comment.Body
+			}
+
 			m.Comments[i] = updatedComment
 			m.UpdatedComments = append(m.UpdatedComments, updatedComment)
 			return updatedComment, &github.Response{}, nil

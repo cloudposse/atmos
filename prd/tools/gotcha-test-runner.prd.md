@@ -36,7 +36,7 @@
 
 1. **Beautiful CLI Experience**: Leverage Charm ecosystem for modern, visually appealing interface
 2. **Real-time Progress Tracking**: Provide immediate feedback during test execution with Bubble Tea TUI
-3. **Multi-VCS Support**: Abstract VCS operations to support GitHub, GitLab, Bitbucket, and Azure DevOps
+3. **Multi-CI Support**: Abstract CI operations to support GitHub, GitLab, Bitbucket, and Azure DevOps
 4. **CI/CD Integration**: Native support for various CI platforms with PR/MR comments and job summaries
 5. **Flexible Configuration**: Support YAML config files and environment variables via Viper
 6. **Cross-platform Compatibility**: Work consistently across Linux, macOS, and Windows
@@ -500,7 +500,7 @@ preferences:     # User preferences and defaults
   default_timeout: "40m"
   default_show_filter: "all"
 
-vcs:            # VCS integration metadata
+ci:             # CI integration metadata
   github:       # GitHub-specific cache data
 ```
 
@@ -553,9 +553,9 @@ gotcha ./pkg/utils           # → go test ./pkg/utils/...
 gotcha -- -run TestSpecific -v  # Explicit -run flag respected
 ```
 
-### VCS Platform Integration
+### CI Platform Integration
 
-Gotcha uses a provider-based architecture to support multiple Version Control System (VCS) platforms, enabling test result reporting across different CI/CD environments.
+Gotcha uses an integration-based architecture to support multiple Continuous Integration (CI) platforms, enabling test result reporting across different CI/CD environments.
 
 #### Supported Platforms
 - **GitHub Actions**: Full support for PR comments and job summaries via `$GITHUB_STEP_SUMMARY`
@@ -563,20 +563,20 @@ Gotcha uses a provider-based architecture to support multiple Version Control Sy
 - **Bitbucket Pipelines** (future): Support for PR comments and pipeline artifacts
 - **Azure DevOps** (future): Support for PR comments and build summaries
 
-#### VCS Interface Architecture
+#### CI Interface Architecture
 
 ##### Core Interfaces
-The VCS abstraction is built on several key interfaces:
+The CI abstraction is built on several key interfaces:
 
-1. **Provider Interface**: Main interface for VCS platform detection and capability access
-   - `DetectContext()`: Detects VCS-specific context from environment
+1. **Integration Interface**: Main interface for CI platform integration and capability access
+   - `DetectContext()`: Detects CI-specific context from environment
    - `CreateCommentManager()`: Creates platform-specific comment manager
    - `GetJobSummaryWriter()`: Returns job summary writer (optional capability)
    - `GetArtifactPublisher()`: Returns artifact publisher (optional capability)
-   - `GetPlatform()`: Returns the platform identifier
-   - `IsAvailable()`: Checks if platform is available in current environment
+   - `Provider()`: Returns the CI provider name (github, gitlab, etc.)
+   - `IsAvailable()`: Checks if integration is available in current environment
 
-2. **Context Interface**: Provides VCS-specific context information
+2. **Context Interface**: Provides CI-specific context information
    - `GetOwner()`: Repository owner/organization
    - `GetRepo()`: Repository name
    - `GetPRNumber()`: Pull/merge request number
@@ -584,9 +584,9 @@ The VCS abstraction is built on several key interfaces:
    - `GetToken()`: Authentication token
    - `GetEventName()`: CI event type
    - `IsSupported()`: Checks if current context supports operations
-   - `GetPlatform()`: Platform identifier
+   - `Provider()`: CI provider identifier
 
-3. **CommentManager Interface**: Handles VCS comment operations
+3. **CommentManager Interface**: Handles CI comment operations
    - `PostOrUpdateComment()`: Creates or updates PR/MR comments
    - `FindExistingComment()`: Finds existing comments by UUID
 
@@ -601,21 +601,21 @@ The VCS abstraction is built on several key interfaces:
 
 ##### Platform Detection
 - **Automatic detection**: Based on environment variables (CI, GITHUB_ACTIONS, GITLAB_CI, etc.)
-- **Manual override**: Via `--vcs-platform` flag or `GOTCHA_VCS_PLATFORM` environment variable
-- **Fallback behavior**: Graceful degradation when no VCS is detected
-- **Registration pattern**: Providers self-register via init() functions
+- **Manual override**: Via `--ci-provider` flag or `GOTCHA_CI_PROVIDER` environment variable
+- **Fallback behavior**: Graceful degradation when no CI is detected
+- **Registration pattern**: Integrations self-register via init() functions
 
 ##### Capability Model
-Each VCS provider declares its capabilities:
+Each CI integration declares its capabilities:
 - **Required capabilities**: Context detection, comment management
 - **Optional capabilities**: Job summaries, artifact publishing, test reports
 - **Graceful degradation**: Missing capabilities return nil, allowing fallback behavior
 
 #### Configuration
-- **CLI Flag**: `--vcs-platform` to force specific platform
-- **Environment Variable**: `GOTCHA_VCS_PLATFORM` for platform override
-- **Auto-detection order**: GitHub → GitLab → Bitbucket → Azure DevOps
-- **Provider registry**: Extensible system for adding new platforms
+- **CLI Flag**: `--ci-provider` to force specific provider
+- **Environment Variable**: `GOTCHA_CI_PROVIDER` for provider override
+- **Auto-detection order**: GitHub → GitLab → Bitbucket → Azure DevOps → CircleCI
+- **Integration registry**: Extensible system for adding new platforms
 
 ### GitHub Actions Integration
 
@@ -807,7 +807,7 @@ Existing tools failed to provide:
 - **Interface-driven**: Use interfaces for testability and future extensibility
 - **Error handling**: Comprehensive error handling with proper exit codes
 - **Performance**: Efficient streaming with minimal memory overhead
-- **VCS abstraction**: Provider-based architecture for multi-platform support
+- **CI abstraction**: Integration-based architecture for multi-platform support
 - **Non-intrusive enhancements**: All features work within existing Cobra/Fang command structure
 - **Graceful degradation**: Features degrade gracefully when dependencies unavailable
 
@@ -823,7 +823,7 @@ Existing tools failed to provide:
 - **Strategy pattern**: For different output formats
 - **Factory pattern**: For creating appropriate renderers based on environment
 - **Command pattern**: For structured CLI command handling
-- **Provider pattern**: For VCS platform abstraction and registration
+- **Provider pattern**: For CI platform abstraction and registration
 - **Interface segregation**: Optional capabilities via separate interfaces
 
 ### Security Considerations

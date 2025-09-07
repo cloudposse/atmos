@@ -11,7 +11,7 @@ type CacheFile struct {
 	Discovery   DiscoveryCache    `yaml:"discovery"`
 	Performance *PerformanceCache `yaml:"performance,omitempty"`
 	History     *HistoryCache     `yaml:"history,omitempty"`
-	VCS         *VCSCache         `yaml:"vcs,omitempty"`
+	CI          *CICache          `yaml:"ci,omitempty"`
 }
 
 // CacheMetadata contains metadata about the cache file itself.
@@ -90,8 +90,8 @@ type RunHistory struct {
 	Flags      []string  `yaml:"flags,omitempty"`
 }
 
-// VCSCache stores VCS integration metadata.
-type VCSCache struct {
+// CICache stores CI integration metadata.
+type CICache struct {
 	GitHub *GitHubCache `yaml:"github,omitempty"`
 }
 

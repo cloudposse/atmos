@@ -311,8 +311,10 @@ func TestTruncateComment(t *testing.T) {
 			result := truncateComment(tt.content, tt.maxSize)
 			assert.LessOrEqual(t, len(result), tt.maxSize)
 
-			if len(tt.content) > tt.maxSize {
-				assert.Contains(t, result, "Comment truncated due to size limits")
+			// Only check for truncation message if maxSize is large enough to contain it
+			truncationMsg := "Comment truncated due to size limits"
+			if len(tt.content) > tt.maxSize && tt.maxSize >= len(truncationMsg) {
+				assert.Contains(t, result, truncationMsg)
 			}
 		})
 	}
