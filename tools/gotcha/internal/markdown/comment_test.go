@@ -31,7 +31,7 @@ func TestGenerateGitHubComment(t *testing.T) {
 			expectComment: true,
 			checkContent: []string{
 				"✅", // Success badge
-				"3",  // Test count
+				"3", // Test count
 			},
 		},
 		{
@@ -43,20 +43,20 @@ func TestGenerateGitHubComment(t *testing.T) {
 				},
 				Failed: []types.TestResult{
 					{
-						Package: "pkg/test",
-						Test:    "TestFailed1",
+						Package:  "pkg/test",
+						Test:     "TestFailed1",
 						Duration: 1.5,
 					},
 					{
-						Package: "pkg/test",
-						Test:    "TestFailed2",
+						Package:  "pkg/test",
+						Test:     "TestFailed2",
 						Duration: 2.0,
 					},
 				},
 				Skipped: []types.TestResult{
 					{
-						Package: "pkg/test",
-						Test:    "TestSkipped1",
+						Package:    "pkg/test",
+						Test:       "TestSkipped1",
 						SkipReason: "Not implemented",
 					},
 				},
@@ -115,8 +115,8 @@ func TestGenerateGitHubComment(t *testing.T) {
 					{Package: "pkg/test", Test: "Test9", Status: "pass"},
 					{Package: "pkg/test", Test: "Test10", Status: "pass"},
 				},
-				Failed:  []types.TestResult{},
-				Skipped: []types.TestResult{},
+				Failed:   []types.TestResult{},
+				Skipped:  []types.TestResult{},
 				Coverage: "coverage: 85.5% of statements",
 			},
 			expectComment: true,
@@ -156,11 +156,11 @@ func TestGenerateGitHubComment(t *testing.T) {
 			},
 			expectComment: true,
 			checkContent: []string{
-				"❌",          // Failure badge
-				"100",         // Total tests
-				"95",          // Passed count
-				"3",           // Failed count
-				"TestFail1",   // Failed test names
+				"❌",         // Failure badge
+				"100",       // Total tests
+				"95",        // Passed count
+				"3",         // Failed count
+				"TestFail1", // Failed test names
 				"TestFail2",
 				"TestFail3",
 				"pkg/package1", // Package names

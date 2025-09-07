@@ -55,7 +55,7 @@ type TestModel struct {
 
 	// Buffered output
 	buffers        map[string][]string
-	subtestStats   map[string]*SubtestStats // Track subtest statistics per parent test
+	subtestStats   map[string]*SubtestStats  // Track subtest statistics per parent test
 	packageResults map[string]*PackageResult // Complete package results
 	packageOrder   []string                  // Order packages were started
 	activePackages map[string]bool           // Currently running packages
@@ -73,7 +73,7 @@ type TestModel struct {
 	progressMessages []string
 	estimatedTotal   int // Estimated total test count (from cache or discovery)
 	processedTests   int // Number of tests processed so far
-	
+
 	// Test counting
 	actualTestCount    int  // Actual test count discovered during execution
 	completedTests     int  // Number of tests completed so far
@@ -105,12 +105,12 @@ type TestModel struct {
 	coverProfile string
 
 	// Process state
-	done      bool
-	err       error
-	aborted   bool // Track if the test was aborted
-	exitCode  int  // Store the exit code from the test process
-	alert     bool // Whether to emit terminal bell on completion
-	jsonFile  io.WriteCloser
+	done       bool
+	err        error
+	aborted    bool // Track if the test was aborted
+	exitCode   int  // Store the exit code from the test process
+	alert      bool // Whether to emit terminal bell on completion
+	jsonFile   io.WriteCloser
 	jsonWriter *sync.Mutex
 
 	// Legacy compatibility fields

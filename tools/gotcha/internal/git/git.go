@@ -8,8 +8,10 @@ import (
 )
 
 // Variable aliases for test compatibility.
-var getChangedFiles = GetChangedFiles
-var getChangedPackages = GetChangedPackages
+var (
+	getChangedFiles    = GetChangedFiles
+	getChangedPackages = GetChangedPackages
+)
 
 // GetChangedFiles returns a list of changed Go files in the current PR/branch for PR-focused test reporting.
 // This function enables gotcha to filter test results to only show failures from packages

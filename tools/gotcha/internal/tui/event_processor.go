@@ -41,10 +41,10 @@ func (m *TestModel) processPackageEvent(event *types.TestEvent) {
 				m.activePackages[event.Package] = true
 			}
 		}
-		
+
 	case "output":
 		m.processPackageOutput(event)
-		
+
 	case "skip":
 		// Package skipped (no tests to run)
 		if event.Package != "" {
@@ -58,7 +58,7 @@ func (m *TestModel) processPackageEvent(event *types.TestEvent) {
 				}
 			}
 		}
-		
+
 	case "pass", "fail":
 		// Package completed
 		if event.Package != "" {
@@ -86,12 +86,12 @@ func (m *TestModel) processPackageOutput(event *types.TestEvent) {
 	if event.Package == "" {
 		return
 	}
-	
+
 	// Check for coverage or "no test files" message
 	if strings.Contains(event.Output, "coverage:") {
 		m.extractCoverage(event)
 	}
-	
+
 	if strings.Contains(event.Output, "[no test files]") {
 		m.packagesWithNoTests[event.Package] = true
 	}
@@ -148,7 +148,7 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 	if event.Package == "" || event.Test == "" {
 		return
 	}
-	
+
 	pkg := m.packageResults[event.Package]
 	if pkg == nil {
 		// Create package if it doesn't exist (can happen with out-of-order events)
@@ -179,10 +179,10 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 	switch event.Action {
 	case "run":
 		m.processTestRun(event, pkg, parentTest, isSubtest)
-		
+
 	case "output":
 		m.processTestOutput(event, pkg, parentTest, isSubtest)
-		
+
 	case "pass", "fail", "skip":
 		m.processTestResult(event, pkg, parentTest, isSubtest)
 	}
@@ -245,7 +245,7 @@ func (m *TestModel) processTestOutput(event *types.TestEvent, pkg *PackageResult
 		fmt.Fprintf(f, "[OUTPUT] Test=%s, Output=%q\n", event.Test, event.Output)
 		f.Close()
 	}
-	
+
 	// Buffer the output
 	if isSubtest {
 		if parent := pkg.Tests[parentTest]; parent != nil {
@@ -270,17 +270,17 @@ func (m *TestModel) extractSkipReason(output string, test *TestResult) {
 	if strings.HasPrefix(strings.TrimSpace(output), "---") {
 		return
 	}
-	
+
 	// Check if this is a skip output
 	if !strings.Contains(output, "SKIP:") && !strings.Contains(output, "SKIP ") &&
 		!strings.Contains(output, "skipping:") && !strings.Contains(output, "Skipping ") &&
 		!strings.Contains(output, "Skip(") && !strings.Contains(output, "Skipf(") {
 		return
 	}
-	
+
 	// Extract just the reason part, not the full output
 	reason := strings.TrimSpace(output)
-	
+
 	// Remove file:line: prefix if present (e.g., "skip_test.go:9: ")
 	if idx := strings.LastIndex(reason, ": "); idx >= 0 && idx < len(reason)-2 {
 		// Check if this looks like a file:line prefix
@@ -289,7 +289,7 @@ func (m *TestModel) extractSkipReason(output string, test *TestResult) {
 			reason = strings.TrimSpace(reason[idx+2:])
 		}
 	}
-	
+
 	// Now extract the actual skip message
 	if idx := strings.Index(reason, "SKIP:"); idx >= 0 {
 		reason = strings.TrimSpace(reason[idx+5:])
@@ -300,11 +300,11 @@ func (m *TestModel) extractSkipReason(output string, test *TestResult) {
 	} else if idx := strings.Index(reason, "Skipping "); idx >= 0 {
 		reason = strings.TrimSpace(reason[idx+9:])
 	}
-	
+
 	// Only set if we have a meaningful reason
 	if reason != "" && !strings.HasPrefix(reason, "---") {
 		test.SkipReason = reason
-		
+
 		// Log to file for debugging
 		if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "[DEBUG] Captured skip reason for %s: %q\n", test.Name, reason)

@@ -10,10 +10,10 @@ import (
 
 func TestTestBufferHandling(t *testing.T) {
 	model := &TestModel{
-		buffers:        make(map[string][]string),
-		packageResults: make(map[string]*PackageResult),
-		activePackages: make(map[string]bool),
-		subtestStats:   make(map[string]*SubtestStats),
+		buffers:             make(map[string][]string),
+		packageResults:      make(map[string]*PackageResult),
+		activePackages:      make(map[string]bool),
+		subtestStats:        make(map[string]*SubtestStats),
 		packagesWithNoTests: make(map[string]bool),
 		packageHasTests:     make(map[string]bool),
 	}
@@ -62,10 +62,10 @@ func TestTestBufferHandling(t *testing.T) {
 
 func TestSubtestOutputCollection(t *testing.T) {
 	model := &TestModel{
-		buffers:        make(map[string][]string),
-		packageResults: make(map[string]*PackageResult),
-		activePackages: make(map[string]bool),
-		subtestStats:   make(map[string]*SubtestStats),
+		buffers:             make(map[string][]string),
+		packageResults:      make(map[string]*PackageResult),
+		activePackages:      make(map[string]bool),
+		subtestStats:        make(map[string]*SubtestStats),
 		packagesWithNoTests: make(map[string]bool),
 		packageHasTests:     make(map[string]bool),
 	}
@@ -96,7 +96,7 @@ func TestSubtestOutputCollection(t *testing.T) {
 	pkg := model.packageResults["test/pkg"]
 	parent := pkg.Tests["TestWithSubtests"]
 	assert.NotNil(t, parent)
-	
+
 	subtest := parent.Subtests["TestWithSubtests/Subtest1"]
 	assert.NotNil(t, subtest)
 	assert.Len(t, subtest.Output, 1)
@@ -118,10 +118,10 @@ func TestSubtestOutputCollection(t *testing.T) {
 
 func TestEventOrdering(t *testing.T) {
 	model := &TestModel{
-		buffers:        make(map[string][]string),
-		packageResults: make(map[string]*PackageResult),
-		activePackages: make(map[string]bool),
-		subtestStats:   make(map[string]*SubtestStats),
+		buffers:             make(map[string][]string),
+		packageResults:      make(map[string]*PackageResult),
+		activePackages:      make(map[string]bool),
+		subtestStats:        make(map[string]*SubtestStats),
 		packagesWithNoTests: make(map[string]bool),
 		packageHasTests:     make(map[string]bool),
 	}
@@ -154,9 +154,9 @@ func TestEventOrdering(t *testing.T) {
 
 func TestDisplayPackageResult(t *testing.T) {
 	model := &TestModel{
-		showFilter: "all",
+		showFilter:          "all",
 		packagesWithNoTests: make(map[string]bool),
-		subtestStats: make(map[string]*SubtestStats),
+		subtestStats:        make(map[string]*SubtestStats),
 	}
 
 	// Test package with no tests
@@ -166,7 +166,7 @@ func TestDisplayPackageResult(t *testing.T) {
 		HasTests: false,
 		Tests:    make(map[string]*TestResult),
 	}
-	
+
 	result := model.displayPackageResult(pkg)
 	assert.Contains(t, result, "empty/pkg")
 	assert.Contains(t, result, "No tests")
@@ -212,7 +212,7 @@ func TestGenerateSubtestProgress(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := model.generateSubtestProgress(tt.passed, tt.total)
-			
+
 			// For large numbers, just check it's not too long
 			if tt.total > 10 {
 				assert.LessOrEqual(t, len(result)/len("●"), 10)
@@ -230,7 +230,7 @@ func TestGenerateSubtestProgress(t *testing.T) {
 
 func TestExtractSkipReason(t *testing.T) {
 	model := &TestModel{}
-	
+
 	tests := []struct {
 		name       string
 		output     string
@@ -262,7 +262,7 @@ func TestExtractSkipReason(t *testing.T) {
 			wantReason: "",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			test := &TestResult{}
@@ -283,7 +283,7 @@ func TestProcessPackageOutput(t *testing.T) {
 		},
 		packagesWithNoTests: make(map[string]bool),
 	}
-	
+
 	// Test coverage extraction
 	event := &types.TestEvent{
 		Package: "test/pkg",
@@ -291,7 +291,7 @@ func TestProcessPackageOutput(t *testing.T) {
 	}
 	model.processPackageOutput(event)
 	assert.Equal(t, "75.5%", model.packageResults["test/pkg"].Coverage)
-	
+
 	// Test no test files detection
 	event2 := &types.TestEvent{
 		Package: "test/pkg",
@@ -299,7 +299,7 @@ func TestProcessPackageOutput(t *testing.T) {
 	}
 	model.processPackageOutput(event2)
 	assert.True(t, model.packagesWithNoTests["test/pkg"])
-	
+
 	// Test failure detection
 	event3 := &types.TestEvent{
 		Package: "test/pkg",
@@ -322,7 +322,7 @@ func TestGetBufferSizeKB(t *testing.T) {
 			},
 		},
 	}
-	
+
 	size := model.getBufferSizeKB()
 	// Should be approximately 3KB
 	assert.InDelta(t, 3.0, size, 0.1)

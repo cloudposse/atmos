@@ -65,8 +65,8 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 			},
 		},
 		{
-			name: "Large test suite adapts format",
-			summary: createLargeSummary(1000, 50, 25),
+			name:     "Large test suite adapts format",
+			summary:  createLargeSummary(1000, 50, 25),
 			uuid:     "test-uuid-large",
 			platform: "Darwin",
 			expected: struct {
@@ -90,8 +90,8 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 			},
 		},
 		{
-			name: "Huge test suite truncates non-essential",
-			summary: createLargeSummary(5000, 200, 100),
+			name:     "Huge test suite truncates non-essential",
+			summary:  createLargeSummary(5000, 200, 100),
 			uuid:     "test-uuid-huge",
 			platform: "Windows",
 			expected: struct {
@@ -106,10 +106,10 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 			}{
 				hasUUID:           true,
 				hasBadges:         true,
-				hasFailedTests:    true,   // Always show failures
-				hasSkippedTests:   false,  // May be truncated
-				hasSlowestTests:   false,  // Likely truncated
-				hasPackageSummary: true,   // Keep summary for overview
+				hasFailedTests:    true,  // Always show failures
+				hasSkippedTests:   false, // May be truncated
+				hasSlowestTests:   false, // Likely truncated
+				hasPackageSummary: true,  // Keep summary for overview
 				hasElapsedTime:    true,
 				withinSizeLimit:   true,
 			},
@@ -304,7 +304,6 @@ func createLargeSummary(total, failed, skipped int) *types.TestSummary {
 			Duration: float64(i) * 0.05,
 		})
 	}
-
 
 	// Set overall coverage
 	summary.Coverage = "75.5%"

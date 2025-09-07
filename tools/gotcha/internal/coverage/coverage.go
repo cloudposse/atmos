@@ -15,9 +15,11 @@ import (
 )
 
 // Type aliases for test compatibility.
-type CoverageLine = types.CoverageLine
-type CoverageFunction = types.CoverageFunction
-type CoverageData = types.CoverageData
+type (
+	CoverageLine     = types.CoverageLine
+	CoverageFunction = types.CoverageFunction
+	CoverageData     = types.CoverageData
+)
 
 // parseCoverageProfile parses a coverage profile and returns coverage data (exported for tests).
 var parseCoverageProfile = ParseCoverageProfile

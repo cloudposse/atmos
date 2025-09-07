@@ -51,29 +51,29 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 	}
 
 	return TestModel{
-		testPackages:       testPackages,
-		testArgs:          testArgs,
-		buffers:           make(map[string][]string),
-		subtestStats:      make(map[string]*SubtestStats),
-		packageResults:    make(map[string]*PackageResult),
-		packageOrder:      []string{},
-		activePackages:    make(map[string]bool),
-		spinner:           s,
-		progress:          p,
-		outputFile:        outputFile,
-		coverProfile:      coverProfile,
-		showFilter:        showFilter,
-		verbosityLevel:    verbosityLevel,
-		testFilter:        testFilter,
-		alert:             alert,
-		startTime:         time.Now(),
-		jsonWriter:        &sync.Mutex{},
-		
+		testPackages:   testPackages,
+		testArgs:       testArgs,
+		buffers:        make(map[string][]string),
+		subtestStats:   make(map[string]*SubtestStats),
+		packageResults: make(map[string]*PackageResult),
+		packageOrder:   []string{},
+		activePackages: make(map[string]bool),
+		spinner:        s,
+		progress:       p,
+		outputFile:     outputFile,
+		coverProfile:   coverProfile,
+		showFilter:     showFilter,
+		verbosityLevel: verbosityLevel,
+		testFilter:     testFilter,
+		alert:          alert,
+		startTime:      time.Now(),
+		jsonWriter:     &sync.Mutex{},
+
 		// Legacy compatibility
 		packagesWithNoTests:   make(map[string]bool),
 		packageHasTests:       make(map[string]bool),
 		packageNoTestsPrinted: make(map[string]bool),
-		
+
 		// Estimate handling
 		estimatedTotal:     estimatedTestCount,
 		estimatedTestCount: estimatedTestCount,
