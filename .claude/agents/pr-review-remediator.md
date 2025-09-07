@@ -595,7 +595,22 @@ fi
 | `patch` | Bug fixes, minor corrections | Changes that fix existing functionality |
 | `minor` | New features, enhancements | Non-breaking changes that add functionality |
 | `major` | Breaking changes | Changes requiring users to update configuration |
-| `no-release` | Docs, CI, non-code changes | Changes that don't affect Go code or app functionality |
+| `no-release` | Documentation or CI changes only | Changes that DO NOT affect the Atmos binary |
+
+#### When to Use `no-release` Label
+
+Use `no-release` for changes that **DO NOT** modify the Atmos binary or runtime behavior:
+- Documentation updates (`*.md`, `*.mdx`, `website/`, `docs/`)
+- CI/CD configuration (`.github/workflows/`, `.github/actions/`)
+- Development tooling (`.claude/`, `.cursor/`, `.vscode/`)
+- Configuration examples that don't change code
+- Test fixtures that don't change functionality
+- Comments or formatting-only changes
+
+**DO NOT** use `no-release` if the PR modifies:
+- Any Go source code in `pkg/`, `cmd/`, or `internal/`
+- Dependencies in `go.mod` or `go.sum`
+- Build configuration that affects the binary
 
 #### Handling Failed "PR Semver Labels" Check
 
@@ -606,10 +621,10 @@ When the check fails:
 gh pr view <PR_NUMBER> --repo cloudposse/atmos --json labels --jq '.labels[].name'
 
 # 2. Analyze the changes to determine appropriate label
-# - Bug fixes only → patch
-# - New features → minor  
-# - Breaking changes → major
-# - Docs/CI only → no-release
+# - Bug fixes to Go code → patch
+# - New features in Go code → minor  
+# - Breaking changes to APIs/configs → major
+# - Documentation/CI/tooling only → no-release
 
 # 3. Add the appropriate label
 gh pr edit <PR_NUMBER> --repo cloudposse/atmos --add-label <LABEL>
@@ -630,14 +645,24 @@ gh pr checks <PR_NUMBER> --repo cloudposse/atmos | grep "PR Semver"
 Analyze PR changes to suggest appropriate label:
 
 ```bash
-# Check if only documentation files changed (exclude deleted files)
 # Get non-deleted files only
 CHANGED_FILES=$(gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/files \
   --jq '.[] | select(.status != "removed") | .filename')
-NON_DOC_FILES=$(echo "$CHANGED_FILES" | grep -v -E '\.(md|mdx|txt)$|^website/|^docs/|^\.github/|^\.claude/' | wc -l)
 
-if [[ $NON_DOC_FILES -eq 0 ]]; then
-  echo "Suggested label: no-release (documentation/CI changes only)"
+# Check if changes affect the Atmos binary
+# Files that DO NOT affect the binary: docs, CI, tooling, examples
+NON_RELEASE_PATTERN='^\.(md|mdx|txt)$|^website/|^docs/|^\.github/|^\.claude/|^\.cursor/|^examples/|^\.vscode/'
+GO_CODE_PATTERN='^(pkg|cmd|internal)/.*\.go$'
+
+# Count files that would trigger a release
+RELEASE_REQUIRED_FILES=$(echo "$CHANGED_FILES" | grep -E "$GO_CODE_PATTERN" | wc -l)
+NON_DOC_FILES=$(echo "$CHANGED_FILES" | grep -v -E "$NON_RELEASE_PATTERN" | wc -l)
+
+if [[ $RELEASE_REQUIRED_FILES -eq 0 && $NON_DOC_FILES -eq 0 ]]; then
+  echo "Suggested label: no-release (no changes to Atmos binary - docs/CI/tooling only)"
+elif [[ $RELEASE_REQUIRED_FILES -eq 0 && $NON_DOC_FILES -gt 0 ]]; then
+  # Has non-doc changes but no Go code - check what they are
+  echo "Suggested label: no-release (likely config/examples - verify no binary changes)"
 else
   # Check commit messages and file changes for hints
   COMMITS=$(gh pr view <PR_NUMBER> --repo cloudposse/atmos --json commits --jq '.commits[].commit.message')
