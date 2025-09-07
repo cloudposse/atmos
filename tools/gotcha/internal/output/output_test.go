@@ -152,8 +152,8 @@ func TestHandleOutputWithGenerateSummary(t *testing.T) {
 			wantFile:        false,
 		},
 		{
-			name:            "stdin format ignores generate-summary",
-			format:          "stdin",
+			name:            "terminal format ignores generate-summary",
+			format:          "terminal",
 			generateSummary: true,
 			wantFile:        false,
 		},

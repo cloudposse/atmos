@@ -22,8 +22,8 @@ func TestHandleOutput(t *testing.T) {
 		wantError bool
 	}{
 		{
-			name:      "stdin format",
-			format:    "stdin",
+			name:      "terminal format",
+			format:    "terminal",
 			wantError: false,
 		},
 		{

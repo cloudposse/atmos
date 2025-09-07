@@ -17,7 +17,7 @@ func TestNewTestModel(t *testing.T) {
 	coverProfile := "coverage.out"
 	showFilter := "failed"
 
-	model := NewTestModel(testPackages, testArgs, outputFile, coverProfile, showFilter, false)
+	model := NewTestModel(testPackages, testArgs, outputFile, coverProfile, showFilter, false, "", 0)
 	// Check that model fields are set correctly
 	if model.outputFile != outputFile {
 		t.Errorf("NewTestModel() outputFile = %v, want %v", model.outputFile, outputFile)
@@ -45,7 +45,7 @@ func TestNewTestModel(t *testing.T) {
 }
 
 func TestTestModelInit(t *testing.T) {
-	model := NewTestModel([]string{"./pkg"}, "", "", "", "all", false)
+	model := NewTestModel([]string{"./pkg"}, "", "", "", "all", false, "", 0)
 	cmd := model.Init()
 
 	// Init should return a command (spinner tick)
@@ -132,6 +132,12 @@ func TestShouldShowTest(t *testing.T) {
 			showFilter: "failed",
 			status:     "fail",
 			want:       true,
+		},
+		{
+			name:       "show failed - skip",
+			showFilter: "failed",
+			status:     "skip",
+			want:       true, // Skipped tests should show with failed filter
 		},
 		{
 			name:       "show passed - pass",

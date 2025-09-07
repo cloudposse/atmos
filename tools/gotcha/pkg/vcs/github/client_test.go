@@ -71,6 +71,11 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestRealClientMethods(t *testing.T) {
+	// Skip if no GitHub token is available
+	if os.Getenv("GITHUB_TOKEN") == "" && os.Getenv("GOTCHA_GITHUB_TOKEN") == "" {
+		t.Skipf("Skipping test: GITHUB_TOKEN not set (required for GitHub API calls)")
+	}
+
 	// Create a real client for interface verification
 	client := NewClient("")
 	realClient, ok := client.(*RealClient)
@@ -115,6 +120,13 @@ func TestClientInterface(t *testing.T) {
 
 	for i, client := range clients {
 		t.Run(fmt.Sprintf("client_%d", i), func(t *testing.T) {
+			// Skip real client tests if no GitHub token
+			if _, isReal := client.(*RealClient); isReal {
+				if os.Getenv("GITHUB_TOKEN") == "" && os.Getenv("GOTCHA_GITHUB_TOKEN") == "" {
+					t.Skipf("Skipping real client test: GITHUB_TOKEN not set")
+				}
+			}
+
 			ctx := context.Background()
 
 			// Verify interface methods are available
