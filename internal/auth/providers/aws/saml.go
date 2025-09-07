@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sts"
+	aws "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	log "github.com/charmbracelet/log"
 	"github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
@@ -211,25 +211,23 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 
 // assumeRoleWithSAML assumes an AWS role using SAML assertion.
 func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion string, role *saml2aws.AWSRole) (*schema.Credentials, error) {
-	// Create AWS session
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(p.region),
-	})
+	// Load AWS configuration (v2)
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(p.region))
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create AWS session: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to create AWS config: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	stsClient := sts.New(sess)
+	stsClient := sts.NewFromConfig(cfg)
 
 	// Assume role with SAML
 	input := &sts.AssumeRoleWithSAMLInput{
 		RoleArn:         aws.String(role.RoleARN),
 		PrincipalArn:    aws.String(role.PrincipalARN),
 		SAMLAssertion:   aws.String(samlAssertion),
-		DurationSeconds: aws.Int64(3600), // 1 hour
+		DurationSeconds: aws.Int32(3600), // 1 hour
 	}
 
-	result, err := stsClient.AssumeRoleWithSAML(input)
+	result, err := stsClient.AssumeRoleWithSAML(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
 	}
@@ -237,9 +235,9 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 	// Convert to schema.Credentials
 	creds := &schema.Credentials{
 		AWS: &schema.AWSCredentials{
-			AccessKeyID:     *result.Credentials.AccessKeyId,
-			SecretAccessKey: *result.Credentials.SecretAccessKey,
-			SessionToken:    *result.Credentials.SessionToken,
+			AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
+			SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+			SessionToken:    aws.ToString(result.Credentials.SessionToken),
 			Region:          p.region,
 			Expiration:      result.Credentials.Expiration.Format(time.RFC3339),
 		},
