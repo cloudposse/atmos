@@ -1,13 +1,13 @@
-# Claude PR Review Agent
+# Claude PR Review Remediator
 
-This directory contains Claude Code agents for automating PR review feedback and CI/CD remediation.
+This directory contains Claude Code agents for automating PR review feedback remediation and CI/CD issue fixing.
 
 ## Structure
 
 ```
 .claude/
 ├── agents/
-│   └── pr-review-handler.md    # Main PR review and remediation agent
+│   └── pr-review-remediator.md    # Main PR review remediation agent
 ├── commands/
 │   └── analyze-pr.md           # Slash command for quick PR analysis
 └── README.md                   # This file
@@ -19,7 +19,7 @@ This directory contains Claude Code agents for automating PR review feedback and
 
 ```bash
 # Use the Task tool to invoke the agent
-/agent pr-review-handler
+/agent pr-review-remediator
 ```
 
 Then provide the PR number when prompted.
@@ -136,7 +136,7 @@ Each suggestion is marked as:
 ## Customization
 
 To modify the agent behavior, edit:
-- `.claude/agents/pr-review-handler.md` - Main agent logic
+- `.claude/agents/pr-review-remediator.md` - Main agent logic
 - `.claude/commands/analyze-pr.md` - Slash command template
 
 ## Best Practices
