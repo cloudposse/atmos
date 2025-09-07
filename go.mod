@@ -80,7 +80,7 @@ require (
 	github.com/terraform-docs/terraform-docs v0.20.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zclconf/go-cty v1.17.0
-	golang.org/x/oauth2 v0.30.0
+	golang.org/x/oauth2 v0.31.0
 	golang.org/x/term v0.34.0
 	golang.org/x/text v0.28.0
 	google.golang.org/api v0.248.0
