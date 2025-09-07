@@ -7,13 +7,15 @@ import (
 )
 
 // Provider name constants for CI providers.
+// Only include providers that have actual implementations.
 const (
-	GitHub      = "github"
-	GitLab      = "gitlab"
-	Bitbucket   = "bitbucket"
-	AzureDevOps = "azuredevops"
-	CircleCI    = "circleci"
-	Unknown     = "unknown"
+	GitHub = "github"
+	// Future providers can be added here as they are implemented:
+	// GitLab      = "gitlab"
+	// Bitbucket   = "bitbucket"
+	// AzureDevOps = "azuredevops"
+	// CircleCI    = "circleci"
+	Unknown = "unknown"
 )
 
 // Integration is the main CI integration interface.

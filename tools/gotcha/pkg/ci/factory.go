@@ -15,6 +15,8 @@ type IntegrationFactory func(*log.Logger) Integration
 var integrations = map[string]IntegrationFactory{}
 
 // DetectIntegration automatically detects and returns the appropriate CI integration.
+// This returns an integration only if we have an implementation for the detected CI provider.
+// Returns nil if no supported integration is available, even if IsCI() returns true.
 func DetectIntegration(logger *log.Logger) Integration {
 	// Check for manual override via environment variable or config
 	_ = viper.BindEnv("GOTCHA_CI_PROVIDER", "CI_PROVIDER")
@@ -44,9 +46,10 @@ func DetectIntegration(logger *log.Logger) Integration {
 
 	// Auto-detect based on environment
 	// Try integrations in a specific order for predictable behavior
+	// Only providers with actual implementations are listed here
 	orderedProviders := []string{
-		GitHub,
-		// Add other providers here as they are implemented
+		GitHub, // Currently the only implemented provider
+		// Future providers will be added here as they are implemented
 	}
 
 	for _, provider := range orderedProviders {
@@ -87,6 +90,10 @@ func GetSupportedProviders() []string {
 }
 
 // IsCI detects if running in any CI environment.
+// This is used for output formatting decisions (colors, progress bars, etc.)
+// and is distinct from whether we have an integration for that CI provider.
+// For example, we may be running in GitLab CI (IsCI() returns true) but
+// not have a GitLab integration (DetectIntegration() returns nil).
 func IsCI() bool {
 	// Check common CI environment variables
 	ciEnvVars := []string{
