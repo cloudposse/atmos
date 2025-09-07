@@ -306,6 +306,15 @@ terraform:
 				assert.Equal(t, "Debug", cfg.Logs.Level)
 			},
 		},
+		{
+			name: "valid import custom override",
+			setup: func(t *testing.T, dir string, tc testCase) {
+				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports-override")
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				assert.Equal(t, "foo", cfg.Commands[0].Name)
+			},
+		},
 	}
 
 	for _, tc := range testCases {

@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/viper"
@@ -273,10 +276,20 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	if err := tempViper.ReadInConfig(); err != nil {
 		return err
 	}
+
+	if processImports {
+		if err := mergeDefaultImports(path, tempViper); err != nil {
+			log.Debug("error process imports", "path", path, "error", err)
+		}
+		if err := mergeImports(tempViper); err != nil {
+			log.Debug("error process imports", "file", tempViper.ConfigFileUsed(), "error", err)
+		}
+	}
+
 	configFilePath := tempViper.ConfigFileUsed()
 
-	v.SetConfigFile(configFilePath)
-	err := v.MergeInConfig()
+	tempViper.SetConfigFile(configFilePath)
+	err := tempViper.MergeInConfig()
 	if err != nil {
 		return err
 	}
@@ -285,20 +298,25 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 		return err
 	}
 
-	err = preprocessAtmosYamlFunc(content, v)
+	err = preprocessAtmosYamlFunc(content, tempViper)
 	if err != nil {
 		return err
 	}
 
-	if !processImports {
-		return nil
+	// Marshal the temporary Viper instance to YAML content
+	allSettings := tempViper.AllSettings()
+	yamlBytes, err := yaml.Marshal(allSettings)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedMarshalConfigToYaml, err)
 	}
-	if err := mergeDefaultImports(path, v); err != nil {
-		log.Debug("error process imports", "path", path, "error", err)
+
+	// Merge the YAML content into the main Viper instance
+	v.SetConfigFile(configFilePath)
+	err = v.MergeConfig(strings.NewReader(string(yamlBytes)))
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrMerge, err)
 	}
-	if err := mergeImports(v); err != nil {
-		log.Debug("error process imports", "file", v.ConfigFileUsed(), "error", err)
-	}
+
 	return nil
 }
 
