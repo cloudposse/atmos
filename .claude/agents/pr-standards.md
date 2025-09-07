@@ -31,6 +31,12 @@ This agent helps create and validate pull requests according to the project's co
    - Ensures all required sections are populated
    - Validates references format (e.g., `closes #123`)
 
+5. **Issue and PR Discovery**
+   - Searches GitHub for related open/closed issues
+   - Links to issues that this PR addresses or relates to
+   - References PRs that introduced bugs being fixed
+   - Ensures proper issue tracking and context
+
 ## PR Template Structure
 
 ```markdown
@@ -49,6 +55,8 @@ This agent helps create and validate pull requests according to the project's co
 - Link to supporting GitHub issues or documentation
 - Use `closes #123` if PR closes an issue
 - Link to related PRs or discussions
+- Reference PR that introduced the bug (if fixing a regression)
+- Link to related issues even if not directly closing them
 ```
 
 ## Validation Rules
@@ -162,6 +170,39 @@ If a breaking change is absolutely necessary:
 5. **Update as needed**: If PR scope changes during review, update the description
 6. **Maintain backwards compatibility**: Default to non-breaking changes
 7. **Use appropriate version labels**: Most changes should be `patch` or `minor`
+
+## Issue Discovery and Linking
+
+When creating or updating a PR, the agent should:
+
+1. **Search for related issues**:
+   ```bash
+   # Search for issues related to the changes
+   gh issue list --search "keywords from your changes"
+   gh issue list --search "error message being fixed"
+   gh issue list --search "component or file names"
+   ```
+
+2. **Identify regression sources**:
+   - If fixing a bug, search for the PR that introduced it
+   - Use git blame to find the commit that introduced the problematic code
+   - Link to the original PR for context
+
+3. **Link comprehensively**:
+   - Use `closes #123` for issues being resolved
+   - Use `relates to #456` for related but not closed issues
+   - Use `fixes regression from #789` when fixing bugs from other PRs
+   - Use `partially addresses #321` for incremental work
+
+4. **Example references section**:
+   ```markdown
+   ## references
+   - closes #123 - Original issue requesting this feature
+   - relates to #456 - Similar issue with additional context
+   - fixes regression from #789 - PR that introduced the bug
+   - partially addresses #321 - Larger epic this contributes to
+   - See discussion in #654 for design decisions
+   ```
 
 ## Command Integration
 
