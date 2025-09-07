@@ -79,15 +79,15 @@ type gitHubContext struct {
 	underlying *Context
 }
 
-func (c *gitHubContext) GetOwner() string          { return c.underlying.Owner }
-func (c *gitHubContext) GetRepo() string           { return c.underlying.Repo }
-func (c *gitHubContext) GetPRNumber() int          { return c.underlying.PRNumber }
-func (c *gitHubContext) GetCommentUUID() string    { return c.underlying.CommentUUID }
-func (c *gitHubContext) GetToken() string          { return c.underlying.Token }
-func (c *gitHubContext) GetEventName() string      { return c.underlying.EventName }
-func (c *gitHubContext) IsSupported() bool         { return c.underlying.IsSupported() }
-func (c *gitHubContext) Provider() string { return ci.GitHub }
-func (c *gitHubContext) String() string            { return c.underlying.String() }
+func (c *gitHubContext) GetOwner() string       { return c.underlying.Owner }
+func (c *gitHubContext) GetRepo() string        { return c.underlying.Repo }
+func (c *gitHubContext) GetPRNumber() int       { return c.underlying.PRNumber }
+func (c *gitHubContext) GetCommentUUID() string { return c.underlying.CommentUUID }
+func (c *gitHubContext) GetToken() string       { return c.underlying.Token }
+func (c *gitHubContext) GetEventName() string   { return c.underlying.EventName }
+func (c *gitHubContext) IsSupported() bool      { return c.underlying.IsSupported() }
+func (c *gitHubContext) Provider() string       { return ci.GitHub }
+func (c *gitHubContext) String() string         { return c.underlying.String() }
 
 // SetCommentUUID allows updating the UUID (needed for job discriminator support).
 func (c *gitHubContext) SetCommentUUID(uuid string) {

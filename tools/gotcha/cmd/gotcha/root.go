@@ -24,9 +24,9 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 
 	// Import CI integrations to register them
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github"

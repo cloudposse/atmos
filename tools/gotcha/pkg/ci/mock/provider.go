@@ -209,14 +209,14 @@ type MockContext struct {
 	config *MockConfig
 }
 
-func (c *MockContext) GetOwner() string          { return c.config.Owner }
-func (c *MockContext) GetRepo() string           { return c.config.Repo }
-func (c *MockContext) GetPRNumber() int          { return c.config.PRNumber }
-func (c *MockContext) GetCommentUUID() string    { return c.config.CommentUUID }
-func (c *MockContext) GetToken() string          { return c.config.Token }
-func (c *MockContext) GetEventName() string      { return c.config.EventName }
-func (c *MockContext) IsSupported() bool         { return c.config.ContextSupported }
-func (c *MockContext) Provider() string { return "mock" }
+func (c *MockContext) GetOwner() string       { return c.config.Owner }
+func (c *MockContext) GetRepo() string        { return c.config.Repo }
+func (c *MockContext) GetPRNumber() int       { return c.config.PRNumber }
+func (c *MockContext) GetCommentUUID() string { return c.config.CommentUUID }
+func (c *MockContext) GetToken() string       { return c.config.Token }
+func (c *MockContext) GetEventName() string   { return c.config.EventName }
+func (c *MockContext) IsSupported() bool      { return c.config.ContextSupported }
+func (c *MockContext) Provider() string       { return "mock" }
 func (c *MockContext) String() string {
 	return fmt.Sprintf("Mock Context: %s/%s PR#%d", c.config.Owner, c.config.Repo, c.config.PRNumber)
 }

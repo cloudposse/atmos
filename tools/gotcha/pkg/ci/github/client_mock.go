@@ -96,7 +96,7 @@ func (m *MockClient) CreateComment(ctx context.Context, owner, repo string, issu
 	newComment := &github.IssueComment{
 		ID: github.Int64(newID),
 	}
-	
+
 	// Handle nil comment gracefully
 	if comment != nil {
 		newComment.Body = comment.Body
@@ -121,12 +121,12 @@ func (m *MockClient) UpdateComment(ctx context.Context, owner, repo string, comm
 			updatedComment := &github.IssueComment{
 				ID: github.Int64(commentID),
 			}
-			
+
 			// Handle nil comment gracefully
 			if comment != nil {
 				updatedComment.Body = comment.Body
 			}
-			
+
 			m.Comments[i] = updatedComment
 			m.UpdatedComments = append(m.UpdatedComments, updatedComment)
 			return updatedComment, &github.Response{}, nil

@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github" // Register GitHub
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"   // Register Mock
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -64,9 +64,9 @@ func TestCIAbstractionIntegration(t *testing.T) {
 	t.Run("no provider available", func(t *testing.T) {
 		// Clear all CI-related environment variables
 		oldVars := map[string]string{
-			"GOTCHA_USE_MOCK":     os.Getenv("GOTCHA_USE_MOCK"),
+			"GOTCHA_USE_MOCK":    os.Getenv("GOTCHA_USE_MOCK"),
 			"GOTCHA_CI_PROVIDER": os.Getenv("GOTCHA_CI_PROVIDER"),
-			"GITHUB_ACTIONS":      os.Getenv("GITHUB_ACTIONS"),
+			"GITHUB_ACTIONS":     os.Getenv("GITHUB_ACTIONS"),
 		}
 
 		os.Unsetenv("GOTCHA_USE_MOCK")

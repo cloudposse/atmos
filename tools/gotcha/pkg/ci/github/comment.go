@@ -265,13 +265,13 @@ func truncateComment(content string, maxSize int) string {
 
 	// Reserve space for truncation message
 	truncationMsg := "\n\n---\n*Comment truncated due to size limits*"
-	
+
 	// If the truncation message itself is too long for maxSize,
 	// return as much of it as possible
 	if len(truncationMsg) >= maxSize {
 		return truncationMsg[:maxSize]
 	}
-	
+
 	availableSize := maxSize - len(truncationMsg)
 
 	if availableSize <= 0 {
