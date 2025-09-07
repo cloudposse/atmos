@@ -8,17 +8,16 @@ import (
 	"github.com/charmbracelet/log"
 	ini "gopkg.in/ini.v1"
 
-	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// AWSFileManager implements the AWSFileManager interface
+// AWSFileManager provides helpers to manage AWS credentials/config files
 type AWSFileManager struct {
 	baseDir string
 }
 
 // NewAWSFileManager creates a new AWS file manager instance
-func NewAWSFileManager() types.AWSFileManager {
+func NewAWSFileManager() *AWSFileManager {
 	homeDir, _ := os.UserHomeDir()
 	return &AWSFileManager{
 		baseDir: filepath.Join(homeDir, ".aws", "atmos"),
@@ -140,21 +139,7 @@ func (m *AWSFileManager) GetConfigPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "config")
 }
 
-// SetEnvironmentVariables sets the AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE environment variables
-func (m *AWSFileManager) SetEnvironmentVariables(providerName string) error {
-	credentialsPath := m.GetCredentialsPath(providerName)
-	configPath := m.GetConfigPath(providerName)
 
-	if err := os.Setenv("AWS_SHARED_CREDENTIALS_FILE", credentialsPath); err != nil {
-		return fmt.Errorf("failed to set AWS_SHARED_CREDENTIALS_FILE: %w", err)
-	}
-
-	if err := os.Setenv("AWS_CONFIG_FILE", configPath); err != nil {
-		return fmt.Errorf("failed to set AWS_CONFIG_FILE: %w", err)
-	}
-
-	return nil
-}
 
 // GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
 func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName string) []schema.EnvironmentVariable {

@@ -63,6 +63,7 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 			authConfig,
 			credStore,
 			validator,
+			nil,
 		)
 		require.NoError(t, err)
 		assert.NotNil(t, authManager)

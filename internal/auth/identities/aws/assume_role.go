@@ -171,11 +171,14 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 	return "", fmt.Errorf("assume role identity %q has no valid via configuration", i.name)
 }
 
-// PostAuthenticate implements the PostAuthHook interface to set up AWS files after authentication
-func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error {
+// PostAuthenticate sets up AWS files after authentication
+func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *schema.Credentials) error {
 	// Setup AWS files using shared AWS cloud package
-	if err := awsCloud.SetupFiles(ctx, providerName, identityName, creds); err != nil {
+	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
 		return fmt.Errorf("failed to setup AWS files: %w", err)
+	}
+	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
+		return fmt.Errorf("failed to set environment variables: %w", err)
 	}
 	return nil
 }

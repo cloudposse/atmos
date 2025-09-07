@@ -71,7 +71,7 @@ func createAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) 
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
 
-	return auth.NewAuthManager(authConfig, credStore, validator)
+	return auth.NewAuthManager(authConfig, credStore, validator, nil)
 }
 
 func init() {

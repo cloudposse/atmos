@@ -21,6 +21,7 @@ type manager struct {
 	identities      map[string]types.Identity
 	credentialStore types.CredentialStore
 	validator       types.Validator
+	stackInfo       *schema.ConfigAndStacksInfo
 }
 
 // NewAuthManager creates a new AuthManager instance
@@ -28,6 +29,7 @@ func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
 	validator types.Validator,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) (types.AuthManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("auth config cannot be nil")
@@ -39,6 +41,7 @@ func NewAuthManager(
 		identities:      make(map[string]types.Identity),
 		credentialStore: credentialStore,
 		validator:       validator,
+		stackInfo:       stackInfo,
 	}
 
 	// Initialize providers
@@ -54,15 +57,19 @@ func NewAuthManager(
 	return m, nil
 }
 
+// GetStackInfo returns the associated stack info pointer (may be nil)
+func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
+	return m.stackInfo
+}
+
 // Authenticate performs hierarchical authentication for the specified identity
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
 	// If no identity specified, use default
 	if identityName == "" {
-		defaultIdentity, err := m.GetDefaultIdentity()
-		if err != nil {
-			return nil, fmt.Errorf("no identity specified and no default identity found: %w", err)
-		}
-		identityName = defaultIdentity
+		return nil, fmt.Errorf("no identity specified")
+	}
+	if _, exists := m.identities[identityName]; !exists {
+		return nil, fmt.Errorf("identity %q not found", identityName)
 	}
 
 	// Build the complete authentication chain
@@ -79,13 +86,11 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 		return nil, fmt.Errorf("hierarchical authentication failed: %w", err)
 	}
 
-	// Call post-authentication hooks for the target identity
+	// Call post-authentication hook on the identity (now part of Identity interface)
 	if identity, exists := m.identities[identityName]; exists {
-		if hook, hasHook := identity.(types.PostAuthHook); hasHook {
-			providerName := chain[0]
-			if err := hook.PostAuthenticate(ctx, providerName, identityName, finalCreds); err != nil {
-				return nil, fmt.Errorf("post-authentication hook failed: %w", err)
-			}
+		providerName := chain[0]
+		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
+			return nil, fmt.Errorf("post-authentication hook failed: %w", err)
 		}
 	}
 
@@ -452,7 +457,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string,
 		identityStep := chain[i]
 		identity, exists := m.identities[identityStep]
 		if !exists {
-			log.Error("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
+			log.Errorf("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
 			return nil, fmt.Errorf("identity %q not found in chain step %d", identityStep, i)
 		}
 
@@ -461,7 +466,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string,
 		// Each identity receives credentials from the previous step
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			log.Error("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
+			log.Errorf("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
 			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
 		}
 

@@ -80,13 +80,10 @@ type Identity interface {
 
 	// Environment returns environment variables that should be set for this identity
 	Environment() (map[string]string, error)
-}
 
-// PostAuthHook defines an optional interface that identities can implement
-// to perform actions after successful authentication
-type PostAuthHook interface {
 	// PostAuthenticate is called after successful authentication with the final credentials
-	PostAuthenticate(ctx context.Context, providerName, identityName string, creds *schema.Credentials) error
+	// Implementations can use the manager to perform provider-specific file setup or other side effects
+	PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *schema.Credentials) error
 }
 
 // AuthManager manages the overall authentication process
@@ -113,6 +110,9 @@ type AuthManager interface {
 	// GetProviderKindForIdentity returns the provider kind for the given identity
 	GetProviderKindForIdentity(identityName string) (string, error)
 
+	// GetStackInfo returns the current stack info pointer associated with this manager
+	GetStackInfo() *schema.ConfigAndStacksInfo
+
 	// ListProviders returns all available provider names
 	ListProviders() []string
 }
@@ -133,30 +133,6 @@ type CredentialStore interface {
 
 	// IsExpired checks if credentials for the given alias are expired
 	IsExpired(alias string) (bool, error)
-}
-
-// AWSFileManager manages AWS credentials and config files
-type AWSFileManager interface {
-	// WriteCredentials writes AWS credentials to the provider-specific file with identity profile
-	WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error
-
-	// WriteConfig writes AWS config to the provider-specific file with identity profile
-	WriteConfig(providerName, identityName, region, outputFormat string) error
-
-	// GetCredentialsPath returns the path to the credentials file for the provider
-	GetCredentialsPath(providerName string) string
-
-	// GetConfigPath returns the path to the config file for the provider
-	GetConfigPath(providerName string) string
-
-	// SetEnvironmentVariables sets the AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE environment variables
-	SetEnvironmentVariables(providerName string) error
-
-	// GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
-	GetEnvironmentVariables(providerName, identityName string) []schema.EnvironmentVariable
-
-	// Cleanup removes AWS files for the provider
-	Cleanup(providerName string) error
 }
 
 // Validator defines the interface for validating auth configurations
