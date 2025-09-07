@@ -31,10 +31,10 @@ func EnvironToMap() map[string]string {
 	return envMap
 }
 
-// EnvToMap converts a slice of CommandEnv to a map of string string.
-// Keys are taken from the `Key` field, values are taken from the `Value` field.
+// CommandEnvToMap converts a slice of schema.CommandEnv to a map[string]string.
+// Keys are taken from the Key field; later entries overwrite earlier ones on duplicate keys.
 func CommandEnvToMap(envs []schema.CommandEnv) map[string]string {
-	m := make(map[string]string)
+	m := make(map[string]string, len(envs))
 	for _, e := range envs {
 		m[e.Key] = e.Value
 	}

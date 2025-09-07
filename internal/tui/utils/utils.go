@@ -81,6 +81,7 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	return out, nil
 }
 
+// NewAtmosHuhTheme returns the Atmos-styled Huh theme for interactive prompts.
 func NewAtmosHuhTheme() *huh.Theme {
 	t := huh.ThemeCharm()
 	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}

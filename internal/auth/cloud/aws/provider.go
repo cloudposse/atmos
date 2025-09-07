@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -39,20 +40,20 @@ func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, i
 
 	// Create AWS directory structure
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
-	if err := os.MkdirAll(awsDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create AWS directory: %w", err)
+	if err := os.MkdirAll(awsDir, 0o700); err != nil {
+		return fmt.Errorf("%w: failed to create AWS directory: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Write credentials file
 	credentialsPath := filepath.Join(awsDir, "credentials")
 	if err := p.writeCredentialsFile(credentialsPath, identityName, credentials.AWS); err != nil {
-		return fmt.Errorf("failed to write credentials file: %w", err)
+		return fmt.Errorf("%w: failed to write credentials file: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Write config file
 	configPath := filepath.Join(awsDir, "config")
 	if err := p.writeConfigFile(configPath, identityName, credentials.AWS.Region); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+		return fmt.Errorf("%w: failed to write config file: %v", errUtils.ErrStaticError, err)
 	}
 
 	return nil
@@ -79,19 +80,19 @@ func (p *AWSCloudProvider) CleanupEnvironment(ctx context.Context, providerName,
 // ValidateCredentials validates AWS credentials
 func (p *AWSCloudProvider) ValidateCredentials(ctx context.Context, credentials *schema.Credentials) error {
 	if credentials == nil {
-		return fmt.Errorf("credentials cannot be nil")
+		return fmt.Errorf("%w: credentials cannot be nil", errUtils.ErrStaticError)
 	}
 
 	if credentials.AWS == nil {
-		return fmt.Errorf("AWS credentials are required")
+		return fmt.Errorf("%w: AWS credentials are required", errUtils.ErrStaticError)
 	}
 
 	if credentials.AWS.AccessKeyID == "" {
-		return fmt.Errorf("AWS access key ID is required")
+		return fmt.Errorf("%w: AWS access key ID is required", errUtils.ErrStaticError)
 	}
 
 	if credentials.AWS.SecretAccessKey == "" {
-		return fmt.Errorf("AWS secret access key is required")
+		return fmt.Errorf("%w: AWS secret access key is required", errUtils.ErrStaticError)
 	}
 
 	return nil
@@ -119,7 +120,12 @@ aws_secret_access_key = %s
 		content += fmt.Sprintf("aws_session_token = %s\n", creds.SessionToken)
 	}
 
-	return p.updateProfileInFile(path, identityName, content)
+	if err := p.updateProfileInFile(path, identityName, content); err != nil {
+		return err
+	}
+	// Tighten permissions as credentials are sensitive.
+	_ = os.Chmod(path, 0o600)
+	return nil
 }
 
 // writeConfigFile writes AWS config to the specified file
@@ -132,7 +138,11 @@ func (p *AWSCloudProvider) writeConfigFile(path, identityName, region string) er
 region = %s
 `, identityName, region)
 
-	return p.updateProfileInFile(path, fmt.Sprintf("profile %s", identityName), content)
+	if err := p.updateProfileInFile(path, fmt.Sprintf("profile %s", identityName), content); err != nil {
+		return err
+	}
+	_ = os.Chmod(path, 0o600)
+	return nil
 }
 
 // Cleanup removes temporary files and resources created by this provider
@@ -163,19 +173,19 @@ func (p *AWSCloudProvider) updateProfileInFile(path, profileName, content string
 	// Parse the content to extract key-value pairs
 	lines := strings.Split(strings.TrimSpace(content), "\n")
 	if len(lines) == 0 {
-		return fmt.Errorf("invalid content format")
+		return fmt.Errorf("%w: invalid content format", errUtils.ErrStaticError)
 	}
 
-	// Skip the section header line (e.g., "[profile name]" or "[name]")
-	sectionName := strings.Trim(lines[0], "[]")
-
-	// Get or create the section
-	section, err := cfg.NewSection(sectionName)
+	// Use the given profileName for the section and get or create it.
+	section, err := cfg.GetSection(profileName)
 	if err != nil {
-		return fmt.Errorf("failed to create section %s: %w", sectionName, err)
+		section, err = cfg.NewSection(profileName)
+		if err != nil {
+			return fmt.Errorf("%w: failed to create section %s: %v", errUtils.ErrStaticError, profileName, err)
+		}
 	}
 
-	// Add key-value pairs from remaining lines
+	// Add key-value pairs from remaining lines (skip header).
 	for _, line := range lines[1:] {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -192,6 +202,6 @@ func (p *AWSCloudProvider) updateProfileInFile(path, profileName, content string
 		section.Key(key).SetValue(value)
 	}
 
-	// Save the file with proper permissions
+	// Save the file.
 	return cfg.SaveTo(path)
 }

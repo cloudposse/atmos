@@ -2,8 +2,11 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/charmbracelet/log"
 
@@ -25,10 +28,6 @@ func NewOIDCProvider(name string, config *schema.Provider) (types.Provider, erro
 
 	if name == "" {
 		return nil, fmt.Errorf("provider name is required")
-	}
-
-	if config.Region == "" {
-		return nil, fmt.Errorf("region is required")
 	}
 
 	return &oidcProvider{
@@ -67,8 +66,17 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 		return nil, fmt.Errorf("ACTIONS_ID_TOKEN_REQUEST_URL not found - ensure job has 'id-token: write' permission")
 	}
 
-	// Get the JWT token from GitHub's OIDC endpoint
-	jwtToken, err := p.getOIDCToken(ctx, requestURL, token)
+	var aud string
+	if p.config != nil && p.config.Spec != nil {
+		if v, ok := p.config.Spec["audience"].(string); ok && v != "" {
+			aud = v
+		} else {
+			return nil, fmt.Errorf("audience is required in provider spec")
+		}
+	}
+
+	// Get the JWT token from GitHub's OIDC endpoint.
+	jwtToken, err := p.getOIDCToken(ctx, requestURL, token, aud)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OIDC token: %w", err)
 	}
@@ -81,7 +89,7 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 		OIDC: &schema.OIDCCredentials{
 			Token:    jwtToken,
 			Provider: "github",
-			Audience: "sts.amazonaws.com", // Standard audience for AWS
+			Audience: aud,
 		},
 	}, nil
 }
@@ -92,19 +100,37 @@ func (p *oidcProvider) isGitHubActions() bool {
 }
 
 // getOIDCToken retrieves the JWT token from GitHub's OIDC endpoint
-func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToken string) (string, error) {
-	// This would typically make an HTTP request to GitHub's OIDC endpoint
-	// For now, we'll check if the token is available directly from the environment
-	// In a real implementation, we'd make a request to requestURL with the requestToken
-
-	// GitHub Actions provides the token directly in some cases
-	if directToken := os.Getenv("ACTIONS_ID_TOKEN"); directToken != "" {
-		return directToken, nil
+func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToken, audience string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create OIDC request: %w", err)
 	}
-
-	// TODO: Implement HTTP request to requestURL with requestToken
-	// This requires making a POST request to the GitHub OIDC endpoint
-	return "", fmt.Errorf("OIDC token retrieval not yet implemented - need to make HTTP request to %s", requestURL)
+	q := req.URL.Query()
+	if audience != "" {
+		q.Set("audience", audience)
+	}
+	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Authorization", "bearer "+requestToken)
+	req.Header.Set("Accept", "application/json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("call OIDC endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("OIDC endpoint returned status %s", resp.Status)
+	}
+	var out struct {
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("decode OIDC response: %w", err)
+	}
+	if out.Value == "" {
+		return "", fmt.Errorf("empty token in OIDC response")
+	}
+	return out.Value, nil
 }
 
 // Validate validates the provider configuration

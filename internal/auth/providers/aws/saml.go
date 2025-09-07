@@ -20,6 +20,7 @@ import (
 
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	errUtils "github.com/cloudposse/atmos/pkg/utils/error"
 )
 
 // min returns the minimum of two integers
@@ -41,15 +42,15 @@ type samlProvider struct {
 // NewSAMLProvider creates a new AWS SAML provider
 func NewSAMLProvider(name string, config *schema.Provider) (types.Provider, error) {
 	if config.Kind != "aws/saml" {
-		return nil, fmt.Errorf("invalid provider kind for SAML provider: %s", config.Kind)
+		return nil, fmt.Errorf("%w: invalid provider kind for SAML provider: %s", errUtils.ErrStaticError, config.Kind)
 	}
 
 	if config.URL == "" {
-		return nil, fmt.Errorf("url is required for AWS SAML provider")
+		return nil, fmt.Errorf("%w: url is required for AWS SAML provider", errUtils.ErrStaticError)
 	}
 
 	if config.Region == "" {
-		return nil, fmt.Errorf("region is required for AWS SAML provider")
+		return nil, fmt.Errorf("%w: region is required for AWS SAML provider", errUtils.ErrStaticError)
 	}
 
 	return &samlProvider{
@@ -104,27 +105,20 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	// Create the SAML client
 	samlClient, err := saml2aws.NewSAMLClient(samlConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create SAML client: %w", err)
+		return nil, fmt.Errorf("%w: failed to create SAML client: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Perform authentication
 	samlAssertion, err := samlClient.Authenticate(loginDetails)
 	if err != nil {
-		return nil, fmt.Errorf("SAML authentication failed: %w", err)
+		return nil, fmt.Errorf("%w: SAML authentication failed: %v", errUtils.ErrStaticError, err)
 	}
 
 	if samlAssertion == "" {
-		return nil, fmt.Errorf("empty SAML assertion received")
+		return nil, fmt.Errorf("%w: empty SAML assertion received", errUtils.ErrStaticError)
 	}
 
-	log.Debug("SAML assertion received", "length", len(samlAssertion))
-
-	// Log first 1000 characters of SAML assertion for debugging
-	debugLength := 1000
-	if len(samlAssertion) < debugLength {
-		debugLength = len(samlAssertion)
-	}
-	log.Debug("SAML assertion content", "assertion", samlAssertion[:debugLength])
+	log.Debug("SAML assertion received.", "length", len(samlAssertion))
 
 	// For Google Apps SAML, we need to extract the assertion from the Response
 	// The response contains a saml2p:Response with embedded saml2:Assertion
@@ -173,7 +167,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 
 			if err != nil {
 				log.Error("All SAML assertion formats failed", "error", err)
-				return nil, fmt.Errorf("failed to extract AWS roles from SAML assertion (tried multiple formats): %w", err)
+				return nil, fmt.Errorf("%w: failed to extract AWS roles from SAML assertion (tried multiple formats): %v", errUtils.ErrStaticError, err)
 			}
 		} else {
 			log.Debug("Success with original assertion format")
@@ -183,13 +177,13 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	}
 
 	if len(roleStrings) == 0 {
-		return nil, fmt.Errorf("no AWS roles found in SAML assertion")
+		return nil, fmt.Errorf("%w: no AWS roles found in SAML assertion", errUtils.ErrStaticError)
 	}
 
 	// Parse role strings into AWSRole structs
 	awsRoles, err := saml2aws.ParseAWSRoles(roleStrings)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse AWS roles: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse AWS roles: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Use the first role or let user select if multiple
@@ -200,10 +194,14 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 		log.Info("Using first available role", "role", selectedRole.RoleARN)
 	}
 
-	// Assume the role using the SAML assertion
-	awsCreds, err := p.assumeRoleWithSAML(ctx, samlAssertion, selectedRole)
+	// Assume the role using the best assertion format.
+	assertionForSTS := samlAssertion
+	if len(processedAssertion) > 0 {
+		assertionForSTS = processedAssertion
+	}
+	awsCreds, err := p.assumeRoleWithSAML(ctx, assertionForSTS, selectedRole)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume role with SAML: %w", err)
+		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrStaticError, err)
 	}
 
 	log.Info("SAML authentication successful", "provider", p.name, "role", selectedRole.RoleARN)
@@ -218,7 +216,7 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 		Region: aws.String(p.region),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create AWS session: %w", err)
+		return nil, fmt.Errorf("%w: failed to create AWS session: %v", errUtils.ErrStaticError, err)
 	}
 
 	stsClient := sts.New(sess)
@@ -233,7 +231,7 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 
 	result, err := stsClient.AssumeRoleWithSAML(input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume role with SAML: %w", err)
+		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Convert to schema.Credentials
@@ -274,16 +272,16 @@ func (p *samlProvider) getProviderType() string {
 // Validate validates the provider configuration
 func (p *samlProvider) Validate() error {
 	if p.url == "" {
-		return fmt.Errorf("URL is required for SAML provider")
+		return fmt.Errorf("%w: URL is required for SAML provider", errUtils.ErrStaticError)
 	}
 
 	if p.region == "" {
-		return fmt.Errorf("region is required for SAML provider")
+		return fmt.Errorf("%w: region is required for SAML provider", errUtils.ErrStaticError)
 	}
 
 	// Validate URL format
 	if _, err := url.Parse(p.url); err != nil {
-		return fmt.Errorf("invalid URL format: %w", err)
+		return fmt.Errorf("%w: invalid URL format: %v", errUtils.ErrStaticError, err)
 	}
 
 	return nil

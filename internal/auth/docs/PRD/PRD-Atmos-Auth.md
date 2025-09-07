@@ -834,7 +834,6 @@ The GitHub OIDC provider authenticates using GitHub Actions OIDC tokens and is d
 providers:
   github-oidc:
     kind: github/oidc
-    region: us-east-1
 ```
 
 **Usage with AWS Assume Role Identity:**
@@ -843,7 +842,6 @@ providers:
 providers:
   github-oidc:
     kind: github/oidc
-    region: us-east-1
 
 identities:
   ci-role:

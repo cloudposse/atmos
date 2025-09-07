@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -184,24 +185,24 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 					// Mock identity name input
 					identityName := getInput("Enter identity name: ")
 					if identityName == "" {
-						return assert.AnError
+						return fmt.Errorf("identity name cannot be empty")
 					}
 
 					// Validate identity exists and is AWS user
 					identity, exists := config.Auth.Identities[identityName]
 					if !exists || identity.Kind != "aws/user" {
-						return assert.AnError
+						return fmt.Errorf("identity %q not found or not an AWS user identity", identityName)
 					}
 
 					// Mock credential inputs
 					accessKeyID := getInput("Enter AWS Access Key ID: ")
 					if accessKeyID == "" {
-						return assert.AnError
+						return fmt.Errorf("access key ID cannot be empty")
 					}
 
 					secretAccessKey := getInput("Enter AWS Secret Access Key: ")
 					if secretAccessKey == "" {
-						return assert.AnError
+						return fmt.Errorf("secret access key cannot be empty")
 					}
 
 					region := getInput("Enter AWS Region: ")
@@ -234,7 +235,7 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 
 			// Verify results
 			if tt.expectedError != "" {
-				assert.Error(t, err)
+				assert.ErrorContains(t, err, tt.expectedError)
 			} else {
 				assert.NoError(t, err)
 				output := buf.String()

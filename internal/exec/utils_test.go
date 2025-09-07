@@ -20,7 +20,7 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 			input: schema.ConfigAndStacksInfo{
 				ComponentSection: map[string]any{
 					cfg.ProvidersSectionName:   map[string]any{"aws": map[string]any{"region": "us-west-2"}},
-					cfg.AuthSectionName:        map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-west-2"}}},
+					cfg.AuthSectionName:        map[string]interface{}{"providers": map[string]interface{}{"aws": schema.Provider{Region: "us-west-2"}}},
 					cfg.VarsSectionName:        map[string]any{"environment": "dev"},
 					cfg.SettingsSectionName:    map[string]any{"enabled": true},
 					cfg.EnvSectionName:         map[string]any{"DB_PASSWORD": "secret"},

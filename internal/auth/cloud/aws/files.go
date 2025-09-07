@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/log"
 	ini "gopkg.in/ini.v1"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -31,7 +32,7 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(credentialsPath), 0o700); err != nil {
-		return fmt.Errorf("failed to create credentials directory: %w", err)
+		return fmt.Errorf("%w: failed to create credentials directory: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Load existing INI file or create new one
@@ -44,7 +45,7 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	// Get or create the profile section
 	section, err := cfg.NewSection(identityName)
 	if err != nil {
-		return fmt.Errorf("failed to create profile section: %w", err)
+		return fmt.Errorf("%w: failed to create profile section: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Set credentials
@@ -59,12 +60,12 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 
 	// Save file with proper permissions
 	if err := cfg.SaveTo(credentialsPath); err != nil {
-		return fmt.Errorf("failed to write credentials file: %w", err)
+		return fmt.Errorf("%w: failed to write credentials file: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Set proper file permissions
 	if err := os.Chmod(credentialsPath, 0o600); err != nil {
-		return fmt.Errorf("failed to set credentials file permissions: %w", err)
+		return fmt.Errorf("%w: failed to set credentials file permissions: %v", errUtils.ErrStaticError, err)
 	}
 
 	return nil
@@ -76,7 +77,7 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return fmt.Errorf("%w: failed to create config directory: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Load existing INI file or create new one
@@ -93,12 +94,8 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	} else {
 		profileSectionName = fmt.Sprintf("profile %s", identityName)
 	}
-	section, err := cfg.NewSection(profileSectionName)
-	if err != nil {
-		return fmt.Errorf("failed to create profile section: %w", err)
-	}
 
-	// Debug logging for region
+	section := cfg.Section(profileSectionName)
 	log.Debug("AWS WriteConfig", "providerName", providerName, "identityName", identityName, "region", region, "outputFormat", outputFormat)
 
 	// Set config values only if they are not empty
@@ -119,12 +116,12 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 
 	// Save file with proper permissions
 	if err := cfg.SaveTo(configPath); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+		return fmt.Errorf("%w: failed to write config file: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Set proper file permissions
 	if err := os.Chmod(configPath, 0o600); err != nil {
-		return fmt.Errorf("failed to set config file permissions: %w", err)
+		return fmt.Errorf("%w: failed to set config file permissions: %v", errUtils.ErrStaticError, err)
 	}
 
 	return nil

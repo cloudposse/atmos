@@ -141,6 +141,10 @@ func ExecuteTerraformGenerateVarfiles(
 					authSection = map[string]any{}
 				}
 
+				if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
+					providersSection = map[string]any{}
+				}
+
 				if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
 					overridesSection = map[string]any{}
 				}
@@ -177,6 +181,7 @@ func ExecuteTerraformGenerateVarfiles(
 					ComponentSettingsSection:  settingsSection,
 					ComponentEnvSection:       envSection,
 					ComponentAuthSection:      authSection,
+					ComponentProvidersSection: providersSection,
 					ComponentOverridesSection: overridesSection,
 					ComponentBackendSection:   backendSection,
 					ComponentBackendType:      backendTypeSection,
@@ -185,6 +190,7 @@ func ExecuteTerraformGenerateVarfiles(
 						cfg.MetadataSectionName:    metadataSection,
 						cfg.SettingsSectionName:    settingsSection,
 						cfg.EnvSectionName:         envSection,
+						cfg.AuthSectionName:        authSection,
 						cfg.ProvidersSectionName:   providersSection,
 						cfg.OverridesSectionName:   overridesSection,
 						cfg.BackendSectionName:     backendSection,

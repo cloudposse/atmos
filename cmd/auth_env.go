@@ -8,6 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // authEnvCmd exports authentication environment variables
@@ -58,7 +59,7 @@ var authEnvCmd = &cobra.Command{
 
 		switch format {
 		case "json":
-			return outputEnvAsJSON(envVars)
+			return outputEnvAsJSON(&atmosConfig, envVars)
 		case "export":
 			return outputEnvAsExport(envVars)
 		case "dotenv":
@@ -70,8 +71,8 @@ var authEnvCmd = &cobra.Command{
 }
 
 // outputEnvAsJSON outputs environment variables as JSON
-func outputEnvAsJSON(envVars map[string]string) error {
-	return u.PrintAsJSON(nil, envVars)
+func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]string) error {
+	return u.PrintAsJSON(atmosConfig, envVars)
 }
 
 // outputEnvAsExport outputs environment variables as shell export statements
@@ -91,6 +92,14 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 }
 
 func init() {
-	authEnvCmd.Flags().StringP("format", "f", "export", "Output format: export, json, dotenv")
+	authEnvCmd.Flags().StringP("format", "f", "export", "Output format: export, json, dotenv.")
+	viper.MustBindEnv("auth_env_format", "AUTH_ENV_FORMAT", "ATMOS_AUTH_ENV_FORMAT")
+	_ = viper.BindPFlag("auth_env_format", authEnvCmd.Flags().Lookup("format"))
+	_ = authEnvCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"export", "json", "dotenv"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	_ = viper.BindPFlag("identity", authEnvCmd.Flags().Lookup("identity"))
+	viper.MustBindEnv("identity", "AUTH_IDENTITY", "ATMOS_IDENTITY")
 	authCmd.AddCommand(authEnvCmd)
 }

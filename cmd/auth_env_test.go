@@ -244,7 +244,9 @@ if identityName == "" {
 
 			// Verify results
 			if tt.expectedError != "" {
-				assert.Error(t, err)
+				if assert.Error(t, err) {
+					assert.Contains(t, err.Error(), tt.expectedError)
+				}
 			} else {
 				assert.NoError(t, err)
 				output := buf.String()

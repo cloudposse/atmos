@@ -12,6 +12,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/internal/auth/cloud/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	errUtils "github.com/cloudposse/atmos/pkg/utils/error"
 )
 
 // permissionSetIdentity implements AWS permission set identity
@@ -23,7 +24,7 @@ type permissionSetIdentity struct {
 // NewPermissionSetIdentity creates a new AWS permission set identity
 func NewPermissionSetIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	if config.Kind != "aws/permission-set" {
-		return nil, fmt.Errorf("invalid identity kind for permission set: %s", config.Kind)
+		return nil, fmt.Errorf("%w: invalid identity kind for permission set: %s", errUtils.ErrStaticError, config.Kind)
 	}
 
 	return &permissionSetIdentity{
@@ -52,30 +53,30 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 	// Note: Caching is now handled at the manager level to prevent duplicates
 
 	if baseCreds == nil || baseCreds.AWS == nil {
-		return nil, fmt.Errorf("base AWS credentials are required")
+		return nil, fmt.Errorf("%w: base AWS credentials are required", errUtils.ErrStaticError)
 	}
 
-	log.Debug("Permission set authentication with base credentials", "identity", i.name, "baseAccessKeyId", baseCreds.AWS.AccessKeyID[:10]+"...")
+	log.Debug("Permission set authentication started.", "identity", i.name)
 
 	// Get permission set name from principal or spec (backward compatibility)
 	var permissionSetName string
 	var ok bool
 	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
-		return nil, fmt.Errorf("permission set name is required in principal")
+		return nil, fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrStaticError)
 	}
 
 	// Get account info from principal or spec (backward compatibility)
 	var accountSpec map[string]interface{}
 	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
-		return nil, fmt.Errorf("account specification is required in principal")
+		return nil, fmt.Errorf("%w: account specification is required in principal", errUtils.ErrStaticError)
 	}
 	if !ok {
-		return nil, fmt.Errorf("account specification is required")
+		return nil, fmt.Errorf("%w: account specification is required", errUtils.ErrStaticError)
 	}
 
 	accountName, ok := accountSpec["name"].(string)
 	if !ok || accountName == "" {
-		return nil, fmt.Errorf("account name is required")
+		return nil, fmt.Errorf("%w: account name is required", errUtils.ErrStaticError)
 	}
 
 	// Create AWS config using the base credentials (SSO access token)
@@ -88,7 +89,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 		})),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Create SSO client
@@ -99,7 +100,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 		AccessToken: aws.String(baseCreds.AWS.AccessKeyID), // SSO access token
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list accounts: %w", err)
+		return nil, fmt.Errorf("%w: failed to list accounts: %v", errUtils.ErrStaticError, err)
 	}
 
 	var accountID string
@@ -111,7 +112,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 	}
 
 	if accountID == "" {
-		return nil, fmt.Errorf("account %q not found", accountName)
+		return nil, fmt.Errorf("%w: account %q not found", errUtils.ErrStaticError, accountName)
 	}
 
 	// Get role credentials for the permission set
@@ -121,7 +122,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 		RoleName:    aws.String(permissionSetName),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get role credentials: %w", err)
+		return nil, fmt.Errorf("%w: failed to get role credentials: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Convert to our credential format
@@ -142,7 +143,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 		},
 	}
 
-	log.Debug("Permission set authentication successful", "identity", i.name, "accessKeyId", creds.AWS.AccessKeyID[:10]+"...")
+	log.Debug("Permission set authentication successful.", "identity", i.name)
 
 	// Note: Caching handled at manager level
 	return creds, nil
@@ -151,25 +152,25 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 // Validate validates the identity configuration
 func (i *permissionSetIdentity) Validate() error {
 	if i.config.Principal == nil {
-		return fmt.Errorf("principal is required")
+		return fmt.Errorf("%w: principal is required", errUtils.ErrStaticError)
 	}
 
 	// Check permission set name in principal or spec (backward compatibility)
 	var permissionSetName string
 	var ok bool
 	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
-		return fmt.Errorf("permission set name is required in principal")
+		return fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrStaticError)
 	}
 
 	// Check account info in principal
 	var accountSpec map[string]interface{}
 	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
-		return fmt.Errorf("account specification is required in principal")
+		return fmt.Errorf("%w: account specification is required in principal", errUtils.ErrStaticError)
 	}
 
 	accountName, ok := accountSpec["name"].(string)
 	if !ok || accountName == "" {
-		return fmt.Errorf("account name is required")
+		return fmt.Errorf("%w: account name is required", errUtils.ErrStaticError)
 	}
 
 	return nil
@@ -192,17 +193,17 @@ func (i *permissionSetIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {
 		return i.config.Via.Provider, nil
 	}
-	return "", fmt.Errorf("permission set identity %q has no valid via provider configuration", i.name)
+	return "", fmt.Errorf("%w: permission set identity %q has no valid via provider configuration", errUtils.ErrStaticError, i.name)
 }
 
 // PostAuthenticate sets up AWS files after authentication.
 func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *schema.Credentials) error {
 	// Setup AWS files using shared AWS cloud package
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
-		return fmt.Errorf("failed to setup AWS files: %w", err)
+		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrStaticError, err)
 	}
 	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
-		return fmt.Errorf("failed to set environment variables: %w", err)
+		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrStaticError, err)
 	}
 	return nil
 }

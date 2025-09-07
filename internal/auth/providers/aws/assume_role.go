@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/cloudposse/atmos/pkg/schema"
+	errUtils "github.com/cloudposse/atmos/pkg/utils/error"
 )
 
 // assumeRoleProvider implements AWS assume role authentication
@@ -21,7 +22,7 @@ type assumeRoleProvider struct {
 // NewAssumeRoleProvider creates a new AWS assume role provider
 func NewAssumeRoleProvider(name string, providerConfig *schema.Provider) (*assumeRoleProvider, error) {
 	if providerConfig.Kind != "aws/assume-role" {
-		return nil, fmt.Errorf("invalid provider kind for assume role provider: %s", providerConfig.Kind)
+		return nil, fmt.Errorf("%w: invalid provider kind for assume role provider: %s", errUtils.ErrStaticError, providerConfig.Kind)
 	}
 
 	region := providerConfig.Region
@@ -46,13 +47,13 @@ func (p *assumeRoleProvider) Authenticate(ctx context.Context) (*schema.Credenti
 	// Load default AWS configuration
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(p.region))
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Get role ARN from spec
 	roleArn, ok := p.config.Spec["role_arn"].(string)
 	if !ok || roleArn == "" {
-		return nil, fmt.Errorf("role_arn is required in provider spec")
+		return nil, fmt.Errorf("%w: role_arn is required in provider spec", errUtils.ErrStaticError)
 	}
 
 	// Create STS client
@@ -74,7 +75,7 @@ func (p *assumeRoleProvider) Authenticate(ctx context.Context) (*schema.Credenti
 
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume role: %w", err)
+		return nil, fmt.Errorf("%w: failed to assume role: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Convert to our credential format
@@ -97,12 +98,12 @@ func (p *assumeRoleProvider) Authenticate(ctx context.Context) (*schema.Credenti
 // Validate validates the provider configuration
 func (p *assumeRoleProvider) Validate() error {
 	if p.config.Spec == nil {
-		return fmt.Errorf("spec is required")
+		return fmt.Errorf("%w: spec is required", errUtils.ErrStaticError)
 	}
 
 	roleArn, ok := p.config.Spec["role_arn"].(string)
 	if !ok || roleArn == "" {
-		return fmt.Errorf("role_arn is required in spec")
+		return fmt.Errorf("%w: role_arn is required in spec", errUtils.ErrStaticError)
 	}
 
 	return nil

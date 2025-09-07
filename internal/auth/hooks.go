@@ -23,17 +23,22 @@ type (
 
 // TerraformPreHook runs before Terraform commands to set up authentication
 func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
-	// Set up logging
-	// atmos-auth prefix is used to distinguish auth logs from atmos logs
-	logPrefix := log.GetPrefix()
-	log.SetPrefix("[atmos-auth]")
-	defer log.SetPrefix(logPrefix)
-
-	// Set log level to atmos auth log level, then reset to atmos log level after hook
-	atmosLogLevel, _ := log.ParseLevel(atmosConfig.Logs.Level)
-	authLogLevel, _ := log.ParseLevel(atmosConfig.Auth.Logs.Level)
-	log.SetLevel(authLogLevel)
-	defer log.SetLevel(atmosLogLevel)
+	// Determine base (atmos) log level.
+	atmosLevel := log.InfoLevel
+	if atmosConfig.Logs != nil && atmosConfig.Logs.Level != "" {
+		if l, err := log.ParseLevel(atmosConfig.Logs.Level); err == nil {
+			atmosLevel = l
+		}
+	}
+	// Determine auth log level (fallback to atmos level).
+	authLevel := atmosLevel
+	if atmosConfig.Auth != nil && atmosConfig.Auth.Logs != nil && atmosConfig.Auth.Logs.Level != "" {
+		if l, err := log.ParseLevel(atmosConfig.Auth.Logs.Level); err == nil {
+			authLevel = l
+		}
+	}
+	log.SetLevel(authLevel)
+	defer log.SetLevel(atmosLevel)
 
 	// TODO: verify if we need to use Decode, or if we can use the merged auth config directly
 	// Use the merged auth configuration from stackInfo
@@ -64,7 +69,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	)
 	log.Info("Auth manager created", "authManager", authManager, "stackInfo", stackInfo)
 	if err != nil {
-		return fmt.Errorf("failed to create auth manager: %w", err)
+		return fmt.Errorf("%w: failed to create auth manager: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Determine target identity: stack info identity (CLI flag) or default identity
@@ -77,11 +82,11 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	} else {
 		targetIdentityName, err = authManager.GetDefaultIdentity()
 		if err != nil {
-			return fmt.Errorf("failed to get default identity: %w", err)
+			return fmt.Errorf("%w: failed to get default identity: %v", errUtils.ErrStaticError, err)
 		}
 	}
 	if targetIdentityName == "" {
-		return fmt.Errorf("no default identity configured for authentication")
+		return fmt.Errorf("%w: no default identity configured for authentication", errUtils.ErrStaticError)
 	}
 
 	log.Info("Authenticating with identity", "identity", targetIdentityName)
@@ -89,7 +94,7 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 	// Authenticate with target identity
 	whoami, err := authManager.Authenticate(ctx, targetIdentityName)
 	if err != nil {
-		return fmt.Errorf("failed to authenticate with identity %q: %w", targetIdentityName, err)
+		return fmt.Errorf("%w: failed to authenticate with identity %q: %v", errUtils.ErrStaticError, targetIdentityName, err)
 	}
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)

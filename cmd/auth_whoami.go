@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // authWhoamiCmd shows current authentication status
@@ -40,20 +41,20 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	defaultIdentity, err := authManager.GetDefaultIdentity()
 	if err != nil {
-		u.PrintfMarkdown("**No default identity configured**\n")
-		u.PrintfMarkdown("Configure auth in atmos.yaml and run `atmos auth login` to authenticate.\n")
+		fmt.Fprint(os.Stderr, "No default identity configured.\n")
+		fmt.Fprint(os.Stderr, "Configure auth in atmos.yaml and run `atmos auth login` to authenticate.\n")
 		return nil
 	}
 
 	whoami, err := authManager.Whoami(ctx, defaultIdentity)
 	if err != nil {
-		u.PrintfMarkdown("**No active authentication session found**\n")
-		u.PrintfMarkdown("Run `atmos auth login` to authenticate.\n")
+		fmt.Fprint(os.Stderr, "No active authentication session found.\n")
+		fmt.Fprint(os.Stderr, "Run `atmos auth login` to authenticate.\n")
 		return nil
 	}
 
 	// Check if output should be JSON
-	outputFormat, _ := cmd.Flags().GetString("output")
+	outputFormat := viper.GetString("auth.whoami.output")
 	if outputFormat == "json" {
 		jsonData, err := json.MarshalIndent(whoami, "", "  ")
 		if err != nil {
@@ -64,27 +65,29 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display human-readable output
-	u.PrintfMarkdown("**Current Authentication Status**\n\n")
-	u.PrintfMarkdown("**Provider:** %s\n", whoami.Provider)
-	u.PrintfMarkdown("**Identity:** %s\n", whoami.Identity)
+	fmt.Fprint(os.Stderr, "Current Authentication Status\n\n")
+	fmt.Fprint(os.Stderr, "Provider: %s\n", whoami.Provider)
+	fmt.Fprint(os.Stderr, "Identity: %s\n", whoami.Identity)
 	if whoami.Principal != "" {
-		u.PrintfMarkdown("**Principal:** %s\n", whoami.Principal)
+		fmt.Fprint(os.Stderr, "Principal: %s\n", whoami.Principal)
 	}
 	if whoami.Account != "" {
-		u.PrintfMarkdown("**Account:** %s\n", whoami.Account)
+		fmt.Fprint(os.Stderr, "Account: %s\n", whoami.Account)
 	}
 	if whoami.Region != "" {
-		u.PrintfMarkdown("**Region:** %s\n", whoami.Region)
+		fmt.Fprint(os.Stderr, "Region: %s\n", whoami.Region)
 	}
 	if whoami.Expiration != nil {
-		u.PrintfMarkdown("**Expires:** %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
+		fmt.Fprint(os.Stderr, "Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
 	}
-	u.PrintfMarkdown("**Last Updated:** %s\n", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST"))
+	fmt.Fprint(os.Stderr, "Last Updated: %s\n", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST"))
 
 	return nil
 }
 
 func init() {
 	authWhoamiCmd.Flags().StringP("output", "o", "", "Output format (json)")
+	_ = viper.BindPFlag("auth.whoami.output", authWhoamiCmd.Flags().Lookup("output"))
+	_ = viper.BindEnv("auth.whoami.output", "ATMOS_AUTH_WHOAMI_OUTPUT")
 	authCmd.AddCommand(authWhoamiCmd)
 }

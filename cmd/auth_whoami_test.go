@@ -134,8 +134,8 @@ func TestAuthWhoamiCmd(t *testing.T) {
 					}
 
 					if defaultIdentity == "" {
-						cmd.Println("**No default identity configured**")
-						cmd.Println("Configure auth in atmos.yaml and run `atmos auth login` to authenticate.")
+						cmd.PrintErrln("No default identity configured.")
+						cmd.PrintErrln("Configure auth in atmos.yaml and run `atmos auth login` to authenticate.")
 						return nil
 					}
 
@@ -154,12 +154,12 @@ func TestAuthWhoamiCmd(t *testing.T) {
 						jsonData, _ := json.MarshalIndent(whoamiInfo, "", "  ")
 						cmd.Println(string(jsonData))
 					} else {
-						cmd.Printf("**Identity**: %s\n", whoamiInfo.Identity)
-						cmd.Printf("**Provider**: %s\n", whoamiInfo.Provider)
-						cmd.Printf("**Account**: %s\n", whoamiInfo.Account)
-						cmd.Printf("**Principal**: %s\n", whoamiInfo.Principal)
+						cmd.PrintfErr("**Identity**: %s\n", whoamiInfo.Identity)
+						cmd.PrintfErr("**Provider**: %s\n", whoamiInfo.Provider)
+						cmd.PrintfErr("**Account**: %s\n", whoamiInfo.Account)
+						cmd.PrintfErr("**Principal**: %s\n", whoamiInfo.Principal)
 						if whoamiInfo.Expiration != nil {
-							cmd.Printf("**Expiration**: %s\n", whoamiInfo.Expiration.Format(time.RFC3339))
+							cmd.PrintfErr("**Expiration**: %s\n", whoamiInfo.Expiration.Format(time.RFC3339))
 						}
 					}
 
@@ -169,9 +169,9 @@ func TestAuthWhoamiCmd(t *testing.T) {
 			cmd.Flags().StringP("output", "o", "", "Output format (json)")
 
 			// Capture output
-			var buf bytes.Buffer
-			cmd.SetOut(&buf)
-			cmd.SetErr(&buf)
+			var stdoutBuf, stderrBuf bytes.Buffer
+			cmd.SetOut(&stdoutBuf)
+			cmd.SetErr(&stderrBuf)
 
 			// Set arguments
 			cmd.SetArgs(tt.args)
@@ -185,8 +185,14 @@ func TestAuthWhoamiCmd(t *testing.T) {
 				assert.Contains(t, err.Error(), tt.expectedError)
 			} else {
 				assert.NoError(t, err)
-				output := buf.String()
-				assert.Contains(t, output, tt.expectedOutput)
+				out := stdoutBuf.String()
+				errOut := stderrBuf.String()
+				// JSON should appear on stdout; human-readable on stderr.
+				if len(tt.args) >= 2 && tt.args[0] == "--output" && tt.args[1] == "json" {
+					assert.Contains(t, out, tt.expectedOutput)
+				} else {
+					assert.Contains(t, errOut, tt.expectedOutput)
+				}
 			}
 		})
 	}

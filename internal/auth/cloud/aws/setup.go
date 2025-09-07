@@ -1,40 +1,35 @@
 package aws
 
 import (
-	"os"
-	"path/filepath"
+	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// SetupFiles sets up AWS credentials and config files for the given identity
+// SetupFiles sets up AWS credentials and config files for the given identity.
 func SetupFiles(providerName, identityName string, creds *schema.Credentials) error {
 	if creds.AWS == nil {
 		return nil // No AWS credentials to setup
 	}
 
-	// Create AWS file manager
-	homeDir, _ := os.UserHomeDir()
-	baseDir := filepath.Join(homeDir, ".aws", "atmos")
+	// Create AWS file manager.
+	fileManager := NewAWSFileManager()
 
-	fileManager := &AWSFileManager{
-		baseDir: baseDir,
-	}
-
-	// Write credentials file
+	// Write credentials file.
 	if err := fileManager.WriteCredentials(providerName, identityName, creds.AWS); err != nil {
-		return err
+		return fmt.Errorf("%w: failed to write AWS credentials", errUtils.ErrStaticError)
 	}
 
-	// Write config file with region
+	// Write config file with region.
 	region := creds.AWS.Region
 	if region == "" {
 		region = "us-east-1" // Default region
 	}
 
 	if err := fileManager.WriteConfig(providerName, identityName, region, ""); err != nil {
-		return err
+		return fmt.Errorf("%w: failed to write AWS config", errUtils.ErrStaticError)
 	}
 
 	return nil

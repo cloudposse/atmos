@@ -1032,16 +1032,6 @@ type ComponentAuthConfig struct {
 	Identities map[string]Identity `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
 }
 
-// HookConfig defines configuration for authentication hooks
-type HookConfig struct {
-	Terraform *TerraformHookConfig `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
-}
-
-// TerraformHookConfig defines Terraform-specific hook configuration
-type TerraformHookConfig struct {
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-}
-
 // Credentials defines credential storage configuration
 type Credentials struct {
 	AWS   *AWSCredentials   `yaml:"aws,omitempty" json:"aws,omitempty" mapstructure:"aws"`

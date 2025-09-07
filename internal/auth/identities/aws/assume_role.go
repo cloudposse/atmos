@@ -14,16 +14,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// assumeRoleIdentity implements AWS assume role identity
+// assumeRoleIdentity implements AWS assume role identity.
 type assumeRoleIdentity struct {
 	name   string
 	config *schema.Identity
 }
 
-// NewAssumeRoleIdentity creates a new AWS assume role identity
+// NewAssumeRoleIdentity creates a new AWS assume role identity.
 func NewAssumeRoleIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	if config.Kind != "aws/assume-role" {
-		return nil, fmt.Errorf("invalid identity kind for assume role: %s", config.Kind)
+		return nil, fmt.Errorf("%w: invalid identity kind for assume role: %s", errUtils.ErrStaticError, config.Kind)
 	}
 
 	return &assumeRoleIdentity{
@@ -32,12 +32,12 @@ func NewAssumeRoleIdentity(name string, config *schema.Identity) (types.Identity
 	}, nil
 }
 
-// Kind returns the identity kind
+// Kind returns the identity kind.
 func (i *assumeRoleIdentity) Kind() string {
 	return "aws/assume-role"
 }
 
-// assumeRoleCache represents cached assume role credentials
+// assumeRoleCache represents cached assume role credentials.
 type assumeRoleCache struct {
 	AccessKeyID     string    `json:"access_key_id"`
 	SecretAccessKey string    `json:"secret_access_key"`
@@ -47,26 +47,42 @@ type assumeRoleCache struct {
 	LastUpdated     time.Time `json:"last_updated"`
 }
 
-// Authenticate performs authentication using assume role
+// Authenticate performs authentication using assume role.
 func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
-	// Note: Caching is now handled at the manager level to prevent duplicates
+	// Note: Caching is now handled at the manager level to prevent duplicates.
 
 	if baseCreds == nil || baseCreds.AWS == nil {
-		return nil, fmt.Errorf("base AWS credentials are required")
+		return nil, fmt.Errorf("%w: base AWS credentials are required", errUtils.ErrStaticError)
 	}
 
-	log.Debug("Assume role authentication with base credentials", "identity", i.name, "baseAccessKeyId", baseCreds.AWS.AccessKeyID[:10]+"...", "hasSecretKey", baseCreds.AWS.SecretAccessKey != "", "hasSessionToken", baseCreds.AWS.SessionToken != "")
+	prefix := baseCreds.AWS.AccessKeyID
+	if len(prefix) > 10 {
+		prefix = prefix[:10]
+	}
 
-	// Get role ARN from principal or spec (backward compatibility)
-	var roleArn string
+	secretPrefix := baseCreds.AWS.SecretAccessKey
+	if len(secretPrefix) > 10 {
+		secretPrefix = secretPrefix[:10]
+	}
+
+	log.Debug("Assume role authentication with base credentials",
+		"identity", i.name,
+		"baseAccessKeyId", prefix+"...",
+		"baseSecretAccessKey", secretPrefix+"...",
+		"hasSessionToken", baseCreds.AWS.SessionToken != "")
+
 	var ok bool
 	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
-		return nil, fmt.Errorf("assume_role is required in principal")
+		return nil, fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrStaticError)
 	}
 
 	// Create AWS config using base credentials
+	region := baseCreds.AWS.Region
+	if region == "" {
+		region = "us-east-1"
+	}
 	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(baseCreds.AWS.Region),
+		config.WithRegion(region),
 		config.WithCredentialsProvider(aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
 			return aws.Credentials{
 				AccessKeyID:     baseCreds.AWS.AccessKeyID,
@@ -76,39 +92,43 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 		})),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrStaticError, err)
 	}
 
-	// Create STS client
+	// Create STS client.
 	stsClient := sts.NewFromConfig(cfg)
 
-	// Assume the role
+	// Assume the role.
 	sessionName := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
 	assumeRoleInput := &sts.AssumeRoleInput{
 		RoleArn:         aws.String(roleArn),
 		RoleSessionName: aws.String(sessionName),
 	}
 
-	// Add external ID if specified
+	// Add external ID if specified.
 	if externalID, ok := i.config.Principal["external_id"].(string); ok && externalID != "" {
 		assumeRoleInput.ExternalId = aws.String(externalID)
 	}
 
-	// Add duration if specified
+	// Add duration if specified.
 	var durationStr string
 	durationStr, _ = i.config.Principal["duration"].(string)
 	if durationStr != "" {
 		if duration, err := time.ParseDuration(durationStr); err == nil {
 			assumeRoleInput.DurationSeconds = aws.Int32(int32(duration.Seconds()))
+		} else {
+			log.Warn("Invalid duration specified for assume role", "duration", durationStr)
 		}
 	}
 
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume role: %w", err)
+		return nil, fmt.Errorf("%w: failed to assume role: %v", errUtils.ErrStaticError, err)
 	}
-
-	// Convert to our credential format
+	if result == nil || result.Credentials == nil {
+		return nil, fmt.Errorf("%w: STS returned empty credentials", errUtils.ErrStaticError)
+	}
+	// Convert to our credential format.
 	expiration := ""
 	expirationTime := time.Time{}
 	if result.Credentials.Expiration != nil {
@@ -126,31 +146,31 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 		},
 	}
 
-	// Note: Caching handled at manager level
+	// Note: Caching handled at manager level.
 	return creds, nil
 }
 
-// Validate validates the identity configuration
+// Validate validates the identity configuration.
 func (i *assumeRoleIdentity) Validate() error {
 	if i.config.Principal == nil {
-		return fmt.Errorf("principal is required")
+		return fmt.Errorf("%w: principal is required", errUtils.ErrStaticError)
 	}
 
-	// Check role ARN in principal or spec (backward compatibility)
+	// Check role ARN in principal or spec (backward compatibility).
 	var roleArn string
 	var ok bool
 	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
-		return fmt.Errorf("assume_role is required in principal")
+		return fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrStaticError)
 	}
 
 	return nil
 }
 
-// Environment returns environment variables for this identity
+// Environment returns environment variables for this identity.
 func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
-	// Add environment variables from identity config
+	// Add environment variables from identity config.
 	for _, envVar := range i.config.Env {
 		env[envVar.Key] = envVar.Value
 	}
@@ -158,27 +178,27 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
-// GetProviderName extracts the provider name from the identity configuration
+// GetProviderName extracts the provider name from the identity configuration.
 func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {
 		return i.config.Via.Provider, nil
 	}
 	if i.config.Via != nil && i.config.Via.Identity != "" {
 		// This assume role identity chains through another identity
-		// For caching purposes, we'll use the chained identity name
+		// For caching purposes, we'll use the chained identity name.
 		return i.config.Via.Identity, nil
 	}
-	return "", fmt.Errorf("assume role identity %q has no valid via configuration", i.name)
+	return "", fmt.Errorf("%w: assume role identity %q has no valid via configuration", errUtils.ErrStaticError, i.name)
 }
 
-// PostAuthenticate sets up AWS files after authentication
+// PostAuthenticate sets up AWS files after authentication.
 func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *schema.Credentials) error {
-	// Setup AWS files using shared AWS cloud package
+	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
-		return fmt.Errorf("failed to setup AWS files: %w", err)
+		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrStaticError, err)
 	}
 	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
-		return fmt.Errorf("failed to set environment variables: %w", err)
+		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrStaticError, err)
 	}
 	return nil
 }

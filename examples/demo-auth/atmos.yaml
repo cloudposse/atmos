@@ -11,7 +11,7 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
-  
+
 stacks:
   base_path: "stacks"
   included_paths:
@@ -26,14 +26,14 @@ logs:
 
 # Custom CLI commands
 commands:
-- name: "test"
-  description: "Run all tests"
-  steps:
-  - atmos validate stacks
-  # Test dev stack
-  - atmos terraform plan whoami -s dev --identity oidc
-  - atmos terraform apply whoami -s dev -auto-approve --identity oidc
-  - atmos terraform destroy whoami -s dev -auto-approve --identity oidc
+  - name: "test"
+    description: "Run all tests"
+    steps:
+      - atmos validate stacks
+      # Test dev stack
+      - atmos terraform plan whoami -s dev --identity oidc
+      - atmos terraform apply whoami -s dev -auto-approve --identity oidc
+      - atmos terraform destroy whoami -s dev -auto-approve --identity oidc
 
 # Auth configuration demo (stub values)
 auth:
@@ -42,42 +42,46 @@ auth:
   session_length: 15 minutes
   providers:
     oidc:
-      type: aws/oidc
+      kind: aws/oidc
       region: us-east-1
-      profile: oidc
-      role_arn: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
     idp-acme-saml:
-      type: aws/saml
+      kind: aws/saml
       url: https://mock
       idp_arn: arn:aws:iam::000000000000:saml-provider/mock
       profile: "acme-identity"
     idp-acme-sso:
-      type: aws/iam-identity-center
+      kind: aws/iam-identity-center
       url: https://mock
       profile: "acme-identity"
       role_name: "IdentityManagersTeamAccess"
       account_name: "core-identity"
-    idp-superuser:
-      type: aws/user
 
   identities:
     # Used in tests
     oidc:
-      provider: oidc
+      kind: aws/assume-role
+      via:
+        provider: oidc
       default: false # we use the identity flag in the test custom command
-    
+      principal:
+        assume_role: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
     # Example identities mapping to providers (stubbed examples)
     saml:
+      kind: aws/assume-role
       enabled: false
-      provider: idp-acme-saml
-      role_arn: arn:aws:iam::111111111111:role/ExampleRole
+      via:
+        provider: idp-acme-saml
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/ExampleRole
     sso:
+      kind: aws/assume-role
       enabled: false
-      provider: idp-acme-sso
-      account_id: "111111111111"
-      role_name: "ExampleRole"
+      via:
+        provider: idp-acme-sso
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/ExampleRole
     superuser:
+      kind: aws/user
       enabled: false
-      provider: idp-superuser
       profile: default
 

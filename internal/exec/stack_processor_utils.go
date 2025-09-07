@@ -2058,9 +2058,8 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 	return settings, nil
 }
 
-// processAuthConfig deep-merges the `auth` section from stack manifests with
-// the `auth` section from `atmos.yaml`. Component auth config takes precedence
-// over global auth config.
+// processAuthConfig merges the component `auth` section with global `auth` from atmos.yaml.
+// Component-level config takes precedence over global config.
 func processAuthConfig(atmosConfig *schema.AtmosConfiguration, authConfig map[string]any) (map[string]any, error) {
 	if len(authConfig) == 0 {
 		return authConfig, nil
@@ -2071,11 +2070,6 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, authConfig map[st
 	err := mapstructure.Decode(atmosConfig.Auth, &globalAuthConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert global auth config to map: %w", err)
-	}
-
-	// If global auth config is empty, just return the component auth config
-	if len(globalAuthConfig) == 0 {
-		return authConfig, nil
 	}
 
 	mergedAuthConfig, err := m.Merge(

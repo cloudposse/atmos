@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
+	errUtils "github.com/cloudposse/atmos/pkg/utils/error"
 )
 
 // ssoProvider implements AWS IAM Identity Center authentication
@@ -25,15 +26,15 @@ type ssoProvider struct {
 // NewSSOProvider creates a new AWS SSO provider
 func NewSSOProvider(name string, config *schema.Provider) (*ssoProvider, error) {
 	if config.Kind != "aws/iam-identity-center" {
-		return nil, fmt.Errorf("invalid provider kind for SSO provider: %s", config.Kind)
+		return nil, fmt.Errorf("%w: invalid provider kind for SSO provider: %s", errUtils.ErrStaticError, config.Kind)
 	}
 
 	if config.StartURL == "" {
-		return nil, fmt.Errorf("start_url is required for AWS SSO provider")
+		return nil, fmt.Errorf("%w: start_url is required for AWS SSO provider", errUtils.ErrStaticError)
 	}
 
 	if config.Region == "" {
-		return nil, fmt.Errorf("region is required for AWS SSO provider")
+		return nil, fmt.Errorf("%w: region is required for AWS SSO provider", errUtils.ErrStaticError)
 	}
 
 	return &ssoProvider{
@@ -77,7 +78,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 		ClientType: aws.String("public"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to register SSO client: %w", err)
+		return nil, fmt.Errorf("%w: failed to register SSO client: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Start device authorization
@@ -87,7 +88,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 		StartUrl:     aws.String(p.startURL),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to start device authorization: %w", err)
+		return nil, fmt.Errorf("%w: failed to start device authorization: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Display user code and verification URI
@@ -98,6 +99,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 	}
 	// Poll for token
 	var accessToken string
+	var tokenExpiresAt time.Time
 	expiresIn := authResp.ExpiresIn
 	interval := authResp.Interval
 
@@ -114,6 +116,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 
 		if err == nil {
 			accessToken = aws.ToString(tokenResp.AccessToken)
+			tokenExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 			break
 		}
 
@@ -131,17 +134,20 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 			continue
 		}
 
-		// Any other error is terminal
-		return nil, fmt.Errorf("failed to create token: %w", err)
+		// Any other error is terminal.
+		return nil, fmt.Errorf("%w: failed to create token: %v", errUtils.ErrStaticError, err)
 	}
 
 	if accessToken == "" {
-		return nil, fmt.Errorf("authentication timed out")
+		return nil, fmt.Errorf("%w: authentication timed out", errUtils.ErrStaticError)
 	}
 
 	// Calculate expiration time
-	expiration := time.Now().Add(time.Duration(p.getSessionDuration()) * time.Minute)
-
+	// Use token expiration (fallback to session duration if unavailable).
+	expiration := tokenExpiresAt
+	if expiration.IsZero() {
+		expiration = time.Now().Add(time.Duration(p.getSessionDuration()) * time.Minute)
+	}
 	log.Debug("Authentication successful", "expiration", expiration)
 	// Note: Caching is now handled by identities that use this provider
 	// since they have access to the identity name required for the cache key
@@ -158,10 +164,10 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 // Validate validates the provider configuration
 func (p *ssoProvider) Validate() error {
 	if p.startURL == "" {
-		return fmt.Errorf("start_url is required")
+		return fmt.Errorf("%w: start_url is required", errUtils.ErrStaticError)
 	}
 	if p.region == "" {
-		return fmt.Errorf("region is required")
+		return fmt.Errorf("%w: region is required", errUtils.ErrStaticError)
 	}
 	return nil
 }

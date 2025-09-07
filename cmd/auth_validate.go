@@ -8,6 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // authValidateCmd validates the auth configuration
@@ -24,8 +25,7 @@ var authValidateCmd = &cobra.Command{
 
 func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	// Get verbose flag
-	verbose, _ := cmd.Flags().GetBool("verbose")
-
+	verbose := viper.GetBool("auth.validate.verbose")
 	if verbose {
 		u.PrintfMarkdown("**Validating authentication configuration...**\n")
 	}
@@ -52,5 +52,8 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 
 func init() {
 	authValidateCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
+	_ = viper.BindPFlag("auth.validate.verbose", authValidateCmd.Flags().Lookup("verbose"))
+	viper.SetEnvPrefix("ATMOS")
+	_ = viper.BindEnv("auth.validate.verbose") // ATMOS_AUTH_VALIDATE_VERBOSE
 	authCmd.AddCommand(authValidateCmd)
 }

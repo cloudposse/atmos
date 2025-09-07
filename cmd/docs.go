@@ -13,7 +13,6 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -119,12 +118,13 @@ var docsCmd = &cobra.Command{
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
-		err := utils.OpenUrl(atmosDocsURL)
+		err := u.OpenUrl(atmosDocsURL)
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
+		// UI messages should go to stderr; stdout is for data/results.
+		fmt.Fprintf(os.Stderr, "Opening default browser to '%v'.\n", atmosDocsURL)
 		return nil
 	},
 }

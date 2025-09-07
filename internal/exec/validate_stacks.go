@@ -246,6 +246,10 @@ func createComponentStackMap(
 						envSection = map[string]any{}
 					}
 
+					if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+						authSection = map[string]any{}
+					}
+
 					if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 						providersSection = map[string]any{}
 					}
@@ -279,6 +283,7 @@ func createComponentStackMap(
 							cfg.MetadataSectionName:    metadataSection,
 							cfg.SettingsSectionName:    settingsSection,
 							cfg.EnvSectionName:         envSection,
+							cfg.AuthSectionName:        authSection,
 							cfg.ProvidersSectionName:   providersSection,
 							cfg.OverridesSectionName:   overridesSection,
 							cfg.BackendSectionName:     backendSection,

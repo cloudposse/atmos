@@ -15,6 +15,7 @@ import (
 	atmosCredentials "github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	errUtils "github.com/cloudposse/atmos/pkg/utils/error"
 )
 
 // userIdentity implements AWS user identity (passthrough)
@@ -26,7 +27,7 @@ type userIdentity struct {
 // NewUserIdentity creates a new AWS user identity
 func NewUserIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	if config.Kind != "aws/user" {
-		return nil, fmt.Errorf("invalid identity kind for user: %s", config.Kind)
+		return nil, fmt.Errorf("%w: invalid identity kind for user: %s", errUtils.ErrStaticError, config.Kind)
 	}
 
 	return &userIdentity{
@@ -71,7 +72,7 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds *schema.Crede
 		credStore := atmosCredentials.NewCredentialStore()
 		longLivedCreds, err = credStore.Retrieve(i.name)
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve AWS User credentials for %q: %w", i.name, err)
+			return nil, fmt.Errorf("%w: failed to retrieve AWS User credentials for %q: %w", errUtils.ErrStaticError, i.name, err)
 		}
 
 		log.Debug("Using credentials from keyring", "identity", i.name)
@@ -104,12 +105,12 @@ func (i *userIdentity) writeAWSFiles(creds *schema.Credentials, region string) e
 
 	// Write credentials to ~/.aws/atmos/aws-user/credentials
 	if err := awsFileManager.WriteCredentials("aws-user", i.name, creds.AWS); err != nil {
-		return fmt.Errorf("failed to write AWS credentials: %w", err)
+		return fmt.Errorf("%w: failed to write AWS credentials: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Write config to ~/.aws/atmos/aws-user/config
 	if err := awsFileManager.WriteConfig("aws-user", i.name, region, ""); err != nil {
-		return fmt.Errorf("failed to write AWS config: %w", err)
+		return fmt.Errorf("%w: failed to write AWS config: %v", errUtils.ErrStaticError, err)
 	}
 
 	return nil
@@ -127,7 +128,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 		)),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Create STS client
@@ -147,10 +148,10 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 					Value(&mfaToken).
 					Validate(func(s string) error {
 						if s == "" {
-							return fmt.Errorf("MFA token is required")
+							return fmt.Errorf("%w: MFA token is required", errUtils.ErrStaticError)
 						}
 						if len(s) != 6 {
-							return fmt.Errorf("MFA token must be 6 digits")
+							return fmt.Errorf("%w: MFA token must be 6 digits", errUtils.ErrStaticError)
 						}
 						return nil
 					}),
@@ -158,7 +159,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 		)
 
 		if err := form.Run(); err != nil {
-			return nil, fmt.Errorf("failed to get MFA token: %w", err)
+			return nil, fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrStaticError, err)
 		}
 
 		// Get session token with MFA
@@ -176,7 +177,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 
 	result, err := stsClient.GetSessionToken(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get session token: %w", err)
+		return nil, fmt.Errorf("%w: failed to get session token: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Create session credentials (temporary tokens for AWS files)
@@ -192,7 +193,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 
 	// Write session credentials to AWS files using "aws-user" as mock provider
 	if err := i.writeAWSFiles(sessionCreds, region); err != nil {
-		return nil, fmt.Errorf("failed to write AWS files: %w", err)
+		return nil, fmt.Errorf("%w: failed to write AWS files: %v", errUtils.ErrStaticError, err)
 	}
 
 	// Note: We keep the long-lived credentials in the keystore unchanged
@@ -242,20 +243,20 @@ func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Ident
 	return false
 }
 
-// AuthenticateStandaloneAWSUser handles authentication for standalone AWS user identities
+// AuthenticateStandaloneAWSUser handles authentication for standalone AWS user identities.
 func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, identities map[string]types.Identity) (*schema.Credentials, error) {
 	log.Debug("Authenticating AWS user identity directly", "identity", identityName)
 
 	// Get the identity instance
 	userIdentity, exists := identities[identityName]
 	if !exists {
-		return nil, fmt.Errorf("AWS user identity %q not found", identityName)
+		return nil, fmt.Errorf("%w: AWS user identity %q not found", errUtils.ErrStaticError, identityName)
 	}
 
-	// AWS user identities authenticate directly without provider credentials
+	// AWS user identities authenticate directly without provider credentials.
 	credentials, err := userIdentity.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("AWS user identity %q authentication failed: %w", identityName, err)
+		return nil, fmt.Errorf("%w: AWS user identity %q authentication failed: %v", errUtils.ErrStaticError, identityName, err)
 	}
 
 	log.Debug("AWS user identity authenticated successfully", "identity", identityName)
@@ -266,10 +267,10 @@ func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, ide
 func (i *userIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *schema.Credentials) error {
 	// Setup AWS files using shared AWS cloud package
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
-		return fmt.Errorf("failed to setup AWS files: %w", err)
+		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrStaticError, err)
 	}
 	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
-		return fmt.Errorf("failed to set environment variables: %w", err)
+		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrStaticError, err)
 	}
 	return nil
 }
