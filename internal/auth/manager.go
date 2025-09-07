@@ -208,6 +208,7 @@ func (m *manager) ListProviders() []string {
 
 // initializeProviders creates provider instances from configuration.
 func (m *manager) initializeProviders() error {
+	// nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, providerConfig := range m.config.Providers {
 		provider, err := NewProvider(name, &providerConfig)
 		if err != nil {
@@ -220,6 +221,7 @@ func (m *manager) initializeProviders() error {
 
 // initializeIdentities creates identity instances from configuration.
 func (m *manager) initializeIdentities() error {
+	// nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, identityConfig := range m.config.Identities {
 		identity, err := NewIdentity(name, &identityConfig)
 		if err != nil {
@@ -297,9 +299,7 @@ func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, 
 	// Step 1: Bottom-up validation - check cached credentials from target to root
 	validFromIndex := m.findFirstValidCachedCredentials(chain, targetIdentity)
 
-	if validFromIndex == -1 {
-		log.Debug("No valid cached credentials found in chain, full authentication required")
-	} else {
+	if validFromIndex != -1 {
 		log.Debug("Found valid cached credentials", "validFromIndex", validFromIndex, "chainStep", getChainStepName(chain, validFromIndex))
 
 		// If target identity has valid cached credentials, use them
@@ -312,12 +312,12 @@ func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, 
 	}
 
 	// Step 2: Selective re-authentication from first invalid point down to target
-	return m.authenticateFromIndex(ctx, chain, validFromIndex, targetIdentity)
+	return m.authenticateFromIndex(ctx, chain, validFromIndex)
 }
 
 // findFirstValidCachedCredentials checks cached credentials from bottom to top of chain
 // Returns the index of the first valid cached credentials, or -1 if none found.
-func (m *manager) findFirstValidCachedCredentials(chain []string, targetIdentity string) int {
+func (m *manager) findFirstValidCachedCredentials(chain []string) int {
 	// Check from target identity (bottom) up to provider (top)
 	for i := len(chain) - 1; i >= 0; i-- {
 		identityName := chain[i]
@@ -364,23 +364,23 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds *schema.Cre
 }
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
-func (m *manager) authenticateFromIndex(ctx context.Context, chain []string, startIndex int, targetIdentity string) (*schema.Credentials, error) {
+func (m *manager) authenticateFromIndex(ctx context.Context, chain []string, startIndex int) (*schema.Credentials, error) {
 	// Handle special case: standalone AWS user identity
 	if aws.IsStandaloneAWSUserChain(chain, m.config.Identities) {
 		return aws.AuthenticateStandaloneAWSUser(ctx, chain[0], m.identities)
 	}
 
 	// Handle regular provider-based authentication chains
-	return m.authenticateProviderChain(ctx, chain, startIndex, targetIdentity)
+	return m.authenticateProviderChain(ctx, chain, startIndex)
 }
 
 // authenticateProviderChain handles authentication for provider-based identity chains.
-func (m *manager) authenticateProviderChain(ctx context.Context, chain []string, startIndex int, targetIdentity string) (*schema.Credentials, error) {
+func (m *manager) authenticateProviderChain(ctx context.Context, chain []string, startIndex int) (*schema.Credentials, error) {
 	var currentCreds *schema.Credentials
 	var err error
 
 	// Determine actual starting point for authentication
-	actualStartIndex := m.determineStartingIndex(chain, startIndex)
+	actualStartIndex := m.determineStartingIndex(startIndex)
 
 	// Retrieve cached credentials if starting from a cached point.
 	// Important: if we start from index N (>0) because cached creds exist at that step,
@@ -392,7 +392,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 			actualStartIndex = 0
 		} else {
 			// Skip re-authenticating the identity at actualStartIndex, since we already have its output
-			actualStartIndex = actualStartIndex + 1
+			actualStartIndex++
 		}
 	}
 
@@ -410,7 +410,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 }
 
 // determineStartingIndex determines where to start authentication based on cached credentials.
-func (m *manager) determineStartingIndex(chain []string, startIndex int) int {
+func (m *manager) determineStartingIndex(startIndex int) int {
 	if startIndex == -1 {
 		return 0 // Start from provider if no valid cached credentials
 	}
@@ -457,13 +457,6 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 func getChainStepName(chain []string, index int) string {
 	if index < len(chain) {
 		return chain[index]
-	}
-	return "unknown"
-}
-
-func getPreviousStepName(chain []string, currentIndex int) string {
-	if currentIndex > 0 && currentIndex <= len(chain) {
-		return chain[currentIndex-1]
 	}
 	return "unknown"
 }
@@ -612,14 +605,4 @@ func (m *manager) buildWhoamiInfo(identityName string, creds *schema.Credentials
 	}
 
 	return info
-}
-
-// extractIdentityFromAlias extracts the identity name from an alias (format: provider/identity).
-func extractIdentityFromAlias(alias string) string {
-	for i := len(alias) - 1; i >= 0; i-- {
-		if alias[i] == '/' {
-			return alias[i+1:]
-		}
-	}
-	return alias
 }

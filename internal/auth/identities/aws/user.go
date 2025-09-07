@@ -139,23 +139,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	if longLivedCreds.AWS.MfaArn != "" {
 		// Prompt for MFA token
 		var mfaToken string
-		form := huh.NewForm(
-			huh.NewGroup(
-				huh.NewInput().
-					Title("Enter MFA Token").
-					Description(fmt.Sprintf("MFA Device: %s", longLivedCreds.AWS.MfaArn)).
-					Value(&mfaToken).
-					Validate(func(s string) error {
-						if s == "" {
-							return fmt.Errorf("%w: MFA token is required", errUtils.ErrAwsAuth)
-						}
-						if len(s) != 6 {
-							return fmt.Errorf("%w: MFA token must be 6 digits", errUtils.ErrAwsAuth)
-						}
-						return nil
-					}),
-			),
-		)
+		form := newMfaForm(longLivedCreds, &mfaToken)
 
 		if err := form.Run(); err != nil {
 			return nil, fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrUnsupportedInputType, err)
@@ -199,6 +183,27 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	// Only the session tokens are written to AWS config/credentials files
 
 	return sessionCreds, nil
+}
+
+func newMfaForm(longLivedCreds *schema.Credentials, mfaToken *string) *huh.Form {
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Enter MFA Token").
+				Description(fmt.Sprintf("MFA Device: %s", longLivedCreds.AWS.MfaArn)).
+				Value(mfaToken).
+				Validate(func(s string) error {
+					if s == "" {
+						return fmt.Errorf("%w: MFA token is required", errUtils.ErrAwsAuth)
+					}
+					if len(s) != 6 {
+						return fmt.Errorf("%w: MFA token must be 6 digits", errUtils.ErrAwsAuth)
+					}
+					return nil
+				}),
+		),
+	)
+	return form
 }
 
 // Validate validates the identity configuration.

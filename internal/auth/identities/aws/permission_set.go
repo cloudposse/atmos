@@ -38,16 +38,6 @@ func (i *permissionSetIdentity) Kind() string {
 	return "aws/permission-set"
 }
 
-// permissionSetCache represents cached permission set credentials.
-type permissionSetCache struct {
-	AccessKeyID     string    `json:"access_key_id"`
-	SecretAccessKey string    `json:"secret_access_key"`
-	SessionToken    string    `json:"session_token"`
-	Region          string    `json:"region"`
-	Expiration      time.Time `json:"expiration"`
-	LastUpdated     time.Time `json:"last_updated"`
-}
-
 // Authenticate performs authentication using permission set.
 func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
 	// Note: Caching is now handled at the manager level to prevent duplicates

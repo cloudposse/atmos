@@ -32,6 +32,7 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 	}
 
 	// Validate providers
+	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, provider := range config.Providers {
 		if err := v.ValidateProvider(name, &provider); err != nil {
 			return fmt.Errorf("%w: provider %q validation failed: %w", errUtils.ErrInvalidAuthConfig, name, err)
@@ -39,6 +40,7 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 	}
 
 	// Validate identities
+
 	for name, identity := range config.Identities {
 		if err := v.ValidateIdentity(name, &identity, convertProviders(config.Providers)); err != nil {
 			return fmt.Errorf("%w: identity %q validation failed: %w", errUtils.ErrInvalidAuthConfig, name, err)
@@ -285,6 +287,7 @@ func (v *validator) hasCycle(node string, graph map[string][]string, visited, re
 // Helper functions to convert map types.
 func convertProviders(providers map[string]schema.Provider) map[string]*schema.Provider {
 	result := make(map[string]*schema.Provider)
+	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for k, v := range providers {
 		provider := v
 		result[k] = &provider

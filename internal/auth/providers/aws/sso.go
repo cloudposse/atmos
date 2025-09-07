@@ -50,15 +50,6 @@ func (p *ssoProvider) Kind() string {
 	return "aws/iam-identity-center"
 }
 
-// ssoCache represents cached SSO credentials.
-type ssoCache struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token,omitempty"`
-	Expiration   time.Time `json:"expiration"`
-	Region       string    `json:"region"`
-	LastUpdated  time.Time `json:"last_updated"`
-}
-
 // Authenticate performs AWS SSO authentication.
 func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
 	// Note: SSO provider no longer caches credentials directly

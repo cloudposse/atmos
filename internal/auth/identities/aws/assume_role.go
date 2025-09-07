@@ -38,16 +38,6 @@ func (i *assumeRoleIdentity) Kind() string {
 	return "aws/assume-role"
 }
 
-// assumeRoleCache represents cached assume role credentials.
-type assumeRoleCache struct {
-	AccessKeyID     string    `json:"access_key_id"`
-	SecretAccessKey string    `json:"secret_access_key"`
-	SessionToken    string    `json:"session_token"`
-	Region          string    `json:"region"`
-	Expiration      time.Time `json:"expiration"`
-	LastUpdated     time.Time `json:"last_updated"`
-}
-
 // Authenticate performs authentication using assume role.
 func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema.Credentials) (*schema.Credentials, error) {
 	// Note: Caching is now handled at the manager level to prevent duplicates.

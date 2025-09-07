@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,14 +21,6 @@ import (
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-// min returns the minimum of two integers.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // samlProvider implements AWS SAML authentication using saml2aws.
 type samlProvider struct {
@@ -71,12 +62,53 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url)
 
 	// Set up browser automation if needed
-	if err := p.setupBrowserAutomation(); err != nil {
-		log.Warn("Failed to setup browser automation", "error", err)
+	p.setupBrowserAutomation()
+
+	// Create config and client + login details
+	samlConfig := p.createSAMLConfig()
+	loginDetails := p.createLoginDetails()
+
+	// Create the SAML client
+	samlClient, err := saml2aws.NewSAMLClient(samlConfig)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create SAML client: %v", errUtils.ErrInvalidProviderConfig, err)
 	}
 
-	// Create saml2aws configuration
-	samlConfig := &cfg.IDPAccount{
+	// Authenticate and get assertion
+	assertionB64, err := p.authenticateAndGetAssertion(samlClient, loginDetails)
+	if err != nil {
+		return nil, err
+	}
+
+	decodedXML, err := base64.StdEncoding.DecodeString(assertionB64)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to decode assertion: %v", errUtils.ErrAwsSAMLDecodeFailed, err)
+	}
+	rolesStr, err := saml2aws.ExtractAwsRoles(decodedXML)
+	if err != nil {
+		return nil, fmt.Errorf("%w: extract AWS roles: %v", errUtils.ErrAwsSAMLDecodeFailed, err)
+	}
+	roles, err := saml2aws.ParseAWSRoles(rolesStr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parse AWS roles: %v", errUtils.ErrAwsSAMLDecodeFailed, err)
+	}
+
+	selectedRole := p.selectRole(roles)
+
+	// Assume role
+	awsCreds, err := p.assumeRoleWithSAML(ctx, assertionB64, selectedRole)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
+	}
+
+	log.Info("SAML authentication successful", "provider", p.name, "role", selectedRole.RoleARN)
+
+	return awsCreds, nil
+}
+
+// createSAMLConfig creates the saml2aws configuration.
+func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
+	return &cfg.IDPAccount{
 		URL:                  p.url,
 		Username:             p.config.Username,
 		Provider:             p.getProviderType(),
@@ -90,8 +122,10 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 		DownloadBrowser:      p.config.DownloadBrowserDriver,
 		Headless:             false, // Force non-headless for interactive auth
 	}
+}
 
-	// Set up saml2aws client
+// createLoginDetails creates the login details for saml2aws.
+func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
 	loginDetails := &creds.LoginDetails{
 		URL:      p.url,
 		Username: p.config.Username,
@@ -102,90 +136,27 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 		loginDetails.Password = p.config.Password
 	}
 
-	// Create the SAML client
-	samlClient, err := saml2aws.NewSAMLClient(samlConfig)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create SAML client: %v", errUtils.ErrInvalidProviderConfig, err)
-	}
+	return loginDetails
+}
 
-	// Perform authentication
+// authenticateAndGetAssertion authenticates and gets the SAML assertion.
+func (p *samlProvider) authenticateAndGetAssertion(samlClient saml2aws.SAMLClient, loginDetails *creds.LoginDetails) (string, error) {
 	samlAssertion, err := samlClient.Authenticate(loginDetails)
 	if err != nil {
-		return nil, fmt.Errorf("%w: SAML authentication failed: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: SAML authentication failed: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	if samlAssertion == "" {
-		return nil, fmt.Errorf("%w: empty SAML assertion received", errUtils.ErrAuthenticationFailed)
+		return "", fmt.Errorf("%w: empty SAML assertion received", errUtils.ErrAuthenticationFailed)
 	}
 
 	log.Debug("SAML assertion received.", "length", len(samlAssertion))
 
-	// For Google Apps SAML, we need to extract the assertion from the Response
-	// The response contains a saml2p:Response with embedded saml2:Assertion
-	processedAssertion := p.preprocessGoogleSAMLResponse(samlAssertion)
+	return samlAssertion, nil
+}
 
-	// Log the processed assertion for debugging
-	if len(processedAssertion) > 0 {
-		// Decode and log the processed assertion content
-		if decoded, err := base64.StdEncoding.DecodeString(processedAssertion); err == nil {
-			log.Debug("Processed assertion XML content", "xml", string(decoded)[:min(2000, len(decoded))])
-		}
-	}
-
-	// Try different formats for saml2aws.ExtractAwsRoles()
-	// First try the processed assertion
-	roleStrings, err := saml2aws.ExtractAwsRoles([]byte(processedAssertion))
-	if err != nil {
-		log.Debug("Failed with processed assertion, trying original", "error", err)
-
-		// Try with original assertion
-		roleStrings, err = saml2aws.ExtractAwsRoles([]byte(samlAssertion))
-		if err != nil {
-			log.Debug("Failed with original assertion, trying decoded", "error", err)
-
-			// Try with decoded assertion (if it was Base64 encoded)
-			if decoded, decodeErr := base64.StdEncoding.DecodeString(samlAssertion); decodeErr == nil {
-				roleStrings, err = saml2aws.ExtractAwsRoles(decoded)
-				if err != nil {
-					log.Debug("Failed with decoded assertion", "error", err)
-				} else {
-					log.Debug("Success with decoded assertion format")
-				}
-			}
-
-			// If still failing, try with the decoded processed assertion
-			if err != nil && len(processedAssertion) > 0 {
-				if decoded, decodeErr := base64.StdEncoding.DecodeString(processedAssertion); decodeErr == nil {
-					roleStrings, err = saml2aws.ExtractAwsRoles(decoded)
-					if err != nil {
-						log.Debug("Failed with decoded processed assertion", "error", err)
-					} else {
-						log.Debug("Success with decoded processed assertion format")
-					}
-				}
-			}
-
-			if err != nil {
-				log.Error("All SAML assertion formats failed", "error", err)
-				return nil, fmt.Errorf("%w: failed to extract AWS roles from SAML assertion (tried multiple formats): %v", errUtils.ErrAuthenticationFailed, err)
-			}
-		} else {
-			log.Debug("Success with original assertion format")
-		}
-	} else {
-		log.Debug("Success with processed assertion format")
-	}
-
-	if len(roleStrings) == 0 {
-		return nil, fmt.Errorf("%w: no AWS roles found in SAML assertion", errUtils.ErrAuthenticationFailed)
-	}
-
-	// Parse role strings into AWSRole structs
-	awsRoles, err := saml2aws.ParseAWSRoles(roleStrings)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to parse AWS roles: %v", errUtils.ErrAuthenticationFailed, err)
-	}
-
+// selectRole selects the AWS role (first for now, with logging).
+func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRole {
 	// Use the first role or let user select if multiple
 	selectedRole := awsRoles[0]
 	if len(awsRoles) > 1 {
@@ -194,19 +165,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 		log.Info("Using first available role", "role", selectedRole.RoleARN)
 	}
 
-	// Assume the role using the best assertion format.
-	assertionForSTS := samlAssertion
-	if len(processedAssertion) > 0 {
-		assertionForSTS = processedAssertion
-	}
-	awsCreds, err := p.assumeRoleWithSAML(ctx, assertionForSTS, selectedRole)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
-	}
-
-	log.Info("SAML authentication successful", "provider", p.name, "role", selectedRole.RoleARN)
-
-	return awsCreds, nil
+	return selectedRole
 }
 
 // assumeRoleWithSAML assumes an AWS role using SAML assertion.
@@ -221,10 +180,18 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 
 	// Assume role with SAML
 	input := &sts.AssumeRoleWithSAMLInput{
-		RoleArn:         aws.String(role.RoleARN),
-		PrincipalArn:    aws.String(role.PrincipalARN),
-		SAMLAssertion:   aws.String(samlAssertion),
-		DurationSeconds: aws.Int32(3600), // 1 hour
+		RoleArn:       aws.String(role.RoleARN),
+		PrincipalArn:  aws.String(role.PrincipalARN),
+		SAMLAssertion: aws.String(samlAssertion),
+		DurationSeconds: aws.Int32(func() int32 {
+			// Respect requested duration within STS/account limits.
+			if p.config.Session.Duration != "" {
+				if duration, err := time.ParseDuration(p.config.Session.Duration); err == nil {
+					return int32(duration.Seconds())
+				}
+			}
+			return 3600
+		}()),
 	}
 
 	result, err := stsClient.AssumeRoleWithSAML(ctx, input)
@@ -302,7 +269,7 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 }
 
 // setupBrowserAutomation sets up browser automation for SAML authentication.
-func (p *samlProvider) setupBrowserAutomation() error {
+func (p *samlProvider) setupBrowserAutomation() {
 	// Set environment variables for browser automation
 	if p.config.DownloadBrowserDriver {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
@@ -312,60 +279,4 @@ func (p *samlProvider) setupBrowserAutomation() error {
 	if strings.Contains(p.url, "accounts.google.com") {
 		log.Debug("Detected Google Apps SAML, using Browser provider")
 	}
-
-	return nil
-}
-
-// preprocessGoogleSAMLResponse processes Google Apps SAML response to extract the assertion.
-func (p *samlProvider) preprocessGoogleSAMLResponse(samlResponse string) string {
-	// First, try to decode the SAML response if it's Base64 encoded
-	decodedResponse := samlResponse
-	if decoded, err := base64.StdEncoding.DecodeString(samlResponse); err == nil {
-		decodedResponse = string(decoded)
-		log.Debug("Successfully decoded Base64 SAML response", "originalLength", len(samlResponse), "decodedLength", len(decodedResponse))
-	}
-
-	// Check if this looks like a Google Apps SAML response
-	if !strings.Contains(decodedResponse, "saml2p:Response") {
-		log.Debug("Not a Google Apps SAML response, returning original")
-		return samlResponse // Return original encoded response
-	}
-
-	// Find the assertion within the response
-	assertionStart := strings.Index(decodedResponse, "<saml2:Assertion")
-	if assertionStart == -1 {
-		log.Debug("No saml2:Assertion found in decoded response, returning original")
-		return samlResponse
-	}
-
-	assertionEnd := strings.Index(decodedResponse[assertionStart:], "</saml2:Assertion>")
-	if assertionEnd == -1 {
-		log.Debug("No closing saml2:Assertion tag found, returning original")
-		return samlResponse
-	}
-
-	// Extract the assertion including the closing tag
-	assertion := decodedResponse[assertionStart : assertionStart+assertionEnd+len("</saml2:Assertion>")]
-	log.Debug("Extracted assertion from Google SAML response", "length", len(assertion))
-
-	// Re-encode the extracted assertion as Base64 for saml2aws
-	encodedAssertion := base64.StdEncoding.EncodeToString([]byte(assertion))
-	log.Debug("Re-encoded assertion as Base64", "encodedLength", len(encodedAssertion))
-
-	return encodedAssertion
-}
-
-// setupSAML2AWSConfig creates the saml2aws configuration directory and file.
-func (p *samlProvider) setupSAML2AWSConfig() error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	configDir := filepath.Join(homeDir, ".saml2aws")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
-		return fmt.Errorf("failed to create saml2aws config directory: %w", err)
-	}
-
-	return nil
 }
