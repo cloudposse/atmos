@@ -16,21 +16,21 @@ func RunExecCommand(installer ToolRunner, args []string) error {
 	}
 
 	toolSpec := args[0]
-	tool, version, err := ParseToolVersionArg(toolSpec)
+	remainingArgs := args[1:]
+	tool, _, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
 	}
 	if tool == "" {
 		return fmt.Errorf("invalid tool specification: missing tool name")
 	}
-	remainingArgs := args[1:]
 
-	owner, repo, err := installer.GetResolver().Resolve(tool)
+	_, _, err = installer.GetResolver().Resolve(tool)
 	if err != nil {
 		return fmt.Errorf("invalid tool name: %w", err)
 	}
 
-	binaryPath, err := ensureToolInstalled(installer, owner, repo, tool, version)
+	binaryPath, err := ensureToolInstalled(toolSpec)
 	if err != nil {
 		return err
 	}
@@ -40,19 +40,19 @@ func RunExecCommand(installer ToolRunner, args []string) error {
 }
 
 // ensureToolInstalled checks if the binary exists, otherwise installs it.
-func ensureToolInstalled(installer ToolRunner, owner, repo, tool, version string) (string, error) {
-	binaryPath, err := installer.FindBinaryPath(owner, repo, version)
+func ensureToolInstalled(tool string) (string, error) {
+	binaryPath, err := findBinaryPath(tool)
 	if err == nil && binaryPath != "" {
 		if _, statErr := os.Stat(binaryPath); !os.IsNotExist(statErr) {
 			return binaryPath, nil
 		}
 	}
 
-	fmt.Printf("🔧 Tool %s@%s is not installed. Installing automatically...\n", tool, version)
-	if installErr := InstallSingleTool(owner, repo, version, false, true); installErr != nil {
-		return "", fmt.Errorf("failed to auto-install %s@%s: %w. Run 'toolchain install %s/%s@%s' manually",
-			tool, version, installErr, owner, repo, version)
+	fmt.Printf("🔧 Tool %s is not installed. Installing automatically...\n", tool)
+	if installErr := RunInstall(tool, false, true); installErr != nil {
+		return "", fmt.Errorf("failed to auto-install %s: %w.",
+			tool, installErr)
 	}
 
-	return installer.FindBinaryPath(owner, repo, version)
+	return findBinaryPath(tool)
 }

@@ -17,7 +17,6 @@ var toolchainInfoCmd = &cobra.Command{
 		if outputFormat != "table" && outputFormat != "yaml" {
 			return fmt.Errorf("invalid output format: %s. Must be 'table' or 'yaml'", outputFormat)
 		}
-
 		// Extract tool name from arguments
 		toolName := args[0]
 

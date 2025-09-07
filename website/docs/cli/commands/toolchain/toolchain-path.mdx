@@ -1,0 +1,50 @@
+---
+title: atmos toolchain path
+sidebar_label: path
+sidebar_class_name: command
+id: path
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note purpose
+Display the path.
+:::
+
+<Screengrab title="atmos toolchain path --help" slug="atmos-toolchain---help" />
+
+## Usage
+
+Execute the `toolchain versions` command like this:
+
+```shell
+atmos toolchain path
+```
+
+## Examples
+
+```shell
+atmos toolchain path                    # Print PATH for all tools in .tool-versions (absolute paths)
+atmos toolchain path --relative         # Print PATH with relative paths
+atmos toolchain path --export           # Print export PATH=... for shell sourcing
+atmos toolchain path --json             # Print PATH as JSON object
+```
+
+
+## Flags
+
+<dl>
+    <dt>`--relative`  <em>(optional)</em></dt>
+    <dd>
+        Print path with relative paths
+    </dd>
+    <dt>`--export`  <em>(optional)</em></dt>
+    <dd>
+        Print export PATH=... for shell sourcing
+    </dd>
+    <dt>`--json`  <em>(optional)</em></dt>
+    <dd>
+        Print path as json object.
+    </dd>
+
+</dl>
