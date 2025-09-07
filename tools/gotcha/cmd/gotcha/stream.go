@@ -1,0 +1,390 @@
+package cmd
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
+)
+
+// newStreamCmd creates the stream subcommand.
+func newStreamCmd(logger *log.Logger) *cobra.Command {
+	streamCmd := &cobra.Command{
+		Use:   "stream [path]",
+		Short: "Stream test results as they execute",
+		Long: `Execute go test and stream results in real-time.
+This is the default command when running gotcha without arguments.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runStream(cmd, args, logger)
+		},
+	}
+
+	// Test execution flags
+	streamCmd.Flags().StringP("run", "r", "", "Run only tests matching regular expression")
+	streamCmd.Flags().StringP("timeout", "t", "10m", "Test timeout")
+	streamCmd.Flags().BoolP("short", "s", false, "Run smaller tests")
+	streamCmd.Flags().Bool("race", false, "Enable race detector")
+	streamCmd.Flags().Int("count", 1, "Run tests this many times")
+	streamCmd.Flags().Bool("shuffle", false, "Shuffle test order")
+	streamCmd.Flags().BoolP("verbose", "v", false, "Verbose output")
+
+	// Coverage flags
+	streamCmd.Flags().Bool("cover", false, "Enable coverage")
+	streamCmd.Flags().String("coverprofile", "", "Coverage profile output file")
+	streamCmd.Flags().String("coverpkg", "", "Apply coverage to packages matching this pattern")
+
+	// Package selection flags
+	streamCmd.Flags().String("include", "", "Include packages matching regex patterns (comma-separated)")
+	streamCmd.Flags().String("exclude", "", "Exclude packages matching regex patterns (comma-separated)")
+
+	// Output control flags
+	streamCmd.Flags().StringP("show", "", "all", "Filter test results: all, failed, passed, skipped, collapsed, none")
+	streamCmd.Flags().StringP("format", "f", "terminal", "Output format: terminal, json, markdown")
+	streamCmd.Flags().StringP("output", "o", "", "Output file for test results")
+	streamCmd.Flags().Bool("alert", false, "Sound alert when tests complete")
+
+	// Verbosity flags
+	streamCmd.Flags().String("verbosity", "standard", "Verbosity level: minimal, standard, with-output, verbose")
+
+	// CI Integration flags
+	streamCmd.Flags().Bool("ci", false, "CI mode - automatically detect and integrate with CI systems")
+	streamCmd.Flags().String("post", "", "Post comment strategy: always, on-failure, off")
+	streamCmd.Flags().String("comment-uuid", "", "Unique identifier for updating existing CI comment")
+
+	return streamCmd
+}
+
+// runStream executes the stream command.
+func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
+	// Parse test path
+	testPath := "./..."
+	if len(args) > 0 {
+		testPath = args[0]
+		logger.Debug("Test path specified", "path", testPath)
+	}
+
+	// Collect all the arguments for 'go test'
+	var testArgs []string
+
+	// Check for -- separator to allow raw go test args
+	dashIndex := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			dashIndex = i
+			break
+		}
+	}
+
+	// If we have raw args after --, use them
+	if dashIndex >= 0 && dashIndex < len(os.Args)-1 {
+		testArgs = os.Args[dashIndex+1:]
+		logger.Debug("Using raw go test arguments", "args", testArgs)
+	} else {
+		// Build args from flags
+		// Note: We're building minimal args here. The full set would include all flags.
+		if run, _ := cmd.Flags().GetString("run"); run != "" {
+			testArgs = append(testArgs, "-run", run)
+		}
+		if timeout, _ := cmd.Flags().GetString("timeout"); timeout != "" && timeout != "10m" {
+			testArgs = append(testArgs, "-timeout", timeout)
+		}
+		if short, _ := cmd.Flags().GetBool("short"); short {
+			testArgs = append(testArgs, "-short")
+		}
+		if race, _ := cmd.Flags().GetBool("race"); race {
+			testArgs = append(testArgs, "-race")
+		}
+		if count, _ := cmd.Flags().GetInt("count"); count > 1 {
+			testArgs = append(testArgs, "-count", fmt.Sprintf("%d", count))
+		}
+		if shuffle, _ := cmd.Flags().GetBool("shuffle"); shuffle {
+			testArgs = append(testArgs, "-shuffle", "on")
+		}
+	}
+
+	// Get filter flags
+	showFilter, _ := cmd.Flags().GetString("show")
+	includePatterns, _ := cmd.Flags().GetString("include")
+	excludePatterns, _ := cmd.Flags().GetString("exclude")
+
+	// Validate show filter
+	if !utils.IsValidShowFilter(showFilter) {
+		return fmt.Errorf("%w: '%s' must be one of: all, failed, passed, skipped, collapsed, none", types.ErrInvalidShowFilter, showFilter)
+	}
+
+	// Get output settings
+	format, _ := cmd.Flags().GetString("format")
+	outputFile, _ := cmd.Flags().GetString("output")
+	alert, _ := cmd.Flags().GetBool("alert")
+
+	// Get verbosity level
+	verbosityLevel, _ := cmd.Flags().GetString("verbosity")
+
+	// Get coverage settings
+	cover, _ := cmd.Flags().GetBool("cover")
+	coverProfile, _ := cmd.Flags().GetString("coverprofile")
+	coverPkg, _ := cmd.Flags().GetString("coverpkg")
+
+	// Handle coverage flags
+	if cover && coverProfile == "" {
+		// Generate default coverage profile name with timestamp
+		coverProfile = fmt.Sprintf("coverage-%s.out", time.Now().Format("20060102-150405"))
+	}
+	if coverProfile != "" {
+		// Coverage is implicitly enabled if coverprofile is set
+		cover = true
+	}
+
+	// Get CI settings
+	ciMode, _ := cmd.Flags().GetBool("ci")
+	postStrategy, _ := cmd.Flags().GetString("post")
+	// commentUUID will be used when posting comments
+	// commentUUID, _ := cmd.Flags().GetString("comment-uuid")
+
+	// Check if post flag was actually set by the user
+	postFlagPresent := cmd.Flags().Changed("post")
+
+	// Normalize the posting strategy
+	postStrategy = normalizePostingStrategy(postStrategy, postFlagPresent)
+
+	// Auto-detect CI mode if not explicitly set
+	if !ciMode && (os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "") {
+		ciMode = true
+		logger.Debug("CI mode auto-detected", "CI", os.Getenv("CI"), "GITHUB_ACTIONS", os.Getenv("GITHUB_ACTIONS"))
+	}
+
+	// If CI mode and format is terminal, switch to a more appropriate format
+	if ciMode && format == "terminal" {
+		// Don't override if user explicitly set format
+		if !cmd.Flags().Changed("format") {
+			format = "markdown"
+			logger.Debug("Switching to markdown format for CI mode")
+		}
+	}
+
+	// Determine test packages
+	var testPackages []string
+
+	// Support various test path formats
+	switch {
+	case testPath == "./..." || testPath == "...":
+		// Recursive from current directory
+		testPackages = append(testPackages, "./...")
+	case strings.HasSuffix(testPath, "/..."):
+		// Recursive from specified directory
+		testPackages = append(testPackages, testPath)
+	case strings.Contains(testPath, ","):
+		// Comma-separated list of packages
+		for _, pkg := range strings.Split(testPath, ",") {
+			testPackages = append(testPackages, strings.TrimSpace(pkg))
+		}
+	default:
+		// Single package or directory
+		testPackages = append(testPackages, testPath)
+	}
+
+	// Apply filters to packages
+	filteredPackages, err := utils.FilterPackages(testPackages, includePatterns, excludePatterns)
+	if err != nil {
+		return err
+	}
+
+	if len(filteredPackages) == 0 {
+		logger.Warn("No packages matched the filters")
+		return nil
+	}
+
+	testPackages = filteredPackages
+
+	// Debug: Log test packages
+	logger.Debug("Test packages", "packages", testPackages)
+
+	// Determine output file
+	if outputFile == "" {
+		outputFile = "test-output.json"
+		if format == "markdown" {
+			outputFile = "test-output.md"
+		}
+	}
+
+	// Try to get an estimated test count
+	estimatedTestCount := 0
+	if !cmd.Flags().Changed("count") {
+		// Only use cache if we're not running tests multiple times
+		cacheManager, cacheErr := cache.NewManager(logger)
+		if cacheErr == nil && cacheManager != nil {
+			// Convert packages to pattern string for cache lookup
+			pattern := strings.Join(testPackages, " ")
+			if count, found := cacheManager.GetTestCount(pattern); found {
+				estimatedTestCount = count
+				logger.Debug("Using cached test count", "count", estimatedTestCount)
+			} else {
+				logger.Debug("No cached test count available")
+			}
+		}
+	}
+
+	// Override --show flag if --verbosity is specified
+	if cmd.Flags().Changed("verbosity") {
+		switch verbosityLevel {
+		case "minimal":
+			showFilter = "failed"
+		case "standard":
+			// Keep the existing show filter
+		case "with-output":
+			// Keep the existing show filter
+		case "verbose":
+			showFilter = "all"
+		}
+	}
+
+	// Run tests based on output format and TTY availability
+	var exitCode int
+
+	if format == "terminal" && utils.IsTTY() {
+		// Use interactive TUI mode
+		logger.Debug("Starting interactive TUI mode")
+
+		// Create the Bubble Tea model
+		model := tui.NewTestModel(
+			testPackages,
+			strings.Join(testArgs, " "),
+			outputFile,
+			coverProfile,
+			showFilter,
+			alert,
+			verbosityLevel,
+			estimatedTestCount,
+		)
+
+		// Configure coverage options if needed
+		if cover && coverPkg != "" {
+			// Add coverage package configuration to test args
+			// This would be passed through to the model
+			logger.Debug("Coverage package filter", "coverpkg", coverPkg)
+		}
+
+		// Create Bubble Tea program
+		p := tea.NewProgram(&model,
+			tea.WithAltScreen(),
+			tea.WithMouseCellMotion(),
+		)
+
+		// Run the TUI
+		finalModel, err := p.Run()
+		if err != nil {
+			return fmt.Errorf("error running TUI: %w", err)
+		}
+
+		// Get the exit code from the model
+		if m, ok := finalModel.(*tui.TestModel); ok {
+			exitCode = m.GetExitCode()
+
+			// Update cache with actual count if we have it
+			if !m.IsAborted() && estimatedTestCount > 0 {
+				// The model tracks actual test count during execution
+				// We could enhance this to report back the actual count
+				cacheManager, cacheErr := cache.NewManager(logger)
+				// For now, just update the timestamp
+				if cacheErr == nil && cacheManager != nil {
+					pattern := strings.Join(testPackages, " ")
+					_ = cacheManager.UpdateTestCount(pattern, estimatedTestCount, len(testPackages))
+				}
+			}
+		}
+	} else {
+		// Use simple streaming mode (no TUI)
+		logger.Debug("Starting simple streaming mode", "format", format)
+
+		// For non-terminal formats or when not in a TTY
+		exitCode = stream.RunSimpleStream(
+			testPackages,
+			strings.Join(testArgs, " "),
+			outputFile,
+			coverProfile,
+			showFilter,
+			alert,
+			verbosityLevel,
+		)
+	}
+
+	// Process results if needed
+	if format != "terminal" || !utils.IsTTY() {
+		// Read and parse the JSON output
+		jsonData, err := os.ReadFile(outputFile)
+		if err != nil {
+			return fmt.Errorf("failed to read test output: %w", err)
+		}
+
+		// Parse the test events
+		jsonReader := bytes.NewReader(jsonData)
+		excludeMocks := viper.GetBool("coverage.exclude-mocks")
+		summary, err := parser.ParseTestJSON(jsonReader, coverProfile, excludeMocks)
+		if err != nil {
+			return fmt.Errorf("failed to parse test output: %w", err)
+		}
+
+		// Note: Metadata fields would need to be added to types.TestSummary if needed
+
+		// Handle different output formats
+		switch format {
+		case "json":
+			if err := output.WriteSummary(summary, "json", outputFile); err != nil {
+				return fmt.Errorf("failed to write JSON output: %w", err)
+			}
+			logger.Info("JSON output written", "file", outputFile)
+
+		case "markdown":
+			outputPath := strings.TrimSuffix(outputFile, filepath.Ext(outputFile)) + ".md"
+			if err := output.WriteSummary(summary, "markdown", outputPath); err != nil {
+				return fmt.Errorf("failed to write markdown output: %w", err)
+			}
+			logger.Info("Markdown output written", "file", outputPath)
+		}
+
+		// Handle CI comment posting if enabled
+		if ciMode && shouldPostComment(postStrategy, summary) {
+			// Post comment to CI system
+			if err := postGitHubComment(summary, cmd, logger); err != nil {
+				// Log error but don't fail the command
+				logger.Error("Failed to post CI comment", "error", err)
+			}
+		}
+	}
+
+	// Return with the test exit code
+	if exitCode != 0 {
+		return &testFailureError{code: exitCode}
+	}
+
+	return nil
+}
+
+// testFailureError is used to indicate test failures with specific exit codes.
+type testFailureError struct {
+	code int
+}
+
+func (e *testFailureError) Error() string {
+	return fmt.Sprintf("tests failed with exit code %d", e.code)
+}
+
+func (e *testFailureError) ExitCode() int {
+	return e.code
+}
