@@ -29,10 +29,10 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 
 	// Trim spaces
 	strategy = strings.TrimSpace(strategy)
-	
+
 	// Convert to lowercase for comparison
 	lower := strings.ToLower(strategy)
-	
+
 	// Handle boolean aliases
 	switch lower {
 	case "true", "yes", "1", "on":
@@ -40,7 +40,7 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 	case "false", "no", "0", "off":
 		return "never"
 	}
-	
+
 	// Normalize named strategies to lowercase
 	switch lower {
 	case "always", "never", "adaptive", "on-failure", "on-skip":
@@ -48,12 +48,12 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 	case "linux", "darwin", "windows":
 		return lower
 	}
-	
+
 	// Default to "never" if empty (when flag is present but empty)
 	if strategy == "" && flagPresent {
 		return "never"
 	}
-	
+
 	// Default to "on-failure" if still empty (when no flag and no env)
 	if strategy == "" {
 		return "on-failure"
@@ -151,7 +151,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 
 	// Log summary information
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
-	logger.Info("Test summary", 
+	logger.Info("Test summary",
 		"passed", len(summary.Passed),
 		"failed", len(summary.Failed),
 		"skipped", len(summary.Skipped),
