@@ -363,12 +363,17 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 	// Determine actual starting point for authentication
 	actualStartIndex := m.determineStartingIndex(chain, startIndex)
 
-	// Retrieve cached credentials if starting from a cached point
+	// Retrieve cached credentials if starting from a cached point.
+	// Important: if we start from index N (>0) because cached creds exist at that step,
+	// those creds are the OUTPUT of identity N and should be used as the base for the NEXT step (N+1).
 	if actualStartIndex > 0 {
 		currentCreds, err = m.retrieveCachedCredentials(chain, startIndex)
 		if err != nil {
 			log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
 			actualStartIndex = 0
+		} else {
+			// Skip re-authenticating the identity at actualStartIndex, since we already have its output
+			actualStartIndex = actualStartIndex + 1
 		}
 	}
 

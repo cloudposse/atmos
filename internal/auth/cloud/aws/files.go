@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/log"
 	ini "gopkg.in/ini.v1"
 
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -18,7 +19,7 @@ type AWSFileManager struct {
 
 // NewAWSFileManager creates a new AWS file manager instance
 func NewAWSFileManager() *AWSFileManager {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := homedir.Dir()
 	return &AWSFileManager{
 		baseDir: filepath.Join(homeDir, ".aws", "atmos"),
 	}
@@ -138,8 +139,6 @@ func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
 func (m *AWSFileManager) GetConfigPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "config")
 }
-
-
 
 // GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
 func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName string) []schema.EnvironmentVariable {
