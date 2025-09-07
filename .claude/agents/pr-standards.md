@@ -117,3 +117,59 @@ N/A
 ## Command Integration
 
 This agent is automatically invoked when using the `/pr` command to ensure compliance with standards.
+
+## Updating Existing PRs
+
+When pushing additional commits to an existing PR branch, the agent should:
+
+1. **Update the PR description** to reflect cumulative changes:
+   - Add new items to the `what` section for new functionality
+   - Update the `why` section if the justification has evolved
+   - Add new references if additional issues are addressed
+
+2. **Maintain chronological clarity**:
+   - Keep the original context but expand with new changes
+   - Don't remove original items unless they're no longer relevant
+   - Mark completed items if using a checklist format
+
+3. **Example of updating a PR**:
+
+   **Original PR (after first commit):**
+   ```markdown
+   ## what
+   - Refactored large files to meet lint requirements
+   - Created new package structure for better organization
+   
+   ## why
+   - Files over 500 lines violate lint standards
+   - Improves maintainability
+   
+   ## references
+   - Addresses `.golangci.yml` requirements
+   ```
+
+   **Updated PR (after adding documentation):**
+   ```markdown
+   ## what
+   - Refactored large files to meet lint requirements
+   - Created new package structure for better organization
+   - Added Claude agent and command for PR standards enforcement
+   - Updated CLAUDE.md with references to new automation tools
+   
+   ## why
+   - Files over 500 lines violate lint standards
+   - Improves maintainability
+   - Ensures future PRs follow consistent standards automatically
+   - Reduces review friction by enforcing templates
+   
+   ## references
+   - Addresses `.golangci.yml` requirements
+   - Implements PR standards from CLAUDE.md
+   - Creates `.claude/agents/pr-standards.md` for automation
+   ```
+
+4. **Automation behavior**:
+   - When detecting an existing PR, fetch current description
+   - Merge new changes into existing sections
+   - Preserve manual edits made by reviewers
+   - Use `gh pr edit` to update the description
