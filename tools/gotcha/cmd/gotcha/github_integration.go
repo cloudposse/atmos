@@ -97,7 +97,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	// Ensure GitHub token is available via viper (for the CI provider to use)
 	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
 	_ = viper.BindEnv("github-token", "GITHUB_TOKEN")
-	
+
 	// Get the comment UUID
 	_ = viper.BindPFlag("comment-uuid", cmd.Flags().Lookup("comment-uuid"))
 	_ = viper.BindEnv("comment-uuid", "GOTCHA_COMMENT_UUID", "COMMENT_UUID")

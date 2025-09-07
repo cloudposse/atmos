@@ -144,7 +144,7 @@ func initConfig() {
 func Execute() error {
 	// Initialize the logger immediately so it's available for command creation
 	initGlobalLogger()
-	
+
 	// Initialize configuration
 	cobra.OnInitialize(initConfig)
 
