@@ -205,7 +205,7 @@ func TestPlatformInHeader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.platform, func(t *testing.T) {
 			summary := &types.TestSummary{
-				Passed:  []types.TestResult{{Package: "test", Test: "Test1"}},
+				Passed: []types.TestResult{{Package: "test", Test: "Test1"}},
 			}
 
 			comment := GenerateAdaptiveComment(summary, "test-uuid", tt.platform)

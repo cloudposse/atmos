@@ -70,7 +70,7 @@ func shouldPostComment(strategy string, summary *types.TestSummary) bool {
 	result := shouldPostCommentWithOS(strategy, summary, runtime.GOOS)
 	// Debug logging to trace decision
 	if globalLogger != nil {
-		globalLogger.Debug("shouldPostComment decision", 
+		globalLogger.Debug("shouldPostComment decision",
 			"strategy", strategy,
 			"os", runtime.GOOS,
 			"result", result)
@@ -82,7 +82,7 @@ func shouldPostComment(strategy string, summary *types.TestSummary) bool {
 func shouldPostCommentWithOS(strategy string, summary *types.TestSummary, goos string) bool {
 	// Normalize strategy (remove dashes for alternative forms)
 	normalizedStrategy := strings.ReplaceAll(strategy, "-", "")
-	
+
 	switch normalizedStrategy {
 	case "always":
 		return true
@@ -123,12 +123,12 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 
 	// Comment UUID is required for posting
 	if commentUUID == "" {
-		logger.Error("Comment UUID is required but not set", 
+		logger.Error("Comment UUID is required but not set",
 			"GOTCHA_COMMENT_UUID", os.Getenv("GOTCHA_COMMENT_UUID"),
 			"COMMENT_UUID", os.Getenv("COMMENT_UUID"))
 		return fmt.Errorf("%w", ErrCommentUUIDRequired)
 	}
-	
+
 	logger.Debug("Comment UUID found", "uuid", commentUUID)
 
 	// Get the CI provider
@@ -149,8 +149,8 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		logger.Error("Failed to detect CI context", "error", err)
 		return fmt.Errorf("failed to detect CI context: %w", err)
 	}
-	
-	logger.Debug("CI context detected", 
+
+	logger.Debug("CI context detected",
 		"repo", ctx.GetRepoName(),
 		"pr", ctx.GetPRNumber())
 
@@ -161,20 +161,20 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 			"provider", provider.Provider())
 		return nil
 	}
-	
+
 	logger.Debug("Comment manager created successfully")
 
 	// Generate the comment content
 	commentContent := markdown.GenerateGitHubComment(summary, commentUUID)
 
 	// Post the comment
-	logger.Info("Posting comment to GitHub PR", 
+	logger.Info("Posting comment to GitHub PR",
 		"contentLength", len(commentContent),
 		"repo", ctx.GetRepoName(),
 		"pr", ctx.GetPRNumber())
-		
+
 	if err := commentManager.PostOrUpdateComment(context.Background(), ctx, commentContent); err != nil {
-		logger.Error("Failed to post comment to GitHub", 
+		logger.Error("Failed to post comment to GitHub",
 			"error", err,
 			"repo", ctx.GetRepoName(),
 			"pr", ctx.GetPRNumber())
