@@ -127,10 +127,8 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *sch
 
 	// Convert to our credential format
 	expiration := ""
-	expirationTime := time.Time{}
 	if roleCredsResp.RoleCredentials.Expiration != 0 {
-		expirationTime = time.Unix(roleCredsResp.RoleCredentials.Expiration/1000, 0)
-		expiration = expirationTime.Format(time.RFC3339)
+		expiration = time.Unix(roleCredsResp.RoleCredentials.Expiration/1000, 0).Format(time.RFC3339)
 	}
 
 	creds := &schema.Credentials{

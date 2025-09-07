@@ -91,4 +91,7 @@ var (
 	ErrDefaultIdentity              = errors.New("default identity error")
 	ErrAwsAuth                      = errors.New("aws auth error")
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
+
+	ErrInvalidSubcommand = errors.New("invalid subcommand")
+	ErrSubcommandFailed  = errors.New("subcommand failed")
 )

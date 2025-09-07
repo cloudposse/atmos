@@ -68,7 +68,6 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 		validator,
 		stackInfo,
 	)
-	log.Info("Auth manager created", "authManager", authManager, "stackInfo", stackInfo)
 	if err != nil {
 		return fmt.Errorf("%w: failed to create auth manager: %v", errUtils.ErrAuthManager, err)
 	}

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/types"
@@ -57,12 +57,14 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	}
 
 	// Get the OIDC token from GitHub Actions environment
-	token := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	_ = viper.BindEnv("github.oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	token := viper.GetString("github.oidc.request_token")
 	if token == "" {
 		return nil, fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_TOKEN not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
 	}
 
-	requestURL := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+	_ = viper.BindEnv("github.oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+	requestURL := viper.GetString("github.oidc.request_url")
 	if requestURL == "" {
 		return nil, fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
 	}
@@ -97,7 +99,8 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 
 // isGitHubActions checks if we're running in GitHub Actions environment.
 func (p *oidcProvider) isGitHubActions() bool {
-	return os.Getenv("GITHUB_ACTIONS") == "true"
+	_ = viper.BindEnv("github.actions", "GITHUB_ACTIONS")
+	return viper.GetString("github.actions") == "true"
 }
 
 // getOIDCToken retrieves the JWT token from GitHub's OIDC endpoint.

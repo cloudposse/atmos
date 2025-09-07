@@ -56,22 +56,6 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 		return nil, fmt.Errorf("%w: base AWS credentials are required", errUtils.ErrInvalidAuthConfig)
 	}
 
-	prefix := baseCreds.AWS.AccessKeyID
-	if len(prefix) > 10 {
-		prefix = prefix[:10]
-	}
-
-	secretPrefix := baseCreds.AWS.SecretAccessKey
-	if len(secretPrefix) > 10 {
-		secretPrefix = secretPrefix[:10]
-	}
-
-	log.Debug("Assume role authentication with base credentials",
-		"identity", i.name,
-		"baseAccessKeyId", prefix+"...",
-		"baseSecretAccessKey", secretPrefix+"...",
-		"hasSessionToken", baseCreds.AWS.SessionToken != "")
-
 	var roleArn string
 	if roleArn, ok := i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
 		return nil, fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidIdentityConfig)
@@ -131,10 +115,8 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 	}
 	// Convert to our credential format.
 	expiration := ""
-	expirationTime := time.Time{}
 	if result.Credentials.Expiration != nil {
-		expirationTime = *result.Credentials.Expiration
-		expiration = expirationTime.Format(time.RFC3339)
+		expiration = result.Credentials.Expiration.Format(time.RFC3339)
 	}
 
 	creds := &schema.Credentials{

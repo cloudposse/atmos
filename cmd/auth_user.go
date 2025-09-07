@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/huh"
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -32,8 +33,8 @@ var authUserConfigureCmd = &cobra.Command{
 
 		// Gather identities that use a provider of type aws/user.
 		var selectable []string
-		if atmosConfig.Auth == nil || atmosConfig.Auth.Identities == nil {
-			return fmt.Errorf("%w: no auth identities configured in atmos.yaml", errUtils.ErrStaticError)
+		if atmosConfig.Auth.Identities == nil {
+			return fmt.Errorf("%w: no auth identities configured in atmos.yaml", errUtils.ErrInvalidAuthConfig)
 		}
 		defaultChoice := ""
 		for ident := range atmosConfig.Auth.Identities {
@@ -46,7 +47,7 @@ var authUserConfigureCmd = &cobra.Command{
 			}
 		}
 		if len(selectable) == 0 {
-			return fmt.Errorf("no identities configured for provider type 'aws/user'. Define one under auth.providers and auth.identities in atmos.yaml")
+			return fmt.Errorf("%w: no identities configured for provider type 'aws/user'. Define one under auth.identities in atmos.yaml", errUtils.ErrInvalidAuthConfig)
 		}
 
 		// Choose identity
