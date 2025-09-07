@@ -155,17 +155,17 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Get CI settings
 	ciMode, _ := cmd.Flags().GetBool("ci")
-	
+
 	// Bind flags to viper for environment variable support
 	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
 	_ = viper.BindEnv("post-comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
 	postStrategy := viper.GetString("post-comment")
-	
+
 	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
 	_ = viper.BindEnv("github-token", "GITHUB_TOKEN")
-	
+
 	_ = viper.BindPFlag("exclude-mocks", cmd.Flags().Lookup("exclude-mocks"))
-	
+
 	// Check if post-comment flag was actually set by the user
 	postFlagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
 
@@ -368,16 +368,16 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		}
 
 		// Handle CI comment posting if enabled
-		logger.Debug("Checking if should post comment", 
-			"ciMode", ciMode, 
+		logger.Debug("Checking if should post comment",
+			"ciMode", ciMode,
 			"postStrategy", postStrategy,
 			"passed", len(summary.Passed),
 			"failed", len(summary.Failed),
 			"skipped", len(summary.Skipped))
-			
+
 		shouldPost := shouldPostComment(postStrategy, summary)
 		logger.Debug("Should post decision", "shouldPost", shouldPost)
-		
+
 		if ciMode && shouldPost {
 			logger.Info("Attempting to post GitHub comment", "strategy", postStrategy)
 			// Post comment to CI system
