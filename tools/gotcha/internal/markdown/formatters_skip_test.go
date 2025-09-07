@@ -91,4 +91,3 @@ func TestWriteSkippedTestsTable_WithReasons(t *testing.T) {
 		})
 	}
 }
-

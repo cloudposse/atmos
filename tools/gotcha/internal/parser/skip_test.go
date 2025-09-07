@@ -15,11 +15,11 @@ func TestParseSkipReason(t *testing.T) {
 
 	reader := strings.NewReader(input)
 	summary, err := ParseTestJSON(reader, "", false)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, summary)
 	assert.Len(t, summary.Skipped, 1)
-	
+
 	if len(summary.Skipped) > 0 {
 		skip := summary.Skipped[0]
 		assert.Equal(t, "TestCopyFile_FailChmod", skip.Test)
