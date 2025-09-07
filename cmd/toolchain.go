@@ -63,8 +63,6 @@ func init() {
 	ToolChainCmd.AddCommand(toolchainSetCmd)
 	ToolChainCmd.AddCommand(toolchainGetCmd)
 	ToolChainCmd.AddCommand(toolchainCleanCmd)
-	// toolVersionsCmd removed - functionality merged into listCmd, but file kept as library
-	ToolChainCmd.AddCommand(toolchainRunCmd)
 	ToolChainCmd.AddCommand(toolchainExecCmd)
 	ToolChainCmd.AddCommand(toolchainListCmd)
 	ToolChainCmd.AddCommand(toolchainInstallCmd)
