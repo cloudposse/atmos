@@ -103,7 +103,23 @@ jobs:
     name: PR Semver Labels
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
     steps:
+      # Checkout is required for local composite actions
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+
+      # Remove Dependabot's auto-added semver labels
+      # Dependabot PRs should only have the 'no-release' label since
+      # dependency updates don't determine Atmos releases.
+      - name: Clean up Dependabot labels
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+        uses: ./.github/actions/remove-dependabot-semver-labels
+
+      # Check for required semver labels
+      # Every PR must have exactly one: major, minor, patch, or no-release
       - uses: mheap/github-action-required-labels@v5
         with:
           mode: exactly
