@@ -2,10 +2,10 @@ package github
 
 import (
 	"context"
-	"os"
 
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 func init() {
@@ -52,7 +52,7 @@ func (g *GitHubIntegration) CreateCommentManager(ctx ci.Context, logger *log.Log
 
 // GetJobSummaryWriter returns a GitHub job summary writer if available.
 func (g *GitHubIntegration) GetJobSummaryWriter() ci.JobSummaryWriter {
-	if os.Getenv("GITHUB_STEP_SUMMARY") != "" {
+	if config.GetGitHubStepSummary() != "" {
 		return &GitHubJobSummaryWriter{}
 	}
 	return nil
@@ -71,7 +71,7 @@ func (g *GitHubIntegration) Provider() string {
 
 // IsAvailable checks if GitHub Actions environment is available.
 func (g *GitHubIntegration) IsAvailable() bool {
-	return os.Getenv("GITHUB_ACTIONS") != ""
+	return config.IsGitHubActions()
 }
 
 // gitHubContext wraps the GitHub-specific Context to implement ci.Context.

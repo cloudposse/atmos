@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
@@ -77,9 +78,9 @@ This is the default command when running gotcha without arguments.`,
 // The logic is now split across:
 // - stream_config.go: Configuration extraction and validation
 // - stream_execution.go: Test execution and output processing
-// - stream_refactored.go: Main orchestration logic
+// - stream_orchestrator.go: Main orchestration logic
 func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
-	return runStreamRefactored(cmd, args, logger)
+	return orchestrateStream(cmd, args, logger)
 }
 
 // runStreamOld is the original 324-line implementation preserved for reference.
@@ -184,9 +185,11 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	postStrategy = normalizePostingStrategy(postStrategy, postFlagPresent)
 
 	// Auto-detect CI mode if not explicitly set
-	if !ciMode && (os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "") {
+	if !ciMode && config.IsCI() {
 		ciMode = true
-		logger.Debug("CI mode auto-detected", "CI", os.Getenv("CI"), "GITHUB_ACTIONS", os.Getenv("GITHUB_ACTIONS"))
+		logger.Debug("CI mode auto-detected", 
+			"CI", viper.GetBool("ci"), 
+			"GITHUB_ACTIONS", viper.GetBool("github.actions"))
 	}
 
 	// If CI mode and format is terminal, switch to a more appropriate format

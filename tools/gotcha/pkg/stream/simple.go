@@ -2,11 +2,11 @@ package stream
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
@@ -16,8 +16,8 @@ func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, 
 	profile := tui.ConfigureColors()
 
 	// Debug: Log the detected color profile in CI
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-		logger.GetLogger().Debug("Color profile detected", "profile", tui.ProfileName(profile), "CI", os.Getenv("CI"), "GITHUB_ACTIONS", os.Getenv("GITHUB_ACTIONS"))
+	if config.IsCI() {
+		logger.GetLogger().Debug("Color profile detected", "profile", tui.ProfileName(profile), "CI", config.IsCI(), "GITHUB_ACTIONS", config.IsGitHubActions())
 	}
 
 	// Build the go test command

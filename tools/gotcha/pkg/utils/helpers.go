@@ -7,10 +7,10 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 
 	"github.com/mattn/go-isatty"
-	"github.com/spf13/viper"
 )
 
 // IsValidShowFilter validates that the show filter is one of the allowed values.
@@ -100,14 +100,12 @@ func FilterPackages(packages []string, includePatterns, excludePatterns string) 
 // Uses cross-platform detection that works on Windows, macOS, and Linux.
 func IsTTY() bool {
 	// Provide an environment override
-	_ = viper.BindEnv("GOTCHA_FORCE_NO_TTY", "FORCE_NO_TTY")
-	if viper.GetString("GOTCHA_FORCE_NO_TTY") != "" {
+	if config.ForceNoTTY() {
 		return false
 	}
 
 	// Debug: Force TTY mode for testing (but only if TTY is actually usable)
-	_ = viper.BindEnv("GOTCHA_FORCE_TTY", "FORCE_TTY")
-	if viper.GetString("GOTCHA_FORCE_TTY") != "" {
+	if config.ForceTTY() {
 		// Use cross-platform TTY detection
 		stdoutTTY := isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 		stdinTTY := isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
@@ -121,7 +119,7 @@ func IsTTY() bool {
 
 	// Windows CI environments often report as TTY but aren't really interactive
 	// Disable TUI mode in CI environments on Windows to prevent issues
-	if runtime.GOOS == "windows" && (os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "") {
+	if runtime.GOOS == "windows" && config.IsCI() {
 		return false
 	}
 

@@ -10,9 +10,10 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
-// runStreamRefactored is the new simplified entry point for the stream command.
-// This replaces the 324-line runStream function with a clean, modular approach.
-func runStreamRefactored(cmd *cobra.Command, args []string, logger *log.Logger) error {
+// orchestrateStream coordinates the execution of the stream command.
+// This function orchestrates configuration extraction, test preparation,
+// and delegates to appropriate execution modes (TUI or CI).
+func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Step 1: Extract and validate configuration
 	config, err := extractStreamConfig(cmd, args, logger)
 	if err != nil {

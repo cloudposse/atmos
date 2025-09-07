@@ -18,6 +18,8 @@ import (
 
 	// Import CI integrations to register them
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github"
+	
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 // Main package static errors.
@@ -103,7 +105,7 @@ func initGlobalLogger() {
 	globalLogger.SetLevel(logLevel)
 
 	// Show timestamp in non-CI environments
-	if os.Getenv("CI") == "" && os.Getenv("GITHUB_ACTIONS") == "" {
+	if !config.IsCI() {
 		globalLogger.SetTimeFormat("15:04:05")
 	} else {
 		// In CI, don't show timestamps as CI systems add their own
@@ -142,6 +144,9 @@ func initConfig() {
 
 // Execute runs the root command.
 func Execute() error {
+	// Initialize environment configuration first to avoid os.Getenv usage
+	config.InitEnvironment()
+	
 	// Initialize the logger immediately so it's available for command creation
 	initGlobalLogger()
 

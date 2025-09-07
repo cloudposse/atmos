@@ -3,9 +3,9 @@ package markdown
 import (
 	"fmt"
 	"io"
-	"os"
 	"time"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -14,14 +14,12 @@ import (
 // This is the main function that orchestrates writing a complete test summary.
 func WriteContent(output io.Writer, summary *types.TestSummary, format string) {
 	// Add UUID magic comment to prevent duplicate GitHub comments.
-	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
-	if uuid := os.Getenv("GOTCHA_COMMENT_UUID"); uuid != "" {
+	if uuid := config.GetCommentUUID(); uuid != "" {
 		fmt.Fprintf(output, "<!-- test-summary-uuid: %s -->\n\n", uuid)
 	}
 
 	// Add timestamp for local GitHub format runs.
-	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
-	if format == constants.FormatGitHub && os.Getenv("GITHUB_STEP_SUMMARY") == "" {
+	if format == constants.FormatGitHub && config.GetGitHubStepSummary() == "" {
 		fmt.Fprintf(output, "_Generated: %s_\n\n", time.Now().Format("2006-01-02 15:04:05"))
 	}
 

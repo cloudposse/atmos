@@ -13,6 +13,7 @@ import (
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	pkgErrors "github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 )
 
@@ -77,9 +78,11 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	postStrategy = normalizePostingStrategy(postStrategy, postFlagPresent)
 
 	// Auto-detect CI mode if not explicitly set
-	if !ciMode && (os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "") {
+	if !ciMode && config.IsCI() {
 		ciMode = true
-		logger.Debug("CI mode auto-detected", "CI", os.Getenv("CI"), "GITHUB_ACTIONS", os.Getenv("GITHUB_ACTIONS"))
+		logger.Debug("CI mode auto-detected", 
+			"CI", viper.GetBool("ci"), 
+			"GITHUB_ACTIONS", viper.GetBool("github.actions"))
 	}
 
 	// Read the input file

@@ -2,11 +2,11 @@ package mock
 
 import (
 	"fmt"
-	"os"
 	"sync"
 
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 func init() {
@@ -159,7 +159,7 @@ func (m *MockIntegration) IsAvailable() bool {
 	defer m.mu.RUnlock()
 
 	// Check for GOTCHA_USE_MOCK environment variable
-	if os.Getenv("GOTCHA_USE_MOCK") == "true" {
+	if config.UseMock() {
 		return true
 	}
 

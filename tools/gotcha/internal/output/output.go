@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -105,8 +106,7 @@ func openOutput(format, outputFile string) (io.Writer, string, error) {
 
 // openGitHubOutput handles GitHub-specific output logic.
 func openGitHubOutput(outputFile string) (io.Writer, string, error) {
-	//nolint:forbidigo // Standalone tool - direct env var access is appropriate.
-	githubStepSummary := os.Getenv("GITHUB_STEP_SUMMARY")
+	githubStepSummary := config.GetGitHubStepSummary()
 
 	if githubStepSummary != "" {
 		// Running in GitHub Actions - write to GITHUB_STEP_SUMMARY.

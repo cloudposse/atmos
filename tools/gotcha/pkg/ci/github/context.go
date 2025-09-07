@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 // Context represents GitHub Actions environment information.
@@ -24,23 +25,15 @@ type Context struct {
 
 // DetectContext checks if running in GitHub Actions and extracts context information.
 func DetectContext() (*Context, error) {
-	// Bind environment variables using viper
-	_ = viper.BindEnv("GITHUB_ACTIONS")
-	_ = viper.BindEnv("GITHUB_REPOSITORY")
-	_ = viper.BindEnv("GITHUB_EVENT_NAME")
-	_ = viper.BindEnv("GITHUB_EVENT_PATH")
-	_ = viper.BindEnv("GOTCHA_COMMENT_UUID")
-	_ = viper.BindEnv("GOTCHA_GITHUB_TOKEN", "GITHUB_TOKEN")
-
-	// Check if running in GitHub Actions - use os.Getenv directly for reliability
-	isActions := os.Getenv("GITHUB_ACTIONS") != ""
+	// Check if running in GitHub Actions
+	isActions := config.IsGitHubActions()
 
 	if !isActions {
 		return nil, ErrNotGitHubActions
 	}
 
-	// Parse repository (format: owner/repo) - use os.Getenv for CI env vars
-	repository := os.Getenv("GITHUB_REPOSITORY")
+	// Parse repository (format: owner/repo)
+	repository := config.GetGitHubRepository()
 	if repository == "" {
 		return nil, ErrRepositoryNotSet
 	}
@@ -53,8 +46,8 @@ func DetectContext() (*Context, error) {
 	owner := parts[0]
 	repo := parts[1]
 
-	// Get event information - use os.Getenv for CI env vars
-	eventName := os.Getenv("GITHUB_EVENT_NAME")
+	// Get event information
+	eventName := config.GetGitHubEventName()
 	if eventName == "" {
 		return nil, ErrEventNameNotSet
 	}
@@ -65,22 +58,14 @@ func DetectContext() (*Context, error) {
 		return nil, fmt.Errorf("failed to extract PR number: %w", err)
 	}
 
-	// Get comment UUID - this can use viper since it might be configured
-	commentUUID := viper.GetString("GOTCHA_COMMENT_UUID")
-	if commentUUID == "" {
-		// Fall back to env var
-		commentUUID = os.Getenv("GOTCHA_COMMENT_UUID")
-	}
+	// Get comment UUID
+	commentUUID := config.GetCommentUUID()
 	if commentUUID == "" {
 		return nil, ErrCommentUUIDNotSet
 	}
 
-	// Get GitHub token - check both GOTCHA_GITHUB_TOKEN and GITHUB_TOKEN
-	// Use os.Getenv directly for reliability in CI environments
-	token := os.Getenv("GOTCHA_GITHUB_TOKEN")
-	if token == "" {
-		token = os.Getenv("GITHUB_TOKEN")
-	}
+	// Get GitHub token
+	token := config.GetGitHubToken()
 	if token == "" {
 		return nil, ErrGitHubTokenNotAvailable
 	}
@@ -111,8 +96,8 @@ func extractPRNumber(eventName string) (int, error) {
 
 // getPRNumberFromEventPayload reads the GitHub event payload and extracts PR number.
 func getPRNumberFromEventPayload() (int, error) {
-	// Use os.Getenv for CI env vars
-	eventPath := os.Getenv("GITHUB_EVENT_PATH")
+	// Get event path from configuration
+	eventPath := config.GetGitHubEventPath()
 	if eventPath == "" {
 		return 0, ErrEventPathNotSet
 	}

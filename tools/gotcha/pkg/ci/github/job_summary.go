@@ -3,6 +3,8 @@ package github
 import (
 	"fmt"
 	"os"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 // GitHubJobSummaryWriter implements ci.JobSummaryWriter for GitHub Actions.
@@ -10,7 +12,7 @@ type GitHubJobSummaryWriter struct{}
 
 // WriteJobSummary writes content to the GitHub Actions step summary.
 func (w *GitHubJobSummaryWriter) WriteJobSummary(content string) (string, error) {
-	summaryPath := os.Getenv("GITHUB_STEP_SUMMARY")
+	summaryPath := config.GetGitHubStepSummary()
 	if summaryPath == "" {
 		return "", nil
 	}
@@ -31,10 +33,10 @@ func (w *GitHubJobSummaryWriter) WriteJobSummary(content string) (string, error)
 
 // IsJobSummarySupported checks if GitHub step summaries are supported.
 func (w *GitHubJobSummaryWriter) IsJobSummarySupported() bool {
-	return os.Getenv("GITHUB_STEP_SUMMARY") != ""
+	return config.GetGitHubStepSummary() != ""
 }
 
 // GetJobSummaryPath returns the path to the GitHub step summary file.
 func (w *GitHubJobSummaryWriter) GetJobSummaryPath() string {
-	return os.Getenv("GITHUB_STEP_SUMMARY")
+	return config.GetGitHubStepSummary()
 }

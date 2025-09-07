@@ -1,10 +1,8 @@
 package ci
 
 import (
-	"os"
-
 	"github.com/charmbracelet/log"
-	"github.com/spf13/viper"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 // IntegrationFactory is a function that creates a CI integration.
@@ -19,8 +17,7 @@ var integrations = map[string]IntegrationFactory{}
 // Returns nil if no supported integration is available, even if IsCI() returns true.
 func DetectIntegration(logger *log.Logger) Integration {
 	// Check for manual override via environment variable or config
-	_ = viper.BindEnv("GOTCHA_CI_PROVIDER", "CI_PROVIDER")
-	if provider := viper.GetString("GOTCHA_CI_PROVIDER"); provider != "" {
+	if provider := config.GetCIProvider(); provider != "" {
 		if factory, ok := integrations[provider]; ok {
 			integration := factory(logger)
 			if integration.IsAvailable() {
@@ -34,7 +31,7 @@ func DetectIntegration(logger *log.Logger) Integration {
 	}
 
 	// Check for mock integration first if GOTCHA_USE_MOCK is set
-	if os.Getenv("GOTCHA_USE_MOCK") == "true" {
+	if config.UseMock() {
 		if factory, ok := integrations["mock"]; ok {
 			integration := factory(logger)
 			if integration.IsAvailable() {
@@ -95,24 +92,6 @@ func GetSupportedProviders() []string {
 // For example, we may be running in GitLab CI (IsCI() returns true) but
 // not have a GitLab integration (DetectIntegration() returns nil).
 func IsCI() bool {
-	// Check common CI environment variables
-	ciEnvVars := []string{
-		"CI",
-		"CONTINUOUS_INTEGRATION",
-		"GITHUB_ACTIONS",
-		"GITLAB_CI",
-		"BITBUCKET_PIPELINES",
-		"SYSTEM_TEAMFOUNDATIONCOLLECTIONURI", // Azure DevOps
-		"JENKINS_URL",
-		"CIRCLECI",
-		"TRAVIS",
-	}
-
-	for _, envVar := range ciEnvVars {
-		if os.Getenv(envVar) != "" {
-			return true
-		}
-	}
-
-	return false
+	// Use the centralized config package for CI detection
+	return config.IsCI()
 }

@@ -164,7 +164,43 @@ func (m *TestModel) readNextLine() tea.Cmd {
 }
 
 // Update handles messages and updates the model.
+// Update processes incoming messages and updates the model state.
+// Refactored to use message handlers to reduce complexity.
 func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		return m.handleKeyMsg(msg)
+
+	case tea.WindowSizeMsg:
+		m.handleWindowSizeMsg(msg)
+		return m, nil
+
+	case subprocessReadyMsg:
+		return m, m.handleSubprocessReady(msg)
+
+	case streamOutputMsg:
+		return m, m.handleStreamOutput(msg)
+
+	case testFailMsg:
+		return m, m.handleTestFail()
+
+	case testCompleteMsg:
+		return m, m.handleTestComplete(msg)
+
+	case spinner.TickMsg:
+		return m, m.handleSpinnerTick(msg)
+
+	case progress.FrameMsg:
+		return m, m.handleProgressFrame(msg)
+
+	default:
+		return m, nil
+	}
+}
+
+// Update processes incoming messages and updates the model - OLD VERSION.
+// TODO: Remove this after verifying the refactored version works.
+func (m *TestModel) UpdateOld(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
