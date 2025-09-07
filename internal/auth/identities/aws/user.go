@@ -11,11 +11,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/internal/auth/cloud/aws"
 	atmosCredentials "github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
-	errUtils "github.com/cloudposse/atmos/pkg/utils/error"
 )
 
 // userIdentity implements AWS user identity (passthrough)

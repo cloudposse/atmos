@@ -9,10 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/internal/auth/cloud/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
-	errUtils "github.com/cloudposse/atmos/pkg/utils/error"
 )
 
 // permissionSetIdentity implements AWS permission set identity

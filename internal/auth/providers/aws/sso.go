@@ -10,9 +10,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
-	errUtils "github.com/cloudposse/atmos/pkg/utils/error"
 )
 
 // ssoProvider implements AWS IAM Identity Center authentication
@@ -26,15 +26,15 @@ type ssoProvider struct {
 // NewSSOProvider creates a new AWS SSO provider
 func NewSSOProvider(name string, config *schema.Provider) (*ssoProvider, error) {
 	if config.Kind != "aws/iam-identity-center" {
-		return nil, fmt.Errorf("%w: invalid provider kind for SSO provider: %s", errUtils.ErrStaticError, config.Kind)
+		return nil, fmt.Errorf("%w: invalid provider kind for SSO provider: %s", errUtils.ErrInvalidProviderKind, config.Kind)
 	}
 
 	if config.StartURL == "" {
-		return nil, fmt.Errorf("%w: start_url is required for AWS SSO provider", errUtils.ErrStaticError)
+		return nil, fmt.Errorf("%w: start_url is required for AWS SSO provider", errUtils.ErrInvalidProviderConfig)
 	}
 
 	if config.Region == "" {
-		return nil, fmt.Errorf("%w: region is required for AWS SSO provider", errUtils.ErrStaticError)
+		return nil, fmt.Errorf("%w: region is required for AWS SSO provider", errUtils.ErrInvalidProviderConfig)
 	}
 
 	return &ssoProvider{
@@ -78,7 +78,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 		ClientType: aws.String("public"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to register SSO client: %v", errUtils.ErrStaticError, err)
+		return nil, fmt.Errorf("%w: failed to register SSO client: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Start device authorization
@@ -88,7 +88,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 		StartUrl:     aws.String(p.startURL),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to start device authorization: %v", errUtils.ErrStaticError, err)
+		return nil, fmt.Errorf("%w: failed to start device authorization: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Display user code and verification URI
@@ -135,11 +135,11 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 		}
 
 		// Any other error is terminal.
-		return nil, fmt.Errorf("%w: failed to create token: %v", errUtils.ErrStaticError, err)
+		return nil, fmt.Errorf("%w: failed to create token: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	if accessToken == "" {
-		return nil, fmt.Errorf("%w: authentication timed out", errUtils.ErrStaticError)
+		return nil, fmt.Errorf("%w: authentication timed out", errUtils.ErrAuthenticationFailed)
 	}
 
 	// Calculate expiration time
@@ -164,10 +164,10 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 // Validate validates the provider configuration
 func (p *ssoProvider) Validate() error {
 	if p.startURL == "" {
-		return fmt.Errorf("%w: start_url is required", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: start_url is required", errUtils.ErrInvalidProviderConfig)
 	}
 	if p.region == "" {
-		return fmt.Errorf("%w: region is required", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: region is required", errUtils.ErrInvalidProviderConfig)
 	}
 	return nil
 }

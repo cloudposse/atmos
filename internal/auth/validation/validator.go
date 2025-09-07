@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
-	errUtils "github.com/cloudposse/atmos/pkg/utils/error"
 )
 
 // validator implements the Validator interface.
@@ -21,7 +21,7 @@ func NewValidator() types.Validator {
 // ValidateAuthConfig validates the entire auth configuration
 func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 	if config == nil {
-		return fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
 
 	// Validate logs configuration
@@ -73,11 +73,11 @@ func (v *validator) ValidateLogsConfig(logs *schema.LogsConfig) error {
 // ValidateProvider validates a provider configuration.
 func (v *validator) ValidateProvider(name string, provider *schema.Provider) error {
 	if name == "" {
-		return fmt.Errorf("%w: provider name cannot be empty", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: provider name cannot be empty", errUtils.ErrInvalidProviderConfig)
 	}
 
 	if provider.Kind == "" {
-		return fmt.Errorf("%w: provider kind is required", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: provider kind is required", errUtils.ErrInvalidProviderConfig)
 	}
 
 	// TODO replace with Provider Interface Validate()
@@ -99,11 +99,11 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 // ValidateIdentity validates an identity configuration
 func (v *validator) ValidateIdentity(name string, identity *schema.Identity, providers map[string]*schema.Provider) error {
 	if name == "" {
-		return fmt.Errorf("%w: identity name cannot be empty", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: identity name cannot be empty", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	if identity.Kind == "" {
-		return fmt.Errorf("%w: identity kind is required", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: identity kind is required", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	// Validate via configuration - AWS User identities don't require via provider

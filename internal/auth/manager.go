@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/identities/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -46,12 +47,12 @@ func NewAuthManager(
 
 	// Initialize providers
 	if err := m.initializeProviders(); err != nil {
-		return nil, fmt.Errorf("%w: failed to initialize providers: %v", errUtils.ErrStaticError, err)
+		return nil, fmt.Errorf("%w: failed to initialize providers: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Initialize identities
 	if err := m.initializeIdentities(); err != nil {
-		return nil, fmt.Errorf("%w: failed to initialize identities: %v", errUtils.ErrStaticError, err)
+		return nil, fmt.Errorf("%w: failed to initialize identities: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	return m, nil
@@ -64,18 +65,18 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 
 // Authenticate performs hierarchical authentication for the specified identity
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
-	// If no identity specified, use default
+	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
-		return nil, fmt.Errorf("%w: no identity specified", errUtils.ErrStaticError)
+		return nil, fmt.Errorf("%w: no identity specified", errUtils.ErrInvalidAuthConfig)
 	}
 	if _, exists := m.identities[identityName]; !exists {
-		return nil, fmt.Errorf("%w: identity %q not found", errUtils.ErrStaticError, identityName)
+		return nil, fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
 	}
 
 	// Build the complete authentication chain
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to build authentication chain for identity %q: %v", errUtils.ErrStaticError, identityName, err)
+		return nil, fmt.Errorf("%w: failed to build authentication chain for identity %q: %v", errUtils.ErrInvalidAuthConfig, identityName, err)
 	}
 
 	log.Debug("Authentication chain discovered", "identity", identityName, "chainLength", len(chain), "chain", chain)
@@ -83,14 +84,14 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 	// Perform hierarchical credential validation (bottom-up)
 	finalCreds, err := m.authenticateHierarchical(ctx, chain, identityName)
 	if err != nil {
-		return nil, fmt.Errorf("%w: hierarchical authentication failed: %v", errUtils.ErrStaticError, err)
+		return nil, fmt.Errorf("%w: hierarchical authentication failed: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Call post-authentication hook on the identity (now part of Identity interface)
 	if identity, exists := m.identities[identityName]; exists {
 		providerName := chain[0]
 		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
-			return nil, fmt.Errorf("%w: post-authentication hook failed: %v", errUtils.ErrStaticError, err)
+			return nil, fmt.Errorf("%w: post-authentication hook failed: %v", errUtils.ErrAuthenticationFailed, err)
 		}
 	}
 
@@ -114,12 +115,12 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*schema.Whoa
 	// Try to retrieve credentials for this specific identity
 	creds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
-		return nil, fmt.Errorf("%w: no credentials found for identity %q: %v", errUtils.ErrStaticError, identityName, err)
+		return nil, fmt.Errorf("%w: no credentials found for identity %q: %v", errUtils.ErrAuthenticationFailed, identityName, err)
 	}
 
 	// Check if credentials are expired
 	if expired, err := m.credentialStore.IsExpired(identityName); err != nil || expired {
-		return nil, fmt.Errorf("%w: credentials for identity %q are expired or invalid", errUtils.ErrStaticError, identityName)
+		return nil, fmt.Errorf("%w: credentials for identity %q are expired or invalid", errUtils.ErrAuthenticationFailed, identityName)
 	}
 
 	return m.buildWhoamiInfo(identityName, creds), nil
@@ -145,7 +146,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	case 0:
 		// No default identities found
 		if telemetry.IsCI() {
-			return "", fmt.Errorf("%w: no default identity configured", errUtils.ErrStaticError)
+			return "", fmt.Errorf("%w: no default identity configured", errUtils.ErrInvalidAuthConfig)
 		}
 		// In interactive mode, prompt user to choose from all identities
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
@@ -157,7 +158,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	default:
 		// Multiple default identities found
 		if telemetry.IsCI() {
-			return "", fmt.Errorf("%w: multiple default identities found: %v", errUtils.ErrStaticError, defaultIdentities)
+			return "", fmt.Errorf("%w: multiple default identities found: %v", errUtils.ErrInvalidAuthConfig, defaultIdentities)
 		}
 		// In interactive mode, prompt user to choose from default identities
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
@@ -167,7 +168,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 // promptForIdentity prompts the user to select an identity from the given list
 func (m *manager) promptForIdentity(message string, identities []string) (string, error) {
 	if len(identities) == 0 {
-		return "", fmt.Errorf("%w: no identities available", errUtils.ErrStaticError)
+		return "", fmt.Errorf("%w: no identities available", errUtils.ErrInvalidAuthConfig)
 	}
 
 	var selectedIdentity string
@@ -181,7 +182,7 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	)
 
 	if err := form.Run(); err != nil {
-		return "", fmt.Errorf("%w: failed to select identity: %v", errUtils.ErrStaticError, err)
+		return "", fmt.Errorf("%w: failed to select identity: %v", errUtils.ErrUnsupportedInputType, err)
 	}
 
 	return selectedIdentity, nil
@@ -210,7 +211,7 @@ func (m *manager) initializeProviders() error {
 	for name, providerConfig := range m.config.Providers {
 		provider, err := NewProvider(name, &providerConfig)
 		if err != nil {
-			return fmt.Errorf("%w: failed to create provider %q: %v", errUtils.ErrStaticError, name, err)
+			return fmt.Errorf("%w: failed to create provider %q: %v", errUtils.ErrInvalidProviderConfig, name, err)
 		}
 		m.providers[name] = provider
 	}
@@ -222,7 +223,7 @@ func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := NewIdentity(name, &identityConfig)
 		if err != nil {
-			return fmt.Errorf("%w: failed to create identity %q: %v", errUtils.ErrStaticError, name, err)
+			return fmt.Errorf("%w: failed to create identity %q: %v", errUtils.ErrInvalidIdentityConfig, name, err)
 		}
 		m.identities[name] = identity
 	}
@@ -269,11 +270,11 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	// Build the complete authentication chain
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to build authentication chain for identity %q: %v", errUtils.ErrStaticError, identityName, err)
+		return "", fmt.Errorf("%w: failed to build authentication chain for identity %q: %v", errUtils.ErrInvalidAuthConfig, identityName, err)
 	}
 
 	if len(chain) == 0 {
-		return "", fmt.Errorf("%w: empty authentication chain for identity %q", errUtils.ErrStaticError, identityName)
+		return "", fmt.Errorf("%w: empty authentication chain for identity %q", errUtils.ErrInvalidAuthConfig, identityName)
 	}
 
 	// The first element in the chain is the root provider name
@@ -288,7 +289,7 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 		return identity.Kind, nil
 	}
 
-	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrStaticError, providerName)
+	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation
@@ -414,13 +415,13 @@ func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*sc
 func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (*schema.Credentials, error) {
 	provider, exists := m.providers[providerName]
 	if !exists {
-		return nil, fmt.Errorf("%w: provider %q not found", errUtils.ErrStaticError, providerName)
+		return nil, fmt.Errorf("%w: provider %q not found", errUtils.ErrInvalidAuthConfig, providerName)
 	}
 
 	log.Debug("Authenticating with provider", "provider", providerName)
 	credentials, err := provider.Authenticate(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: provider %q authentication failed: %v", errUtils.ErrStaticError, providerName, err)
+		return nil, fmt.Errorf("%w: provider %q authentication failed: %v", errUtils.ErrAuthenticationFailed, providerName, err)
 	}
 
 	// Cache provider credentials
@@ -534,7 +535,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	}
 
 	if !exists {
-		return fmt.Errorf("%w: identity %q not found", errUtils.ErrStaticError, identityName)
+		return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
 	}
 
 	// AWS User identities don't require via configuration - they are standalone
@@ -544,7 +545,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 			*chain = append(*chain, identityName)
 			return nil
 		}
-		return fmt.Errorf("%w: identity %q has no via configuration", errUtils.ErrStaticError, identityName)
+		return fmt.Errorf("%w: identity %q has no via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 	}
 
 	// Add current identity to chain
@@ -561,7 +562,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return m.buildChainRecursive(identity.Via.Identity, chain, visited)
 	}
 
-	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrStaticError, identityName)
+	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 }
 
 // buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials.
