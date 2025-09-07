@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -40,6 +41,16 @@ func NewAssumeRoleProvider(name string, providerConfig *schema.Provider) (*assum
 // Kind returns the provider kind.
 func (p *assumeRoleProvider) Kind() string {
 	return "aws/assume-role"
+}
+
+// Name returns the configured provider name.
+func (p *assumeRoleProvider) Name() string {
+	return p.name
+}
+
+// PreAuthenticate is a no-op for assume-role provider.
+func (p *assumeRoleProvider) PreAuthenticate(_ types.AuthManager, _ []string) error {
+	return nil
 }
 
 // Authenticate performs AWS assume role authentication.

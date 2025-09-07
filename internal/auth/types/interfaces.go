@@ -52,8 +52,14 @@ type CloudProviderManager interface {
 type Provider interface {
 	// Kind returns the provider kind (e.g., "aws/iam-identity-center").
 	Kind() string
-
-	// Authenticate performs the authentication process and returns credentials.
+	// Name returns the provider name as defined in configuration
+	Name() string
+	// PreAuthenticate allows the provider to inspect the authentication chain prior to authentication
+	// so that it can set up any provider-specific preferences based on downstream identities (e.g.,
+	// preferred role ARN for SAML based on the next identity in the chain).
+	// Implementations should be side-effect free beyond local provider state.
+	PreAuthenticate(manager AuthManager, chain []string) error
+	// Authenticate performs provider-specific authentication and returns credentials.
 	Authenticate(ctx context.Context) (*schema.Credentials, error)
 
 	// Validate validates the provider configuration.
@@ -115,6 +121,12 @@ type AuthManager interface {
 
 	// ListProviders returns all available provider names.
 	ListProviders() []string
+
+	// GetIdentities returns all available identity configurations.
+	GetIdentities() map[string]schema.Identity
+	
+	// GetProviders returns all available provider configurations.
+	GetProviders() map[string]schema.Provider
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.

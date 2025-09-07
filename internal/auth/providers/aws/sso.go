@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -48,6 +49,16 @@ func NewSSOProvider(name string, config *schema.Provider) (*ssoProvider, error) 
 // Kind returns the provider kind.
 func (p *ssoProvider) Kind() string {
 	return "aws/iam-identity-center"
+}
+
+// Name returns the configured provider name.
+func (p *ssoProvider) Name() string {
+	return p.name
+}
+
+// PreAuthenticate is a no-op for SSO provider.
+func (p *ssoProvider) PreAuthenticate(_ authTypes.AuthManager, _ []string) error { //nolint:revive // interface contract
+	return nil
 }
 
 // Authenticate performs AWS SSO authentication.

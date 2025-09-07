@@ -15,7 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
-// manager implements the AuthManager interface.
+// manager implements the Authmanager interface.
 type manager struct {
 	config          *schema.AuthConfig
 	providers       map[string]types.Provider
@@ -25,7 +25,7 @@ type manager struct {
 	stackInfo       *schema.ConfigAndStacksInfo
 }
 
-// NewAuthManager creates a new AuthManager instance.
+// NewAuthmanager creates a new Authmanager instance.
 func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
@@ -51,7 +51,7 @@ func NewAuthManager(
 	}
 
 	// Initialize identities
-	if err := m.initializeIdentities(); err != nil {
+	if err := m.initializeidentities(); err != nil {
 		return nil, fmt.Errorf("%w: failed to initialize identities: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 
@@ -134,34 +134,34 @@ func (m *manager) Validate() error {
 // GetDefaultIdentity returns the name of the default identity, if any.
 func (m *manager) GetDefaultIdentity() (string, error) {
 	// Find all default identities
-	var defaultIdentities []string
+	var defaultidentities []string
 	for name, identity := range m.config.Identities {
 		if identity.Default {
-			defaultIdentities = append(defaultIdentities, name)
+			defaultidentities = append(defaultidentities, name)
 		}
 	}
 
 	// Handle different scenarios based on number of default identities found
-	switch len(defaultIdentities) {
+	switch len(defaultidentities) {
 	case 0:
 		// No default identities found
 		if telemetry.IsCI() {
 			return "", fmt.Errorf("%w: no default identity configured", errUtils.ErrInvalidAuthConfig)
 		}
 		// In interactive mode, prompt user to choose from all identities
-		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
+		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.Listidentities())
 
 	case 1:
 		// Exactly one default identity found - use it
-		return defaultIdentities[0], nil
+		return defaultidentities[0], nil
 
 	default:
 		// Multiple default identities found
 		if telemetry.IsCI() {
-			return "", fmt.Errorf("%w: multiple default identities found: %v", errUtils.ErrInvalidAuthConfig, defaultIdentities)
+			return "", fmt.Errorf("%w: multiple default identities found: %v", errUtils.ErrInvalidAuthConfig, defaultidentities)
 		}
 		// In interactive mode, prompt user to choose from default identities
-		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
+		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultidentities)
 	}
 }
 
@@ -188,8 +188,8 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	return selectedIdentity, nil
 }
 
-// ListIdentities returns all available identity names.
-func (m *manager) ListIdentities() []string {
+// Listidentities returns all available identity names.
+func (m *manager) Listidentities() []string {
 	var names []string
 	for name := range m.config.Identities {
 		names = append(names, name)
@@ -219,8 +219,8 @@ func (m *manager) initializeProviders() error {
 	return nil
 }
 
-// initializeIdentities creates identity instances from configuration.
-func (m *manager) initializeIdentities() error {
+// initializeidentities creates identity instances from configuration.
+func (m *manager) initializeidentities() error {
 	// nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, identityConfig := range m.config.Identities {
 		identity, err := NewIdentity(name, &identityConfig)
@@ -297,14 +297,15 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation.
 func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, targetIdentity string) (*schema.Credentials, error) {
 	// Step 1: Bottom-up validation - check cached credentials from target to root
-	validFromIndex := m.findFirstValidCachedCredentials(chain, targetIdentity)
+	validFromIndex := m.findFirstValidCachedCredentials(chain)
 
 	if validFromIndex != -1 {
 		log.Debug("Found valid cached credentials", "validFromIndex", validFromIndex, "chainStep", getChainStepName(chain, validFromIndex))
 
-		// If target identity has valid cached credentials, use them
+		// If target identity (last element in chain) has valid cached credentials, use them
 		if validFromIndex == len(chain)-1 {
-			if cachedCreds, err := m.credentialStore.Retrieve(targetIdentity); err == nil {
+			last := chain[len(chain)-1]
+			if cachedCreds, err := m.credentialStore.Retrieve(last); err == nil {
 				log.Debug("Using cached credentials for target identity", "identity", targetIdentity)
 				return cachedCreds, nil
 			}
@@ -398,6 +399,12 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 
 	// Step 1: Authenticate with provider if needed
 	if actualStartIndex == 0 {
+		// Allow provider to inspect the chain and prepare pre-auth preferences
+		if provider, exists := m.providers[chain[0]]; exists {
+			if err := provider.PreAuthenticate(m, chain); err != nil {
+				log.Debug("Provider pre-authenticate failed", "provider", chain[0], "error", err)
+			}
+		}
 		currentCreds, err = m.authenticateWithProvider(ctx, chain[0])
 		if err != nil {
 			return nil, err
@@ -407,6 +414,21 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 
 	// Step 2: Authenticate through identity chain
 	return m.authenticateIdentityChain(ctx, chain, actualStartIndex, currentCreds)
+}
+
+// GetIdentities returns the map of identities.
+func (m *manager) GetIdentities() map[string]schema.Identity {
+	return m.identities
+}
+
+// GetProviders returns the map of providers.
+func (m *manager) GetProviders() map[string]schema.Provider {
+	return m.providers
+}
+
+// GetConfig returns the config.
+func (m *manager) GetConfig() *schema.ConfigAndStacksInfo {
+	return m.stackInfo
 }
 
 // determineStartingIndex determines where to start authentication based on cached credentials.

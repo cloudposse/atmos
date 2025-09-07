@@ -28,6 +28,8 @@ type samlProvider struct {
 	config *schema.Provider
 	url    string
 	region string
+	// RoleToAssumeFromAssertion is set by PreAuthenticate based on the next identity in the chain
+	RoleToAssumeFromAssertion string
 }
 
 // NewSAMLProvider creates a new AWS SAML provider.
@@ -45,10 +47,11 @@ func NewSAMLProvider(name string, config *schema.Provider) (types.Provider, erro
 	}
 
 	return &samlProvider{
-		name:   name,
-		config: config,
-		url:    config.URL,
-		region: config.Region,
+		name:                      name,
+		config:                    config,
+		url:                       config.URL,
+		region:                    config.Region,
+		RoleToAssumeFromAssertion: "",
 	}, nil
 }
 
@@ -57,9 +60,36 @@ func (p *samlProvider) Kind() string {
 	return "aws/saml"
 }
 
+// Name returns the configured provider name.
+func (p *samlProvider) Name() string {
+	return p.name
+}
+
+// PreAuthenticate records a hint (next identity name) to help role selection.
+func (p *samlProvider) PreAuthenticate(manager types.AuthManager, chain []string) error {
+	// chain: [provider, identity1, identity2, ...]
+	if len(chain) > 1 {
+		identities := manager.GetIdentities()
+		identity, exists := identities[chain[1]]
+		if !exists {
+			return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, chain[1])
+		}
+		var roleArn string
+		if roleArn, ok := identity.Principal["assume_role"].(string); !ok || roleArn == "" {
+			return fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidIdentityConfig)
+		}
+		p.RoleToAssumeFromAssertion = roleArn
+		log.Debug("SAML pre-auth: recorded role to assume from assertion", "role", p.RoleToAssumeFromAssertion)
+	}
+	return nil
+}
+
 // Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
 	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url)
+	if p.RoleToAssumeFromAssertion == "" {
+		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
+	}
 
 	// Set up browser automation if needed
 	p.setupBrowserAutomation()
@@ -94,6 +124,9 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	}
 
 	selectedRole := p.selectRole(roles)
+	if selectedRole == nil {
+		return nil, fmt.Errorf("%w: no role selected", errUtils.ErrAuthenticationFailed)
+	}
 
 	// Assume role
 	awsCreds, err := p.assumeRoleWithSAML(ctx, assertionB64, selectedRole)
@@ -158,14 +191,16 @@ func (p *samlProvider) authenticateAndGetAssertion(samlClient saml2aws.SAMLClien
 // selectRole selects the AWS role (first for now, with logging).
 func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRole {
 	// Use the first role or let user select if multiple
-	selectedRole := awsRoles[0]
-	if len(awsRoles) > 1 {
-		log.Info("Multiple AWS roles available", "count", len(awsRoles))
-		// For now, use the first role. In the future, we could add role selection logic
-		log.Info("Using first available role", "role", selectedRole.RoleARN)
+	// If we have a preferred hint, try to match it
+	hint := strings.ToLower(p.RoleToAssumeFromAssertion)
+	for _, r := range awsRoles {
+		if strings.Contains(strings.ToLower(r.RoleARN), hint) || strings.Contains(strings.ToLower(r.PrincipalARN), hint) {
+			log.Info("Selecting role matching preferred hint", "role", r.RoleARN, "hint", p.RoleToAssumeFromAssertion)
+			return r
+		}
 	}
 
-	return selectedRole
+	return nil
 }
 
 // assumeRoleWithSAML assumes an AWS role using SAML assertion.
