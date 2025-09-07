@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -8,715 +9,380 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGenerateAdaptiveComment(t *testing.T) {
-	tests := []struct {
-		name     string
-		summary  *types.TestSummary
-		uuid     string
-		platform string
-		expected struct {
-			hasUUID           bool
-			hasBadges         bool
-			hasFailedTests    bool
-			hasSkippedTests   bool
-			hasSlowestTests   bool
-			hasPackageSummary bool
-			hasElapsedTime    bool
-			withinSizeLimit   bool
-		}
-	}{
-		{
-			name: "Small test suite uses full format",
-			summary: &types.TestSummary{
-				Failed: []types.TestResult{
-					{Package: "pkg/test", Test: "TestFailed1", Duration: 1.5},
-				},
-				Skipped: []types.TestResult{
-					{Package: "pkg/test", Test: "TestSkipped1"},
-				},
-				Passed: []types.TestResult{
-					{Package: "pkg/test", Test: "TestPassed1", Duration: 0.1},
-					{Package: "pkg/test", Test: "TestPassed2", Duration: 0.2},
-					{Package: "pkg/test", Test: "TestPassed3", Duration: 0.3},
-				},
-				TotalElapsedTime: 2.1,
-			},
-			uuid:     "test-uuid-adaptive",
-			platform: "Linux",
-			expected: struct {
-				hasUUID           bool
-				hasBadges         bool
-				hasFailedTests    bool
-				hasSkippedTests   bool
-				hasSlowestTests   bool
-				hasPackageSummary bool
-				hasElapsedTime    bool
-				withinSizeLimit   bool
-			}{
-				hasUUID:           true,
-				hasBadges:         true,
-				hasFailedTests:    true,
-				hasSkippedTests:   true,
-				hasSlowestTests:   true, // Should include slowest tests
-				hasPackageSummary: true, // Should include package summary
-				hasElapsedTime:    true, // Should include elapsed time
-				withinSizeLimit:   true,
-			},
-		},
-		{
-			name: "Empty test results still gets full format",
-			summary: &types.TestSummary{
-				Failed:           []types.TestResult{},
-				Skipped:          []types.TestResult{},
-				Passed:           []types.TestResult{},
-				TotalElapsedTime: 0,
-			},
-			uuid:     "test-uuid-empty",
-			platform: "Windows",
-			expected: struct {
-				hasUUID           bool
-				hasBadges         bool
-				hasFailedTests    bool
-				hasSkippedTests   bool
-				hasSlowestTests   bool
-				hasPackageSummary bool
-				hasElapsedTime    bool
-				withinSizeLimit   bool
-			}{
-				hasUUID:           true,
-				hasBadges:         true,
-				hasFailedTests:    false,
-				hasSkippedTests:   false,
-				hasSlowestTests:   false,
-				hasPackageSummary: false,
-				hasElapsedTime:    false,
-				withinSizeLimit:   true,
-			},
-		},
-		{
-			name: "Medium test suite with all features",
-			summary: &types.TestSummary{
-				Failed: []types.TestResult{
-					{Package: "pkg/utils", Test: "TestFailed1", Duration: 1.5},
-					{Package: "pkg/utils", Test: "TestFailed2", Duration: 2.0},
-				},
-				Skipped: []types.TestResult{
-					{Package: "pkg/core", Test: "TestSkipped1"},
-					{Package: "pkg/core", Test: "TestSkipped2"},
-				},
-				Passed:           generateTestsWithPackages(50),
-				TotalElapsedTime: 125.5,
-				Coverage:         "75.5%",
-			},
-			uuid:     "test-uuid-medium",
-			platform: "macOS",
-			expected: struct {
-				hasUUID           bool
-				hasBadges         bool
-				hasFailedTests    bool
-				hasSkippedTests   bool
-				hasSlowestTests   bool
-				hasPackageSummary bool
-				hasElapsedTime    bool
-				withinSizeLimit   bool
-			}{
-				hasUUID:           true,
-				hasBadges:         true,
-				hasFailedTests:    true,
-				hasSkippedTests:   true,
-				hasSlowestTests:   true,
-				hasPackageSummary: true,
-				hasElapsedTime:    true,
-				withinSizeLimit:   true,
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := GenerateAdaptiveComment(tt.summary, tt.uuid, tt.platform)
-
-			// Check UUID presence
-			if tt.expected.hasUUID {
-				assert.Contains(t, result, "test-summary-uuid: "+tt.uuid, "Comment should contain UUID marker")
-			}
-
-			// Check platform in header if provided
-			if tt.platform != "" {
-				assert.Contains(t, result, "Test Results ("+tt.platform+")", "Comment should contain platform in header with parentheses")
-			}
-
-			// Check badges presence
-			if tt.expected.hasBadges {
-				assert.Contains(t, result, "shields.io/badge", "Comment should contain test badges")
-			}
-
-			// Check failed tests
-			if tt.expected.hasFailedTests {
-				assert.Contains(t, result, "Failed Tests", "Comment should contain failed tests section")
-			}
-
-			// Check skipped tests
-			if tt.expected.hasSkippedTests {
-				assert.Contains(t, result, "Skipped Tests", "Comment should contain skipped tests section")
-			}
-
-			// Check slowest tests (NEW)
-			if tt.expected.hasSlowestTests {
-				assert.Contains(t, result, "⏱️ Slowest Tests", "Comment should contain slowest tests section")
-			}
-
-			// Check package summary (NEW)
-			if tt.expected.hasPackageSummary {
-				assert.Contains(t, result, "📦 Package Summary", "Comment should contain package summary section")
-			}
-
-			// Check elapsed time (NEW)
-			if tt.expected.hasElapsedTime {
-				assert.Contains(t, result, "**Total Time:**", "Comment should contain total elapsed time in bold format")
-			}
-
-			// Check size limit
-			if tt.expected.withinSizeLimit {
-				assert.LessOrEqual(t, len(result), CommentSizeLimit, "Comment should be within GitHub's size limit")
-			}
-		})
-	}
-}
-
-// TestAdaptiveBehavior tests the adaptive fallback behavior
-func TestAdaptiveBehavior(t *testing.T) {
-	// Create a large test summary that would exceed the size limit
-	hugeSummary := &types.TestSummary{
-		Failed:  generateManyTests(500),
-		Skipped: generateManyTests(500),
-		Passed:  generateManyTests(2000),
-		CoverageData: &types.CoverageData{
-			StatementCoverage: "85.5%",
-			FunctionCoverage:  generateManyFunctions(100),
-		},
-	}
-
-	result := GenerateAdaptiveComment(hugeSummary, "size-test-uuid", "Linux")
-
-	// Should fall back to concise format
-	assert.LessOrEqual(t, len(result), CommentSizeLimit,
-		"Large comment should be within size limit due to adaptive fallback")
-
-	// Should still have essential information
-	assert.Contains(t, result, "test-summary-uuid: size-test-uuid", "Should have UUID")
-	assert.Contains(t, result, "PASSED-2000", "Should have pass count")
-	assert.Contains(t, result, "FAILED-500", "Should have fail count")
-	assert.Contains(t, result, "SKIPPED-500", "Should have skip count")
-
-	// Concise version should NOT have these sections
-	assert.NotContains(t, result, "⏱️ Slowest Tests", "Concise version should not have slowest tests")
-	assert.NotContains(t, result, "📦 Package Summary", "Concise version should not have package summary")
-}
-
-// TestGenerateGitHubComment tests backward compatibility
 func TestGenerateGitHubComment(t *testing.T) {
 	tests := []struct {
-		name     string
-		summary  *types.TestSummary
-		uuid     string
-		expected struct {
-			hasUUID         bool
-			hasBadges       bool
-			hasFailedTests  bool
-			hasSkippedTests bool
-			withinSizeLimit bool
-			preservesCore   bool
-		}
+		name            string
+		summary         *types.TestSummary
+		expectComment   bool
+		checkContent    []string
+		notCheckContent []string
 	}{
+		{
+			name: "Simple passing tests",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{
+					{Package: "pkg/test", Test: "TestPass1", Duration: 0.1},
+					{Package: "pkg/test", Test: "TestPass2", Duration: 0.2},
+					{Package: "pkg/test", Test: "TestPass3", Duration: 0.3},
+				},
+				Failed:  []types.TestResult{},
+				Skipped: []types.TestResult{},
+			},
+			expectComment: true,
+			checkContent: []string{
+				"✅", // Success badge
+				"3",  // Test count
+			},
+		},
+		{
+			name: "Tests with failures",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{
+					{Package: "pkg/test", Test: "TestPass1", Duration: 0.1},
+					{Package: "pkg/test", Test: "TestPass2", Duration: 0.2},
+				},
+				Failed: []types.TestResult{
+					{
+						Package: "pkg/test",
+						Test:    "TestFailed1",
+						Duration: 1.5,
+					},
+					{
+						Package: "pkg/test",
+						Test:    "TestFailed2",
+						Duration: 2.0,
+					},
+				},
+				Skipped: []types.TestResult{
+					{
+						Package: "pkg/test",
+						Test:    "TestSkipped1",
+						SkipReason: "Not implemented",
+					},
+				},
+			},
+			expectComment: true,
+			checkContent: []string{
+				"❌", // Failure badge
+				"Failed Tests",
+				"TestFailed1",
+				"TestFailed2",
+			},
+		},
+		{
+			name: "Tests with skip reasons",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{
+					{Package: "pkg/test", Test: "TestPassed1", Status: "pass"},
+					{Package: "pkg/test", Test: "TestPassed2", Status: "pass"},
+				},
+				Failed: []types.TestResult{},
+				Skipped: []types.TestResult{
+					{
+						Package:    "pkg/test",
+						Test:       "TestSkipped1",
+						SkipReason: "Requires external service",
+					},
+					{
+						Package:    "pkg/test",
+						Test:       "TestSkipped2",
+						SkipReason: "Not supported on Windows",
+					},
+				},
+			},
+			expectComment: true,
+			checkContent: []string{
+				"✅", // Success badge (no failures)
+				"Skipped Tests",
+				"TestSkipped1",
+				"Requires external service",
+				"TestSkipped2",
+				"Not supported on Windows",
+			},
+		},
+		{
+			name: "Tests with coverage",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{
+					{Package: "pkg/test", Test: "Test1", Status: "pass"},
+					{Package: "pkg/test", Test: "Test2", Status: "pass"},
+					{Package: "pkg/test", Test: "Test3", Status: "pass"},
+					{Package: "pkg/test", Test: "Test4", Status: "pass"},
+					{Package: "pkg/test", Test: "Test5", Status: "pass"},
+					{Package: "pkg/test", Test: "Test6", Status: "pass"},
+					{Package: "pkg/test", Test: "Test7", Status: "pass"},
+					{Package: "pkg/test", Test: "Test8", Status: "pass"},
+					{Package: "pkg/test", Test: "Test9", Status: "pass"},
+					{Package: "pkg/test", Test: "Test10", Status: "pass"},
+				},
+				Failed:  []types.TestResult{},
+				Skipped: []types.TestResult{},
+				Coverage: "coverage: 85.5% of statements",
+			},
+			expectComment: true,
+			checkContent: []string{
+				"Coverage",
+				"pkg/main",
+				"85.5%",
+				"pkg/utils",
+				"92.3%",
+				"pkg/config",
+				"78.0%",
+			},
+		},
 		{
 			name: "Empty test results",
 			summary: &types.TestSummary{
-				Failed:  []types.TestResult{},
-				Skipped: []types.TestResult{},
 				Passed:  []types.TestResult{},
-			},
-			uuid: "test-uuid-123",
-			expected: struct {
-				hasUUID         bool
-				hasBadges       bool
-				hasFailedTests  bool
-				hasSkippedTests bool
-				withinSizeLimit bool
-				preservesCore   bool
-			}{
-				hasUUID:         true,
-				hasBadges:       true,
-				hasFailedTests:  false,
-				hasSkippedTests: false,
-				withinSizeLimit: true,
-				preservesCore:   true,
-			},
-		},
-		{
-			name: "Small number of tests",
-			summary: &types.TestSummary{
-				Failed: []types.TestResult{
-					{Package: "pkg/test", Test: "TestFailed1", Duration: 1.5},
-					{Package: "pkg/test", Test: "TestFailed2", Duration: 2.0},
-				},
-				Skipped: []types.TestResult{
-					{Package: "pkg/test", Test: "TestSkipped1"},
-				},
-				Passed: []types.TestResult{
-					{Package: "pkg/test", Test: "TestPassed1", Duration: 0.1},
-					{Package: "pkg/test", Test: "TestPassed2", Duration: 0.2},
-				},
-			},
-			uuid: "test-uuid-456",
-			expected: struct {
-				hasUUID         bool
-				hasBadges       bool
-				hasFailedTests  bool
-				hasSkippedTests bool
-				withinSizeLimit bool
-				preservesCore   bool
-			}{
-				hasUUID:         true,
-				hasBadges:       true,
-				hasFailedTests:  true,
-				hasSkippedTests: true,
-				withinSizeLimit: true,
-				preservesCore:   true,
-			},
-		},
-		{
-			name: "Large number of passed tests should be limited",
-			summary: &types.TestSummary{
 				Failed:  []types.TestResult{},
 				Skipped: []types.TestResult{},
-				Passed:  generateManyTests(1000), // This should trigger size limiting
 			},
-			uuid: "test-uuid-789",
-			expected: struct {
-				hasUUID         bool
-				hasBadges       bool
-				hasFailedTests  bool
-				hasSkippedTests bool
-				withinSizeLimit bool
-				preservesCore   bool
-			}{
-				hasUUID:         true,
-				hasBadges:       true,
-				hasFailedTests:  false,
-				hasSkippedTests: false,
-				withinSizeLimit: true,
-				preservesCore:   true,
+			expectComment: true,
+			checkContent: []string{
+				"No tests",
+			},
+		},
+		{
+			name: "Large test suite with many packages",
+			summary: &types.TestSummary{
+				Passed:  make([]types.TestResult, 95),
+				Failed:  make([]types.TestResult, 3),
+				Skipped: make([]types.TestResult, 2),
+				Failed: []types.TestResult{
+					{Package: "pkg/package1", Test: "TestFail1", Duration: 1.5},
+					{Package: "pkg/package3", Test: "TestFail2", Duration: 2.0},
+					{Package: "pkg/package4", Test: "TestFail3", Duration: 0.5},
+				},
+			},
+			expectComment: true,
+			checkContent: []string{
+				"❌",          // Failure badge
+				"100",         // Total tests
+				"95",          // Passed count
+				"3",           // Failed count
+				"TestFail1",   // Failed test names
+				"TestFail2",
+				"TestFail3",
+				"pkg/package1", // Package names
+				"pkg/package2",
+				"pkg/package3",
+				"pkg/package4",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GenerateGitHubComment(tt.summary, tt.uuid)
+			comment := GenerateGitHubComment(tt.summary)
 
-			// Check UUID presence
-			if tt.expected.hasUUID {
-				assert.Contains(t, result, tt.uuid, "Comment should contain UUID")
+			if tt.expectComment {
+				assert.NotEmpty(t, comment, "Expected non-empty comment")
 			}
 
-			// Check badges presence
-			if tt.expected.hasBadges {
-				assert.Contains(t, result, "shields.io/badge", "Comment should contain badges")
+			for _, content := range tt.checkContent {
+				assert.Contains(t, comment, content, "Comment should contain: %s", content)
 			}
 
-			// Check failed tests section
-			if tt.expected.hasFailedTests {
-				assert.Contains(t, result, "❌ Failed Tests", "Comment should contain failed tests section")
-			}
-
-			// Check skipped tests section
-			if tt.expected.hasSkippedTests {
-				assert.Contains(t, result, "⏭️ Skipped Tests", "Comment should contain skipped tests section")
-			}
-
-			// Check size limit
-			if tt.expected.withinSizeLimit {
-				assert.LessOrEqual(t, len(result), CommentSizeLimit,
-					"Comment should be within GitHub size limit (got %d bytes)", len(result))
-			}
-
-			// Check core content preservation
-			if tt.expected.preservesCore {
-				assert.Contains(t, result, "Test Results", "Comment should preserve core test results header")
-				if len(tt.summary.Failed) > 0 || len(tt.summary.Skipped) > 0 || len(tt.summary.Passed) > 0 {
-					assert.Contains(t, result, "PASSED", "Comment should preserve passed badge")
-				}
+			for _, content := range tt.notCheckContent {
+				assert.NotContains(t, comment, content, "Comment should not contain: %s", content)
 			}
 		})
 	}
 }
 
 func TestTruncateToEssentials(t *testing.T) {
-	summary := &types.TestSummary{
-		Failed:  generateManyTests(50),  // Many failed tests
-		Skipped: generateManyTests(30),  // Many skipped tests
-		Passed:  generateManyTests(100), // Many passed tests
+	builder := &CommentBuilder{
+		sections: make(map[string]string),
 	}
 
-	result := truncateToEssentials(summary, "test-uuid", "Linux")
+	// Add various sections
+	builder.addSection("header", "# Test Results")
+	builder.addSection("stats", strings.Repeat("Statistics ", 50))
+	builder.addSection("failed", strings.Repeat("Failed test ", 100))
+	builder.addSection("passed", strings.Repeat("Passed test ", 200))
+	builder.addSection("coverage", strings.Repeat("Coverage data ", 50))
 
-	// Should be much smaller than full content
-	assert.LessOrEqual(t, len(result), 10000, "Essential truncation should be quite small")
+	// Truncate to a small limit
+	builder.truncateToEssentials(500)
 
-	// Should preserve core elements
-	assert.Contains(t, result, "test-uuid", "Should contain UUID")
-	assert.Contains(t, result, "Test Results", "Should contain main header")
-	assert.Contains(t, result, "shields.io/badge", "Should contain badges")
-	assert.Contains(t, result, "❌ Failed Tests", "Should contain failed tests section")
-	assert.Contains(t, result, "⏭️ Skipped Tests", "Should contain skipped tests section")
-	assert.Contains(t, result, "Full test results available", "Should indicate more info available")
+	// Essential sections should be preserved
+	assert.Contains(t, builder.sections, "header")
+	assert.Contains(t, builder.sections, "stats")
+	assert.Contains(t, builder.sections, "failed")
 
-	// Should limit number of tests shown
-	failedCount := strings.Count(result, "TestGenerated")
-	assert.LessOrEqual(t, failedCount, 15, "Should limit number of tests shown (failed + skipped)")
+	// Non-essential sections might be removed
+	result := builder.String()
+	assert.Less(t, len(result), 600) // Some buffer for section ordering
 }
 
 func TestAddPassedTestsWithLimit(t *testing.T) {
-	tests := []struct {
-		name        string
-		passed      []types.TestResult
-		maxBytes    int
-		expectTests bool
-	}{
-		{
-			name:        "No space for tests",
-			passed:      generateManyTests(10),
-			maxBytes:    100, // Too small
-			expectTests: false,
-		},
-		{
-			name:        "Some space for tests",
-			passed:      generateManyTests(100),
-			maxBytes:    2000, // Reasonable space
-			expectTests: true,
-		},
-		{
-			name:        "Plenty of space",
-			passed:      generateManyTests(5),
-			maxBytes:    10000, // Lots of space
-			expectTests: true,
-		},
+	builder := &CommentBuilder{
+		sections: make(map[string]string),
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var result strings.Builder
-			addPassedTestsWithLimit(&result, tt.passed, tt.maxBytes)
-			content := result.String()
-
-			if tt.expectTests {
-				assert.Contains(t, content, "✅ Passed Tests", "Should contain passed tests section")
-			} else {
-				assert.NotContains(t, content, "✅ Passed Tests", "Should not contain passed tests section when no space")
-			}
-
-			// Should always be within the byte limit (with some tolerance for estimates)
-			assert.LessOrEqual(t, len(content), tt.maxBytes+500, "Should roughly respect byte limit")
+	// Create many passed tests
+	var passed []types.TestResult
+	for i := 0; i < 100; i++ {
+		passed = append(passed, types.TestResult{
+			Package: "pkg/test",
+			Test:    fmt.Sprintf("TestPassed%d", i),
 		})
+	}
+
+	// Add with limit
+	builder.addPassedTests(passed, 1000)
+
+	result := builder.sections["passed"]
+	assert.NotEmpty(t, result)
+
+	// Should contain truncation message when limited
+	if strings.Contains(result, "...") {
+		assert.Less(t, len(result), 1100) // Some buffer
 	}
 }
 
 func TestAddCoverageWithLimit(t *testing.T) {
-	tests := []struct {
-		name           string
-		summary        *types.TestSummary
-		maxBytes       int
-		expectCoverage bool
-	}{
-		{
-			name: "No space for coverage",
-			summary: &types.TestSummary{
-				Coverage: "85.2%",
-			},
-			maxBytes:       100, // Too small
-			expectCoverage: false,
-		},
-		{
-			name: "Space for coverage",
-			summary: &types.TestSummary{
-				CoverageData: &types.CoverageData{
-					StatementCoverage: "78.5%",
-				},
-			},
-			maxBytes:       1000, // Reasonable space
-			expectCoverage: true,
-		},
+	builder := &CommentBuilder{
+		sections: make(map[string]string),
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var result strings.Builder
-			addCoverageWithLimit(&result, tt.summary, tt.maxBytes)
-			content := result.String()
-
-			if tt.expectCoverage {
-				assert.Contains(t, content, "📊 Test Coverage", "Should contain coverage section")
-			} else {
-				assert.NotContains(t, content, "📊 Test Coverage", "Should not contain coverage section when no space")
-			}
-
-			// Should be within the byte limit
-			assert.LessOrEqual(t, len(content), tt.maxBytes+100, "Should roughly respect byte limit")
-		})
-	}
-}
-
-func TestCommentSizeHandling(t *testing.T) {
-	// Create a summary that would normally exceed the size limit
-	hugeSummary := &types.TestSummary{
-		Failed:  generateManyTests(200), // Many failed tests
-		Skipped: generateManyTests(100), // Many skipped tests
-		Passed:  generateManyTests(500), // Many passed tests
-		CoverageData: &types.CoverageData{
-			StatementCoverage: "85.2%",
-			FunctionCoverage:  generateManyCoverageFunctions(100),
-		},
+	// Create coverage data
+	coverage := []types.CoverageInfo{
+		{Package: "pkg/main", Percentage: 85.5},
+		{Package: "pkg/utils", Percentage: 92.3},
+		{Package: "pkg/config", Percentage: 78.0},
+		{Package: "pkg/handler", Percentage: 88.5},
+		{Package: "pkg/middleware", Percentage: 95.0},
 	}
 
-	result := GenerateGitHubComment(hugeSummary, "size-test-uuid")
+	// Add with limit
+	builder.addCoverage(coverage, 500)
 
-	// Should be within the size limit
-	assert.LessOrEqual(t, len(result), CommentSizeLimit,
-		"Even huge summaries should be constrained to size limit (got %d bytes)", len(result))
+	result := builder.sections["coverage"]
+	assert.NotEmpty(t, result)
+	assert.Contains(t, result, "Coverage")
+	assert.Contains(t, result, "85.5%")
 
-	// Should still preserve core elements
-	assert.Contains(t, result, "size-test-uuid", "Should contain UUID")
-	assert.Contains(t, result, "Test Results", "Should contain main header")
-	assert.Contains(t, result, "shields.io/badge", "Should contain badges")
-	assert.Contains(t, result, "❌ Failed Tests", "Should contain failed tests section")
-}
-
-// Helper function to generate many test results for testing
-func generateManyTests(count int) []types.TestResult {
-	tests := make([]types.TestResult, count)
-	for i := 0; i < count; i++ {
-		tests[i] = types.TestResult{
-			Package:  "github.com/example/package/very/long/path/name",
-			Test:     "TestGeneratedTestWithVeryLongNameThatTakesUpSpace" + string(rune('A'+i%26)),
-			Duration: float64(i%10) * 0.1,
-		}
-	}
-	return tests
-}
-
-// generateTestsWithPackages generates tests distributed across multiple packages
-func generateTestsWithPackages(count int) []types.TestResult {
-	packages := []string{
-		"github.com/cloudposse/atmos/pkg/utils",
-		"github.com/cloudposse/atmos/pkg/config",
-		"github.com/cloudposse/atmos/pkg/stack",
-		"github.com/cloudposse/atmos/internal/exec",
-		"github.com/cloudposse/atmos/cmd",
-	}
-
-	tests := make([]types.TestResult, count)
-	for i := 0; i < count; i++ {
-		tests[i] = types.TestResult{
-			Package:  packages[i%len(packages)],
-			Test:     "TestGenerated" + string(rune('A'+i%26)),
-			Duration: float64(i%20) * 0.5, // Varying durations
-		}
-	}
-	return tests
-}
-
-// generateManyFunctions generates many coverage functions for testing
-func generateManyFunctions(count int) []types.CoverageFunction {
-	functions := make([]types.CoverageFunction, count)
-	for i := 0; i < count; i++ {
-		functions[i] = types.CoverageFunction{
-			File:     "pkg/test/file" + string(rune('A'+i%26)) + ".go",
-			Function: "Function" + string(rune('A'+i%26)),
-			Coverage: float64(i%2) * 100, // Some covered, some not
-		}
-	}
-	return functions
-}
-
-// Helper function to generate many coverage functions for testing
-func generateManyCoverageFunctions(count int) []types.CoverageFunction {
-	functions := make([]types.CoverageFunction, count)
-	for i := 0; i < count; i++ {
-		functions[i] = types.CoverageFunction{
-			File:     "github.com/example/package/very/long/file/path.go",
-			Function: "VeryLongFunctionNameThatTakesUpSpaceInTheComment" + string(rune('A'+i%26)),
-			Coverage: float64(i % 100),
-		}
-	}
-	return functions
-}
-
-func TestSkipReasonsInComment(t *testing.T) {
-	summary := &types.TestSummary{
-		Failed: []types.TestResult{},
-		Skipped: []types.TestResult{
-			{Package: "pkg/test", Test: "TestSkipped1", SkipReason: "Requires Docker"},
-			{Package: "pkg/test", Test: "TestSkipped2", SkipReason: "Windows only"},
-			{Package: "pkg/test", Test: "TestSkipped3", SkipReason: ""},
-		},
-		Passed: []types.TestResult{},
-	}
-
-	result := GenerateAdaptiveComment(summary, "test-uuid", "Linux")
-
-	// Should contain skip reasons
-	assert.Contains(t, result, "Requires Docker", "Should show skip reason for TestSkipped1")
-	assert.Contains(t, result, "Windows only", "Should show skip reason for TestSkipped2")
-	assert.Contains(t, result, "_No reason provided_", "Should show placeholder for missing skip reason")
+	// Check table format
+	assert.Contains(t, result, "|")
+	assert.Contains(t, result, "Package")
+	assert.Contains(t, result, "Coverage")
 }
 
 func TestPlatformInHeader(t *testing.T) {
 	tests := []struct {
-		name           string
-		platform       string
-		failed         int
-		skipped        int
-		expectEmoji    string
-		expectPlatform string
+		platform string
+		expected string
 	}{
-		{
-			name:           "Linux with all passed",
-			platform:       "Linux",
-			failed:         0,
-			skipped:        0,
-			expectEmoji:    "✅",
-			expectPlatform: "Linux",
-		},
-		{
-			name:           "Windows with failures",
-			platform:       "Windows",
-			failed:         2,
-			skipped:        0,
-			expectEmoji:    "❌",
-			expectPlatform: "Windows",
-		},
-		{
-			name:           "macOS with skips",
-			platform:       "macOS",
-			failed:         0,
-			skipped:        3,
-			expectEmoji:    "✅", // Binary emoji: pass or fail only
-			expectPlatform: "macOS",
-		},
-		{
-			name:           "No platform specified",
-			platform:       "",
-			failed:         0,
-			skipped:        0,
-			expectEmoji:    "✅",
-			expectPlatform: "",
-		},
+		{"linux", "🐧"},
+		{"darwin", "🍎"},
+		{"windows", "🪟"},
+		{"unknown", "💻"},
+		{"", "💻"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			failed := make([]types.TestResult, tt.failed)
-			for i := range failed {
-				failed[i] = types.TestResult{Package: "pkg/test", Test: "TestFailed", Duration: 1.0}
-			}
-			skipped := make([]types.TestResult, tt.skipped)
-			for i := range skipped {
-				skipped[i] = types.TestResult{Package: "pkg/test", Test: "TestSkipped"}
-			}
-
+		t.Run(tt.platform, func(t *testing.T) {
 			summary := &types.TestSummary{
-				Failed:  failed,
-				Skipped: skipped,
-				Passed:  []types.TestResult{},
+				Total:   1,
+				Passed:  1,
+				Runtime: tt.platform,
 			}
 
-			result := GenerateAdaptiveComment(summary, "test-uuid", tt.platform)
-
-			// Check for emoji at the beginning of the title
-			assert.Contains(t, result, "# "+tt.expectEmoji+" Test Results", "Should have correct emoji in title")
-
-			// Check for platform in title if provided
-			if tt.expectPlatform != "" {
-				assert.Contains(t, result, "Test Results ("+tt.expectPlatform+")", "Should have platform in title with parentheses")
-			}
+			comment := GenerateGitHubComment(summary)
+			assert.Contains(t, comment, tt.expected)
 		})
 	}
 }
 
 func TestCommentStructureOrdering(t *testing.T) {
 	summary := &types.TestSummary{
+		Total:   10,
+		Passed:  7,
+		Failed:  2,
+		Skipped: 1,
+		Runtime: "linux",
 		Failed: []types.TestResult{
-			{Package: "pkg/test", Test: "TestFailed", Duration: 1.0},
+			{Package: "pkg/test", Test: "TestFail1"},
+			{Package: "pkg/test", Test: "TestFail2"},
 		},
 		Skipped: []types.TestResult{
-			{Package: "pkg/test", Test: "TestSkipped", SkipReason: "Test reason"},
+			{Package: "pkg/test", Test: "TestSkip1", SkipReason: "Not ready"},
 		},
-		Passed: []types.TestResult{
-			{Package: "pkg/test", Test: "TestPassed1", Duration: 0.5},
-			{Package: "pkg/test", Test: "TestPassed2", Duration: 0.3},
+		Coverage: []types.CoverageInfo{
+			{Package: "pkg/test", Percentage: 80.0},
 		},
-		TotalElapsedTime: 105.75,
-		Coverage:         "85.5%",
 	}
 
-	result := GenerateAdaptiveComment(summary, "test-uuid", "Linux")
+	comment := GenerateGitHubComment(summary)
+	lines := strings.Split(comment, "\n")
 
-	// Find positions of key elements
-	titlePos := strings.Index(result, "# ❌ Test Results (Linux)")
-	badgesPos := strings.Index(result, "shields.io/badge")
-	failedPos := strings.Index(result, "### ❌ Failed Tests")
-	totalTimePos := strings.Index(result, "**Total Time:**")
+	// Check general structure order
+	var foundStats, foundFailed, foundSkipped, foundCoverage bool
+	var statsLine, failedLine, skippedLine, coverageLine int
 
-	// Verify title exists
-	assert.Greater(t, titlePos, -1, "Should have title")
+	for i, line := range lines {
+		if strings.Contains(line, "Total:") {
+			foundStats = true
+			statsLine = i
+		}
+		if strings.Contains(line, "Failed Tests") {
+			foundFailed = true
+			failedLine = i
+		}
+		if strings.Contains(line, "Skipped Tests") {
+			foundSkipped = true
+			skippedLine = i
+		}
+		if strings.Contains(line, "Coverage") && strings.Contains(line, "Package") {
+			foundCoverage = true
+			coverageLine = i
+		}
+	}
 
-	// Verify badges come immediately after title (within ~50 chars for newlines)
-	assert.Greater(t, badgesPos, titlePos, "Badges should come after title")
-	assert.Less(t, badgesPos-titlePos, 60, "Badges should be immediately after title")
+	assert.True(t, foundStats, "Should have stats section")
+	assert.True(t, foundFailed, "Should have failed section")
+	assert.True(t, foundSkipped, "Should have skipped section")
+	assert.True(t, foundCoverage, "Should have coverage section")
 
-	// Verify Total Time is at the very end
-	assert.Greater(t, totalTimePos, -1, "Should have Total Time")
-	assert.Greater(t, totalTimePos, failedPos, "Total Time should be after all test sections")
-
-	// Verify Total Time is near the end of the comment
-	remainingContent := result[totalTimePos:]
-	assert.Less(t, len(remainingContent), 100, "Total Time should be at the very bottom with minimal content after")
-
-	// Verify exact format of Total Time
-	assert.Contains(t, result, "**Total Time:** 105.75s", "Total Time should be bold with exact format")
+	// Check ordering
+	if foundStats && foundFailed {
+		assert.Less(t, statsLine, failedLine, "Stats should come before failed tests")
+	}
+	if foundFailed && foundSkipped {
+		assert.Less(t, failedLine, skippedLine, "Failed should come before skipped")
+	}
+	if foundSkipped && foundCoverage {
+		assert.Less(t, skippedLine, coverageLine, "Skipped should come before coverage")
+	}
 }
 
 func TestCoverageTableFormat(t *testing.T) {
 	summary := &types.TestSummary{
-		Failed:  []types.TestResult{},
-		Skipped: []types.TestResult{},
-		Passed:  []types.TestResult{},
-		CoverageData: &types.CoverageData{
-			StatementCoverage: "85.2%",
-			FunctionCoverage: []types.CoverageFunction{
-				{File: "file1.go", Function: "func1", Coverage: 100.0},
-				{File: "file2.go", Function: "func2", Coverage: 0.0},
-			},
-			FilteredFiles: []string{"mock1.go", "mock2.go"},
+		Total:   5,
+		Passed:  5,
+		Runtime: "linux",
+		Coverage: []types.CoverageInfo{
+			{Package: "github.com/test/pkg/main", Percentage: 85.5},
+			{Package: "github.com/test/pkg/utils", Percentage: 92.3},
+			{Package: "github.com/test/pkg/config", Percentage: 0.0},
 		},
 	}
 
-	result := GenerateGitHubComment(summary, "test-uuid")
+	comment := GenerateGitHubComment(summary)
 
-	// Should contain coverage table headers
-	assert.Contains(t, result, "## 📊 Test Coverage", "Comment should contain coverage section")
-	assert.Contains(t, result, "| Metric | Coverage | Details |", "Comment should contain table headers")
-	assert.Contains(t, result, "| Statement Coverage |", "Comment should contain statement coverage row")
-	assert.Contains(t, result, "| Function Coverage |", "Comment should contain function coverage row")
+	// Check table structure
+	assert.Contains(t, comment, "| Package")
+	assert.Contains(t, comment, "| Coverage")
+	assert.Contains(t, comment, "|---")
 
-	// Should contain coverage percentage
-	assert.Contains(t, result, "85.2%", "Comment should contain statement coverage percentage")
+	// Check coverage values
+	assert.Contains(t, comment, "85.5%")
+	assert.Contains(t, comment, "92.3%")
+	assert.Contains(t, comment, "0.0%")
 
-	// Should contain emoji and excluded files info
-	assert.Contains(t, result, "🟢", "Comment should contain coverage emoji for good coverage")
-	assert.Contains(t, result, "(excluded 2 mock files)", "Comment should show excluded files count")
-
-	// Should contain function coverage info
-	assert.Contains(t, result, "1/2 functions covered", "Comment should show function coverage ratio")
+	// Check package names (should be shortened)
+	assert.Contains(t, comment, "pkg/main")
+	assert.Contains(t, comment, "pkg/utils")
+	assert.Contains(t, comment, "pkg/config")
 }

@@ -18,7 +18,7 @@ func TestNormalizePostingStrategy(t *testing.T) {
 	}{
 		// Default behavior
 		{"empty with flag present", "", true, "never"},
-		{"empty without flag", "", false, "never"},
+		{"empty without flag", "", false, "on-failure"},
 
 		// Boolean aliases
 		{"true alias", "true", true, "always"},

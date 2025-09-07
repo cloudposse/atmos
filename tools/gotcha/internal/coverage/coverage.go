@@ -14,6 +14,14 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
+// Type aliases for test compatibility.
+type CoverageLine = types.CoverageLine
+type CoverageFunction = types.CoverageFunction
+type CoverageData = types.CoverageData
+
+// parseCoverageProfile parses a coverage profile and returns coverage data (exported for tests).
+var parseCoverageProfile = ParseCoverageProfile
+
 // parseCoverageProfile parses a coverage profile and returns coverage data.
 func ParseCoverageProfile(profileFile string, excludeMocks bool) (*types.CoverageData, error) {
 	// Validate profile file exists.
