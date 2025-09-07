@@ -35,7 +35,7 @@ jobs:
   build:
     needs: [prepare]
     runs-on: ubuntu-latest
-    environment: release
+    environment: feature-releases
     steps:
       - name: Install dependencies
         run: |
