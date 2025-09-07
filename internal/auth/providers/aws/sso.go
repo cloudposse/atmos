@@ -9,13 +9,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ssoProvider implements AWS IAM Identity Center authentication
+// ssoProvider implements AWS IAM Identity Center authentication.
 type ssoProvider struct {
 	name     string
 	config   *schema.Provider
@@ -23,7 +23,7 @@ type ssoProvider struct {
 	region   string
 }
 
-// NewSSOProvider creates a new AWS SSO provider
+// NewSSOProvider creates a new AWS SSO provider.
 func NewSSOProvider(name string, config *schema.Provider) (*ssoProvider, error) {
 	if config.Kind != "aws/iam-identity-center" {
 		return nil, fmt.Errorf("%w: invalid provider kind for SSO provider: %s", errUtils.ErrInvalidProviderKind, config.Kind)
@@ -45,12 +45,12 @@ func NewSSOProvider(name string, config *schema.Provider) (*ssoProvider, error) 
 	}, nil
 }
 
-// Kind returns the provider kind
+// Kind returns the provider kind.
 func (p *ssoProvider) Kind() string {
 	return "aws/iam-identity-center"
 }
 
-// ssoCache represents cached SSO credentials
+// ssoCache represents cached SSO credentials.
 type ssoCache struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token,omitempty"`
@@ -59,7 +59,7 @@ type ssoCache struct {
 	LastUpdated  time.Time `json:"last_updated"`
 }
 
-// Authenticate performs AWS SSO authentication
+// Authenticate performs AWS SSO authentication.
 func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
 	// Note: SSO provider no longer caches credentials directly
 	// Caching is handled at the manager level to prevent duplicates
@@ -161,7 +161,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (*schema.Credentials, er
 	}, nil
 }
 
-// Validate validates the provider configuration
+// Validate validates the provider configuration.
 func (p *ssoProvider) Validate() error {
 	if p.startURL == "" {
 		return fmt.Errorf("%w: start_url is required", errUtils.ErrInvalidProviderConfig)
@@ -172,7 +172,7 @@ func (p *ssoProvider) Validate() error {
 	return nil
 }
 
-// Environment returns environment variables for this provider
+// Environment returns environment variables for this provider.
 func (p *ssoProvider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 	env["AWS_REGION"] = p.region
@@ -181,7 +181,7 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 
 // Note: SSO caching is now handled at the manager level to prevent duplicate entries
 
-// getSessionDuration returns the session duration in minutes
+// getSessionDuration returns the session duration in minutes.
 func (p *ssoProvider) getSessionDuration() int {
 	if p.config.Session != nil && p.config.Session.Duration != "" {
 		// Parse duration (e.g., "15m", "1h")

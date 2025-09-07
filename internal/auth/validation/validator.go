@@ -18,7 +18,7 @@ func NewValidator() types.Validator {
 	return &validator{}
 }
 
-// ValidateAuthConfig validates the entire auth configuration
+// ValidateAuthConfig validates the entire auth configuration.
 func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 	if config == nil {
 		return fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrInvalidAuthConfig)
@@ -53,7 +53,7 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 	return nil
 }
 
-// ValidateLogsConfig validates the logs configuration
+// ValidateLogsConfig validates the logs configuration.
 func (v *validator) ValidateLogsConfig(logs *schema.LogsConfig) error {
 	if logs.Level == "" {
 		// Default to Info if not specified
@@ -67,7 +67,7 @@ func (v *validator) ValidateLogsConfig(logs *schema.LogsConfig) error {
 		}
 	}
 
-	return fmt.Errorf("invalid log level %q, must be one of: %s", logs.Level, strings.Join(validLevels, ", "))
+	return fmt.Errorf("%w: invalid log level %q, must be one of: %s", errUtils.ErrInvalidAuthConfig, logs.Level, strings.Join(validLevels, ", "))
 }
 
 // ValidateProvider validates a provider configuration.
@@ -92,11 +92,11 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 	case "github/oidc":
 		return v.validateGitHubOIDCProvider(provider)
 	default:
-		return fmt.Errorf("unsupported provider kind: %s", provider.Kind)
+		return fmt.Errorf("%w: unsupported provider kind: %s", errUtils.ErrInvalidProviderKind, provider.Kind)
 	}
 }
 
-// ValidateIdentity validates an identity configuration
+// ValidateIdentity validates an identity configuration.
 func (v *validator) ValidateIdentity(name string, identity *schema.Identity, providers map[string]*schema.Provider) error {
 	if name == "" {
 		return fmt.Errorf("%w: identity name cannot be empty", errUtils.ErrInvalidIdentityConfig)
@@ -129,7 +129,7 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 	}
 }
 
-// ValidateChains validates identity chains for cycles and invalid references
+// ValidateChains validates identity chains for cycles and invalid references.
 func (v *validator) ValidateChains(identities map[string]*schema.Identity, providers map[string]*schema.Provider) error {
 	// Build dependency graph
 	graph := make(map[string][]string)
@@ -157,7 +157,7 @@ func (v *validator) ValidateChains(identities map[string]*schema.Identity, provi
 	return nil
 }
 
-// validateSSOProvider validates AWS SSO provider configuration
+// validateSSOProvider validates AWS SSO provider configuration.
 func (v *validator) validateSSOProvider(provider *schema.Provider) error {
 	if provider.StartURL == "" {
 		return fmt.Errorf("%w: start_url is required for AWS SSO provider", errUtils.ErrInvalidAuthConfig)
@@ -170,7 +170,7 @@ func (v *validator) validateSSOProvider(provider *schema.Provider) error {
 	return nil
 }
 
-// validateAssumeRoleProvider validates AWS assume role provider configuration
+// validateAssumeRoleProvider validates AWS assume role provider configuration.
 func (v *validator) validateAssumeRoleProvider(provider *schema.Provider) error {
 	if provider.Spec == nil {
 		return fmt.Errorf("%w: spec is required for assume role provider", errUtils.ErrInvalidAuthConfig)
@@ -188,7 +188,7 @@ func (v *validator) validateAssumeRoleProvider(provider *schema.Provider) error 
 	return nil
 }
 
-// validateSAMLProvider validates AWS SAML provider configuration
+// validateSAMLProvider validates AWS SAML provider configuration.
 func (v *validator) validateSAMLProvider(provider *schema.Provider) error {
 	if provider.URL == "" {
 		return fmt.Errorf("%w: url is required for AWS SAML provider", errUtils.ErrInvalidAuthConfig)
@@ -206,7 +206,7 @@ func (v *validator) validateSAMLProvider(provider *schema.Provider) error {
 	return nil
 }
 
-// validateGitHubOIDCProvider validates GitHub OIDC provider configuration
+// validateGitHubOIDCProvider validates GitHub OIDC provider configuration.
 func (v *validator) validateGitHubOIDCProvider(provider *schema.Provider) error {
 	if provider.Region == "" {
 		return fmt.Errorf("%w: region is required for GitHub OIDC provider", errUtils.ErrInvalidAuthConfig)
@@ -215,7 +215,7 @@ func (v *validator) validateGitHubOIDCProvider(provider *schema.Provider) error 
 	return nil
 }
 
-// validatePermissionSetIdentity validates AWS permission set identity configuration
+// validatePermissionSetIdentity validates AWS permission set identity configuration.
 func (v *validator) validatePermissionSetIdentity(identity *schema.Identity) error {
 	if identity.Principal == nil {
 		return fmt.Errorf("%w: principal is required for permission set identity", errUtils.ErrInvalidAuthConfig)
@@ -239,7 +239,7 @@ func (v *validator) validatePermissionSetIdentity(identity *schema.Identity) err
 	return nil
 }
 
-// validateAssumeRoleIdentity validates AWS assume role identity configuration
+// validateAssumeRoleIdentity validates AWS assume role identity configuration.
 func (v *validator) validateAssumeRoleIdentity(identity *schema.Identity) error {
 	if identity.Principal == nil {
 		return fmt.Errorf("%w: principal is required for assume role identity", errUtils.ErrInvalidAuthConfig)
@@ -257,13 +257,13 @@ func (v *validator) validateAssumeRoleIdentity(identity *schema.Identity) error 
 	return nil
 }
 
-// validateUserIdentity validates AWS user identity configuration
+// validateUserIdentity validates AWS user identity configuration.
 func (v *validator) validateUserIdentity(identity *schema.Identity) error {
 	// User identities typically don't require additional validation
 	return nil
 }
 
-// hasCycle performs DFS to detect cycles in the dependency graph
+// hasCycle performs DFS to detect cycles in the dependency graph.
 func (v *validator) hasCycle(node string, graph map[string][]string, visited, recStack map[string]bool) bool {
 	visited[node] = true
 	recStack[node] = true
@@ -282,7 +282,7 @@ func (v *validator) hasCycle(node string, graph map[string][]string, visited, re
 	return false
 }
 
-// Helper functions to convert map types
+// Helper functions to convert map types.
 func convertProviders(providers map[string]schema.Provider) map[string]*schema.Provider {
 	result := make(map[string]*schema.Provider)
 	for k, v := range providers {

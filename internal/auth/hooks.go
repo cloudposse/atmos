@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/credentials"
 	"github.com/cloudposse/atmos/internal/auth/types"
@@ -22,7 +22,7 @@ type (
 	Validator       = types.Validator
 )
 
-// TerraformPreHook runs before Terraform commands to set up authentication
+// TerraformPreHook runs before Terraform commands to set up authentication.
 func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
 	// Determine base (atmos) log level.
 	atmosLevel := log.InfoLevel
@@ -100,6 +100,6 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
-	utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvSection)
+	_ = utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvSection)
 	return nil
 }

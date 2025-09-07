@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
 	"github.com/versent/saml2aws/v2/pkg/creds"
@@ -23,7 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// min returns the minimum of two integers
+// min returns the minimum of two integers.
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -31,7 +31,7 @@ func min(a, b int) int {
 	return b
 }
 
-// samlProvider implements AWS SAML authentication using saml2aws
+// samlProvider implements AWS SAML authentication using saml2aws.
 type samlProvider struct {
 	name   string
 	config *schema.Provider
@@ -39,7 +39,7 @@ type samlProvider struct {
 	region string
 }
 
-// NewSAMLProvider creates a new AWS SAML provider
+// NewSAMLProvider creates a new AWS SAML provider.
 func NewSAMLProvider(name string, config *schema.Provider) (types.Provider, error) {
 	if config.Kind != "aws/saml" {
 		return nil, fmt.Errorf("%w: invalid provider kind for SAML provider: %s", errUtils.ErrInvalidProviderKind, config.Kind)
@@ -61,12 +61,12 @@ func NewSAMLProvider(name string, config *schema.Provider) (types.Provider, erro
 	}, nil
 }
 
-// Kind returns the provider kind
+// Kind returns the provider kind.
 func (p *samlProvider) Kind() string {
 	return "aws/saml"
 }
 
-// Authenticate performs SAML authentication using saml2aws
+// Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
 	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url)
 
@@ -209,7 +209,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	return awsCreds, nil
 }
 
-// assumeRoleWithSAML assumes an AWS role using SAML assertion
+// assumeRoleWithSAML assumes an AWS role using SAML assertion.
 func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion string, role *saml2aws.AWSRole) (*schema.Credentials, error) {
 	// Create AWS session
 	sess, err := session.NewSession(&aws.Config{
@@ -248,7 +248,7 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 	return creds, nil
 }
 
-// getProviderType returns the SAML provider type based on configuration or URL detection
+// getProviderType returns the SAML provider type based on configuration or URL detection.
 func (p *samlProvider) getProviderType() string {
 	if p.config.ProviderType != "" {
 		return p.config.ProviderType
@@ -269,7 +269,7 @@ func (p *samlProvider) getProviderType() string {
 	return "Browser"
 }
 
-// Validate validates the provider configuration
+// Validate validates the provider configuration.
 func (p *samlProvider) Validate() error {
 	if p.url == "" {
 		return fmt.Errorf("%w: URL is required for SAML provider", errUtils.ErrInvalidProviderConfig)
@@ -287,7 +287,7 @@ func (p *samlProvider) Validate() error {
 	return nil
 }
 
-// Environment returns environment variables for this provider
+// Environment returns environment variables for this provider.
 func (p *samlProvider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
@@ -303,7 +303,7 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
-// setupBrowserAutomation sets up browser automation for SAML authentication
+// setupBrowserAutomation sets up browser automation for SAML authentication.
 func (p *samlProvider) setupBrowserAutomation() error {
 	// Set environment variables for browser automation
 	if p.config.DownloadBrowserDriver {
@@ -318,7 +318,7 @@ func (p *samlProvider) setupBrowserAutomation() error {
 	return nil
 }
 
-// preprocessGoogleSAMLResponse processes Google Apps SAML response to extract the assertion
+// preprocessGoogleSAMLResponse processes Google Apps SAML response to extract the assertion.
 func (p *samlProvider) preprocessGoogleSAMLResponse(samlResponse string) string {
 	// First, try to decode the SAML response if it's Base64 encoded
 	decodedResponse := samlResponse
@@ -357,7 +357,7 @@ func (p *samlProvider) preprocessGoogleSAMLResponse(samlResponse string) string 
 	return encodedAssertion
 }
 
-// setupSAML2AWSConfig creates the saml2aws configuration directory and file
+// setupSAML2AWSConfig creates the saml2aws configuration directory and file.
 func (p *samlProvider) setupSAML2AWSConfig() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {

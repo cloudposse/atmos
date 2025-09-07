@@ -8,26 +8,27 @@ import (
 	"os"
 	"time"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// oidcProvider implements GitHub OIDC authentication
+// oidcProvider implements GitHub OIDC authentication.
 type oidcProvider struct {
 	name   string
 	config *schema.Provider
 }
 
-// NewOIDCProvider creates a new GitHub OIDC provider
+// NewOIDCProvider creates a new GitHub OIDC provider.
 func NewOIDCProvider(name string, config *schema.Provider) (types.Provider, error) {
 	if config == nil {
-		return nil, fmt.Errorf("provider config is required")
+		return nil, fmt.Errorf("%w: provider config is required", errUtils.ErrInvalidProviderConfig)
 	}
 
 	if name == "" {
-		return nil, fmt.Errorf("provider name is required")
+		return nil, fmt.Errorf("%w: provider name is required", errUtils.ErrInvalidProviderConfig)
 	}
 
 	return &oidcProvider{
@@ -36,34 +37,34 @@ func NewOIDCProvider(name string, config *schema.Provider) (types.Provider, erro
 	}, nil
 }
 
-// Name returns the provider name
+// Name returns the provider name.
 func (p *oidcProvider) Name() string {
 	return p.name
 }
 
-// Kind returns the provider kind
+// Kind returns the provider kind.
 func (p *oidcProvider) Kind() string {
 	return "github/oidc"
 }
 
-// Authenticate performs GitHub OIDC authentication
+// Authenticate performs GitHub OIDC authentication.
 func (p *oidcProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
 	log.Info("Starting GitHub OIDC authentication", "provider", p.name)
 
 	// Check if we're running in GitHub Actions
 	if !p.isGitHubActions() {
-		return nil, fmt.Errorf("GitHub OIDC authentication is only available in GitHub Actions environment")
+		return nil, fmt.Errorf("%w: GitHub OIDC authentication is only available in GitHub Actions environment", errUtils.ErrAuthenticationFailed)
 	}
 
 	// Get the OIDC token from GitHub Actions environment
 	token := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 	if token == "" {
-		return nil, fmt.Errorf("ACTIONS_ID_TOKEN_REQUEST_TOKEN not found - ensure job has 'id-token: write' permission")
+		return nil, fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_TOKEN not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
 	}
 
 	requestURL := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
 	if requestURL == "" {
-		return nil, fmt.Errorf("ACTIONS_ID_TOKEN_REQUEST_URL not found - ensure job has 'id-token: write' permission")
+		return nil, fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
 	}
 
 	var aud string
@@ -71,14 +72,14 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 		if v, ok := p.config.Spec["audience"].(string); ok && v != "" {
 			aud = v
 		} else {
-			return nil, fmt.Errorf("audience is required in provider spec")
+			return nil, fmt.Errorf("%w: audience is required in provider spec", errUtils.ErrInvalidProviderConfig)
 		}
 	}
 
 	// Get the JWT token from GitHub's OIDC endpoint.
 	jwtToken, err := p.getOIDCToken(ctx, requestURL, token, aud)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get OIDC token: %w", err)
+		return nil, fmt.Errorf("%w: failed to get OIDC token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	log.Info("GitHub OIDC authentication successful", "provider", p.name)
@@ -94,16 +95,16 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (*schema.Credentials, e
 	}, nil
 }
 
-// isGitHubActions checks if we're running in GitHub Actions environment
+// isGitHubActions checks if we're running in GitHub Actions environment.
 func (p *oidcProvider) isGitHubActions() bool {
 	return os.Getenv("GITHUB_ACTIONS") == "true"
 }
 
-// getOIDCToken retrieves the JWT token from GitHub's OIDC endpoint
+// getOIDCToken retrieves the JWT token from GitHub's OIDC endpoint.
 func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToken, audience string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("create OIDC request: %w", err)
+		return "", fmt.Errorf("%w: create OIDC request: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	q := req.URL.Query()
 	if audience != "" {
@@ -115,32 +116,32 @@ func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToke
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("call OIDC endpoint: %w", err)
+		return "", fmt.Errorf("%w: call OIDC endpoint: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("OIDC endpoint returned status %s", resp.Status)
+		return "", fmt.Errorf("%w: OIDC endpoint returned status %s", errUtils.ErrAuthenticationFailed, resp.Status)
 	}
 	var out struct {
 		Value string `json:"value"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("decode OIDC response: %w", err)
+		return "", fmt.Errorf("%w: decode OIDC response: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	if out.Value == "" {
-		return "", fmt.Errorf("empty token in OIDC response")
+		return "", fmt.Errorf("%w: empty token in OIDC response", errUtils.ErrAuthenticationFailed)
 	}
 	return out.Value, nil
 }
 
-// Validate validates the provider configuration
+// Validate validates the provider configuration.
 func (p *oidcProvider) Validate() error {
 	// GitHub OIDC provider doesn't require additional configuration
 	// It relies on GitHub Actions environment variables
 	return nil
 }
 
-// Environment returns environment variables for this provider
+// Environment returns environment variables for this provider.
 func (p *oidcProvider) Environment() (map[string]string, error) {
 	// GitHub OIDC provider doesn't set additional environment variables
 	// The OIDC token is passed to downstream identities via credentials

@@ -89,4 +89,6 @@ var (
 	ErrPostAuthenticationHookFailed = errors.New("post authentication hook failed")
 	ErrAuthManager                  = errors.New("auth manager error")
 	ErrDefaultIdentity              = errors.New("default identity error")
+	ErrAwsAuth                      = errors.New("aws auth error")
+	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
 )

@@ -8,7 +8,7 @@ import (
 
 // TestHelpers provides common test utilities for auth package tests
 
-// CreateTestProvider creates a test provider configuration
+// CreateTestProvider creates a test provider configuration.
 func CreateTestProvider(kind, region string) *schema.Provider {
 	return &schema.Provider{
 		Kind:   kind,
@@ -16,14 +16,14 @@ func CreateTestProvider(kind, region string) *schema.Provider {
 	}
 }
 
-// CreateTestIdentity creates a test identity configuration
+// CreateTestIdentity creates a test identity configuration.
 func CreateTestIdentity(kind string) *schema.Identity {
 	return &schema.Identity{
 		Kind: kind,
 	}
 }
 
-// CreateTestCredentials creates test AWS credentials
+// CreateTestCredentials creates test AWS credentials.
 func CreateTestCredentials(accessKeyID, secretKey, region string) *schema.Credentials {
 	return &schema.Credentials{
 		AWS: &schema.AWSCredentials{
@@ -34,7 +34,7 @@ func CreateTestCredentials(accessKeyID, secretKey, region string) *schema.Creden
 	}
 }
 
-// CreateTestOIDCCredentials creates test OIDC credentials
+// CreateTestOIDCCredentials creates test OIDC credentials.
 func CreateTestOIDCCredentials(token, provider string) *schema.Credentials {
 	return &schema.Credentials{
 		OIDC: &schema.OIDCCredentials{
@@ -44,7 +44,7 @@ func CreateTestOIDCCredentials(token, provider string) *schema.Credentials {
 	}
 }
 
-// CreateTestWhoamiInfo creates test whoami information
+// CreateTestWhoamiInfo creates test whoami information.
 func CreateTestWhoamiInfo(provider, identity, principal string) *schema.WhoamiInfo {
 	return &schema.WhoamiInfo{
 		Provider:    provider,
@@ -54,7 +54,7 @@ func CreateTestWhoamiInfo(provider, identity, principal string) *schema.WhoamiIn
 	}
 }
 
-// CreateTestAuthConfig creates a test auth configuration
+// CreateTestAuthConfig creates a test auth configuration.
 func CreateTestAuthConfig() *schema.AuthConfig {
 	return &schema.AuthConfig{
 		Providers:  make(map[string]schema.Provider),

@@ -14,12 +14,19 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-// AWSCloudProvider implements the CloudProvider interface for AWS
+const (
+	DefaultAwsDirName            = ".aws"
+	DefaultAwsAtmosDirName       = "atmos"
+	DefaultAwsConfigDirName      = "config"
+	DefaultAwsCredentialsDirName = "credentials"
+)
+
+// AWSCloudProvider implements the CloudProvider interface for AWS.
 type AWSCloudProvider struct {
 	homeDir string
 }
 
-// NewAWSCloudProvider creates a new AWS cloud provider instance
+// NewAWSCloudProvider creates a new AWS cloud provider instance.
 func NewAWSCloudProvider() types.CloudProvider {
 	homedirDir, _ := homedir.Dir()
 	return &AWSCloudProvider{
@@ -27,78 +34,78 @@ func NewAWSCloudProvider() types.CloudProvider {
 	}
 }
 
-// GetName returns the cloud provider name
+// GetName returns the cloud provider name.
 func (p *AWSCloudProvider) GetName() string {
 	return "aws"
 }
 
-// SetupEnvironment configures AWS-specific environment variables and files
+// SetupEnvironment configures AWS-specific environment variables and files.
 func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *schema.Credentials) error {
 	if credentials == nil || credentials.AWS == nil {
-		return fmt.Errorf("AWS credentials are required")
+		return fmt.Errorf("%w: AWS credentials are required", errUtils.ErrAwsAuth)
 	}
 
 	// Create AWS directory structure
-	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
-	if err := os.MkdirAll(awsDir, 0o700); err != nil {
-		return fmt.Errorf("%w: failed to create AWS directory: %v", errUtils.ErrStaticError, err)
+	awsDir := filepath.Join(p.homeDir, DefaultAwsDirName, DefaultAwsAtmosDirName, providerName)
+	if err := os.MkdirAll(awsDir, PermissionRWX); err != nil {
+		return fmt.Errorf("%w: failed to create AWS directory: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Write credentials file
-	credentialsPath := filepath.Join(awsDir, "credentials")
+	credentialsPath := filepath.Join(awsDir, DefaultAwsCredentialsDirName)
 	if err := p.writeCredentialsFile(credentialsPath, identityName, credentials.AWS); err != nil {
-		return fmt.Errorf("%w: failed to write credentials file: %v", errUtils.ErrStaticError, err)
+		return fmt.Errorf("%w: failed to write credentials file: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Write config file
-	configPath := filepath.Join(awsDir, "config")
+	configPath := filepath.Join(awsDir, DefaultAwsConfigDirName)
 	if err := p.writeConfigFile(configPath, identityName, credentials.AWS.Region); err != nil {
-		return fmt.Errorf("%w: failed to write config file: %v", errUtils.ErrStaticError, err)
+		return fmt.Errorf("%w: failed to write config file: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	return nil
 }
 
-// GetEnvironmentVariables returns AWS-specific environment variables
+// GetEnvironmentVariables returns AWS-specific environment variables.
 func (p *AWSCloudProvider) GetEnvironmentVariables(providerName, identityName string) (map[string]string, error) {
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
 
 	return map[string]string{
-		"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(awsDir, "credentials"),
-		"AWS_CONFIG_FILE":             filepath.Join(awsDir, "config"),
+		"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(awsDir, DefaultAwsCredentialsDirName),
+		"AWS_CONFIG_FILE":             filepath.Join(awsDir, DefaultAwsConfigDirName),
 		"AWS_PROFILE":                 identityName,
 	}, nil
 }
 
-// CleanupEnvironment removes AWS temporary files and resources
+// CleanupEnvironment removes AWS temporary files and resources.
 func (p *AWSCloudProvider) CleanupEnvironment(ctx context.Context, providerName, identityName string) error {
 	// For now, we keep the files for caching purposes
 	// In the future, we might implement cleanup based on expiration
 	return nil
 }
 
-// ValidateCredentials validates AWS credentials
+// ValidateCredentials validates AWS credentials.
 func (p *AWSCloudProvider) ValidateCredentials(ctx context.Context, credentials *schema.Credentials) error {
 	if credentials == nil {
-		return fmt.Errorf("%w: credentials cannot be nil", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: credentials cannot be nil", errUtils.ErrAwsAuth)
 	}
 
 	if credentials.AWS == nil {
-		return fmt.Errorf("%w: AWS credentials are required", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: AWS credentials are required", errUtils.ErrAwsAuth)
 	}
 
 	if credentials.AWS.AccessKeyID == "" {
-		return fmt.Errorf("%w: AWS access key ID is required", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: AWS access key ID is required", errUtils.ErrAwsAuth)
 	}
 
 	if credentials.AWS.SecretAccessKey == "" {
-		return fmt.Errorf("%w: AWS secret access key is required", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: AWS secret access key is required", errUtils.ErrAwsAuth)
 	}
 
 	return nil
 }
 
-// GetCredentialPaths returns paths where AWS credentials are stored
+// GetCredentialPaths returns paths where AWS credentials are stored.
 func (p *AWSCloudProvider) GetCredentialPaths(providerName, identityName string) (map[string]string, error) {
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
 
@@ -109,7 +116,7 @@ func (p *AWSCloudProvider) GetCredentialPaths(providerName, identityName string)
 	}, nil
 }
 
-// writeCredentialsFile writes AWS credentials to the specified file
+// writeCredentialsFile writes AWS credentials to the specified file.
 func (p *AWSCloudProvider) writeCredentialsFile(path, identityName string, creds *schema.AWSCredentials) error {
 	content := fmt.Sprintf(`[%s]
 aws_access_key_id = %s
@@ -124,11 +131,11 @@ aws_secret_access_key = %s
 		return err
 	}
 	// Tighten permissions as credentials are sensitive.
-	_ = os.Chmod(path, 0o600)
+	_ = os.Chmod(path, PermissionRW)
 	return nil
 }
 
-// writeConfigFile writes AWS config to the specified file
+// writeConfigFile writes AWS config to the specified file.
 func (p *AWSCloudProvider) writeConfigFile(path, identityName, region string) error {
 	if region == "" {
 		region = "us-east-1" // Default region
@@ -141,27 +148,27 @@ region = %s
 	if err := p.updateProfileInFile(path, fmt.Sprintf("profile %s", identityName), content); err != nil {
 		return err
 	}
-	_ = os.Chmod(path, 0o600)
+	_ = os.Chmod(path, PermissionRW)
 	return nil
 }
 
-// Cleanup removes temporary files and resources created by this provider
+// Cleanup removes temporary files and resources created by this provider.
 func (p *AWSCloudProvider) Cleanup(ctx context.Context, providerName, identityName string) error {
 	// Currently no cleanup needed - files are persistent for caching
 	// In the future, we could implement cleanup of expired credential files
 	return nil
 }
 
-// GetCredentialFilePaths returns the paths to credential files managed by this provider
+// GetCredentialFilePaths returns the paths to credential files managed by this provider.
 func (p *AWSCloudProvider) GetCredentialFilePaths(providerName string) map[string]string {
 	awsDir := filepath.Join(p.homeDir, ".aws", "atmos", providerName)
 	return map[string]string{
-		"credentials": filepath.Join(awsDir, "credentials"),
-		"config":      filepath.Join(awsDir, "config"),
+		"credentials": filepath.Join(awsDir, DefaultAwsCredentialsDirName),
+		"config":      filepath.Join(awsDir, DefaultAwsConfigDirName),
 	}
 }
 
-// updateProfileInFile updates or adds a profile section in an AWS config file using INI format
+// updateProfileInFile updates or adds a profile section in an AWS config file using INI format.
 func (p *AWSCloudProvider) updateProfileInFile(path, profileName, content string) error {
 	// Load existing INI file or create new one
 	cfg, err := ini.Load(path)
@@ -173,7 +180,7 @@ func (p *AWSCloudProvider) updateProfileInFile(path, profileName, content string
 	// Parse the content to extract key-value pairs
 	lines := strings.Split(strings.TrimSpace(content), "\n")
 	if len(lines) == 0 {
-		return fmt.Errorf("%w: invalid content format", errUtils.ErrStaticError)
+		return fmt.Errorf("%w: invalid content format", errUtils.ErrAwsAuth)
 	}
 
 	// Use the given profileName for the section and get or create it.
@@ -181,7 +188,7 @@ func (p *AWSCloudProvider) updateProfileInFile(path, profileName, content string
 	if err != nil {
 		section, err = cfg.NewSection(profileName)
 		if err != nil {
-			return fmt.Errorf("%w: failed to create section %s: %v", errUtils.ErrStaticError, profileName, err)
+			return fmt.Errorf("%w: failed to create section %s: %v", errUtils.ErrAwsAuth, profileName, err)
 		}
 	}
 

@@ -12,14 +12,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// assumeRoleProvider implements AWS assume role authentication
+// assumeRoleProvider implements AWS assume role authentication.
 type assumeRoleProvider struct {
 	name   string
 	config *schema.Provider
 	region string
 }
 
-// NewAssumeRoleProvider creates a new AWS assume role provider
+// NewAssumeRoleProvider creates a new AWS assume role provider.
 func NewAssumeRoleProvider(name string, providerConfig *schema.Provider) (*assumeRoleProvider, error) {
 	if providerConfig.Kind != "aws/assume-role" {
 		return nil, fmt.Errorf("%w: invalid provider kind for assume role provider: %s", errUtils.ErrInvalidProviderKind, providerConfig.Kind)
@@ -37,12 +37,12 @@ func NewAssumeRoleProvider(name string, providerConfig *schema.Provider) (*assum
 	}, nil
 }
 
-// Kind returns the provider kind
+// Kind returns the provider kind.
 func (p *assumeRoleProvider) Kind() string {
 	return "aws/assume-role"
 }
 
-// Authenticate performs AWS assume role authentication
+// Authenticate performs AWS assume role authentication.
 func (p *assumeRoleProvider) Authenticate(ctx context.Context) (*schema.Credentials, error) {
 	// Load default AWS configuration
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(p.region))
@@ -95,7 +95,7 @@ func (p *assumeRoleProvider) Authenticate(ctx context.Context) (*schema.Credenti
 	}, nil
 }
 
-// Validate validates the provider configuration
+// Validate validates the provider configuration.
 func (p *assumeRoleProvider) Validate() error {
 	if p.config.Spec == nil {
 		return fmt.Errorf("%w: spec is required", errUtils.ErrInvalidProviderConfig)
@@ -109,7 +109,7 @@ func (p *assumeRoleProvider) Validate() error {
 	return nil
 }
 
-// Environment returns environment variables for this provider
+// Environment returns environment variables for this provider.
 func (p *assumeRoleProvider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 	env["AWS_REGION"] = p.region

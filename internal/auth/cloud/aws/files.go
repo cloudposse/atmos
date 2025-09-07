@@ -1,11 +1,12 @@
 package aws
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	ini "gopkg.in/ini.v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -13,12 +14,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// AWSFileManager provides helpers to manage AWS credentials/config files
+const (
+	PermissionRWX = 0o700
+	PermissionRW  = 0o600
+)
+
+// AWSFileManager provides helpers to manage AWS credentials/config files.
 type AWSFileManager struct {
 	baseDir string
 }
 
-// NewAWSFileManager creates a new AWS file manager instance
+// NewAWSFileManager creates a new AWS file manager instance.
 func NewAWSFileManager() *AWSFileManager {
 	homeDir, _ := homedir.Dir()
 	return &AWSFileManager{
@@ -26,26 +32,28 @@ func NewAWSFileManager() *AWSFileManager {
 	}
 }
 
-// WriteCredentials writes AWS credentials to the provider-specific file with identity profile
+// WriteCredentials writes AWS credentials to the provider-specific file with identity profile.
 func (m *AWSFileManager) WriteCredentials(providerName, identityName string, creds *schema.AWSCredentials) error {
 	credentialsPath := m.GetCredentialsPath(providerName)
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(credentialsPath), 0o700); err != nil {
-		return fmt.Errorf("%w: failed to create credentials directory: %v", errUtils.ErrStaticError, err)
+	if err := os.MkdirAll(filepath.Dir(credentialsPath), PermissionRWX); err != nil {
+		return fmt.Errorf("%w: failed to create credentials directory: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Load existing INI file or create new one
 	cfg, err := ini.Load(credentialsPath)
 	if err != nil {
-		// File doesn't exist or is invalid, create new one
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%w: failed to load credentials file: %w", errUtils.ErrAwsAuth, err)
+		}
 		cfg = ini.Empty()
 	}
 
 	// Get or create the profile section
 	section, err := cfg.NewSection(identityName)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create profile section: %v", errUtils.ErrStaticError, err)
+		return fmt.Errorf("%w: failed to create profile section: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Set credentials
@@ -60,24 +68,24 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 
 	// Save file with proper permissions
 	if err := cfg.SaveTo(credentialsPath); err != nil {
-		return fmt.Errorf("%w: failed to write credentials file: %v", errUtils.ErrStaticError, err)
+		return fmt.Errorf("%w: failed to write credentials file: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Set proper file permissions
-	if err := os.Chmod(credentialsPath, 0o600); err != nil {
-		return fmt.Errorf("%w: failed to set credentials file permissions: %v", errUtils.ErrStaticError, err)
+	if err := os.Chmod(credentialsPath, PermissionRWX); err != nil {
+		return fmt.Errorf("%w: failed to set credentials file permissions: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	return nil
 }
 
-// WriteConfig writes AWS config to the provider-specific file with identity profile
+// WriteConfig writes AWS config to the provider-specific file with identity profile.
 func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputFormat string) error {
 	configPath := m.GetConfigPath(providerName)
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
-		return fmt.Errorf("%w: failed to create config directory: %v", errUtils.ErrStaticError, err)
+	if err := os.MkdirAll(filepath.Dir(configPath), PermissionRWX); err != nil {
+		return fmt.Errorf("%w: failed to create config directory: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Load existing INI file or create new one
@@ -116,28 +124,28 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 
 	// Save file with proper permissions
 	if err := cfg.SaveTo(configPath); err != nil {
-		return fmt.Errorf("%w: failed to write config file: %v", errUtils.ErrStaticError, err)
+		return fmt.Errorf("%w: failed to write config file: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Set proper file permissions
-	if err := os.Chmod(configPath, 0o600); err != nil {
-		return fmt.Errorf("%w: failed to set config file permissions: %v", errUtils.ErrStaticError, err)
+	if err := os.Chmod(configPath, PermissionRW); err != nil {
+		return fmt.Errorf("%w: failed to set config file permissions: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	return nil
 }
 
-// GetCredentialsPath returns the path to the credentials file for the provider
+// GetCredentialsPath returns the path to the credentials file for the provider.
 func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "credentials")
 }
 
-// GetConfigPath returns the path to the config file for the provider
+// GetConfigPath returns the path to the config file for the provider.
 func (m *AWSFileManager) GetConfigPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "config")
 }
 
-// GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice
+// GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice.
 func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName string) []schema.EnvironmentVariable {
 	credentialsPath := m.GetCredentialsPath(providerName)
 	configPath := m.GetConfigPath(providerName)
@@ -149,7 +157,7 @@ func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName stri
 	}
 }
 
-// Cleanup removes AWS files for the provider
+// Cleanup removes AWS files for the provider.
 func (m *AWSFileManager) Cleanup(providerName string) error {
 	providerDir := filepath.Join(m.baseDir, providerName)
 

@@ -46,7 +46,7 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 	}
 }
 
-// NewIdentity creates a new identity instance based on the identity configuration
+// NewIdentity creates a new identity instance based on the identity configuration.
 func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	if config == nil {
 		return nil, fmt.Errorf("%w: identity config is nil", errUtils.ErrInvalidAuthConfig)

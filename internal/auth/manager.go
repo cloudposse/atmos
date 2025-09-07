@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/identities/aws"
 	"github.com/cloudposse/atmos/internal/auth/types"
@@ -15,7 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
-// manager implements the AuthManager interface
+// manager implements the AuthManager interface.
 type manager struct {
 	config          *schema.AuthConfig
 	providers       map[string]types.Provider
@@ -25,7 +25,7 @@ type manager struct {
 	stackInfo       *schema.ConfigAndStacksInfo
 }
 
-// NewAuthManager creates a new AuthManager instance
+// NewAuthManager creates a new AuthManager instance.
 func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
@@ -33,7 +33,7 @@ func NewAuthManager(
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (types.AuthManager, error) {
 	if config == nil {
-		return nil, fmt.Errorf("auth config cannot be nil")
+		return nil, fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
 
 	m := &manager{
@@ -58,12 +58,12 @@ func NewAuthManager(
 	return m, nil
 }
 
-// GetStackInfo returns the associated stack info pointer (may be nil)
+// GetStackInfo returns the associated stack info pointer (may be nil).
 func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 	return m.stackInfo
 }
 
-// Authenticate performs hierarchical authentication for the specified identity
+// Authenticate performs hierarchical authentication for the specified identity.
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
@@ -110,7 +110,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 	return whoamiInfo, nil
 }
 
-// Whoami returns information about the specified identity's credentials
+// Whoami returns information about the specified identity's credentials.
 func (m *manager) Whoami(ctx context.Context, identityName string) (*schema.WhoamiInfo, error) {
 	// Try to retrieve credentials for this specific identity
 	creds, err := m.credentialStore.Retrieve(identityName)
@@ -126,12 +126,12 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*schema.Whoa
 	return m.buildWhoamiInfo(identityName, creds), nil
 }
 
-// Validate validates the entire auth configuration
+// Validate validates the entire auth configuration.
 func (m *manager) Validate() error {
 	return m.validator.ValidateAuthConfig(m.config)
 }
 
-// GetDefaultIdentity returns the name of the default identity, if any
+// GetDefaultIdentity returns the name of the default identity, if any.
 func (m *manager) GetDefaultIdentity() (string, error) {
 	// Find all default identities
 	var defaultIdentities []string
@@ -165,7 +165,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	}
 }
 
-// promptForIdentity prompts the user to select an identity from the given list
+// promptForIdentity prompts the user to select an identity from the given list.
 func (m *manager) promptForIdentity(message string, identities []string) (string, error) {
 	if len(identities) == 0 {
 		return "", fmt.Errorf("%w: no identities available", errUtils.ErrInvalidAuthConfig)
@@ -188,7 +188,7 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	return selectedIdentity, nil
 }
 
-// ListIdentities returns all available identity names
+// ListIdentities returns all available identity names.
 func (m *manager) ListIdentities() []string {
 	var names []string
 	for name := range m.config.Identities {
@@ -197,7 +197,7 @@ func (m *manager) ListIdentities() []string {
 	return names
 }
 
-// ListProviders returns all available provider names
+// ListProviders returns all available provider names.
 func (m *manager) ListProviders() []string {
 	var names []string
 	for name := range m.config.Providers {
@@ -206,7 +206,7 @@ func (m *manager) ListProviders() []string {
 	return names
 }
 
-// initializeProviders creates provider instances from configuration
+// initializeProviders creates provider instances from configuration.
 func (m *manager) initializeProviders() error {
 	for name, providerConfig := range m.config.Providers {
 		provider, err := NewProvider(name, &providerConfig)
@@ -218,7 +218,7 @@ func (m *manager) initializeProviders() error {
 	return nil
 }
 
-// initializeIdentities creates identity instances from configuration
+// initializeIdentities creates identity instances from configuration.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := NewIdentity(name, &identityConfig)
@@ -231,7 +231,7 @@ func (m *manager) initializeIdentities() error {
 }
 
 // getProviderForIdentity returns the provider name for the given identity
-// Uses the identity's GetProviderName() method to eliminate complex conditionals
+// Uses the identity's GetProviderName() method to eliminate complex conditionals.
 func (m *manager) getProviderForIdentity(identityName string) string {
 	// First try to find by identity name
 	if identity, exists := m.identities[identityName]; exists {
@@ -259,13 +259,13 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 }
 
 // GetProviderForIdentity returns the provider name for the given identity
-// Recursively resolves through identity chains to find the root provider
+// Recursively resolves through identity chains to find the root provider.
 func (m *manager) GetProviderForIdentity(identityName string) string {
 	return m.getProviderForIdentity(identityName)
 }
 
 // GetProviderKindForIdentity returns the provider kind for the given identity
-// by building the authentication chain and getting the root provider's kind
+// by building the authentication chain and getting the root provider's kind.
 func (m *manager) GetProviderKindForIdentity(identityName string) (string, error) {
 	// Build the complete authentication chain
 	chain, err := m.buildAuthenticationChain(identityName)
@@ -292,7 +292,7 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 
-// authenticateHierarchical performs hierarchical authentication with bottom-up validation
+// authenticateHierarchical performs hierarchical authentication with bottom-up validation.
 func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, targetIdentity string) (*schema.Credentials, error) {
 	// Step 1: Bottom-up validation - check cached credentials from target to root
 	validFromIndex := m.findFirstValidCachedCredentials(chain, targetIdentity)
@@ -316,7 +316,7 @@ func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, 
 }
 
 // findFirstValidCachedCredentials checks cached credentials from bottom to top of chain
-// Returns the index of the first valid cached credentials, or -1 if none found
+// Returns the index of the first valid cached credentials, or -1 if none found.
 func (m *manager) findFirstValidCachedCredentials(chain []string, targetIdentity string) int {
 	// Check from target identity (bottom) up to provider (top)
 	for i := len(chain) - 1; i >= 0; i-- {
@@ -345,7 +345,7 @@ func (m *manager) findFirstValidCachedCredentials(chain []string, targetIdentity
 	return -1 // No valid cached credentials found
 }
 
-// authenticateFromIndex performs authentication starting from the given index in the chain
+// authenticateFromIndex performs authentication starting from the given index in the chain.
 func (m *manager) authenticateFromIndex(ctx context.Context, chain []string, startIndex int, targetIdentity string) (*schema.Credentials, error) {
 	// Handle special case: standalone AWS user identity
 	if aws.IsStandaloneAWSUserChain(chain, m.config.Identities) {
@@ -356,7 +356,7 @@ func (m *manager) authenticateFromIndex(ctx context.Context, chain []string, sta
 	return m.authenticateProviderChain(ctx, chain, startIndex, targetIdentity)
 }
 
-// authenticateProviderChain handles authentication for provider-based identity chains
+// authenticateProviderChain handles authentication for provider-based identity chains.
 func (m *manager) authenticateProviderChain(ctx context.Context, chain []string, startIndex int, targetIdentity string) (*schema.Credentials, error) {
 	var currentCreds *schema.Credentials
 	var err error
@@ -391,7 +391,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 	return m.authenticateIdentityChain(ctx, chain, actualStartIndex, currentCreds)
 }
 
-// determineStartingIndex determines where to start authentication based on cached credentials
+// determineStartingIndex determines where to start authentication based on cached credentials.
 func (m *manager) determineStartingIndex(chain []string, startIndex int) int {
 	if startIndex == -1 {
 		return 0 // Start from provider if no valid cached credentials
@@ -399,7 +399,7 @@ func (m *manager) determineStartingIndex(chain []string, startIndex int) int {
 	return startIndex
 }
 
-// retrieveCachedCredentials retrieves cached credentials from the specified starting point
+// retrieveCachedCredentials retrieves cached credentials from the specified starting point.
 func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*schema.Credentials, error) {
 	identityName := chain[startIndex]
 	currentCreds, err := m.credentialStore.Retrieve(identityName)
@@ -411,7 +411,7 @@ func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*sc
 	return currentCreds, nil
 }
 
-// authenticateWithProvider handles provider authentication
+// authenticateWithProvider handles provider authentication.
 func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (*schema.Credentials, error) {
 	provider, exists := m.providers[providerName]
 	if !exists {
@@ -435,7 +435,7 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	return credentials, nil
 }
 
-// Helper functions for logging
+// Helper functions for logging.
 func getChainStepName(chain []string, index int) string {
 	if index < len(chain) {
 		return chain[index]
@@ -450,7 +450,7 @@ func getPreviousStepName(chain []string, currentIndex int) string {
 	return "unknown"
 }
 
-// authenticateIdentityChain performs sequential authentication through an identity chain
+// authenticateIdentityChain performs sequential authentication through an identity chain.
 func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string, startIndex int, initialCreds *schema.Credentials) (*schema.Credentials, error) {
 	bold := lipgloss.NewStyle().Bold(true)
 
@@ -464,7 +464,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string,
 		identity, exists := m.identities[identityStep]
 		if !exists {
 			log.Errorf("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
-			return nil, fmt.Errorf("identity %q not found in chain step %d", identityStep, i)
+			return nil, fmt.Errorf("%w: identity %q not found in chain step %d", errUtils.ErrInvalidAuthConfig, identityStep, i)
 		}
 
 		log.Debug("Authenticating identity step", "step", i, "identity", identityStep, "kind", identity.Kind())
@@ -473,7 +473,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string,
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
 			log.Errorf("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
-			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
+			return nil, fmt.Errorf("%w: identity %q authentication failed at chain step %d: %w", errUtils.ErrAuthenticationFailed, identityStep, i, err)
 		}
 
 		currentCreds = nextCreds
@@ -492,7 +492,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string,
 }
 
 // buildAuthenticationChain builds the authentication chain from target identity to source provider
-// Returns a slice where [0] is the provider name, [1..n] are identity names in authentication order
+// Returns a slice where [0] is the provider name, [1..n] are identity names in authentication order.
 func (m *manager) buildAuthenticationChain(identityName string) ([]string, error) {
 	var chain []string
 	visited := make(map[string]bool)
@@ -512,11 +512,11 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 	return chain, nil
 }
 
-// buildChainRecursive recursively builds the authentication chain
+// buildChainRecursive recursively builds the authentication chain.
 func (m *manager) buildChainRecursive(identityName string, chain *[]string, visited map[string]bool) error {
 	// Check for circular dependencies
 	if visited[identityName] {
-		return fmt.Errorf("circular dependency detected in identity chain involving %q", identityName)
+		return fmt.Errorf("%w: circular dependency detected in identity chain involving %q", errUtils.ErrInvalidAuthConfig, identityName)
 	}
 	visited[identityName] = true
 
@@ -596,7 +596,7 @@ func (m *manager) buildWhoamiInfo(identityName string, creds *schema.Credentials
 	return info
 }
 
-// extractIdentityFromAlias extracts the identity name from an alias (format: provider/identity)
+// extractIdentityFromAlias extracts the identity name from an alias (format: provider/identity).
 func extractIdentityFromAlias(alias string) string {
 	for i := len(alias) - 1; i >= 0; i-- {
 		if alias[i] == '/' {
