@@ -29,7 +29,7 @@ func newStreamCmd(logger *log.Logger) *cobra.Command {
 		Short: "Stream test results as they execute",
 		Long: `Execute go test and stream results in real-time.
 This is the default command when running gotcha without arguments.`,
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStream(cmd, args, logger)
 		},
@@ -64,8 +64,10 @@ This is the default command when running gotcha without arguments.`,
 
 	// CI Integration flags
 	streamCmd.Flags().Bool("ci", false, "CI mode - automatically detect and integrate with CI systems")
-	streamCmd.Flags().String("post", "", "Post comment strategy: always, on-failure, off")
-	streamCmd.Flags().String("comment-uuid", "", "Unique identifier for updating existing CI comment")
+	streamCmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
+	streamCmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
+	streamCmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
+	streamCmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
 
 	return streamCmd
 }
@@ -153,12 +155,19 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Get CI settings
 	ciMode, _ := cmd.Flags().GetBool("ci")
-	postStrategy, _ := cmd.Flags().GetString("post")
-	// commentUUID will be used when posting comments
-	// commentUUID, _ := cmd.Flags().GetString("comment-uuid")
-
-	// Check if post flag was actually set by the user
-	postFlagPresent := cmd.Flags().Changed("post")
+	
+	// Bind flags to viper for environment variable support
+	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
+	_ = viper.BindEnv("post-comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
+	postStrategy := viper.GetString("post-comment")
+	
+	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
+	_ = viper.BindEnv("github-token", "GITHUB_TOKEN")
+	
+	_ = viper.BindPFlag("exclude-mocks", cmd.Flags().Lookup("exclude-mocks"))
+	
+	// Check if post-comment flag was actually set by the user
+	postFlagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
 
 	// Normalize the posting strategy
 	postStrategy = normalizePostingStrategy(postStrategy, postFlagPresent)
@@ -334,7 +343,7 @@ func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 		// Parse the test events
 		jsonReader := bytes.NewReader(jsonData)
-		excludeMocks := viper.GetBool("coverage.exclude-mocks")
+		excludeMocks := viper.GetBool("exclude-mocks")
 		summary, err := parser.ParseTestJSON(jsonReader, coverProfile, excludeMocks)
 		if err != nil {
 			return fmt.Errorf("failed to parse test output: %w", err)

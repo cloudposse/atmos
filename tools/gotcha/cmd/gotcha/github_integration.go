@@ -94,13 +94,14 @@ func shouldPostCommentWithOS(strategy string, summary *types.TestSummary, goos s
 
 // postGitHubComment posts a comment to GitHub PR if conditions are met.
 func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *log.Logger) error {
+	// Ensure GitHub token is available via viper (for the CI provider to use)
+	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
+	_ = viper.BindEnv("github-token", "GITHUB_TOKEN")
+	
 	// Get the comment UUID
-	commentUUID, _ := cmd.Flags().GetString("comment-uuid")
-	if commentUUID == "" {
-		// Try to get from environment
-		_ = viper.BindEnv("GOTCHA_COMMENT_UUID", "COMMENT_UUID")
-		commentUUID = viper.GetString("GOTCHA_COMMENT_UUID")
-	}
+	_ = viper.BindPFlag("comment-uuid", cmd.Flags().Lookup("comment-uuid"))
+	_ = viper.BindEnv("comment-uuid", "GOTCHA_COMMENT_UUID", "COMMENT_UUID")
+	commentUUID := viper.GetString("comment-uuid")
 
 	// Comment UUID is required for posting
 	if commentUUID == "" {

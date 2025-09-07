@@ -136,13 +136,16 @@ func initConfig() {
 		}
 	}
 
-	// Initialize the logger after config is loaded
+	// Re-initialize the logger after config is loaded to pick up any log level changes
 	initGlobalLogger()
 }
 
 // Execute runs the root command.
 func Execute() error {
-	// Initialize configuration first
+	// Initialize the logger immediately so it's available for command creation
+	initGlobalLogger()
+	
+	// Initialize configuration
 	cobra.OnInitialize(initConfig)
 
 	// Create root command using Cobra

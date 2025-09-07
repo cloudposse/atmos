@@ -9,6 +9,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
@@ -29,11 +30,15 @@ func newParseCmd(logger *log.Logger) *cobra.Command {
 	// Output control flags
 	parseCmd.Flags().StringP("format", "f", "terminal", "Output format: terminal, json, markdown")
 	parseCmd.Flags().StringP("output", "o", "", "Output file for results")
+	parseCmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
+	parseCmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
+	parseCmd.Flags().Bool("generate-summary", false, "Write test summary to test-summary.md file")
 
 	// CI Integration flags
 	parseCmd.Flags().Bool("ci", false, "CI mode - automatically detect and integrate with CI systems")
-	parseCmd.Flags().String("post", "", "Post comment strategy: always, on-failure, off")
-	parseCmd.Flags().String("comment-uuid", "", "Unique identifier for updating existing CI comment")
+	parseCmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
+	parseCmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
+	parseCmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
 	return parseCmd
 }
@@ -42,16 +47,30 @@ func newParseCmd(logger *log.Logger) *cobra.Command {
 func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	inputFile := args[0]
 
+	// Bind flags to viper for environment variable support
+	_ = viper.BindPFlag("format", cmd.Flags().Lookup("format"))
+	_ = viper.BindPFlag("output", cmd.Flags().Lookup("output"))
+	_ = viper.BindPFlag("coverprofile", cmd.Flags().Lookup("coverprofile"))
+	_ = viper.BindPFlag("exclude-mocks", cmd.Flags().Lookup("exclude-mocks"))
+	_ = viper.BindPFlag("generate-summary", cmd.Flags().Lookup("generate-summary"))
+	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
+	_ = viper.BindEnv("post-comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
+	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
+	_ = viper.BindEnv("github-token", "GITHUB_TOKEN")
+
 	// Get output settings
-	format, _ := cmd.Flags().GetString("format")
-	outputFile, _ := cmd.Flags().GetString("output")
+	format := viper.GetString("format")
+	outputFile := viper.GetString("output")
+	coverprofile := viper.GetString("coverprofile")
+	excludeMocks := viper.GetBool("exclude-mocks")
+	generateSummary := viper.GetBool("generate-summary")
 
 	// Get CI settings
 	ciMode, _ := cmd.Flags().GetBool("ci")
-	postStrategy, _ := cmd.Flags().GetString("post")
+	postStrategy := viper.GetString("post-comment")
 
-	// Check if post flag was actually set by the user
-	postFlagPresent := cmd.Flags().Changed("post")
+	// Check if post-comment flag was actually set by the user
+	postFlagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
 
 	// Normalize the posting strategy
 	postStrategy = normalizePostingStrategy(postStrategy, postFlagPresent)
@@ -70,7 +89,7 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Parse the test events
 	jsonReader := bytes.NewReader(jsonData)
-	summary, err := parser.ParseTestJSON(jsonReader, "", false)
+	summary, err := parser.ParseTestJSON(jsonReader, coverprofile, excludeMocks)
 	if err != nil {
 		return fmt.Errorf("failed to parse JSON output: %w", err)
 	}
@@ -112,6 +131,16 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	default:
 		return fmt.Errorf("unsupported format: %s", format)
+	}
+
+	// Generate summary file if requested
+	if generateSummary {
+		summaryFile := "test-summary.md"
+		if err := output.WriteSummary(summary, "markdown", summaryFile); err != nil {
+			logger.Error("Failed to write test summary", "error", err)
+		} else {
+			logger.Info("Test summary written", "file", summaryFile)
+		}
 	}
 
 	// Handle CI comment posting if enabled
