@@ -307,7 +307,7 @@ step summaries and markdown reports.`,
 	rootCmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	rootCmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 	rootCmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
-	rootCmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
+	rootCmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
 	rootCmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
 	rootCmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
@@ -364,7 +364,7 @@ Pre-calculates total test count for accurate progress tracking.`,
 	cmd.Flags().String("exclude", "", "Regex patterns to exclude packages (comma-separated)")
 	cmd.Flags().BoolP("alert", "a", false, "Emit terminal bell when tests complete")
 	cmd.Flags().String("verbosity", "standard", "Output verbosity: standard, with-output, minimal, or verbose")
-	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
+	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
 	cmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
 	cmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
 
@@ -403,7 +403,7 @@ and console output with rich formatting.`,
 	cmd.Flags().String("output", "", "Output file (default: stdout for terminal/markdown)")
 	cmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
 	cmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
-	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: always when flag present)")
+	cmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
 	cmd.Flags().Bool("generate-summary", false, "Write test summary to test-summary.md file")
 	cmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
 	cmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
@@ -876,9 +876,9 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 	// Trim spaces
 	strategy = strings.TrimSpace(strategy)
 
-	// Handle the special case where flag is present but empty
-	if flagPresent && strategy == "" {
-		return "always"
+	// Default to "never" when no value is provided
+	if strategy == "" {
+		return "never"
 	}
 
 	// Handle boolean aliases

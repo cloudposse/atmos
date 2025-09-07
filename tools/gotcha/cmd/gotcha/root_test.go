@@ -17,8 +17,8 @@ func TestNormalizePostingStrategy(t *testing.T) {
 		expected    string
 	}{
 		// Default behavior
-		{"empty with flag present", "", true, "always"},
-		{"empty without flag", "", false, ""},
+		{"empty with flag present", "", true, "never"},
+		{"empty without flag", "", false, "never"},
 
 		// Boolean aliases
 		{"true alias", "true", true, "always"},
@@ -436,7 +436,7 @@ func TestPostingStrategiesIntegration(t *testing.T) {
 		shouldPost   bool
 	}{
 		// Test default behavior
-		{"flag present without value", "", true, "linux", 0, 0, true},
+		{"flag present without value", "", true, "linux", 0, 0, false},
 		{"flag not present", "", false, "linux", 0, 0, false},
 
 		// Test boolean compatibility
