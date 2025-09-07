@@ -375,6 +375,57 @@ gh run view <RUN_ID> --repo cloudposse/atmos --log-failed
 # - PR Semver Labels: Missing version labels
 ```
 
+### CodeQL Security Analysis
+
+Get security alerts specific to a PR:
+
+```bash
+# Get CodeQL alerts for a specific PR
+gh api repos/cloudposse/atmos/code-scanning/alerts \
+  --method GET \
+  -f ref="refs/pull/<PR_NUMBER>/head" \
+  --jq '.[] | select(.state == "open")'
+
+# Get detailed information about alerts
+gh api repos/cloudposse/atmos/code-scanning/alerts \
+  --method GET \
+  -f ref="refs/pull/<PR_NUMBER>/head" \
+  --jq '.[] | {
+    number: .number,
+    severity: .rule.severity,
+    description: .rule.description,
+    file: .most_recent_instance.location.path,
+    line: .most_recent_instance.location.start_line
+  }'
+
+# Check if CodeQL found any new alerts in this PR
+gh api repos/cloudposse/atmos/code-scanning/analyses \
+  --jq '.[] | select(.ref == "refs/pull/<PR_NUMBER>/head") | {
+    commit: .commit_sha,
+    results: .results_count,
+    rules: .rules_count,
+    error: .error
+  }' \
+  | head -1
+
+# Example: Check if PR introduces new security issues
+PR_NUMBER=1440
+ALERTS=$(gh api repos/cloudposse/atmos/code-scanning/alerts \
+  --method GET \
+  -f ref="refs/pull/$PR_NUMBER/head" \
+  --jq '[.[] | select(.state == "open")] | length')
+  
+if [[ $ALERTS -gt 0 ]]; then
+  echo "⚠️ CodeQL found $ALERTS security issue(s) in this PR"
+  gh api repos/cloudposse/atmos/code-scanning/alerts \
+    --method GET \
+    -f ref="refs/pull/$PR_NUMBER/head" \
+    --jq '.[] | "- \(.rule.severity): \(.rule.description) in \(.most_recent_instance.location.path):\(.most_recent_instance.location.start_line)"'
+else
+  echo "✅ No CodeQL security alerts found"
+fi
+```
+
 ### Remediation Strategies by Check Type
 
 | Check Type | Common Issues | Remediation Strategy |
@@ -412,6 +463,17 @@ gh pr checks <PR> --repo cloudposse/atmos
 
 # View failing check logs
 gh run view <RUN_ID> --repo cloudposse/atmos --log-failed
+
+# Get CodeQL security alerts for PR
+gh api repos/cloudposse/atmos/code-scanning/alerts \
+  --method GET \
+  -f ref="refs/pull/<PR>/head" \
+  --jq '.[] | select(.state == "open")'
+
+# Get CodeQL analysis results
+gh api repos/cloudposse/atmos/code-scanning/analyses \
+  --jq '.[] | select(.ref == "refs/pull/<PR>/head")' \
+  | head -1
 ```
 
 ## Response Templates
