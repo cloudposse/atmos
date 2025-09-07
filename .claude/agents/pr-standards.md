@@ -8,17 +8,23 @@ This agent helps create and validate pull requests according to the project's co
 
 ## Capabilities
 
-1. **PR Description Formatting**
+1. **PR Title Best Practices**
+   - Focus on value and outcomes, not compliance requirements
+   - Describe what the change accomplishes for users/developers
+   - Use active voice and clear language
+   - Avoid "because we have to" framing
+
+2. **PR Description Formatting**
    - Enforces the required sections: `what`, `why`, and `references`
    - Ensures descriptions are in plain English with bullet points
    - Validates business justification is provided
 
-2. **Commit Message Standards**
+3. **Commit Message Standards**
    - Follows conventional commit format
    - Includes the Claude Code attribution footer
    - Uses appropriate commit types (feat, fix, refactor, docs, etc.)
 
-3. **Label Management**
+4. **Label Management**
    - Applies "no-release" label for documentation-only changes
    - Suggests appropriate labels based on changes
    - **AVOID major version labels** - Changes should be backwards compatible
@@ -26,23 +32,48 @@ This agent helps create and validate pull requests according to the project's co
    - Use `minor` for new features that don't break existing functionality
    - `major` labels require strategic planning and should rarely be used
 
-4. **Template Compliance**
+5. **Template Compliance**
    - Uses the PR template from `.github/PULL_REQUEST_TEMPLATE.md`
    - Ensures all required sections are populated
    - Validates references format (e.g., `closes #123`)
 
-5. **Issue and PR Discovery**
+6. **Issue and PR Discovery**
    - Searches GitHub for related open/closed issues
    - Links to issues that this PR addresses or relates to
    - References PRs that introduced bugs being fixed
    - Ensures proper issue tracking and context
 
-6. **Build and Test Verification** (CRITICAL)
+7. **Build and Test Verification** (CRITICAL)
    - **ALWAYS compile the code before committing**
    - **ALWAYS run tests before pushing changes**
    - Never assume code works without verification
    - Fix all compilation errors immediately
    - Address test failures before creating PR
+
+## PR Title Guidelines
+
+**IMPORTANT**: PR titles should communicate value, not compliance.
+
+### Good PR Titles (Value-Focused)
+- ✅ `refactor(gotcha): improve code organization and maintainability with focused modules`
+- ✅ `feat(auth): add SSO support for enterprise customers`
+- ✅ `fix(parser): resolve memory leak in large file processing`
+- ✅ `perf(cli): reduce startup time by 50% with lazy loading`
+- ✅ `docs: clarify configuration options with real-world examples`
+
+### Bad PR Titles (Compliance-Focused)
+- ❌ `refactor(gotcha): split files to meet 500-line lint requirement`
+- ❌ `feat(auth): add feature requested in ticket ABC-123`
+- ❌ `fix(parser): fix bug to pass CI checks`
+- ❌ `perf(cli): make changes to satisfy performance requirements`
+- ❌ `docs: update documentation as required by PR template`
+
+### Title Writing Tips
+1. **Lead with the benefit**: What does this change accomplish?
+2. **Use active voice**: "Improve" not "Improving", "Add" not "Adding"
+3. **Be specific but concise**: Mention the key improvement without details
+4. **Avoid technical jargon**: Unless the audience is deeply technical
+5. **Focus on outcomes**: What's better after this change?
 
 ## PR Template Structure
 

@@ -11,7 +11,7 @@ Create a pull request following Cloud Posse standards.
 ## Options
 
 - `--base <branch>`: Target branch for the PR (default: main)
-- `--title <title>`: PR title (will be auto-generated if not provided)
+- `--title <title>`: PR title focusing on value/outcome (auto-generated if not provided)
 - `--no-release`: Add the no-release label for documentation-only changes
 - `--patch`: Add patch label for bug fixes and minor improvements (default for most changes)
 - `--minor`: Add minor label for new features that don't break compatibility
@@ -25,6 +25,22 @@ Create a pull request following Cloud Posse standards.
 /pr --no-release
 /pr --title "fix: resolve bug in parser" --patch
 ```
+
+## PR Title Best Practices
+
+When using `--title` or when the command generates a title:
+
+**Focus on value, not compliance:**
+- ✅ Good: `improve code organization with focused modules`
+- ❌ Bad: `split files to meet lint requirement`
+
+**Describe the benefit:**
+- ✅ Good: `reduce memory usage in large file processing`
+- ❌ Bad: `fix memory issue found in testing`
+
+**Use active voice:**
+- ✅ Good: `add SSO support for enterprise users`
+- ❌ Bad: `adding SSO as requested`
 
 ## What this command does
 
