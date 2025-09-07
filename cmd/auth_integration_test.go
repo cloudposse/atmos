@@ -82,8 +82,6 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 		assert.Equal(t, "aws-user", userProvider)
 	})
 
-
-
 	t.Run("Environment Variable Integration", func(t *testing.T) {
 		// Test that environment variables are properly formatted
 		testEnvVars := []schema.EnvironmentVariable{
@@ -138,4 +136,3 @@ func formatEnvironmentVariables(envVars []schema.EnvironmentVariable, format str
 		return result
 	}
 }
-

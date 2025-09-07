@@ -152,7 +152,7 @@ func ExecuteTerraformGenerateBackends(
 				if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 					providersSection = map[string]any{}
 				}
-				
+
 				if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
 					authSection = map[string]any{}
 				}
