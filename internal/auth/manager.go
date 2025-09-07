@@ -88,7 +88,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*schem
 	m.chain = chain
 
 	// Perform hierarchical credential validation (bottom-up)
-	finalCreds, err := m.authenticateHierarchical(ctx, chain, identityName)
+	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
 	if err != nil {
 		return nil, fmt.Errorf("%w: hierarchical authentication failed: %v", errUtils.ErrAuthenticationFailed, err)
 	}
@@ -307,16 +307,16 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 }
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation.
-func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, targetIdentity string) (*schema.Credentials, error) {
+func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity string) (*schema.Credentials, error) {
 	// Step 1: Bottom-up validation - check cached credentials from target to root
-	validFromIndex := m.findFirstValidCachedCredentials(chain)
+	validFromIndex := m.findFirstValidCachedCredentials()
 
 	if validFromIndex != -1 {
-		log.Debug("Found valid cached credentials", "validFromIndex", validFromIndex, "chainStep", getChainStepName(chain, validFromIndex))
+		log.Debug("Found valid cached credentials", "validFromIndex", validFromIndex, "chainStep", m.getChainStepName(validFromIndex))
 
 		// If target identity (last element in chain) has valid cached credentials, use them
-		if validFromIndex == len(chain)-1 {
-			last := chain[len(chain)-1]
+		if validFromIndex == len(m.chain)-1 {
+			last := m.chain[len(m.chain)-1]
 			if cachedCreds, err := m.credentialStore.Retrieve(last); err == nil {
 				log.Debug("Using cached credentials for target identity", "identity", targetIdentity)
 				return cachedCreds, nil
@@ -325,15 +325,15 @@ func (m *manager) authenticateHierarchical(ctx context.Context, chain []string, 
 	}
 
 	// Step 2: Selective re-authentication from first invalid point down to target
-	return m.authenticateFromIndex(ctx, chain, validFromIndex)
+	return m.authenticateFromIndex(ctx, validFromIndex)
 }
 
 // findFirstValidCachedCredentials checks cached credentials from bottom to top of chain
 // Returns the index of the first valid cached credentials, or -1 if none found.
-func (m *manager) findFirstValidCachedCredentials(chain []string) int {
+func (m *manager) findFirstValidCachedCredentials() int {
 	// Check from target identity (bottom) up to provider (top)
-	for i := len(chain) - 1; i >= 0; i-- {
-		identityName := chain[i]
+	for i := len(m.chain) - 1; i >= 0; i-- {
+		identityName := m.chain[i]
 
 		// Check if we have cached credentials for this level
 		cachedCreds, err := m.credentialStore.Retrieve(identityName)
@@ -377,18 +377,19 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds *schema.Cre
 }
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
-func (m *manager) authenticateFromIndex(ctx context.Context, chain []string, startIndex int) (*schema.Credentials, error) {
+func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (*schema.Credentials, error) {
+	// Todo Ideally this wouldn't be here, and would be handled by an identity interface function
 	// Handle special case: standalone AWS user identity
-	if aws.IsStandaloneAWSUserChain(chain, m.config.Identities) {
-		return aws.AuthenticateStandaloneAWSUser(ctx, chain[0], m.identities)
+	if aws.IsStandaloneAWSUserChain(m.chain, m.config.Identities) {
+		return aws.AuthenticateStandaloneAWSUser(ctx, m.chain[0], m.identities)
 	}
 
 	// Handle regular provider-based authentication chains
-	return m.authenticateProviderChain(ctx, chain, startIndex)
+	return m.authenticateProviderChain(ctx, startIndex)
 }
 
 // authenticateProviderChain handles authentication for provider-based identity chains.
-func (m *manager) authenticateProviderChain(ctx context.Context, chain []string, startIndex int) (*schema.Credentials, error) {
+func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int) (*schema.Credentials, error) {
 	var currentCreds *schema.Credentials
 	var err error
 
@@ -399,25 +400,18 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 	// Important: if we start from index N (>0) because cached creds exist at that step,
 	// those creds are the OUTPUT of identity N and should be used as the base for the NEXT step (N+1).
 	if actualStartIndex > 0 {
-		currentCreds, err = m.retrieveCachedCredentials(chain, startIndex)
-		if err != nil {
-			log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
-			actualStartIndex = 0
-		} else {
-			// Skip re-authenticating the identity at actualStartIndex, since we already have its output
-			actualStartIndex++
-		}
+		currentCreds, actualStartIndex = m.fetchCachedCredentials(actualStartIndex)
 	}
 
 	// Step 1: Authenticate with provider if needed
 	if actualStartIndex == 0 {
 		// Allow provider to inspect the chain and prepare pre-auth preferences
-		if provider, exists := m.providers[chain[0]]; exists {
+		if provider, exists := m.providers[m.chain[0]]; exists {
 			if err := provider.PreAuthenticate(m); err != nil {
-				log.Debug("Provider pre-authenticate failed", "provider", chain[0], "error", err)
+				log.Debug("Provider pre-authenticate failed", "provider", m.chain[0], "error", err)
 			}
 		}
-		currentCreds, err = m.authenticateWithProvider(ctx, chain[0])
+		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
 		if err != nil {
 			return nil, err
 		}
@@ -425,7 +419,17 @@ func (m *manager) authenticateProviderChain(ctx context.Context, chain []string,
 	}
 
 	// Step 2: Authenticate through identity chain
-	return m.authenticateIdentityChain(ctx, chain, actualStartIndex, currentCreds)
+	return m.authenticateIdentityChain(ctx, actualStartIndex, currentCreds)
+}
+
+func (m *manager) fetchCachedCredentials(startIndex int) (*schema.Credentials, int) {
+	currentCreds, err := m.retrieveCachedCredentials(m.chain, startIndex)
+	if err != nil {
+		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
+		return nil, 0
+	}
+	// Skip re-authenticating the identity at startIndex, since we already have its output
+	return currentCreds, startIndex + 1
 }
 
 // GetIdentities returns the map of identities.
@@ -488,27 +492,27 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 }
 
 // Helper functions for logging.
-func getChainStepName(chain []string, index int) string {
-	if index < len(chain) {
-		return chain[index]
+func (m *manager) getChainStepName(index int) string {
+	if index < len(m.chain) {
+		return m.chain[index]
 	}
 	return "unknown"
 }
 
 // authenticateIdentityChain performs sequential authentication through an identity chain.
-func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string, startIndex int, initialCreds *schema.Credentials) (*schema.Credentials, error) {
+func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int, initialCreds *schema.Credentials) (*schema.Credentials, error) {
 	bold := lipgloss.NewStyle().Bold(true)
 
-	log.Debug("Authenticating identity chain", "chainLength", len(chain), "startIndex", startIndex, "chain", chain)
+	log.Debug("Authenticating identity chain", "chainLength", len(m.chain), "startIndex", startIndex, "chain", m.chain)
 
 	currentCreds := initialCreds
 
 	// Step 2: Authenticate through identity chain starting from startIndex
-	for i := startIndex; i < len(chain); i++ {
-		identityStep := chain[i]
+	for i := startIndex; i < len(m.chain); i++ {
+		identityStep := m.chain[i]
 		identity, exists := m.identities[identityStep]
 		if !exists {
-			log.Errorf("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
+			log.Errorf("❌ Chaining identity %s → %s", bold.Render(m.getChainStepName(i-1)), bold.Render(identityStep))
 			return nil, fmt.Errorf("%w: identity %q not found in chain step %d", errUtils.ErrInvalidAuthConfig, identityStep, i)
 		}
 
@@ -517,7 +521,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string,
 		// Each identity receives credentials from the previous step
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			log.Errorf("❌ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
+			log.Errorf("❌ Chaining identity %s → %s", bold.Render(m.getChainStepName(i-1)), bold.Render(identityStep))
 			return nil, fmt.Errorf("%w: identity %q authentication failed at chain step %d: %w", errUtils.ErrAuthenticationFailed, identityStep, i, err)
 		}
 
@@ -530,7 +534,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, chain []string,
 			log.Debug("Cached credentials", "identityStep", identityStep)
 		}
 
-		log.Infof("✅ Chaining identity %s → %s", bold.Render(getChainStepName(chain, i-1)), bold.Render(identityStep))
+		log.Infof("✅ Chaining identity %s → %s", bold.Render(m.getChainStepName(i-1)), bold.Render(identityStep))
 	}
 
 	return currentCreds, nil

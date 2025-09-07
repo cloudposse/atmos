@@ -110,7 +110,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			}()
 
 			// Create manager with test identities
-			manager := &Manager{
+			manager := &manager{
 				config: &schema.AuthConfig{
 					Identities: tt.identities,
 				},
@@ -145,7 +145,7 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 	os.Setenv("CI", "true")
 	defer os.Unsetenv("CI")
 
-	manager := &Manager{
+	manager := &manager{
 		config: &schema.AuthConfig{
 			Identities: identities,
 		},
@@ -171,7 +171,7 @@ func TestManager_ListIdentities(t *testing.T) {
 		"identity3": {Kind: "aws/assume-role", Default: false},
 	}
 
-	manager := &Manager{
+	manager := &manager{
 		config: &schema.AuthConfig{
 			Identities: identities,
 		},
@@ -187,7 +187,7 @@ func TestManager_ListIdentities(t *testing.T) {
 }
 
 func TestManager_promptForIdentity(t *testing.T) {
-	manager := &Manager{}
+	manager := &manager{}
 
 	// Test with empty identities list
 	_, err := manager.promptForIdentity("Choose identity:", []string{})

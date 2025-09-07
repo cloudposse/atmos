@@ -129,7 +129,7 @@ type AuthManager interface {
 
 	// GetIdentities returns all available identity configurations.
 	GetIdentities() map[string]schema.Identity
-	
+
 	// GetProviders returns all available provider configurations.
 	GetProviders() map[string]schema.Provider
 }
