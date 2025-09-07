@@ -1,0 +1,124 @@
+name: dev
+description: Development workflow commands for Atmos development
+commands:
+  - name: setup
+    description: Set up local development environment
+    steps:
+      - |
+        echo "🚀 Setting up Atmos development environment..."
+
+        echo "1️⃣  Installing Go dependencies..."
+        go mod download
+
+        echo "2️⃣  Installing pre-commit and golangci-lint..."
+        if ! command -v pre-commit >/dev/null 2>&1; then
+          if command -v brew >/dev/null 2>&1; then
+            echo "Installing pre-commit via Homebrew..."
+            brew install pre-commit
+          elif command -v apt-get >/dev/null 2>&1; then
+            echo "Installing pre-commit via apt..."
+            sudo apt-get update && sudo apt-get install -y pre-commit
+          else
+            echo "Installing pre-commit via pip..."
+            pip install --user pre-commit || pip install pre-commit
+          fi
+        else
+          echo "pre-commit is already installed: $(pre-commit --version)"
+        fi
+
+        if ! command -v golangci-lint >/dev/null 2>&1; then
+          if command -v brew >/dev/null 2>&1; then
+            echo "Installing golangci-lint via Homebrew..."
+            brew install golangci-lint
+          else
+            echo "Installing golangci-lint via curl..."
+            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+          fi
+        else
+          echo "golangci-lint is already installed: $(golangci-lint --version)"
+        fi
+
+        echo "3️⃣  Installing pre-commit hooks..."
+        pre-commit install
+
+        echo "4️⃣  Installing Go tools..."
+        go install mvdan.cc/gofumpt@latest
+
+        echo "✅ Development environment setup complete!"
+        echo ""
+        echo "Run 'atmos dev check' to run pre-commit hooks on staged files"
+        echo "Run 'atmos dev check-all' to run pre-commit hooks on all files"
+
+  - name: check
+    description: Run pre-commit hooks on staged files
+    steps:
+      - pre-commit run
+
+  - name: check-all
+    description: Run pre-commit hooks on all files
+    steps:
+      - pre-commit run --all-files
+
+  - name: fix
+    description: Auto-fix Go formatting issues
+    steps:
+      - |
+        echo "🔧 Auto-fixing Go formatting issues..."
+        gofumpt -w .
+        go mod tidy
+        echo "✅ Formatting fixes applied"
+
+  - name: lint
+    description: Run golangci-lint
+    steps:
+      - golangci-lint run --config=.golangci.yml
+
+  - name: test
+    description: Run tests
+    steps:
+      - go test ./... -v
+
+  - name: build
+    description: Build the Atmos binary
+    steps:
+      - make build
+
+  - name: quick
+    description: Quick build and test
+    steps:
+      - |
+        echo "🏃 Running quick build and test..."
+        make build
+        ./build/atmos version
+        echo "✅ Quick build successful!"
+
+  - name: update-hooks
+    description: Update pre-commit hooks to latest versions
+    steps:
+      - pre-commit autoupdate
+
+  - name: help
+    description: Show available dev commands
+    steps:
+      - |
+        echo "Available Atmos dev commands:"
+        echo ""
+        echo "  atmos dev setup       - Set up local development environment"
+        echo "  atmos dev check       - Run pre-commit hooks on staged files"
+        echo "  atmos dev check-all   - Run pre-commit hooks on all files"
+        echo "  atmos dev fix         - Auto-fix Go formatting issues"
+        echo "  atmos dev lint        - Run golangci-lint"
+        echo "  atmos dev test        - Run tests"
+        echo "  atmos dev build       - Build the Atmos binary"
+        echo "  atmos dev quick       - Quick build and test"
+        echo "  atmos dev update-hooks - Update pre-commit hooks to latest versions"
+        echo ""
+        echo "Pre-commit hooks include:"
+        echo "  - go-fumpt: Go code formatting"
+        echo "  - go-build-mod: Verify Go compilation"
+        echo "  - go-mod-tidy: Ensure go.mod is tidy"
+        echo "  - golangci-lint: Comprehensive Go linting"
+        echo "  - trailing-whitespace: Remove trailing whitespace"
+        echo "  - end-of-file-fixer: Ensure files end with newline"
+        echo "  - check-yaml: Validate YAML files"
+        echo "  - check-added-large-files: Prevent large files"
