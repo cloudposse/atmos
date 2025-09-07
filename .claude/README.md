@@ -9,7 +9,7 @@ This directory contains Claude Code agents for automating PR review feedback rem
 ├── agents/
 │   └── pr-review-remediator.md    # Main PR review remediation agent
 ├── commands/
-│   └── analyze-pr.md           # Slash command for quick PR analysis
+│   └── fix-pr.md               # Slash command to fix PR issues
 └── README.md                   # This file
 ```
 
@@ -28,14 +28,14 @@ Then provide the PR number when prompted.
 
 ```bash
 # Use the slash command with a PR number
-/analyze-pr 1440
+/fix-pr 1440
 ```
 
 ### Method 3: Manual Invocation
 
-Simply ask Claude to analyze a PR:
-```
-"Please analyze PR #1440 for review feedback and failing checks"
+Simply ask Claude to fix a PR:
+```text
+"Please fix issues in PR #1440 based on review feedback"
 ```
 
 The agent will automatically be invoked based on the task description.

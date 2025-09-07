@@ -1,9 +1,9 @@
 ---
-name: analyze-pr
-description: Analyze a PR for review feedback and failing checks
+name: fix-pr
+description: Fix issues in a PR based on review feedback and failing checks
 ---
 
-Please analyze PR #{{PR_NUMBER}} in the cloudposse/atmos repository:
+Please fix issues in PR #{{PR_NUMBER}} in the cloudposse/atmos repository:
 
 1. Fetch all review comments (CodeRabbit and human)
 2. Check status of all CI/CD checks
