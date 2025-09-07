@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 )
 
-// cleanToolsAndCaches handles the business logic for cleaning tools and cache directories.
-// It performs file counting, deletion, and prints output using fmt.Printf.
+// CleanToolsAndCaches handles the business logic for cleaning tools and cache directories.
+// It performs file counting, deletion, and writes UI messages to stderr.
 func CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir string) error {
 	toolsCount := 0
 	err := filepath.Walk(toolsDir, func(path string, info os.FileInfo, err error) error {
