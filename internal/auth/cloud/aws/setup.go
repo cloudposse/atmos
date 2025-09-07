@@ -10,8 +10,9 @@ import (
 )
 
 // SetupFiles sets up AWS credentials and config files for the given identity.
-func SetupFiles(providerName, identityName string, creds *types.Credentials) error {
-	if creds.AWS == nil {
+func SetupFiles(providerName, identityName string, creds types.ICredentials) error {
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	if !ok {
 		return nil // No AWS credentials to setup
 	}
 
@@ -19,12 +20,12 @@ func SetupFiles(providerName, identityName string, creds *types.Credentials) err
 	fileManager := NewAWSFileManager()
 
 	// Write credentials file.
-	if err := fileManager.WriteCredentials(providerName, identityName, creds.AWS); err != nil {
-		return fmt.Errorf("%w: failed to write AWS credentials", errUtils.ErrAwsAuth)
+	if err := fileManager.WriteCredentials(providerName, identityName, awsCreds); err != nil {
+		return fmt.Errorf("%w: failed to write AWS credentials: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Write config file with region.
-	region := creds.AWS.Region
+	region := awsCreds.Region
 	if region == "" {
 		region = "us-east-1" // Default region
 	}

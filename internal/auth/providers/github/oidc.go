@@ -53,7 +53,7 @@ func (p *oidcProvider) Kind() string {
 }
 
 // Authenticate performs GitHub OIDC authentication.
-func (p *oidcProvider) Authenticate(ctx context.Context) (*types.Credentials, error) {
+func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
 	log.Info("Starting GitHub OIDC authentication", "provider", p.name)
 
 	// Check if we're running in GitHub Actions
@@ -91,14 +91,11 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (*types.Credentials, er
 
 	log.Info("GitHub OIDC authentication successful", "provider", p.name)
 
-	// Return the JWT token as credentials
-	// This will be used by downstream AWS assume role identity
-	return &types.Credentials{
-		OIDC: &types.OIDCCredentials{
-			Token:    jwtToken,
-			Provider: "github",
-			Audience: aud,
-		},
+	// Return the JWT token as credentials (used by downstream identities)
+	return &types.OIDCCredentials{
+		Token:    jwtToken,
+		Provider: "github",
+		Audience: aud,
 	}, nil
 }
 

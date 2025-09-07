@@ -39,8 +39,9 @@ func (p *AWSCloudProvider) GetName() string {
 }
 
 // SetupEnvironment configures AWS-specific environment variables and files.
-func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *types.Credentials) error {
-	if credentials == nil || credentials.AWS == nil {
+func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, identityName string, credentials types.ICredentials) error {
+	awsCreds, ok := credentials.(*types.AWSCredentials)
+	if !ok {
 		return fmt.Errorf("%w: AWS credentials are required", errUtils.ErrAwsAuth)
 	}
 
@@ -52,13 +53,13 @@ func (p *AWSCloudProvider) SetupEnvironment(ctx context.Context, providerName, i
 
 	// Write credentials file
 	credentialsPath := filepath.Join(awsDir, DefaultAwsCredentialsDirName)
-	if err := p.writeCredentialsFile(credentialsPath, identityName, credentials.AWS); err != nil {
+	if err := p.writeCredentialsFile(credentialsPath, identityName, awsCreds); err != nil {
 		return fmt.Errorf("%w: failed to write credentials file: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Write config file
 	configPath := filepath.Join(awsDir, DefaultAwsConfigDirName)
-	if err := p.writeConfigFile(configPath, identityName, credentials.AWS.Region); err != nil {
+	if err := p.writeConfigFile(configPath, identityName, awsCreds.Region); err != nil {
 		return fmt.Errorf("%w: failed to write config file: %v", errUtils.ErrAwsAuth, err)
 	}
 
@@ -84,21 +85,12 @@ func (p *AWSCloudProvider) CleanupEnvironment(ctx context.Context, providerName,
 }
 
 // ValidateCredentials validates AWS credentials.
-func (p *AWSCloudProvider) ValidateCredentials(ctx context.Context, credentials *types.Credentials) error {
+func (p *AWSCloudProvider) ValidateCredentials(ctx context.Context, credentials types.ICredentials) error {
 	if credentials == nil {
 		return fmt.Errorf("%w: credentials cannot be nil", errUtils.ErrAwsAuth)
 	}
-
-	if credentials.AWS == nil {
+	if _, ok := credentials.(*types.AWSCredentials); !ok {
 		return fmt.Errorf("%w: AWS credentials are required", errUtils.ErrAwsAuth)
-	}
-
-	if credentials.AWS.AccessKeyID == "" {
-		return fmt.Errorf("%w: AWS access key ID is required", errUtils.ErrAwsAuth)
-	}
-
-	if credentials.AWS.SecretAccessKey == "" {
-		return fmt.Errorf("%w: AWS secret access key is required", errUtils.ErrAwsAuth)
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -12,7 +13,7 @@ type CloudProvider interface {
 	GetName() string
 
 	// SetupEnvironment sets up cloud-specific environment variables and files.
-	SetupEnvironment(ctx context.Context, providerName, identityName string, credentials *Credentials) error
+	SetupEnvironment(ctx context.Context, providerName, identityName string, credentials ICredentials) error
 
 	// GetEnvironmentVariables returns cloud-specific environment variables for tools like Terraform.
 	GetEnvironmentVariables(providerName, identityName string) (map[string]string, error)
@@ -21,7 +22,7 @@ type CloudProvider interface {
 	Cleanup(ctx context.Context, providerName, identityName string) error
 
 	// ValidateCredentials validates that the provided credentials are valid for this cloud provider.
-	ValidateCredentials(ctx context.Context, credentials *Credentials) error
+	ValidateCredentials(ctx context.Context, credentials ICredentials) error
 
 	// GetCredentialFilePaths returns the paths to credential files managed by this provider.
 	GetCredentialFilePaths(providerName string) map[string]string
@@ -39,7 +40,7 @@ type CloudProviderFactory interface {
 // CloudProviderManager provides high-level cloud provider operations.
 type CloudProviderManager interface {
 	// SetupEnvironment sets up cloud environment for the given provider kind and identity.
-	SetupEnvironment(ctx context.Context, providerKind, providerName, identityName string, credentials *Credentials) error
+	SetupEnvironment(ctx context.Context, providerKind, providerName, identityName string, credentials ICredentials) error
 
 	// GetEnvironmentVariables returns environment variables for the given provider kind and identity.
 	GetEnvironmentVariables(providerKind, providerName, identityName string) (map[string]string, error)
@@ -61,7 +62,7 @@ type Provider interface {
 	// Providers can access the current chain via manager.GetChain().
 	PreAuthenticate(manager AuthManager) error
 	// Authenticate performs provider-specific authentication and returns credentials.
-	Authenticate(ctx context.Context) (*Credentials, error)
+	Authenticate(ctx context.Context) (ICredentials, error)
 
 	// Validate validates the provider configuration.
 	Validate() error
@@ -80,7 +81,7 @@ type Identity interface {
 	GetProviderName() (string, error)
 
 	// Authenticate performs authentication using the provided base credentials.
-	Authenticate(ctx context.Context, baseCreds *Credentials) (*Credentials, error)
+	Authenticate(ctx context.Context, baseCreds ICredentials) (ICredentials, error)
 
 	// Validate validates the identity configuration.
 	Validate() error
@@ -90,7 +91,7 @@ type Identity interface {
 
 	// PostAuthenticate is called after successful authentication with the final credentials.
 	// Implementations can use the manager to perform provider-specific file setup or other side effects.
-	PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *Credentials) error
+	PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds ICredentials) error
 }
 
 // AuthManager manages the overall authentication process.
@@ -137,10 +138,10 @@ type AuthManager interface {
 // CredentialStore defines the interface for storing and retrieving credentials.
 type CredentialStore interface {
 	// Store stores credentials for the given alias.
-	Store(alias string, creds *Credentials) error
+	Store(alias string, creds ICredentials) error
 
 	// Retrieve retrieves credentials for the given alias.
-	Retrieve(alias string) (*Credentials, error)
+	Retrieve(alias string) (ICredentials, error)
 
 	// Delete deletes credentials for the given alias.
 	Delete(alias string) error
@@ -169,4 +170,8 @@ type Validator interface {
 
 type ICredentials interface {
 	IsExpired() bool
+
+	GetExpiration() (*time.Time, error)
+
+	BuildWhoamiInfo(info *WhoamiInfo)
 }

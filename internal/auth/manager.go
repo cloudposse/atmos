@@ -95,8 +95,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 
 	// Call post-authentication hook on the identity (now part of Identity interface)
 	if identity, exists := m.identities[identityName]; exists {
-		providerName := chain[0]
-		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
+		if err := identity.PostAuthenticate(ctx, m.stackInfo, m.chain[0], identityName, finalCreds); err != nil {
 			return nil, fmt.Errorf("%w: post-authentication hook failed: %v", errUtils.ErrAuthenticationFailed, err)
 		}
 	}
@@ -146,15 +145,15 @@ func (m *manager) Validate() error {
 // GetDefaultIdentity returns the name of the default identity, if any.
 func (m *manager) GetDefaultIdentity() (string, error) {
 	// Find all default identities
-	var defaultidentities []string
+	var defaultIdentities []string
 	for name, identity := range m.config.Identities {
 		if identity.Default {
-			defaultidentities = append(defaultidentities, name)
+			defaultIdentities = append(defaultIdentities, name)
 		}
 	}
 
 	// Handle different scenarios based on number of default identities found
-	switch len(defaultidentities) {
+	switch len(defaultIdentities) {
 	case 0:
 		// No default identities found
 		if telemetry.IsCI() {
@@ -165,15 +164,15 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 
 	case 1:
 		// Exactly one default identity found - use it
-		return defaultidentities[0], nil
+		return defaultIdentities[0], nil
 
 	default:
 		// Multiple default identities found
 		if telemetry.IsCI() {
-			return "", fmt.Errorf("%w: multiple default identities found: %v", errUtils.ErrInvalidAuthConfig, defaultidentities)
+			return "", fmt.Errorf("%w: multiple default identities found: %v", errUtils.ErrInvalidAuthConfig, defaultIdentities)
 		}
 		// In interactive mode, prompt user to choose from default identities
-		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultidentities)
+		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
 	}
 }
 
@@ -200,7 +199,7 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	return selectedIdentity, nil
 }
 
-// Listidentities returns all available identity names.
+// ListIdentities returns all available identity names.
 func (m *manager) ListIdentities() []string {
 	var names []string
 	for name := range m.config.Identities {
@@ -306,7 +305,7 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 }
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation.
-func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity string) (*types.Credentials, error) {
+func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity string) (types.ICredentials, error) {
 	// Step 1: Bottom-up validation - check cached credentials from target to root
 	validFromIndex := m.findFirstValidCachedCredentials()
 
@@ -355,28 +354,23 @@ func (m *manager) findFirstValidCachedCredentials() int {
 
 // isCredentialValid checks if the cached credentials are valid and not expired.
 // Returns whether the credentials are valid and, if AWS expiration is present and valid, the parsed expiration time.
-func (m *manager) isCredentialValid(identityName string, cachedCreds *types.Credentials) (bool, *time.Time) {
+func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICredentials) (bool, *time.Time) {
 	expired, err := m.credentialStore.IsExpired(identityName)
 	if err != nil || expired {
 		return false, nil
 	}
 
-	// For AWS creds with an explicit expiration, ensure >5 minutes remaining
-	if cachedCreds.AWS != nil && cachedCreds.AWS.Expiration != "" {
-		if expTime, err := time.Parse(time.RFC3339, cachedCreds.AWS.Expiration); err == nil {
-			if expTime.After(time.Now().Add(5 * time.Minute)) {
-				return true, &expTime
-			}
+	if expTime, err := cachedCreds.GetExpiration(); err == nil && expTime != nil {
+		if expTime.After(time.Now().Add(5 * time.Minute)) {
+			return true, expTime
 		}
-		return false, nil
 	}
 
-	// Non-AWS credentials or no expiration info, assume valid
 	return true, nil
 }
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
-func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (*types.Credentials, error) {
+func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (types.ICredentials, error) {
 	// Todo Ideally this wouldn't be here, and would be handled by an identity interface function
 	// Handle special case: standalone AWS user identity
 	if aws.IsStandaloneAWSUserChain(m.chain, m.config.Identities) {
@@ -388,8 +382,8 @@ func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (*t
 }
 
 // authenticateProviderChain handles authentication for provider-based identity chains.
-func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int) (*types.Credentials, error) {
-	var currentCreds *types.Credentials
+func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int) (types.ICredentials, error) {
+	var currentCreds types.ICredentials
 	var err error
 
 	// Determine actual starting point for authentication
@@ -419,7 +413,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 	return m.authenticateIdentityChain(ctx, actualStartIndex, currentCreds)
 }
 
-func (m *manager) fetchCachedCredentials(startIndex int) (*types.Credentials, int) {
+func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, int) {
 	currentCreds, err := m.retrieveCachedCredentials(m.chain, startIndex)
 	if err != nil {
 		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
@@ -453,7 +447,7 @@ func (m *manager) determineStartingIndex(startIndex int) int {
 }
 
 // retrieveCachedCredentials retrieves cached credentials from the specified starting point.
-func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*types.Credentials, error) {
+func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (types.ICredentials, error) {
 	identityName := chain[startIndex]
 	currentCreds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
@@ -465,7 +459,7 @@ func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (*ty
 }
 
 // authenticateWithProvider handles provider authentication.
-func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (*types.Credentials, error) {
+func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (types.ICredentials, error) {
 	provider, exists := m.providers[providerName]
 	if !exists {
 		return nil, fmt.Errorf("%w: provider %q not found", errUtils.ErrInvalidAuthConfig, providerName)
@@ -497,7 +491,7 @@ func (m *manager) getChainStepName(index int) string {
 }
 
 // authenticateIdentityChain performs sequential authentication through an identity chain.
-func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int, initialCreds *types.Credentials) (*types.Credentials, error) {
+func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int, initialCreds types.ICredentials) (types.ICredentials, error) {
 	bold := lipgloss.NewStyle().Bold(true)
 
 	log.Debug("Authenticating identity chain", "chainLength", len(m.chain), "startIndex", startIndex, "chain", m.chain)
@@ -612,7 +606,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 }
 
 // buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials.
-func (m *manager) buildWhoamiInfo(identityName string, creds *types.Credentials) *types.WhoamiInfo {
+func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials) *types.WhoamiInfo {
 	providerName := m.getProviderForIdentity(identityName)
 
 	info := &types.WhoamiInfo{
@@ -622,16 +616,10 @@ func (m *manager) buildWhoamiInfo(identityName string, creds *types.Credentials)
 		LastUpdated: time.Now(),
 	}
 
-	// Extract additional info from AWS credentials
-	if creds.AWS != nil {
-		info.Region = creds.AWS.Region
-		if creds.AWS.Expiration != "" {
-			if expTime, err := time.Parse(time.RFC3339, creds.AWS.Expiration); err == nil {
-				info.Expiration = &expTime
-			}
-		}
+	creds.BuildWhoamiInfo(info)
+	if expTime, err := creds.GetExpiration(); err == nil && expTime != nil {
+		info.Expiration = expTime
 	}
-
 	// Get environment variables
 	if identity, exists := m.identities[identityName]; exists {
 		if env, err := identity.Environment(); err == nil {

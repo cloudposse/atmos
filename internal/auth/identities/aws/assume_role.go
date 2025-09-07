@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,6 +20,7 @@ import (
 type assumeRoleIdentity struct {
 	name   string
 	config *schema.Identity
+	region string
 }
 
 // NewAssumeRoleIdentity creates a new AWS assume role identity.
@@ -39,37 +41,32 @@ func (i *assumeRoleIdentity) Kind() string {
 }
 
 // Authenticate performs authentication using assume role.
-func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *types.Credentials) (*types.Credentials, error) {
+func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
 	// Note: Caching is now handled at the manager level to prevent duplicates.
 
-	if baseCreds == nil || baseCreds.AWS == nil {
-		return nil, fmt.Errorf("%w: base AWS credentials are required", errUtils.ErrInvalidAuthConfig)
+	awsBase, ok := baseCreds.(*types.AWSCredentials)
+	if !ok {
+		return nil, fmt.Errorf("%w: base AWS credentials are required for assume-role", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	var roleArn string
-	var ok bool
-	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
+	var okBool bool
+	if roleArn, okBool = i.config.Principal["assume_role"].(string); !okBool || roleArn == "" {
 		return nil, fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	// Create AWS config using base credentials
-	region := baseCreds.AWS.Region
-	if region == "" {
-		region = "us-east-1"
+	i.region = awsBase.Region
+	if i.region == "" {
+		i.region = "us-east-1"
 	}
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(region),
-		config.WithCredentialsProvider(aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
-			return aws.Credentials{
-				AccessKeyID:     baseCreds.AWS.AccessKeyID,
-				SecretAccessKey: baseCreds.AWS.SecretAccessKey,
-				SessionToken:    baseCreds.AWS.SessionToken,
-			}, nil
-		})),
-	)
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(i.region))
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
 	}
+
+	// Inject base credentials into STS client
+	cfg.Credentials = aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(awsBase.AccessKeyID, awsBase.SecretAccessKey, awsBase.SessionToken))
 
 	// Create STS client.
 	stsClient := sts.NewFromConfig(cfg)
@@ -105,23 +102,18 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *types.
 		return nil, fmt.Errorf("%w: STS returned empty credentials", errUtils.ErrAuthenticationFailed)
 	}
 	// Convert to our credential format.
-	expiration := ""
-	if result.Credentials.Expiration != nil {
+	var expiration string
+	if result.Credentials != nil {
 		expiration = result.Credentials.Expiration.Format(time.RFC3339)
 	}
 
-	creds := &types.Credentials{
-		AWS: &types.AWSCredentials{
-			AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
-			SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
-			SessionToken:    aws.ToString(result.Credentials.SessionToken),
-			Region:          baseCreds.AWS.Region,
-			Expiration:      expiration,
-		},
-	}
-
-	// Note: Caching handled at manager level.
-	return creds, nil
+	return &types.AWSCredentials{
+		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
+		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+		SessionToken:    aws.ToString(result.Credentials.SessionToken),
+		Region:          i.region,
+		Expiration:      expiration,
+	}, nil
 }
 
 // Validate validates the identity configuration.
@@ -166,13 +158,10 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 }
 
 // PostAuthenticate sets up AWS files after authentication.
-func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *types.Credentials) error {
+func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
 	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
-	}
-	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
-		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrAwsAuth, err)
 	}
 	return nil
 }

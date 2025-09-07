@@ -31,8 +31,35 @@ func NewCredentialStore() types.CredentialStore {
 }
 
 // Store stores credentials for the given alias.
-func (s *keyringStore) Store(alias string, creds *types.Credentials) error {
-	data, err := json.Marshal(creds)
+// envelope used to persist interface credentials
+type credentialEnvelope struct {
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
+}
+
+func (s *keyringStore) Store(alias string, creds types.ICredentials) error {
+	var (
+		typ string
+		raw []byte
+		err error
+	)
+
+	switch c := creds.(type) {
+	case *types.AWSCredentials:
+		typ = "aws"
+		raw, err = json.Marshal(c)
+	case *types.OIDCCredentials:
+		typ = "oidc"
+		raw, err = json.Marshal(c)
+	default:
+		return fmt.Errorf("%w: unsupported credential type %T", ErrCredentialStore, creds)
+	}
+	if err != nil {
+		return fmt.Errorf("%w: failed to marshal credentials: %v", ErrCredentialStore, err)
+	}
+
+	env := credentialEnvelope{Type: typ, Data: raw}
+	data, err := json.Marshal(&env)
 	if err != nil {
 		return fmt.Errorf("%w: failed to marshal credentials: %v", ErrCredentialStore, err)
 	}
@@ -40,23 +67,37 @@ func (s *keyringStore) Store(alias string, creds *types.Credentials) error {
 	if err := keyring.Set(alias, KeyringUser, string(data)); err != nil {
 		return fmt.Errorf("%w: failed to store credentials in keyring: %v", ErrCredentialStore, err)
 	}
-
 	return nil
 }
 
 // Retrieve retrieves credentials for the given alias.
-func (s *keyringStore) Retrieve(alias string) (*types.Credentials, error) {
+func (s *keyringStore) Retrieve(alias string) (types.ICredentials, error) {
 	data, err := keyring.Get(alias, KeyringUser)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to retrieve credentials from keyring: %v", ErrCredentialStore, err)
 	}
 
-	var creds types.Credentials
-	if err := json.Unmarshal([]byte(data), &creds); err != nil {
-		return nil, fmt.Errorf("%w: failed to unmarshal credentials: %v", ErrCredentialStore, err)
+	var env credentialEnvelope
+	if err := json.Unmarshal([]byte(data), &env); err != nil {
+		return nil, fmt.Errorf("%w: failed to unmarshal credential envelope: %v", ErrCredentialStore, err)
 	}
 
-	return &creds, nil
+	switch env.Type {
+	case "aws":
+		var c types.AWSCredentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, fmt.Errorf("%w: failed to unmarshal AWS credentials: %v", ErrCredentialStore, err)
+		}
+		return &c, nil
+	case "oidc":
+		var c types.OIDCCredentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, fmt.Errorf("%w: failed to unmarshal OIDC credentials: %v", ErrCredentialStore, err)
+		}
+		return &c, nil
+	default:
+		return nil, fmt.Errorf("%w: unknown credential type %q", ErrCredentialStore, env.Type)
+	}
 }
 
 // Delete deletes credentials for the given alias.
@@ -82,14 +123,8 @@ func (s *keyringStore) IsExpired(alias string) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-
-	// Check if creds implements the iCredentials interface, and if so, run the isExpired function
-	if icreds, ok := creds.(iCredentials); ok {
-		return icreds.isExpired(), nil
-	}
-
-	// If no expiration info, assume not expired
-	return false, nil
+	// Delegate to the credential's IsExpired implementation
+	return creds.IsExpired(), nil
 }
 
 // GetAny retrieves and unmarshals any type from the keyring.

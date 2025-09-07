@@ -2,12 +2,6 @@ package types
 
 import "time"
 
-// Credentials defines credential storage configuration.
-type Credentials struct {
-	AWS  *AWSCredentials  `yaml:"aws,omitempty" json:"aws,omitempty" mapstructure:"aws"`
-	OIDC *OIDCCredentials `yaml:"oidc,omitempty" json:"oidc,omitempty" mapstructure:"oidc"`
-}
-
 // AWSCredentials defines AWS-specific credential fields.
 type AWSCredentials struct {
 	AccessKeyID     string `json:"access_key_id,omitempty"`
@@ -31,11 +25,34 @@ func (c *AWSCredentials) IsExpired() bool {
 	return time.Now().After(expTime)
 }
 
+// GetExpiration implements ICredentials for AWSCredentials.
+func (c *AWSCredentials) GetExpiration() (*time.Time, error) {
+	if c.Expiration == "" {
+		return nil, nil
+	}
+	expTime, err := time.Parse(time.RFC3339, c.Expiration)
+	if err != nil {
+		return nil, err
+	}
+	return &expTime, nil
+}
+
+// BuildWhoamiInfo implements ICredentials for AWSCredentials.
+func (c *AWSCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
+	info.Region = c.Region
+}
+
 // OIDCCredentials defines OIDC-specific credential fields.
 type OIDCCredentials struct {
 	Token    string `json:"token,omitempty"`
 	Provider string `json:"provider,omitempty"`
 	Audience string `json:"audience,omitempty"`
+}
+
+// IsExpired implements ICredentials for OIDCCredentials.
+// If no expiration tracking exists, default to not expired.
+func (c *OIDCCredentials) IsExpired() bool { // nolint:revive
+	return false
 }
 
 // WhoamiInfo represents the current effective authentication principal.
@@ -47,6 +64,6 @@ type WhoamiInfo struct {
 	Region      string            `json:"region,omitempty"`
 	Expiration  *time.Time        `json:"expiration,omitempty"`
 	Environment map[string]string `json:"environment,omitempty"`
-	Credentials *Credentials      `json:"credentials,omitempty"`
+	Credentials ICredentials      `json:"credentials,omitempty"`
 	LastUpdated time.Time         `json:"last_updated"`
 }

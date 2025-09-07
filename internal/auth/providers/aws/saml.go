@@ -89,7 +89,7 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 }
 
 // Authenticate performs SAML authentication using saml2aws.
-func (p *samlProvider) Authenticate(ctx context.Context) (*types.Credentials, error) {
+func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
 	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url)
 	if p.RoleToAssumeFromAssertion == "" {
 		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
@@ -208,7 +208,7 @@ func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRol
 }
 
 // assumeRoleWithSAML assumes an AWS role using SAML assertion.
-func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion string, role *saml2aws.AWSRole) (*types.Credentials, error) {
+func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion string, role *saml2aws.AWSRole) (*types.AWSCredentials, error) {
 	// Load AWS configuration (v2)
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(p.region))
 	if err != nil {
@@ -238,15 +238,13 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Convert to types.Credentials
-	creds := &types.Credentials{
-		AWS: &types.AWSCredentials{
-			AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
-			SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
-			SessionToken:    aws.ToString(result.Credentials.SessionToken),
-			Region:          p.region,
-			Expiration:      result.Credentials.Expiration.Format(time.RFC3339),
-		},
+	// Convert to AWSCredentials
+	creds := &types.AWSCredentials{
+		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
+		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+		SessionToken:    aws.ToString(result.Credentials.SessionToken),
+		Region:          p.region,
+		Expiration:      result.Credentials.Expiration.Format(time.RFC3339),
 	}
 
 	return creds, nil

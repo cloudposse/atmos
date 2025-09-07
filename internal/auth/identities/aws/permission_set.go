@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	log "github.com/charmbracelet/log"
@@ -39,11 +39,12 @@ func (i *permissionSetIdentity) Kind() string {
 }
 
 // Authenticate performs authentication using permission set.
-func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *types.Credentials) (*types.Credentials, error) {
+func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
 	// Note: Caching is now handled at the manager level to prevent duplicates
 
-	if baseCreds == nil || baseCreds.AWS == nil {
-		return nil, fmt.Errorf("%w: base AWS credentials are required", errUtils.ErrAuthenticationFailed)
+	awsBase, ok := baseCreds.(*types.AWSCredentials)
+	if !ok {
+		return nil, fmt.Errorf("%w: base AWS credentials are required for permission-set", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	log.Debug("Permission set authentication started.", "identity", i.name)
@@ -60,9 +61,6 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *typ
 	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
 		return nil, fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
-	if !ok {
-		return nil, fmt.Errorf("%w: account specification is required", errUtils.ErrInvalidIdentityConfig)
-	}
 
 	accountName, ok := accountSpec["name"].(string)
 	if !ok || accountName == "" {
@@ -71,15 +69,15 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *typ
 
 	// Create AWS config using the base credentials (SSO access token)
 	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(baseCreds.AWS.Region),
-		config.WithCredentialsProvider(aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
-			return aws.Credentials{
-				AccessKeyID: baseCreds.AWS.AccessKeyID, // This is actually the SSO access token
+		config.WithRegion(awsBase.Region),
+		config.WithCredentialsProvider(awssdk.CredentialsProviderFunc(func(ctx context.Context) (awssdk.Credentials, error) {
+			return awssdk.Credentials{
+				AccessKeyID: awsBase.AccessKeyID, // This is actually the SSO access token
 			}, nil
 		})),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAwsAuth, err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
 	}
 
 	// Create SSO client
@@ -87,7 +85,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *typ
 
 	// List accounts to find the target account ID
 	accountsResp, err := ssoClient.ListAccounts(ctx, &sso.ListAccountsInput{
-		AccessToken: aws.String(baseCreds.AWS.AccessKeyID), // SSO access token
+		AccessToken: awssdk.String(awsBase.AccessKeyID), // SSO access token
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to list accounts: %v", errUtils.ErrAwsAuth, err)
@@ -95,8 +93,8 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *typ
 
 	var accountID string
 	for _, account := range accountsResp.AccountList {
-		if aws.ToString(account.AccountName) == accountName {
-			accountID = aws.ToString(account.AccountId)
+		if awssdk.ToString(account.AccountName) == accountName {
+			accountID = awssdk.ToString(account.AccountId)
 			break
 		}
 	}
@@ -107,9 +105,9 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *typ
 
 	// Get role credentials for the permission set
 	roleCredsResp, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
-		AccessToken: aws.String(baseCreds.AWS.AccessKeyID),
-		AccountId:   aws.String(accountID),
-		RoleName:    aws.String(permissionSetName),
+		AccountId:   awssdk.String(accountID),
+		RoleName:    awssdk.String(permissionSetName),
+		AccessToken: awssdk.String(awsBase.AccessKeyID),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get role credentials: %v", errUtils.ErrAuthenticationFailed, err)
@@ -121,14 +119,12 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds *typ
 		expiration = time.Unix(roleCredsResp.RoleCredentials.Expiration/1000, 0).Format(time.RFC3339)
 	}
 
-	creds := &types.Credentials{
-		AWS: &types.AWSCredentials{
-			AccessKeyID:     aws.ToString(roleCredsResp.RoleCredentials.AccessKeyId),
-			SecretAccessKey: aws.ToString(roleCredsResp.RoleCredentials.SecretAccessKey),
-			SessionToken:    aws.ToString(roleCredsResp.RoleCredentials.SessionToken),
-			Region:          baseCreds.AWS.Region,
-			Expiration:      expiration,
-		},
+	creds := &types.AWSCredentials{
+		AccessKeyID:     awssdk.ToString(roleCredsResp.RoleCredentials.AccessKeyId),
+		SecretAccessKey: awssdk.ToString(roleCredsResp.RoleCredentials.SecretAccessKey),
+		SessionToken:    awssdk.ToString(roleCredsResp.RoleCredentials.SessionToken),
+		Region:          awsBase.Region,
+		Expiration:      expiration,
 	}
 
 	log.Debug("Permission set authentication successful.", "identity", i.name)
@@ -185,13 +181,10 @@ func (i *permissionSetIdentity) GetProviderName() (string, error) {
 }
 
 // PostAuthenticate sets up AWS files after authentication.
-func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds *types.Credentials) error {
+func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
 	// Setup AWS files using shared AWS cloud package
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
-	}
-	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
-		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrAwsAuth, err)
 	}
 	return nil
 }
