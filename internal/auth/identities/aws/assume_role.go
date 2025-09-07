@@ -57,7 +57,8 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds *schema
 	}
 
 	var roleArn string
-	if roleArn, ok := i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
+	var ok bool
+	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
 		return nil, fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
