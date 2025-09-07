@@ -6,24 +6,24 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/vcs"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 )
 
 func init() {
-	// Register mock provider with the VCS factory
-	vcs.RegisterProvider(vcs.Platform("mock"), NewMockProvider)
+	// Register mock integration with the CI factory
+	ci.RegisterIntegration("mock", NewMockIntegration)
 }
 
-// MockProvider implements the VCS Provider interface for testing.
-type MockProvider struct {
+// MockIntegration implements the CI Integration interface for testing.
+type MockIntegration struct {
 	logger *log.Logger
 	config *MockConfig
 	mu     sync.RWMutex
 }
 
-// MockConfig allows configuring the mock provider's behavior.
+// MockConfig allows configuring the mock integration's behavior.
 type MockConfig struct {
-	// Provider behavior
+	// Integration behavior
 	IsAvailable         bool
 	ShouldFailDetection bool
 	DetectionError      error
@@ -56,17 +56,17 @@ type MockConfig struct {
 	PublishedArtifacts map[string]string // name -> path
 }
 
-// NewMockProvider creates a new mock VCS provider.
-func NewMockProvider(logger *log.Logger) vcs.Provider {
-	return &MockProvider{
+// NewMockIntegration creates a new mock CI integration.
+func NewMockIntegration(logger *log.Logger) ci.Integration {
+	return &MockIntegration{
 		logger: logger,
 		config: DefaultMockConfig(),
 	}
 }
 
-// NewMockProviderWithConfig creates a mock provider with custom configuration.
-func NewMockProviderWithConfig(logger *log.Logger, config *MockConfig) *MockProvider {
-	return &MockProvider{
+// NewMockIntegrationWithConfig creates a mock integration with custom configuration.
+func NewMockIntegrationWithConfig(logger *log.Logger, config *MockConfig) *MockIntegration {
+	return &MockIntegration{
 		logger: logger,
 		config: config,
 	}
@@ -93,118 +93,118 @@ func DefaultMockConfig() *MockConfig {
 }
 
 // DetectContext returns a mock context.
-func (p *MockProvider) DetectContext() (vcs.Context, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+func (m *MockIntegration) DetectContext() (ci.Context, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
-	if p.config.ShouldFailDetection {
-		if p.config.DetectionError != nil {
-			return nil, p.config.DetectionError
+	if m.config.ShouldFailDetection {
+		if m.config.DetectionError != nil {
+			return nil, m.config.DetectionError
 		}
-		return nil, vcs.ErrContextNotDetected
+		return nil, ci.ErrContextNotDetected
 	}
 
 	return &MockContext{
-		config: p.config,
+		config: m.config,
 	}, nil
 }
 
 // CreateCommentManager creates a mock comment manager.
-func (p *MockProvider) CreateCommentManager(ctx vcs.Context, logger *log.Logger) vcs.CommentManager {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+func (m *MockIntegration) CreateCommentManager(ctx ci.Context, logger *log.Logger) ci.CommentManager {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	return &MockCommentManager{
-		config: p.config,
+		config: m.config,
 		logger: logger,
 	}
 }
 
 // GetJobSummaryWriter returns a mock job summary writer if supported.
-func (p *MockProvider) GetJobSummaryWriter() vcs.JobSummaryWriter {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+func (m *MockIntegration) GetJobSummaryWriter() ci.JobSummaryWriter {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
-	if !p.config.JobSummarySupported {
+	if !m.config.JobSummarySupported {
 		return nil
 	}
 
 	return &MockJobSummaryWriter{
-		config: p.config,
+		config: m.config,
 	}
 }
 
 // GetArtifactPublisher returns a mock artifact publisher if supported.
-func (p *MockProvider) GetArtifactPublisher() vcs.ArtifactPublisher {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+func (m *MockIntegration) GetArtifactPublisher() ci.ArtifactPublisher {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
-	if !p.config.ArtifactsSupported {
+	if !m.config.ArtifactsSupported {
 		return nil
 	}
 
 	return &MockArtifactPublisher{
-		config: p.config,
+		config: m.config,
 	}
 }
 
-// GetPlatform returns the mock platform identifier.
-func (p *MockProvider) GetPlatform() vcs.Platform {
-	return vcs.Platform("mock")
+// Provider returns the mock provider identifier.
+func (m *MockIntegration) Provider() string {
+	return "mock"
 }
 
-// IsAvailable checks if the mock provider is available.
-func (p *MockProvider) IsAvailable() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+// IsAvailable checks if the mock integration is available.
+func (m *MockIntegration) IsAvailable() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	// Check for GOTCHA_USE_MOCK environment variable
 	if os.Getenv("GOTCHA_USE_MOCK") == "true" {
 		return true
 	}
 
-	return p.config.IsAvailable
+	return m.config.IsAvailable
 }
 
 // SetConfig updates the mock configuration (useful for testing).
-func (p *MockProvider) SetConfig(config *MockConfig) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.config = config
+func (m *MockIntegration) SetConfig(config *MockConfig) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.config = config
 }
 
 // GetConfig returns the current mock configuration.
-func (p *MockProvider) GetConfig() *MockConfig {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.config
+func (m *MockIntegration) GetConfig() *MockConfig {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.config
 }
 
 // GetComments returns all stored comments (for testing).
-func (p *MockProvider) GetComments() map[string]string {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+func (m *MockIntegration) GetComments() map[string]string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	// Return a copy to avoid race conditions
 	comments := make(map[string]string)
-	for k, v := range p.config.Comments {
+	for k, v := range m.config.Comments {
 		comments[k] = v
 	}
 	return comments
 }
 
 // GetWrittenSummaries returns all written summaries (for testing).
-func (p *MockProvider) GetWrittenSummaries() []string {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+func (m *MockIntegration) GetWrittenSummaries() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	// Return a copy
-	summaries := make([]string, len(p.config.WrittenSummaries))
-	copy(summaries, p.config.WrittenSummaries)
+	summaries := make([]string, len(m.config.WrittenSummaries))
+	copy(summaries, m.config.WrittenSummaries)
 	return summaries
 }
 
-// MockContext implements the vcs.Context interface for testing.
+// MockContext implements the ci.Context interface for testing.
 type MockContext struct {
 	config *MockConfig
 }
@@ -216,7 +216,7 @@ func (c *MockContext) GetCommentUUID() string    { return c.config.CommentUUID }
 func (c *MockContext) GetToken() string          { return c.config.Token }
 func (c *MockContext) GetEventName() string      { return c.config.EventName }
 func (c *MockContext) IsSupported() bool         { return c.config.ContextSupported }
-func (c *MockContext) GetPlatform() vcs.Platform { return vcs.Platform("mock") }
+func (c *MockContext) Provider() string { return "mock" }
 func (c *MockContext) String() string {
 	return fmt.Sprintf("Mock Context: %s/%s PR#%d", c.config.Owner, c.config.Repo, c.config.PRNumber)
 }

@@ -1,9 +1,9 @@
-package vcs
+package ci
 
-// CommentMetadata contains common metadata for VCS comments.
+// CommentMetadata contains common metadata for CI comments.
 type CommentMetadata struct {
 	UUID      string
-	Platform  Platform
+	Provider  string
 	JobID     string
 	RunNumber int
 }

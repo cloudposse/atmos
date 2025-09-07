@@ -5,28 +5,28 @@ import (
 	"os"
 
 	"github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/vcs"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 )
 
 func init() {
-	// Register GitHub provider with the VCS factory
-	vcs.RegisterProvider(vcs.PlatformGitHub, NewGitHubProvider)
+	// Register GitHub integration with the CI factory
+	ci.RegisterIntegration(ci.GitHub, NewGitHubIntegration)
 }
 
-// GitHubProvider implements the VCS Provider interface for GitHub.
-type GitHubProvider struct {
+// GitHubIntegration implements the CI Integration interface for GitHub Actions.
+type GitHubIntegration struct {
 	logger *log.Logger
 }
 
-// NewGitHubProvider creates a new GitHub VCS provider.
-func NewGitHubProvider(logger *log.Logger) vcs.Provider {
-	return &GitHubProvider{
+// NewGitHubIntegration creates a new GitHub CI integration.
+func NewGitHubIntegration(logger *log.Logger) ci.Integration {
+	return &GitHubIntegration{
 		logger: logger,
 	}
 }
 
 // DetectContext detects GitHub Actions context from environment.
-func (p *GitHubProvider) DetectContext() (vcs.Context, error) {
+func (g *GitHubIntegration) DetectContext() (ci.Context, error) {
 	ctx, err := DetectContext()
 	if err != nil {
 		return nil, err
@@ -35,11 +35,11 @@ func (p *GitHubProvider) DetectContext() (vcs.Context, error) {
 }
 
 // CreateCommentManager creates a GitHub comment manager.
-func (p *GitHubProvider) CreateCommentManager(ctx vcs.Context, logger *log.Logger) vcs.CommentManager {
+func (g *GitHubIntegration) CreateCommentManager(ctx ci.Context, logger *log.Logger) ci.CommentManager {
 	// Extract the underlying GitHub context
 	ghCtx, ok := ctx.(*gitHubContext)
 	if !ok {
-		p.logger.Error("Invalid context type for GitHub provider")
+		g.logger.Error("Invalid context type for GitHub integration")
 		return nil
 	}
 
@@ -51,7 +51,7 @@ func (p *GitHubProvider) CreateCommentManager(ctx vcs.Context, logger *log.Logge
 }
 
 // GetJobSummaryWriter returns a GitHub job summary writer if available.
-func (p *GitHubProvider) GetJobSummaryWriter() vcs.JobSummaryWriter {
+func (g *GitHubIntegration) GetJobSummaryWriter() ci.JobSummaryWriter {
 	if os.Getenv("GITHUB_STEP_SUMMARY") != "" {
 		return &GitHubJobSummaryWriter{}
 	}
@@ -59,22 +59,22 @@ func (p *GitHubProvider) GetJobSummaryWriter() vcs.JobSummaryWriter {
 }
 
 // GetArtifactPublisher returns nil as GitHub Actions handles artifacts differently.
-func (p *GitHubProvider) GetArtifactPublisher() vcs.ArtifactPublisher {
+func (g *GitHubIntegration) GetArtifactPublisher() ci.ArtifactPublisher {
 	// GitHub Actions handles artifacts through workflow commands, not API
 	return nil
 }
 
-// GetPlatform returns the GitHub platform identifier.
-func (p *GitHubProvider) GetPlatform() vcs.Platform {
-	return vcs.PlatformGitHub
+// Provider returns the GitHub provider identifier.
+func (g *GitHubIntegration) Provider() string {
+	return ci.GitHub
 }
 
 // IsAvailable checks if GitHub Actions environment is available.
-func (p *GitHubProvider) IsAvailable() bool {
+func (g *GitHubIntegration) IsAvailable() bool {
 	return os.Getenv("GITHUB_ACTIONS") != ""
 }
 
-// gitHubContext wraps the GitHub-specific Context to implement vcs.Context.
+// gitHubContext wraps the GitHub-specific Context to implement ci.Context.
 type gitHubContext struct {
 	underlying *Context
 }
@@ -86,7 +86,7 @@ func (c *gitHubContext) GetCommentUUID() string    { return c.underlying.Comment
 func (c *gitHubContext) GetToken() string          { return c.underlying.Token }
 func (c *gitHubContext) GetEventName() string      { return c.underlying.EventName }
 func (c *gitHubContext) IsSupported() bool         { return c.underlying.IsSupported() }
-func (c *gitHubContext) GetPlatform() vcs.Platform { return vcs.PlatformGitHub }
+func (c *gitHubContext) Provider() string { return ci.GitHub }
 func (c *gitHubContext) String() string            { return c.underlying.String() }
 
 // SetCommentUUID allows updating the UUID (needed for job discriminator support).
@@ -94,24 +94,24 @@ func (c *gitHubContext) SetCommentUUID(uuid string) {
 	c.underlying.CommentUUID = uuid
 }
 
-// gitHubCommentManager wraps the GitHub CommentManager to implement vcs.CommentManager.
+// gitHubCommentManager wraps the GitHub CommentManager to implement ci.CommentManager.
 type gitHubCommentManager struct {
 	manager *CommentManager
 	logger  *log.Logger
 }
 
-func (m *gitHubCommentManager) PostOrUpdateComment(ctx context.Context, vcsCtx vcs.Context, content string) error {
-	ghCtx, ok := vcsCtx.(*gitHubContext)
+func (m *gitHubCommentManager) PostOrUpdateComment(ctx context.Context, ciCtx ci.Context, content string) error {
+	ghCtx, ok := ciCtx.(*gitHubContext)
 	if !ok {
-		return vcs.ErrContextNotSupported
+		return ci.ErrContextNotSupported
 	}
 	return m.manager.PostOrUpdateComment(ctx, ghCtx.underlying, content)
 }
 
-func (m *gitHubCommentManager) FindExistingComment(ctx context.Context, vcsCtx vcs.Context, uuid string) (interface{}, error) {
-	ghCtx, ok := vcsCtx.(*gitHubContext)
+func (m *gitHubCommentManager) FindExistingComment(ctx context.Context, ciCtx ci.Context, uuid string) (interface{}, error) {
+	ghCtx, ok := ciCtx.(*gitHubContext)
 	if !ok {
-		return nil, vcs.ErrContextNotSupported
+		return nil, ci.ErrContextNotSupported
 	}
 	return m.manager.FindExistingComment(ctx, ghCtx.underlying.Owner, ghCtx.underlying.Repo, ghCtx.underlying.PRNumber, uuid)
 }

@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// MockJobSummaryWriter implements vcs.JobSummaryWriter for testing.
+// MockJobSummaryWriter implements ci.JobSummaryWriter for testing.
 type MockJobSummaryWriter struct {
 	config *MockConfig
 	mu     sync.Mutex
@@ -52,7 +52,7 @@ func (w *MockJobSummaryWriter) GetJobSummaryPath() string {
 	return w.config.JobSummaryPath
 }
 
-// MockArtifactPublisher implements vcs.ArtifactPublisher for testing.
+// MockArtifactPublisher implements ci.ArtifactPublisher for testing.
 type MockArtifactPublisher struct {
 	config *MockConfig
 	mu     sync.Mutex

@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-// GitHubJobSummaryWriter implements vcs.JobSummaryWriter for GitHub Actions.
+// GitHubJobSummaryWriter implements ci.JobSummaryWriter for GitHub Actions.
 type GitHubJobSummaryWriter struct{}
 
 // WriteJobSummary writes content to the GitHub Actions step summary.

@@ -1,4 +1,4 @@
-package vcs_test
+package ci_test
 
 import (
 	"context"
@@ -7,14 +7,14 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/vcs"
-	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/vcs/github" // Register GitHub
-	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/vcs/mock"   // Register Mock
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
+	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github" // Register GitHub
+	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"   // Register Mock
 	"github.com/stretchr/testify/assert"
 )
 
-// TestVCSAbstractionIntegration tests the complete VCS abstraction flow
-func TestVCSAbstractionIntegration(t *testing.T) {
+// TestCIAbstractionIntegration tests the complete CI abstraction flow
+func TestCIAbstractionIntegration(t *testing.T) {
 	logger := log.New(nil)
 	logger.SetLevel(log.DebugLevel)
 
@@ -31,19 +31,19 @@ func TestVCSAbstractionIntegration(t *testing.T) {
 			}
 		}()
 
-		// Detect provider
-		provider := vcs.DetectProvider(logger)
-		assert.NotNil(t, provider)
-		assert.Equal(t, vcs.Platform("mock"), provider.GetPlatform())
+		// Detect integration
+		integration := ci.DetectIntegration(logger)
+		assert.NotNil(t, integration)
+		assert.Equal(t, "mock", integration.Provider())
 
 		// Get context
-		ctx, err := provider.DetectContext()
+		ctx, err := integration.DetectContext()
 		assert.NoError(t, err)
 		assert.NotNil(t, ctx)
 		assert.True(t, ctx.IsSupported())
 
 		// Test comment posting
-		cm := provider.CreateCommentManager(ctx, logger)
+		cm := integration.CreateCommentManager(ctx, logger)
 		assert.NotNil(t, cm)
 
 		testComment := "# Test Results\n\n✅ All tests passed!"
@@ -51,7 +51,7 @@ func TestVCSAbstractionIntegration(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Test job summary (if supported)
-		jsw := provider.GetJobSummaryWriter()
+		jsw := integration.GetJobSummaryWriter()
 		if jsw != nil {
 			assert.True(t, jsw.IsJobSummarySupported())
 			path, err := jsw.WriteJobSummary(testComment)
@@ -62,15 +62,15 @@ func TestVCSAbstractionIntegration(t *testing.T) {
 
 	// Test provider detection without any environment
 	t.Run("no provider available", func(t *testing.T) {
-		// Clear all VCS-related environment variables
+		// Clear all CI-related environment variables
 		oldVars := map[string]string{
 			"GOTCHA_USE_MOCK":     os.Getenv("GOTCHA_USE_MOCK"),
-			"GOTCHA_VCS_PLATFORM": os.Getenv("GOTCHA_VCS_PLATFORM"),
+			"GOTCHA_CI_PROVIDER": os.Getenv("GOTCHA_CI_PROVIDER"),
 			"GITHUB_ACTIONS":      os.Getenv("GITHUB_ACTIONS"),
 		}
 
 		os.Unsetenv("GOTCHA_USE_MOCK")
-		os.Unsetenv("GOTCHA_VCS_PLATFORM")
+		os.Unsetenv("GOTCHA_CI_PROVIDER")
 		os.Unsetenv("GITHUB_ACTIONS")
 
 		defer func() {
@@ -81,13 +81,13 @@ func TestVCSAbstractionIntegration(t *testing.T) {
 			}
 		}()
 
-		provider := vcs.DetectProvider(logger)
-		assert.Nil(t, provider)
+		integration := ci.DetectIntegration(logger)
+		assert.Nil(t, integration)
 	})
 }
 
-// TestVCSCommentSizing tests that comments handle size limits correctly
-func TestVCSCommentSizing(t *testing.T) {
+// TestCICommentSizing tests that comments handle size limits correctly
+func TestCICommentSizing(t *testing.T) {
 	logger := log.New(nil)
 
 	// Enable mock provider
@@ -101,13 +101,13 @@ func TestVCSCommentSizing(t *testing.T) {
 		}
 	}()
 
-	provider := vcs.DetectProvider(logger)
-	assert.NotNil(t, provider)
+	integration := ci.DetectIntegration(logger)
+	assert.NotNil(t, integration)
 
-	ctx, err := provider.DetectContext()
+	ctx, err := integration.DetectContext()
 	assert.NoError(t, err)
 
-	cm := provider.CreateCommentManager(ctx, logger)
+	cm := integration.CreateCommentManager(ctx, logger)
 
 	// Create a large comment (mock provider should handle any size)
 	largeComment := "# Large Test Report\n\n"
@@ -139,17 +139,17 @@ func TestSimulateGotchaCommentPosting(t *testing.T) {
 	}
 
 	// This simulates what postGitHubComment does
-	provider := vcs.DetectProvider(logger)
-	if provider == nil {
-		t.Skip("No VCS provider available")
+	integration := ci.DetectIntegration(logger)
+	if integration == nil {
+		t.Skip("No CI integration available")
 	}
 
-	ctx, err := provider.DetectContext()
+	ctx, err := integration.DetectContext()
 	if err != nil || !ctx.IsSupported() {
-		t.Skip("VCS context not supported")
+		t.Skip("CI context not supported")
 	}
 
-	cm := provider.CreateCommentManager(ctx, logger)
+	cm := integration.CreateCommentManager(ctx, logger)
 
 	// Create markdown comment (simplified version)
 	comment := "# Test Results\n\n"
