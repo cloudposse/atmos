@@ -12,7 +12,7 @@ import (
 	"golang.org/x/term"
 )
 
-// Bubble Tea spinner model
+// Bubble Tea spinner model.
 type spinnerModel struct {
 	spinner bspinner.Model
 	message string
@@ -58,10 +58,10 @@ func (m spinnerModel) View() string {
 	return fmt.Sprintf("%s %s", m.spinner.View(), m.message)
 }
 
-// Custom message type for signaling installation completion
+// Custom message type for signaling installation completion.
 type installDoneMsg struct{}
 
-// Run spinner with Bubble Tea - proper way
+// Run spinner with Bubble Tea - proper way.
 func runBubbleTeaSpinner(message string) *tea.Program {
 	p := tea.NewProgram(initialSpinnerModel(message))
 	return p
@@ -76,7 +76,7 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 		return err
 	}
 	if version == "" {
-		// Try to look up version in .tool-versions or fallback to alias/latest
+		// Try to look up version in .tool-versions or fallback to alias/latest.
 		toolVersions, err := LoadToolVersions(".tool-versions")
 		if err != nil {
 			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", toolSpec, err)
@@ -93,14 +93,14 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 		return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version", toolSpec)
 	}
 
-	// Use the enhanced parseToolSpec to handle both owner/repo and tool name formats
+	// Use the enhanced parseToolSpec to handle both owner/repo and tool name formats.
 	installer := NewInstaller()
 	owner, repo, err := installer.parseToolSpec(tool)
 	if err != nil {
 		return fmt.Errorf("invalid repository path: %s. Expected format: owner/repo or tool name", tool)
 	}
 
-	// Handle "latest" keyword
+	// Handle "latest" keyword.
 	isLatest := false
 	if version == "latest" {
 		registry := NewAquaRegistry()
@@ -118,7 +118,7 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 		return err
 	}
 
-	// Update .tool-versions: add version, set as default if requested
+	// Update .tool-versions: add version, set as default if requested.
 	if setAsDefault {
 		if err := AddToolToVersionsAsDefault(".tool-versions", tool, version); err != nil {
 			return fmt.Errorf("failed to update .tool-versions: %w", err)
@@ -142,7 +142,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		go p.Run()
 	}
 
-	// Perform installation
+	// Perform installation.
 	binaryPath, err := installer.Install(owner, repo, version)
 	if err != nil {
 		if showProgressBar && p != nil {
@@ -165,7 +165,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 	}
 	if showProgressBar && p != nil {
 		p.Send(installDoneMsg{})
-		// Small delay to ensure spinner is cleared
+		// Small delay to ensure spinner is cleared.
 		time.Sleep(100 * time.Millisecond)
 	}
 	if err := AddToolToVersions(".tool-versions", repo, version); err == nil && showProgressBar {
@@ -226,7 +226,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 			bar := progressBar.ViewAs(percent)
 			resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 			fmt.Fprintln(os.Stderr, msg)
-			// Show animated progress for a moment
+			// Show animated progress for a moment.
 			for j := 0; j < 5; j++ {
 				printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
 				spinner, _ = spinner.Update(bspinner.TickMsg{})
@@ -249,7 +249,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 		bar := progressBar.ViewAs(percent)
 		resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 		fmt.Fprintln(os.Stderr, msg)
-		// Show animated progress for a moment
+		// Show animated progress for a moment.
 		for j := 0; j < 5; j++ {
 			printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
 			spinner, _ = spinner.Update(bspinner.TickMsg{})
@@ -257,10 +257,10 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 		}
 	}
 
-	// Stop spinner animation
-	// spinnerDone.Store(true) // This line is removed as per the new_code
+	// Stop spinner animation.
+	// spinnerDone.Store(true) // This line is removed as per the new_code.
 
-	// At the end, clear the progress bar line before printing the summary
+	// At the end, clear the progress bar line before printing the summary.
 	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 	fmt.Fprintln(os.Stderr)
 	if totalTools == 0 {
