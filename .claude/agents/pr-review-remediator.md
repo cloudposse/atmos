@@ -40,22 +40,31 @@ You are a specialized PR review remediation agent for the Atmos project, focused
 
 ## Critical Implementation Details
 
-### IMPORTANT: Linting Only Changed Files
+### IMPORTANT: Linting Only Changed Files (Excluding Deleted)
 
-When running golangci-lint, **ONLY lint files changed in the PR**, not the entire codebase:
+When running golangci-lint, **ONLY lint files changed in the PR**, not the entire codebase.
+**CRITICAL**: Exclude deleted files to avoid errors.
 
 ```bash
-# Get list of changed files in PR
-gh pr view <PR_NUMBER> --repo cloudposse/atmos --json files --jq '.files[].path'
+# Get list of changed files in PR (excluding deleted files)
+# The files array includes: additions, deletions, and path
+# We filter for added, modified, or renamed files only
+CHANGED_FILES=$(gh pr view <PR_NUMBER> --repo cloudposse/atmos --json files \
+  --jq '.files[] | select(.deletions >= 0 and .additions > 0) | .path')
+
+# Alternative: Use gh api for more detailed file status
+CHANGED_FILES=$(gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/files \
+  --jq '.[] | select(.status != "removed") | .filename')
 
 # The Makefile already handles this correctly:
 make lint  # Uses: golangci-lint run --new-from-rev=origin/main
 
-# Or manually for specific files:
-golangci-lint run --new-from-rev=origin/main
-
-# For a specific file:
-golangci-lint run path/to/changed/file.go
+# Or manually for specific files (check existence first):
+for file in $CHANGED_FILES; do
+  if [[ -f "$file" && "$file" == *.go ]]; then
+    golangci-lint run "$file"
+  fi
+done
 ```
 
 ### Finding and Parsing CodeRabbit Comments
@@ -183,9 +192,19 @@ Ready to proceed with valid suggestions? [y/n]
 PR_NUMBER=1440
 gh pr view $PR_NUMBER --repo cloudposse/atmos --json files,title,state
 
-# 2. Get list of changed files (for targeted linting)
-CHANGED_FILES=$(gh pr view $PR_NUMBER --repo cloudposse/atmos --json files --jq '.files[].path')
-echo "Changed files:"
+# 2. Get list of changed files (excluding deleted files for targeted operations)
+# Use GitHub API to get file status and filter out deleted files
+CHANGED_FILES=$(gh api repos/cloudposse/atmos/pulls/$PR_NUMBER/files \
+  --jq '.[] | select(.status != "removed") | .filename')
+
+# Count files by status for visibility
+echo "File changes summary:"
+gh api repos/cloudposse/atmos/pulls/$PR_NUMBER/files --jq '
+  "Added: " + ([.[] | select(.status == "added")] | length | tostring) + 
+  ", Modified: " + ([.[] | select(.status == "modified")] | length | tostring) +
+  ", Removed: " + ([.[] | select(.status == "removed")] | length | tostring)'
+
+echo "Files to process (excluding deleted):"
 echo "$CHANGED_FILES"
 
 # 3. Get all review comments
@@ -261,25 +280,31 @@ set -euo pipefail
 git fetch origin main --quiet || true
 make lint  # This already uses --new-from-rev=origin/main
 
-# 2. Apply specific fixes to changed files only
+# 2. Apply specific fixes to changed files only (skip deleted files)
 while IFS= read -r file; do
-  if [[ -n "$file" && "$file" == *.go ]]; then
-    # Format only if it's a Go file that was changed
+  if [[ -n "$file" && "$file" == *.go && -f "$file" ]]; then
+    # Format only if it's a Go file that exists on disk
+    echo "Formatting: $file"
     gofumpt -w "$file"
     goimports -w "$file"
+  elif [[ -n "$file" && ! -f "$file" ]]; then
+    echo "Skipping deleted file: $file"
   fi
 done <<< "$CHANGED_FILES"
 
-# 3. Run tests for changed packages (deduplicate directories)
+# 3. Run tests for changed packages (deduplicate directories, skip deleted)
 CHANGED_DIRS=$(while IFS= read -r file; do
-  if [[ -n "$file" && "$file" == *.go ]]; then
+  if [[ -n "$file" && "$file" == *.go && -f "$file" ]]; then
     dirname "$file"
   fi
 done <<< "$CHANGED_FILES" | sort -u)
 
 while IFS= read -r pkg_dir; do
-  if [[ -n "$pkg_dir" ]]; then
+  if [[ -n "$pkg_dir" && -d "$pkg_dir" ]]; then
+    echo "Testing package: $pkg_dir"
     go test "./$pkg_dir" -v
+  elif [[ -n "$pkg_dir" && ! -d "$pkg_dir" ]]; then
+    echo "Skipping removed directory: $pkg_dir"
   fi
 done <<< "$CHANGED_DIRS"
 
@@ -515,8 +540,10 @@ gh pr checks <PR_NUMBER> --repo cloudposse/atmos | grep "PR Semver"
 Analyze PR changes to suggest appropriate label:
 
 ```bash
-# Check if only documentation files changed
-CHANGED_FILES=$(gh pr view <PR_NUMBER> --repo cloudposse/atmos --json files --jq '.files[].path')
+# Check if only documentation files changed (exclude deleted files)
+# Get non-deleted files only
+CHANGED_FILES=$(gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/files \
+  --jq '.[] | select(.status != "removed") | .filename')
 NON_DOC_FILES=$(echo "$CHANGED_FILES" | grep -v -E '\.(md|mdx|txt)$|^website/|^docs/|^\.github/|^\.claude/' | wc -l)
 
 if [[ $NON_DOC_FILES -eq 0 ]]; then

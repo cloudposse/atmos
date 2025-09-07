@@ -94,8 +94,9 @@ The agent will automatically be invoked based on the task description.
 ## Key Commands Used by Agent
 
 ```bash
-# Get changed files in PR
-gh pr view <PR_NUMBER> --repo cloudposse/atmos --json files --jq '.files[].path'
+# Get changed files in PR (excluding deleted files)
+gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/files \
+  --jq '.[] | select(.status != "removed") | .filename'
 
 # Find CodeRabbit comments
 gh api repos/cloudposse/atmos/issues/<PR>/comments \
