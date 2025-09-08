@@ -49,7 +49,9 @@ This is the default command when running gotcha without arguments.`,
   gotcha stream -- -run TestConfigLoad
   gotcha stream -- -run "TestConfig.*" -v
   gotcha stream --show=failed -- -run "Test.*Load" -race`,
-		Args: cobra.ArbitraryArgs,
+		Args:          cobra.ArbitraryArgs,
+		SilenceUsage:  true,
+		SilenceErrors: false,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStream(cmd, args, logger)
 		},

@@ -35,7 +35,9 @@ func newParseCmd(logger *log.Logger) *cobra.Command {
   
   # Terminal output plus markdown file
   gotcha parse --coverprofile=coverage.out --format=both`,
-		Args:  cobra.ExactArgs(1),
+		Args:          cobra.ExactArgs(1),
+		SilenceUsage:  true,
+		SilenceErrors: false,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runParse(cmd, args, logger)
 		},

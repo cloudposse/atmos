@@ -86,7 +86,6 @@ func (m *TestModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
 		m.startTestsCmd(),
-		tea.EnterAltScreen,
 	)
 }
 
