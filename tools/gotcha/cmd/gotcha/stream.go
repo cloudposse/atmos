@@ -30,6 +30,25 @@ func newStreamCmd(logger *log.Logger) *cobra.Command {
 		Short: "Stream test results as they execute",
 		Long: `Execute go test and stream results in real-time.
 This is the default command when running gotcha without arguments.`,
+		Example: `  # Run all tests with default settings
+  gotcha stream
+  
+  # Test specific packages  
+  gotcha stream ./pkg/utils ./internal/...
+  
+  # Show only failed tests with custom timeout
+  gotcha stream --show=failed --timeout=10m
+  
+  # Apply package filters
+  gotcha stream --include=".*api.*" --exclude=".*mock.*"
+  
+  # Pass arguments to go test
+  gotcha stream -- -race -short -count=3
+  
+  # Run specific tests using -run flag
+  gotcha stream -- -run TestConfigLoad
+  gotcha stream -- -run "TestConfig.*" -v
+  gotcha stream --show=failed -- -run "Test.*Load" -race`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStream(cmd, args, logger)

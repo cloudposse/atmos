@@ -23,6 +23,18 @@ func newParseCmd(logger *log.Logger) *cobra.Command {
 		Use:   "parse <json-file>",
 		Short: "Parse existing go test JSON output",
 		Long:  `Parse and analyze previously generated go test -json output files.`,
+		Example: `  # Process results from stdin with terminal output
+  go test -json ./... | gotcha parse
+  
+  # Process results from file  
+  gotcha parse test-results.json
+  gotcha parse --input=results.json --format=markdown
+  
+  # Generate GitHub step summary
+  gotcha parse --format=github --output=step-summary.md
+  
+  # Terminal output plus markdown file
+  gotcha parse --coverprofile=coverage.out --format=both`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runParse(cmd, args, logger)

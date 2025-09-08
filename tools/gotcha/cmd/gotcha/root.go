@@ -160,6 +160,27 @@ func Execute() error {
 		Long: `Gotcha is a sophisticated Go test runner that provides real-time progress tracking,
 beautiful terminal output, and flexible result formatting. It transforms the Go testing
 experience with intuitive visual feedback and comprehensive test result analysis.`,
+		Example: `  # Stream mode - run tests directly with real-time output
+  gotcha
+  gotcha .
+  gotcha ./tests
+  gotcha stream --packages="./..." --show=failed
+  gotcha stream --packages="./pkg/..." --timeout=5m
+  
+  # Run specific tests using -run flag
+  gotcha -- -run TestConfigLoad
+  gotcha -- -run "TestConfig.*" -v
+  gotcha stream -- -run TestStackProcess -race
+  
+  # Process existing JSON results  
+  go test -json ./... | gotcha parse
+  gotcha parse --input=test-results.json --format=markdown
+  
+  # Generate GitHub step summaries
+  gotcha stream --format=github --output=step-summary.md
+  
+  # Advanced filtering and configuration
+  gotcha stream --include=".*api.*" --exclude=".*mock.*" -- -race -short`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Default behavior is to run stream command
