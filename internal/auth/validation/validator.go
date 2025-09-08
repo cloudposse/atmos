@@ -24,13 +24,6 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 		return fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
 
-	// Validate logs configuration
-	if config.Logs != nil {
-		if err := v.ValidateLogsConfig(config.Logs); err != nil {
-			return fmt.Errorf("%w: logs configuration validation failed: %w", errUtils.ErrInvalidAuthConfig, err)
-		}
-	}
-
 	// Validate providers
 	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
 	for name, provider := range config.Providers {
@@ -56,7 +49,7 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 }
 
 // ValidateLogsConfig validates the logs configuration.
-func (v *validator) ValidateLogsConfig(logs *schema.LogsConfig) error {
+func (v *validator) ValidateLogsConfig(logs *schema.Logs) error {
 	if logs.Level == "" {
 		// Default to Info if not specified
 		return nil
@@ -114,6 +107,8 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 			}
 		}
 	}
+
+	i := *identity.(types.Identity)
 
 	// TODO replace with Identity Interface Validate()
 	// Validate based on identity kind

@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	principalName    = "name"
-	principalAccount = "account"
+	principalName        = "name"
+	principalAccount     = "account"
+	principalAccountName = "name"
+	principalAccountID   = "id"
 )
 
 // permissionSetIdentity implements AWS permission set identity.
@@ -70,9 +72,10 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 		return nil, fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
-	accountName, ok3 := accountSpec[principalName].(string)
-	if !ok3 || accountName == "" {
-		return nil, fmt.Errorf("%w: account name is required", errUtils.ErrInvalidIdentityConfig)
+	accountName, okAccountName := accountSpec[principalName].(string)
+	accountID, okAccountID := accountSpec[principalAccountID].(string)
+	if !(okAccountName || okAccountID) || accountName == "" || accountID == "" {
+		return nil, fmt.Errorf("%w: account name/id is required", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	// Create AWS config using the base credentials (SSO access token)
@@ -99,17 +102,18 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 		return nil, fmt.Errorf("%w: failed to list accounts: %v", errUtils.ErrAwsAuth, err)
 	}
 
-	var accountID string
-	for _, account := range accountsResp.AccountList {
-		if awssdk.ToString(account.AccountName) == accountName {
-			accountID = awssdk.ToString(account.AccountId)
-			break
+	if okAccountName {
+		for _, account := range accountsResp.AccountList {
+			if awssdk.ToString(account.AccountName) == accountName {
+				accountID = awssdk.ToString(account.AccountId)
+				break
+			}
+		}
+		if accountID == "" {
+			return nil, fmt.Errorf("%w: account %q not found", errUtils.ErrAwsAuth, accountName)
 		}
 	}
 
-	if accountID == "" {
-		return nil, fmt.Errorf("%w: account %q not found", errUtils.ErrAwsAuth, accountName)
-	}
 
 	// Get role credentials for the permission set
 	roleCredsResp, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
@@ -160,11 +164,14 @@ func (i *permissionSetIdentity) Validate() error {
 		return fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
-	accountName, ok := accountSpec["name"].(string)
-	if !ok || accountName == "" {
-		return fmt.Errorf("%w: account name is required", errUtils.ErrInvalidIdentityConfig)
+	accountName, okName := accountSpec["name"].(string)
+	accountID, okID := accountSpec["id"].(string)
+	if !(okName || okID) {
+		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
 	}
-
+	if accountName == "" && accountID == "" {
+		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
+	}
 	return nil
 }
 

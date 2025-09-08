@@ -6,7 +6,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth whoami with multiple default identities in CI mode"
-    workdir: "fixtures/scenarios/auth-multiple-defaults/"
+    workdir: "fixtures/scenarios/atmos-auth-multiple-defaults/"
     env:
       CI: "true"
     command: "atmos"
@@ -25,7 +25,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth env with multiple default identities in CI mode"
-    workdir: "fixtures/scenarios/auth-multiple-defaults/"
+    workdir: "fixtures/scenarios/atmos-auth-multiple-defaults/"
     env:
       CI: "true"
     command: "atmos"
@@ -44,7 +44,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth login with multiple default identities in CI mode"
-    workdir: "fixtures/scenarios/auth-multiple-defaults/"
+    workdir: "fixtures/scenarios/atmos-auth-multiple-defaults/"
     env:
       CI: "true"
     command: "atmos"
@@ -64,7 +64,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth whoami with no default identities in CI mode"
-    workdir: "fixtures/scenarios/auth-no-defaults/"
+    workdir: "fixtures/scenarios/atmos-auth-no-defaults/"
     env:
       CI: "true"
     command: "atmos"
@@ -81,7 +81,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth env with no default identities in CI mode"
-    workdir: "fixtures/scenarios/auth-no-defaults/"
+    workdir: "fixtures/scenarios/atmos-auth-no-defaults/"
     env:
       CI: "true"
     command: "atmos"
@@ -98,7 +98,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth login with no default identities in CI mode"
-    workdir: "fixtures/scenarios/auth-no-defaults/"
+    workdir: "fixtures/scenarios/atmos-auth-no-defaults/"
     env:
       CI: "true"
     command: "atmos"
@@ -116,7 +116,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth whoami with explicit identity when multiple defaults exist"
-    workdir: "fixtures/scenarios/auth-multiple-defaults/"
+    workdir: "fixtures/scenarios/atmos-auth-multiple-defaults/"
     command: "atmos"
     args:
       - "auth"
@@ -133,7 +133,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth env with explicit identity when no defaults exist"
-    workdir: "fixtures/scenarios/auth-no-defaults/"
+    workdir: "fixtures/scenarios/atmos-auth-no-defaults/"
     command: "atmos"
     args:
       - "auth"

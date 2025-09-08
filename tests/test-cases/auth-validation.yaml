@@ -6,7 +6,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth validate with invalid configuration"
-    workdir: "fixtures/scenarios/auth-invalid/"
+    workdir: "fixtures/scenarios/atmos-auth-invalid/"
     command: "atmos"
     args:
       - "auth"
@@ -23,7 +23,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test auth validate with verbose output"
-    workdir: "fixtures/scenarios/auth/"
+    workdir: "fixtures/scenarios/atmos-auth/"
     command: "atmos"
     args:
       - "auth"
@@ -41,7 +41,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test validation with identity referencing missing provider"
-    workdir: "fixtures/scenarios/auth/"
+    workdir: "fixtures/scenarios/atmos-auth/"
     command: "atmos"
     args:
       - "auth"
@@ -59,7 +59,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test validation with circular identity dependencies"
-    workdir: "fixtures/scenarios/auth/"
+    workdir: "fixtures/scenarios/atmos-auth/"
     command: "atmos"
     args:
       - "auth"

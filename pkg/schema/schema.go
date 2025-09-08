@@ -971,14 +971,9 @@ type ListColumnConfig struct {
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }
 
-// LogsConfig defines the logging configuration for authentication operations
-type LogsConfig struct {
-	Level string `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`
-}
-
 // AuthConfig defines the authentication configuration structure
 type AuthConfig struct {
-	Logs       *LogsConfig         `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Logs       Logs     	       `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
 }
@@ -1003,7 +998,7 @@ type SessionConfig struct {
 	Duration string `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
 }
 
-// Identity defines an authentication identity configuration
+// Identity defines an authentication identity configuration.
 type Identity struct {
 	Kind        string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
 	Default     bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`

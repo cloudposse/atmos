@@ -1,0 +1,19 @@
+identities:
+  identity-oidc:
+    via:
+      provider: provider-oidc
+  oidc:
+    kind: aws/assume-role
+    principal:
+      assume_role: arn:aws:iam::000000000000:role/Dummy
+    via:
+      provider: oidcprov
+logs: null
+providers:
+  oidcprov:
+    kind: github/oidc
+    region: us-east-1
+  provider-oidc:
+    kind: github/oidc
+    region: us-east-1
+

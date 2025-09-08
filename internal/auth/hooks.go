@@ -24,10 +24,10 @@ type (
 
 // TerraformPreHook runs before Terraform commands to set up authentication.
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
-	if !validateAuthConfig(atmosConfig, stackInfo) {
-		log.Debug("No auth configuration found, skipping authentication")
-		return nil
-	}
+	// if !validateAuthConfig(atmosConfig, stackInfo) {
+	// 	log.Debug("No auth configuration found, skipping authentication")
+	// 	return nil
+	// }
 
 	atmosLevel, authLevel := getConfigLogLevels(atmosConfig)
 	log.SetLevel(authLevel)
@@ -130,7 +130,7 @@ func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (log.Level, log.
 	}
 	// Determine auth log level (fallback to atmos level).
 	authLevel := atmosLevel
-	if atmosConfig.Auth.Logs != nil && atmosConfig.Auth.Logs.Level != "" {
+	if atmosConfig.Auth.Logs.Level != "" {
 		if l, err := log.ParseLevel(atmosConfig.Auth.Logs.Level); err == nil {
 			authLevel = l
 		}

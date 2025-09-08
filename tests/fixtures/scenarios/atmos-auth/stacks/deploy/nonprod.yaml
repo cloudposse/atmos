@@ -1,5 +1,5 @@
 vars:
-  stage: nonprod
+  stage: no-component-auth
 import:
   - catalog/mock
 components:
