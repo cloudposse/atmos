@@ -98,9 +98,9 @@ The agent will automatically be invoked based on the task description.
 gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/files \
   --jq '.[] | select(.status != "removed") | .filename'
 
-# Find CodeRabbit comments
+# Find CodeRabbit comments (case-insensitive, handles [bot] suffix)
 gh api repos/cloudposse/atmos/issues/<PR>/comments \
-  --jq '.[] | select(.user.login == "coderabbitai")'
+  --jq '.[] | select(.user.login | ascii_downcase | contains("coderabbit"))'
 
 # Extract AI Agent prompts (PREFERRED)
 gh pr view <PR_NUMBER> --repo cloudposse/atmos --comments | \

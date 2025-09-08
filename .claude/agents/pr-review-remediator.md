@@ -78,20 +78,20 @@ CodeRabbit comments appear in two locations:
 
 1. **Issue Comments** (main review summary):
 ```bash
-# Get CodeRabbit's main review comment
+# Get CodeRabbit's main review comment (case-insensitive, handles [bot] suffix)
 gh api repos/cloudposse/atmos/issues/<PR_NUMBER>/comments \
-  --jq '.[] | select(.user.login == "coderabbitai") | .body'
+  --jq '.[] | select(.user.login | ascii_downcase | contains("coderabbit")) | .body'
 ```
 
 2. **Review Comments** (inline code comments):
 ```bash
-# Get CodeRabbit's review with detailed feedback
+# Get CodeRabbit's review with detailed feedback (case-insensitive, handles [bot] suffix)
 gh pr view <PR_NUMBER> --repo cloudposse/atmos --json reviews \
-  --jq '.reviews[] | select(.author.login == "coderabbitai") | .body'
+  --jq '.reviews[] | select(.author.login | ascii_downcase | contains("coderabbit")) | .body'
 
-# Get inline review comments (per-file)
+# Get inline review comments (per-file) - handles coderabbitai[bot] or any variant
 gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/comments \
-  --jq '.[] | select(.user.login == "coderabbitai") | {path, line: .line, body: .body}'
+  --jq '.[] | select(.user.login | ascii_downcase | contains("coderabbit")) | {path, line: .line, body: .body}'
 ```
 
 #### CodeRabbit Comment Structure
@@ -215,9 +215,9 @@ echo "$CHANGED_FILES"
 # 3. Get all review comments
 gh pr view $PR_NUMBER --repo cloudposse/atmos --comments > pr_comments.txt
 
-# 4. Extract CodeRabbit comments specifically
+# 4. Extract CodeRabbit comments specifically (case-insensitive)
 gh api repos/cloudposse/atmos/issues/$PR_NUMBER/comments \
-  --jq '.[] | select(.user.login == "coderabbitai")' > coderabbit_review.json
+  --jq '.[] | select(.user.login | ascii_downcase | contains("coderabbit"))' > coderabbit_review.json
 
 # 5. Get status checks
 gh pr checks $PR_NUMBER --repo cloudposse/atmos
@@ -323,9 +323,9 @@ After successfully implementing fixes, update GitHub to show what was done:
 
 ```bash
 # 1. Reply to CodeRabbit review comments with what was fixed
-# Get the comment ID from the original review
+# Get the comment ID from the original review (case-insensitive match)
 COMMENT_ID=$(gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/comments \
-  --jq '.[] | select(.user.login == "coderabbitai") | .id' | head -1)
+  --jq '.[] | select(.user.login | ascii_downcase | contains("coderabbit")) | .id' | head -1)
 
 # Reply to the comment explaining what was done
 gh api repos/cloudposse/atmos/pulls/comments/$COMMENT_ID/replies \
@@ -371,9 +371,9 @@ gh api graphql -f query='
 #### Getting Review Thread IDs
 
 ```bash
-# List all review threads on a PR
+# List all review threads on a PR (case-insensitive match)
 gh api repos/cloudposse/atmos/pulls/<PR_NUMBER>/reviews \
-  --jq '.[] | select(.user.login == "coderabbitai") | .id'
+  --jq '.[] | select(.user.login | ascii_downcase | contains("coderabbit")) | .id'
 
 # Get specific review comment threads
 gh api graphql -f query='
@@ -399,7 +399,7 @@ gh api graphql -f query='
   }
 ' -f owner=cloudposse -f repo=atmos -f pr=<PR_NUMBER> \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[] | 
-        select(.comments.nodes[0].author.login == "coderabbitai" and .isResolved == false)'
+        select((.comments.nodes[0].author.login | ascii_downcase | contains("coderabbit")) and .isResolved == false)'
 ```
 
 ## Example Interaction Flow
@@ -703,9 +703,9 @@ gh pr view <PR_NUMBER> --repo cloudposse/atmos --json files --jq '.files[].path'
 # Lint only changed files (project's Makefile already does this)
 make lint
 
-# Find CodeRabbit comments
+# Find CodeRabbit comments (case-insensitive, handles [bot] suffix)
 gh api repos/cloudposse/atmos/issues/<PR>/comments \
-  --jq '.[] | select(.user.login == "coderabbitai")'
+  --jq '.[] | select(.user.login | ascii_downcase | contains("coderabbit"))'
 
 # Check specific test
 go test ./pkg/merge -run TestMergeWithNilConfig -v
