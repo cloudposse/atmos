@@ -406,13 +406,10 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 				absExcludePath = excludePath
 			}
 
-			// Check if any .atmos.d paths under dirPath would match the exclusion
-			atmosDPath := filepath.Join(absDirPath, ".atmos.d")
-			atmosPath := filepath.Join(absDirPath, "atmos.d")
-
-			if strings.HasPrefix(atmosDPath, absExcludePath) || strings.HasPrefix(atmosPath, absExcludePath) ||
-				strings.HasPrefix(absExcludePath, atmosDPath) || strings.HasPrefix(absExcludePath, atmosPath) {
-				log.Debug("Skipping default imports from excluded path", "path", dirPath, "excluded", excludePath)
+			// Check if the current directory matches the excluded path
+			// This will prevent loading .atmos.d and atmos.d from the excluded directory
+			if absDirPath == absExcludePath {
+				log.Debug("Skipping default imports from excluded path", "path", dirPath)
 				return nil
 			}
 		}

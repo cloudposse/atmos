@@ -609,7 +609,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Exclude the repository root's .atmos.d from being loaded during tests
 	// This prevents test pollution from development-specific configurations
-	tc.Env["ATMOS_TEST_EXCLUDE_DEFAULT_IMPORTS"] = filepath.Join(repoRoot, ".atmos.d")
+	// We pass the repository root, and the code will check for .atmos.d and atmos.d under it
+	tc.Env["ATMOS_TEST_EXCLUDE_DEFAULT_IMPORTS"] = repoRoot
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
