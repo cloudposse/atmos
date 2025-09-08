@@ -24,6 +24,9 @@ components:
   packer:
     base_path: ""
     command: ""
+  ansible:
+    base_path: ""
+    command: ""
 stacks:
   base_path: stacks
   included_paths:
@@ -65,6 +68,7 @@ includeStackAbsolutePaths:
 terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
+ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 default: false
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 import: []
