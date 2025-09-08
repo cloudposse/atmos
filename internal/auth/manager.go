@@ -496,7 +496,9 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		identityStep := m.chain[i]
 		identity, exists := m.identities[identityStep]
 		if !exists {
-			log.Errorf("❌ Chaining identity %s → %s", bold.Render(m.getChainStepName(i-1)), bold.Render(identityStep))
+			log.Error("Chaining identity failed",
+				"from", bold.Render(m.getChainStepName(i-1)),
+				"to", bold.Render(identityStep))
 			return nil, fmt.Errorf("%w: identity %q not found in chain step %d", errUtils.ErrInvalidAuthConfig, identityStep, i)
 		}
 
@@ -505,7 +507,9 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		// Each identity receives credentials from the previous step
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			log.Errorf("❌ Chaining identity %s → %s", bold.Render(m.getChainStepName(i-1)), bold.Render(identityStep))
+			log.Error("Chaining identity failed",
+				"from", bold.Render(m.getChainStepName(i-1)),
+				"to", bold.Render(identityStep))
 			return nil, fmt.Errorf("%w: identity %q authentication failed at chain step %d: %w", errUtils.ErrAuthenticationFailed, identityStep, i, err)
 		}
 
@@ -518,7 +522,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 			log.Debug("Cached credentials", "identityStep", identityStep)
 		}
 
-		log.Infof("✅ Chaining identity %s → %s", bold.Render(m.getChainStepName(i-1)), bold.Render(identityStep))
+		log.Info("Chained identity", "from", bold.Render(m.getChainStepName(i-1)), "to", bold.Render(identityStep))
 	}
 
 	return currentCreds, nil

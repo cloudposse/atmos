@@ -20,7 +20,7 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 			input: schema.ConfigAndStacksInfo{
 				ComponentSection: map[string]any{
 					cfg.ProvidersSectionName:   map[string]any{"aws": map[string]any{"region": "us-west-2"}},
-					cfg.AuthSectionName:        map[string]interface{}{"providers": map[string]interface{}{"aws": schema.Provider{Region: "us-west-2"}}},
+					cfg.AuthSectionName:        map[string]interface{}{"providers": map[string]schema.Provider{"aws": {Region: "us-west-2"}}},
 					cfg.VarsSectionName:        map[string]any{"environment": "dev"},
 					cfg.SettingsSectionName:    map[string]any{"enabled": true},
 					cfg.EnvSectionName:         map[string]any{"DB_PASSWORD": "secret"},
@@ -35,7 +35,7 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 			},
 			expected: schema.ConfigAndStacksInfo{
 				ComponentProvidersSection: map[string]any{"aws": map[string]any{"region": "us-west-2"}},
-				ComponentAuthSection:      schema.AuthConfig{Providers: map[string]schema.Provider{"aws": {Region: "us-west-2"}}},
+				ComponentAuthSection:      schema.AtmosSectionMapType{"providers": map[string]schema.Provider{"aws": {Region: "us-west-2"}}},
 				ComponentVarsSection:      map[string]any{"environment": "dev"},
 				ComponentSettingsSection:  map[string]any{"enabled": true},
 				ComponentEnvSection:       map[string]any{"DB_PASSWORD": "secret"},
