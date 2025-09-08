@@ -108,8 +108,6 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 		}
 	}
 
-	i := *identity.(types.Identity)
-
 	// TODO replace with Identity Interface Validate()
 	// Validate based on identity kind
 	switch identity.Kind {
