@@ -24,6 +24,55 @@ type assumeRoleIdentity struct {
 	roleArn string
 }
 
+// newSTSClient creates an STS client using the base credentials and configured region.
+func (i *assumeRoleIdentity) newSTSClient(ctx context.Context, awsBase *types.AWSCredentials) (*sts.Client, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(i.region))
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
+	}
+	cfg.Credentials = aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(awsBase.AccessKeyID, awsBase.SecretAccessKey, awsBase.SessionToken))
+	return sts.NewFromConfig(cfg), nil
+}
+
+// toAWSCredentials converts STS AssumeRole output to AWSCredentials with validation.
+func (i *assumeRoleIdentity) toAWSCredentials(result *sts.AssumeRoleOutput) (types.ICredentials, error) {
+	if result == nil || result.Credentials == nil {
+		return nil, fmt.Errorf("%w: STS returned empty credentials", errUtils.ErrAuthenticationFailed)
+	}
+	expiration := ""
+	if result.Credentials != nil {
+		expiration = result.Credentials.Expiration.Format(time.RFC3339)
+	}
+	return &types.AWSCredentials{
+		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
+		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+		SessionToken:    aws.ToString(result.Credentials.SessionToken),
+		Region:          i.region,
+		Expiration:      expiration,
+	}, nil
+}
+
+// buildAssumeRoleInput constructs the STS AssumeRoleInput including optional external ID and duration.
+
+func (i *assumeRoleIdentity) buildAssumeRoleInput() *sts.AssumeRoleInput {
+	sessionName := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
+	input := &sts.AssumeRoleInput{
+		RoleArn:         aws.String(i.roleArn),
+		RoleSessionName: aws.String(sessionName),
+	}
+	if externalID, ok := i.config.Principal["external_id"].(string); ok && externalID != "" {
+		input.ExternalId = aws.String(externalID)
+	}
+	if durationStr, ok := i.config.Principal["duration"].(string); ok && durationStr != "" {
+		if duration, err := time.ParseDuration(durationStr); err == nil {
+			input.DurationSeconds = aws.Int32(int32(duration.Seconds()))
+		} else {
+			log.Warn("Invalid duration specified for assume role", "duration", durationStr)
+		}
+	}
+	return input
+}
+
 // NewAssumeRoleIdentity creates a new AWS assume role identity.
 func NewAssumeRoleIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	if config.Kind != "aws/assume-role" {
@@ -55,61 +104,20 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 		return nil, fmt.Errorf("%w: invalid assume role identity: %v", errUtils.ErrInvalidIdentityConfig, err)
 	}
 
-	// Create AWS config using base credentials
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(i.region))
+	// Create STS client with base credentials
+	stsClient, err := i.newSTSClient(ctx, awsBase)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
+		return nil, err
 	}
 
-	// Inject base credentials into STS client
-	cfg.Credentials = aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(awsBase.AccessKeyID, awsBase.SecretAccessKey, awsBase.SessionToken))
-
-	// Create STS client.
-	stsClient := sts.NewFromConfig(cfg)
-
-	// Assume the role.
-	sessionName := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
-	assumeRoleInput := &sts.AssumeRoleInput{
-		RoleArn:         aws.String(i.roleArn),
-		RoleSessionName: aws.String(sessionName),
-	}
-
-	// Add external ID if specified.
-	if externalID, ok := i.config.Principal["external_id"].(string); ok && externalID != "" {
-		assumeRoleInput.ExternalId = aws.String(externalID)
-	}
-
-	// Add duration if specified.
-	var durationStr string
-	durationStr, _ = i.config.Principal["duration"].(string)
-	if durationStr != "" {
-		if duration, err := time.ParseDuration(durationStr); err == nil {
-			assumeRoleInput.DurationSeconds = aws.Int32(int32(duration.Seconds()))
-		} else {
-			log.Warn("Invalid duration specified for assume role", "duration", durationStr)
-		}
-	}
+	// Build AssumeRole input (handles optional external ID and duration)
+	assumeRoleInput := i.buildAssumeRoleInput()
 
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to assume role: %v", errUtils.ErrAuthenticationFailed, err)
 	}
-	if result == nil || result.Credentials == nil {
-		return nil, fmt.Errorf("%w: STS returned empty credentials", errUtils.ErrAuthenticationFailed)
-	}
-	// Convert to our credential format.
-	var expiration string
-	if result.Credentials != nil {
-		expiration = result.Credentials.Expiration.Format(time.RFC3339)
-	}
-
-	return &types.AWSCredentials{
-		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
-		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
-		SessionToken:    aws.ToString(result.Credentials.SessionToken),
-		Region:          i.region,
-		Expiration:      expiration,
-	}, nil
+	return i.toAWSCredentials(result)
 }
 
 // Validate validates the identity configuration.

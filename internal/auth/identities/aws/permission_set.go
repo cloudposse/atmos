@@ -15,6 +15,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	principalName    = "name"
+	principalAccount = "account"
+)
+
 // permissionSetIdentity implements AWS permission set identity.
 type permissionSetIdentity struct {
 	name   string
@@ -39,6 +44,8 @@ func (i *permissionSetIdentity) Kind() string {
 }
 
 // Authenticate performs authentication using permission set.
+//
+//nolint:revive // cyclomatic: complexity is acceptable for this orchestration method
 func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
 	// Note: Caching is now handled at the manager level to prevent duplicates
 
@@ -52,18 +59,18 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 	// Get permission set name from principal or spec (backward compatibility)
 	var permissionSetName string
 	var ok1 bool
-	if permissionSetName, ok1 = i.config.Principal["name"].(string); !ok1 || permissionSetName == "" {
+	if permissionSetName, ok1 = i.config.Principal[principalName].(string); !ok1 || permissionSetName == "" {
 		return nil, fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	// Get account info from principal or spec (backward compatibility)
 	var accountSpec map[string]interface{}
 	var ok2 bool
-	if accountSpec, ok2 = i.config.Principal["account"].(map[string]interface{}); !ok2 {
+	if accountSpec, ok2 = i.config.Principal[principalAccount].(map[string]interface{}); !ok2 {
 		return nil, fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
-	accountName, ok3 := accountSpec["name"].(string)
+	accountName, ok3 := accountSpec[principalName].(string)
 	if !ok3 || accountName == "" {
 		return nil, fmt.Errorf("%w: account name is required", errUtils.ErrInvalidIdentityConfig)
 	}

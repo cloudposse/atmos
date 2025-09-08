@@ -142,29 +142,10 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	// Create STS client
 	stsClient := sts.NewFromConfig(cfg)
 
-	var input *sts.GetSessionTokenInput
-
-	// Check if MFA is required
-	if longLivedCreds.MfaArn != "" {
-		// Prompt for MFA token
-		var mfaToken string
-		form := newMfaForm(longLivedCreds, &mfaToken)
-
-		if err := form.Run(); err != nil {
-			return nil, fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrUnsupportedInputType, err)
-		}
-
-		// Get session token with MFA
-		input = &sts.GetSessionTokenInput{
-			SerialNumber:    aws.String(longLivedCreds.MfaArn),
-			TokenCode:       aws.String(mfaToken),
-			DurationSeconds: aws.Int32(defaultUserSessionSeconds), // 1 hour session
-		}
-	} else {
-		// Get session token without MFA
-		input = &sts.GetSessionTokenInput{
-			DurationSeconds: aws.Int32(defaultUserSessionSeconds), // 1 hour session
-		}
+	// Build GetSessionToken input (handles MFA prompt if configured)
+	input, err := i.buildGetSessionTokenInput(longLivedCreds)
+	if err != nil {
+		return nil, err
 	}
 
 	result, err := stsClient.GetSessionToken(ctx, input)
@@ -190,6 +171,25 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	// Only the session tokens are written to AWS config/credentials files
 
 	return sessionCreds, nil
+}
+
+// buildGetSessionTokenInput builds the STS GetSessionToken input, prompting for MFA if required.
+func (i *userIdentity) buildGetSessionTokenInput(longLivedCreds *types.AWSCredentials) (*sts.GetSessionTokenInput, error) {
+	if longLivedCreds.MfaArn != "" {
+		var mfaToken string
+		form := newMfaForm(longLivedCreds, &mfaToken)
+		if err := form.Run(); err != nil {
+			return nil, fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrUnsupportedInputType, err)
+		}
+		return &sts.GetSessionTokenInput{
+			SerialNumber:    aws.String(longLivedCreds.MfaArn),
+			TokenCode:       aws.String(mfaToken),
+			DurationSeconds: aws.Int32(defaultUserSessionSeconds),
+		}, nil
+	}
+	return &sts.GetSessionTokenInput{
+		DurationSeconds: aws.Int32(defaultUserSessionSeconds),
+	}, nil
 }
 
 func newMfaForm(longLivedCreds *types.AWSCredentials, mfaToken *string) *huh.Form {

@@ -10,6 +10,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	testSSOKind                = "aws/iam-identity-center"
+	testRegion                 = "us-east-1"
+	testStartURL               = "https://company.awsapps.com/start"
+	testProviderName           = "aws-sso"
+	testErrorMsgRequiredConfig = "provider config is required"
+	testErrorMsgRequiredName   = "provider name is required"
+)
+
 func TestNewSSOProvider_Simple(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -20,31 +29,31 @@ func TestNewSSOProvider_Simple(t *testing.T) {
 	}{
 		{
 			name:         "valid config",
-			providerName: "aws-sso",
+			providerName: testProviderName,
 			config: &schema.Provider{
-				Kind:     "aws/iam-identity-center",
-				Region:   "us-east-1",
-				StartURL: "https://company.awsapps.com/start",
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: testStartURL,
 			},
 			expectError: false,
 		},
 		{
 			name:         "nil config",
-			providerName: "aws-sso",
+			providerName: testProviderName,
 			config:       nil,
 			expectError:  true,
-			errorMsg:     "provider config is required",
+			errorMsg:     testErrorMsgRequiredConfig,
 		},
 		{
 			name:         "empty name",
 			providerName: "",
 			config: &schema.Provider{
-				Kind:     "aws/iam-identity-center",
-				Region:   "us-east-1",
-				StartURL: "https://company.awsapps.com/start",
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: testStartURL,
 			},
 			expectError: true,
-			errorMsg:    "provider name is required",
+			errorMsg:    testErrorMsgRequiredName,
 		},
 	}
 
@@ -59,7 +68,7 @@ func TestNewSSOProvider_Simple(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, provider)
-				assert.Equal(t, "aws/iam-identity-center", provider.Kind())
+				assert.Equal(t, testSSOKind, provider.Kind())
 			}
 		})
 	}
@@ -67,12 +76,12 @@ func TestNewSSOProvider_Simple(t *testing.T) {
 
 func TestSSOProvider_Validate_Simple(t *testing.T) {
 	config := &schema.Provider{
-		Kind:     "aws/iam-identity-center",
-		Region:   "us-east-1",
-		StartURL: "https://company.awsapps.com/start",
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
 	}
 
-	provider, err := NewSSOProvider("aws-sso", config)
+	provider, err := NewSSOProvider(testProviderName, config)
 	require.NoError(t, err)
 
 	err = provider.Validate()
@@ -81,28 +90,28 @@ func TestSSOProvider_Validate_Simple(t *testing.T) {
 
 func TestSSOProvider_Environment_Simple(t *testing.T) {
 	config := &schema.Provider{
-		Kind:     "aws/iam-identity-center",
-		Region:   "us-east-1",
-		StartURL: "https://company.awsapps.com/start",
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
 	}
 
-	provider, err := NewSSOProvider("aws-sso", config)
+	provider, err := NewSSOProvider(testProviderName, config)
 	require.NoError(t, err)
 
 	env, err := provider.Environment()
 	assert.NoError(t, err)
 	assert.NotNil(t, env)
-	assert.Equal(t, "us-east-1", env["AWS_REGION"])
+	assert.Equal(t, testRegion, env["AWS_REGION"])
 }
 
 func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	config := &schema.Provider{
-		Kind:     "aws/iam-identity-center",
-		Region:   "us-east-1",
-		StartURL: "https://company.awsapps.com/start",
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
 	}
 
-	provider, err := NewSSOProvider("aws-sso", config)
+	provider, err := NewSSOProvider(testProviderName, config)
 	require.NoError(t, err)
 
 	// Note: This would fail without proper AWS SSO setup
