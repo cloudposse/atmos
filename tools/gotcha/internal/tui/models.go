@@ -54,11 +54,12 @@ type TestModel struct {
 	scanner      io.ReadCloser
 
 	// Buffered output
-	buffers        map[string][]string
-	subtestStats   map[string]*SubtestStats  // Track subtest statistics per parent test
-	packageResults map[string]*PackageResult // Complete package results
-	packageOrder   []string                  // Order packages were started
-	activePackages map[string]bool           // Currently running packages
+	buffers          map[string][]string
+	subtestStats     map[string]*SubtestStats  // Track subtest statistics per parent test
+	packageResults   map[string]*PackageResult // Complete package results
+	packageOrder     []string                  // Order packages were started
+	activePackages   map[string]bool           // Currently running packages
+	displayedPackages map[string]bool          // Packages that have been displayed
 
 	// Current state
 	currentPackage string

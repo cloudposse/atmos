@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -108,7 +109,7 @@ func (p *StreamProcessor) ProcessStream(input io.Reader) error {
 	scanner := bufio.NewScanner(input)
 
 	// Track if we're in CI for periodic flushing
-	inCI := os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != ""
+	inCI := config.IsCI()
 	lastFlush := time.Now()
 	flushInterval := 100 * time.Millisecond // Flush frequently in CI
 
@@ -206,7 +207,7 @@ func (p *StreamProcessor) PrintSummary() {
 	fmt.Fprintf(os.Stderr, "%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds())
 
 	// Ensure output is flushed
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+	if config.IsCI() {
 		os.Stderr.Sync()
 	}
 

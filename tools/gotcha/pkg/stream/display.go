@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 // displayPackageResult outputs the buffered results for a completed package.
@@ -15,7 +16,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		tui.PackageHeaderStyle.Render(pkg.Package))
 
 	// Flush output immediately in CI environments to prevent buffering
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+	if config.IsCI() {
 		os.Stderr.Sync()
 	}
 
@@ -39,9 +40,9 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	if !pkg.HasTests {
 		// Show more specific message if a filter is applied
 		if p.testFilter != "" {
-			fmt.Fprintf(os.Stderr, " %s\n", tui.DurationStyle.Render("No tests matching filter"))
+			fmt.Fprintf(os.Stderr, "  %s\n", tui.DurationStyle.Render("No tests matching filter"))
 		} else {
-			fmt.Fprintf(os.Stderr, " %s\n", tui.DurationStyle.Render("No tests"))
+			fmt.Fprintf(os.Stderr, "  %s\n", tui.DurationStyle.Render("No tests"))
 		}
 		return
 	}
@@ -101,7 +102,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	}
 
 	// Flush output after displaying package results
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+	if config.IsCI() {
 		os.Stderr.Sync()
 	}
 }
@@ -139,7 +140,7 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 
 	// Build display line
 	var line strings.Builder
-	line.WriteString(indent + " ")
+	line.WriteString(indent + "  ")
 	line.WriteString(statusIcon)
 	line.WriteString(" ")
 	line.WriteString(tui.TestNameStyle.Render(test.Name))

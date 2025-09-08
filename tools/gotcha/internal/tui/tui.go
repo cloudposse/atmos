@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -50,13 +51,14 @@ func NewTestModel(testPackages []string, testArgs, outputFile, coverProfile, sho
 	}
 
 	return TestModel{
-		testPackages:   testPackages,
-		testArgs:       testArgs,
-		buffers:        make(map[string][]string),
-		subtestStats:   make(map[string]*SubtestStats),
-		packageResults: make(map[string]*PackageResult),
-		packageOrder:   []string{},
-		activePackages: make(map[string]bool),
+		testPackages:     testPackages,
+		testArgs:         testArgs,
+		buffers:          make(map[string][]string),
+		subtestStats:     make(map[string]*SubtestStats),
+		packageResults:   make(map[string]*PackageResult),
+		packageOrder:     []string{},
+		activePackages:   make(map[string]bool),
+		displayedPackages: make(map[string]bool),
 		spinner:        s,
 		progress:       p,
 		outputFile:     outputFile,
@@ -298,7 +300,7 @@ func (m *TestModel) UpdateOld(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case testFailMsg:
 		// A test has failed
-		m.failed++
+		m.failCount++
 		if !m.done {
 			cmds = append(cmds, m.readNextLine())
 		}
@@ -427,12 +429,12 @@ func (m *TestModel) View() string {
 
 	// Calculate the display width of all components except the progress bar
 	// We need to account for ANSI color codes not contributing to display width
-	spinWidth := getDisplayWidth(spin)
-	infoWidth := getDisplayWidth(info)
-	percentageWidth := getDisplayWidth(percentage)
-	testCountWidth := getDisplayWidth(testCount)
-	timeWidth := getDisplayWidth(timeStr)
-	bufferWidth := getDisplayWidth(bufferStr)
+	spinWidth := lipgloss.Width(spin)
+	infoWidth := lipgloss.Width(info)
+	percentageWidth := lipgloss.Width(percentage)
+	testCountWidth := lipgloss.Width(testCount)
+	timeWidth := lipgloss.Width(timeStr)
+	bufferWidth := lipgloss.Width(bufferStr)
 
 	// Calculate total fixed width (including spaces)
 	// spin + info + "  " + [progress] + " " + percentage + " " + testCount + "  " + time + " " + buffer
@@ -487,4 +489,14 @@ func (m *TestModel) GetExitCode() int {
 // IsAborted returns true if the test was aborted by the user.
 func (m *TestModel) IsAborted() bool {
 	return m.aborted
+}
+
+// GetTotalTestCount returns the total number of tests that were run.
+func (m *TestModel) GetTotalTestCount() int {
+	return m.passCount + m.failCount + m.skipCount
+}
+
+// GetTestPackages returns the list of test packages.
+func (m *TestModel) GetTestPackages() []string {
+	return m.testPackages
 }

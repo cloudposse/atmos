@@ -192,7 +192,7 @@ func TestGenerateFinalSummary(t *testing.T) {
 		},
 	}
 
-	summary := model.generateFinalSummary()
+	summary := model.GenerateFinalSummary()
 
 	// Check for expected content in summary
 	assert.Contains(t, summary, "Passed:  10")

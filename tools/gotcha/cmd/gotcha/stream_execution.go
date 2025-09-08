@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
@@ -55,9 +56,26 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 	if m, ok := finalModel.(*tui.TestModel); ok {
 		exitCode = m.GetExitCode()
 		
-		// Update cache if successful
-		if !m.IsAborted() && config.EstimatedTestCount > 0 {
-			updateTestCache(config, logger)
+		// Print final summary
+		summary := m.GenerateFinalSummary()
+		if summary != "" {
+			fmt.Fprint(os.Stderr, summary)
+		}
+		
+		// Update cache with actual test count if successful
+		if !m.IsAborted() {
+			actualTestCount := m.GetTotalTestCount()
+			if actualTestCount > 0 {
+				cacheManager, err := cache.NewManager(logger)
+				if err == nil && cacheManager != nil {
+					pattern := strings.Join(m.GetTestPackages(), " ")
+					if err := cacheManager.UpdateTestCount(pattern, actualTestCount, len(m.GetTestPackages())); err != nil {
+						logger.Debug("Failed to update test count cache", "error", err)
+					} else {
+						logger.Info("Updated test count cache", "pattern", pattern, "count", actualTestCount)
+					}
+				}
+			}
 		}
 	}
 
@@ -224,7 +242,7 @@ func prepareTestPackages(config *StreamConfig, logger *log.Logger) error {
 
 	if len(filteredPackages) == 0 {
 		logger.Warn("No packages matched the filters")
-		return fmt.Errorf("no packages matched the filters")
+		return errors.ErrNoPackagesMatched
 	}
 
 	config.TestPackages = filteredPackages
@@ -276,13 +294,3 @@ func loadTestCountFromCache(config *StreamConfig, cmd *cobra.Command, logger *lo
 	}
 }
 
-// updateTestCache updates the test count cache.
-func updateTestCache(config *StreamConfig, logger *log.Logger) {
-	cacheManager, err := cache.NewManager(logger)
-	if err != nil || cacheManager == nil {
-		return
-	}
-
-	pattern := strings.Join(config.TestPackages, " ")
-	_ = cacheManager.UpdateTestCount(pattern, config.EstimatedTestCount, len(config.TestPackages))
-}

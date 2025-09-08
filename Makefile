@@ -25,6 +25,8 @@ version: version-default
 # but it's still including files not in git.
 lint: get
 	golangci-lint run --new-from-rev=origin/main
+	@echo "Linting tools/gotcha..."
+	@cd tools/gotcha && golangci-lint run --new-from-rev=origin/main
 
 build-linux: GOOS=linux
 build-linux: build-default

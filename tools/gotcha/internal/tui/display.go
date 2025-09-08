@@ -67,17 +67,17 @@ func (m *TestModel) generateSubtestProgress(passed, total int) string {
 	return indicator.String()
 }
 
-// generateFinalSummary generates the final summary display.
-func (m *TestModel) generateFinalSummary() string {
+// GenerateFinalSummary generates the final summary display.
+func (m *TestModel) GenerateFinalSummary() string {
 	var summary strings.Builder
 
 	// Generate test summary
-	totalTests := m.passed + m.failed + m.skipped
+	totalTests := m.passCount + m.failCount + m.skipCount
 	summary.WriteString(fmt.Sprintf("\n%s\n", StatsHeaderStyle.Render("Test Results:")))
-	summary.WriteString(fmt.Sprintf("  %s Passed:  %d\n", PassStyle.Render(CheckPass), m.passed))
-	summary.WriteString(fmt.Sprintf("  %s Failed:  %d\n", FailStyle.Render(CheckFail), m.failed))
-	summary.WriteString(fmt.Sprintf("  %s Skipped: %d\n", SkipStyle.Render(CheckSkip), m.skipped))
-	summary.WriteString(fmt.Sprintf("  Total:     %d\n", totalTests))
+	summary.WriteString(fmt.Sprintf("  %s Passed:  %5d\n", PassStyle.Render(CheckPass), m.passCount))
+	summary.WriteString(fmt.Sprintf("  %s Failed:  %5d\n", FailStyle.Render(CheckFail), m.failCount))
+	summary.WriteString(fmt.Sprintf("  %s Skipped: %5d\n", SkipStyle.Render(CheckSkip), m.skipCount))
+	summary.WriteString(fmt.Sprintf("  Total:     %5d\n", totalTests))
 
 	// Add coverage summary if available
 	packagesWithCoverage := 0
@@ -94,7 +94,7 @@ func (m *TestModel) generateFinalSummary() string {
 
 	if packagesWithCoverage > 0 {
 		avgCoverage := totalCoverage / float64(packagesWithCoverage)
-		summary.WriteString(fmt.Sprintf("  Coverage:  %.1f%%\n", avgCoverage))
+		summary.WriteString(fmt.Sprintf("  Coverage:  %5.1f%%\n", avgCoverage))
 	}
 
 	// Log completion time

@@ -181,7 +181,7 @@ experience with intuitive visual feedback and comprehensive test result analysis
   
   # Advanced filtering and configuration
   gotcha stream --include=".*api.*" --exclude=".*mock.*" -- -race -short`,
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Default behavior is to run stream command
 			streamCmd := newStreamCmd(globalLogger)
@@ -197,7 +197,7 @@ experience with intuitive visual feedback and comprehensive test result analysis
 			return streamCmd.Execute()
 		},
 		SilenceUsage:  true,
-		SilenceErrors: false,
+		SilenceErrors: true,
 	}
 
 	// Global flags
@@ -236,6 +236,8 @@ experience with intuitive visual feedback and comprehensive test result analysis
 		// Check if it's a test failure error to get the correct exit code
 		var testErr *testFailureError
 		if errors.As(err, &testErr) {
+			// Don't return the error - we handle it with os.Exit
+			// This prevents double error output
 			os.Exit(testErr.ExitCode())
 		}
 		return err

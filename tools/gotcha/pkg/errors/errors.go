@@ -28,7 +28,8 @@ var (
 
 // Test errors.
 var (
-	ErrNoTestsRun      = errors.New("no tests were run")
-	ErrTestFailed      = errors.New("test execution failed")
-	ErrInvalidTestData = errors.New("invalid test data")
+	ErrNoTestsRun           = errors.New("no tests were run")
+	ErrTestFailed           = errors.New("test execution failed")
+	ErrInvalidTestData      = errors.New("invalid test data")
+	ErrNoPackagesMatched    = errors.New("no packages matched the filters")
 )

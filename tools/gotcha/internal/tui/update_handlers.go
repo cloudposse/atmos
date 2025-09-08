@@ -116,6 +116,26 @@ func (m *TestModel) handleStreamOutput(msg streamOutputMsg) tea.Cmd {
 	if err := json.Unmarshal([]byte(msg.line), &event); err == nil {
 		m.processEvent(&event)
 
+		// Check if a package has completed and needs to be displayed
+		var cmds []tea.Cmd
+		
+		// Display completed packages
+		if event.Action == "pass" || event.Action == "fail" || event.Action == "skip" {
+			if event.Package != "" && event.Test == "" {
+				// This is a package completion event
+				if pkg := m.packageResults[event.Package]; pkg != nil {
+					if !m.displayedPackages[event.Package] {
+						m.displayedPackages[event.Package] = true
+						output := m.displayPackageResult(pkg)
+						if output != "" {
+							// Use tea.Printf to print the package result
+							cmds = append(cmds, tea.Printf("%s", output))
+						}
+					}
+				}
+			}
+		}
+
 		// Update progress based on test completion
 		if m.totalTests > 0 {
 			progress := float64(m.completedTests) / float64(m.totalTests)
@@ -123,9 +143,13 @@ func (m *TestModel) handleStreamOutput(msg streamOutputMsg) tea.Cmd {
 				progress = 1.0
 			}
 			if cmd := m.progress.SetPercent(progress); cmd != nil {
-				return tea.Batch(cmd, m.readNextLine())
+				cmds = append(cmds, cmd)
 			}
 		}
+		
+		// Continue reading
+		cmds = append(cmds, m.readNextLine())
+		return tea.Batch(cmds...)
 	}
 
 	// Continue reading
@@ -134,7 +158,7 @@ func (m *TestModel) handleStreamOutput(msg streamOutputMsg) tea.Cmd {
 
 // handleTestFail processes test failure messages.
 func (m *TestModel) handleTestFail() tea.Cmd {
-	m.failed++
+	m.failCount++
 	if !m.done {
 		return m.readNextLine()
 	}

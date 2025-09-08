@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"strings"
 
@@ -13,6 +12,7 @@ import (
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -124,8 +124,8 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	// Comment UUID is required for posting
 	if commentUUID == "" {
 		logger.Error("Comment UUID is required but not set",
-			"GOTCHA_COMMENT_UUID", os.Getenv("GOTCHA_COMMENT_UUID"),
-			"COMMENT_UUID", os.Getenv("COMMENT_UUID"))
+			"GOTCHA_COMMENT_UUID", config.GetCommentUUID(),
+			"COMMENT_UUID", viper.GetString("comment.uuid"))
 		return fmt.Errorf("%w", ErrCommentUUIDRequired)
 	}
 
@@ -135,9 +135,9 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	provider := ci.DetectIntegration(logger)
 	if provider == nil {
 		logger.Warn("No CI provider detected",
-			"CI", os.Getenv("CI"),
-			"GITHUB_ACTIONS", os.Getenv("GITHUB_ACTIONS"),
-			"GITHUB_RUN_ID", os.Getenv("GITHUB_RUN_ID"))
+			"CI", viper.GetString("ci"),
+			"GITHUB_ACTIONS", viper.GetString("github.actions"),
+			"GITHUB_RUN_ID", viper.GetString("github.run.id"))
 		return nil
 	}
 

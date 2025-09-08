@@ -99,6 +99,21 @@ jobs:
         with:
           sarif_file: golangci-lint.sarif
 
+      - name: Run golangci-lint on tools/gotcha
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.4.0
+          working-directory: tools/gotcha
+          only-new-issues: true
+          args: >
+            --output.sarif.path=gotcha-golangci-lint.sarif
+            --issues-exit-code=0
+
+      - name: Upload gotcha SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: tools/gotcha/gotcha-golangci-lint.sarif
+
   pr-semver-labels:
     name: PR Semver Labels
     if: github.event_name == 'pull_request'
