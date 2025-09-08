@@ -6,13 +6,13 @@ acme-platform-dev:
         atmos_manifest: orgs/acme/platform/dev
         atmos_stack: acme-platform-dev
         atmos_stack_file: orgs/acme/platform/dev
+        auth: {}
         backend: {}
         backend_type: ""
         command: terraform
         component: mock
         env: {}
         hooks: {}
-        identities: {}
         inheritance: []
         metadata: {}
         overrides: {}
@@ -37,13 +37,13 @@ acme-platform-prod:
         atmos_manifest: orgs/acme/platform/prod
         atmos_stack: acme-platform-prod
         atmos_stack_file: orgs/acme/platform/prod
+        auth: {}
         backend: {}
         backend_type: ""
         command: terraform
         component: mock
         env: {}
         hooks: {}
-        identities: {}
         inheritance: []
         metadata: {}
         overrides: {}
@@ -68,13 +68,13 @@ acme-platform-staging:
         atmos_manifest: orgs/acme/platform/staging
         atmos_stack: acme-platform-staging
         atmos_stack_file: orgs/acme/platform/staging
+        auth: {}
         backend: {}
         backend_type: ""
         command: terraform
         component: mock
         env: {}
         hooks: {}
-        identities: {}
         inheritance: []
         metadata: {}
         overrides: {}

@@ -22,7 +22,7 @@ stacks:
 
 logs:
   file: "/dev/stderr"
-  level: Debug
+  level: Info
 
 # Custom CLI commands
 commands:
@@ -37,6 +37,8 @@ commands:
 
 # Auth configuration demo (stub values)
 auth:
+  logs:
+    level: Debug
   providers:
     oidc:
       kind: github/oidc

@@ -47,7 +47,7 @@ Global Flags:
         --no-color                   Disable color output (default false)
 
         --profile string             Specify the profile to use for
-                                     authentication
+                                     authentication.
 
         --redirect-stderr string     File descriptor to redirect stderr to.
                                      Errors can be redirected to any file or any

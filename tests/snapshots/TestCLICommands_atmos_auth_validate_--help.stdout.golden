@@ -46,16 +46,12 @@ Global Flags:
         --no-color                   Disable color output (default false)
 
         --profile string             Specify the profile to use for
-                                     authentication
+                                     authentication.
 
         --redirect-stderr string     File descriptor to redirect stderr to.
                                      Errors can be redirected to any file or any
                                      standard file descriptor (including
                                      /dev/null)
-
-    -s, --stack string               The stack flag specifies the environment
-                                     or configuration set for deployment in
-                                     Atmos CLI.
 
 
 Use atmos auth validate --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
