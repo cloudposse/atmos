@@ -18,9 +18,10 @@ import (
 
 // assumeRoleIdentity implements AWS assume role identity.
 type assumeRoleIdentity struct {
-	name   string
-	config *schema.Identity
-	region string
+	name    string
+	config  *schema.Identity
+	region  string
+	roleArn string
 }
 
 // NewAssumeRoleIdentity creates a new AWS assume role identity.
@@ -49,17 +50,12 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 		return nil, fmt.Errorf("%w: base AWS credentials are required for assume-role", errUtils.ErrInvalidIdentityConfig)
 	}
 
-	var roleArn string
-	var okBool bool
-	if roleArn, okBool = i.config.Principal["assume_role"].(string); !okBool || roleArn == "" {
-		return nil, fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidIdentityConfig)
+	// Validate identity configuration, sets roleArn and region.
+	if err := i.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: invalid assume role identity: %v", errUtils.ErrInvalidIdentityConfig, err)
 	}
 
 	// Create AWS config using base credentials
-	i.region = awsBase.Region
-	if i.region == "" {
-		i.region = "us-east-1"
-	}
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(i.region))
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
@@ -74,7 +70,7 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 	// Assume the role.
 	sessionName := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
 	assumeRoleInput := &sts.AssumeRoleInput{
-		RoleArn:         aws.String(roleArn),
+		RoleArn:         aws.String(i.roleArn),
 		RoleSessionName: aws.String(sessionName),
 	}
 
@@ -127,6 +123,12 @@ func (i *assumeRoleIdentity) Validate() error {
 	var ok bool
 	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
 		return fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidIdentityConfig)
+	}
+	i.roleArn = roleArn
+
+	var region string
+	if region, ok = i.config.Principal["region"].(string); ok {
+		i.region = region
 	}
 
 	return nil

@@ -51,7 +51,7 @@ type OIDCCredentials struct {
 
 // IsExpired implements ICredentials for OIDCCredentials.
 // If no expiration tracking exists, default to not expired.
-func (c *OIDCCredentials) IsExpired() bool { // nolint:revive
+func (c *OIDCCredentials) IsExpired() bool {
 	return false
 }
 

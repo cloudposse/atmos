@@ -15,6 +15,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const OIDC_TIMEOUT = 10
+
 // oidcProvider implements GitHub OIDC authentication.
 type oidcProvider struct {
 	name   string
@@ -76,11 +78,11 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 
 	var aud string
 	if p.config != nil && p.config.Spec != nil {
-		if v, ok := p.config.Spec["audience"].(string); ok && v != "" {
-			aud = v
-		} else {
+		v, ok := p.config.Spec["audience"].(string)
+		if !ok || v == "" {
 			return nil, fmt.Errorf("%w: audience is required in provider spec", errUtils.ErrInvalidProviderConfig)
 		}
+		aud = v
 	}
 
 	// Get the JWT token from GitHub's OIDC endpoint.
@@ -118,7 +120,7 @@ func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToke
 	req.URL.RawQuery = q.Encode()
 	req.Header.Set("Authorization", "bearer "+requestToken)
 	req.Header.Set("Accept", "application/json")
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: OIDC_TIMEOUT * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: call OIDC endpoint: %w", errUtils.ErrAuthenticationFailed, err)

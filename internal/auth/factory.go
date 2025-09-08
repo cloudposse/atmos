@@ -18,29 +18,13 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 	}
 	switch config.Kind {
 	case "aws/iam-identity-center":
-		p, err := awsProviders.NewSSOProvider(name, config)
-		if err != nil {
-			return nil, fmt.Errorf("%w: create provider '%s' (kind=%s) failed: %v", errUtils.ErrInvalidProviderConfig, name, config.Kind, err)
-		}
-		return p, nil
+		return awsProviders.NewSSOProvider(name, config)
 	case "aws/assume-role":
-		p, err := awsProviders.NewAssumeRoleProvider(name, config)
-		if err != nil {
-			return nil, fmt.Errorf("%w: create provider '%s' (kind=%s) failed: %v", errUtils.ErrInvalidProviderConfig, name, config.Kind, err)
-		}
-		return p, nil
+		return awsProviders.NewAssumeRoleProvider(name, config)
 	case "aws/saml":
-		p, err := awsProviders.NewSAMLProvider(name, config)
-		if err != nil {
-			return nil, fmt.Errorf("%w: create provider '%s' (kind=%s) failed: %v", errUtils.ErrInvalidProviderConfig, name, config.Kind, err)
-		}
-		return p, nil
+		return awsProviders.NewSAMLProvider(name, config)
 	case "github/oidc":
-		p, err := githubProviders.NewOIDCProvider(name, config)
-		if err != nil {
-			return nil, fmt.Errorf("%w: create provider '%s' (kind=%s) failed: %v", errUtils.ErrInvalidProviderConfig, name, config.Kind, err)
-		}
-		return p, nil
+		return githubProviders.NewOIDCProvider(name, config)
 	default:
 		return nil, fmt.Errorf("%w: unsupported provider kind: %s", errUtils.ErrInvalidProviderKind, config.Kind)
 	}
@@ -53,23 +37,11 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	}
 	switch config.Kind {
 	case "aws/permission-set":
-		i, err := aws.NewPermissionSetIdentity(name, config)
-		if err != nil {
-			return nil, fmt.Errorf("%w: create identity '%s' (kind=%s) failed: %v", errUtils.ErrInvalidIdentityConfig, name, config.Kind, err)
-		}
-		return i, nil
+		return aws.NewPermissionSetIdentity(name, config)
 	case "aws/assume-role":
-		i, err := aws.NewAssumeRoleIdentity(name, config)
-		if err != nil {
-			return nil, fmt.Errorf("%w: create identity '%s' (kind=%s) failed: %v", errUtils.ErrInvalidIdentityConfig, name, config.Kind, err)
-		}
-		return i, nil
+		return aws.NewAssumeRoleIdentity(name, config)
 	case "aws/user":
-		i, err := aws.NewUserIdentity(name, config)
-		if err != nil {
-			return nil, fmt.Errorf("%w: create identity '%s' (kind=%s) failed: %v", errUtils.ErrInvalidIdentityConfig, name, config.Kind, err)
-		}
-		return i, nil
+		return aws.NewUserIdentity(name, config)
 	default:
 		return nil, fmt.Errorf("%w: unsupported identity kind: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}

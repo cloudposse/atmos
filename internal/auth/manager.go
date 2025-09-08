@@ -15,6 +15,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
+const (
+	logKeyIdentity = "identity"
+)
+
 // manager implements the Authmanager interface.
 type manager struct {
 	config          *schema.AuthConfig
@@ -82,7 +86,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		return nil, fmt.Errorf("%w: failed to build authentication chain for identity %q: %v", errUtils.ErrInvalidAuthConfig, identityName, err)
 	}
 
-	log.Debug("Authentication chain discovered", "identity", identityName, "chainLength", len(chain), "chain", chain)
+	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
 	// Persist the chain for later retrieval by providers or callers
 	m.chain = chain
@@ -237,7 +241,7 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 	if identity, exists := m.identities[identityName]; exists {
 		providerName, err := identity.GetProviderName()
 		if err != nil {
-			log.Debug("Failed to get provider name for identity", "identity", identityName, "error", err)
+			log.Debug("Failed to get provider name for identity", logKeyIdentity, identityName, "error", err)
 			return ""
 		}
 		return providerName
@@ -248,7 +252,7 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 		if m.config.Identities[name].Alias == identityName {
 			providerName, err := identity.GetProviderName()
 			if err != nil {
-				log.Debug("Failed to get provider name for identity alias", "identity", identityName, "actualName", name, "error", err)
+				log.Debug("Failed to get provider name for identity alias", logKeyIdentity, identityName, "actualName", name, "error", err)
 				return ""
 			}
 			return providerName
@@ -304,7 +308,7 @@ func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity s
 		if validFromIndex == len(m.chain)-1 {
 			last := m.chain[len(m.chain)-1]
 			if cachedCreds, err := m.credentialStore.Retrieve(last); err == nil {
-				log.Debug("Using cached credentials for target identity", "identity", targetIdentity)
+				log.Debug("Using cached credentials for target identity", logKeyIdentity, targetIdentity)
 				return cachedCreds, nil
 			}
 		}
@@ -495,7 +499,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 			return nil, fmt.Errorf("%w: identity %q not found in chain step %d", errUtils.ErrInvalidAuthConfig, identityStep, i)
 		}
 
-		log.Debug("Authenticating identity step", "step", i, "identity", identityStep, "kind", identity.Kind())
+		log.Debug("Authenticating identity step", "step", i, logKeyIdentity, identityStep, "kind", identity.Kind())
 
 		// Each identity receives credentials from the previous step
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)

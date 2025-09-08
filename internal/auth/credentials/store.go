@@ -30,8 +30,8 @@ func NewCredentialStore() types.CredentialStore {
 	return &keyringStore{}
 }
 
-// Store stores credentials for the given alias.
-// envelope used to persist interface credentials
+// Store stores credentials for the given alias
+// envelope used to persist interface credentials.
 type credentialEnvelope struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`

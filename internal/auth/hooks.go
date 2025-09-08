@@ -46,19 +46,9 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 		return nil
 	}
 
-	// Create auth manager components
-	credStore := credentials.NewCredentialStore()
-	validator := validation.NewValidator()
-
-	// Create auth manager with merged configuration and stack info (so identities can mutate it)
-	authManager, err := NewAuthManager(
-		&authConfig,
-		credStore,
-		validator,
-		stackInfo,
-	)
+	authManager, err := newAuthManager(&authConfig, stackInfo)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create auth manager: %v", errUtils.ErrAuthManager, err)
+		return err
 	}
 
 	// Determine target identity: stack info identity (CLI flag) or default identity
@@ -90,6 +80,24 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	_ = utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection)
 	return nil
+}
+
+func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo) (types.AuthManager, error) {
+	// Create auth manager components
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+
+	// Create auth manager with merged configuration and stack info (so identities can mutate it)
+	authManager, err := NewAuthManager(
+		authConfig,
+		credStore,
+		validator,
+		stackInfo,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create auth manager: %v", errUtils.ErrAuthManager, err)
+	}
+	return authManager, nil
 }
 
 func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (log.Level, log.Level) {

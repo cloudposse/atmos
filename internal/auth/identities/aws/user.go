@@ -18,6 +18,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	defaultUserSessionSeconds = 3600
+	awsUserProviderName       = "aws-user"
+	logKeyIdentity            = "identity"
+	defaultRegion             = "us-east-1"
+)
+
 // userIdentity implements AWS user identity (passthrough).
 type userIdentity struct {
 	name   string
@@ -44,7 +51,7 @@ func (i *userIdentity) Kind() string {
 // GetProviderName returns the provider name for this identity
 // AWS user identities always return "aws-user" as they are standalone.
 func (i *userIdentity) GetProviderName() (string, error) {
-	return "aws-user", nil
+	return awsUserProviderName, nil
 }
 
 // Authenticate performs authentication by retrieving long-lived credentials and generating session tokens.
@@ -63,7 +70,7 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds types.ICreden
 			MfaArn:          mfaArn,
 		}
 
-		log.Debug("Using credentials from atmos.yaml configuration", "identity", i.name, "hasAccessKey", accessKeyID != "", "hasMFA", mfaArn != "")
+		log.Debug("Using credentials from atmos.yaml configuration", logKeyIdentity, i.name, "hasAccessKey", accessKeyID != "", "hasMFA", mfaArn != "")
 	} else {
 		// Fallback to credential store (keyring) for stored credentials
 		credStore := atmosCredentials.NewCredentialStore()
@@ -77,16 +84,16 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds types.ICreden
 			return nil, fmt.Errorf("%w: stored credentials are not AWS credentials", errUtils.ErrAwsAuth)
 		}
 
-		log.Debug("Using credentials from keyring", "identity", i.name)
+		log.Debug("Using credentials from keyring", logKeyIdentity, i.name)
 	}
 
 	// Get region from identity credentials
-	region := "us-east-1" // default
+	region := defaultRegion // default
 	if r, ok := i.config.Credentials["region"].(string); ok && r != "" {
 		region = r
 	}
 
-	log.Debug("AWS User region extracted.", "identity", i.name, "region", region)
+	log.Debug("AWS User region extracted.", logKeyIdentity, i.name, "region", region)
 
 	// Validate and set region in credentials.
 	if longLivedCreds == nil {
@@ -105,12 +112,12 @@ func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string)
 	awsFileManager := awsCloud.NewAWSFileManager()
 
 	// Write credentials to ~/.aws/atmos/aws-user/credentials
-	if err := awsFileManager.WriteCredentials("aws-user", i.name, creds); err != nil {
+	if err := awsFileManager.WriteCredentials(awsUserProviderName, i.name, creds); err != nil {
 		return fmt.Errorf("%w: failed to write AWS credentials: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	// Write config to ~/.aws/atmos/aws-user/config
-	if err := awsFileManager.WriteConfig("aws-user", i.name, region, ""); err != nil {
+	if err := awsFileManager.WriteConfig(awsUserProviderName, i.name, region, ""); err != nil {
 		return fmt.Errorf("%w: failed to write AWS config: %v", errUtils.ErrAwsAuth, err)
 	}
 
@@ -151,12 +158,12 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 		input = &sts.GetSessionTokenInput{
 			SerialNumber:    aws.String(longLivedCreds.MfaArn),
 			TokenCode:       aws.String(mfaToken),
-			DurationSeconds: aws.Int32(3600), // 1 hour session
+			DurationSeconds: aws.Int32(defaultUserSessionSeconds), // 1 hour session
 		}
 	} else {
 		// Get session token without MFA
 		input = &sts.GetSessionTokenInput{
-			DurationSeconds: aws.Int32(3600), // 1 hour session
+			DurationSeconds: aws.Int32(defaultUserSessionSeconds), // 1 hour session
 		}
 	}
 
@@ -218,7 +225,7 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 
 	// Get AWS file environment variables using "aws-user" as mock provider
 	awsFileManager := awsCloud.NewAWSFileManager()
-	awsEnvVars := awsFileManager.GetEnvironmentVariables("aws-user", i.name)
+	awsEnvVars := awsFileManager.GetEnvironmentVariables(awsUserProviderName, i.name)
 
 	// Convert to map format
 	for _, envVar := range awsEnvVars {
@@ -249,7 +256,7 @@ func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Ident
 
 // AuthenticateStandaloneAWSUser handles authentication for standalone AWS user identities.
 func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, identities map[string]types.Identity) (types.ICredentials, error) {
-	log.Debug("Authenticating AWS user identity directly", "identity", identityName)
+	log.Debug("Authenticating AWS user identity directly", logKeyIdentity, identityName)
 
 	// Get the identity instance
 	userIdentity, exists := identities[identityName]

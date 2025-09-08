@@ -13,7 +13,12 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
+)
+
+const (
+	ssoDefaultSessionMinutes = 60
 )
 
 // ssoProvider implements AWS IAM Identity Center authentication.
@@ -93,55 +98,17 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		return nil, fmt.Errorf("%w: failed to start device authorization: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Display user code and verification URI
-	err = utils.OpenUrl(*authResp.VerificationUriComplete)
+	// Display user code and verification URI if not in CI
+	if !telemetry.IsCI() {
+		if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
+			log.Debug(err)
+			utils.PrintfMarkdown("🔐 Please visit %s and enter code: %s", *authResp.VerificationUriComplete, *authResp.UserCode)
+		}
+	}
+	// Poll for token using helper to keep function size small
+	accessToken, tokenExpiresAt, err := p.pollForAccessToken(ctx, oidcClient, registerResp, authResp)
 	if err != nil {
-		log.Debug(err)
-		utils.PrintfMarkdown("🔐 Please visit %s and enter code: %s", *authResp.VerificationUriComplete, *authResp.UserCode)
-	}
-	// Poll for token
-	var accessToken string
-	var tokenExpiresAt time.Time
-	expiresIn := authResp.ExpiresIn
-	interval := authResp.Interval
-
-	// Add initial delay before first poll
-	time.Sleep(time.Duration(interval) * time.Second)
-
-	for i := 0; i < int(expiresIn/interval); i++ {
-		tokenResp, err := oidcClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
-			ClientId:     registerResp.ClientId,
-			ClientSecret: registerResp.ClientSecret,
-			DeviceCode:   authResp.DeviceCode,
-			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
-		})
-
-		if err == nil {
-			accessToken = aws.ToString(tokenResp.AccessToken)
-			tokenExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-			break
-		}
-
-		// Check for specific AWS error types
-		var authPendingErr *types.AuthorizationPendingException
-		var slowDownErr *types.SlowDownException
-
-		if errors.As(err, &authPendingErr) {
-			// Authorization is still pending, continue polling
-			time.Sleep(time.Duration(interval) * time.Second)
-			continue
-		} else if errors.As(err, &slowDownErr) {
-			// Slow down polling as requested by AWS
-			time.Sleep(time.Duration(interval*2) * time.Second)
-			continue
-		}
-
-		// Any other error is terminal.
-		return nil, fmt.Errorf("%w: failed to create token: %v", errUtils.ErrAuthenticationFailed, err)
-	}
-
-	if accessToken == "" {
-		return nil, fmt.Errorf("%w: authentication timed out", errUtils.ErrAuthenticationFailed)
+		return nil, err
 	}
 
 	// Calculate expiration time
@@ -187,5 +154,48 @@ func (p *ssoProvider) getSessionDuration() int {
 			return int(duration.Minutes())
 		}
 	}
-	return 60 // Default to 60 minutes
+	return ssoDefaultSessionMinutes // Default to 60 minutes
+}
+
+// pollForAccessToken polls the device authorization endpoint until an access token is available or times out.
+func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooidc.Client, registerResp *ssooidc.RegisterClientOutput, authResp *ssooidc.StartDeviceAuthorizationOutput) (string, time.Time, error) {
+	var accessToken string
+	var tokenExpiresAt time.Time
+	expiresIn := authResp.ExpiresIn
+	interval := authResp.Interval
+
+	// Initial delay before first poll
+	time.Sleep(time.Duration(interval) * time.Second)
+
+	for i := 0; i < int(expiresIn/interval); i++ {
+		tokenResp, err := oidcClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
+			ClientId:     registerResp.ClientId,
+			ClientSecret: registerResp.ClientSecret,
+			DeviceCode:   authResp.DeviceCode,
+			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
+		})
+		if err == nil {
+			accessToken = aws.ToString(tokenResp.AccessToken)
+			tokenExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+			break
+		}
+
+		var authPendingErr *types.AuthorizationPendingException
+		var slowDownErr *types.SlowDownException
+
+		if errors.As(err, &authPendingErr) {
+			time.Sleep(time.Duration(interval) * time.Second)
+			continue
+		} else if errors.As(err, &slowDownErr) {
+			time.Sleep(time.Duration(interval*2) * time.Second)
+			continue
+		}
+
+		return "", time.Time{}, fmt.Errorf("%w: failed to create token: %v", errUtils.ErrAuthenticationFailed, err)
+	}
+
+	if accessToken == "" {
+		return "", time.Time{}, fmt.Errorf("%w: authentication timed out", errUtils.ErrAuthenticationFailed)
+	}
+	return accessToken, tokenExpiresAt, nil
 }

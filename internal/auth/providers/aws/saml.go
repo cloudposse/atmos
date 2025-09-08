@@ -22,6 +22,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	samlTimeoutSeconds    = 30
+	samlDefaultSessionSec = 3600
+)
+
 // samlProvider implements AWS SAML authentication using saml2aws.
 type samlProvider struct {
 	name   string
@@ -151,9 +156,9 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 		Provider:             p.getProviderType(),
 		MFA:                  "Auto",
 		SkipVerify:           false,
-		Timeout:              30, // 30 second timeout
+		Timeout:              samlTimeoutSeconds, // 30 second timeout
 		AmazonWebservicesURN: "urn:amazon:webservices",
-		SessionDuration:      3600, // 1 hour default
+		SessionDuration:      samlDefaultSessionSec, // 1 hour default
 		Profile:              p.name,
 		Region:               p.region,
 		DownloadBrowser:      p.config.DownloadBrowserDriver,
