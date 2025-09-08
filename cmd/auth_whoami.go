@@ -41,15 +41,15 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	defaultIdentity, err := authManager.GetDefaultIdentity()
 	if err != nil {
-		fmt.Fprint(os.Stderr, "No default identity configured.\n")
-		fmt.Fprint(os.Stderr, "Configure auth in atmos.yaml and run `atmos auth login` to authenticate.\n")
+		fmt.Fprintf(os.Stderr, "No default identity configured.\n")
+		fmt.Fprintf(os.Stderr, "Configure auth in atmos.yaml and run `atmos auth login` to authenticate.\n")
 		return nil
 	}
 
 	whoami, err := authManager.Whoami(ctx, defaultIdentity)
 	if err != nil {
-		fmt.Fprint(os.Stderr, "No active authentication session found.\n")
-		fmt.Fprint(os.Stderr, "Run `atmos auth login` to authenticate.\n")
+		fmt.Fprintf(os.Stderr, "No active authentication session found.\n")
+		fmt.Fprintf(os.Stderr, "Run `atmos auth login` to authenticate.\n")
 		return nil
 	}
 
@@ -65,22 +65,22 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display human-readable output
-	fmt.Fprint(os.Stderr, "Current Authentication Status\n\n")
-	fmt.Fprint(os.Stderr, "Provider: %s\n", whoami.Provider)
-	fmt.Fprint(os.Stderr, "Identity: %s\n", whoami.Identity)
+	fmt.Fprintf(os.Stderr, "Current Authentication Status\n\n")
+	fmt.Fprintf(os.Stderr, "Provider: %s\n", whoami.Provider)
+	fmt.Fprintf(os.Stderr, "Identity: %s\n", whoami.Identity)
 	if whoami.Principal != "" {
-		fmt.Fprint(os.Stderr, "Principal: %s\n", whoami.Principal)
+		fmt.Fprintf(os.Stderr, "Principal: %s\n", whoami.Principal)
 	}
 	if whoami.Account != "" {
-		fmt.Fprint(os.Stderr, "Account: %s\n", whoami.Account)
+		fmt.Fprintf(os.Stderr, "Account: %s\n", whoami.Account)
 	}
 	if whoami.Region != "" {
-		fmt.Fprint(os.Stderr, "Region: %s\n", whoami.Region)
+		fmt.Fprintf(os.Stderr, "Region: %s\n", whoami.Region)
 	}
 	if whoami.Expiration != nil {
-		fmt.Fprint(os.Stderr, "Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
+		fmt.Fprintf(os.Stderr, "Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
 	}
-	fmt.Fprint(os.Stderr, "Last Updated: %s\n", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST"))
+	fmt.Fprintf(os.Stderr, "Last Updated: %s\n", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST"))
 
 	return nil
 }

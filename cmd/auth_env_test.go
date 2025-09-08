@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -181,23 +182,14 @@ func TestAuthEnvCmd(t *testing.T) {
 							}
 						}
 						if identityName == "" {
-if identityName == "" {
-    // Find default identity
-    for name, identity := range config.Auth.Identities {
-        if identity.Default {
-            identityName = name
-            break
-        }
-    }
-    if identityName == "" {
-        return fmt.Errorf("no default identity configured")
-    }
-} else {
-    // Validate specified identity exists
-    if _, exists := config.Auth.Identities[identityName]; !exists {
-        return fmt.Errorf("identity %q not found", identityName)
-    }
-}
+							return fmt.Errorf("no default identity configured")
+						}
+					} else {
+						// Validate specified identity exists
+						if _, exists := config.Auth.Identities[identityName]; !exists {
+							return fmt.Errorf("identity %q not found", identityName)
+						}
+					}
 
 					// Mock environment variables
 					envVars := []schema.EnvironmentVariable{

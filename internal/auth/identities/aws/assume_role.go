@@ -104,13 +104,13 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 		return nil, fmt.Errorf("%w: invalid assume role identity: %v", errUtils.ErrInvalidIdentityConfig, err)
 	}
 
-	// Create STS client with base credentials
+	// Create STS client with base credentials.
 	stsClient, err := i.newSTSClient(ctx, awsBase)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build AssumeRole input (handles optional external ID and duration)
+	// Build AssumeRole input (handles optional external ID and duration).
 	assumeRoleInput := i.buildAssumeRoleInput()
 
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
@@ -160,7 +160,7 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 		return i.config.Via.Provider, nil
 	}
 	if i.config.Via != nil && i.config.Via.Identity != "" {
-		// This assume role identity chains through another identity
+		// This assume role identity chains through another identity.
 		// For caching purposes, we'll use the chained identity name.
 		return i.config.Via.Identity, nil
 	}

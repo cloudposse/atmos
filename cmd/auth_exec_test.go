@@ -178,7 +178,8 @@ func TestAuthExecCmd(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a mock command for testing
 			cmd := &cobra.Command{
-				Use: "exec",
+				Use:               "exec",
+				DisableFlagParsing: true,
 				RunE: func(cmd *cobra.Command, args []string) error {
 					if len(args) == 0 {
 						return assert.AnError

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	authTypes "github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -141,25 +142,25 @@ func TestAuthWhoamiCmd(t *testing.T) {
 
 					// Mock whoami info
 					expTime, _ := time.Parse(time.RFC3339, "2024-01-01T12:00:00Z")
-					whoamiInfo := schema.WhoamiInfo{
+					whoamiInfo := authTypes.WhoamiInfo{
 						Identity:    defaultIdentity,
 						Provider:    "test-provider",
 						Account:     "123456789012",
 						Principal:   "TestRole",
 						Expiration:  &expTime,
-						Credentials: &schema.Credentials{},
+						Credentials: &authTypes.AWSCredentials{},
 					}
 
 					if outputFormat == "json" {
 						jsonData, _ := json.MarshalIndent(whoamiInfo, "", "  ")
 						cmd.Println(string(jsonData))
 					} else {
-						cmd.PrintfErr("**Identity**: %s\n", whoamiInfo.Identity)
-						cmd.PrintfErr("**Provider**: %s\n", whoamiInfo.Provider)
-						cmd.PrintfErr("**Account**: %s\n", whoamiInfo.Account)
-						cmd.PrintfErr("**Principal**: %s\n", whoamiInfo.Principal)
+						cmd.PrintErrf("**Identity**: %s\n", whoamiInfo.Identity)
+						cmd.PrintErrf("**Provider**: %s\n", whoamiInfo.Provider)
+						cmd.PrintErrf("**Account**: %s\n", whoamiInfo.Account)
+						cmd.PrintErrf("**Principal**: %s\n", whoamiInfo.Principal)
 						if whoamiInfo.Expiration != nil {
-							cmd.PrintfErr("**Expiration**: %s\n", whoamiInfo.Expiration.Format(time.RFC3339))
+							cmd.PrintErrf("**Expiration**: %s\n", whoamiInfo.Expiration.Format(time.RFC3339))
 						}
 					}
 
@@ -214,19 +215,17 @@ func TestAuthWhoamiCmdFlags(t *testing.T) {
 
 func TestWhoamiJSONOutput(t *testing.T) {
 	expTime, _ := time.Parse(time.RFC3339, "2024-01-01T12:00:00Z")
-	whoamiInfo := schema.WhoamiInfo{
+	whoamiInfo := authTypes.WhoamiInfo{
 		Identity:   "test-identity",
 		Provider:   "test-provider",
 		Account:    "123456789012",
 		Principal:  "TestRole",
 		Expiration: &expTime,
-		Credentials: &schema.Credentials{
-			AWS: &schema.AWSCredentials{
-				AccessKeyID:     "AKIATEST",
-				SecretAccessKey: "secret",
-				SessionToken:    "token",
-				Region:          "us-east-1",
-			},
+		Credentials: &authTypes.AWSCredentials{
+			AccessKeyID:     "AKIATEST",
+			SecretAccessKey: "secret",
+			SessionToken:    "token",
+			Region:          "us-east-1",
 		},
 	}
 

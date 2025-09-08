@@ -97,9 +97,10 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		return nil, fmt.Errorf("%w: hierarchical authentication failed: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Call post-authentication hook on the identity (now part of Identity interface)
+	// Call post-authentication hook on the identity (now part of Identity interface).
 	if identity, exists := m.identities[identityName]; exists {
-		if err := identity.PostAuthenticate(ctx, m.stackInfo, m.chain[0], identityName, finalCreds); err != nil {
+		providerName, _ := identity.GetProviderName()
+		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
 			return nil, fmt.Errorf("%w: post-authentication hook failed: %v", errUtils.ErrAuthenticationFailed, err)
 		}
 	}

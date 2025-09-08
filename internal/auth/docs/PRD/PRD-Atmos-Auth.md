@@ -159,6 +159,7 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
   - Graceful error handling for terminal errors
   - Use AWS SDK v2 error type checking instead of string matching
   - Automatic browser opening when possible
+- In CI environments, do not attempt to open a browser; instead, print the verification URI and user code
 - **Priority**: P0 (Must Have)
 
 #### FR-012: Credential Store Keyring Integration
@@ -575,6 +576,27 @@ auth:
 ## 4. Technical Architecture
 
 ### 4.1 Core Components
+
+#### 4.1.1 Credential Interfaces
+
+Atmos Auth uses a unified credential interface to standardize provider/identity behavior:
+
+```
+type ICredentials interface {
+    IsExpired() bool
+    GetExpiration() (*time.Time, error)
+    BuildWhoamiInfo(info *WhoamiInfo)
+}
+```
+
+Concrete implementations:
+
+- AWSCredentials: AccessKeyID, SecretAccessKey, SessionToken, Region, Expiration, MfaArn
+  - Implements `IsExpired()`, `GetExpiration()`, and populates region via `BuildWhoamiInfo()`
+- OIDCCredentials: Token, Provider, Audience
+  - Implements `IsExpired()` (non-expiring), `GetExpiration()` (nil), and no-op `BuildWhoamiInfo()`
+
+The Auth Manager, providers, and identities now exchange `ICredentials` rather than bespoke structs. This simplifies expiration handling and whoami augmentation, and cleanly supports new credential types.
 
 #### Authentication Configuration Structure
 

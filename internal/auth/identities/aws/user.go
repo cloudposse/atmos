@@ -153,13 +153,26 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 		return nil, fmt.Errorf("%w: failed to get session token: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Create session credentials (temporary tokens for AWS files)
+	// Validate result and safely construct session credentials.
+	if result == nil || result.Credentials == nil {
+		return nil, fmt.Errorf("%w: STS returned empty credentials", errUtils.ErrAuthenticationFailed)
+	}
+
+	accessKeyID := aws.ToString(result.Credentials.AccessKeyId)
+	secretAccessKey := aws.ToString(result.Credentials.SecretAccessKey)
+	sessionToken := aws.ToString(result.Credentials.SessionToken)
+	expiration := ""
+	if result.Credentials.Expiration != nil {
+		expiration = result.Credentials.Expiration.Format(time.RFC3339)
+	}
+
+	// Create session credentials (temporary tokens for AWS files).
 	sessionCreds := &types.AWSCredentials{
-		AccessKeyID:     *result.Credentials.AccessKeyId,
-		SecretAccessKey: *result.Credentials.SecretAccessKey,
-		SessionToken:    *result.Credentials.SessionToken,
+		AccessKeyID:     accessKeyID,
+		SecretAccessKey: secretAccessKey,
+		SessionToken:    sessionToken,
 		Region:          region,
-		Expiration:      result.Credentials.Expiration.Format(time.RFC3339),
+		Expiration:      expiration,
 	}
 
 	// Write session credentials to AWS files using "aws-user" as mock provider

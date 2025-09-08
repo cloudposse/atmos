@@ -33,6 +33,10 @@ func NewOIDCProvider(name string, config *schema.Provider) (types.Provider, erro
 		return nil, fmt.Errorf("%w: provider name is required", errUtils.ErrInvalidProviderConfig)
 	}
 
+	if config.Region == "" {
+		return nil, fmt.Errorf("%w: region is required", errUtils.ErrInvalidProviderConfig)
+	}
+
 	return &oidcProvider{
 		name:   name,
 		config: config,
@@ -85,11 +89,17 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		aud = v
 	}
 
-	// Get the JWT token from GitHub's OIDC endpoint.
-	jwtToken, err := p.getOIDCToken(ctx, requestURL, token, aud)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get OIDC token: %w", errUtils.ErrAuthenticationFailed, err)
-	}
+    // Prefer provided ACTIONS_ID_TOKEN if present (avoids external calls in tests/CI),
+    // otherwise retrieve a token from the OIDC endpoint.
+    _ = viper.BindEnv("github.oidc.id_token", "ACTIONS_ID_TOKEN")
+    jwtToken := viper.GetString("github.oidc.id_token")
+    if jwtToken == "" {
+        var err error
+        jwtToken, err = p.getOIDCToken(ctx, requestURL, token, aud)
+        if err != nil {
+            return nil, fmt.Errorf("%w: failed to get OIDC token: %w", errUtils.ErrAuthenticationFailed, err)
+        }
+    }
 
 	log.Info("GitHub OIDC authentication successful", "provider", p.name)
 
