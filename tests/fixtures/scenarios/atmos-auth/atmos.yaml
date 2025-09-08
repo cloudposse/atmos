@@ -10,12 +10,14 @@ stacks:
 auth:
   providers:
     oidcprov:
-      type: aws/oidc
+      kind: github/oidc
       region: us-east-1
-      profile: oidc-prof
   identities:
     oidc:
-      provider: oidcprov
-      role_arn: arn:aws:iam::000000000000:role/Dummy
+      kind: aws/assume-role
+      via:
+        provider: oidcprov
+      principal:
+        assume_role: arn:aws:iam::000000000000:role/Dummy
 logs:
   level: Debug

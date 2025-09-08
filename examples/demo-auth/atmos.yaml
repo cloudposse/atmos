@@ -37,24 +37,20 @@ commands:
 
 # Auth configuration demo (stub values)
 auth:
-  default_profile: "acme-identity"
-  default_region: "us-east-2"
-  session_length: 15 minutes
   providers:
     oidc:
-      kind: aws/oidc
+      kind: github/oidc
       region: us-east-1
+      # spec:
+      #   audience: your-audience
     idp-acme-saml:
       kind: aws/saml
       url: https://mock
-      idp_arn: arn:aws:iam::000000000000:saml-provider/mock
-      profile: "acme-identity"
+      region: us-east-1
     idp-acme-sso:
       kind: aws/iam-identity-center
-      url: https://mock
-      profile: "acme-identity"
-      role_name: "IdentityManagersTeamAccess"
-      account_name: "core-identity"
+      start_url: https://mock
+      region: us-east-1
 
   identities:
     # Used in tests
@@ -83,5 +79,6 @@ auth:
     superuser:
       kind: aws/user
       enabled: false
-      profile: default
+      credentials:
+        region: us-east-1
 

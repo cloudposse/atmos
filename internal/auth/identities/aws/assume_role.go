@@ -26,7 +26,14 @@ type assumeRoleIdentity struct {
 
 // newSTSClient creates an STS client using the base credentials and configured region.
 func (i *assumeRoleIdentity) newSTSClient(ctx context.Context, awsBase *types.AWSCredentials) (*sts.Client, error) {
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(i.region))
+	region := i.region
+	if region == "" {
+		region = awsBase.Region
+	}
+	if region == "" {
+		region = "us-east-1"
+	}
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
 	}

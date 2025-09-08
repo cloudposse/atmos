@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -58,7 +59,7 @@ func (p *assumeRoleProvider) Authenticate(ctx context.Context) (types.ICredentia
 	// Load default AWS configuration
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(p.region))
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidProviderConfig, err)
+		return nil, errors.Join(errUtils.ErrInvalidProviderConfig, fmt.Errorf("failed to load AWS config: %w", err))
 	}
 
 	// Get role ARN from spec
@@ -86,7 +87,7 @@ func (p *assumeRoleProvider) Authenticate(ctx context.Context) (types.ICredentia
 
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to assume role: %v", errUtils.ErrInvalidProviderConfig, err)
+		return nil, errors.Join(errUtils.ErrInvalidProviderConfig, fmt.Errorf("assume role failed (role_arn=%s): %w", roleArn, err))
 	}
 
 	// Convert to our credential format

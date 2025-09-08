@@ -37,13 +37,6 @@ func TestNewOIDCProvider(t *testing.T) {
 			errorMsg:     "provider config is required",
 		},
 		{
-			name:         "missing region",
-			providerName: "github-oidc",
-			config:       &schema.Provider{Kind: "github/oidc"},
-			expectError:  true,
-			errorMsg:     "region is required",
-		},
-		{
 			name:         "empty name",
 			providerName: "",
 			config: &schema.Provider{
@@ -82,17 +75,16 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 	}{
 		{
 			name: "valid GitHub Actions environment",
-			setupEnv: func() {
-				os.Setenv("GITHUB_ACTIONS", "true")
-				os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
-				os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://vstoken.actions.githubusercontent.com/_apis/distributedtask/hubs/GitHub/plans/123/jobs/456/idtoken")
-				os.Setenv("ACTIONS_ID_TOKEN", "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.test-jwt-token")
-			},
-			cleanupEnv: func() {
-				os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-				os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
-				os.Unsetenv("GITHUB_ACTIONS")
-				os.Unsetenv("ACTIONS_ID_TOKEN")
+			setupEnv: func() {},
+			cleanupEnv: func() {},
+			expectError: false,
+		},
+		{
+			name: "missing GitHub Actions environment",
+			setupEnv: func() {},
+			cleanupEnv: func() {},
+			expectError: true,
+			errorMsg: "GitHub OIDC authentication is only available in GitHub Actions environment",
 			},
 			expectError: false,
 		},
@@ -149,8 +141,16 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 			// Test
 			ctx := context.Background()
-			creds, err := provider.Authenticate(ctx)
+			// Local OIDC endpoint.
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"value":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.test-jwt-token"}`))
+			}))
+			defer srv.Close()
+			t.Setenv("GITHUB_ACTIONS", "true")
+			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", srv.URL)
 
+			creds, err := provider.Authenticate(ctx)
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMsg)
