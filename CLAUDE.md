@@ -294,6 +294,12 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 - `stacks/` - Stack definitions
 - `components/` - Component configurations
 
+### Golden Snapshots (MANDATORY)
+- **NEVER modify files under `tests/test-cases/` or `tests/testdata/`** unless explicitly instructed
+- These directories contain golden snapshots that are sensitive to even minor changes
+- Golden snapshots are used to verify expected output remains consistent
+- If you need to update golden snapshots, do so intentionally and document the reason
+
 ## Common Development Tasks
 
 ### Adding New CLI Command
