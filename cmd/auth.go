@@ -26,5 +26,4 @@ func init() {
 	_ = viper.BindPFlag("identity", authCmd.PersistentFlags().Lookup("identity"))
 
 	RootCmd.AddCommand(authCmd)
-
 }

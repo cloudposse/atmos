@@ -1,15 +1,15 @@
 package cmd
 
 import (
-    "bytes"
-    "fmt"
-    "os"
-    "testing"
+	"bytes"
+	"fmt"
+	"os"
+	"testing"
 
-    "github.com/cloudposse/atmos/pkg/schema"
-    "github.com/spf13/cobra"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAuthLoginCmd(t *testing.T) {

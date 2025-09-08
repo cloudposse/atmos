@@ -89,17 +89,17 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		aud = v
 	}
 
-    // Prefer provided ACTIONS_ID_TOKEN if present (avoids external calls in tests/CI),
-    // otherwise retrieve a token from the OIDC endpoint.
-    _ = viper.BindEnv("github.oidc.id_token", "ACTIONS_ID_TOKEN")
-    jwtToken := viper.GetString("github.oidc.id_token")
-    if jwtToken == "" {
-        var err error
-        jwtToken, err = p.getOIDCToken(ctx, requestURL, token, aud)
-        if err != nil {
-            return nil, fmt.Errorf("%w: failed to get OIDC token: %w", errUtils.ErrAuthenticationFailed, err)
-        }
-    }
+	// Prefer provided ACTIONS_ID_TOKEN if present (avoids external calls in tests/CI),
+	// otherwise retrieve a token from the OIDC endpoint.
+	_ = viper.BindEnv("github.oidc.id_token", "ACTIONS_ID_TOKEN")
+	jwtToken := viper.GetString("github.oidc.id_token")
+	if jwtToken == "" {
+		var err error
+		jwtToken, err = p.getOIDCToken(ctx, requestURL, token, aud)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to get OIDC token: %w", errUtils.ErrAuthenticationFailed, err)
+		}
+	}
 
 	log.Info("GitHub OIDC authentication successful", "provider", p.name)
 

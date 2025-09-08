@@ -14,9 +14,9 @@ import (
 
 func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 	// Skip integration tests in CI or if no auth config is available
-    if os.Getenv("CI") != "" {
-        t.Skipf("Skipping integration tests in CI environment.")
-    }
+	if os.Getenv("CI") != "" {
+		t.Skipf("Skipping integration tests in CI environment.")
+	}
 
 	// Create a temporary directory for test files
 	tempDir, err := os.MkdirTemp("", "atmos-auth-test")
