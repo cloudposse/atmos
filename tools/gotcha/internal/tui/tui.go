@@ -14,7 +14,6 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -350,124 +349,122 @@ func (m *TestModel) UpdateOld(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the TUI.
+// View returns the single-line progress display for the TUI.
+// This maintains the original behavior of showing progress on a single line at the bottom of the terminal,
+// allowing normal terminal scrolling to view test output.
 func (m *TestModel) View() string {
-	if m.width == 0 || m.height == 0 {
-		return ""
-	}
-
-	var output strings.Builder
-
-	// Header
-	output.WriteString(StatsHeaderStyle.Render("🧪 Go Test Runner"))
-	output.WriteString("\n\n")
-
-	// Show spinner and current status
-	if !m.done {
-		output.WriteString(m.spinner.View())
-		output.WriteString(" Running tests...\n")
-
-		// Show progress bar
-		if m.totalTests > 0 {
-			progressText := fmt.Sprintf(" %d/%d tests completed", m.completedTests, m.totalTests)
-			if m.usingEstimate {
-				progressText += " (estimated)"
-			}
-			output.WriteString(m.progress.View())
-			output.WriteString(progressText)
-			output.WriteString("\n")
-		}
-
-		// Show current package/test
-		if m.currentPackage != "" {
-			output.WriteString(fmt.Sprintf("\nPackage: %s\n", DurationStyle.Render(m.currentPackage)))
-		}
-		if m.currentTest != "" {
-			output.WriteString(fmt.Sprintf("Test: %s\n", DurationStyle.Render(m.currentTest)))
-		}
-	} else {
-		// Show completion status
-		if m.exitCode == 0 {
-			output.WriteString(PassStyle.Render("✅ Tests completed successfully!\n"))
-		} else {
-			output.WriteString(FailStyle.Render(fmt.Sprintf("❌ Tests failed with exit code %d\n", m.exitCode)))
-		}
-	}
-
-	// Show test statistics
-	output.WriteString(fmt.Sprintf("\n%s %s | %s %s | %s %s\n",
-		PassStyle.Render("✓"), fmt.Sprintf("%d passed", m.passed),
-		FailStyle.Render("✗"), fmt.Sprintf("%d failed", m.failed),
-		SkipStyle.Render("○"), fmt.Sprintf("%d skipped", m.skipped),
-	))
-
-	// Show package results
-	if len(m.packageOrder) > 0 {
-		output.WriteString("\n" + StatsHeaderStyle.Render("Package Results:") + "\n")
-
-		// Build the full output for all packages
-		var fullOutput strings.Builder
-		for _, pkgName := range m.packageOrder {
-			if pkg := m.packageResults[pkgName]; pkg != nil {
-				fullOutput.WriteString(m.displayPackageResult(pkg))
-			}
-		}
-
-		// Apply scrolling if needed
-		lines := strings.Split(fullOutput.String(), "\n")
-		availableHeight := m.height - strings.Count(output.String(), "\n") - 5 // Reserve space for footer
-
-		if len(lines) > availableHeight {
-			m.maxScroll = len(lines) - availableHeight
-			if m.scrollOffset > m.maxScroll {
-				m.scrollOffset = m.maxScroll
-			}
-
-			// Show scrolled content
-			endLine := m.scrollOffset + availableHeight
-			if endLine > len(lines) {
-				endLine = len(lines)
-			}
-
-			for i := m.scrollOffset; i < endLine; i++ {
-				output.WriteString(lines[i])
-				if i < endLine-1 {
-					output.WriteString("\n")
-				}
-			}
-
-			// Show scroll indicator
-			output.WriteString(fmt.Sprintf("\n\n%s (Line %d-%d of %d)",
-				DurationStyle.Render("↑↓ to scroll"),
-				m.scrollOffset+1,
-				endLine,
-				len(lines),
-			))
-		} else {
-			// Show all content
-			output.WriteString(fullOutput.String())
-		}
-	}
-
-	// Show final summary if done
 	if m.done {
-		output.WriteString(m.generateFinalSummary())
+		// Return a newline to clear the progress bar line
+		return "\n"
 	}
 
-	// Footer with controls
-	if !m.done {
-		output.WriteString(fmt.Sprintf("\n\n%s", DurationStyle.Render("Press q to quit, ↑↓ to scroll")))
+	// Get terminal width for layout calculations
+	terminalWidth := getTerminalWidth()
+	if terminalWidth == 0 {
+		terminalWidth = 80 // Default fallback
+	}
+
+	// Build the status line components
+	spin := m.spinner.View() + " "
+
+	// Test name with fixed width for stability
+	const maxTestWidth = 55
+	var info string
+	if m.currentTest != "" {
+		testName := m.currentTest
+		if len(testName) > maxTestWidth {
+			testName = testName[:maxTestWidth-3] + "..."
+		}
+		// Pad test name to exactly maxTestWidth BEFORE styling
+		testName = fmt.Sprintf("%-*s", maxTestWidth, testName)
+		styledName := TestNameStyle.Render(testName)
+		info = fmt.Sprintf("Running %s", styledName)
 	} else {
-		elapsed := m.endTime.Sub(m.startTime)
-		output.WriteString(fmt.Sprintf("\n\nCompleted in %s", DurationStyle.Render(elapsed.Round(time.Millisecond).String())))
+		// Pad "Starting tests..." to match "Running " + maxTestWidth
+		padded := fmt.Sprintf("%-*s", maxTestWidth+8, "Starting tests...")
+		info = padded
 	}
 
-	// Memory usage indicator (debug)
-	if viper.GetBool("debug.show_memory") {
-		bufferSize := m.getBufferSizeKB()
-		output.WriteString(fmt.Sprintf("\n%s", DurationStyle.Render(fmt.Sprintf("Buffer: %.1f KB", bufferSize))))
+	// Calculate elapsed time
+	elapsed := time.Since(m.startTime)
+	elapsedSeconds := int(elapsed.Seconds())
+
+	// Calculate buffer size
+	bufferSizeKB := m.getBufferSizeKB()
+
+	// Build the ordered status components
+	var percentage string
+	var testCount string
+
+	// Always use estimate if we have one and are still using it
+	if m.usingEstimate && m.estimatedTestCount > 0 {
+		// Using cached estimate
+		if m.completedTests > 0 {
+			// Tests are running, show progress against estimate
+			percentFloat := float64(m.completedTests) / float64(m.estimatedTestCount)
+			percent := int(percentFloat * 100)
+			percentage = fmt.Sprintf("%3d%s", percent, DurationStyle.Render("%"))
+		} else {
+			// No tests completed yet
+			percentage = fmt.Sprintf("  0%s", DurationStyle.Render("%"))
+		}
+		// Show completed/estimated format with tilde prefix (since whole fraction is estimated)
+		testCount = fmt.Sprintf("~%d/%d %s", m.completedTests, m.estimatedTestCount, DurationStyle.Render("tests"))
+	} else if m.totalTests > 0 {
+		// Not using estimate, have actual count
+		percentFloat := float64(m.completedTests) / float64(m.totalTests)
+		percent := int(percentFloat * 100)
+		percentage = fmt.Sprintf("%3d%s", percent, DurationStyle.Render("%"))
+		testCount = fmt.Sprintf("%4d/%-4d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
+	} else {
+		// No estimate and no tests discovered yet
+		percentage = fmt.Sprintf("  0%s", DurationStyle.Render("%"))
+		testCount = fmt.Sprintf("%-15s", DurationStyle.Render("discovering tests"))
 	}
 
-	return output.String()
+	// Format time and buffer with fixed widths for stability
+	timeStr := fmt.Sprintf("%3d%s", elapsedSeconds, DurationStyle.Render("s"))
+	bufferStr := fmt.Sprintf("%7.1f%s", bufferSizeKB, DurationStyle.Render("KB"))
+
+	// Calculate the display width of all components except the progress bar
+	// We need to account for ANSI color codes not contributing to display width
+	spinWidth := getDisplayWidth(spin)
+	infoWidth := getDisplayWidth(info)
+	percentageWidth := getDisplayWidth(percentage)
+	testCountWidth := getDisplayWidth(testCount)
+	timeWidth := getDisplayWidth(timeStr)
+	bufferWidth := getDisplayWidth(bufferStr)
+
+	// Calculate total fixed width (including spaces)
+	// spin + info + "  " + [progress] + " " + percentage + " " + testCount + "  " + time + " " + buffer
+	fixedWidth := spinWidth + infoWidth + 2 + 1 + percentageWidth + 1 + testCountWidth + 2 + timeWidth + 1 + bufferWidth
+
+	// Calculate available width for progress bar (with some padding)
+	availableWidth := terminalWidth - fixedWidth - 2 // 2 chars padding for safety
+
+	// Set minimum and maximum progress bar width
+	const minProgressWidth = 20
+	const maxProgressWidth = 100
+
+	progressWidth := availableWidth
+	if progressWidth < minProgressWidth {
+		progressWidth = minProgressWidth
+	} else if progressWidth > maxProgressWidth {
+		progressWidth = maxProgressWidth
+	}
+
+	// Update progress bar width if it's different
+	if m.progress.Width != progressWidth {
+		m.progress.Width = progressWidth
+	}
+
+	prog := m.progress.View()
+
+	// Assemble the complete status line with fixed spacing
+	// All sections are now fixed-width, so no jumping should occur
+	statusLine := spin + info + "  " + prog + " " + percentage + " " + testCount + "  " + timeStr + " " + bufferStr
+
+	return statusLine + "\n"
 }
 
 // GetElapsedTime returns the elapsed time since the test started.

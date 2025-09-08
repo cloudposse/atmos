@@ -50,8 +50,8 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 
 	// Step 6: Exit with appropriate code
 	if exitCode != 0 {
-		// Return error to indicate test failure
-		return fmt.Errorf("tests failed with exit code %d", exitCode)
+		// Return testFailureError to indicate test failure with specific exit code
+		return &testFailureError{code: exitCode}
 	}
 
 	return nil
