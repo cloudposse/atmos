@@ -389,6 +389,35 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	if !isDir {
 		return ErrAtmosDIrConfigNotFound
 	}
+
+	// Check if this path should be excluded in test mode
+	//nolint:forbidigo // This is specifically for test isolation, not application configuration
+	if excludePaths := os.Getenv("ATMOS_TEST_EXCLUDE_DEFAULT_IMPORTS"); excludePaths != "" {
+		// Convert dirPath to absolute for comparison
+		absDirPath, err := filepath.Abs(dirPath)
+		if err != nil {
+			absDirPath = dirPath
+		}
+
+		for _, excludePath := range strings.Split(excludePaths, ":") {
+			// Convert exclude path to absolute for comparison
+			absExcludePath, err := filepath.Abs(excludePath)
+			if err != nil {
+				absExcludePath = excludePath
+			}
+
+			// Check if any .atmos.d paths under dirPath would match the exclusion
+			atmosDPath := filepath.Join(absDirPath, ".atmos.d")
+			atmosPath := filepath.Join(absDirPath, "atmos.d")
+
+			if strings.HasPrefix(atmosDPath, absExcludePath) || strings.HasPrefix(atmosPath, absExcludePath) ||
+				strings.HasPrefix(absExcludePath, atmosDPath) || strings.HasPrefix(absExcludePath, atmosPath) {
+				log.Debug("Skipping default imports from excluded path", "path", dirPath, "excluded", excludePath)
+				return nil
+			}
+		}
+	}
+
 	var atmosFoundFilePaths []string
 	// Search for `atmos.d/` configurations
 	searchDir := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))

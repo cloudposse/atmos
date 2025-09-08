@@ -41,6 +41,7 @@ var (
 	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 	startingDir         string
 	snapshotBaseDir     string
+	repoRoot            string // Repository root directory for excluding .atmos.d in tests
 	skipReason          string // Package-level variable to track why tests should be skipped
 )
 
@@ -467,7 +468,6 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
-	var repoRoot string
 
 	// Capture the starting working directory
 	startingDir, err = os.Getwd()
@@ -606,6 +606,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Include the system PATH in the test environment
 	tc.Env["PATH"] = os.Getenv("PATH")
+
+	// Exclude the repository root's .atmos.d from being loaded during tests
+	// This prevents test pollution from development-specific configurations
+	tc.Env["ATMOS_TEST_EXCLUDE_DEFAULT_IMPORTS"] = filepath.Join(repoRoot, ".atmos.d")
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
