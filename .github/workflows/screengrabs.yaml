@@ -35,7 +35,7 @@ jobs:
   build:
     needs: [prepare]
     runs-on: ubuntu-latest
-    environment: screengrabs
+    environment: demo
     steps:
       - name: Install dependencies
         run: |
