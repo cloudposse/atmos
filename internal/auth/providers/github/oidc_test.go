@@ -74,18 +74,17 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 		errorMsg    string
 	}{
 		{
-			name: "valid GitHub Actions environment",
-			setupEnv: func() {},
-			cleanupEnv: func() {},
+			name:        "valid GitHub Actions environment",
+			setupEnv:    func() {},
+			cleanupEnv:  func() {},
 			expectError: false,
 		},
 		{
-			name: "missing GitHub Actions environment",
-			setupEnv: func() {},
-			cleanupEnv: func() {},
+			name:        "missing GitHub Actions environment",
+			setupEnv:    func() {},
+			cleanupEnv:  func() {},
 			expectError: true,
-			errorMsg: "GitHub OIDC authentication is only available in GitHub Actions environment",
-			},
+			errorMsg:    "GitHub OIDC authentication is only available in GitHub Actions environment",
 			expectError: false,
 		},
 		{
