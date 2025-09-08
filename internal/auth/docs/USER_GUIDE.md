@@ -72,7 +72,6 @@ atmos terraform plan mycomponent -s dev
 - **AWS SSO**: `aws/iam-identity-center`
 - **AWS SAML**: `aws/saml`
 - **GitHub OIDC**: `github/oidc`
-- **AWS Assume Role**: `aws/assume-role`
 
 ### Identities
 

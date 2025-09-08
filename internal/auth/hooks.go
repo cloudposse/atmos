@@ -24,6 +24,11 @@ type (
 
 // TerraformPreHook runs before Terraform commands to set up authentication.
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
+	if !validateAuthConfig(atmosConfig, stackInfo) {
+		log.Debug("No auth configuration found, skipping authentication")
+		return nil
+	}
+
 	atmosLevel, authLevel := getConfigLogLevels(atmosConfig)
 	log.SetLevel(authLevel)
 	defer log.SetLevel(atmosLevel)
@@ -82,6 +87,19 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	return nil
 }
 
+func validateAuthConfig(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) bool {
+	if atmosConfig == nil {
+		return false
+	}
+	if stackInfo == nil {
+		return false
+	}
+	if len(atmosConfig.Auth.Identities) == 0 && len(atmosConfig.Auth.Providers) == 0 {
+		return false
+	}
+	return true
+}
+
 func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo) (types.AuthManager, error) {
 	// Create auth manager components
 	credStore := credentials.NewCredentialStore()
@@ -101,6 +119,9 @@ func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndSt
 }
 
 func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (log.Level, log.Level) {
+	if atmosConfig == nil {
+		return log.InfoLevel, log.InfoLevel
+	}
 	atmosLevel := log.GetLevel()
 	if atmosConfig.Logs.Level != "" {
 		if l, err := log.ParseLevel(atmosConfig.Logs.Level); err == nil {

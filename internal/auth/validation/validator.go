@@ -87,8 +87,6 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 	switch provider.Kind {
 	case "aws/iam-identity-center":
 		return v.validateSSOProvider(provider)
-	case "aws/assume-role":
-		return v.validateAssumeRoleProvider(provider)
 	case "aws/saml":
 		return v.validateSAMLProvider(provider)
 	case "github/oidc":
@@ -172,23 +170,7 @@ func (v *validator) validateSSOProvider(provider *schema.Provider) error {
 	return nil
 }
 
-// validateAssumeRoleProvider validates AWS assume role provider configuration.
-func (v *validator) validateAssumeRoleProvider(provider *schema.Provider) error {
-	if provider.Spec == nil {
-		return fmt.Errorf("%w: spec is required for assume role provider", errUtils.ErrInvalidAuthConfig)
-	}
-
-	roleArn, ok := provider.Spec["role_arn"].(string)
-	if !ok || roleArn == "" {
-		return fmt.Errorf("%w: role_arn is required in spec", errUtils.ErrInvalidAuthConfig)
-	}
-
-	if !strings.HasPrefix(roleArn, "arn:aws:iam::") {
-		return fmt.Errorf("%w: invalid role ARN format", errUtils.ErrInvalidAuthConfig)
-	}
-
-	return nil
-}
+// (aws/assume-role provider removed)
 
 // validateSAMLProvider validates AWS SAML provider configuration.
 func (v *validator) validateSAMLProvider(provider *schema.Provider) error {

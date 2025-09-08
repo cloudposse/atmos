@@ -12,12 +12,6 @@ auth:
       region: us-east-1
       start_url: https://test.awsapps.com/start
       
-    test-assume-role:
-      kind: aws/assume-role
-      region: us-west-2
-      spec:
-        role_arn: arn:aws:iam::123456789012:role/TestRole
-      
   identities:
     test-admin:
       kind: aws/permission-set
@@ -48,7 +42,7 @@ auth:
     test-role:
       kind: aws/assume-role
       via:
-        provider: test-assume-role
+        provider: test-sso
       principal:
         assume_role: arn:aws:iam::123456789012:role/TestRole
         session_name: test-session

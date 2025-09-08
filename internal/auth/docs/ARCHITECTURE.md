@@ -33,7 +33,6 @@ internal/auth/
 │       └── user.go          # AWS user identity
 ├── providers/               # Provider implementations
 │   ├── aws/                 # AWS providers
-│   │   ├── assume_role.go   # AWS assume role provider
 │   │   ├── saml.go          # AWS SAML provider
 │   │   └── sso.go           # AWS SSO provider
 │   └── github/              # GitHub providers

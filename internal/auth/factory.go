@@ -19,8 +19,6 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 	switch config.Kind {
 	case "aws/iam-identity-center":
 		return awsProviders.NewSSOProvider(name, config)
-	case "aws/assume-role":
-		return awsProviders.NewAssumeRoleProvider(name, config)
 	case "aws/saml":
 		return awsProviders.NewSAMLProvider(name, config)
 	case "github/oidc":
