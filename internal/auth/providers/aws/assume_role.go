@@ -54,7 +54,7 @@ func (p *assumeRoleProvider) PreAuthenticate(_ types.AuthManager) error {
 }
 
 // Authenticate performs AWS assume role authentication.
-func (p *assumeRoleProvider) Authenticate(ctx context.Context) (*types.Credentials, error) {
+func (p *assumeRoleProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
 	// Load default AWS configuration
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(p.region))
 	if err != nil {
@@ -95,14 +95,12 @@ func (p *assumeRoleProvider) Authenticate(ctx context.Context) (*types.Credentia
 		expiration = result.Credentials.Expiration.Format(time.RFC3339)
 	}
 
-	return &types.Credentials{
-		AWS: &types.AWSCredentials{
-			AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
-			SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
-			SessionToken:    aws.ToString(result.Credentials.SessionToken),
-			Region:          p.region,
-			Expiration:      expiration,
-		},
+	return &types.AWSCredentials{
+		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
+		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+		SessionToken:    aws.ToString(result.Credentials.SessionToken),
+		Region:          p.region,
+		Expiration:      expiration,
 	}, nil
 }
 

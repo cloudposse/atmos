@@ -91,13 +91,11 @@ var authUserConfigureCmd = &cobra.Command{
 		// Save to keyring using schema.Credentials format
 		store := credentials.NewCredentialStore()
 
-		// Create credentials in the proper schema format with AWS wrapper
-		creds := &types.Credentials{
-			AWS: &types.AWSCredentials{
-				AccessKeyID:     accessKeyID,
-				SecretAccessKey: secretAccessKey,
-				MfaArn:          mfaArn,
-			},
+		// Create concrete AWS credentials implementing ICredentials
+		creds := &types.AWSCredentials{
+			AccessKeyID:     accessKeyID,
+			SecretAccessKey: secretAccessKey,
+			MfaArn:          mfaArn,
 		}
 
 		// Store the credentials

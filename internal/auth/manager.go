@@ -100,19 +100,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		}
 	}
 
-	whoamiInfo := m.buildWhoamiInfo(identityName, finalCreds)
-
-	// Add identity environment variables to whoami info for component environment merging
-	if identity, exists := m.config.Identities[identityName]; exists && len(identity.Env) > 0 {
-		if whoamiInfo.Environment == nil {
-			whoamiInfo.Environment = make(map[string]string)
-		}
-		for _, envVar := range identity.Env {
-			whoamiInfo.Environment[envVar.Key] = envVar.Value
-		}
-	}
-
-	return whoamiInfo, nil
+	return m.buildWhoamiInfo(identityName, finalCreds), nil
 }
 
 // GetChain returns the most recently built authentication chain.

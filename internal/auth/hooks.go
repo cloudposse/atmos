@@ -23,23 +23,12 @@ type (
 )
 
 // TerraformPreHook runs before Terraform commands to set up authentication.
-func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
-	// Determine base (atmos) log level.
-	atmosLevel := log.InfoLevel
-	if atmosConfig.Logs.Level != "" {
-		if l, err := log.ParseLevel(atmosConfig.Logs.Level); err == nil {
-			atmosLevel = l
-		}
-	}
-	// Determine auth log level (fallback to atmos level).
-	authLevel := atmosLevel
-	if atmosConfig.Logs.Level != "" {
-		if l, err := log.ParseLevel(atmosConfig.Logs.Level); err == nil {
-			authLevel = l
-		}
-	}
+func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
+	atmosLevel, authLevel := getConfigLogLevels(atmosConfig)
 	log.SetLevel(authLevel)
 	defer log.SetLevel(atmosLevel)
+	log.SetPrefix("atmos-auth")
+	defer log.SetPrefix("")
 
 	// TODO: verify if we need to use Decode, or if we can use the merged auth config directly
 	// Use the merged auth configuration from stackInfo
@@ -99,6 +88,23 @@ func TerraformPreHook(atmosConfig schema.AtmosConfiguration, stackInfo *schema.C
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
-	_ = utils.PrintAsYAMLToFileDescriptor(&atmosConfig, stackInfo.ComponentEnvSection)
+	_ = utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection)
 	return nil
+}
+
+func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (log.Level, log.Level) {
+	atmosLevel := log.GetLevel()
+	if atmosConfig.Logs.Level != "" {
+		if l, err := log.ParseLevel(atmosConfig.Logs.Level); err == nil {
+			atmosLevel = l
+		}
+	}
+	// Determine auth log level (fallback to atmos level).
+	authLevel := atmosLevel
+	if atmosConfig.Auth.Logs.Level != "" {
+		if l, err := log.ParseLevel(atmosConfig.Auth.Logs.Level); err == nil {
+			authLevel = l
+		}
+	}
+	return atmosLevel, authLevel
 }

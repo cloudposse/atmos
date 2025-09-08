@@ -163,5 +163,8 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *sc
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
 	}
+	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
+		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrAwsAuth, err)
+	}
 	return nil
 }

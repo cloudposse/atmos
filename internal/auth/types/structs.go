@@ -55,6 +55,16 @@ func (c *OIDCCredentials) IsExpired() bool { // nolint:revive
 	return false
 }
 
+// GetExpiration implements ICredentials for OIDCCredentials.
+func (c *OIDCCredentials) GetExpiration() (*time.Time, error) {
+	return nil, nil
+}
+
+// BuildWhoamiInfo implements ICredentials for OIDCCredentials.
+func (c *OIDCCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
+	// No additional fields to populate for generic OIDC creds
+}
+
 // WhoamiInfo represents the current effective authentication principal.
 type WhoamiInfo struct {
 	Provider    string            `json:"provider"`

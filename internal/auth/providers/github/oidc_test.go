@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -157,8 +158,9 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, creds)
-				assert.NotNil(t, creds.OIDC)
-				assert.Equal(t, "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.test-jwt-token", creds.OIDC.Token)
+				oidc, ok := creds.(*types.OIDCCredentials)
+				require.True(t, ok, "expected OIDC credentials type")
+				assert.Equal(t, "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.test-jwt-token", oidc.Token)
 			}
 		})
 	}

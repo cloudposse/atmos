@@ -230,7 +230,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	err = auth.TerraformPreHook(atmosConfig, &info)
+	err = auth.TerraformPreHook(&atmosConfig, &info)
 	if err != nil {
 		log.Error("Error executing 'atmos auth terraform pre-hook'", "component", info.ComponentFromArg, "error", err)
 	}

@@ -51,19 +51,20 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 
 	// Get permission set name from principal or spec (backward compatibility)
 	var permissionSetName string
-	var ok bool
-	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
+	var ok1 bool
+	if permissionSetName, ok1 = i.config.Principal["name"].(string); !ok1 || permissionSetName == "" {
 		return nil, fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	// Get account info from principal or spec (backward compatibility)
 	var accountSpec map[string]interface{}
-	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
+	var ok2 bool
+	if accountSpec, ok2 = i.config.Principal["account"].(map[string]interface{}); !ok2 {
 		return nil, fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
-	accountName, ok := accountSpec["name"].(string)
-	if !ok || accountName == "" {
+	accountName, ok3 := accountSpec["name"].(string)
+	if !ok3 || accountName == "" {
 		return nil, fmt.Errorf("%w: account name is required", errUtils.ErrInvalidIdentityConfig)
 	}
 
@@ -185,6 +186,9 @@ func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, stackInfo 
 	// Setup AWS files using shared AWS cloud package
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
+	}
+	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
+		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrAwsAuth, err)
 	}
 	return nil
 }
