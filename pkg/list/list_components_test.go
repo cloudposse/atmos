@@ -88,7 +88,7 @@ func TestGetStackComponents(t *testing.T) {
 			"not-components": map[string]any{},
 		})
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrNoComponentsFound))
+		assert.True(t, errors.Is(err, ErrParseComponents))
 	})
 }
 
