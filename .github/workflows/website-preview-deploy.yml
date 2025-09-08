@@ -81,8 +81,6 @@ jobs:
         run: |
           ./website/algolia/reindex.sh
 
-      
-
       - name: Update deployment status
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
         if: always()
