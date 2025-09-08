@@ -41,11 +41,8 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 		logger.Debug("Coverage package filter", "coverpkg", config.CoverPkg)
 	}
 
-	// Create Bubble Tea program
-	p := tea.NewProgram(&model,
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
+	// Create Bubble Tea program without AltScreen to allow normal terminal scrolling
+	p := tea.NewProgram(&model)
 
 	// Run the TUI
 	finalModel, err := p.Run()
@@ -169,6 +166,52 @@ func prepareTestPackages(config *StreamConfig, logger *log.Logger) error {
 	// Parse test packages from path
 	config.parseTestPackages()
 
+	// Smart test name detection - check if any "packages" are actually test names
+	detectedTestFilter := ""
+	filteredTestPackages := []string{}
+
+	for _, arg := range config.TestPackages {
+		// Check if this looks like a test name rather than a package path
+		if utils.IsLikelyTestName(arg) {
+			// Build up the test filter
+			if detectedTestFilter != "" {
+				detectedTestFilter += "|"
+			}
+			detectedTestFilter += arg
+			logger.Debug("Detected test name in arguments", "test", arg)
+		} else {
+			// It's a package path
+			filteredTestPackages = append(filteredTestPackages, arg)
+		}
+	}
+
+	// If we detected test names, add them to the -run filter
+	if detectedTestFilter != "" {
+		// Check if there's already a -run filter
+		hasRunFlag := false
+		for i, arg := range config.TestArgs {
+			if arg == "-run" && i+1 < len(config.TestArgs) {
+				// Combine with existing filter
+				config.TestArgs[i+1] = config.TestArgs[i+1] + "|" + detectedTestFilter
+				hasRunFlag = true
+				break
+			}
+		}
+		
+		// If no existing -run flag, add it
+		if !hasRunFlag {
+			config.TestArgs = append(config.TestArgs, "-run", detectedTestFilter)
+		}
+		
+		// If no packages were specified, default to ./...
+		if len(filteredTestPackages) == 0 {
+			filteredTestPackages = []string{"./..."}
+		}
+		
+		config.TestPackages = filteredTestPackages
+		logger.Info("Detected test names, using filter", "filter", detectedTestFilter, "packages", filteredTestPackages)
+	}
+
 	// Apply filters to packages
 	filteredPackages, err := utils.FilterPackages(
 		config.TestPackages,
@@ -202,13 +245,34 @@ func loadTestCountFromCache(config *StreamConfig, cmd *cobra.Command, logger *lo
 		return
 	}
 
-	// Convert packages to pattern string for cache lookup
+	// Build cache key including test filter if present
 	pattern := strings.Join(config.TestPackages, " ")
+	
+	// Check if there's a -run filter in test args
+	testFilter := ""
+	for i, arg := range config.TestArgs {
+		if arg == "-run" && i+1 < len(config.TestArgs) {
+			testFilter = config.TestArgs[i+1]
+			break
+		}
+	}
+	
+	// Include filter in pattern for more accurate cache lookup
+	if testFilter != "" {
+		pattern = pattern + " -run " + testFilter
+	}
+	
 	if count, found := cacheManager.GetTestCount(pattern); found {
 		config.EstimatedTestCount = count
-		logger.Debug("Using cached test count", "count", config.EstimatedTestCount)
+		logger.Debug("Using cached test count", "count", config.EstimatedTestCount, "pattern", pattern)
 	} else {
-		logger.Debug("No cached test count available")
+		if testFilter != "" {
+			logger.Info("No cached test count found for filtered pattern",
+				"pattern", strings.Join(config.TestPackages, " "), "filter", testFilter)
+		} else {
+			logger.Info("No cached test count found for pattern, will cache after run",
+				"pattern", pattern, "cache_file", ".gotcha/cache.yaml")
+		}
 	}
 }
 
