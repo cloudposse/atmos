@@ -14,6 +14,8 @@ var (
 	ErrParseStacks = errors.New("could not parse stacks")
 	// ErrParseComponents is returned when component data cannot be parsed.
 	ErrParseComponents = errors.New("could not parse components")
+	// ErrNoComponentsFound is returned when no components are found.
+	ErrNoComponentsFound = errors.New("no components found")
 	// ErrStackNotFound is returned when a requested stack is not found.
 	ErrStackNotFound = errors.New("stack not found")
 	// ErrProcessStack is returned when there's an error processing a stack.
@@ -50,7 +52,7 @@ func getStackComponents(stackData any) ([]string, error) {
 
 	// If no components found, return an error
 	if len(allComponents) == 0 {
-		return nil, ErrParseComponents
+		return nil, ErrNoComponentsFound
 	}
 
 	return allComponents, nil
