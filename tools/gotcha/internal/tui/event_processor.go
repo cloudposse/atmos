@@ -240,12 +240,6 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 
 // processTestOutput handles test output events.
 func (m *TestModel) processTestOutput(event *types.TestEvent, pkg *PackageResult, parentTest string, isSubtest bool) {
-	// Log all output events for debugging
-	if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-		fmt.Fprintf(f, "[OUTPUT] Test=%s, Output=%q\n", event.Test, event.Output)
-		f.Close()
-	}
-
 	// Buffer the output
 	if isSubtest {
 		if parent := pkg.Tests[parentTest]; parent != nil {

@@ -1,5 +1,6 @@
 # Go build artifacts
 gotcha
+gotcha-*
 *.exe
 *.test
 *.prof

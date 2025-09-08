@@ -304,16 +304,16 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 	}
 
 	// Display the test
-	output.WriteString(fmt.Sprintf("  %s %s", styledIcon, TestNameStyle.Render(test.Name)))
+	fmt.Fprintf(output, "  %s %s", styledIcon, TestNameStyle.Render(test.Name))
 
 	// Add duration if available
 	if test.Elapsed > 0 {
-		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed))))
+		fmt.Fprintf(output, " %s", DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
 	}
 
 	// Add skip reason if available
 	if test.Status == "skip" && test.SkipReason != "" {
-		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(fmt.Sprintf("- %s", test.SkipReason))))
+		fmt.Fprintf(output, " %s", DurationStyle.Render(fmt.Sprintf("- %s", test.SkipReason)))
 	}
 
 	// Add subtest progress indicator if it has subtests
@@ -324,7 +324,7 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 		if totalSubtests > 0 {
 			miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
 			percentage := (len(stats.passed) * 100) / totalSubtests
-			output.WriteString(fmt.Sprintf(" %s %d%% passed", miniProgress, percentage))
+			fmt.Fprintf(output, " %s %d%% passed", miniProgress, percentage)
 		}
 	}
 
@@ -356,12 +356,12 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 		if stats != nil {
 			totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
 			if totalSubtests > 0 {
-				output.WriteString(fmt.Sprintf("\n    Subtest Summary: %d passed, %d failed of %d total\n",
-					len(stats.passed), len(stats.failed), totalSubtests))
+				fmt.Fprintf(output, "\n    Subtest Summary: %d passed, %d failed of %d total\n",
+					len(stats.passed), len(stats.failed), totalSubtests)
 
 				// Show passed subtests
 				if len(stats.passed) > 0 {
-					output.WriteString(fmt.Sprintf("\n    %s Passed (%d):\n", PassStyle.Render("✔"), len(stats.passed)))
+					fmt.Fprintf(output, "\n    %s Passed (%d):\n", PassStyle.Render("✔"), len(stats.passed))
 					for _, name := range stats.passed {
 						// Extract just the subtest name, not the full path
 						parts := strings.SplitN(name, "/", 2)
@@ -369,13 +369,13 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 						if len(parts) > 1 {
 							subtestName = parts[1]
 						}
-						output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
+						fmt.Fprintf(output, "      • %s\n", subtestName)
 					}
 				}
 
 				// Show failed subtests with their output
 				if len(stats.failed) > 0 {
-					output.WriteString(fmt.Sprintf("\n    %s Failed (%d):\n", FailStyle.Render("✘"), len(stats.failed)))
+					fmt.Fprintf(output, "\n    %s Failed (%d):\n", FailStyle.Render("✘"), len(stats.failed))
 					for _, name := range stats.failed {
 						// Extract just the subtest name
 						parts := strings.SplitN(name, "/", 2)
@@ -383,7 +383,7 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 						if len(parts) > 1 {
 							subtestName = parts[1]
 						}
-						output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
+						fmt.Fprintf(output, "      • %s\n", subtestName)
 
 						// Show subtest output if available
 						if subtest := test.Subtests[name]; subtest != nil && len(subtest.Output) > 0 {
@@ -405,14 +405,14 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 
 				// Show skipped subtests if any
 				if len(stats.skipped) > 0 {
-					output.WriteString(fmt.Sprintf("\n    %s Skipped (%d):\n", SkipStyle.Render("⊘"), len(stats.skipped)))
+					fmt.Fprintf(output, "\n    %s Skipped (%d):\n", SkipStyle.Render("⊘"), len(stats.skipped))
 					for _, name := range stats.skipped {
 						parts := strings.SplitN(name, "/", 2)
 						subtestName := name
 						if len(parts) > 1 {
 							subtestName = parts[1]
 						}
-						output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
+						fmt.Fprintf(output, "      • %s\n", subtestName)
 					}
 				}
 			}

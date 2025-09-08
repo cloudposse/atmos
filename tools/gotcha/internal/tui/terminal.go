@@ -16,7 +16,6 @@ func getTerminalWidth() int {
 	return width
 }
 
-
 // max returns the maximum of two integers.
 func max(a, b int) int {
 	if a > b {

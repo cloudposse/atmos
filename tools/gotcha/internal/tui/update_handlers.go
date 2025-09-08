@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -118,7 +118,7 @@ func (m *TestModel) handleStreamOutput(msg streamOutputMsg) tea.Cmd {
 
 		// Check if a package has completed and needs to be displayed
 		var cmds []tea.Cmd
-		
+
 		// Display completed packages
 		if event.Action == "pass" || event.Action == "fail" || event.Action == "skip" {
 			if event.Package != "" && event.Test == "" {
@@ -146,7 +146,7 @@ func (m *TestModel) handleStreamOutput(msg streamOutputMsg) tea.Cmd {
 				cmds = append(cmds, cmd)
 			}
 		}
-		
+
 		// Continue reading
 		cmds = append(cmds, m.readNextLine())
 		return tea.Batch(cmds...)

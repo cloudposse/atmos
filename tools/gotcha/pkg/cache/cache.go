@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
@@ -118,7 +118,7 @@ func (m *Manager) load() error {
 }
 
 // save writes the cache file to disk.
-// Note: This method assumes the mutex is already held by the caller
+// Note: This method assumes the mutex is already held by the caller.
 func (m *Manager) saveUnlocked() error {
 	if m.file == nil {
 		m.logger.Warn("Cannot save cache: no cache file initialized")

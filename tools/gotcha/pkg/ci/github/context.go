@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/viper"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/spf13/viper"
 )
 
 // Context represents GitHub Actions environment information.

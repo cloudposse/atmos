@@ -32,7 +32,7 @@ func GenerateAdaptiveComment(summary *types.TestSummary, uuid string, platform s
 	return generateConciseComment(summary, uuid, platform)
 }
 
-// generateFullComment creates the full rich markdown content (same as job summaries)
+// generateFullComment creates the full rich markdown content (same as job summaries).
 func generateFullComment(summary *types.TestSummary, uuid string, platform string) string {
 	var content bytes.Buffer
 
@@ -101,7 +101,7 @@ func generateFullComment(summary *types.TestSummary, uuid string, platform strin
 	return content.String()
 }
 
-// writeSlowestTestsSection adds a collapsible section with the slowest tests
+// writeSlowestTestsSection adds a collapsible section with the slowest tests.
 func writeSlowestTestsSection(output io.Writer, passed []types.TestResult) {
 	if len(passed) == 0 {
 		return
@@ -134,7 +134,7 @@ func writeSlowestTestsSection(output io.Writer, passed []types.TestResult) {
 	fmt.Fprintf(output, "\n</details>\n\n")
 }
 
-// writePackageSummarySection adds a collapsible table with package statistics
+// writePackageSummarySection adds a collapsible table with package statistics.
 func writePackageSummarySection(output io.Writer, summary *types.TestSummary) {
 	// Combine all tests to generate package summary
 	allTests := make([]types.TestResult, 0, len(summary.Passed)+len(summary.Failed)+len(summary.Skipped))
@@ -167,13 +167,13 @@ func writePackageSummarySection(output io.Writer, summary *types.TestSummary) {
 }
 
 // GenerateGitHubComment is a compatibility wrapper that calls GenerateAdaptiveComment
-// Deprecated: Use GenerateAdaptiveComment instead
+// Deprecated: Use GenerateAdaptiveComment instead.
 func GenerateGitHubComment(summary *types.TestSummary, uuid string) string {
 	return GenerateAdaptiveComment(summary, uuid, "")
 }
 
 // generateConciseComment creates a size-optimized version for large test suites
-// This is the original GenerateGitHubComment implementation, renamed
+// This is the original GenerateGitHubComment implementation, renamed.
 func generateConciseComment(summary *types.TestSummary, uuid string, platform string) string {
 	var content bytes.Buffer
 
@@ -425,7 +425,6 @@ func addCoverageWithLimit(output io.Writer, summary *types.TestSummary, maxBytes
 		fmt.Fprintf(output, "|--------|----------|----------|\n")
 		fmt.Fprintf(output, "| Statement Coverage | %s | %s |\n", summary.CoverageData.StatementCoverage, statementDetails)
 		fmt.Fprintf(output, "| Function Coverage | %.1f%% | %s |\n\n", functionCoveragePercent, functionDetails)
-
 	} else if summary.Coverage != "" {
 		fmt.Fprintf(output, "## 📊 Test Coverage\n\n")
 

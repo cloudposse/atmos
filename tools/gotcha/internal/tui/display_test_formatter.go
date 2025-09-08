@@ -39,18 +39,18 @@ func (f *TestFormatter) FormatTest(output *strings.Builder, test *TestResult) {
 // formatTestHeader formats the test name, icon, and basic info.
 func (f *TestFormatter) formatTestHeader(output *strings.Builder, test *TestResult) {
 	icon := f.getStatusIcon(test.Status)
-	output.WriteString(fmt.Sprintf("  %s %s", icon, TestNameStyle.Render(test.Name)))
+	fmt.Fprintf(output, "  %s %s", icon, TestNameStyle.Render(test.Name))
 
 	// Add duration
 	if test.Elapsed > 0 {
 		duration := fmt.Sprintf("(%.2fs)", test.Elapsed)
-		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(duration)))
+		fmt.Fprintf(output, " %s", DurationStyle.Render(duration))
 	}
 
 	// Add skip reason
 	if test.Status == "skip" && test.SkipReason != "" {
 		reason := fmt.Sprintf("- %s", test.SkipReason)
-		output.WriteString(fmt.Sprintf(" %s", DurationStyle.Render(reason)))
+		fmt.Fprintf(output, " %s", DurationStyle.Render(reason))
 	}
 
 	// Add subtest progress
@@ -91,7 +91,7 @@ func (f *TestFormatter) addSubtestProgress(output *strings.Builder, test *TestRe
 
 	progress := f.model.generateSubtestProgress(len(stats.passed), total)
 	percentage := (len(stats.passed) * 100) / total
-	output.WriteString(fmt.Sprintf(" %s %d%% passed", progress, percentage))
+	fmt.Fprintf(output, " %s %d%% passed", progress, percentage)
 }
 
 // shouldShowOutput determines if test output should be displayed.
@@ -175,8 +175,8 @@ func (s *SubtestSummaryFormatter) Format(output *strings.Builder, test *TestResu
 	}
 
 	// Write summary header
-	output.WriteString(fmt.Sprintf("\n    Subtest Summary: %d passed, %d failed of %d total\n",
-		len(s.stats.passed), len(s.stats.failed), total))
+	fmt.Fprintf(output, "\n    Subtest Summary: %d passed, %d failed of %d total\n",
+		len(s.stats.passed), len(s.stats.failed), total)
 
 	// Format each category
 	s.formatPassedSubtests(output)
@@ -190,12 +190,12 @@ func (s *SubtestSummaryFormatter) formatPassedSubtests(output *strings.Builder) 
 		return
 	}
 
-	output.WriteString(fmt.Sprintf("\n    %s Passed (%d):\n", 
-		PassStyle.Render("✔"), len(s.stats.passed)))
-	
+	fmt.Fprintf(output, "\n    %s Passed (%d):\n",
+		PassStyle.Render("✔"), len(s.stats.passed))
+
 	for _, name := range s.stats.passed {
 		subtestName := s.extractSubtestName(name)
-		output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
+		fmt.Fprintf(output, "      • %s\n", subtestName)
 	}
 }
 
@@ -205,14 +205,14 @@ func (s *SubtestSummaryFormatter) formatFailedSubtests(output *strings.Builder, 
 		return
 	}
 
-	output.WriteString(fmt.Sprintf("\n    %s Failed (%d):\n", 
-		FailStyle.Render("✘"), len(s.stats.failed)))
-	
+	fmt.Fprintf(output, "\n    %s Failed (%d):\n",
+		FailStyle.Render("✘"), len(s.stats.failed))
+
 	formatter := s.getOutputFormatter()
-	
+
 	for _, name := range s.stats.failed {
 		subtestName := s.extractSubtestName(name)
-		output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
+		fmt.Fprintf(output, "      • %s\n", subtestName)
 
 		// Show subtest output if available
 		s.formatSubtestOutput(output, test, name, formatter)
@@ -238,12 +238,12 @@ func (s *SubtestSummaryFormatter) formatSkippedSubtests(output *strings.Builder)
 		return
 	}
 
-	output.WriteString(fmt.Sprintf("\n    %s Skipped (%d):\n", 
-		SkipStyle.Render("⊘"), len(s.stats.skipped)))
-	
+	fmt.Fprintf(output, "\n    %s Skipped (%d):\n",
+		SkipStyle.Render("⊘"), len(s.stats.skipped))
+
 	for _, name := range s.stats.skipped {
 		subtestName := s.extractSubtestName(name)
-		output.WriteString(fmt.Sprintf("      • %s\n", subtestName))
+		fmt.Fprintf(output, "      • %s\n", subtestName)
 	}
 }
 

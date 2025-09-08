@@ -5,11 +5,11 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
 var (
-	// globalLogger is the shared logger instance.
+	// GlobalLogger is the shared logger instance.
 	globalLogger *log.Logger
 	once         sync.Once
 )

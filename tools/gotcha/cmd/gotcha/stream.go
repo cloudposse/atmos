@@ -99,7 +99,7 @@ This is the default command when running gotcha without arguments.`,
 // The logic is now split across:
 // - stream_config.go: Configuration extraction and validation
 // - stream_execution.go: Test execution and output processing
-// - stream_orchestrator.go: Main orchestration logic
+// - stream_orchestrator.go: Main orchestration logic.
 func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	return orchestrateStream(cmd, args, logger)
 }
@@ -208,8 +208,8 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Auto-detect CI mode if not explicitly set
 	if !ciMode && config.IsCI() {
 		ciMode = true
-		logger.Debug("CI mode auto-detected", 
-			"CI", viper.GetBool("ci"), 
+		logger.Debug("CI mode auto-detected",
+			"CI", viper.GetBool("ci"),
 			"GITHUB_ACTIONS", viper.GetBool("github.actions"))
 	}
 

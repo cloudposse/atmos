@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock" // Register integration

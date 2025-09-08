@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestNoTestsDetection verifies that "No tests" is displayed for packages without test files
+// TestNoTestsDetection verifies that "No tests" is displayed for packages without test files.
 func TestNoTestsDetection(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -126,7 +126,7 @@ func TestNoTestsDetection(t *testing.T) {
 	}
 }
 
-// captureStreamProcessorOutput runs the StreamProcessor and captures its output
+// captureStreamProcessorOutput runs the StreamProcessor and captures its output.
 func captureStreamProcessorOutput(jsonStream io.Reader) string {
 	// Capture stderr
 	oldStderr := os.Stderr

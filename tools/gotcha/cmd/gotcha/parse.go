@@ -94,8 +94,8 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Auto-detect CI mode if not explicitly set
 	if !ciMode && config.IsCI() {
 		ciMode = true
-		logger.Debug("CI mode auto-detected", 
-			"CI", viper.GetBool("ci"), 
+		logger.Debug("CI mode auto-detected",
+			"CI", viper.GetBool("ci"),
 			"GITHUB_ACTIONS", viper.GetBool("github.actions"))
 	}
 

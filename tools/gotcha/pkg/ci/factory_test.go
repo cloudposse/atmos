@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github" // Register GitHub integration
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"     // Import mock integration

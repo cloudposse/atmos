@@ -10,7 +10,7 @@ import (
 func main() {
 	// Initialize environment variable bindings
 	config.InitEnvironment()
-	
+
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

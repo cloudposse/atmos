@@ -181,7 +181,7 @@ func TestStreamProcessorSubtestOutput(t *testing.T) {
 	}
 }
 
-// Helper to simulate event processing
+// Helper to simulate event processing.
 func processStreamEvent(p *StreamProcessor, event *types.TestEvent) {
 	// Skip package-level events
 	if event.Test == "" {

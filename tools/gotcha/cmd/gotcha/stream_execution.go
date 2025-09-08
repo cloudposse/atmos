@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
@@ -55,24 +55,26 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 	var exitCode int
 	if m, ok := finalModel.(*tui.TestModel); ok {
 		exitCode = m.GetExitCode()
-		
+
 		// Print final summary
 		summary := m.GenerateFinalSummary()
 		if summary != "" {
 			fmt.Fprint(os.Stderr, summary)
 		}
-		
+
 		// Update cache with actual test count if successful
 		if !m.IsAborted() {
 			actualTestCount := m.GetTotalTestCount()
 			if actualTestCount > 0 {
 				cacheManager, err := cache.NewManager(logger)
-				if err == nil && cacheManager != nil {
+				if err != nil {
+					logger.Error("Failed to create cache manager", "error", err)
+				} else if cacheManager != nil {
 					pattern := strings.Join(m.GetTestPackages(), " ")
 					if err := cacheManager.UpdateTestCount(pattern, actualTestCount, len(m.GetTestPackages())); err != nil {
-						logger.Debug("Failed to update test count cache", "error", err)
+						logger.Error("Failed to update test count cache", "error", err)
 					} else {
-						logger.Info("Updated test count cache", "pattern", pattern, "count", actualTestCount)
+						logger.Warn("Updated test count cache", "pattern", pattern, "count", actualTestCount)
 					}
 				}
 			}
@@ -215,17 +217,17 @@ func prepareTestPackages(config *StreamConfig, logger *log.Logger) error {
 				break
 			}
 		}
-		
+
 		// If no existing -run flag, add it
 		if !hasRunFlag {
 			config.TestArgs = append(config.TestArgs, "-run", detectedTestFilter)
 		}
-		
+
 		// If no packages were specified, default to ./...
 		if len(filteredTestPackages) == 0 {
 			filteredTestPackages = []string{"./..."}
 		}
-		
+
 		config.TestPackages = filteredTestPackages
 		logger.Info("Detected test names, using filter", "filter", detectedTestFilter, "packages", filteredTestPackages)
 	}
@@ -247,7 +249,7 @@ func prepareTestPackages(config *StreamConfig, logger *log.Logger) error {
 
 	config.TestPackages = filteredPackages
 	logger.Debug("Test packages", "packages", config.TestPackages)
-	
+
 	return nil
 }
 
@@ -265,7 +267,7 @@ func loadTestCountFromCache(config *StreamConfig, cmd *cobra.Command, logger *lo
 
 	// Build cache key including test filter if present
 	pattern := strings.Join(config.TestPackages, " ")
-	
+
 	// Check if there's a -run filter in test args
 	testFilter := ""
 	for i, arg := range config.TestArgs {
@@ -274,12 +276,12 @@ func loadTestCountFromCache(config *StreamConfig, cmd *cobra.Command, logger *lo
 			break
 		}
 	}
-	
+
 	// Include filter in pattern for more accurate cache lookup
 	if testFilter != "" {
 		pattern = pattern + " -run " + testFilter
 	}
-	
+
 	if count, found := cacheManager.GetTestCount(pattern); found {
 		config.EstimatedTestCount = count
 		logger.Debug("Using cached test count", "count", config.EstimatedTestCount, "pattern", pattern)
@@ -293,4 +295,3 @@ func loadTestCountFromCache(config *StreamConfig, cmd *cobra.Command, logger *lo
 		}
 	}
 }
-

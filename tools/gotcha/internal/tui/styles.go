@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	// Store the current renderer to ensure consistent style creation
+	// Store the current renderer to ensure consistent style creation.
 	currentRenderer *lipgloss.Renderer
 
 	// Test result styles.

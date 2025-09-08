@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 )
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -35,8 +35,8 @@ type StreamConfig struct {
 	CoverPkg     string
 
 	// CI settings
-	CIMode       bool
-	PostStrategy string
+	CIMode          bool
+	PostStrategy    string
 	PostFlagPresent bool
 
 	// Cache settings
@@ -86,7 +86,7 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 
 	// Get CI settings
 	config.CIMode, _ = cmd.Flags().GetBool("ci")
-	
+
 	// Bind and get posting strategy
 	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
 	_ = viper.BindEnv("post-comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
@@ -96,7 +96,7 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 	// Bind other viper settings
 	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
 	_ = viper.BindEnv("github-token", "GITHUB_TOKEN")
-	
+
 	_ = viper.BindPFlag("exclude-mocks", cmd.Flags().Lookup("exclude-mocks"))
 	config.ExcludeMocks = viper.GetBool("exclude-mocks")
 
@@ -129,8 +129,8 @@ func (c *StreamConfig) detectCIMode(logger *log.Logger) {
 		// Using viper for environment detection
 		if viper.GetBool("ci") || viper.GetBool("github.actions") {
 			c.CIMode = true
-			logger.Debug("CI mode auto-detected", 
-				"CI", viper.GetBool("ci"), 
+			logger.Debug("CI mode auto-detected",
+				"CI", viper.GetBool("ci"),
 				"GITHUB_ACTIONS", viper.GetBool("github.actions"))
 		}
 	}
@@ -155,7 +155,7 @@ func (c *StreamConfig) adjustShowFilterForVerbosity(cmd *cobra.Command) {
 			c.ShowFilter = "failed"
 		case "verbose":
 			c.ShowFilter = "all"
-		// "standard" and "with-output" keep existing filter
+			// "standard" and "with-output" keep existing filter
 		}
 	}
 }

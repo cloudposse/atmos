@@ -71,7 +71,7 @@ func TestWriteMarkdownContentWithGitHubActions(t *testing.T) {
 }
 
 // TestOpenGitHubOutputWithEnv tests GitHub output opening
-// Note: openGitHubOutput is not exported, testing through WriteSummary instead
+// Note: openGitHubOutput is not exported, testing through WriteSummary instead.
 func TestGitHubOutputWithEnv(t *testing.T) {
 	// Create temporary file for test.
 	tempDir := t.TempDir()

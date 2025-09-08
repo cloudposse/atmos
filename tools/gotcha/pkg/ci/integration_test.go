@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github" // Register GitHub
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"   // Register Mock
@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestCIAbstractionIntegration tests the complete CI abstraction flow
+// TestCIAbstractionIntegration tests the complete CI abstraction flow.
 func TestCIAbstractionIntegration(t *testing.T) {
 	logger := log.New(nil)
 	logger.SetLevel(log.DebugLevel)
@@ -86,7 +86,7 @@ func TestCIAbstractionIntegration(t *testing.T) {
 	})
 }
 
-// TestCICommentSizing tests that comments handle size limits correctly
+// TestCICommentSizing tests that comments handle size limits correctly.
 func TestCICommentSizing(t *testing.T) {
 	logger := log.New(nil)
 
@@ -119,7 +119,7 @@ func TestCICommentSizing(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestSimulateGotchaCommentPosting simulates how gotcha would post a comment
+// TestSimulateGotchaCommentPosting simulates how gotcha would post a comment.
 func TestSimulateGotchaCommentPosting(t *testing.T) {
 	logger := log.New(nil)
 

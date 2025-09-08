@@ -16,9 +16,9 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	// Import CI integrations to register them
+	// Import CI integrations to register them.
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github"
-	
+
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
@@ -146,7 +146,7 @@ func initConfig() {
 func Execute() error {
 	// Initialize environment configuration first to avoid os.Getenv usage
 	config.InitEnvironment()
-	
+
 	// Initialize the logger immediately so it's available for command creation
 	initGlobalLogger()
 

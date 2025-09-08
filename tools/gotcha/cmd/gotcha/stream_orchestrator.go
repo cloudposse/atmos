@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -22,7 +22,7 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 
 	// Step 2: Validate show filter
 	if !utils.IsValidShowFilter(config.ShowFilter) {
-		return fmt.Errorf("%w: '%s' must be one of: all, failed, passed, skipped, collapsed, none", 
+		return fmt.Errorf("%w: '%s' must be one of: all, failed, passed, skipped, collapsed, none",
 			types.ErrInvalidShowFilter, config.ShowFilter)
 	}
 

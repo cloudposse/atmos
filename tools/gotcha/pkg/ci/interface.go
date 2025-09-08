@@ -3,7 +3,7 @@ package ci
 import (
 	"context"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
 // Provider name constants for CI providers.
@@ -14,7 +14,7 @@ const (
 	// GitLab      = "gitlab"
 	// Bitbucket   = "bitbucket"
 	// AzureDevOps = "azuredevops"
-	// CircleCI    = "circleci"
+	// CircleCI    = "circleci".
 	Unknown = "unknown"
 )
 

@@ -1,7 +1,7 @@
 package ci
 
 import (
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 

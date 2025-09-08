@@ -6,7 +6,7 @@ import (
 
 // Message types for Bubble Tea.
 type (
-	// testCompleteMsg signals that all tests have completed.
+	// TestCompleteMsg signals that all tests have completed.
 	testCompleteMsg struct {
 		exitCode int
 	}
@@ -20,7 +20,7 @@ type testFailMsg struct {
 
 // Additional message types.
 type (
-	// tickMsg is sent periodically to update the UI.
+	// TickMsg is sent periodically to update the UI.
 	tickMsg struct{}
 )
 
