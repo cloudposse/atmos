@@ -77,7 +77,7 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 	log.Debug("SAML pre-auth: chain", "chain", chain)
 	if len(chain) > 1 {
 		identities := manager.GetIdentities()
-		_, exists := identities[chain[1]]
+		identity, exists := identities[chain[1]]
 		log.Debug("SAML pre-auth: identity", "name", chain[1], "exists", exists)
 		if !exists {
 			return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, chain[1])
