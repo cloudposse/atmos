@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -56,7 +57,17 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	// Check if output should be JSON
 	outputFormat := viper.GetString("auth.whoami.output")
 	if outputFormat == "json" {
-		jsonData, err := json.MarshalIndent(whoami, "", "  ")
+		// Redact home directory in environment variable values before output
+		redactedWhoami := *whoami
+		homeDir, _ := os.UserHomeDir()
+		if whoami.Environment != nil && homeDir != "" {
+			redactedEnv := make(map[string]string, len(whoami.Environment))
+			for k, v := range whoami.Environment {
+				redactedEnv[k] = redactHomeDir(v, homeDir)
+			}
+			redactedWhoami.Environment = redactedEnv
+		}
+		jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal JSON: %w", err)
 		}
@@ -83,6 +94,21 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(os.Stderr, "Last Updated: %s\n", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST"))
 
 	return nil
+}
+
+// redactHomeDir replaces occurrences of the homeDir at the start of v with "~" to avoid leaking user paths
+func redactHomeDir(v string, homeDir string) string {
+	if homeDir == "" {
+		return v
+	}
+	// Ensure both have the same path separator
+	if strings.HasPrefix(v, homeDir+string(os.PathSeparator)) {
+		return "~" + v[len(homeDir):]
+	}
+	if v == homeDir {
+		return "~"
+	}
+	return v
 }
 
 func init() {
