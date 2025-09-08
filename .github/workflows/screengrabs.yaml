@@ -35,6 +35,7 @@ jobs:
   build:
     needs: [prepare]
     runs-on: ubuntu-latest
+    environment: demo
     steps:
       - name: Install dependencies
         run: |
@@ -68,11 +69,19 @@ jobs:
           make -C demo/screengrabs build-all install
           git add -A
           git status
+        env:
+          ATMOS_PAGER: "false"
+
+      - uses: actions/create-github-app-token@v1
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.github-app.outputs.token }}
           branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
           title: "Update screengrabs for ${{ needs.prepare.outputs.version }}"
           delete-branch: true
@@ -82,5 +91,7 @@ jobs:
           body: |
             This PR updates the screengrabs for Atmos version ${{ needs.prepare.outputs.version }}.
           base: main
-          labels: "no-release"
+          labels: "no-release"          
+
+
 
