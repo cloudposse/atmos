@@ -973,7 +973,7 @@ type ListColumnConfig struct {
 
 // AuthConfig defines the authentication configuration structure
 type AuthConfig struct {
-	Logs       Logs     	       `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Logs       Logs                `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
 }

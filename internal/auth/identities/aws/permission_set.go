@@ -114,7 +114,6 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 		}
 	}
 
-
 	// Get role credentials for the permission set
 	roleCredsResp, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
 		AccountId:   awssdk.String(accountID),

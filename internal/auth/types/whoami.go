@@ -14,4 +14,3 @@ type WhoamiInfo struct {
 	Credentials ICredentials      `json:"credentials,omitempty"`
 	LastUpdated time.Time         `json:"last_updated"`
 }
-
