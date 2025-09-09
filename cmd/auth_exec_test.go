@@ -181,6 +181,10 @@ func TestAuthExecCmd(t *testing.T) {
 				Use:                "exec",
 				DisableFlagParsing: true,
 				RunE: func(cmd *cobra.Command, args []string) error {
+					// Manually parse flags since DisableFlagParsing is true
+					_ = cmd.Flags().Parse(args)
+					// Use only the non-flag arguments for command execution logic
+					args = cmd.Flags().Args()
 					if len(args) == 0 {
 						return assert.AnError
 					}

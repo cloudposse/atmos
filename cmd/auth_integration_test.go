@@ -27,8 +27,9 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 	authConfig := &schema.AuthConfig{
 		Providers: map[string]schema.Provider{
 			"test-aws-provider": {
-				Kind:   "aws/iam-identity-center",
-				Region: "us-east-1",
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://example.awsapps.com/start",
 			},
 		},
 		Identities: map[string]schema.Identity{

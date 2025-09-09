@@ -46,7 +46,7 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 			},
 			expectedOutput: []string{
 				"AWS User credentials configured successfully",
-				"Identity: test-user",
+				"**Identity**: test-user",
 			},
 		},
 		{
@@ -75,8 +75,8 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 			},
 			expectedOutput: []string{
 				"AWS User credentials configured successfully",
-				"Identity: mfa-user",
-				"MFA ARN: arn:aws:iam::123456789012:mfa/user",
+				"**Identity**: mfa-user",
+				"**MFA ARN**: arn:aws:iam::123456789012:mfa/user",
 			},
 		},
 		{
