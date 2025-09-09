@@ -107,7 +107,7 @@ var (
 	ErrMultipleDefaultIdentities   = errors.New("multiple default identities found")
 	ErrTerraformPreHook            = errors.New("terraform pre-hook failed")
 	ErrNoIdentitiesAvailable       = errors.New("no identities available")
-
+	ErrFailedBuildAuthenticationChain           = errors.New("failed to build authentication chain for identity")
 	ErrInvalidStackConfig = errors.New("invalid stack config")
 
 	ErrInvalidSubcommand = errors.New("invalid subcommand")
