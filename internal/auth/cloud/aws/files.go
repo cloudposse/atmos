@@ -52,9 +52,12 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	}
 
 	// Get or create the profile section
-	section, err := cfg.NewSection(identityName)
+	section, err := cfg.GetSection(identityName)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create profile section: %v", errUtils.ErrAwsAuth, err)
+		section, err = cfg.NewSection(identityName)
+		if err != nil {
+			return fmt.Errorf("%w: failed to create profile section: %v", errUtils.ErrAwsAuth, err)
+		}
 	}
 
 	// Set credentials
@@ -72,8 +75,8 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 		return fmt.Errorf("%w: failed to write credentials file: %v", errUtils.ErrAwsAuth, err)
 	}
 
-	// Set proper file permissions
-	if err := os.Chmod(credentialsPath, PermissionRWX); err != nil {
+	// Set proper file permissions.
+	if err := os.Chmod(credentialsPath, PermissionRW); err != nil {
 		return fmt.Errorf("%w: failed to set credentials file permissions: %v", errUtils.ErrAwsAuth, err)
 	}
 
@@ -92,10 +95,11 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	// Load existing INI file or create new one
 	cfg, err := ini.Load(configPath)
 	if err != nil {
-		// File doesn't exist or is invalid, create new one
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("%w: failed to load config file: %v", errUtils.ErrAwsAuth, err)
+		}
 		cfg = ini.Empty()
 	}
-
 	// Get or create the profile section (AWS config uses "profile name" format, except for "default")
 	var profileSectionName string
 	if identityName == "default" {
@@ -162,9 +166,9 @@ func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName stri
 func (m *AWSFileManager) Cleanup(providerName string) error {
 	providerDir := filepath.Join(m.baseDir, providerName)
 
-	if err := os.RemoveAll(providerDir); err != nil {
-		return fmt.Errorf("failed to cleanup AWS files: %w", err)
-	}
+    if err := os.RemoveAll(providerDir); err != nil {
+        return fmt.Errorf("%w: failed to cleanup AWS files: %v", errUtils.ErrAwsAuth, err)
+    }
 
 	return nil
 }

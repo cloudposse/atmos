@@ -91,7 +91,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.skipInteractive {
-				t.Skip("Skipping interactive test - requires user input")
+				t.Skipf("Skipping interactive test - requires user input.")
 			}
 
 			// Set up CI environment variable

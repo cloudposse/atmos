@@ -106,7 +106,8 @@ func init() {
 		return SupportedFormats, cobra.ShellCompDirectiveNoFileComp
 	})
 
-	_ = viper.BindPFlag("identity", authEnvCmd.Flags().Lookup("identity"))
-	viper.MustBindEnv("identity", "AUTH_IDENTITY", "ATMOS_IDENTITY")
+	_ = viper.BindPFlag("identity", authCmd.PersistentFlags().Lookup("identity"))
+	viper.MustBindEnv("identity", "IDENTITY", "ATMOS_IDENTITY")
 	authCmd.AddCommand(authEnvCmd)
+}
 }

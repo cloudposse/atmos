@@ -33,9 +33,6 @@ func NewOIDCProvider(name string, config *schema.Provider) (types.Provider, erro
 		return nil, fmt.Errorf("%w: provider name is required", errUtils.ErrInvalidProviderConfig)
 	}
 
-	if config.Region == "" {
-		return nil, fmt.Errorf("%w: region is required", errUtils.ErrInvalidProviderConfig)
-	}
 
 	return &oidcProvider{
 		name:   name,

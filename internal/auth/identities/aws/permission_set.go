@@ -124,19 +124,22 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 		return nil, fmt.Errorf("%w: failed to get role credentials: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Convert to our credential format
-	expiration := ""
-	if roleCredsResp.RoleCredentials.Expiration != 0 {
-		expiration = time.Unix(roleCredsResp.RoleCredentials.Expiration/1000, 0).Format(time.RFC3339)
-	}
+  // Convert to our credential format.
+  if roleCredsResp.RoleCredentials == nil {
+      return nil, fmt.Errorf("%w: empty role credentials response", errUtils.ErrAuthenticationFailed)
+  }
+  expiration := ""
+  if roleCredsResp.RoleCredentials.Expiration != 0 {
+      expiration = time.Unix(roleCredsResp.RoleCredentials.Expiration/1000, 0).Format(time.RFC3339)
+  }
 
-	creds := &types.AWSCredentials{
-		AccessKeyID:     awssdk.ToString(roleCredsResp.RoleCredentials.AccessKeyId),
-		SecretAccessKey: awssdk.ToString(roleCredsResp.RoleCredentials.SecretAccessKey),
-		SessionToken:    awssdk.ToString(roleCredsResp.RoleCredentials.SessionToken),
-		Region:          awsBase.Region,
-		Expiration:      expiration,
-	}
+  creds := &types.AWSCredentials{
+      AccessKeyID:     awssdk.ToString(roleCredsResp.RoleCredentials.AccessKeyId),
+      SecretAccessKey: awssdk.ToString(roleCredsResp.RoleCredentials.SecretAccessKey),
+      SessionToken:    awssdk.ToString(roleCredsResp.RoleCredentials.SessionToken),
+      Region:          awsBase.Region,
+      Expiration:      expiration,
+  }
 
 	log.Debug("Permission set authentication successful.", "identity", i.name)
 

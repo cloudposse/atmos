@@ -31,7 +31,7 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials) err
 	}
 
 	if err := fileManager.WriteConfig(providerName, identityName, region, ""); err != nil {
-		return fmt.Errorf("%w: failed to write AWS config", errUtils.ErrAwsAuth)
+		return fmt.Errorf("%w: failed to write AWS config: %v", errUtils.ErrAwsAuth, err)
 	}
 
 	return nil

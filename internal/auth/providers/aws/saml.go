@@ -199,8 +199,7 @@ func (p *samlProvider) authenticateAndGetAssertion(samlClient saml2aws.SAMLClien
 
 // selectRole selects the AWS role (first for now, with logging).
 func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRole {
-	// Use the first role or let user select if multiple
-	// If we have a preferred hint, try to match it
+	// Try preferred hint first, then fall back to the first role.
 	hint := strings.ToLower(p.RoleToAssumeFromAssertion)
 	for _, r := range awsRoles {
 		if strings.Contains(strings.ToLower(r.RoleARN), hint) || strings.Contains(strings.ToLower(r.PrincipalARN), hint) {
@@ -209,6 +208,10 @@ func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRol
 		}
 	}
 
+	if len(awsRoles) > 0 {
+		log.Debug("No role matched hint; falling back to first role.", "role", awsRoles[0].RoleARN)
+		return awsRoles[0]
+	}
 	return nil
 }
 
@@ -231,12 +234,18 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 			// Respect requested duration within STS/account limits.
 			if p.config != nil && p.config.Session != nil && p.config.Session.Duration != "" {
 				if duration, err := time.ParseDuration(p.config.Session.Duration); err == nil {
-					return int32(duration.Seconds())
+					sec := int32(duration.Seconds())
+					if sec < 900 {
+						sec = 900
+					}
+					if sec > 43200 {
+						sec = 43200
+					}
+					return sec
 				}
 			}
 			return 3600
 		}()),
-	}
 
 	result, err := stsClient.AssumeRoleWithSAML(ctx, input)
 	if err != nil {

@@ -42,6 +42,12 @@ func NewAuthManager(
 	if config == nil {
 		return nil, fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
+	if credentialStore == nil {
+		return nil, fmt.Errorf("%w: credential store cannot be nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if validator == nil {
+		return nil, fmt.Errorf("%w: validator cannot be nil", errUtils.ErrInvalidAuthConfig)
+	}
 
 	m := &manager{
 		config:          config,
@@ -97,7 +103,10 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
 	if identity, exists := m.identities[identityName]; exists {
-		providerName, _ := identity.GetProviderName()
+		providerName, perr := identity.GetProviderName()
+		if perr != nil {
+			return nil, fmt.Errorf("%w: failed to resolve provider for identity %q: %v", errUtils.ErrInvalidAuthConfig, identityName, perr)
+		}
 		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
 			return nil, fmt.Errorf("%w: post-authentication hook failed: %v", errUtils.ErrAuthenticationFailed, err)
 		}
@@ -391,7 +400,10 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 	if actualStartIndex == 0 {
 		// Allow provider to inspect the chain and prepare pre-auth preferences
 		if provider, exists := m.providers[m.chain[0]]; exists {
-			_ = provider.PreAuthenticate(m)
+			if err := provider.PreAuthenticate(m); err != nil {
+				return nil, fmt.Errorf("%w: provider %q pre-authentication failed: %v",
+					errUtils.ErrAuthenticationFailed, m.chain[0], err)
+			}
 		}
 		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
 		if err != nil {

@@ -11,8 +11,11 @@ type WhoamiInfo struct {
 	Region      string            `json:"region,omitempty"`
 	Expiration  *time.Time        `json:"expiration,omitempty"`
 	Environment map[string]string `json:"environment,omitempty"`
-	// Credentials holds raw credential material and must never be serialized.
-	// Ensure secrets/tokens are not exposed via JSON or YAML outputs.
-	Credentials ICredentials `json:"-" yaml:"-"`
-	LastUpdated time.Time    `json:"last_updated"`
+type WhoamiInfo struct {
+    // Credentials holds raw credential material and must never be serialized.
+    // Ensure secrets/tokens are not exposed via JSON or YAML outputs.
+    Credentials     ICredentials `json:"-" yaml:"-"`
+    // CredentialsRef holds an opaque keystore handle for rehydrating credentials without exposing secrets.
+    CredentialsRef  string       `json:"credentials_ref,omitempty" yaml:"credentials_ref,omitempty"`
+    LastUpdated     time.Time    `json:"last_updated"`
 }

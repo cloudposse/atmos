@@ -31,7 +31,7 @@ var authUserConfigureCmd = &cobra.Command{
 		// Load atmos config
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
-			return err
+			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
 		}
 
 		// Gather identities that use a provider of type aws/user.
@@ -101,9 +101,9 @@ var authUserConfigureCmd = &cobra.Command{
 		}
 
 		// Store the credentials
-		if err := store.Store(alias, creds); err != nil {
-			return err
-		}
+        if err := store.Store(alias, creds); err != nil {
+            return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAwsAuth, err)
+        }
 		log.Info("Saved credentials to keyring", "alias", alias)
 		return nil
 	},

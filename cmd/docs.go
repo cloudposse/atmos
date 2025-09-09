@@ -118,9 +118,8 @@ var docsCmd = &cobra.Command{
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
-		err := u.OpenUrl(atmosDocsURL)
-		if err != nil {
-			return err
+		if err := u.OpenUrl(atmosDocsURL); err != nil {
+			return fmt.Errorf("open Atmos docs: %w", err)
 		}
 
 		// UI messages should go to stderr; stdout is for data/results.
