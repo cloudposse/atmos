@@ -80,8 +80,8 @@ func TestValidateChains(t *testing.T) {
 		"a": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Identity: "b"}},
 		"b": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Identity: "a"}},
 	}
-    err = v.ValidateChains(identitiesCycle, providers)
-    assert.ErrorIs(t, err, ErrIdentityCycle)
+	err = v.ValidateChains(identitiesCycle, providers)
+	assert.ErrorIs(t, err, ErrIdentityCycle)
 }
 
 func TestValidateAuthConfig(t *testing.T) {
