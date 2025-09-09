@@ -47,7 +47,7 @@ func TestAuthExecCmd(t *testing.T) {
 		},
 		{
 			name: "command execution with specific identity",
-			args: []string{"--identity", "test-identity", "echo", "test output"},
+			args: []string{"--identity", "test-identity", "--", "echo", "test output"},
 			setupConfig: func() *schema.AtmosConfiguration {
 				return &schema.AtmosConfiguration{
 					Auth: schema.AuthConfig{

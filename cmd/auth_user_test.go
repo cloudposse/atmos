@@ -365,7 +365,7 @@ func TestMaskAccessKey(t *testing.T) {
 	}{
 		{
 			input:    "AKIATEST123456789",
-			expected: "AKIA***********6789",
+			expected: "AKIA*********6789",
 		},
 		{
 			input:    "AKIA",
@@ -377,7 +377,7 @@ func TestMaskAccessKey(t *testing.T) {
 		},
 		{
 			input:    "AKIATESTLONGKEY123456789",
-			expected: "AKIA***************6789",
+			expected: "AKIA****************6789",
 		},
 	}
 

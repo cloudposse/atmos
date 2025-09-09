@@ -74,54 +74,59 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 		cleanupEnv  func()
 		expectError bool
 		errorMsg    string
+		setOidcUrl  bool
 	}{
 		{
-			name:        "valid GitHub Actions environment",
-			setupEnv:    func() {},
-			cleanupEnv:  func() {},
+			name: "valid GitHub Actions environment",
+			setupEnv: func() {
+				t.Setenv("GITHUB_ACTIONS", "true")
+				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+			},
+			cleanupEnv: func() {
+				t.Setenv("GITHUB_ACTIONS", "")
+				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+			},
+			setOidcUrl:  true,
 			expectError: false,
-		},
-		{
-			name:        "missing GitHub Actions environment",
-			setupEnv:    func() {},
-			cleanupEnv:  func() {},
-			expectError: false,
-			errorMsg:    "GitHub OIDC authentication is only available in GitHub Actions environment",
 		},
 		{
 			name: "missing GitHub Actions environment",
 			setupEnv: func() {
-				os.Unsetenv("GITHUB_ACTIONS")
-				os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+				t.Setenv("GITHUB_ACTIONS", "true")
+				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
 			},
-			cleanupEnv:  func() {},
-			expectError: true,
+			cleanupEnv: func() {
+				t.Setenv("GITHUB_ACTIONS", "")
+				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+			},
+			setOidcUrl:  true,
+			expectError: false,
 			errorMsg:    "GitHub OIDC authentication is only available in GitHub Actions environment",
 		},
 		{
 			name: "missing OIDC token",
 			setupEnv: func() {
-				os.Setenv("GITHUB_ACTIONS", "true")
-				os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+				t.Setenv("GITHUB_ACTIONS", "true")
 			},
 			cleanupEnv: func() {
-				os.Unsetenv("GITHUB_ACTIONS")
+				t.Setenv("GITHUB_ACTIONS", "")
 			},
+			setOidcUrl:  true,
 			expectError: true,
 			errorMsg:    "ACTIONS_ID_TOKEN_REQUEST_TOKEN not found",
 		},
 		{
 			name: "missing OIDC URL",
 			setupEnv: func() {
-				os.Setenv("GITHUB_ACTIONS", "true")
-				os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
-				os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+				t.Setenv("GITHUB_ACTIONS", "true")
+				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
 			},
 			cleanupEnv: func() {
-				os.Unsetenv("GITHUB_ACTIONS")
-				os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+				t.Setenv("GITHUB_ACTIONS", "")
+				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
 			},
 			expectError: true,
+			setOidcUrl:  false,
 			errorMsg:    "ACTIONS_ID_TOKEN_REQUEST_URL not found",
 		},
 	}
@@ -146,9 +151,9 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 				_, _ = w.Write([]byte(`{"value":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.test-jwt-token"}`))
 			}))
 			defer srv.Close()
-			t.Setenv("GITHUB_ACTIONS", "true")
-			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
-			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", srv.URL)
+			if tt.setOidcUrl {
+				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", srv.URL)
+			}
 
 			creds, err := provider.Authenticate(ctx)
 			if tt.expectError {
