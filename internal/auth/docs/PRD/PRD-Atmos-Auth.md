@@ -871,7 +871,7 @@ identities:
     kind: aws/assume-role
     via: { provider: github-oidc }
     principal:
-      role_arn: arn:aws:iam::123456789012:role/GitHubActionsRole
+      assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
     alias: ci-role
 ```
 
@@ -1050,7 +1050,7 @@ identities:
 - Direct AWS API authentication using access key pairs
 - AWS files written to `~/.aws/atmos/aws-user/credentials` and `~/.aws/atmos/aws-user/config`
 
-#### Azure Role
+#### Azure Role (Not Implemented)
 
 ```yaml
 identities:
@@ -1063,7 +1063,7 @@ identities:
     alias: azure-admin
 ```
 
-#### GCP Service Account Impersonation
+#### GCP Service Account Impersonation (Not Implemented)
 
 ```yaml
 identities:
@@ -1076,7 +1076,7 @@ identities:
     alias: gcp-admin
 ```
 
-#### Okta Application
+#### Okta Application (Not Implemented)
 
 ```yaml
 identities:

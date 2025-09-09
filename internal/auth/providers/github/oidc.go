@@ -58,7 +58,12 @@ func (p *oidcProvider) Kind() string {
 func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
 	log.Info("Starting GitHub OIDC authentication", "provider", p.name)
 
-	// Check if we're running in GitHub Actions
+	// Validate provider configuration early.
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Check if we're running in GitHub Actions.
 	if !p.isGitHubActions() {
 		return nil, fmt.Errorf("%w: GitHub OIDC authentication is only available in GitHub Actions environment", errUtils.ErrAuthenticationFailed)
 	}

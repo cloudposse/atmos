@@ -90,6 +90,7 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 		p.RoleToAssumeFromAssertion = roleArn
 		log.Debug("SAML pre-auth: recorded role to assume from assertion", "role", p.RoleToAssumeFromAssertion)
 	}
+
 	return nil
 }
 

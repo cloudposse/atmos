@@ -173,7 +173,7 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 
 					// Mock user input
 					inputIndex := 0
-					getInput := func(prompt string) string {
+					getInput := func(_ string) string {
 						if inputIndex < len(tt.mockInput) {
 							input := tt.mockInput[inputIndex]
 							inputIndex++

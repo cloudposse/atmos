@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	log "github.com/charmbracelet/log"
@@ -22,19 +23,21 @@ type (
 	Validator       = types.Validator
 )
 
+var (
+	ErrTerraformPreHook  = errors.New("terraform pre-hook failed")
+	ErrNoDefaultIdentity = errors.New("no default identity configured for authentication")
+)
+
 // TerraformPreHook runs before Terraform commands to set up authentication.
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
 	if stackInfo == nil {
+		errUtils.CheckErrorAndPrint(fmt.Errorf("%w: stack info is nil", errUtils.ErrInvalidAuthConfig), "TerraformPreHook", "")
 		return fmt.Errorf("%w: stack info is nil", errUtils.ErrInvalidAuthConfig)
 	}
 	if atmosConfig == nil {
+		errUtils.CheckErrorAndPrint(fmt.Errorf("%w: atmos configuration is nil", errUtils.ErrInvalidAuthConfig), "TerraformPreHook", "")
 		return fmt.Errorf("%w: atmos configuration is nil", errUtils.ErrInvalidAuthConfig)
 	}
-
-	// if !validateAuthConfig(atmosConfig, stackInfo) {
-	// 	log.Debug("No auth configuration found, skipping authentication")
-	// 	return nil
-	// }
 
 	atmosLevel, authLevel := getConfigLogLevels(atmosConfig)
 	log.SetLevel(authLevel)
@@ -42,17 +45,18 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	log.SetPrefix("atmos-auth")
 	defer log.SetPrefix("")
 
-	// TODO: verify if we need to use Decode, or if we can use the merged auth config directly
-	// Use the merged auth configuration from stackInfo
-	// ComponentAuthSection already contains the deep-merged auth config from component + inherits + atmos.yaml
-	// Converted to typed struct when needed
+	// TODO: verify if we need to use Decode, or if we can use the merged auth config directly.
+	// Use the merged auth configuration from stackInfo.
+	// ComponentAuthSection already contains the deep-merged auth config from component + inherits + atmos.yaml.
+	// Converted to typed struct when needed.
 	var authConfig schema.AuthConfig
 	err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig)
 	if err != nil {
-		return fmt.Errorf("%w: failed to decode component auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "TerraformPreHook", "failed to decode component auth config - check atmos.yaml or component auth section")
+		return errUtils.ErrInvalidAuthConfig
 	}
 
-	// Skip if no auth config (check the merged config, not the original)
+	// Skip if no auth config (check the merged config, not the original).
 	if len(authConfig.Providers) == 0 && len(authConfig.Identities) == 0 {
 		log.Debug("No auth configuration found, skipping authentication")
 		return nil
@@ -60,37 +64,43 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	authManager, err := newAuthManager(&authConfig, stackInfo)
 	if err != nil {
-		return err
+		errUtils.CheckErrorAndPrint(errUtils.ErrAuthManager, "TerraformPreHook", "failed to create auth manager")
+		return errUtils.ErrAuthManager
 	}
 
-	// Determine target identity: stack info identity (CLI flag) or default identity
+	// Determine target identity: stack info identity (CLI flag) or default identity.
 	ctx := context.Background()
 	var targetIdentityName string
 
 	if stackInfo.Identity != "" {
-		// This is set by the CLI Flag
+		// This is set by the CLI Flag.
 		targetIdentityName = stackInfo.Identity
 	} else {
 		targetIdentityName, err = authManager.GetDefaultIdentity()
 		if err != nil {
-			return fmt.Errorf("%w: failed to get default identity: %v", errUtils.ErrDefaultIdentity, err)
+			errUtils.CheckErrorAndPrint(errUtils.ErrDefaultIdentity, "TerraformPreHook", "failed to get default identity")
+			return errUtils.ErrDefaultIdentity
 		}
 	}
 	if targetIdentityName == "" {
-		return fmt.Errorf("%w: no default identity configured for authentication", errUtils.ErrDefaultIdentity)
+		errUtils.CheckErrorAndPrint(ErrNoDefaultIdentity, "TerraformPreHook", "Use the identity flag or specify an identity as default.")
+		return ErrNoDefaultIdentity
 	}
 
 	log.Info("Authenticating with identity", "identity", targetIdentityName)
 
-	// Authenticate with target identity
+	// Authenticate with target identity.
 	whoami, err := authManager.Authenticate(ctx, targetIdentityName)
 	if err != nil {
-		return fmt.Errorf("%w: failed to authenticate with identity %q: %v", errUtils.ErrAuthenticationFailed, targetIdentityName, err)
+		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "TerraformPreHook", "failed to authenticate with identity")
+		return errUtils.ErrAuthenticationFailed
 	}
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
-	_ = utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection)
+	err = utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection)
+	errUtils.CheckErrorAndPrint(err, "TerraformPreHook", "failed to print component env section")
+
 	return nil
 }
 
@@ -108,11 +118,11 @@ func validateAuthConfig(atmosConfig *schema.AtmosConfiguration, stackInfo *schem
 }
 
 func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo) (types.AuthManager, error) {
-	// Create auth manager components
+	// Create auth manager components.
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
 
-	// Create auth manager with merged configuration and stack info (so identities can mutate it)
+	// Create auth manager with merged configuration and stack info (so identities can mutate it).
 	authManager, err := NewAuthManager(
 		authConfig,
 		credStore,

@@ -21,12 +21,12 @@ var authWhoamiCmd = &cobra.Command{
 	Long:  "Display information about the current effective authentication principal.",
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return executeAuthWhoamiCommand(cmd, args)
-	},
+	RunE:               executeAuthWhoamiCommand,
 }
 
 func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
+	handleHelpRequest(cmd, args)
+
 	// Load atmos config
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {

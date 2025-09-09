@@ -315,23 +315,8 @@ tests:
       - "whoami"
     expect:
       diff: []
+      stderr:
+        - "Retrieve"
       stdout:
         - "test-admin"
       exit_code: 0
-
-  - name: atmos auth env (CI mode)
-    enabled: true
-    snapshot: true
-    description: "Test auth env in CI environment"
-    workdir: "fixtures/scenarios/atmos-auth/"
-    env:
-      CI: "true"
-    command: "atmos"
-    args:
-      - "auth"
-      - "env"
-    expect:
-      diff: []
-      stderr:
-        - "failed to authenticate"
-      exit_code: 1

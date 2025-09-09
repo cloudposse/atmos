@@ -241,6 +241,9 @@ func TestAuthExecCmd(t *testing.T) {
 			// Verify results
 			if tt.expectedError != "" {
 				assert.Error(t, err)
+				if err != nil {
+					assert.Contains(t, err.Error(), tt.expectedError)
+				}
 			} else {
 				assert.NoError(t, err)
 				if tt.expectedOutput != "" {

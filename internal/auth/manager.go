@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,6 +18,16 @@ import (
 
 const (
 	logKeyIdentity = "identity"
+)
+
+var (
+	ErrNoCredentialsFound          = errors.New("no credentials found for identity")
+	ErrExpiredCredentials          = errors.New("credentials for identity are expired or invalid")
+	ErrNilParam                    = errors.New("parameter cannot be nil")
+	ErrInitializingProviders       = errors.New("failed to initialize providers")
+	ErrInitializingIdentities      = errors.New("failed to initialize identities")
+	ErrInitializingCredentialStore = errors.New("failed to initialize credential store")
+	ErrCircularDependency          = errors.New("circular dependency detected in identity chain")
 )
 
 // manager implements the Authmanager interface.
@@ -40,13 +51,16 @@ func NewAuthManager(
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (types.AuthManager, error) {
 	if config == nil {
-		return nil, fmt.Errorf("%w: auth config cannot be nil", errUtils.ErrInvalidAuthConfig)
+		errUtils.CheckErrorAndPrint(ErrNilParam, "config", "auth config cannot be nil")
+		return nil, ErrNilParam
 	}
 	if credentialStore == nil {
-		return nil, fmt.Errorf("%w: credential store cannot be nil", errUtils.ErrInvalidAuthConfig)
+		errUtils.CheckErrorAndPrint(ErrNilParam, "credentialStore", "credential store cannot be nil")
+		return nil, ErrNilParam
 	}
 	if validator == nil {
-		return nil, fmt.Errorf("%w: validator cannot be nil", errUtils.ErrInvalidAuthConfig)
+		errUtils.CheckErrorAndPrint(ErrNilParam, "validator", "validator cannot be nil")
+		return nil, ErrNilParam
 	}
 
 	m := &manager{
@@ -60,12 +74,14 @@ func NewAuthManager(
 
 	// Initialize providers
 	if err := m.initializeProviders(); err != nil {
-		return nil, fmt.Errorf("%w: failed to initialize providers: %v", errUtils.ErrInvalidAuthConfig, err)
+		errUtils.CheckErrorAndPrint(ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
+		return nil, ErrInitializingProviders
 	}
 
 	// Initialize identities
 	if err := m.initializeIdentities(); err != nil {
-		return nil, fmt.Errorf("%w: failed to initialize identities: %v", errUtils.ErrInvalidAuthConfig, err)
+		errUtils.CheckErrorAndPrint(ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
+		return nil, ErrInitializingIdentities
 	}
 
 	return m, nil
@@ -80,16 +96,19 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
-		return nil, fmt.Errorf("%w: no identity specified", errUtils.ErrInvalidAuthConfig)
+		errUtils.CheckErrorAndPrint(ErrNilParam, "identityName", "no identity specified")
+		return nil, ErrNilParam
 	}
 	if _, exists := m.identities[identityName]; !exists {
-		return nil, fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "identityName", "Identity specified was not found in the auth config.")
+		return nil, errUtils.ErrInvalidAuthConfig
 	}
 
 	// Build the complete authentication chain
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to build authentication chain for identity %q: %v", errUtils.ErrInvalidAuthConfig, identityName, err)
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildAuthenticationChain", "Check your atmos.yaml.")
+		return nil, errUtils.ErrInvalidAuthConfig
 	}
 	// Persist the chain for later retrieval by providers or callers
 	m.chain = chain
@@ -98,17 +117,20 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Perform hierarchical credential validation (bottom-up)
 	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
 	if err != nil {
-		return nil, fmt.Errorf("%w: hierarchical authentication failed: %v", errUtils.ErrAuthenticationFailed, err)
+		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateHierarchical", "")
+		return nil, errUtils.ErrAuthenticationFailed
 	}
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
 	if identity, exists := m.identities[identityName]; exists {
 		providerName, perr := identity.GetProviderName()
 		if perr != nil {
-			return nil, fmt.Errorf("%w: failed to resolve provider for identity %q: %v", errUtils.ErrInvalidAuthConfig, identityName, perr)
+			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderName", "")
+			return nil, errUtils.ErrInvalidAuthConfig
 		}
 		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
-			return nil, fmt.Errorf("%w: post-authentication hook failed: %v", errUtils.ErrAuthenticationFailed, err)
+			errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PostAuthenticate", "")
+			return nil, errUtils.ErrAuthenticationFailed
 		}
 	}
 
@@ -123,15 +145,37 @@ func (m *manager) GetChain() []string {
 
 // Whoami returns information about the specified identity's credentials.
 func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	// Try to retrieve credentials for this specific identity
-	creds, err := m.credentialStore.Retrieve(identityName)
+	// Resolve alias -> actual identity name if needed.
+	found := false
+	resolved := identityName
+	if _, exists := m.identities[identityName]; !exists {
+		for name, ident := range m.config.Identities {
+			if ident.Alias == identityName {
+				resolved = name
+				found = true
+				break
+			}
+		}
+	} else {
+		// Identity is already the actual name.
+		found = true
+	}
+	if !found {
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Whoami", fmt.Sprintf("Identity %q not found", identityName))
+		return nil, errUtils.ErrInvalidAuthConfig
+	}
+
+	// Try to retrieve credentials for the resolved identity.
+	creds, err := m.credentialStore.Retrieve(resolved)
 	if err != nil {
-		return nil, fmt.Errorf("%w: no credentials found for identity %q: %v", errUtils.ErrAuthenticationFailed, identityName, err)
+		errUtils.CheckErrorAndPrint(ErrNoCredentialsFound, "Retrieve", "")
+		return nil, ErrNoCredentialsFound
 	}
 
 	// Check if credentials are expired
 	if expired, err := m.credentialStore.IsExpired(identityName); err != nil || expired {
-		return nil, fmt.Errorf("%w: credentials for identity %q are expired or invalid", errUtils.ErrAuthenticationFailed, identityName)
+		errUtils.CheckErrorAndPrint(ErrExpiredCredentials, "IsExpired", "")
+		return nil, ErrExpiredCredentials
 	}
 
 	return m.buildWhoamiInfo(identityName, creds), nil
@@ -157,7 +201,8 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	case 0:
 		// No default identities found
 		if telemetry.IsCI() {
-			return "", fmt.Errorf("%w: no default identity configured", errUtils.ErrInvalidAuthConfig)
+			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetDefaultIdentity", "no default identity configured")
+			return "", errUtils.ErrInvalidAuthConfig
 		}
 		// In interactive mode, prompt user to choose from all identities
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
@@ -169,7 +214,8 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	default:
 		// Multiple default identities found
 		if telemetry.IsCI() {
-			return "", fmt.Errorf("%w: multiple default identities found: %v", errUtils.ErrInvalidAuthConfig, defaultIdentities)
+			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetDefaultIdentity", fmt.Sprintf("multiple default identities found: %v", defaultIdentities))
+			return "", errUtils.ErrInvalidAuthConfig
 		}
 		// In interactive mode, prompt user to choose from default identities
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
@@ -179,7 +225,8 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 // promptForIdentity prompts the user to select an identity from the given list.
 func (m *manager) promptForIdentity(message string, identities []string) (string, error) {
 	if len(identities) == 0 {
-		return "", fmt.Errorf("%w: no identities available", errUtils.ErrInvalidAuthConfig)
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "promptForIdentity", "no identities available")
+		return "", errUtils.ErrInvalidAuthConfig
 	}
 
 	var selectedIdentity string
@@ -193,7 +240,8 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	)
 
 	if err := form.Run(); err != nil {
-		return "", fmt.Errorf("%w: failed to select identity: %v", errUtils.ErrUnsupportedInputType, err)
+		errUtils.CheckErrorAndPrint(errUtils.ErrUnsupportedInputType, "promptForIdentity", "")
+		return "", errUtils.ErrUnsupportedInputType
 	}
 
 	return selectedIdentity, nil
@@ -223,7 +271,8 @@ func (m *manager) initializeProviders() error {
 	for name, providerConfig := range m.config.Providers {
 		provider, err := NewProvider(name, &providerConfig)
 		if err != nil {
-			return fmt.Errorf("%w: failed to create provider %q: %v", errUtils.ErrInvalidProviderConfig, name, err)
+			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidProviderConfig, "initializeProviders", "")
+			return errUtils.ErrInvalidProviderConfig
 		}
 		m.providers[name] = provider
 	}
@@ -235,7 +284,8 @@ func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := NewIdentity(name, &identityConfig)
 		if err != nil {
-			return fmt.Errorf("%w: failed to create identity %q: %v", errUtils.ErrInvalidIdentityConfig, name, err)
+			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, "initializeIdentities", "")
+			return errUtils.ErrInvalidIdentityConfig
 		}
 		m.identities[name] = identity
 	}
@@ -282,11 +332,13 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	// Build the complete authentication chain
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to build authentication chain for identity %q: %v", errUtils.ErrInvalidAuthConfig, identityName, err)
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildAuthenticationChain", "")
+		return "", errUtils.ErrInvalidAuthConfig
 	}
 
 	if len(chain) == 0 {
-		return "", fmt.Errorf("%w: empty authentication chain for identity %q", errUtils.ErrInvalidAuthConfig, identityName)
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildAuthenticationChain", "")
+		return "", errUtils.ErrInvalidAuthConfig
 	}
 
 	// The first element in the chain is the root provider name
@@ -301,7 +353,8 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 		return identity.Kind, nil
 	}
 
-	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
+	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderKindForIdentity", fmt.Sprintf("provider %q not found in configuration", providerName))
+	return "", errUtils.ErrInvalidAuthConfig
 }
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation.
@@ -401,8 +454,8 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 		// Allow provider to inspect the chain and prepare pre-auth preferences
 		if provider, exists := m.providers[m.chain[0]]; exists {
 			if err := provider.PreAuthenticate(m); err != nil {
-				return nil, fmt.Errorf("%w: provider %q pre-authentication failed: %v",
-					errUtils.ErrAuthenticationFailed, m.chain[0], err)
+				errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PreAuthenticate", "")
+				return nil, errUtils.ErrAuthenticationFailed
 			}
 		}
 		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
@@ -465,13 +518,15 @@ func (m *manager) retrieveCachedCredentials(chain []string, startIndex int) (typ
 func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (types.ICredentials, error) {
 	provider, exists := m.providers[providerName]
 	if !exists {
-		return nil, fmt.Errorf("%w: provider %q not found", errUtils.ErrInvalidAuthConfig, providerName)
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "authenticateWithProvider", "")
+		return nil, errUtils.ErrInvalidAuthConfig
 	}
 
 	log.Debug("Authenticating with provider", "provider", providerName)
 	credentials, err := provider.Authenticate(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: provider %q authentication failed: %v", errUtils.ErrAuthenticationFailed, providerName, err)
+		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateWithProvider", "")
+		return nil, errUtils.ErrAuthenticationFailed
 	}
 
 	// Cache provider credentials
@@ -506,10 +561,8 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		identityStep := m.chain[i]
 		identity, exists := m.identities[identityStep]
 		if !exists {
-			log.Error("Chaining identity failed",
-				"from", bold.Render(m.getChainStepName(i-1)),
-				"to", bold.Render(identityStep))
-			return nil, fmt.Errorf("%w: identity %q not found in chain step %d", errUtils.ErrInvalidAuthConfig, identityStep, i)
+			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "authenticateIdentityChain", fmt.Sprintf("identity %q not found in chain step %d", identityStep, i))
+			return nil, errUtils.ErrInvalidAuthConfig
 		}
 
 		log.Debug("Authenticating identity step", "step", i, logKeyIdentity, identityStep, "kind", identity.Kind())
@@ -517,10 +570,8 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		// Each identity receives credentials from the previous step
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			log.Error("Chaining identity failed",
-				"from", bold.Render(m.getChainStepName(i-1)),
-				"to", bold.Render(identityStep))
-			return nil, fmt.Errorf("%w: identity %q authentication failed at chain step %d: %w", errUtils.ErrAuthenticationFailed, identityStep, i, err)
+			errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateIdentityChain", fmt.Sprintf("identity %q authentication failed at chain step %d: %w", identityStep, i, err))
+			return nil, errUtils.ErrAuthenticationFailed
 		}
 
 		currentCreds = nextCreds
@@ -547,7 +598,8 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 	// Recursively build the chain
 	err := m.buildChainRecursive(identityName, &chain, visited)
 	if err != nil {
-		return nil, err
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildAuthenticationChain", fmt.Sprintf("failed to build authentication chain for identity %q: %v", identityName, err))
+		return nil, errUtils.ErrInvalidAuthConfig
 	}
 
 	// Reverse the chain so provider is first, then identities in authentication order
@@ -563,7 +615,8 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 func (m *manager) buildChainRecursive(identityName string, chain *[]string, visited map[string]bool) error {
 	// Check for circular dependencies
 	if visited[identityName] {
-		return fmt.Errorf("%w: circular dependency detected in identity chain involving %q", errUtils.ErrInvalidAuthConfig, identityName)
+		errUtils.CheckErrorAndPrint(ErrCircularDependency, "buildChainRecursive", fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
+		return ErrCircularDependency
 	}
 	visited[identityName] = true
 
@@ -582,7 +635,8 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	}
 
 	if !exists {
-		return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildChainRecursive", fmt.Sprintf("identity %q not found", identityName))
+		return errUtils.ErrInvalidAuthConfig
 	}
 
 	// AWS User identities don't require via configuration - they are standalone
@@ -592,7 +646,8 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 			*chain = append(*chain, identityName)
 			return nil
 		}
-		return fmt.Errorf("%w: identity %q has no via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, "buildChainRecursive", fmt.Sprintf("identity %q has no via configuration", identityName))
+		return errUtils.ErrInvalidIdentityConfig
 	}
 
 	// Add current identity to chain
@@ -609,7 +664,8 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return m.buildChainRecursive(identity.Via.Identity, chain, visited)
 	}
 
-	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
+	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, "buildChainRecursive", fmt.Sprintf("identity %q has invalid via configuration", identityName))
+	return errUtils.ErrInvalidIdentityConfig
 }
 
 // buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials.
@@ -619,10 +675,11 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	info := &types.WhoamiInfo{
 		Provider:    providerName,
 		Identity:    identityName,
-		Credentials: creds,
 		LastUpdated: time.Now(),
 	}
 
+	// Populate high-level fields from the concrete credential type
+	info.Credentials = creds
 	creds.BuildWhoamiInfo(info)
 	if expTime, err := creds.GetExpiration(); err == nil && expTime != nil {
 		info.Expiration = expTime
@@ -632,6 +689,15 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 		if env, err := identity.Environment(); err == nil {
 			info.Environment = env
 		}
+	}
+
+	// Store credentials in the keystore and set a reference handle
+	// Use the identity name as the opaque handle for retrieval. Only clear
+	// in-memory credentials if storage succeeded to avoid losing access.
+	if err := m.credentialStore.Store(identityName, creds); err == nil {
+		info.CredentialsRef = identityName
+		// Clear raw credentials to avoid accidental serialization of secrets
+		info.Credentials = nil
 	}
 
 	return info
