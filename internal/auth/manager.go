@@ -17,7 +17,10 @@ import (
 )
 
 const (
-	logKeyIdentity = "identity"
+	logKeyIdentity           = "identity"
+	identityNameKey          = "identityName"
+	buildAuthenticationChain = "buildAuthenticationChain"
+	buildChainRecursive      = "buildChainRecursive"
 )
 
 var (
@@ -97,18 +100,18 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
-		errUtils.CheckErrorAndPrint(ErrNilParam, "identityName", "no identity specified")
+		errUtils.CheckErrorAndPrint(ErrNilParam, identityNameKey, "no identity specified")
 		return nil, ErrNilParam
 	}
 	if _, exists := m.identities[identityName]; !exists {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "identityName", "Identity specified was not found in the auth config.")
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
 		return nil, errUtils.ErrInvalidAuthConfig
 	}
 
 	// Build the complete authentication chain
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildAuthenticationChain", "Check your atmos.yaml.")
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "Check your atmos.yaml.")
 		return nil, errUtils.ErrInvalidAuthConfig
 	}
 	// Persist the chain for later retrieval by providers or callers
@@ -315,12 +318,12 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	// Build the complete authentication chain
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildAuthenticationChain", "")
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
 		return "", errUtils.ErrInvalidAuthConfig
 	}
 
 	if len(chain) == 0 {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildAuthenticationChain", "")
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
 		return "", errUtils.ErrInvalidAuthConfig
 	}
 
@@ -377,10 +380,10 @@ func (m *manager) findFirstValidCachedCredentials() int {
 
 		if valid, expTime := m.isCredentialValid(identityName, cachedCreds); valid {
 			if expTime != nil {
-				log.Debug("Found valid cached credentials", "chainIndex", i, "identityName", identityName, "expiration", *expTime)
+				log.Debug("Found valid cached credentials", "chainIndex", i, identityNameKey, identityName, "expiration", *expTime)
 			} else {
 				// Non-AWS credentials or no expiration info, assume valid
-				log.Debug("Found valid cached credentials (non-AWS)", "chainIndex", i, "identityName", identityName)
+				log.Debug("Found valid cached credentials (non-AWS)", "chainIndex", i, identityNameKey, identityName)
 			}
 			return i
 		}
@@ -433,7 +436,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 	}
 
 	// Step 1: Authenticate with provider if needed
-	if actualStartIndex == 0 {
+	if actualStartIndex == 0 { //nolint:nestif
 		// Allow provider to inspect the chain and prepare pre-auth preferences
 		if provider, exists := m.providers[m.chain[0]]; exists {
 			if err := provider.PreAuthenticate(m); err != nil {
@@ -553,8 +556,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		// Each identity receives credentials from the previous step
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateIdentityChain", fmt.Sprintf("identity %q authentication failed at chain step %d: %w", identityStep, i, err))
-			return nil, errUtils.ErrAuthenticationFailed
+			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
 		}
 
 		currentCreds = nextCreds
@@ -581,7 +583,7 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 	// Recursively build the chain
 	err := m.buildChainRecursive(identityName, &chain, visited)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildAuthenticationChain", fmt.Sprintf("failed to build authentication chain for identity %q: %v", identityName, err))
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, fmt.Sprintf("failed to build authentication chain for identity %q: %v", identityName, err))
 		return nil, errUtils.ErrInvalidAuthConfig
 	}
 
@@ -598,7 +600,7 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 func (m *manager) buildChainRecursive(identityName string, chain *[]string, visited map[string]bool) error {
 	// Check for circular dependencies
 	if visited[identityName] {
-		errUtils.CheckErrorAndPrint(ErrCircularDependency, "buildChainRecursive", fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
+		errUtils.CheckErrorAndPrint(ErrCircularDependency, buildChainRecursive, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
 		return ErrCircularDependency
 	}
 	visited[identityName] = true
@@ -618,7 +620,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	}
 
 	if !exists {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "buildChainRecursive", fmt.Sprintf("identity %q not found", identityName))
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildChainRecursive, fmt.Sprintf("identity %q not found", identityName))
 		return errUtils.ErrInvalidAuthConfig
 	}
 
@@ -629,7 +631,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 			*chain = append(*chain, identityName)
 			return nil
 		}
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, "buildChainRecursive", fmt.Sprintf("identity %q has no via configuration", identityName))
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has no via configuration", identityName))
 		return errUtils.ErrInvalidIdentityConfig
 	}
 
@@ -647,7 +649,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return m.buildChainRecursive(identity.Via.Identity, chain, visited)
 	}
 
-	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, "buildChainRecursive", fmt.Sprintf("identity %q has invalid via configuration", identityName))
+	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has invalid via configuration", identityName))
 	return errUtils.ErrInvalidIdentityConfig
 }
 

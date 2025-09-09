@@ -29,13 +29,13 @@ var (
 )
 
 // TerraformPreHook runs before Terraform commands to set up authentication.
+//
+//nolint:revive,funlen
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
 	if stackInfo == nil {
-		errUtils.CheckErrorAndPrint(fmt.Errorf("%w: stack info is nil", errUtils.ErrInvalidAuthConfig), "TerraformPreHook", "")
 		return fmt.Errorf("%w: stack info is nil", errUtils.ErrInvalidAuthConfig)
 	}
 	if atmosConfig == nil {
-		errUtils.CheckErrorAndPrint(fmt.Errorf("%w: atmos configuration is nil", errUtils.ErrInvalidAuthConfig), "TerraformPreHook", "")
 		return fmt.Errorf("%w: atmos configuration is nil", errUtils.ErrInvalidAuthConfig)
 	}
 
@@ -45,10 +45,6 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	log.SetPrefix("atmos-auth")
 	defer log.SetPrefix("")
 
-	// TODO: verify if we need to use Decode, or if we can use the merged auth config directly.
-	// Use the merged auth configuration from stackInfo.
-	// ComponentAuthSection already contains the deep-merged auth config from component + inherits + atmos.yaml.
-	// Converted to typed struct when needed.
 	var authConfig schema.AuthConfig
 	err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig)
 	if err != nil {
@@ -92,14 +88,15 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	// Authenticate with target identity.
 	whoami, err := authManager.Authenticate(ctx, targetIdentityName)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "TerraformPreHook", "failed to authenticate with identity")
-		return errUtils.ErrAuthenticationFailed
+		return fmt.Errorf("failed to authenticate with identity %q: %w", targetIdentityName, err)
 	}
 
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
 	err = utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection)
-	errUtils.CheckErrorAndPrint(err, "TerraformPreHook", "failed to print component env section")
+	if err != nil {
+		return fmt.Errorf("failed to print component env section: %w", err)
+	}
 
 	return nil
 }
