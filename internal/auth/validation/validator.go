@@ -19,6 +19,9 @@ func NewValidator() types.Validator {
 	return &validator{}
 }
 
+// ErrIdentityCycle signals a circular dependency in an identity chain.
+var ErrIdentityCycle = errors.New("identity cycle detected")
+
 // ValidateAuthConfig validates the entire auth configuration.
 func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 	if config == nil {
@@ -157,7 +160,8 @@ func (v *validator) ValidateChains(identities map[string]*schema.Identity, provi
 	for name := range identities {
 		if !visited[name] {
 			if v.hasCycle(name, graph, visited, recStack) {
-				return fmt.Errorf("%w: circular dependency detected in identity chain involving %q", errUtils.ErrInvalidAuthConfig, name)
+				// Return a domain-specific sentinel to enable precise error checks by callers/tests
+				return fmt.Errorf("%w: circular dependency detected in identity chain involving %q", ErrIdentityCycle, name)
 			}
 		}
 	}
