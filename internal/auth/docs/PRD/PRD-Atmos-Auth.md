@@ -1353,7 +1353,7 @@ identities:
 providers:
   cplive-sso:
     kind: aws/iam-identity-center
-    start_url: https://cplive.awsapps.com/start/
+    start_url: https://mock
 
 identities:
   managers:
@@ -1367,7 +1367,7 @@ identities:
     kind: aws/assume-role
     via: { identity: managers }
     principal:
-      role_arn: arn:aws:iam::539916835077:role/cplive-plat-gbl-sandbox-admin
+      role_arn: arn:aws:iam::111111111111:role/ExampleRole
 ```
 
 **Authentication Flow:**

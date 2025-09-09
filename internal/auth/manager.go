@@ -85,11 +85,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to build authentication chain for identity %q: %v", errUtils.ErrInvalidAuthConfig, identityName, err)
 	}
-
-	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
-
 	// Persist the chain for later retrieval by providers or callers
 	m.chain = chain
+	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
 	// Perform hierarchical credential validation (bottom-up)
 	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
