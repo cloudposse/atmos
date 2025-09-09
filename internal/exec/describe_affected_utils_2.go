@@ -445,6 +445,7 @@ func addDependentsToAffected(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	dependentsStack string,
 ) error {
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
@@ -457,6 +458,7 @@ func addDependentsToAffected(
 			processTemplates,
 			processYamlFunctions,
 			skip,
+			dependentsStack,
 		)
 		if err != nil {
 			return err
@@ -471,6 +473,7 @@ func addDependentsToAffected(
 				processTemplates,
 				processYamlFunctions,
 				skip,
+				dependentsStack,
 			)
 			if err != nil {
 				return err
@@ -492,6 +495,7 @@ func addDependentsToDependents(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	dependentsStack string,
 ) error {
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
@@ -504,6 +508,7 @@ func addDependentsToDependents(
 			processTemplates,
 			processYamlFunctions,
 			skip,
+			dependentsStack,
 		)
 		if err != nil {
 			return err
@@ -518,6 +523,7 @@ func addDependentsToDependents(
 				processTemplates,
 				processYamlFunctions,
 				skip,
+				dependentsStack,
 			)
 			if err != nil {
 				return err

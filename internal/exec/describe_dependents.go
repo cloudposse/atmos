@@ -26,6 +26,7 @@ type DescribeDependentsExecProps struct {
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
+	DependentsStack      string
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -43,6 +44,7 @@ type describeDependentsExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
+		dependentsStack string,
 	) ([]schema.Dependent, error)
 	newPageCreator        pager.PageCreator
 	isTTYSupportForStdout func() bool
@@ -73,6 +75,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		describeDependentsExecProps.ProcessTemplates,
 		describeDependentsExecProps.ProcessYamlFunctions,
 		describeDependentsExecProps.Skip,
+		describeDependentsExecProps.DependentsStack,
 	)
 	if err != nil {
 		return err
@@ -110,6 +113,7 @@ func ExecuteDescribeDependents(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	dependentsStack string,
 ) ([]schema.Dependent, error) {
 	if atmosConfig == nil {
 		return nil, errUtils.ErrAtmosConfigIsNil
@@ -121,7 +125,7 @@ func ExecuteDescribeDependents(
 	// Get all stacks with all components
 	stacks, err := ExecuteDescribeStacks(
 		atmosConfig,
-		"",
+		dependentsStack,
 		nil,
 		nil,
 		nil,
