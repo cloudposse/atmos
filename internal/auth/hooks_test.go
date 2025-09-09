@@ -41,6 +41,7 @@ func (s *stubAuthManager) ListProviders() []string { return []string{"prov"} }
 func (s *stubAuthManager) GetIdentities() map[string]schema.Identity {
 	return map[string]schema.Identity{}
 }
+
 func (s *stubAuthManager) GetProviders() map[string]schema.Provider {
 	return map[string]schema.Provider{}
 }
