@@ -13,9 +13,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var (
-	SupportedFormats = []string{"json", "export", "dotenv"}
-)
+var SupportedFormats = []string{"json", "export", "dotenv"}
 
 // authEnvCmd exports authentication environment variables
 var authEnvCmd = &cobra.Command{
