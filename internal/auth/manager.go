@@ -32,6 +32,10 @@ var (
 	ErrInitializingCredentialStore = errors.New("failed to initialize credential store")
 	ErrCircularDependency          = errors.New("circular dependency detected in identity chain")
 	ErrIdentityNotFound            = errors.New("identity not found")
+	ErrNoDefaultIdentity           = errors.New("no default identity configured for authentication")
+	ErrMultipleDefaultIdentities   = errors.New("multiple default identities found")
+	ErrTerraformPreHook            = errors.New("terraform pre-hook failed")
+	ErrNoIdentitiesAvailable       = errors.New("no identities available")
 )
 
 // manager implements the Authmanager interface.
@@ -187,8 +191,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	case 0:
 		// No default identities found
 		if telemetry.IsCI() {
-			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetDefaultIdentity", "no default identity configured")
-			return "", errUtils.ErrInvalidAuthConfig
+			return "", ErrNoDefaultIdentity
 		}
 		// In interactive mode, prompt user to choose from all identities
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
@@ -198,10 +201,9 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 		return defaultIdentities[0], nil
 
 	default:
-		// Multiple default identities found
+		// Multiple default identities found.
 		if telemetry.IsCI() {
-			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetDefaultIdentity", fmt.Sprintf("multiple default identities found: %v", defaultIdentities))
-			return "", errUtils.ErrInvalidAuthConfig
+			return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrMultipleDefaultIdentities, fmt.Sprintf("`%q`", defaultIdentities))
 		}
 		// In interactive mode, prompt user to choose from default identities
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
@@ -211,8 +213,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 // promptForIdentity prompts the user to select an identity from the given list.
 func (m *manager) promptForIdentity(message string, identities []string) (string, error) {
 	if len(identities) == 0 {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "promptForIdentity", "no identities available")
-		return "", errUtils.ErrInvalidAuthConfig
+		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, ErrNoIdentitiesAvailable)
 	}
 
 	var selectedIdentity string

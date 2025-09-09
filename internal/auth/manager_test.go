@@ -62,7 +62,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 				"identity3": {Kind: "aws/user", Default: false},
 			},
 			isCI:          true,
-			expectedError: "multiple default identities found: [identity1 identity2]",
+			expectedError: "multiple default identities found: `[\"identity1\" \"identity2\"]`",
 		},
 		{
 			name: "multiple default identities - interactive mode",

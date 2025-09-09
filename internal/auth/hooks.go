@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	log "github.com/charmbracelet/log"
@@ -21,11 +20,6 @@ type (
 	AuthManager     = types.AuthManager
 	CredentialStore = types.CredentialStore
 	Validator       = types.Validator
-)
-
-var (
-	ErrTerraformPreHook  = errors.New("terraform pre-hook failed")
-	ErrNoDefaultIdentity = errors.New("no default identity configured for authentication")
 )
 
 const hookOpTerraformPreHook = "TerraformPreHook"
