@@ -15,7 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-const OIDC_TIMEOUT = 10
+const OidcTimeout = 10
 
 // oidcProvider implements GitHub OIDC authentication.
 type oidcProvider struct {
@@ -130,7 +130,7 @@ func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToke
 	req.URL.RawQuery = q.Encode()
 	req.Header.Set("Authorization", "bearer "+requestToken)
 	req.Header.Set("Accept", "application/json")
-	client := &http.Client{Timeout: OIDC_TIMEOUT * time.Second}
+	client := &http.Client{Timeout: OidcTimeout * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: call OIDC endpoint: %w", errUtils.ErrAuthenticationFailed, err)

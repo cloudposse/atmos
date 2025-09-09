@@ -8,24 +8,17 @@ The Atmos Auth package provides a comprehensive authentication framework for clo
 
 ```
 internal/auth/
-├── cloud/                    # Cloud provider implementations
-│   ├── aws/                 # AWS-specific cloud provider
-│   ├── azure/               # Azure-specific cloud provider (placeholder)
-│   ├── gcp/                 # GCP-specific cloud provider (placeholder)
-│   ├── factory.go           # Cloud provider factory
-│   ├── interfaces.go        # Cloud provider interfaces
-│   └── manager.go           # Cloud provider manager
-├── config/                  # Configuration merging
-│   └── merger.go            # Auth config merger
+├── cloud/                    # Cloud-specific helpers and providers
+│   └── aws/                  # AWS-specific implementation
+│       ├── files.go          # Helpers for AWS credentials/config file management
+│       ├── provider.go       # AWS CloudProvider implementation
+│       └── setup.go          # Setup helpers used by identities
 ├── credentials/             # Credential storage
 │   └── store.go             # Encrypted credential store
 ├── docs/                    # Documentation
 │   ├── ARCHITECTURE.md      # This file
 │   ├── ADDING_PROVIDERS.md  # Guide for adding new providers
 │   └── USER_GUIDE.md        # User getting started guide
-├── environment/             # Environment management
-│   ├── aws_files.go         # AWS credentials/config file management
-│   └── merger.go            # Environment variable merging
 ├── identities/              # Identity implementations
 │   └── aws/                 # AWS identity types
 │       ├── assume_role.go   # AWS assume role identity
@@ -39,7 +32,9 @@ internal/auth/
 │       └── oidc.go          # GitHub OIDC provider
 ├── types/                   # Core interfaces and types
 │   └── interfaces.go        # All auth interfaces
-├── ui/                      # User interface components
+├── ui/                      # User interface components (currently empty)
+├── utils/                   # Shared utilities
+│   └── env.go               # Helper to append env vars to stack
 ├── validation/              # Configuration validation
 │   └── validator.go         # Auth config validator
 ├── factory.go               # Provider/Identity factory
@@ -55,25 +50,36 @@ The central orchestrator that manages the entire authentication process:
 - **Authenticate()**: Performs authentication for a specified identity
 - **Whoami()**: Returns information about identity credentials
 - **GetDefaultIdentity()**: Handles multiple defaults with CI detection
-- **SetupAWSFiles()**: Manages AWS credential/config files
+- **GetProviderForIdentity()**: Resolves the root provider for an identity
+- **GetProviderKindForIdentity()**: Returns provider kind via chain resolution
+- **GetChain()**: Exposes the last-built chain for inspection
 
 ### Provider
 Represents authentication providers (e.g., AWS SSO, SAML):
+- **Kind()**: Returns provider kind (e.g., "aws/iam-identity-center")
+- **Name()**: Returns configured provider name
+- **PreAuthenticate()**: Inspect chain before auth and set preferences
 - **Authenticate()**: Performs provider-level authentication
-- **Kind()**: Returns provider type (e.g., "aws/iam-identity-center")
 - **Validate()**: Validates provider configuration
+- **Environment()**: Returns provider-level environment variables
 
 ### Identity
 Represents authentication identities that use provider credentials:
-- **Authenticate()**: Performs identity-level authentication using base credentials
 - **Kind()**: Returns identity type (e.g., "aws/permission-set")
-- **Merge()**: Merges with component-level overrides
+- **GetProviderName()**: Resolves root provider name for this identity
+- **Authenticate()**: Performs identity-level authentication using base credentials
+- **Validate()**: Validates identity configuration
+- **Environment()**: Returns identity-level environment variables
+- **PostAuthenticate()**: Perform file/env setup after successful auth
 
 ### CloudProvider
-Manages cloud-specific operations:
-- **SetupEnvironment()**: Sets up cloud-specific environment variables and files
-- **GetEnvironmentVariables()**: Returns environment variables for tools
-- **ValidateCredentials()**: Validates credentials for the cloud provider
+Defines cloud-specific operations. Implemented for AWS in `cloud/aws/provider.go`:
+- **GetName()**: Returns cloud name (e.g., "aws")
+- **SetupEnvironment()**: Sets up cloud-specific files and env vars
+- **GetEnvironmentVariables()**: Returns env vars for tools
+- **ValidateCredentials()**: Validates cloud-specific credentials
+- **Cleanup()**: Optional cleanup of temporary resources
+- **GetCredentialFilePaths()**: Paths to managed credential files
 
 ## Authentication Flow
 
@@ -99,12 +105,11 @@ for each identity in chain {
 ```
 
 ### 3. Environment Setup
+Environment setup is performed by identities via `PostAuthenticate` using the shared AWS helpers:
 ```go
-// Setup cloud-specific environment
-cloudProvider.SetupEnvironment(ctx, providerName, identityName, creds)
-
-// Set environment variables
-envVars := cloudProvider.GetEnvironmentVariables(providerName, identityName)
+// Inside Identity.PostAuthenticate
+aws.SetupFiles(providerName, identityName, creds)
+aws.SetEnvironmentVariables(stackInfo, providerName, identityName)
 ```
 
 ## Key Design Patterns
@@ -121,7 +126,7 @@ envVars := cloudProvider.GetEnvironmentVariables(providerName, identityName)
 
 ### Strategy Pattern
 - Different cloud providers implement the same `CloudProvider` interface
-- Allows switching between AWS, Azure, GCP implementations
+- AWS is implemented today; additional providers can follow the same contract
 - Environment setup varies by cloud provider
 
 ### Repository Pattern
@@ -198,6 +203,12 @@ identities:
 - Mock implementations for all interfaces
 - Test credential generation utilities
 - Environment isolation for tests
+
+## Notes on Current Scope
+
+- The `CloudProvider` interface is defined in `internal/auth/types/interfaces.go` and implemented for AWS in `internal/auth/cloud/aws/provider.go`.
+- A general `CloudProviderFactory` and `CloudProviderManager` are defined as interfaces but not yet wired into the runtime. Identities currently perform file/env setup directly via `cloud/aws/setup.go` helpers in their `PostAuthenticate` methods.
+- The previous `config/` and `environment/` packages mentioned in older docs do not exist; environment merging is handled via `internal/auth/utils/env.go` and stack info.
 
 ## Performance Considerations
 

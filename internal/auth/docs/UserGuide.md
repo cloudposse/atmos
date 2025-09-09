@@ -12,6 +12,11 @@ Add authentication configuration to your `atmos.yaml`:
 
 ```yaml
 auth:
+  # Configure logging
+  ## Optional, defaults to Atmos log level
+  logs:
+    level: Info
+
   providers:
     my-sso:
       kind: aws/iam-identity-center
@@ -27,7 +32,7 @@ auth:
       principal:
         name: AdminAccess
         account:
-          name: "123456789012"
+          name: "account-name"
 ```
 
 Notes:
@@ -142,6 +147,9 @@ auth:
 
 ### AWS SAML Authentication
 
+> ![NOTE]
+> Kinda `aws/saml` requires the next identity to be of kind `aws/assume-role`. This is because the assume_role is the chosen role to sign into after the SAML authentication.
+
 ```yaml
 auth:
   providers:
@@ -149,6 +157,7 @@ auth:
       kind: aws/saml
       region: us-east-1
       url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
+      idp_arn: arn:aws:iam::123456789012:saml-provider/okta-saml
 
   identities:
     saml-admin:
@@ -158,7 +167,6 @@ auth:
         provider: okta-saml
       principal:
         assume_role: arn:aws:iam::123456789012:role/AdminRole
-        session_name: okta-saml-session
 ```
 
 ### GitHub Actions OIDC
@@ -169,6 +177,8 @@ auth:
     github-oidc:
       kind: github/oidc
       region: us-east-1 # Required
+      spec:
+        audience: sts.us-east-1.amazonaws.com
 
   identities:
     github-deploy:
@@ -178,7 +188,6 @@ auth:
         provider: github-oidc
       principal:
         assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
-        session_name: github-actions
 ```
 
 ### AWS User (Break-glass)
@@ -193,6 +202,19 @@ auth:
         secret_access_key: !env EMERGENCY_AWS_SECRET_ACCESS_KEY
         region: us-east-1
 ```
+
+Alternatively
+
+```yaml
+auth:
+  identities:
+    emergency-user:
+      kind: aws/user
+      credentials:
+        region: us-east-1
+```
+
+Then run `atmos auth user configure` to configure the credentials on the keychain.
 
 ## CLI Commands
 
@@ -225,17 +247,6 @@ atmos auth exec -- terraform plan
 atmos auth user configure
 ```
 
-### Help and Information
-
-```bash
-# General auth help
-atmos auth --help
-
-# Command-specific help
-atmos auth login --help
-atmos auth env --help
-```
-
 ## Component-Level Configuration
 
 Override authentication settings for specific components:
@@ -253,7 +264,6 @@ components:
               provider: my-sso
             principal:
               assume_role: arn:aws:iam::123456789012:role/MyAppRole
-        default_identity: custom-role
 ```
 
 ## Environment Variable Formats
@@ -317,13 +327,6 @@ $ atmos auth whoami
     staging-admin
 ```
 
-**CI Mode**: Returns an error
-
-```bash
-$ CI=true atmos auth whoami
-Error: multiple default identities found: [dev-admin, prod-admin]
-```
-
 ### No Defaults
 
 **Interactive Mode**: Shows all available identities
@@ -334,13 +337,6 @@ $ atmos auth whoami
   ▸ dev-admin
     prod-admin
     staging-admin
-```
-
-**CI Mode**: Returns an error
-
-```bash
-$ CI=true atmos auth whoami
-Error: no default identity configured
 ```
 
 ## Credential Storage
@@ -356,16 +352,6 @@ Atmos securely stores credentials using your operating system's keyring:
 - Credentials are automatically refreshed when expired
 - You can check expiration with `atmos auth whoami`
 - Manual refresh: `atmos auth login --identity <name>`
-
-### Clearing Credentials
-
-```bash
-# Clear all cached credentials
-atmos auth logout
-
-# Clear specific identity credentials
-atmos auth logout --identity prod-admin
-```
 
 ## AWS File Management
 
@@ -436,11 +422,6 @@ atmos auth exec --identity <name> -- env | grep AWS
 
 Enable debug logging for detailed troubleshooting:
 
-```bash
-export ATMOS_LOG_LEVEL=Debug
-atmos auth login --identity <name>
-```
-
 ### Logs Configuration
 
 Configure logging in `atmos.yaml`:
@@ -485,8 +466,6 @@ workflows:
 - name: Deploy infrastructure
   run: |
     atmos terraform apply myapp -s prod
-  env:
-    CI: true # Ensures non-interactive mode
 ```
 
 ### GitLab CI
@@ -496,8 +475,6 @@ deploy:
   script:
     - atmos auth validate
     - atmos terraform apply myapp -s prod
-  variables:
-    CI: "true"
 ```
 
 ## Security Best Practices
@@ -521,53 +498,3 @@ deploy:
 - Use different identities for different environments
 - Separate providers for different security domains
 - Implement proper identity chaining for cross-account access
-
-## Advanced Usage
-
-### Custom Session Names
-
-```yaml
-identities:
-  admin:
-    kind: aws/assume-role
-    principal:
-      assume_role: arn:aws:iam::123456789012:role/AdminRole
-      session_name: "atmos-{{.User}}-{{.Timestamp}}"
-```
-
-### Conditional Configuration
-
-Use environment templating for dynamic configuration:
-
-```yaml
-identities:
-  dynamic-user:
-    kind: aws/user
-    credentials:
-      access_key_id: !env AWS_ACCESS_KEY_ID_${ENVIRONMENT}
-      secret_access_key: !env AWS_SECRET_ACCESS_KEY_${ENVIRONMENT}
-```
-
-### Identity Inheritance
-
-```yaml
-identities:
-  base-admin:
-    kind: aws/permission-set
-    via:
-      provider: sso
-    principal:
-      name: AdminAccess
-      account:
-        name: "123456789012"
-
-  # Inherits from base-admin but assumes different role
-  cross-account-admin:
-    kind: aws/assume-role
-    via:
-      identity: base-admin
-    principal:
-      assume_role: arn:aws:iam::999999999999:role/CrossAccountAdmin
-```
-
-This guide covers the essential aspects of using Atmos Auth. For more advanced scenarios or troubleshooting, refer to the architecture documentation and provider-specific guides.
