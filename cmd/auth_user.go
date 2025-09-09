@@ -73,13 +73,13 @@ var authUserConfigureCmd = &cobra.Command{
 			huh.NewGroup(
 				huh.NewInput().Title("AWS Access Key ID").Value(&accessKeyID).Validate(func(s string) error {
 					if s == "" {
-						return fmt.Errorf("required")
+						return errUtils.ErrMissingInput
 					}
 					return nil
 				}),
-				huh.NewInput().Title("AWS Secret Access Key").Value(&secretAccessKey).Password(true).Validate(func(s string) error {
+				huh.NewInput().Title("AWS Secret Access Key").Value(&secretAccessKey).EchoMode(huh.EchoModePassword).Validate(func(s string) error {
 					if s == "" {
-						return fmt.Errorf("required")
+						return errUtils.ErrMissingInput
 					}
 					return nil
 				}),

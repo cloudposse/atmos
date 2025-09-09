@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// awsCmd executes 'aws eks' CLI commands
+// awsCmd executes 'aws eks' CLI commands.
 var awsEksCmd = &cobra.Command{
 	Use:   "eks",
 	Short: "Run AWS EKS CLI commands for cluster management",

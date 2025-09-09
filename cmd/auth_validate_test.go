@@ -192,7 +192,7 @@ func TestAuthValidateCmd(t *testing.T) {
 	}
 }
 
-// mockValidateAuthConfig provides mock validation logic for testing
+// mockValidateAuthConfig provides mock validation logic for testing.
 func mockValidateAuthConfig(config *schema.AuthConfig) error {
 	// Check for missing regions in AWS providers
 	for name, provider := range config.Providers {

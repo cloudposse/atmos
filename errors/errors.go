@@ -97,4 +97,5 @@ var (
 	ErrSubcommandFailed  = errors.New("subcommand failed")
 
 	ErrInvalidArgumentError = errors.New("invalid argument error")
+	ErrMissingInput         = errors.New("missing input")
 )

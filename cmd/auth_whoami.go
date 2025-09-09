@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// authWhoamiCmd shows current authentication status
+// authWhoamiCmd shows current authentication status.
 var authWhoamiCmd = &cobra.Command{
 	Use:   "whoami",
 	Short: "Show current authentication status",
@@ -97,7 +97,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// redactHomeDir replaces occurrences of the homeDir at the start of v with "~" to avoid leaking user paths
+// redactHomeDir replaces occurrences of the homeDir at the start of v with "~" to avoid leaking user paths.
 func redactHomeDir(v string, homeDir string) string {
 	if homeDir == "" {
 		return v

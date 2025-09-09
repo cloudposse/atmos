@@ -21,12 +21,12 @@ var authLoginCmd = &cobra.Command{
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return executeAuthLoginCommand(cmd, args)
-	},
+	RunE:               executeAuthLoginCommand,
 }
 
 func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
+	handleHelpRequest(cmd, args)
+
 	// Load atmos config
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
@@ -66,7 +66,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// createAuthManager creates a new auth manager with all required dependencies
+// createAuthManager creates a new auth manager with all required dependencies.
 func createAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()

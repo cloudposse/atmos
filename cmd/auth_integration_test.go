@@ -107,7 +107,7 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 	})
 }
 
-// formatEnvironmentVariables is a helper function to test environment variable formatting
+// formatEnvironmentVariables is a helper function to test environment variable formatting.
 func formatEnvironmentVariables(envVars []schema.EnvironmentVariable, format string) string {
 	switch format {
 	case "json":

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -11,19 +12,18 @@ import (
 	"github.com/spf13/viper"
 )
 
-// authValidateCmd validates the auth configuration
+// authValidateCmd validates the auth configuration.
 var authValidateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate authentication configuration",
 	Long:  "Validate the authentication configuration in atmos.yaml for syntax and logical errors.",
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return executeAuthValidateCommand(cmd, args)
-	},
+	RunE:               executeAuthValidateCommand,
 }
 
 func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
+	handleHelpRequest(cmd, args)
 	// Get verbose flag
 	verbose := viper.GetBool("auth.validate.verbose")
 	if verbose {
@@ -43,7 +43,7 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	if err := validator.ValidateAuthConfig(&atmosConfig.Auth); err != nil {
 		u.PrintfMarkdown("**❌ Authentication configuration validation failed:**\n")
 		u.PrintfMarkdown("%s\n", err.Error())
-		return fmt.Errorf("validation failed")
+		return errUtils.ErrInvalidAuthConfig
 	}
 
 	u.PrintfMarkdown("**✅ Authentication configuration is valid**\n")

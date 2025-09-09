@@ -247,7 +247,7 @@ func TestAuthUserConfigureCmd(t *testing.T) {
 	}
 }
 
-// maskAccessKey masks the access key for display
+// maskAccessKey masks the access key for display.
 func maskAccessKey(accessKey string) string {
 	if len(accessKey) <= 8 {
 		return strings.Repeat("*", len(accessKey))

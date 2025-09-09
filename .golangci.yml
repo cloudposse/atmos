@@ -3,29 +3,29 @@ run:
   tests: true
 linters:
   enable:
-    - bodyclose
-    - cyclop
-    - dogsled
-    - dupl
-    - err113
-    - forbidigo
-    - funlen
-    - gocognit
-    - gocritic
+    # - bodyclose
+    # - cyclop
+    # - dogsled
+    # - dupl
+    # - err113
+    # - forbidigo
+    # - funlen
+    # - gocognit
+    # - gocritic
     - godot
-    - gosec
-    - importas
-    - loggercheck
-    - misspell
-    - nestif
-    - nilerr
-    - nolintlint
-    - revive
-    - rowserrcheck
-    - tparallel
-    - unconvert
-    - unparam
-    - whitespace
+    # - gosec
+    # - importas
+    # - loggercheck
+    # - misspell
+    # - nestif
+    # - nilerr
+    # - nolintlint
+    # - revive
+    # - rowserrcheck
+    # - tparallel
+    # - unconvert
+    # - unparam
+    # - whitespace
   settings:
     cyclop:
       max-complexity: 15

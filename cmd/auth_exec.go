@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// authExecCmd executes a command with authentication environment variables
+// authExecCmd executes a command with authentication environment variables.
 var authExecCmd = &cobra.Command{
 	Use:   "exec",
 	Short: "Execute a command with authentication environment variables.",
@@ -67,7 +67,7 @@ var authExecCmd = &cobra.Command{
 	},
 }
 
-// executeCommandWithEnv executes a command with additional environment variables
+// executeCommandWithEnv executes a command with additional environment variables.
 func executeCommandWithEnv(args []string, envVars map[string]string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("%w: no command specified", errUtils.ErrInvalidSubcommand)

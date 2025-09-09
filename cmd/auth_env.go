@@ -15,7 +15,7 @@ import (
 
 var SupportedFormats = []string{"json", "export", "dotenv"}
 
-// authEnvCmd exports authentication environment variables
+// authEnvCmd exports authentication environment variables.
 var authEnvCmd = &cobra.Command{
 	Use:   "env",
 	Short: "Export authentication environment variables",
@@ -77,12 +77,12 @@ var authEnvCmd = &cobra.Command{
 	},
 }
 
-// outputEnvAsJSON outputs environment variables as JSON
+// outputEnvAsJSON outputs environment variables as JSON.
 func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]string) error {
 	return u.PrintAsJSON(atmosConfig, envVars)
 }
 
-// outputEnvAsExport outputs environment variables as shell export statements
+// outputEnvAsExport outputs environment variables as shell export statements.
 func outputEnvAsExport(envVars map[string]string) error {
 	for key, value := range envVars {
 		fmt.Printf("export %s=\"%s\"\n", key, value)
@@ -90,7 +90,7 @@ func outputEnvAsExport(envVars map[string]string) error {
 	return nil
 }
 
-// outputEnvAsDotenv outputs environment variables in .env format
+// outputEnvAsDotenv outputs environment variables in .env format.
 func outputEnvAsDotenv(envVars map[string]string) error {
 	for key, value := range envVars {
 		fmt.Printf("%s=%s\n", key, value)
