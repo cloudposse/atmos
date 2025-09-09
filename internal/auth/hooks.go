@@ -42,8 +42,6 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
     log.SetPrefix("atmos-auth")
     defer log.SetPrefix("")
 
-    // ...rest of function...
-}
 	// TODO: verify if we need to use Decode, or if we can use the merged auth config directly
 	// Use the merged auth configuration from stackInfo
 	// ComponentAuthSection already contains the deep-merged auth config from component + inherits + atmos.yaml
