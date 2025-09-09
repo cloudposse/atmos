@@ -88,8 +88,10 @@ func TestAWSFileManager_PathsEnvCleanup(t *testing.T) {
 
 	// Create and cleanup provider dir
 	_ = os.MkdirAll(filepath.Dir(credsPath), 0o755)
-	_, _ = os.Create(credsPath)
-	err := m.Cleanup("prov")
+	f, err := os.Create(credsPath)
+	assert.NoError(t, err)
+	assert.NoError(t, f.Close())
+	err = m.Cleanup("prov")
 	assert.NoError(t, err)
 	_, statErr := os.Stat(filepath.Join(tmp, "prov"))
 	assert.True(t, os.IsNotExist(statErr))

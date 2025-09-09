@@ -7,6 +7,7 @@ import (
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // stubIdentity implements types.Identity minimally for provider lookups.
@@ -39,6 +40,8 @@ func TestBuildAuthenticationChain_Basic(t *testing.T) {
 }
 
 func TestBuildAuthenticationChain_NestedIdentity(t *testing.T) {
+	t.Parallel()
+
 	m := &manager{config: &schema.AuthConfig{
 		Providers: map[string]schema.Provider{
 			"p": {Kind: "aws/iam-identity-center"},
@@ -51,16 +54,18 @@ func TestBuildAuthenticationChain_NestedIdentity(t *testing.T) {
 	}}
 
 	chain, err := m.buildAuthenticationChain("child")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, []string{"p", "root", "child"}, chain)
 
-	// aws/user without via produces identity-only chain
+	// aws/user without via produces identity-only chain.
 	only, err := m.buildAuthenticationChain("orphan")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, []string{"orphan"}, only)
 }
 
 func TestGetProviderKindForIdentity(t *testing.T) {
+	t.Parallel()
+
 	m := &manager{config: &schema.AuthConfig{
 		Providers: map[string]schema.Provider{
 			"p": {Kind: "aws/iam-identity-center"},
@@ -71,19 +76,19 @@ func TestGetProviderKindForIdentity(t *testing.T) {
 			"alias": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}, Alias: "developer"},
 		},
 	}}
-	// Populate identities map so getProviderForIdentity can resolve alias using GetProviderName()
+	// Populate identities map so alias resolution can use GetProviderName().
 	m.identities = map[string]types.Identity{"alias": stubIdentity{provider: "p"}}
 
 	kind, err := m.GetProviderKindForIdentity("dev")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "aws/iam-identity-center", kind)
 
-	// For aws/user chain root is the identity itself
+	// For aws/user chain root is the identity itself.
 	kind, err = m.GetProviderKindForIdentity("me")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "aws/user", kind)
 
-	// Alias resolution in getProviderForIdentity
-	prov := m.getProviderForIdentity("developer")
-	assert.Equal(t, "p", prov)
+	kind, err = m.GetProviderKindForIdentity("developer")
+	require.NoError(t, err)
+	assert.Equal(t, "aws/iam-identity-center", kind)
 }

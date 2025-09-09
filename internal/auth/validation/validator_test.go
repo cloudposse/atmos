@@ -10,15 +10,15 @@ import (
 
 func TestValidateLogsConfig(t *testing.T) {
 	v := &validator{}
-	// Empty -> ok
+	// Empty -> ok.
 	err := v.ValidateLogsConfig(&schema.Logs{})
 	assert.NoError(t, err)
 
-	// Valid -> ok
+	// Valid -> ok.
 	err = v.ValidateLogsConfig(&schema.Logs{Level: "Info"})
 	assert.NoError(t, err)
 
-	// Invalid level
+	// Invalid level.
 	err = v.ValidateLogsConfig(&schema.Logs{Level: "Verbose"})
 	assert.Error(t, err)
 }
@@ -26,11 +26,11 @@ func TestValidateLogsConfig(t *testing.T) {
 func TestValidateProvider(t *testing.T) {
 	v := NewValidator()
 
-	// SSO ok
+	// SSO ok.
 	err := v.ValidateProvider("aws-sso", &schema.Provider{Kind: "aws/iam-identity-center", StartURL: "https://example.awsapps.com/start", Region: "us-east-1"})
 	assert.NoError(t, err)
 
-	// SAML needs url and region
+	// SAML needs url and region.
 	err = v.ValidateProvider("aws-saml", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})
 	assert.NoError(t, err)
 
@@ -46,19 +46,19 @@ func TestValidateIdentity(t *testing.T) {
 		"aws-sso": {Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://example.awsapps.com/start"},
 	}
 
-	// aws/user requires no via
+	// aws/user requires no via.
 	err := v.ValidateIdentity("me", &schema.Identity{Kind: "aws/user"}, providers)
 	assert.NoError(t, err)
 
-	// assume-role requires principal.assume_role and arn format
+	// assume-role requires principal.assume_role and arn format.
 	err = v.ValidateIdentity("role", &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"assume_role": "arn:aws:iam::123456789012:role/MyRole"}}, providers)
 	assert.NoError(t, err)
 
-	// bad arn
+	// bad arn.
 	err = v.ValidateIdentity("role-bad", &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"assume_role": "not-an-arn"}}, providers)
 	assert.Error(t, err)
 
-	// permission-set requires principal.name and account name/id
+	// permission-set requires principal.name and account name/id.
 	err = v.ValidateIdentity("ps", &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"name": "DevAccess", "account": map[string]any{"name": "dev"}}}, providers)
 	assert.NoError(t, err)
 }
@@ -75,7 +75,7 @@ func TestValidateChains(t *testing.T) {
 	err := v.ValidateChains(identities, providers)
 	assert.NoError(t, err)
 
-	// Introduce a cycle a->b->a
+	// Introduce a cycle a->b->a.
 	identitiesCycle := map[string]*schema.Identity{
 		"a": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Identity: "b"}},
 		"b": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Identity: "a"}},
@@ -95,7 +95,7 @@ func TestValidateAuthConfig(t *testing.T) {
 	}
 	assert.NoError(t, v.ValidateAuthConfig(cfg))
 
-	// bad logs level
+	// bad logs level.
 	bad := *cfg
 	bad.Logs.Level = "Verbose"
 	err := v.ValidateAuthConfig(&bad)
