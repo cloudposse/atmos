@@ -209,8 +209,9 @@ func (v *validator) validatePermissionSetIdentity(identity *schema.Identity) err
 	}
 
 	accountName, ok := accountSpec["name"].(string)
-	if !ok || accountName == "" {
-		return fmt.Errorf("%w: account name is required", errUtils.ErrInvalidAuthConfig)
+	accountId, okId := accountSpec["id"].(string)
+	if !(ok || okId) || (accountName == "" && accountId == "") {
+		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidAuthConfig)
 	}
 
 	return nil

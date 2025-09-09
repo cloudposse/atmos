@@ -19,12 +19,14 @@ import (
 var authUserCmd = &cobra.Command{
 	Use:   "user",
 	Short: "Manage aws user credentials for atmos auth",
+	Long:  `Manage AWS user credentials for Atmos authentication.`,
 }
 
 // configure command prompts for static AWS user credentials and stores them in keyring.
 var authUserConfigureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Configure static AWS user credentials (stored securely in keyring)",
+	Long:  `Configure static AWS user credentials (stored securely in keyring)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Load atmos config
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)

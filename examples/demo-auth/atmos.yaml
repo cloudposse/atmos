@@ -43,8 +43,8 @@ auth:
     oidc:
       kind: github/oidc
       region: us-east-1
-      # spec:
-      #   audience: your-audience
+      spec:
+        audience: sts.us-east-1.amazonaws.com
     idp-acme-saml:
       kind: aws/saml
       url: https://mock
@@ -60,27 +60,27 @@ auth:
       kind: aws/assume-role
       via:
         provider: oidc
-      default: false # we use the identity flag in the test custom command
       principal:
-        assume_role: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
-    # Example identities mapping to providers (stubbed examples)
+        assume_role: arn:aws:iam::111111111111:role/ExampleRole
+
+    # Example identities mapping to providers
     saml:
       kind: aws/assume-role
-      enabled: false
       via:
         provider: idp-acme-saml
       principal:
         assume_role: arn:aws:iam::111111111111:role/ExampleRole
+
     sso:
       kind: aws/assume-role
-      enabled: false
       via:
         provider: idp-acme-sso
       principal:
         assume_role: arn:aws:iam::111111111111:role/ExampleRole
+
     superuser:
-      kind: aws/user
       enabled: false
+      kind: aws/user
       credentials:
         region: us-east-1
 

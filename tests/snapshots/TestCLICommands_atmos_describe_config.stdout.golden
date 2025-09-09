@@ -187,6 +187,10 @@
     }
   },
   "auth": {
+    "logs": {
+      "file": "",
+      "level": ""
+    },
     "providers": null,
     "identities": null
   }

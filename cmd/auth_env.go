@@ -3,12 +3,18 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"slices"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+)
+
+var (
+	SupportedFormats = []string{"json", "export", "dotenv"}
 )
 
 // authEnvCmd exports authentication environment variables
@@ -19,6 +25,12 @@ var authEnvCmd = &cobra.Command{
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Get output format
+		format, _ := cmd.Flags().GetString("format")
+		if !slices.Contains(SupportedFormats, format) {
+			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, format)
+		}
+
 		// Load atmos configuration
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		if err != nil {
@@ -53,9 +65,6 @@ var authEnvCmd = &cobra.Command{
 		if envVars == nil {
 			envVars = make(map[string]string)
 		}
-
-		// Get output format
-		format, _ := cmd.Flags().GetString("format")
 
 		switch format {
 		case "json":
@@ -96,7 +105,7 @@ func init() {
 	viper.MustBindEnv("auth_env_format", "AUTH_ENV_FORMAT", "ATMOS_AUTH_ENV_FORMAT")
 	_ = viper.BindPFlag("auth_env_format", authEnvCmd.Flags().Lookup("format"))
 	_ = authEnvCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"export", "json", "dotenv"}, cobra.ShellCompDirectiveNoFileComp
+		return SupportedFormats, cobra.ShellCompDirectiveNoFileComp
 	})
 
 	_ = viper.BindPFlag("identity", authEnvCmd.Flags().Lookup("identity"))

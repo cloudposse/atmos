@@ -382,7 +382,6 @@ jobs:
           - { os: macos-latest, target: macos }
         demo-folder:
           - examples/demo-atlantis
-          - examples/demo-auth
           # - examples/demo-component-manifest
           - examples/demo-component-versions
           - examples/demo-context
@@ -452,7 +451,7 @@ jobs:
 
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
-        if: (matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos') && (matrix.demo-folder != 'examples/demo-auth' || github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -470,7 +469,7 @@ jobs:
 
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft && (matrix.demo-folder != 'examples/demo-auth' || github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

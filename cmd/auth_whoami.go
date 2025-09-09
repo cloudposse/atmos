@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -59,7 +60,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	if outputFormat == "json" {
 		// Redact home directory in environment variable values before output
 		redactedWhoami := *whoami
-		homeDir, _ := os.UserHomeDir()
+		homeDir, _ := homedir.Dir()
 		if whoami.Environment != nil && homeDir != "" {
 			redactedEnv := make(map[string]string, len(whoami.Environment))
 			for k, v := range whoami.Environment {

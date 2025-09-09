@@ -65,4 +65,4 @@ auth:
         session_name: test-session
 
 logs:
-  level: Debug
+  level: Info

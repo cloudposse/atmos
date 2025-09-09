@@ -1,5 +1,0 @@
-DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU Found component 'mycomponent' in the stack 'component-auth' in the stack manifest 'deploy/component-auth-configured'
-DEBU ProcessTmplWithDatasources: not processing templates since templating is disabled in 'atmos.yaml' template=templates-all-atmos-sections
-DEBU Failed to use pager
-DEBU Telemetry event captured
