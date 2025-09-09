@@ -101,9 +101,9 @@ var authUserConfigureCmd = &cobra.Command{
 		}
 
 		// Store the credentials
-        if err := store.Store(alias, creds); err != nil {
-            return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAwsAuth, err)
-        }
+		if err := store.Store(alias, creds); err != nil {
+			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAwsAuth, err)
+		}
 		log.Info("Saved credentials to keyring", "alias", alias)
 		return nil
 	},

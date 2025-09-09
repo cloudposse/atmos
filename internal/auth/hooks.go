@@ -24,23 +24,23 @@ type (
 
 // TerraformPreHook runs before Terraform commands to set up authentication.
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
-    if stackInfo == nil {
-        return fmt.Errorf("%w: stack info is nil", errUtils.ErrInvalidAuthConfig)
-    }
-    if atmosConfig == nil {
-        return fmt.Errorf("%w: atmos configuration is nil", errUtils.ErrInvalidAuthConfig)
-    }
+	if stackInfo == nil {
+		return fmt.Errorf("%w: stack info is nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if atmosConfig == nil {
+		return fmt.Errorf("%w: atmos configuration is nil", errUtils.ErrInvalidAuthConfig)
+	}
 
-    // if !validateAuthConfig(atmosConfig, stackInfo) {
-    // 	log.Debug("No auth configuration found, skipping authentication")
-    // 	return nil
-    // }
+	// if !validateAuthConfig(atmosConfig, stackInfo) {
+	// 	log.Debug("No auth configuration found, skipping authentication")
+	// 	return nil
+	// }
 
-    atmosLevel, authLevel := getConfigLogLevels(atmosConfig)
-    log.SetLevel(authLevel)
-    defer log.SetLevel(atmosLevel)
-    log.SetPrefix("atmos-auth")
-    defer log.SetPrefix("")
+	atmosLevel, authLevel := getConfigLogLevels(atmosConfig)
+	log.SetLevel(authLevel)
+	defer log.SetLevel(atmosLevel)
+	log.SetPrefix("atmos-auth")
+	defer log.SetPrefix("")
 
 	// TODO: verify if we need to use Decode, or if we can use the merged auth config directly
 	// Use the merged auth configuration from stackInfo

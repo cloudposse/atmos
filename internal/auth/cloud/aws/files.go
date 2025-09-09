@@ -166,9 +166,9 @@ func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName stri
 func (m *AWSFileManager) Cleanup(providerName string) error {
 	providerDir := filepath.Join(m.baseDir, providerName)
 
-    if err := os.RemoveAll(providerDir); err != nil {
-        return fmt.Errorf("%w: failed to cleanup AWS files: %v", errUtils.ErrAwsAuth, err)
-    }
+	if err := os.RemoveAll(providerDir); err != nil {
+		return fmt.Errorf("%w: failed to cleanup AWS files: %v", errUtils.ErrAwsAuth, err)
+	}
 
 	return nil
 }

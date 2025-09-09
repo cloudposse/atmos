@@ -33,7 +33,6 @@ func NewOIDCProvider(name string, config *schema.Provider) (types.Provider, erro
 		return nil, fmt.Errorf("%w: provider name is required", errUtils.ErrInvalidProviderConfig)
 	}
 
-
 	return &oidcProvider{
 		name:   name,
 		config: config,
