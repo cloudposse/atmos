@@ -1,10 +1,10 @@
 package cmd
 
 import (
-    "bytes"
-    "fmt"
-    "os"
-    "testing"
+	"bytes"
+	"fmt"
+	"os"
+	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
@@ -182,43 +182,43 @@ func TestAuthExecCmd(t *testing.T) {
 				Use:                "exec",
 				DisableFlagParsing: true,
 				RunE: func(cmd *cobra.Command, args []string) error {
-                // Manually parse flags since DisableFlagParsing is true
-                // Keep a copy of the original args for shell-like detection
-                origArgs := append([]string(nil), args...)
-                _ = cmd.Flags().Parse(args)
-                // Use only the non-flag arguments for command execution logic
-                args = cmd.Flags().Args()
-                if len(args) == 0 {
-                    return fmt.Errorf("no command specified")
-                }
+					// Manually parse flags since DisableFlagParsing is true
+					// Keep a copy of the original args for shell-like detection
+					origArgs := append([]string(nil), args...)
+					_ = cmd.Flags().Parse(args)
+					// Use only the non-flag arguments for command execution logic
+					args = cmd.Flags().Args()
+					if len(args) == 0 {
+						return fmt.Errorf("no command specified")
+					}
 
 					config := tt.setupConfig()
 					identityName, _ := cmd.Flags().GetString("identity")
 
-                    // Determine target identity
-                    if identityName == "" {
-                        identityName = func() string {
-                            for name, identity := range config.Auth.Identities {
-                                if identity.Default {
-                                    return name
-                                }
-                            }
-                            return ""
-                        }()
-                        if identityName == "" {
-                            return fmt.Errorf("no default identity configured")
-                        }
-                    }
-                    // Validate specified identity exists
-                    if _, exists := config.Auth.Identities[identityName]; !exists {
-                        return fmt.Errorf("identity %q not found", identityName)
-                    }
+					// Determine target identity
+					if identityName == "" {
+						identityName = func() string {
+							for name, identity := range config.Auth.Identities {
+								if identity.Default {
+									return name
+								}
+							}
+							return ""
+						}()
+						if identityName == "" {
+							return fmt.Errorf("no default identity configured")
+						}
+					}
+					// Validate specified identity exists
+					if _, exists := config.Auth.Identities[identityName]; !exists {
+						return fmt.Errorf("identity %q not found", identityName)
+					}
 
-                    // Mock command execution with environment variables
-                    if len(origArgs) >= 2 && origArgs[0] == "sh" {
-                        // Simulate shell command using env; print resolved profile
-                        cmd.Println(identityName)
-                    } else if args[0] == "echo" {
+					// Mock command execution with environment variables
+					if len(origArgs) >= 2 && origArgs[0] == "sh" {
+						// Simulate shell command using env; print resolved profile
+						cmd.Println(identityName)
+					} else if args[0] == "echo" {
 						// Mock echo command
 						cmd.Println(args[1])
 					}
