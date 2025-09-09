@@ -27,7 +27,7 @@ func TestAWSFileManager_WriteCredentials(t *testing.T) {
 	assert.Equal(t, "secret", sec.Key("aws_secret_access_key").String())
 	assert.Equal(t, "token", sec.Key("aws_session_token").String())
 
-	// Overwrite without session token ensures key removal
+	// Overwrite without session token ensures key removal.
 	creds.SessionToken = ""
 	err = m.WriteCredentials("prov", "dev", creds)
 	assert.NoError(t, err)
@@ -35,14 +35,14 @@ func TestAWSFileManager_WriteCredentials(t *testing.T) {
 	assert.NoError(t, err)
 	sec = cfg.Section("dev")
 	_, err = sec.GetKey("aws_session_token")
-	assert.Error(t, err) // key removed
+	assert.Error(t, err) // key removed.
 }
 
 func TestAWSFileManager_WriteConfig(t *testing.T) {
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}
 
-	// Non-default profile
+	// Non-default profile.
 	err := m.WriteConfig("prov", "dev", "us-east-2", "json")
 	assert.NoError(t, err)
 	cfg, err := ini.Load(m.GetConfigPath("prov"))
@@ -51,7 +51,7 @@ func TestAWSFileManager_WriteConfig(t *testing.T) {
 	assert.Equal(t, "us-east-2", sec.Key("region").String())
 	assert.Equal(t, "json", sec.Key("output").String())
 
-	// Default profile uses "default" section
+	// Default profile uses "default" section.
 	err = m.WriteConfig("prov", "default", "us-west-1", "")
 	assert.NoError(t, err)
 	cfg, err = ini.Load(m.GetConfigPath("prov"))
@@ -62,7 +62,7 @@ func TestAWSFileManager_WriteConfig(t *testing.T) {
 	_, err = sec.GetKey("output")
 	assert.Error(t, err)
 
-	// Clear keys if empty values provided
+	// Clear keys if empty values provided.
 	err = m.WriteConfig("prov", "dev", "", "")
 	assert.NoError(t, err)
 	cfg, err = ini.Load(m.GetConfigPath("prov"))
@@ -82,11 +82,11 @@ func TestAWSFileManager_PathsEnvCleanup(t *testing.T) {
 	assert.Equal(t, filepath.Join(tmp, "prov", "credentials"), credsPath)
 	assert.Equal(t, filepath.Join(tmp, "prov", "config"), cfgPath)
 
-	// Ensure env variables are produced
+	// Ensure env variables are produced.
 	env := m.GetEnvironmentVariables("prov", "dev")
 	assert.Equal(t, 3, len(env))
 
-	// Create and cleanup provider dir
+	// Create and cleanup provider dir.
 	_ = os.MkdirAll(filepath.Dir(credsPath), 0o755)
 	f, err := os.Create(credsPath)
 	assert.NoError(t, err)
