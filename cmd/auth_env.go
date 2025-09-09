@@ -110,4 +110,3 @@ func init() {
 	viper.MustBindEnv("identity", "IDENTITY", "ATMOS_IDENTITY")
 	authCmd.AddCommand(authEnvCmd)
 }
-}

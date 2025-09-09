@@ -1,6 +1,12 @@
 package types
 
-import "time"
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+)
 
 // OIDCCredentials defines OIDC-specific credential fields.
 type OIDCCredentials struct {

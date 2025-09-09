@@ -246,6 +246,7 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 			}
 			return 3600
 		}()),
+	}
 
 	result, err := stsClient.AssumeRoleWithSAML(ctx, input)
 	if err != nil {
