@@ -59,7 +59,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "No default identity configured.\n")
 		fmt.Fprintf(os.Stderr, "Configure auth in atmos.yaml and run `atmos auth login` to authenticate.\n")
-		return nil
+		return err
 	}
 
 	whoami, err := authManager.Whoami(ctx, identityName)

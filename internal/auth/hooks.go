@@ -104,19 +104,6 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	return nil
 }
 
-func validateAuthConfig(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) bool {
-	if atmosConfig == nil {
-		return false
-	}
-	if stackInfo == nil {
-		return false
-	}
-	if len(atmosConfig.Auth.Identities) == 0 && len(atmosConfig.Auth.Providers) == 0 {
-		return false
-	}
-	return true
-}
-
 func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo) (types.AuthManager, error) {
 	// Create auth manager components.
 	credStore := credentials.NewCredentialStore()
