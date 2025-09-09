@@ -72,10 +72,10 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 		return nil, fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
-	accountName, okAccountName := accountSpec[principalName].(string)
-	accountID, okAccountID := accountSpec[principalAccountID].(string)
-	if !(okAccountName || okAccountID) || accountName == "" || accountID == "" {
-		return nil, fmt.Errorf("%w: account name/id is required", errUtils.ErrInvalidIdentityConfig)
+	accountName, okAccountName := accountSpec[principalAccountName].(string)
+	accountID, _ := accountSpec[principalAccountID].(string)
+	if accountName == "" && accountID == "" {
+		return nil, fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	// Create AWS config using the base credentials (SSO access token)

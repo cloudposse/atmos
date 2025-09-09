@@ -1,6 +1,11 @@
 package types
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
 
 // AWSCredentials defines AWS-specific credential fields.
 type AWSCredentials struct {
@@ -32,7 +37,7 @@ func (c *AWSCredentials) GetExpiration() (*time.Time, error) {
 	}
 	expTime, err := time.Parse(time.RFC3339, c.Expiration)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed parsing AWS credential expiration: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return &expTime, nil
 }
@@ -40,4 +45,7 @@ func (c *AWSCredentials) GetExpiration() (*time.Time, error) {
 // BuildWhoamiInfo implements ICredentials for AWSCredentials.
 func (c *AWSCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 	info.Region = c.Region
+	if t, _ := c.GetExpiration(); t != nil {
+		info.Expiration = t
+	}
 }
