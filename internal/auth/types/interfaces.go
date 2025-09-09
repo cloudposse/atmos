@@ -1,10 +1,10 @@
 package types
 
 import (
-    "context"
-    "time"
+	"context"
+	"time"
 
-    "github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Provider defines the interface that all authentication providers must implement.
