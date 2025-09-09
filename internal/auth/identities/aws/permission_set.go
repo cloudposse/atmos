@@ -47,7 +47,7 @@ func (i *permissionSetIdentity) Kind() string {
 
 // Authenticate performs authentication using permission set.
 //
-//nolint:revive // cyclomatic: complexity is acceptable for this orchestration method
+
 func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
 	// Note: Caching is now handled at the manager level to prevent duplicates
 
@@ -58,60 +58,24 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 
 	log.Debug("Permission set authentication started.", "identity", i.name)
 
-	// Get permission set name from principal or spec (backward compatibility)
-	var permissionSetName string
-	var ok1 bool
-	if permissionSetName, ok1 = i.config.Principal[principalName].(string); !ok1 || permissionSetName == "" {
-		return nil, fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrInvalidIdentityConfig)
-	}
-
-	// Get account info from principal or spec (backward compatibility)
-	var accountSpec map[string]interface{}
-	var ok2 bool
-	if accountSpec, ok2 = i.config.Principal[principalAccount].(map[string]interface{}); !ok2 {
-		return nil, fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
-	}
-
-	accountName, okAccountName := accountSpec[principalAccountName].(string)
-	accountID, _ := accountSpec[principalAccountID].(string)
-	if accountName == "" && accountID == "" {
-		return nil, fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
-	}
-
-	// Create AWS config using the base credentials (SSO access token)
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(awsBase.Region),
-		config.WithCredentialsProvider(awssdk.CredentialsProviderFunc(func(ctx context.Context) (awssdk.Credentials, error) {
-			return awssdk.Credentials{
-				AccessKeyID: awsBase.AccessKeyID, // This is actually the SSO access token
-			}, nil
-		})),
-	)
+	// Get permission set and account info
+	permissionSetName, err := i.getPermissionSetName()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
+		return nil, err
 	}
-
-	// Create SSO client
-	ssoClient := sso.NewFromConfig(cfg)
-
-	// List accounts to find the target account ID
-	accountsResp, err := ssoClient.ListAccounts(ctx, &sso.ListAccountsInput{
-		AccessToken: awssdk.String(awsBase.AccessKeyID), // SSO access token
-	})
+	accountName, accountID, err := i.getAccountDetails()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to list accounts: %v", errUtils.ErrAwsAuth, err)
+		return nil, err
 	}
 
-	if okAccountName {
-		for _, account := range accountsResp.AccountList {
-			if awssdk.ToString(account.AccountName) == accountName {
-				accountID = awssdk.ToString(account.AccountId)
-				break
-			}
-		}
-		if accountID == "" {
-			return nil, fmt.Errorf("%w: account %q not found", errUtils.ErrAwsAuth, accountName)
-		}
+	// Create SSO client and resolve account ID if needed
+	ssoClient, err := i.newSSOClient(ctx, awsBase)
+	if err != nil {
+		return nil, err
+	}
+	accountID, err = i.resolveAccountID(ctx, ssoClient, accountName, accountID, awsBase.AccessKeyID)
+	if err != nil {
+		return nil, err
 	}
 
 	// Get role credentials for the permission set
@@ -125,20 +89,9 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 	}
 
 	// Convert to our credential format.
-	if roleCredsResp.RoleCredentials == nil {
-		return nil, fmt.Errorf("%w: empty role credentials response", errUtils.ErrAuthenticationFailed)
-	}
-	expiration := ""
-	if roleCredsResp.RoleCredentials.Expiration != 0 {
-		expiration = time.Unix(roleCredsResp.RoleCredentials.Expiration/1000, 0).Format(time.RFC3339)
-	}
-
-	creds := &types.AWSCredentials{
-		AccessKeyID:     awssdk.ToString(roleCredsResp.RoleCredentials.AccessKeyId),
-		SecretAccessKey: awssdk.ToString(roleCredsResp.RoleCredentials.SecretAccessKey),
-		SessionToken:    awssdk.ToString(roleCredsResp.RoleCredentials.SessionToken),
-		Region:          awsBase.Region,
-		Expiration:      expiration,
+	creds, err := i.buildCredsFromRole(roleCredsResp, awsBase.Region)
+	if err != nil {
+		return nil, err
 	}
 
 	log.Debug("Permission set authentication successful.", "identity", i.name)
@@ -168,7 +121,7 @@ func (i *permissionSetIdentity) Validate() error {
 
 	accountName, okName := accountSpec["name"].(string)
 	accountID, okID := accountSpec["id"].(string)
-	if !(okName || okID) {
+	if !okName && !okID {
 		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
 	}
 	if accountName == "" && accountID == "" {
@@ -207,4 +160,78 @@ func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, stackInfo 
 		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrAwsAuth, err)
 	}
 	return nil
+}
+
+// getPermissionSetName extracts the permission set name from the identity principal.
+func (i *permissionSetIdentity) getPermissionSetName() (string, error) {
+	if name, ok := i.config.Principal[principalName].(string); ok && name != "" {
+		return name, nil
+	}
+	return "", fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrInvalidIdentityConfig)
+}
+
+// getAccountDetails extracts the account name/ID from the identity principal.
+func (i *permissionSetIdentity) getAccountDetails() (string, string, error) {
+	accountSpec, ok := i.config.Principal[principalAccount].(map[string]interface{})
+	if !ok {
+		return "", "", fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
+	}
+	name, _ := accountSpec[principalAccountName].(string)
+	id, _ := accountSpec[principalAccountID].(string)
+	if name == "" && id == "" {
+		return "", "", fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
+	}
+	return name, id, nil
+}
+
+// resolveAccountID ensures we have an account ID; if only name provided, it looks it up via SSO.
+func (i *permissionSetIdentity) resolveAccountID(ctx context.Context, ssoClient *sso.Client, accountName, accountID, accessToken string) (string, error) {
+	if accountID != "" || accountName == "" {
+		return accountID, nil
+	}
+
+	accountsResp, err := ssoClient.ListAccounts(ctx, &sso.ListAccountsInput{AccessToken: awssdk.String(accessToken)})
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to list accounts: %v", errUtils.ErrAwsAuth, err)
+	}
+	for _, account := range accountsResp.AccountList {
+		if awssdk.ToString(account.AccountName) == accountName {
+			return awssdk.ToString(account.AccountId), nil
+		}
+	}
+	return "", fmt.Errorf("%w: account %q not found", errUtils.ErrAwsAuth, accountName)
+}
+
+// newSSOClient creates an AWS SSO client from base credentials.
+func (i *permissionSetIdentity) newSSOClient(ctx context.Context, awsBase *types.AWSCredentials) (*sso.Client, error) {
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(awsBase.Region),
+		config.WithCredentialsProvider(awssdk.CredentialsProviderFunc(func(ctx context.Context) (awssdk.Credentials, error) {
+			return awssdk.Credentials{
+				AccessKeyID: awsBase.AccessKeyID, // This is actually the SSO access token
+			}, nil
+		})),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
+	}
+	return sso.NewFromConfig(cfg), nil
+}
+
+// buildCredsFromRole converts GetRoleCredentialsOutput to AWSCredentials.
+func (i *permissionSetIdentity) buildCredsFromRole(resp *sso.GetRoleCredentialsOutput, region string) (*types.AWSCredentials, error) {
+	if resp.RoleCredentials == nil {
+		return nil, fmt.Errorf("%w: empty role credentials response", errUtils.ErrAuthenticationFailed)
+	}
+	expiration := ""
+	if resp.RoleCredentials.Expiration != 0 {
+		expiration = time.Unix(resp.RoleCredentials.Expiration/1000, 0).Format(time.RFC3339)
+	}
+	return &types.AWSCredentials{
+		AccessKeyID:     awssdk.ToString(resp.RoleCredentials.AccessKeyId),
+		SecretAccessKey: awssdk.ToString(resp.RoleCredentials.SecretAccessKey),
+		SessionToken:    awssdk.ToString(resp.RoleCredentials.SessionToken),
+		Region:          region,
+		Expiration:      expiration,
+	}, nil
 }

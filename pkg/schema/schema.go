@@ -1,3 +1,4 @@
+//revive:disable:file-length-limit - Schema is intentionally consolidated in one file for compatibility.
 package schema
 
 import (
@@ -971,14 +972,14 @@ type ListColumnConfig struct {
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }
 
-// AuthConfig defines the authentication configuration structure
+// AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
 	Logs       Logs                `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
 }
 
-// Provider defines an authentication provider configuration
+// Provider defines an authentication provider configuration.
 type Provider struct {
 	Kind                  string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
 	StartURL              string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
@@ -993,7 +994,7 @@ type Provider struct {
 	Spec                  map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
 }
 
-// SessionConfig defines session configuration for providers
+// SessionConfig defines session configuration for providers.
 type SessionConfig struct {
 	Duration string `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
 }
@@ -1009,19 +1010,19 @@ type Identity struct {
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 }
 
-// IdentityVia defines how an identity connects to a provider or other identity
+// IdentityVia defines how an identity connects to a provider or other identity.
 type IdentityVia struct {
 	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
-// EnvironmentVariable defines an environment variable with preserved case sensitivity
+// EnvironmentVariable defines an environment variable with preserved case sensitivity.
 type EnvironmentVariable struct {
 	Key   string `yaml:"key" json:"key" mapstructure:"key"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }
 
-// ComponentAuthConfig defines auth configuration at the component level
+// ComponentAuthConfig defines auth configuration at the component level.
 type ComponentAuthConfig struct {
 	Providers  map[string]Provider `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`

@@ -28,9 +28,9 @@ var (
 	ErrNoDefaultIdentity = errors.New("no default identity configured for authentication")
 )
 
+const hookOpTerraformPreHook = "TerraformPreHook"
+
 // TerraformPreHook runs before Terraform commands to set up authentication.
-//
-//nolint:revive,funlen
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
 	if stackInfo == nil {
 		return fmt.Errorf("%w: stack info is nil", errUtils.ErrInvalidAuthConfig)
@@ -45,11 +45,9 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	log.SetPrefix("atmos-auth")
 	defer log.SetPrefix("")
 
-	var authConfig schema.AuthConfig
-	err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig)
+	authConfig, err := decodeAuthConfigFromStack(stackInfo)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "TerraformPreHook", "failed to decode component auth config - check atmos.yaml or component auth section")
-		return errUtils.ErrInvalidAuthConfig
+		return err
 	}
 
 	// Skip if no auth config (check the merged config, not the original).
@@ -60,44 +58,56 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	authManager, err := newAuthManager(&authConfig, stackInfo)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrAuthManager, "TerraformPreHook", "failed to create auth manager")
+		errUtils.CheckErrorAndPrint(errUtils.ErrAuthManager, hookOpTerraformPreHook, "failed to create auth manager")
 		return errUtils.ErrAuthManager
 	}
 
-	// Determine target identity: stack info identity (CLI flag) or default identity.
-	ctx := context.Background()
-	var targetIdentityName string
+	// Determine target identity and authenticate.
+	targetIdentityName, err := resolveTargetIdentityName(stackInfo, authManager)
+	if err != nil {
+		return err
+	}
+	if err := authenticateAndWriteEnv(context.Background(), authManager, targetIdentityName, atmosConfig, stackInfo); err != nil {
+		return err
+	}
+	return nil
+}
 
+func decodeAuthConfigFromStack(stackInfo *schema.ConfigAndStacksInfo) (schema.AuthConfig, error) {
+	var authConfig schema.AuthConfig
+	if err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig); err != nil {
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, hookOpTerraformPreHook, "failed to decode component auth config - check atmos.yaml or component auth section")
+		return schema.AuthConfig{}, errUtils.ErrInvalidAuthConfig
+	}
+	return authConfig, nil
+}
+
+func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManager types.AuthManager) (string, error) {
 	if stackInfo.Identity != "" {
-		// This is set by the CLI Flag.
-		targetIdentityName = stackInfo.Identity
-	} else {
-		targetIdentityName, err = authManager.GetDefaultIdentity()
-		if err != nil {
-			errUtils.CheckErrorAndPrint(errUtils.ErrDefaultIdentity, "TerraformPreHook", "failed to get default identity")
-			return errUtils.ErrDefaultIdentity
-		}
+		return stackInfo.Identity, nil
 	}
-	if targetIdentityName == "" {
-		errUtils.CheckErrorAndPrint(ErrNoDefaultIdentity, "TerraformPreHook", "Use the identity flag or specify an identity as default.")
-		return ErrNoDefaultIdentity
-	}
-
-	log.Info("Authenticating with identity", "identity", targetIdentityName)
-
-	// Authenticate with target identity.
-	whoami, err := authManager.Authenticate(ctx, targetIdentityName)
+	name, err := authManager.GetDefaultIdentity()
 	if err != nil {
-		return fmt.Errorf("failed to authenticate with identity %q: %w", targetIdentityName, err)
+		errUtils.CheckErrorAndPrint(errUtils.ErrDefaultIdentity, hookOpTerraformPreHook, "failed to get default identity")
+		return "", errUtils.ErrDefaultIdentity
 	}
+	if name == "" {
+		errUtils.CheckErrorAndPrint(ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
+		return "", ErrNoDefaultIdentity
+	}
+	return name, nil
+}
 
+func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager, identityName string, atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
+	log.Info("Authenticating with identity", "identity", identityName)
+	whoami, err := authManager.Authenticate(ctx, identityName)
+	if err != nil {
+		return fmt.Errorf("failed to authenticate with identity %q: %w", identityName, err)
+	}
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
-
-	err = utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection)
-	if err != nil {
+	if err := utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection); err != nil {
 		return fmt.Errorf("failed to print component env section: %w", err)
 	}
-
 	return nil
 }
 

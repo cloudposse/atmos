@@ -68,38 +68,19 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, fmt.Errorf("%w: GitHub OIDC authentication is only available in GitHub Actions environment", errUtils.ErrAuthenticationFailed)
 	}
 
-	// Get the OIDC token from GitHub Actions environment
-	_ = viper.BindEnv("github.oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-	token := viper.GetString("github.oidc.request_token")
-	if token == "" {
-		return nil, fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_TOKEN not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
+	requestURL, token, err := p.requestParams()
+	if err != nil {
+		return nil, err
 	}
 
-	_ = viper.BindEnv("github.oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-	requestURL := viper.GetString("github.oidc.request_url")
-	if requestURL == "" {
-		return nil, fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
+	aud, err := p.audience()
+	if err != nil {
+		return nil, err
 	}
 
-	var aud string
-	if p.config != nil && p.config.Spec != nil {
-		v, ok := p.config.Spec["audience"].(string)
-		if !ok || v == "" {
-			return nil, fmt.Errorf("%w: audience is required in provider spec", errUtils.ErrInvalidProviderConfig)
-		}
-		aud = v
-	}
-
-	// Prefer provided ACTIONS_ID_TOKEN if present (avoids external calls in tests/CI),
-	// otherwise retrieve a token from the OIDC endpoint.
-	_ = viper.BindEnv("github.oidc.id_token", "ACTIONS_ID_TOKEN")
-	jwtToken := viper.GetString("github.oidc.id_token")
-	if jwtToken == "" {
-		var err error
-		jwtToken, err = p.getOIDCToken(ctx, requestURL, token, aud)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to get OIDC token: %w", errUtils.ErrAuthenticationFailed, err)
-		}
+	jwtToken, err := p.resolveJWT(ctx, requestURL, token, aud)
+	if err != nil {
+		return nil, err
 	}
 
 	log.Info("GitHub OIDC authentication successful", "provider", p.name)
@@ -116,6 +97,46 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 func (p *oidcProvider) isGitHubActions() bool {
 	_ = viper.BindEnv("github.actions", "GITHUB_ACTIONS")
 	return viper.GetString("github.actions") == "true"
+}
+
+// requestParams loads the request URL and token from the GitHub Actions environment.
+func (p *oidcProvider) requestParams() (string, string, error) {
+	_ = viper.BindEnv("github.oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	token := viper.GetString("github.oidc.request_token")
+	if token == "" {
+		return "", "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_TOKEN not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
+	}
+
+	_ = viper.BindEnv("github.oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+	requestURL := viper.GetString("github.oidc.request_url")
+	if requestURL == "" {
+		return "", "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
+	}
+	return requestURL, token, nil
+}
+
+// audience extracts the required audience from provider config.
+func (p *oidcProvider) audience() (string, error) {
+	if p.config != nil && p.config.Spec != nil {
+		if v, ok := p.config.Spec["audience"].(string); ok && v != "" {
+			return v, nil
+		}
+		return "", fmt.Errorf("%w: audience is required in provider spec", errUtils.ErrInvalidProviderConfig)
+	}
+	return "", nil
+}
+
+// resolveJWT returns an ACTIONS_ID_TOKEN if present, otherwise fetches a token from the endpoint.
+func (p *oidcProvider) resolveJWT(ctx context.Context, requestURL, token, aud string) (string, error) {
+	_ = viper.BindEnv("github.oidc.id_token", "ACTIONS_ID_TOKEN")
+	if jwt := viper.GetString("github.oidc.id_token"); jwt != "" {
+		return jwt, nil
+	}
+	jwtToken, err := p.getOIDCToken(ctx, requestURL, token, aud)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to get OIDC token: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+	return jwtToken, nil
 }
 
 // getOIDCToken retrieves the JWT token from GitHub's OIDC endpoint.

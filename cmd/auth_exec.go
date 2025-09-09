@@ -99,10 +99,10 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 	// Run the command and wait for completion
 	err = execCmd.Run()
 	if err != nil {
-		// If it's an exit error, preserve the exit code
+		// If it's an exit error, propagate as an error with exit status
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				os.Exit(status.ExitStatus())
+				return fmt.Errorf("%w: command exited with status %d", errUtils.ErrSubcommandFailed, status.ExitStatus())
 			}
 		}
 		return fmt.Errorf("%w: command execution failed: %v", errUtils.ErrSubcommandFailed, err)

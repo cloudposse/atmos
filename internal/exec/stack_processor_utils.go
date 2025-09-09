@@ -935,7 +935,7 @@ func ProcessStackConfig(
 				if i, ok := componentMap[cfg.AuthSectionName]; ok {
 					componentAuth, ok = i.(map[string]any)
 					if !ok {
-						return nil, fmt.Errorf("invalid 'components.terraform.%s.auth' section in the file '%s'", component, stackName)
+						return nil, fmt.Errorf("%w: invalid 'components.terraform.%s.auth' section in the file '%s'", errUtils.ErrInvalidStackConfig, component, stackName)
 					}
 				}
 				// Component metadata.

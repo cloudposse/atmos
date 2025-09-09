@@ -138,23 +138,24 @@ func TestAuthLoginCmd(t *testing.T) {
 						return fmt.Errorf("no default identity configured")
 					}
 
-					if identityName != "" {
-						if _, exists := config.Auth.Identities[identityName]; !exists {
-							return fmt.Errorf("identity %q not found", identityName)
-						}
-					} else {
-						// Check for default identity
-						hasDefault := false
-						for _, identity := range config.Auth.Identities {
-							if identity.Default {
-								hasDefault = true
-								break
-							}
-						}
-						if !hasDefault {
-							return fmt.Errorf("no default identity configured")
-						}
-					}
+                    if identityName == "" {
+                        // Check for default identity
+                        hasDefault := false
+                        for _, identity := range config.Auth.Identities {
+                            if identity.Default {
+                                hasDefault = true
+                                break
+                            }
+                        }
+                        if !hasDefault {
+                            return fmt.Errorf("no default identity configured")
+                        }
+                    }
+                    if identityName != "" {
+                        if _, exists := config.Auth.Identities[identityName]; !exists {
+                            return fmt.Errorf("identity %q not found", identityName)
+                        }
+                    }
 
 					cmd.Println("Successfully authenticated")
 					return nil

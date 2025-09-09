@@ -106,12 +106,8 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 	}
 
 	// Validate via configuration - AWS User identities don't require via provider
-	if identity.Kind != "aws/user" && identity.Via != nil {
-		if identity.Via.Provider != "" {
-			if _, exists := providers[identity.Via.Provider]; !exists {
-				return fmt.Errorf("%w: referenced provider %q does not exist", errUtils.ErrInvalidAuthConfig, identity.Via.Provider)
-			}
-		}
+	if err := v.validateViaConfiguration(identity, providers); err != nil {
+		return err
 	}
 
 	// TODO replace with Identity Interface Validate()
@@ -126,6 +122,19 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 	default:
 		return fmt.Errorf("%w: unsupported identity kind: %s", errUtils.ErrInvalidAuthConfig, identity.Kind)
 	}
+}
+
+// validateViaConfiguration validates the optional Via provider/identity references for an identity.
+func (v *validator) validateViaConfiguration(identity *schema.Identity, providers map[string]*schema.Provider) error {
+	if identity.Kind == "aws/user" || identity.Via == nil {
+		return nil
+	}
+	if identity.Via.Provider != "" {
+		if _, exists := providers[identity.Via.Provider]; !exists {
+			return fmt.Errorf("%w: referenced provider %q does not exist", errUtils.ErrInvalidAuthConfig, identity.Via.Provider)
+		}
+	}
+	return nil
 }
 
 // ValidateChains validates identity chains for cycles and invalid references.
@@ -216,7 +225,7 @@ func (v *validator) validatePermissionSetIdentity(identity *schema.Identity) err
 
 	accountName, ok := accountSpec["name"].(string)
 	accountId, okId := accountSpec["id"].(string)
-	if !(ok || okId) || (accountName == "" && accountId == "") {
+	if (!ok && !okId) || (accountName == "" && accountId == "") {
 		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidAuthConfig)
 	}
 

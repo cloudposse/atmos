@@ -92,6 +92,9 @@ var (
 	ErrAwsAuth                      = errors.New("aws auth error")
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
+	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+
+	ErrInvalidStackConfig = errors.New("invalid stack config")
 
 	ErrInvalidSubcommand = errors.New("invalid subcommand")
 	ErrSubcommandFailed  = errors.New("subcommand failed")

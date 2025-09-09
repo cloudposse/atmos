@@ -2,15 +2,17 @@ package utils
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"runtime"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/spf13/viper"
 )
 
-func OpenUrl(URL string) error {
-	if os.Getenv("GO_TEST") == "1" {
+func OpenUrl(urlStr string) error {
+	_ = viper.BindEnv("go.test", "GO_TEST")
+	if viper.GetString("go.test") == "1" {
 		log.Debug("Skipping browser launch in test environment")
 		return nil
 	}
@@ -19,13 +21,13 @@ func OpenUrl(URL string) error {
 
 	switch runtime.GOOS {
 	case "linux":
-		err = exec.Command("xdg-open", URL).Start()
+		err = exec.Command("xdg-open", urlStr).Start()
 	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", URL).Start()
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", urlStr).Start()
 	case "darwin":
-		err = exec.Command("open", URL).Start()
+		err = exec.Command("open", urlStr).Start()
 	default:
-		err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+		err = fmt.Errorf("%w: %s", errUtils.ErrUnsupportedPlatform, runtime.GOOS)
 	}
 
 	if err != nil {

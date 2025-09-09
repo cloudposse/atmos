@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/internal/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -31,65 +32,73 @@ var authWhoamiCmd = &cobra.Command{
 func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
-	// Load atmos config
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	// Load atmos config and auth manager
+	authManager, err := loadAuthManager()
 	if err != nil {
-		return fmt.Errorf("failed to load atmos config: %w", err)
-	}
-
-	// Create auth manager
-	authManager, err := createAuthManager(&atmosConfig.Auth)
-	if err != nil {
-		return fmt.Errorf("failed to create auth manager: %w", err)
-	}
-
-	// Get default identity to check whoami status
-	ctx := context.Background()
-
-	// Get identity from flag or use default
-	identityName, _ := cmd.Flags().GetString("identity")
-	if identityName == "" {
-		defaultIdentity, err := authManager.GetDefaultIdentity()
-		if err != nil {
-			return fmt.Errorf("no default identity configured and no identity specified: %w", err)
-		}
-		identityName = defaultIdentity
-	}
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "No default identity configured.\n")
-		fmt.Fprintf(os.Stderr, "Configure auth in atmos.yaml and run `atmos auth login` to authenticate.\n")
 		return err
 	}
 
-	whoami, err := authManager.Whoami(ctx, identityName)
+	// Determine identity
+	identityName, err := identityFromFlagOrDefault(cmd, authManager)
+	if err != nil {
+		return err
+	}
+
+	// Query whoami
+	whoami, err := authManager.Whoami(context.Background(), identityName)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
-	// Check if output should be JSON
-	outputFormat := viper.GetString("auth.whoami.output")
-	if outputFormat == "json" {
-		// Redact home directory in environment variable values before output
-		redactedWhoami := *whoami
-		homeDir, _ := homedir.Dir()
-		if whoami.Environment != nil && homeDir != "" {
-			redactedEnv := make(map[string]string, len(whoami.Environment))
-			for k, v := range whoami.Environment {
-				redactedEnv[k] = redactHomeDir(v, homeDir)
-			}
-			redactedWhoami.Environment = redactedEnv
-		}
-		jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
-		if err != nil {
-			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Failed to marshal JSON", "")
-			return errUtils.ErrInvalidAuthConfig
-		}
-		fmt.Println(string(jsonData))
-		return nil
+	// Output
+	if viper.GetString("auth.whoami.output") == "json" {
+		return printWhoamiJSON(whoami)
 	}
+	printWhoamiHuman(whoami)
+	return nil
+}
 
-	// Display human-readable output
+func loadAuthManager() (authTypes.AuthManager, error) {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load atmos config: %w", err)
+	}
+	return createAuthManager(&atmosConfig.Auth)
+}
+
+func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthManager) (string, error) {
+	identityName, _ := cmd.Flags().GetString("identity")
+	if identityName != "" {
+		return identityName, nil
+	}
+	defaultIdentity, err := authManager.GetDefaultIdentity()
+	if err != nil {
+		return "", fmt.Errorf("no default identity configured and no identity specified: %w", err)
+	}
+	return defaultIdentity, nil
+}
+
+func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
+	// Redact home directory in environment variable values before output
+	redactedWhoami := *whoami
+	homeDir, _ := homedir.Dir()
+	if whoami.Environment != nil && homeDir != "" {
+		redactedEnv := make(map[string]string, len(whoami.Environment))
+		for k, v := range whoami.Environment {
+			redactedEnv[k] = redactHomeDir(v, homeDir)
+		}
+		redactedWhoami.Environment = redactedEnv
+	}
+	jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
+	if err != nil {
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Failed to marshal JSON", "")
+		return errUtils.ErrInvalidAuthConfig
+	}
+	fmt.Println(string(jsonData))
+	return nil
+}
+
+func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
 	fmt.Fprintf(os.Stderr, "Current Authentication Status\n\n")
 	fmt.Fprintf(os.Stderr, "Provider: %s\n", whoami.Provider)
 	fmt.Fprintf(os.Stderr, "Identity: %s\n", whoami.Identity)
@@ -106,8 +115,6 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
 	}
 	fmt.Fprintf(os.Stderr, "Last Updated: %s\n", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST"))
-
-	return nil
 }
 
 // redactHomeDir replaces occurrences of the homeDir at the start of v with "~" to avoid leaking user paths.

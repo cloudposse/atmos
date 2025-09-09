@@ -195,12 +195,13 @@ func TestAuthValidateCmd(t *testing.T) {
 // mockValidateAuthConfig provides mock validation logic for testing.
 func mockValidateAuthConfig(config *schema.AuthConfig) error {
 	// Check for missing regions in AWS providers
-	for name, provider := range config.Providers {
-		if provider.Kind == "aws/iam-identity-center" && provider.Region == "" {
-			return assert.AnError
-		}
-		_ = name // Use the variable to avoid unused variable error
-	}
+    for name := range config.Providers {
+        provider := config.Providers[name]
+        if provider.Kind == "aws/iam-identity-center" && provider.Region == "" {
+            return assert.AnError
+        }
+        _ = name // Use the variable to avoid unused variable error
+    }
 
 	// Check for nonexistent provider references
 	for _, identity := range config.Identities {
@@ -213,21 +214,24 @@ func mockValidateAuthConfig(config *schema.AuthConfig) error {
 
 	// Check for circular references (simplified)
 	visited := make(map[string]bool)
-	for name, identity := range config.Identities {
-		if identity.Via != nil && identity.Via.Identity != "" {
-			if visited[name] {
-				return assert.AnError
-			}
-			visited[name] = true
+    for name, identity := range config.Identities {
+        if identity.Via == nil || identity.Via.Identity == "" {
+            continue
+        }
+        if visited[name] {
+            return assert.AnError
+        }
+        visited[name] = true
 
-			// Check if referenced identity points back
-			if refIdentity, exists := config.Identities[identity.Via.Identity]; exists {
-				if refIdentity.Via != nil && refIdentity.Via.Identity == name {
-					return assert.AnError
-				}
-			}
-		}
-	}
+        // Check if referenced identity points back
+        refIdentity, exists := config.Identities[identity.Via.Identity]
+        if !exists {
+            continue
+        }
+        if refIdentity.Via != nil && refIdentity.Via.Identity == name {
+            return assert.AnError
+        }
+    }
 
 	return nil
 }
