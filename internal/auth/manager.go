@@ -28,6 +28,7 @@ var (
 	ErrInitializingIdentities      = errors.New("failed to initialize identities")
 	ErrInitializingCredentialStore = errors.New("failed to initialize credential store")
 	ErrCircularDependency          = errors.New("circular dependency detected in identity chain")
+	ErrIdentityNotFound            = errors.New("identity not found")
 )
 
 // manager implements the Authmanager interface.
@@ -145,37 +146,19 @@ func (m *manager) GetChain() []string {
 
 // Whoami returns information about the specified identity's credentials.
 func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	// Resolve alias -> actual identity name if needed.
-	found := false
-	resolved := identityName
 	if _, exists := m.identities[identityName]; !exists {
-		for name, ident := range m.config.Identities {
-			if ident.Alias == identityName {
-				resolved = name
-				found = true
-				break
-			}
-		}
-	} else {
-		// Identity is already the actual name.
-		found = true
-	}
-	if !found {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Whoami", fmt.Sprintf("Identity %q not found", identityName))
-		return nil, errUtils.ErrInvalidAuthConfig
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrIdentityNotFound, fmt.Sprintf("`%q`", identityName))
 	}
 
 	// Try to retrieve credentials for the resolved identity.
-	creds, err := m.credentialStore.Retrieve(resolved)
+	creds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(ErrNoCredentialsFound, "Retrieve", "")
-		return nil, ErrNoCredentialsFound
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrNoCredentialsFound, fmt.Sprintf("`%q`", identityName))
 	}
 
 	// Check if credentials are expired
 	if expired, err := m.credentialStore.IsExpired(identityName); err != nil || expired {
-		errUtils.CheckErrorAndPrint(ErrExpiredCredentials, "IsExpired", "")
-		return nil, ErrExpiredCredentials
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrExpiredCredentials, fmt.Sprintf("`%q`", identityName))
 	}
 
 	return m.buildWhoamiInfo(identityName, creds), nil

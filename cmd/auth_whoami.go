@@ -3,16 +3,20 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+var ErrNoActiveAuthSession = errors.New("no active authentication session found")
 
 // authWhoamiCmd shows current authentication status.
 var authWhoamiCmd = &cobra.Command{
@@ -41,18 +45,26 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 
 	// Get default identity to check whoami status
 	ctx := context.Background()
-	defaultIdentity, err := authManager.GetDefaultIdentity()
+
+	// Get identity from flag or use default
+	identityName, _ := cmd.Flags().GetString("identity")
+	if identityName == "" {
+		defaultIdentity, err := authManager.GetDefaultIdentity()
+		if err != nil {
+			return fmt.Errorf("no default identity configured and no identity specified: %w", err)
+		}
+		identityName = defaultIdentity
+	}
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "No default identity configured.\n")
 		fmt.Fprintf(os.Stderr, "Configure auth in atmos.yaml and run `atmos auth login` to authenticate.\n")
 		return nil
 	}
 
-	whoami, err := authManager.Whoami(ctx, defaultIdentity)
+	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "No active authentication session found.\n")
-		fmt.Fprintf(os.Stderr, "Run `atmos auth login` to authenticate.\n")
-		return nil
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	// Check if output should be JSON
@@ -70,7 +82,8 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 		}
 		jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
 		if err != nil {
-			return fmt.Errorf("failed to marshal JSON: %w", err)
+			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Failed to marshal JSON", "")
+			return errUtils.ErrInvalidAuthConfig
 		}
 		fmt.Println(string(jsonData))
 		return nil

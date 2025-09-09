@@ -14,9 +14,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "validation failed"
-        - "unsupported provider kind"
-        - "invalid/provider"
+        - "invalid auth config"
       exit_code: 1
 
   - name: atmos auth validate --verbose

@@ -168,7 +168,7 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 - **Description**: Secure credential storage without listing capability dependency
 - **Acceptance Criteria**:
   - Store credentials securely in system keyring
-  - Retrieve credentials by identity alias
+  - Retrieve credentials by identity name
   - Check credential expiration without listing all credentials
   - Whoami functionality works without keyring listing capability
   - Iterate through configured identities to find active sessions
@@ -515,7 +515,6 @@ auth:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
-      alias: managers
 
     prod-cross-account-admin:
       kind: aws/assume-role
@@ -523,7 +522,6 @@ auth:
       principal:
         assume_role: arn:aws:iam::999999999999:role/CrossAccountProductionAdmin
         session_name: atmos-prod-access
-      alias: prod-admin
 ```
 
 **Acceptance Criteria**:
@@ -622,7 +620,6 @@ auth:
         name: DeveloperAccess
         account:
           name: development
-      alias: dev-admin
 
     superuser:
       kind: aws/user
@@ -650,7 +647,6 @@ identities:
       name: DeveloperAccess
       account:
         name: development
-    alias: dev-admin
     env:
       - key: AWS_PROFILE
         value: dev-admin
@@ -872,7 +868,6 @@ identities:
     via: { provider: github-oidc }
     principal:
       assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
-    alias: ci-role
 ```
 
 **Environment Variables (GitHub Actions):**
@@ -932,7 +927,6 @@ identities:
       name: IdentityManagersTeamAccess
       account:
         name: core-identity
-    alias: managers-core
     env:
       - key: AWS_PROFILE
         value: managers-core
@@ -998,7 +992,6 @@ identities:
       name: DeveloperAccess
       account:
         name: dev
-    alias: dev
     env:
       - key: AWS_PROFILE
         value: dev-access
@@ -1030,14 +1023,14 @@ identities:
       secret_access_key: !env AWS_SECRET_ACCESS_KEY
       mfa_arn: !env AWS_MFA_ARN
       region: !env AWS_DEFAULT_REGION
-    alias: superuser
+    
 
   emergency-admin:
     kind: aws/user
     credentials:
       # If not defined, the credentials will try to be pulled from the keyring.
       region: us-east-1
-    alias: emergency
+    
 ```
 
 **Key Characteristics:**
@@ -1060,7 +1053,7 @@ identities:
     principal:
       role_definition_id: b24988ac-6180-42a0-ab88-20f7382dd24c
       scope: /subscriptions/12345678-1234-1234-1234-123456789012
-    alias: azure-admin
+    
 ```
 
 #### GCP Service Account Impersonation (Not Implemented)
@@ -1073,7 +1066,7 @@ identities:
     principal:
       service_account: admin@project.iam.gserviceaccount.com
       project: my-project
-    alias: gcp-admin
+    
 ```
 
 #### Okta Application (Not Implemented)
@@ -1085,7 +1078,7 @@ identities:
     via: { provider: okta }
     principal:
       app: datadog-admin
-    alias: monitoring
+    
 ```
 
 ### 5.3 Component-Level Auth Configuration
@@ -1116,7 +1109,7 @@ auth:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
-      alias: managers-core
+      
 
     superuser:
       kind: aws/user
@@ -1223,7 +1216,7 @@ auth:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
-      alias: managers-core
+      
       # AWS files automatically managed:
       # ~/.aws/atmos/cplive-sso/credentials
       # ~/.aws/atmos/cplive-sso/config
@@ -1242,7 +1235,7 @@ auth:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
-      alias: managers-core
+      
     security-admin: # Component-specific identity
       kind: aws/permission-set
       via: { provider: cplive-sso }
@@ -1282,7 +1275,7 @@ identities:
     via: { provider: okta-saml }
     principal:
       role_arn: arn:aws:iam::123456789012:role/SAMLAdminRole
-    alias: saml-admin
+    
 
   # Chained: SAML → Cross-account role
   prod-deployer:
@@ -1290,7 +1283,7 @@ identities:
     via: { identity: saml-admin }
     principal:
       role_arn: arn:aws:iam::987654321098:role/DeployerRole
-    alias: prod-deployer
+    
 ```
 
 **Authentication Flow:**
@@ -1480,7 +1473,7 @@ identities:
     principal:
       name: TerraformAdminAccess
       account.name: production
-    alias: tf-prod
+    
 
 # Bad: Unclear, generic names
 identities:

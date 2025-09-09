@@ -17,10 +17,9 @@ tests:
       - "-q"
       - ".auth"
     expect:
-      diff: []
+      diff: [ ]
       stdout:
-       - |
-         provider-oidc:
-           kind: github/oidc
-           region: us-east-1
+        - "provider-oidc:"
+        - "kind: github/oidc"
+        - "region: us-east-1"
       exit_code: 0

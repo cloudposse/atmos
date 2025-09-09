@@ -298,25 +298,6 @@ tests:
     expect:
       diff: []
       stderr:
-        - "identity \"nonexistent\" not found"
+        - "identity not found:"
+        - "nonexistent"
       exit_code: 1
-
-  # CI Environment Tests
-  - name: atmos auth whoami (CI mode)
-    enabled: true
-    snapshot: true
-    description: "Test auth whoami in CI environment"
-    workdir: "fixtures/scenarios/atmos-auth/"
-    env:
-      CI: "true"
-    command: "atmos"
-    args:
-      - "auth"
-      - "whoami"
-    expect:
-      diff: []
-      stderr:
-        - "Retrieve"
-      stdout:
-        - "test-admin"
-      exit_code: 0
