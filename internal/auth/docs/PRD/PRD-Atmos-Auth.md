@@ -29,10 +29,11 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 - **Description**: Support multiple authentication providers
 - **Acceptance Criteria**:
-  - Support AWS IAM Identity Center, SAML, GitHub Actions OIDC
-  - Support Azure Entra ID, GCP OIDC, Okta OIDC
+  - Support AWS IAM Identity Center (SSO), SAML, GitHub Actions OIDC
+  - Planned: Azure Entra ID, GCP OIDC, Okta OIDC
   - Allow configuration of provider-specific parameters
   - Enable default provider designation
+- Note: This PR implements AWS IAM Identity Center (SSO), SAML, GitHub Actions OIDC, and AWS user credentials. Azure Entra ID, GCP OIDC, and Okta OIDC are planned for a future phase.
 - **Priority**: P0 (Must Have)
 
 #### FR-002: Identity Management
@@ -40,8 +41,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 - **Description**: Manage cloud identities and role assumptions
 - **Acceptance Criteria**:
   - Support AWS permission sets, assume roles, and users
-  - Support Azure roles, GCP service account impersonation
-  - Support Okta applications
+  - Planned: Support Azure roles, GCP service account impersonation
+  - Planned: Support Okta applications
   - Enable identity chaining via other identities or providers
   - Support deep identity chaining (provider→identity→identity→identity)
   - Recursive provider resolution for identity chains
