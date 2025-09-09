@@ -86,8 +86,8 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 		return "", errUtils.ErrDefaultIdentity
 	}
 	if name == "" {
-		errUtils.CheckErrorAndPrint(ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
-		return "", ErrNoDefaultIdentity
+		errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
+		return "", errUtils.ErrNoDefaultIdentity
 	}
 	return name, nil
 }

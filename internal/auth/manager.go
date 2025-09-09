@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -21,21 +20,6 @@ const (
 	identityNameKey          = "identityName"
 	buildAuthenticationChain = "buildAuthenticationChain"
 	buildChainRecursive      = "buildChainRecursive"
-)
-
-var (
-	ErrNoCredentialsFound          = errors.New("no credentials found for identity")
-	ErrExpiredCredentials          = errors.New("credentials for identity are expired or invalid")
-	ErrNilParam                    = errors.New("parameter cannot be nil")
-	ErrInitializingProviders       = errors.New("failed to initialize providers")
-	ErrInitializingIdentities      = errors.New("failed to initialize identities")
-	ErrInitializingCredentialStore = errors.New("failed to initialize credential store")
-	ErrCircularDependency          = errors.New("circular dependency detected in identity chain")
-	ErrIdentityNotFound            = errors.New("identity not found")
-	ErrNoDefaultIdentity           = errors.New("no default identity configured for authentication")
-	ErrMultipleDefaultIdentities   = errors.New("multiple default identities found")
-	ErrTerraformPreHook            = errors.New("terraform pre-hook failed")
-	ErrNoIdentitiesAvailable       = errors.New("no identities available")
 )
 
 // manager implements the Authmanager interface.
@@ -59,16 +43,16 @@ func NewAuthManager(
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (types.AuthManager, error) {
 	if config == nil {
-		errUtils.CheckErrorAndPrint(ErrNilParam, "config", "auth config cannot be nil")
-		return nil, ErrNilParam
+		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "config", "auth config cannot be nil")
+		return nil, errUtils.ErrNilParam
 	}
 	if credentialStore == nil {
-		errUtils.CheckErrorAndPrint(ErrNilParam, "credentialStore", "credential store cannot be nil")
-		return nil, ErrNilParam
+		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "credentialStore", "credential store cannot be nil")
+		return nil, errUtils.ErrNilParam
 	}
 	if validator == nil {
-		errUtils.CheckErrorAndPrint(ErrNilParam, "validator", "validator cannot be nil")
-		return nil, ErrNilParam
+		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "validator", "validator cannot be nil")
+		return nil, errUtils.ErrNilParam
 	}
 
 	m := &manager{
@@ -82,14 +66,14 @@ func NewAuthManager(
 
 	// Initialize providers
 	if err := m.initializeProviders(); err != nil {
-		errUtils.CheckErrorAndPrint(ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
-		return nil, ErrInitializingProviders
+		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
+		return nil, errUtils.ErrInitializingProviders
 	}
 
 	// Initialize identities
 	if err := m.initializeIdentities(); err != nil {
-		errUtils.CheckErrorAndPrint(ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
-		return nil, ErrInitializingIdentities
+		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
+		return nil, errUtils.ErrInitializingIdentities
 	}
 
 	return m, nil
@@ -104,8 +88,8 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
-		errUtils.CheckErrorAndPrint(ErrNilParam, identityNameKey, "no identity specified")
-		return nil, ErrNilParam
+		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
+		return nil, errUtils.ErrNilParam
 	}
 	if _, exists := m.identities[identityName]; !exists {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
@@ -154,18 +138,18 @@ func (m *manager) GetChain() []string {
 // Whoami returns information about the specified identity's credentials.
 func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	if _, exists := m.identities[identityName]; !exists {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrIdentityNotFound, fmt.Sprintf("`%q`", identityName))
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrIdentityNotFound, fmt.Sprintf("`%q`", identityName))
 	}
 
 	// Try to retrieve credentials for the resolved identity.
 	creds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrNoCredentialsFound, fmt.Sprintf("`%q`", identityName))
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNoCredentialsFound, fmt.Sprintf("`%q`", identityName))
 	}
 
 	// Check if credentials are expired
 	if expired, err := m.credentialStore.IsExpired(identityName); err != nil || expired {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrExpiredCredentials, fmt.Sprintf("`%q`", identityName))
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrExpiredCredentials, fmt.Sprintf("`%q`", identityName))
 	}
 
 	return m.buildWhoamiInfo(identityName, creds), nil
@@ -191,7 +175,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	case 0:
 		// No default identities found
 		if telemetry.IsCI() {
-			return "", ErrNoDefaultIdentity
+			return "", errUtils.ErrNoDefaultIdentity
 		}
 		// In interactive mode, prompt user to choose from all identities
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
@@ -203,7 +187,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	default:
 		// Multiple default identities found.
 		if telemetry.IsCI() {
-			return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrMultipleDefaultIdentities, fmt.Sprintf("`%q`", defaultIdentities))
+			return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf("`%q`", defaultIdentities))
 		}
 		// In interactive mode, prompt user to choose from default identities
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
@@ -213,7 +197,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 // promptForIdentity prompts the user to select an identity from the given list.
 func (m *manager) promptForIdentity(message string, identities []string) (string, error) {
 	if len(identities) == 0 {
-		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, ErrNoIdentitiesAvailable)
+		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, errUtils.ErrNoIdentitiesAvailable)
 	}
 
 	var selectedIdentity string
@@ -601,8 +585,8 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 func (m *manager) buildChainRecursive(identityName string, chain *[]string, visited map[string]bool) error {
 	// Check for circular dependencies
 	if visited[identityName] {
-		errUtils.CheckErrorAndPrint(ErrCircularDependency, buildChainRecursive, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
-		return ErrCircularDependency
+		errUtils.CheckErrorAndPrint(errUtils.ErrCircularDependency, buildChainRecursive, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
+		return errUtils.ErrCircularDependency
 	}
 	visited[identityName] = true
 

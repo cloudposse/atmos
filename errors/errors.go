@@ -94,6 +94,20 @@ var (
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 
+	// Auth manager and identity/provider resolution errors (centralized sentinels).
+	ErrNoCredentialsFound          = errors.New("no credentials found for identity")
+	ErrExpiredCredentials          = errors.New("credentials for identity are expired or invalid")
+	ErrNilParam                    = errors.New("parameter cannot be nil")
+	ErrInitializingProviders       = errors.New("failed to initialize providers")
+	ErrInitializingIdentities      = errors.New("failed to initialize identities")
+	ErrInitializingCredentialStore = errors.New("failed to initialize credential store")
+	ErrCircularDependency          = errors.New("circular dependency detected in identity chain")
+	ErrIdentityNotFound            = errors.New("identity not found")
+	ErrNoDefaultIdentity           = errors.New("no default identity configured for authentication")
+	ErrMultipleDefaultIdentities   = errors.New("multiple default identities found")
+	ErrTerraformPreHook            = errors.New("terraform pre-hook failed")
+	ErrNoIdentitiesAvailable       = errors.New("no identities available")
+
 	ErrInvalidStackConfig = errors.New("invalid stack config")
 
 	ErrInvalidSubcommand = errors.New("invalid subcommand")
