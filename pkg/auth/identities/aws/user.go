@@ -280,7 +280,7 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	// Get AWS file environment variables using "aws-user" as mock provider.
 	awsFileManager, err := awsCloud.NewAWSFileManager()
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 	awsEnvVars := awsFileManager.GetEnvironmentVariables(awsUserProviderName, i.name)
 
