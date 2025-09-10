@@ -118,14 +118,16 @@ func createDeployment(stackName, componentName, componentType string, componentC
 	return deployment
 }
 
-// filterProEnabledDeployments returns only deployments that have Atmos Pro explicitly enabled
-// via settings.pro.enabled == true.
+// filterProEnabledDeployments returns only deployments that have Atmos Pro drift detection explicitly enabled
+// via settings.pro.drift_detection.enabled == true.
 func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deployment {
 	filtered := make([]schema.Deployment, 0, len(deployments))
 	for _, deployment := range deployments {
-		if settings, ok := deployment.Settings["pro"].(map[string]any); ok {
-			if enabled, ok := settings["enabled"].(bool); ok && enabled {
-				filtered = append(filtered, deployment)
+		if proSettings, ok := deployment.Settings["pro"].(map[string]any); ok {
+			if driftDetection, ok := proSettings["drift_detection"].(map[string]any); ok {
+				if enabled, ok := driftDetection["enabled"].(bool); ok && enabled {
+					filtered = append(filtered, deployment)
+				}
 			}
 		}
 	}

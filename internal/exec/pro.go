@@ -244,8 +244,14 @@ func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, clie
 
 	// Get GitHub run ID from environment variables using viper
 	v := viper.New()
-	v.BindEnv("github_run_id", "GITHUB_RUN_ID")
-	v.BindEnv("atmos_pro_run_id", "ATMOS_PRO_RUN_ID")
+	if err := v.BindEnv("github_run_id", "GITHUB_RUN_ID"); err != nil {
+		log.Error(err)
+		return err
+	}
+	if err := v.BindEnv("atmos_pro_run_id", "ATMOS_PRO_RUN_ID"); err != nil {
+		log.Error(err)
+		return err
+	}
 
 	atmosProRunID := v.GetString("github_run_id")
 	if atmosProRunID == "" {

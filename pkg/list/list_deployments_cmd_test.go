@@ -38,7 +38,9 @@ func TestListDeploymentsCommandLogic(t *testing.T) {
 				"terraform": map[string]interface{}{
 					"vpc": map[string]interface{}{
 						"settings": map[string]interface{}{
-							"pro": map[string]interface{}{"enabled": true},
+							"pro": map[string]interface{}{
+								"drift_detection": map[string]interface{}{"enabled": true},
+							},
 						},
 						"metadata": map[string]interface{}{"type": "real"},
 					},
@@ -46,7 +48,9 @@ func TestListDeploymentsCommandLogic(t *testing.T) {
 				"helmfile": map[string]interface{}{
 					"app": map[string]interface{}{
 						"settings": map[string]interface{}{
-							"pro": map[string]interface{}{"enabled": false},
+							"pro": map[string]interface{}{
+								"drift_detection": map[string]interface{}{"enabled": false},
+							},
 						},
 						"metadata": map[string]interface{}{"type": "real"},
 					},
@@ -140,7 +144,9 @@ func TestCreateDeploymentWithTemplateRendering(t *testing.T) {
 	componentConfigMap := map[string]any{
 		"settings": map[string]any{
 			"pro": map[string]any{
-				"enabled": true,
+				"drift_detection": map[string]any{
+					"enabled": true,
+				},
 				"pull_request": map[string]any{
 					"merged": map[string]any{
 						"workflows": map[string]any{

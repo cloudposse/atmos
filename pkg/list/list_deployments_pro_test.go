@@ -8,21 +8,25 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestFilterProEnabledDeployments ensures only deployments with settings.pro.enabled == true are returned.
+// TestFilterProEnabledDeployments ensures only deployments with settings.pro.drift_detection.enabled == true are returned.
 func TestFilterProEnabledDeployments(t *testing.T) {
 	deployments := []schema.Deployment{
 		{
 			Component: "vpc",
 			Stack:     "stack1",
 			Settings: map[string]interface{}{
-				"pro": map[string]interface{}{"enabled": true},
+				"pro": map[string]interface{}{
+					"drift_detection": map[string]interface{}{"enabled": true},
+				},
 			},
 		},
 		{
 			Component: "app",
 			Stack:     "stack1",
 			Settings: map[string]interface{}{
-				"pro": map[string]interface{}{"enabled": false},
+				"pro": map[string]interface{}{
+					"drift_detection": map[string]interface{}{"enabled": false},
+				},
 			},
 		},
 		{
