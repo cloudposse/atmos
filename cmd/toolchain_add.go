@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/cloudposse/atmos/toolchain"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var toolchainAddCmd = &cobra.Command{
@@ -14,11 +15,7 @@ This command adds a tool and its version to the .tool-versions file. If the tool
 already exists, it will be updated with the new version.
 
 The tool will be validated against the registry to ensure it exists before being added.
-
-Examples:
-atmos toolchain add terraform 1.9.8
-atmos toolchain add hashicorp/terraform 1.11.4
-atmos toolchain add --file /path/to/.tool-versions kubectl 1.28.0`,
+`,
 	Args: cobra.ExactArgs(2),
 	RunE: runAddToolCmd,
 }
@@ -39,4 +36,6 @@ func runAddToolCmd(cmd *cobra.Command, args []string) error {
 
 func init() {
 	toolchainAddCmd.Flags().String("file", "", "Path to tool-versions file (defaults to global --tool-versions-file)")
+	_ = viper.BindEnv("toolchain.file_path", "TOOLCHAIN_PATH_RELATIVE", "ATMOS_TOOLCHAIN_PATH_RELATIVE")
+
 }

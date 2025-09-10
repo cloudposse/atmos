@@ -12,12 +12,7 @@ var toolchainPathCmd = &cobra.Command{
 
 This command reads the .tool-versions file and constructs a PATH that includes
 all installed tool versions in the correct order for execution.
-
-Examples:
-atmos toolchain path                    # Print PATH for all tools in .tool-versions (absolute paths)
-atmos toolchain path --relative         # Print PATH with relative paths
-atmos toolchain path --export           # Print export PATH=... for shell sourcing
-atmos toolchain path --json             # Print PATH as JSON object`,
+`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return toolchain.EmitPath(exportFlag, jsonFlag, relativeFlag)
 	},

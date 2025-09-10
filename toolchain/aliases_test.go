@@ -69,7 +69,6 @@ func TestAliasesCommand_InvalidConfigFile(t *testing.T) {
 
 	// Change to the temp directory
 	t.Chdir(tempDir)
-	require.NoError(t, err)
 
 	// Test aliases command with invalid config
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsConfigFile: configFile}})

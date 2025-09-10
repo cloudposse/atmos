@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// toolchainAliasesCmd defines the Cobra command for listing aliases
+// toolchainAliasesCmd defines the Cobra command for listing aliases.
 var toolchainAliasesCmd = &cobra.Command{
 	Use:   "aliases",
 	Short: "List configured tool aliases",

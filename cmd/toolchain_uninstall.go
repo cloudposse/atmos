@@ -12,11 +12,7 @@ var toolchainUninstallCmd = &cobra.Command{
 
 The tool should be specified in the format: owner/repo@version or tool@version.
 If no tool is specified, uninstalls all tools from the .tool-versions file.
-
-Examples:
-atmos toolchain uninstall terraform@1.9.8
-atmos toolchain uninstall hashicorp/terraform@1.11.4
-atmos toolchain uninstall                    # Uninstall all tools from .tool-versions`,
+`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runUninstall,
 }
