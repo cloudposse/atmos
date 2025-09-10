@@ -86,7 +86,7 @@ func detectProjectContext() string {
 		parent := filepath.Dir(dir)
 		parentName := filepath.Base(parent)
 		currentName := filepath.Base(dir)
-		
+
 		// Check if parent directory is named "tools"
 		if parentName == "tools" {
 			// We're in a tools subdirectory, return the tool name
@@ -95,7 +95,7 @@ func detectProjectContext() string {
 			}
 			return currentName
 		}
-		
+
 		// Check if we've found a .git directory (repository root)
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 			// Found the repository root
@@ -105,7 +105,7 @@ func detectProjectContext() string {
 			}
 			return repoName
 		}
-		
+
 		// Stop if we've reached the filesystem root
 		if parent == dir {
 			break
