@@ -59,81 +59,81 @@ func (i *userIdentity) GetProviderName() (string, error) {
 
 // Authenticate performs authentication by retrieving long-lived credentials and generating session tokens.
 func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (types.ICredentials, error) {
-    // Resolve base (long-lived) credentials from config or store
-    longLivedCreds, err := i.resolveLongLivedCredentials()
-    if err != nil {
-        return nil, err
-    }
+	// Resolve base (long-lived) credentials from config or store
+	longLivedCreds, err := i.resolveLongLivedCredentials()
+	if err != nil {
+		return nil, err
+	}
 
-    // Resolve region (from config or default) and ensure it is set
-    region := i.resolveRegion()
-    log.Debug("AWS User region extracted.", logKeyIdentity, i.name, "region", region)
-    if longLivedCreds.Region == "" {
-        longLivedCreds.Region = region
-    }
+	// Resolve region (from config or default) and ensure it is set
+	region := i.resolveRegion()
+	log.Debug("AWS User region extracted.", logKeyIdentity, i.name, "region", region)
+	if longLivedCreds.Region == "" {
+		longLivedCreds.Region = region
+	}
 
-    // Generate a session token (handles MFA when configured)
-    return i.generateSessionToken(ctx, longLivedCreds, region)
+	// Generate a session token (handles MFA when configured)
+	return i.generateSessionToken(ctx, longLivedCreds, region)
 }
 
 // resolveLongLivedCredentials returns long-lived credentials either from the identity config
 // (access_key_id/secret_access_key with optional mfa_arn) or from the keyring store.
 func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, error) {
-    if creds, err := i.credentialsFromConfig(); err != nil || creds != nil {
-        return creds, err
-    }
-    return i.credentialsFromStore()
+	if creds, err := i.credentialsFromConfig(); err != nil || creds != nil {
+		return creds, err
+	}
+	return i.credentialsFromStore()
 }
 
 // credentialsFromConfig builds AWS credentials from identity config if present.
 // Returns (nil, nil) when not configured.
 func (i *userIdentity) credentialsFromConfig() (*types.AWSCredentials, error) {
-    accessKeyID, hasAccessKey := i.config.Credentials["access_key_id"].(string)
-    if !hasAccessKey || accessKeyID == "" {
-        return nil, nil
-    }
+	accessKeyID, hasAccessKey := i.config.Credentials["access_key_id"].(string)
+	if !hasAccessKey || accessKeyID == "" {
+		return nil, nil
+	}
 
-    secretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
-    if secretAccessKey == "" {
-        return nil, fmt.Errorf("%w: access_key_id is set but secret_access_key is missing for identity %q", errUtils.ErrInvalidAuthConfig, i.name)
-    }
+	secretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
+	if secretAccessKey == "" {
+		return nil, fmt.Errorf("%w: access_key_id is set but secret_access_key is missing for identity %q", errUtils.ErrInvalidAuthConfig, i.name)
+	}
 
-    mfaArn, _ := i.config.Credentials["mfa_arn"].(string)
-    log.Debug("Using credentials from atmos.yaml configuration", logKeyIdentity, i.name, "hasAccessKey", accessKeyID != "", "hasMFA", mfaArn != "")
+	mfaArn, _ := i.config.Credentials["mfa_arn"].(string)
+	log.Debug("Using credentials from atmos.yaml configuration", logKeyIdentity, i.name, "hasAccessKey", accessKeyID != "", "hasMFA", mfaArn != "")
 
-    return &types.AWSCredentials{
-        AccessKeyID:     accessKeyID,
-        SecretAccessKey: secretAccessKey,
-        MfaArn:          mfaArn,
-    }, nil
+	return &types.AWSCredentials{
+		AccessKeyID:     accessKeyID,
+		SecretAccessKey: secretAccessKey,
+		MfaArn:          mfaArn,
+	}, nil
 }
 
 // credentialsFromStore retrieves AWS credentials from the keyring store.
 func (i *userIdentity) credentialsFromStore() (*types.AWSCredentials, error) {
-    credStore := atmosCredentials.NewCredentialStore()
-    retrieved, err := credStore.Retrieve(i.name)
-    if err != nil {
-        return nil, fmt.Errorf("%w: failed to retrieve AWS User credentials for %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, err)
-    }
+	credStore := atmosCredentials.NewCredentialStore()
+	retrieved, err := credStore.Retrieve(i.name)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to retrieve AWS User credentials for %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, err)
+	}
 
-    longLivedCreds, ok := retrieved.(*types.AWSCredentials)
-    if !ok {
-        return nil, fmt.Errorf("%w: stored credentials are not AWS credentials", errUtils.ErrAwsAuth)
-    }
-    if longLivedCreds.AccessKeyID == "" || longLivedCreds.SecretAccessKey == "" {
-        return nil, fmt.Errorf("%w: stored AWS user credentials for %q are incomplete (missing access key or secret)", errUtils.ErrAwsUserNotConfigured, i.name)
-    }
+	longLivedCreds, ok := retrieved.(*types.AWSCredentials)
+	if !ok {
+		return nil, fmt.Errorf("%w: stored credentials are not AWS credentials", errUtils.ErrAwsAuth)
+	}
+	if longLivedCreds.AccessKeyID == "" || longLivedCreds.SecretAccessKey == "" {
+		return nil, fmt.Errorf("%w: stored AWS user credentials for %q are incomplete (missing access key or secret)", errUtils.ErrAwsUserNotConfigured, i.name)
+	}
 
-    log.Debug("Using credentials from keyring", logKeyIdentity, i.name)
-    return longLivedCreds, nil
+	log.Debug("Using credentials from keyring", logKeyIdentity, i.name)
+	return longLivedCreds, nil
 }
 
 // resolveRegion returns the configured region or the default one.
 func (i *userIdentity) resolveRegion() string {
-    if r, ok := i.config.Credentials["region"].(string); ok && r != "" {
-        return r
-    }
-    return defaultRegion
+	if r, ok := i.config.Credentials["region"].(string); ok && r != "" {
+		return r
+	}
+	return defaultRegion
 }
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider.
