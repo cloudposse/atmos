@@ -19,46 +19,46 @@ import (
 )
 
 func TestNewUserIdentity_And_GetProviderName(t *testing.T) {
-    // Wrong kind should error.
+	// Wrong kind should error.
 	_, err := NewUserIdentity("me", &schema.Identity{Kind: "aws/assume-role"})
 	assert.Error(t, err)
 
-    // Correct kind.
+	// Correct kind.
 	id, err := NewUserIdentity("me", &schema.Identity{Kind: "aws/user"})
 	assert.NoError(t, err)
 	assert.NotNil(t, id)
 	assert.Equal(t, "aws/user", id.Kind())
 
-    // Provider name is constant.
+	// Provider name is constant.
 	name, err := id.GetProviderName()
 	assert.NoError(t, err)
 	assert.Equal(t, "aws-user", name)
 }
 
 func TestUserIdentity_Environment(t *testing.T) {
-    // Environment should include AWS files and pass through additional env from config.
+	// Environment should include AWS files and pass through additional env from config.
 	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user", Env: []schema.EnvironmentVariable{{Key: "FOO", Value: "BAR"}}})
 	require.NoError(t, err)
 	env, err := id.Environment()
 	require.NoError(t, err)
 
-    // Contains the three AWS_* vars and our custom one.
+	// Contains the three AWS_* vars and our custom one.
 	assert.NotEmpty(t, env["AWS_SHARED_CREDENTIALS_FILE"])
 	assert.NotEmpty(t, env["AWS_CONFIG_FILE"])
-    // Points under ~/.aws/atmos/aws-user.
+	// Points under ~/.aws/atmos/aws-user.
 	assert.Contains(t, env["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join(".aws", "atmos", "aws-user"))
 	assert.Contains(t, env["AWS_CONFIG_FILE"], filepath.Join(".aws", "atmos", "aws-user"))
 	assert.Equal(t, "BAR", env["FOO"])
 }
 
 func TestIsStandaloneAWSUserChain(t *testing.T) {
-    // Not standalone when multiple elements.
+	// Not standalone when multiple elements.
 	assert.False(t, IsStandaloneAWSUserChain([]string{"p", "dev"}, map[string]schema.Identity{"dev": {Kind: "aws/user"}}))
 
-    // Single element but wrong kind -> false.
+	// Single element but wrong kind -> false.
 	assert.False(t, IsStandaloneAWSUserChain([]string{"dev"}, map[string]schema.Identity{"dev": {Kind: "aws/permission-set"}}))
 
-    // Single element and aws/user -> true.
+	// Single element and aws/user -> true.
 	assert.True(t, IsStandaloneAWSUserChain([]string{"dev"}, map[string]schema.Identity{"dev": {Kind: "aws/user"}}))
 }
 
@@ -77,11 +77,11 @@ func (s stubUser) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksI
 }
 
 func TestAuthenticateStandaloneAWSUser(t *testing.T) {
-    // Not found -> error.
+	// Not found -> error.
 	_, err := AuthenticateStandaloneAWSUser(context.Background(), "missing", map[string]types.Identity{})
 	assert.Error(t, err)
 
-    // Found -> returns credentials from identity implementation.
+	// Found -> returns credentials from identity implementation.
 	out, err := AuthenticateStandaloneAWSUser(context.Background(), "dev", map[string]types.Identity{
 		"dev": stubUser{creds: &types.AWSCredentials{AccessKeyID: "AKIA", Region: "us-east-1"}},
 	})
@@ -93,7 +93,7 @@ func TestAuthenticateStandaloneAWSUser(t *testing.T) {
 func init() { keyring.MockInit() }
 
 func TestUser_credentialsFromConfig(t *testing.T) {
-    // Missing secret when access_key_id present -> error.
+	// Missing secret when access_key_id present -> error.
 	id, err := NewUserIdentity("me", &schema.Identity{Kind: "aws/user", Credentials: map[string]any{
 		"access_key_id": "AKIA",
 	}})
@@ -103,7 +103,7 @@ func TestUser_credentialsFromConfig(t *testing.T) {
 	assert.Nil(t, creds)
 	assert.Error(t, err)
 
-    // Full credentials with MFA -> success.
+	// Full credentials with MFA -> success.
 	id, err = NewUserIdentity("me", &schema.Identity{Kind: "aws/user", Credentials: map[string]any{
 		"access_key_id":     "AKIA",
 		"secret_access_key": "SECRET",
@@ -120,7 +120,7 @@ func TestUser_credentialsFromConfig(t *testing.T) {
 }
 
 func TestUser_credentialsFromStore(t *testing.T) {
-    // Prime the store for alias "dev".
+	// Prime the store for alias "dev".
 	store := atmosCreds.NewCredentialStore()
 	_ = store.Store("dev", &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "SECRET", Region: "us-east-1"})
 
@@ -128,28 +128,28 @@ func TestUser_credentialsFromStore(t *testing.T) {
 	require.NoError(t, err)
 	ui := id.(*userIdentity)
 
-    // Success path.
+	// Success path.
 	creds, err := ui.credentialsFromStore()
 	require.NoError(t, err)
 	require.NotNil(t, creds)
 	assert.Equal(t, "AKIA", creds.AccessKeyID)
 	assert.Equal(t, "us-east-1", creds.Region)
 
-    // Wrong type stored.
+	// Wrong type stored.
 	_ = store.Store("other", &types.OIDCCredentials{Token: "hdr.payload."})
 	id, _ = NewUserIdentity("other", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
 	assert.Error(t, err)
 
-    // Incomplete stored.
+	// Incomplete stored.
 	_ = store.Store("incomplete", &types.AWSCredentials{AccessKeyID: "AKIA"})
 	id, _ = NewUserIdentity("incomplete", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
 	assert.Error(t, err)
 
-    // Missing alias -> retrieval error.
+	// Missing alias -> retrieval error.
 	id, _ = NewUserIdentity("missing", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
@@ -157,7 +157,7 @@ func TestUser_credentialsFromStore(t *testing.T) {
 }
 
 func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
-    // When config has full credentials, prefer those.
+	// When config has full credentials, prefer those.
 	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user", Credentials: map[string]any{
 		"access_key_id":     "AKIA",
 		"secret_access_key": "SECRET",
@@ -168,8 +168,8 @@ func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "AKIA", creds.AccessKeyID)
 
-    // If config has no access key, fallback to store.
-    // Prime the store.
+	// If config has no access key, fallback to store.
+	// Prime the store.
 	store := atmosCreds.NewCredentialStore()
 	_ = store.Store("dev2", &types.AWSCredentials{AccessKeyID: "AK2", SecretAccessKey: "SEC2"})
 	id, _ = NewUserIdentity("dev2", &schema.Identity{Kind: "aws/user"})
@@ -197,8 +197,8 @@ func TestUser_writeAWSFiles(t *testing.T) {
 	err := ui.writeAWSFiles(creds, "us-east-2")
 	require.NoError(t, err)
 
-    // Files should exist under ~/.aws/atmos/aws-user.
-    // Note: we can’t know the exact tempdir path here; assert partial suffix.
+	// Files should exist under ~/.aws/atmos/aws-user.
+	// Note: we can’t know the exact tempdir path here; assert partial suffix.
 	env, _ := id.Environment()
 	require.Contains(t, env["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join(".aws", "atmos", "aws-user", "credentials"))
 	require.Contains(t, env["AWS_CONFIG_FILE"], filepath.Join(".aws", "atmos", "aws-user", "config"))
@@ -220,7 +220,7 @@ func TestUser_buildGetSessionTokenInput_WithMFA(t *testing.T) {
 	id, _ := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
 	ui := id.(*userIdentity)
 
-    // Stub MFA prompt to avoid interactive UI.
+	// Stub MFA prompt to avoid interactive UI.
 	old := promptMfaTokenFunc
 	defer func() { promptMfaTokenFunc = old }()
 	promptMfaTokenFunc = func(_ *types.AWSCredentials) (string, error) { return "123456", nil }
@@ -245,15 +245,15 @@ func TestUser_PostAuthenticate_SetsEnvAndFiles(t *testing.T) {
 	err := ui.PostAuthenticate(context.Background(), stack, "aws-user", "dev", creds)
 	require.NoError(t, err)
 
-    // Env set on stack.
+	// Env set on stack.
 	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join(".aws", "atmos", "aws-user", "credentials"))
 	assert.Equal(t, "dev", stack.ComponentEnvSection["AWS_PROFILE"])
 }
 
 func TestUser_generateSessionToken_toAWSCredentials(t *testing.T) {
-    // This tests the conversion part separately by invoking GetSessionToken via a local stubbed client through a helper.
-    // We don’t call generateSessionToken directly to avoid network calls.
-    // Instead, validate that the result from STS is translated as expected.
+	// This tests the conversion part separately by invoking GetSessionToken via a local stubbed client through a helper.
+	// We don’t call generateSessionToken directly to avoid network calls.
+	// Instead, validate that the result from STS is translated as expected.
 	exp := time.Now().Add(45 * time.Minute)
 	out := &sts.GetSessionTokenOutput{Credentials: &ststypes.Credentials{
 		AccessKeyId:     aws.String("TMPAKIA"),
