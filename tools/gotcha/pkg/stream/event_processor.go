@@ -145,8 +145,8 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 
 		// Release lock and display package if needed before returning
 		p.mu.Unlock()
-		if packageToDisplay != nil {
-			p.displayPackageResult(packageToDisplay)
+		if packageToDisplay != nil && p.reporter != nil {
+			p.reporter.OnPackageComplete(packageToDisplay)
 		}
 		return
 	}
@@ -264,8 +264,8 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	p.mu.Unlock()
 
 	// Display package if needed (after releasing lock to avoid deadlock)
-	if packageToDisplay != nil {
-		p.displayPackageResult(packageToDisplay)
+	if packageToDisplay != nil && p.reporter != nil {
+		p.reporter.OnPackageComplete(packageToDisplay)
 	}
 }
 

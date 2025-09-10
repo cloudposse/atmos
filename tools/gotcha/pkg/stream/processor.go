@@ -7,13 +7,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -78,6 +75,9 @@ type StreamProcessor struct {
 	passed  int
 	failed  int
 	skipped int
+	
+	// TestReporter for handling display
+	reporter TestReporter
 }
 
 // NewStreamProcessor creates a new stream processor.
@@ -101,6 +101,31 @@ func NewStreamProcessor(jsonWriter io.Writer, showFilter, testFilter, verbosityL
 		testFilter:     testFilter,
 		verbosityLevel: verbosityLevel,
 		startTime:      time.Now(),
+		
+		// Create default stream reporter for backward compatibility
+		reporter: NewStreamReporter(showFilter, testFilter, verbosityLevel),
+	}
+}
+
+// NewStreamProcessorWithReporter creates a new stream processor with a custom reporter.
+func NewStreamProcessorWithReporter(jsonWriter io.Writer, reporter TestReporter) *StreamProcessor {
+	return &StreamProcessor{
+		buffers:      make(map[string][]string),
+		subtestStats: make(map[string]*SubtestStats),
+
+		// New buffered output fields
+		packageResults: make(map[string]*PackageResult),
+		packageOrder:   []string{},
+		activePackages: make(map[string]bool),
+
+		// Legacy fields (will be removed)
+		packagesWithNoTests:   make(map[string]bool),
+		packageHasTests:       make(map[string]bool),
+		packageNoTestsPrinted: make(map[string]bool),
+
+		jsonWriter: jsonWriter,
+		startTime:  time.Now(),
+		reporter:   reporter,
 	}
 }
 
@@ -167,7 +192,9 @@ func (p *StreamProcessor) ProcessStream(input io.Reader) error {
 
 	// Display incomplete packages after releasing the lock
 	for _, pkg := range incompletePackages {
-		p.displayPackageResult(pkg)
+		if p.reporter != nil {
+			p.reporter.OnPackageComplete(pkg)
+		}
 	}
 
 	return scanner.Err()
@@ -177,55 +204,15 @@ func (p *StreamProcessor) ProcessStream(input io.Reader) error {
 func (p *StreamProcessor) PrintSummary() {
 	// FIX: Must hold lock when accessing shared maps to prevent concurrent read panic
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	total := p.passed + p.failed + p.skipped
-	if total == 0 {
-		return
-	}
-
-	// Calculate overall coverage
-	var totalCoverage float64
-	var packagesWithCoverage int
-	for _, pkg := range p.packageResults {
-		if pkg.Coverage != "" && pkg.Coverage != "0.0%" {
-			// Parse percentage from string like "75.2%"
-			coverageStr := strings.TrimSuffix(pkg.Coverage, "%")
-			if coverageVal, err := strconv.ParseFloat(coverageStr, 64); err == nil {
-				totalCoverage += coverageVal
-				packagesWithCoverage++
-			}
-		}
-	}
-
-	fmt.Fprintf(os.Stderr, "\n\n")
-	fmt.Fprintf(os.Stderr, "%s\n", tui.StatsHeaderStyle.Render("Test Results:"))
-	fmt.Fprintf(os.Stderr, "  %s Passed:  %d\n", tui.PassStyle.Render(tui.CheckPass), p.passed)
-	fmt.Fprintf(os.Stderr, "  %s Failed:  %d\n", tui.FailStyle.Render(tui.CheckFail), p.failed)
-	fmt.Fprintf(os.Stderr, "  %s Skipped: %d\n", tui.SkipStyle.Render(tui.CheckSkip), p.skipped)
-	fmt.Fprintf(os.Stderr, "  Total:     %d\n", total)
-
-	// Display average coverage if available
-	if packagesWithCoverage > 0 {
-		avgCoverage := totalCoverage / float64(packagesWithCoverage)
-		fmt.Fprintf(os.Stderr, "  Coverage:  %.1f%%\n", avgCoverage)
-	}
-
-	fmt.Fprintf(os.Stderr, "\n")
-
-	// Log completion time as info message
+	passed := p.passed
+	failed := p.failed
+	skipped := p.skipped
 	elapsed := time.Since(p.startTime)
-	fmt.Fprintf(os.Stderr, "%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds())
+	p.mu.Unlock()
 
-	// Ensure output is flushed
-	if config.IsCI() {
-		os.Stderr.Sync()
-	}
-
-	// Additional defensive flush for Windows to prevent race conditions
-	if runtime.GOOS == "windows" {
-		os.Stderr.Sync()
-		os.Stdout.Sync()
+	// Use reporter to finalize if available
+	if p.reporter != nil {
+		p.reporter.Finalize(passed, failed, skipped, elapsed)
 	}
 }
 
