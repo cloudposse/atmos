@@ -12,12 +12,7 @@ var toolchainSetCmd = &cobra.Command{
 
 If no version is provided, this command will fetch available versions from GitHub releases
 and present them in an interactive selection (only works for github_release type tools).
-
-Examples:
-atmos toolchain set terraform 1.11.4
-atmos toolchain set hashicorp/terraform 1.11.4
-atmos toolchain set terraform  # Interactive version selection
-atmos toolchain set --file /path/to/.tool-versions kubectl 1.28.0`,
+`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filePath, _ := cmd.Flags().GetString("file")

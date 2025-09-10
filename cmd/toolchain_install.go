@@ -11,10 +11,7 @@ var toolchainInstallCmd = &cobra.Command{
 	Long: `Install a CLI binary using metadata from the registry.
 
 The tool should be specified in the format: owner/repo@version
-Examples:
-atmos toolchain install suzuki-shunsuke/github-comment@v3.5.0
-atmos toolchain install hashicorp/terraform@v1.5.0
-atmos toolchain install                    # Install from .tool-versions file`,
+`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runInstall,
 }

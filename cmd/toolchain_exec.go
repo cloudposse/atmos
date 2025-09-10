@@ -11,12 +11,7 @@ var toolchainExecCmd = &cobra.Command{
 	Long: `Exec a specific version of a tool with arguments, replacing the current process.
 
 If no version is specified, the latest version will be used.
-
-Examples:
-atmos toolchain exec terraform --version          # Uses latest version
-atmos toolchain exec terraform@1.9.8 --version   # Uses specific version
-atmos toolchain exec opentofu@1.10.1 init
-atmos toolchain exec terraform@1.5.7 plan -var-file=prod.tfvars`,
+`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		installer := toolchain.NewInstaller()
