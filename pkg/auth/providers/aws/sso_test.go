@@ -96,9 +96,9 @@ func TestSSOProvider_Environment_Simple(t *testing.T) {
 }
 
 func TestSSOProvider_Authenticate_Simple(t *testing.T) {
-	// Prevent browser launch during device auth flow and shorten network timeouts
-	t.Setenv("GO_TEST", "1") // utils.OpenUrl early-exits when set
-	t.Setenv("CI", "1")      // promptDeviceAuth avoids opening in CI
+    // Prevent browser launch during device auth flow and shorten network timeouts.
+    t.Setenv("GO_TEST", "1") // utils.OpenUrl early-exits when set.
+    t.Setenv("CI", "1")      // promptDeviceAuth avoids opening in CI.
 
 	config := &schema.Provider{
 		Kind:     testSSOKind,
@@ -109,13 +109,13 @@ func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	provider, err := NewSSOProvider(testProviderName, config)
 	require.NoError(t, err)
 
-	// Use short timeout so SDK calls fail fast in tests
+    // Use short timeout so SDK calls fail fast in tests.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	_, err = provider.Authenticate(ctx)
 
-	// We expect this to fail in test environment without proper SSO setup
-	assert.Error(t, err)
+    // We expect this to fail in test environment without proper SSO setup.
+    assert.Error(t, err)
 }
 
 func TestSSOProvider_getSessionDuration(t *testing.T) {
