@@ -1,6 +1,8 @@
 package aws
 
 import (
+	"io/fs"
+	"os"
 	"path/filepath"
 	"testing"
 

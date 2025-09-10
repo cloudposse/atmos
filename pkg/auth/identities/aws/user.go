@@ -33,6 +33,9 @@ type userIdentity struct {
 
 // NewUserIdentity creates a new AWS user identity.
 func NewUserIdentity(name string, config *schema.Identity) (types.Identity, error) {
+	if config == nil {
+		return nil, fmt.Errorf("%w: identity %q has nil config", errUtils.ErrInvalidAuthConfig, name)
+	}
 	if config.Kind != "aws/user" {
 		return nil, fmt.Errorf("%w: invalid identity kind for user: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}
@@ -86,7 +89,9 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds types.ICreden
 		if !ok {
 			return nil, fmt.Errorf("%w: stored credentials are not AWS credentials", errUtils.ErrAwsAuth)
 		}
-
+		if longLivedCreds.AccessKeyID == "" || longLivedCreds.SecretAccessKey == "" {
+			return nil, fmt.Errorf("%w: stored AWS user credentials for %q are incomplete (missing access key or secret)", errUtils.ErrAwsUserNotConfigured, i.name)
+		}
 		log.Debug("Using credentials from keyring", logKeyIdentity, i.name)
 	}
 

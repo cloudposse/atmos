@@ -133,7 +133,7 @@ func (p *ssoProvider) promptDeviceAuth(authResp *ssooidc.StartDeviceAuthorizatio
 		if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
 			if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
 				log.Debug(err)
-				utils.PrintfMessageToTUI("🔐 Please visit %s and enter code: %s.", code)
+				utils.PrintfMessageToTUI("🔐 Please visit %s and enter code: %s.", *authResp.VerificationUriComplete, code)
 			}
 		}
 	}

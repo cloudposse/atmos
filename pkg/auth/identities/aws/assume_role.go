@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -15,6 +16,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+const maxSessionNameLength = 64
 
 // assumeRoleIdentity implements AWS assume role identity.
 type assumeRoleIdentity struct {
@@ -33,9 +36,11 @@ func (i *assumeRoleIdentity) newSTSClient(ctx context.Context, awsBase *types.AW
 	if region == "" {
 		region = "us-east-1"
 	}
+	// Persist the resolved region back onto the identity so it is available for serialization.
+	i.region = region
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrInvalidIdentityConfig, err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}
 	cfg.Credentials = aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(awsBase.AccessKeyID, awsBase.SecretAccessKey, awsBase.SessionToken))
 	return sts.NewFromConfig(cfg), nil
@@ -50,11 +55,16 @@ func (i *assumeRoleIdentity) toAWSCredentials(result *sts.AssumeRoleOutput) (typ
 	if result.Credentials != nil && result.Credentials.Expiration != nil {
 		expiration = result.Credentials.Expiration.Format(time.RFC3339)
 	}
+	// Ensure a non-empty region is serialized.
+	finalRegion := i.region
+	if finalRegion == "" {
+		finalRegion = "us-east-1"
+	}
 	return &types.AWSCredentials{
 		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
 		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
 		SessionToken:    aws.ToString(result.Credentials.SessionToken),
-		Region:          i.region,
+		Region:          finalRegion,
 		Expiration:      expiration,
 	}, nil
 }
@@ -62,7 +72,8 @@ func (i *assumeRoleIdentity) toAWSCredentials(result *sts.AssumeRoleOutput) (typ
 // buildAssumeRoleInput constructs the STS AssumeRoleInput including optional external ID and duration.
 
 func (i *assumeRoleIdentity) buildAssumeRoleInput() *sts.AssumeRoleInput {
-	sessionName := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
+	raw := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
+	sessionName := sanitizeRoleSessionName(raw)
 	input := &sts.AssumeRoleInput{
 		RoleArn:         aws.String(i.roleArn),
 		RoleSessionName: aws.String(sessionName),
@@ -108,7 +119,7 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 
 	// Validate identity configuration, sets roleArn and region.
 	if err := i.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: invalid assume role identity: %v", errUtils.ErrInvalidIdentityConfig, err)
+		return nil, fmt.Errorf("%w: invalid assume role identity: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}
 
 	// Create STS client with base credentials.
@@ -122,7 +133,7 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to assume role: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to assume role: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	return i.toAWSCredentials(result)
 }
@@ -178,10 +189,29 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
 	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
-		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%w: failed to setup AWS files: %w", errUtils.ErrAwsAuth, err)
 	}
 	if err := awsCloud.SetEnvironmentVariables(stackInfo, providerName, identityName); err != nil {
-		return fmt.Errorf("%w: failed to set environment variables: %v", errUtils.ErrAwsAuth, err)
+		return fmt.Errorf("%w: failed to set environment variables: %w", errUtils.ErrAwsAuth, err)
 	}
 	return nil
+}
+
+// sanitizeRoleSessionName sanitizes the role session name to be used in AssumeRole.
+func sanitizeRoleSessionName(s string) string {
+	// Allowed: letters, digits, + = , . @ -  characters.
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+			r == '+' || r == '=' || r == ',' || r == '.' || r == '@' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	name := b.String()
+	if len(name) > maxSessionNameLength {
+		name = name[:maxSessionNameLength]
+	}
+	return name
 }
