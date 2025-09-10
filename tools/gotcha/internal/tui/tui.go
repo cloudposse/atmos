@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -143,23 +142,25 @@ func (m *TestModel) readNextLine() tea.Cmd {
 			return nil
 		}
 
-		reader := bufio.NewReader(m.scanner)
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				// Check if the process exited with an error
-				if m.testCmd != nil {
-					// Wait for the process to finish and get exit code
-					if state, err := m.testCmd.Wait(); err == nil {
-						m.exitCode = state.ExitCode()
-					}
-				}
-				return testCompleteMsg{exitCode: m.exitCode}
+		// Use the existing scanner, don't create a new reader each time
+		if !m.scanner.Scan() {
+			// Check for scanner error
+			if err := m.scanner.Err(); err != nil {
+				return testFailMsg{test: "read", pkg: "error: " + err.Error()}
 			}
-			return testFailMsg{test: "read", pkg: "error: " + err.Error()}
+			// EOF reached
+			// Check if the process exited with an error
+			if m.testCmd != nil {
+				// Wait for the process to finish and get exit code
+				if state, err := m.testCmd.Wait(); err == nil {
+					m.exitCode = state.ExitCode()
+				}
+			}
+			return testCompleteMsg{exitCode: m.exitCode}
 		}
 
-		return streamOutputMsg{line: strings.TrimRight(line, "\n")}
+		line := m.scanner.Text()
+		return streamOutputMsg{line: line}
 	}
 }
 
@@ -257,7 +258,7 @@ func (m *TestModel) UpdateOld(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case subprocessReadyMsg:
-		m.scanner = msg.proc
+		m.scanner = bufio.NewScanner(msg.proc)
 
 		// Open JSON file for writing
 		jsonFile, err := os.Create(m.outputFile)
@@ -499,4 +500,55 @@ func (m *TestModel) GetTotalTestCount() int {
 // GetTestPackages returns the list of test packages.
 func (m *TestModel) GetTestPackages() []string {
 	return m.testPackages
+}
+
+// GetPackageResults returns the map of package results.
+func (m *TestModel) GetPackageResults() map[string]*PackageResult {
+	return m.packageResults
+}
+
+// DebugPackageTracking writes debug information about package tracking to a file.
+func (m *TestModel) DebugPackageTracking() {
+	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintf(f, "\n=== TUI PACKAGE TRACKING SUMMARY ===\n")
+			fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))
+			fmt.Fprintf(f, "Total packages in packageOrder: %d\n", len(m.packageOrder))
+			fmt.Fprintf(f, "Total packages in packageResults: %d\n", len(m.packageResults))
+			fmt.Fprintf(f, "Total packages in displayedPackages: %d\n", len(m.displayedPackages))
+			fmt.Fprintf(f, "Total tests counted: passed=%d, failed=%d, skipped=%d (total=%d)\n", 
+				m.passCount, m.failCount, m.skipCount, m.passCount+m.failCount+m.skipCount)
+			
+			// List packages in order
+			fmt.Fprintf(f, "\nPackages in packageOrder:\n")
+			for i, pkg := range m.packageOrder {
+				fmt.Fprintf(f, "  %d. %s\n", i+1, pkg)
+			}
+			
+			// Find packages in results but not in order (this would be the bug)
+			fmt.Fprintf(f, "\nPackages in results but NOT in order (BUG if any):\n")
+			bugCount := 0
+			for pkg := range m.packageResults {
+				found := false
+				for _, orderPkg := range m.packageOrder {
+					if orderPkg == pkg {
+						found = true
+						break
+					}
+				}
+				if !found {
+					bugCount++
+					fmt.Fprintf(f, "  - %s (BUG!)\n", pkg)
+				}
+			}
+			if bugCount == 0 {
+				fmt.Fprintf(f, "  (none - all packages are tracked correctly)\n")
+			} else {
+				fmt.Fprintf(f, "  FOUND %d UNTRACKED PACKAGES!\n", bugCount)
+			}
+			
+			fmt.Fprintf(f, "=====================================\n")
+			f.Close()
+		}
+	}
 }

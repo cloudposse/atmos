@@ -186,6 +186,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	}
 
 	// Count test results for this package
+	// Since subtests are now in pkg.Tests directly, just count all tests
 	var passedCount, failedCount, skippedCount int
 	for _, test := range pkg.Tests {
 		switch test.Status {
@@ -198,44 +199,57 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		}
 	}
 
-	// Display tests in order
-	firstTestDisplayed := false
+	// Display tests in order (including subtests as individual entries)
+	// Track if any tests were actually displayed
+	testsDisplayed := false
+	
+	// Debug: Log test order details
+	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintf(f, "[DISPLAY-DEBUG] Package %s: TestOrder has %d tests, Tests map has %d tests, showFilter=%s\n", 
+				pkg.Package, len(pkg.TestOrder), len(pkg.Tests), m.showFilter)
+			for i, name := range pkg.TestOrder {
+				fmt.Fprintf(f, "[DISPLAY-DEBUG]   TestOrder[%d]: %s\n", i, name)
+			}
+			f.Close()
+		}
+	}
+	
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
 		if test == nil {
 			continue
 		}
 
-		// Check if test has failed subtests (for --show=failed filter)
-		hasFailedSubtests := false
-		if m.showFilter == "failed" && len(test.Subtests) > 0 {
-			for _, subtest := range test.Subtests {
-				if subtest.Status == "fail" {
-					hasFailedSubtests = true
-					break
-				}
-			}
-		}
-
-		// Check if we should display this test based on filter
+		// Check if this is a subtest (has a parent)
+		isSubtest := test.Parent != ""
+		
 		shouldShow := m.shouldShowTest(test.Status)
-		if !shouldShow && !hasFailedSubtests && m.showFilter != "collapsed" {
-			continue
+		if shouldShow || m.showFilter == "collapsed" {
+			// Add blank line before first test
+			if !testsDisplayed {
+				output.WriteString("\n")
+				testsDisplayed = true
+			}
+			
+			// Display with appropriate indentation
+			indent := ""
+			if isSubtest {
+				indent = "  " // Indent subtests
+			}
+			m.displayTestAsLine(&output, test, indent)
 		}
-
-		// Add blank line before first test
-		if !firstTestDisplayed {
-			output.WriteString("\n")
-			firstTestDisplayed = true
-		}
-
-		// Display test result
-		m.displayTest(&output, test)
 	}
 
-	// Display summary line with test counts and coverage
+	// Always display summary line when package has tests
+	// This ensures summaries are shown even when individual tests are filtered out
 	totalTests := passedCount + failedCount + skippedCount
 	if totalTests > 0 {
+		// Add spacing before summary only if tests were displayed
+		if testsDisplayed {
+			output.WriteString("\n")
+		}
+		
 		var summaryLine string
 		coverageStr := ""
 		if pkg.Coverage != "" {
@@ -269,7 +283,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		}
 
 		if summaryLine != "" {
-			output.WriteString(fmt.Sprintf("\n%s\n", summaryLine))
+			output.WriteString(fmt.Sprintf("%s\n", summaryLine))
 		}
 	}
 
@@ -282,6 +296,60 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 	formatter := NewTestFormatter(m)
 	formatter.FormatTest(output, test)
+}
+
+// displayTestAsLine displays a test as a simple one-line entry.
+func (m *TestModel) displayTestAsLine(output *strings.Builder, test *TestResult, indent string) {
+	// Skip running tests
+	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
+		return
+	}
+	
+	// Get the status icon
+	var icon string
+	switch test.Status {
+	case "pass":
+		icon = PassStyle.Render(CheckPass)
+	case "fail":
+		icon = FailStyle.Render(CheckFail)
+	case "skip":
+		icon = SkipStyle.Render(CheckSkip)
+	}
+	
+	// Format the line
+	fmt.Fprintf(output, "  %s%s %s", indent, icon, TestNameStyle.Render(test.Name))
+	
+	// Add duration
+	if test.Elapsed > 0 {
+		duration := fmt.Sprintf("(%.2fs)", test.Elapsed)
+		fmt.Fprintf(output, " %s", DurationStyle.Render(duration))
+	}
+	
+	// Add skip reason if applicable
+	if test.Status == "skip" && test.SkipReason != "" {
+		reason := fmt.Sprintf("- %s", test.SkipReason)
+		fmt.Fprintf(output, " %s", DurationStyle.Render(reason))
+	}
+	
+	output.WriteString("\n")
+	
+	// Show output for failed tests if not collapsed
+	if test.Status == "fail" && m.showFilter != "collapsed" && len(test.Output) > 0 {
+		output.WriteString("\n")
+		formatter := func(line string) string {
+			if m.verbosityLevel == "with-output" || m.verbosityLevel == "verbose" {
+				formatted := strings.ReplaceAll(line, `\t`, "\t")
+				return strings.ReplaceAll(formatted, `\n`, "\n")
+			}
+			return line
+		}
+		
+		for _, line := range test.Output {
+			output.WriteString("    " + indent)
+			output.WriteString(formatter(line))
+		}
+		output.WriteString("\n")
+	}
 }
 
 // displayTestOld is the original implementation preserved for reference.

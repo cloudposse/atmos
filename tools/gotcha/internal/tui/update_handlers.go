@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"time"
 
@@ -89,7 +91,7 @@ func (m *TestModel) handleWindowSizeMsg(msg tea.WindowSizeMsg) {
 
 // handleSubprocessReady handles subprocess initialization.
 func (m *TestModel) handleSubprocessReady(msg subprocessReadyMsg) tea.Cmd {
-	m.scanner = msg.proc
+	m.scanner = bufio.NewScanner(msg.proc)
 
 	// Open JSON file for writing
 	jsonFile, err := os.Create(m.outputFile)
@@ -116,34 +118,68 @@ func (m *TestModel) handleStreamOutput(msg streamOutputMsg) tea.Cmd {
 	if err := json.Unmarshal([]byte(msg.line), &event); err == nil {
 		m.processEvent(&event)
 
-		// Check if a package has completed and needs to be displayed
+		// Check if any packages completed and display them once
 		var cmds []tea.Cmd
 
-		// Display completed packages
-		if event.Action == "pass" || event.Action == "fail" || event.Action == "skip" {
-			if event.Package != "" && event.Test == "" {
-				// This is a package completion event
-				if pkg := m.packageResults[event.Package]; pkg != nil {
-					if !m.displayedPackages[event.Package] {
-						m.displayedPackages[event.Package] = true
-						output := m.displayPackageResult(pkg)
-						if output != "" {
-							// Use tea.Printf to print the package result
-							cmds = append(cmds, tea.Printf("%s", output))
-						}
-					}
-				}
+		// Update progress bar if we have tests
+		if m.totalTests > 0 && m.completedTests > 0 {
+			percentFloat := float64(m.completedTests) / float64(m.totalTests)
+			// Use SetPercent and ensure we return the animation command
+			cmd := m.progress.SetPercent(percentFloat)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
 			}
 		}
 
-		// Update progress based on test completion
-		if m.totalTests > 0 {
-			progress := float64(m.completedTests) / float64(m.totalTests)
-			if progress > 1.0 {
-				progress = 1.0
-			}
-			if cmd := m.progress.SetPercent(progress); cmd != nil {
-				cmds = append(cmds, cmd)
+		// Display completed packages from the packageOrder list
+		for _, pkg := range m.packageOrder {
+			if result, exists := m.packageResults[pkg]; exists {
+				// Check if package is complete (not running) OR no longer active
+				isComplete := result.Status != "running" || !m.activePackages[pkg]
+				
+				if isComplete && !m.displayedPackages[pkg] {
+					// Mark as displayed and generate output
+					m.displayedPackages[pkg] = true
+					
+					// If still marked as running but not active, mark it as done
+					if result.Status == "running" && !m.activePackages[pkg] {
+						// Package finished but didn't send proper completion event
+						// This can happen with packages that have no tests
+						if !result.HasTests && len(result.Tests) == 0 {
+							result.Status = "skip"
+						} else if len(result.Tests) > 0 {
+							// Has tests, check their status
+							allPassed := true
+							for _, test := range result.Tests {
+								if test.Status == "fail" {
+									allPassed = false
+									break
+								}
+							}
+							if allPassed {
+								result.Status = "pass"
+							} else {
+								result.Status = "fail"
+							}
+						}
+					}
+					
+					output := m.displayPackageResult(result)
+					
+					// Debug logging for package display
+					if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+						if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+							fmt.Fprintf(f, "[TUI-DEBUG] Package display: %s, status=%s, output_len=%d, has_tests=%v, active=%v\n", 
+								pkg, result.Status, len(output), result.HasTests, m.activePackages[pkg])
+							f.Close()
+						}
+					}
+					
+					if output != "" {
+						// Use tea.Printf to print the output once
+						cmds = append(cmds, tea.Printf("%s", output))
+					}
+				}
 			}
 		}
 
@@ -176,6 +212,28 @@ func (m *TestModel) handleTestComplete(msg testCompleteMsg) tea.Cmd {
 		_ = m.jsonFile.Close()
 	}
 
+	// Display any remaining packages that weren't displayed yet
+	var displayCmds []tea.Cmd
+	for _, pkg := range m.packageOrder {
+		if result, exists := m.packageResults[pkg]; exists && !m.displayedPackages[pkg] {
+			m.displayedPackages[pkg] = true
+			
+			// Fix status if still running
+			if result.Status == "running" {
+				if !result.HasTests && len(result.Tests) == 0 {
+					result.Status = "skip"
+				} else {
+					result.Status = "pass" // Assume pass if no failures recorded
+				}
+			}
+			
+			output := m.displayPackageResult(result)
+			if output != "" {
+				displayCmds = append(displayCmds, tea.Printf("%s", output))
+			}
+		}
+	}
+
 	// Emit alert if requested
 	if m.alert {
 		emitAlert(true)
@@ -183,6 +241,7 @@ func (m *TestModel) handleTestComplete(msg testCompleteMsg) tea.Cmd {
 
 	// Force 100% progress on completion
 	var cmds []tea.Cmd
+	cmds = append(cmds, displayCmds...)
 	if m.totalTests > 0 {
 		if cmd := m.progress.SetPercent(1.0); cmd != nil {
 			cmds = append(cmds, cmd)

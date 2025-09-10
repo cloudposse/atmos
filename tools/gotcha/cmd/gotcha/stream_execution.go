@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	log "github.com/charmbracelet/log"
@@ -23,7 +24,19 @@ import (
 
 // runStreamInteractive runs tests in interactive TUI mode.
 func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, error) {
+	logger.Debug("Confirmed running in TUI mode")
 	logger.Debug("Starting interactive TUI mode")
+	
+	// Write to debug file if specified
+	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintf(f, "\n=== TUI MODE STARTED ===\n")
+			fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))
+			fmt.Fprintf(f, "Packages: %v\n", config.TestPackages)
+			fmt.Fprintf(f, "========================\n")
+			f.Close()
+		}
+	}
 
 	// Create the Bubble Tea model
 	model := tui.NewTestModel(
@@ -42,8 +55,20 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 		logger.Debug("Coverage package filter", "coverpkg", config.CoverPkg)
 	}
 
+	// Create Bubble Tea program options
+	var opts []tea.ProgramOption
+	
+	// Check if we're in test mode (for AI or CI testing)
+	if os.Getenv("GOTCHA_TEST_MODE") == "true" {
+		// Use WithoutRenderer for headless testing
+		opts = append(opts, tea.WithoutRenderer())
+		// Also provide nil input to avoid TTY requirements
+		opts = append(opts, tea.WithInput(nil))
+		logger.Debug("Running in test mode with WithoutRenderer and no input")
+	}
+	
 	// Create Bubble Tea program without AltScreen to allow normal terminal scrolling
-	p := tea.NewProgram(&model)
+	p := tea.NewProgram(&model, opts...)
 
 	// Run the TUI
 	finalModel, err := p.Run()
@@ -55,6 +80,9 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 	var exitCode int
 	if m, ok := finalModel.(*tui.TestModel); ok {
 		exitCode = m.GetExitCode()
+		
+		// Debug: Write package tracking summary
+		m.DebugPackageTracking()
 
 		// Print final summary
 		summary := m.GenerateFinalSummary()
@@ -62,7 +90,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 			fmt.Fprint(os.Stderr, summary)
 		}
 
-		// Update cache with actual test count if successful
+		// Update cache with actual test count and package details if successful
 		if !m.IsAborted() {
 			actualTestCount := m.GetTotalTestCount()
 			if actualTestCount > 0 {
@@ -70,11 +98,35 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 				if err != nil {
 					logger.Error("Failed to create cache manager", "error", err)
 				} else if cacheManager != nil {
+					// Update total test count
 					pattern := strings.Join(m.GetTestPackages(), " ")
 					if err := cacheManager.UpdateTestCount(pattern, actualTestCount, len(m.GetTestPackages())); err != nil {
 						logger.Error("Failed to update test count cache", "error", err)
 					} else {
 						logger.Warn("Updated test count cache", "pattern", pattern, "count", actualTestCount)
+					}
+
+					// Update per-package details
+					packageResults := m.GetPackageResults()
+					if len(packageResults) > 0 {
+						packageDetails := make(map[string]cache.PackageDetail)
+						for pkgName, pkgResult := range packageResults {
+							testCount := 0
+							for _, test := range pkgResult.Tests {
+								if test != nil {
+									testCount++
+								}
+							}
+							packageDetails[pkgName] = cache.PackageDetail{
+								TestCount:    testCount,
+								LastModified: time.Now(),
+							}
+						}
+						if err := cacheManager.UpdatePackageDetails(packageDetails); err != nil {
+							logger.Error("Failed to update package details cache", "error", err)
+						} else {
+							logger.Debug("Updated package details cache", "packages", len(packageDetails))
+						}
 					}
 				}
 			}

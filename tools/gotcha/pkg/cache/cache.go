@@ -293,6 +293,30 @@ func (m *Manager) UpdateTestList(pattern string, testNames []string, packagesSca
 	return nil
 }
 
+// UpdatePackageDetails updates the cached details for multiple packages.
+func (m *Manager) UpdatePackageDetails(packages map[string]PackageDetail) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.file == nil {
+		return fmt.Errorf("cache not initialized")
+	}
+
+	// Update package details
+	for pkg, details := range packages {
+		m.file.Discovery.PackageDetails[pkg] = details
+	}
+
+	// Save to disk
+	if err := m.saveUnlocked(); err != nil {
+		m.logger.Warn("Failed to save package details cache", "error", err)
+		return err
+	}
+
+	m.logger.Debug("Updated package details cache", "packages", len(packages))
+	return nil
+}
+
 // GetTestCountForFilter gets estimated test count for a pattern with an optional filter.
 func (m *Manager) GetTestCountForFilter(pattern, filter string) (int, bool) {
 	m.mu.RLock()

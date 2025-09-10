@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -36,11 +37,48 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 
 	// Step 5: Execute tests based on mode
 	var exitCode int
-	if config.Format == "terminal" && utils.IsTTY() && !config.CIMode {
+	
+	// Check for force-TUI mode
+	forceTUI := os.Getenv("GOTCHA_FORCE_TUI") == "true"
+	isTTY := utils.IsTTY()
+	
+	// Log mode selection decision
+	logger.Debug("Mode selection",
+		"format", config.Format,
+		"isTTY", isTTY,
+		"ciMode", config.CIMode,
+		"forceTUI", forceTUI)
+	
+	if (config.Format == "terminal" && isTTY && !config.CIMode) || forceTUI {
 		// Interactive TUI mode
+		logger.Debug("Entering TUI mode",
+			"forceTUI", forceTUI,
+			"isTTY", isTTY,
+			"reason", func() string {
+				if forceTUI {
+					return "GOTCHA_FORCE_TUI=true"
+				}
+				return "TTY detected"
+			}())
 		exitCode, err = runStreamInteractive(cmd, config, logger)
 	} else {
 		// CI or non-interactive mode
+		logger.Debug("Entering stream mode",
+			"isTTY", isTTY,
+			"format", config.Format,
+			"ciMode", config.CIMode,
+			"reason", func() string {
+				if !isTTY {
+					return "No TTY detected"
+				}
+				if config.CIMode {
+					return "CI mode enabled"
+				}
+				if config.Format != "terminal" {
+					return fmt.Sprintf("Format is %s", config.Format)
+				}
+				return "Unknown"
+			}())
 		exitCode, err = runStreamInCI(cmd, config, logger)
 	}
 

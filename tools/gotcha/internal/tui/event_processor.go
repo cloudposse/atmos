@@ -39,6 +39,17 @@ func (m *TestModel) processPackageEvent(event *types.TestEvent) {
 					HasTests:  false,
 				}
 				m.activePackages[event.Package] = true
+				// Add to packageOrder when package starts (not just when it completes)
+				if !contains(m.packageOrder, event.Package) {
+					m.packageOrder = append(m.packageOrder, event.Package)
+					// Debug: Log package addition
+					if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+						if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+							fmt.Fprintf(f, "[TUI-DEBUG] Added package to order from processPackageEvent: %s (total: %d)\n", event.Package, len(m.packageOrder))
+							f.Close()
+						}
+					}
+				}
 			}
 		}
 
@@ -162,6 +173,17 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 		}
 		m.packageResults[event.Package] = pkg
 		m.activePackages[event.Package] = true
+		// Add to packageOrder when package is created
+		if !contains(m.packageOrder, event.Package) {
+			m.packageOrder = append(m.packageOrder, event.Package)
+			// Debug: Log package addition from test event
+			if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+				if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+					fmt.Fprintf(f, "[TUI-DEBUG] Added package to order from processTestEvent: %s (total: %d)\n", event.Package, len(m.packageOrder))
+					f.Close()
+				}
+			}
+		}
 	}
 
 	// Mark that this package has tests
@@ -190,6 +212,15 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 
 // processTestRun handles test run events.
 func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, parentTest string, isSubtest bool) {
+	// Debug: Log all test run events
+	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintf(f, "[RUN-DEBUG] Test run event for package %s: %s (isSubtest: %v)\n", 
+				event.Package, event.Test, isSubtest)
+			f.Close()
+		}
+	}
+	
 	m.currentTest = event.Test
 	// Count all tests including subtests for accurate progress
 	// Always increment the actual test count
@@ -205,7 +236,7 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 		// This is a subtest
 		parent := pkg.Tests[parentTest]
 		if parent == nil {
-			// Parent test might not exist yet due to parallel execution
+			// Parent test might not exist yet due to parallel execution or table-driven tests
 			parent = &TestResult{
 				Name:         parentTest,
 				FullName:     parentTest,
@@ -214,6 +245,12 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 				SubtestOrder: []string{},
 			}
 			pkg.Tests[parentTest] = parent
+			
+			// Also add the parent to TestOrder if it's not already there
+			// This ensures parent appears before its subtests in display
+			if !contains(pkg.TestOrder, parentTest) {
+				pkg.TestOrder = append(pkg.TestOrder, parentTest)
+			}
 		}
 
 		subtest := &TestResult{
@@ -224,6 +261,11 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 		}
 		parent.Subtests[event.Test] = subtest
 		parent.SubtestOrder = append(parent.SubtestOrder, event.Test)
+		
+		// IMPORTANT: Add subtest to both pkg.Tests AND pkg.TestOrder for display
+		// This ensures subtests are accessible and visible in the TUI output
+		pkg.Tests[event.Test] = subtest
+		pkg.TestOrder = append(pkg.TestOrder, event.Test)
 	} else {
 		// Top-level test
 		test := &TestResult{
@@ -235,6 +277,15 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 		}
 		pkg.Tests[event.Test] = test
 		pkg.TestOrder = append(pkg.TestOrder, event.Test)
+		
+		// Debug: Log when we add a test to TestOrder
+		if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+				fmt.Fprintf(f, "[EVENT-DEBUG] Added test to TestOrder for package %s: %s (total in order: %d)\n", 
+					event.Package, event.Test, len(pkg.TestOrder))
+				f.Close()
+			}
+		}
 	}
 }
 

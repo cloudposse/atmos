@@ -106,6 +106,17 @@ func NewStreamProcessor(jsonWriter io.Writer, showFilter, testFilter, verbosityL
 
 // ProcessStream reads and processes the test output stream.
 func (p *StreamProcessor) ProcessStream(input io.Reader) error {
+	// Write to debug file if specified
+	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintf(f, "\n=== STREAM MODE STARTED ===\n")
+			fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))
+			fmt.Fprintf(f, "Show filter: %s\n", p.showFilter)
+			fmt.Fprintf(f, "===========================\n")
+			f.Close()
+		}
+	}
+	
 	scanner := bufio.NewScanner(input)
 
 	// Track if we're in CI for periodic flushing

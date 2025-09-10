@@ -47,9 +47,10 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		return
 	}
 
-	// Count test results for this package
+	// Count test results for this package (including subtests)
 	var passedCount, failedCount, skippedCount int
 	for _, test := range pkg.Tests {
+		// Count the parent test
 		switch test.Status {
 		case "pass":
 			passedCount++
@@ -58,17 +59,53 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		case "skip":
 			skippedCount++
 		}
+		
+		// Count all subtests
+		for _, subtest := range test.Subtests {
+			switch subtest.Status {
+			case "pass":
+				passedCount++
+			case "fail":
+				failedCount++
+			case "skip":
+				skippedCount++
+			}
+		}
 	}
 
 	// Display tests based on show filter
+	// Track if any tests were actually displayed
+	testsDisplayed := false
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
-		p.displayTest(test, "")
+		
+		// For tests without subtests, display normally
+		if len(test.Subtests) == 0 {
+			if p.shouldShowTestStatus(test.Status) {
+				testsDisplayed = true
+				p.displayTestLine(test, "")
+			}
+		} else {
+			// For tests with subtests, display each subtest individually
+			for _, subtestName := range test.SubtestOrder {
+				subtest := test.Subtests[subtestName]
+				if p.shouldShowTestStatus(subtest.Status) {
+					testsDisplayed = true
+					p.displayTestLine(subtest, "  ")
+				}
+			}
+		}
 	}
 
-	// Display summary line with test counts and coverage
+	// Always display summary line when package has tests
+	// This ensures summaries are shown even when individual tests are filtered out
 	totalTests := passedCount + failedCount + skippedCount
 	if totalTests > 0 {
+		// Add spacing before summary only if tests were displayed
+		if testsDisplayed {
+			fmt.Fprintf(os.Stderr, "\n")
+		}
+
 		var summaryLine string
 		coverageStr := ""
 		if pkg.Coverage != "" {
@@ -97,13 +134,65 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		}
 
 		if summaryLine != "" {
-			fmt.Fprintf(os.Stderr, "\n%s", summaryLine)
+			fmt.Fprintf(os.Stderr, "%s", summaryLine)
 		}
 	}
 
 	// Flush output after displaying package results
 	if config.IsCI() {
 		os.Stderr.Sync()
+	}
+}
+
+// displayTestLine outputs a test as a simple one-line entry without subtest progress.
+func (p *StreamProcessor) displayTestLine(test *TestResult, indent string) {
+	// Skip running tests
+	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
+		return
+	}
+
+	// Determine status icon
+	var statusIcon string
+	switch test.Status {
+	case "pass":
+		statusIcon = tui.PassStyle.Render(tui.CheckPass)
+	case "fail":
+		statusIcon = tui.FailStyle.Render(tui.CheckFail)
+	case "skip":
+		statusIcon = tui.SkipStyle.Render(tui.CheckSkip)
+	}
+
+	// Build display line
+	var line strings.Builder
+	line.WriteString(indent + "  ")
+	line.WriteString(statusIcon)
+	line.WriteString(" ")
+	line.WriteString(tui.TestNameStyle.Render(test.Name))
+
+	// Add duration for completed tests
+	if test.Elapsed > 0 {
+		line.WriteString(" ")
+		line.WriteString(tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
+	}
+
+	fmt.Fprintln(os.Stderr, line.String())
+
+	// Display test output for failures (respecting show filter)
+	if test.Status == "fail" && len(test.Output) > 0 && p.showFilter != "none" {
+		if p.verbosityLevel == "with-output" || p.verbosityLevel == "verbose" {
+			// With full output, properly render tabs and maintain formatting
+			for _, outputLine := range test.Output {
+				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
+				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+				fmt.Fprint(os.Stderr, indent+"    "+formatted)
+			}
+		} else {
+			// Default: show output as-is
+			for _, outputLine := range test.Output {
+				fmt.Fprint(os.Stderr, indent+"    "+outputLine)
+			}
+		}
+		fmt.Fprintln(os.Stderr, "") // Add blank line after output
 	}
 }
 

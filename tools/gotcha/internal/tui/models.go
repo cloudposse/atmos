@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bufio"
 	"io"
 	"os"
 	"sync"
@@ -51,7 +52,7 @@ type TestModel struct {
 	testArgs     string
 	testCmd      *os.Process // Store the process for killing on abort
 	testProc     io.ReadCloser
-	scanner      io.ReadCloser
+	scanner      *bufio.Scanner
 
 	// Buffered output
 	buffers           map[string][]string
