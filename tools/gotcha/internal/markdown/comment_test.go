@@ -281,7 +281,7 @@ func TestDiscriminatorInCommentTitle(t *testing.T) {
 			}
 
 			comment := GenerateAdaptiveComment(summary, "test-uuid", tt.discriminator)
-			
+
 			// The title should be on its own line after the UUID comment
 			lines := strings.Split(comment, "\n")
 			var titleFound bool

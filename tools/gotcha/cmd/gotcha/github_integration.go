@@ -97,7 +97,7 @@ func detectProjectContext() string {
 			// Found the repository root
 			return filepath.Base(dir)
 		}
-		
+
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			// Reached the root of the filesystem
@@ -187,12 +187,12 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	// Get the project context (to distinguish between main project and tools)
 	_ = viper.BindEnv("project-context", "GOTCHA_PROJECT_CONTEXT", "PROJECT_CONTEXT")
 	projectContext := viper.GetString("project-context")
-	
+
 	// Auto-detect project context if not explicitly set
 	if projectContext == "" {
 		projectContext = detectProjectContext()
 	}
-	
+
 	if projectContext != "" {
 		logger.Debug("Project context determined", "context", projectContext)
 	}
@@ -206,7 +206,7 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	} else if jobDiscriminator != "" {
 		discriminator = jobDiscriminator
 	}
-	
+
 	if discriminator != "" {
 		logger.Debug("Using compound discriminator", "discriminator", discriminator)
 	}
