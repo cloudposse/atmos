@@ -68,13 +68,13 @@ func NewAuthManager(
 	// Initialize providers
 	if err := m.initializeProviders(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingProviders, err)
+		return nil, errUtils.ErrInitializingProviders
 	}
 
 	// Initialize identities
 	if err := m.initializeIdentities(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingIdentities, err)
+		return nil, errUtils.ErrInitializingIdentities
 	}
 
 	return m, nil
@@ -119,11 +119,11 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		providerName, perr := identity.GetProviderName()
 		if perr != nil {
 			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderName", "")
-			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, perr)
+			return nil, errUtils.ErrInvalidAuthConfig
 		}
 		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
 			errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PostAuthenticate", "")
-			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
+			return nil, errUtils.ErrAuthenticationFailed
 		}
 	}
 
@@ -277,6 +277,18 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 		return providerName
 	}
 
+	// If not found by name, try to find by alias
+	for name, identity := range m.identities {
+		if m.config.Identities[name].Alias == identityName {
+			providerName, err := identity.GetProviderName()
+			if err != nil {
+				log.Debug("Failed to get provider name for identity alias", logKeyIdentity, identityName, "actualName", name, "error", err)
+				return ""
+			}
+			return providerName
+		}
+	}
+
 	return ""
 }
 
@@ -415,7 +427,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 		if provider, exists := m.providers[m.chain[0]]; exists {
 			if err := provider.PreAuthenticate(m); err != nil {
 				errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PreAuthenticate", "")
-				return nil, errUtils.ErrAuthenticationFailed
+				return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
 			}
 		}
 		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
@@ -530,7 +542,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		// Each identity receives credentials from the previous step
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			return nil, fmt.Errorf("%w: identity %q authentication failed at chain step %d: %w", errUtils.ErrAuthenticationFailed, identityStep, i, err)
+			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
 		}
 
 		currentCreds = nextCreds
@@ -578,11 +590,6 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return errUtils.ErrCircularDependency
 	}
 	visited[identityName] = true
-
-	// Find the identity
-	identity, exists := m.config.Identities[identityName]
-	if !exists {
-	}
 
 	if !exists {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildChainRecursive, fmt.Sprintf("identity %q not found", identityName))
