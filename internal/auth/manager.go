@@ -591,6 +591,9 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	}
 	visited[identityName] = true
 
+	// Find the identity
+	identity, exists := m.config.Identities[identityName]
+
 	if !exists {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildChainRecursive, fmt.Sprintf("identity %q not found", identityName))
 		return errUtils.ErrInvalidAuthConfig
