@@ -101,19 +101,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		return nil, fmt.Errorf("%w: failed to start device authorization: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Display user code and verification URI if not in CI
-	if !telemetry.IsCI() {
-		if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
-			if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
-				log.Debug(err)
-				if authResp.UserCode != nil {
-					utils.PrintfMessageToTUI("🔐 Please visit %s and enter code: %s.", *authResp.VerificationUriComplete, *authResp.UserCode)
-				} else {
-					utils.PrintfMessageToTUI("🔐 Please visit %s and complete authentication.", *authResp.VerificationUriComplete)
-				}
-			}
-		}
-	}
+	p.promptDeviceAuth(authResp)
 	// Poll for token using helper to keep function size small
 	accessToken, tokenExpiresAt, err := p.pollForAccessToken(ctx, oidcClient, registerResp, authResp)
 	if err != nil {
@@ -133,6 +121,22 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		Region:      p.region,
 		Expiration:  expiration.Format(time.RFC3339),
 	}, nil
+}
+
+// promptDeviceAuth displays user code and verification URI if not in CI.
+func (p *ssoProvider) promptDeviceAuth(authResp *ssooidc.StartDeviceAuthorizationOutput) {
+	code := ""
+	if authResp.UserCode != nil {
+		code = *authResp.UserCode
+	}
+	if !telemetry.IsCI() {
+		if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
+			if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
+				log.Debug(err)
+				utils.PrintfMessageToTUI("🔐 Please visit %s and enter code: %s.", code)
+			}
+		}
+	}
 }
 
 // Validate validates the provider configuration.
