@@ -222,29 +222,29 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 // promptMfaTokenFunc is a helper indirection to allow tests to stub MFA prompting.
 // In production, it displays a form to collect the token.
 var promptMfaTokenFunc = func(longLivedCreds *types.AWSCredentials) (string, error) {
-    var mfaToken string
-    form := newMfaForm(longLivedCreds, &mfaToken)
-    if err := form.Run(); err != nil {
-        return "", fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrAuthenticationFailed, err)
-    }
-    return mfaToken, nil
+	var mfaToken string
+	form := newMfaForm(longLivedCreds, &mfaToken)
+	if err := form.Run(); err != nil {
+		return "", fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrAuthenticationFailed, err)
+	}
+	return mfaToken, nil
 }
 
 func (i *userIdentity) buildGetSessionTokenInput(longLivedCreds *types.AWSCredentials) (*sts.GetSessionTokenInput, error) {
-    if longLivedCreds.MfaArn != "" {
-        token, err := promptMfaTokenFunc(longLivedCreds)
-        if err != nil {
-            return nil, err
-        }
-        return &sts.GetSessionTokenInput{
-            SerialNumber:    aws.String(longLivedCreds.MfaArn),
-            TokenCode:       aws.String(token),
-            DurationSeconds: aws.Int32(defaultUserSessionSeconds),
-        }, nil
-    }
-    return &sts.GetSessionTokenInput{
-        DurationSeconds: aws.Int32(defaultUserSessionSeconds),
-    }, nil
+	if longLivedCreds.MfaArn != "" {
+		token, err := promptMfaTokenFunc(longLivedCreds)
+		if err != nil {
+			return nil, err
+		}
+		return &sts.GetSessionTokenInput{
+			SerialNumber:    aws.String(longLivedCreds.MfaArn),
+			TokenCode:       aws.String(token),
+			DurationSeconds: aws.Int32(defaultUserSessionSeconds),
+		}, nil
+	}
+	return &sts.GetSessionTokenInput{
+		DurationSeconds: aws.Int32(defaultUserSessionSeconds),
+	}, nil
 }
 
 func newMfaForm(longLivedCreds *types.AWSCredentials, mfaToken *string) *huh.Form {
