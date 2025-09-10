@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/internal/auth/types"
-    "github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestNewAssumeRoleIdentity(t *testing.T) {
