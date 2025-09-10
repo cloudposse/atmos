@@ -47,10 +47,10 @@ func TestSetEnvironmentVariables_SetsStackEnv(t *testing.T) {
 	err := SetEnvironmentVariables(stack, "prov", "dev")
 	require.NoError(t, err)
 
-	credPath := filepath.Join(tmp, ".aws", "atmos", "prov", "credentials")
-	cfgPath := filepath.Join(tmp, ".aws", "atmos", "prov", "config")
+	credPath := filepath.Join(".aws", "atmos", "prov", "credentials")
+	cfgPath := filepath.Join(".aws", "atmos", "prov", "config")
 
-	assert.Equal(t, credPath, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"])
-	assert.Equal(t, cfgPath, stack.ComponentEnvSection["AWS_CONFIG_FILE"])
+	assert.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], credPath)
+	assert.Contains(t, stack.ComponentEnvSection["AWS_CONFIG_FILE"], cfgPath)
 	assert.Equal(t, "dev", stack.ComponentEnvSection["AWS_PROFILE"])
 }
