@@ -60,8 +60,11 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds types.ICreden
 
 	// Check if credentials are configured in atmos.yaml (environment templating)
 	if accessKeyID, ok := i.config.Credentials["access_key_id"].(string); ok && accessKeyID != "" {
-		// Credentials are configured in atmos.yaml - use them directly
+		// Credentials are configured in atmos.yaml - use them directly.
 		secretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
+		if secretAccessKey == "" {
+			return nil, fmt.Errorf("%w: access_key_id is set but secret_access_key is missing for identity %q", errUtils.ErrInvalidAuthConfig, i.name)
+		}
 		mfaArn, _ := i.config.Credentials["mfa_arn"].(string)
 
 		longLivedCreds = &types.AWSCredentials{
@@ -192,7 +195,7 @@ func (i *userIdentity) buildGetSessionTokenInput(longLivedCreds *types.AWSCreden
 		var mfaToken string
 		form := newMfaForm(longLivedCreds, &mfaToken)
 		if err := form.Run(); err != nil {
-			return nil, fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrUnsupportedInputType, err)
+			return nil, fmt.Errorf("%w: failed to get MFA token: %v", errUtils.ErrAuthenticationFailed, err)
 		}
 		return &sts.GetSessionTokenInput{
 			SerialNumber:    aws.String(longLivedCreds.MfaArn),

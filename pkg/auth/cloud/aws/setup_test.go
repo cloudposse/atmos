@@ -27,6 +27,9 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	// Verify credentials file
 	cfg, err := ini.Load(credPath)
 	require.NoError(t, err)
+	st, err := os.Stat(credPath)
+	require.NoError(t, err)
+	assert.Equal(t, fs.FileMode(0o600), st.Mode().Perm(), "credentials file should be 0600")
 	sec := cfg.Section("dev")
 	assert.Equal(t, "AKIA123", sec.Key("aws_access_key_id").String())
 	assert.Equal(t, "secret", sec.Key("aws_secret_access_key").String())
@@ -35,6 +38,9 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	// Verify config file
 	cfg2, err := ini.Load(cfgPath)
 	require.NoError(t, err)
+	st2, err := os.Stat(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, fs.FileMode(0o600), st2.Mode().Perm(), "config file should be 0600")
 	sec = cfg2.Section("profile dev")
 	assert.Equal(t, "us-east-2", sec.Key("region").String())
 }

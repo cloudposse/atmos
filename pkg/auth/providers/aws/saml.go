@@ -304,8 +304,9 @@ func (p *samlProvider) Validate() error {
 		return fmt.Errorf("%w: region is required for SAML provider", errUtils.ErrInvalidProviderConfig)
 	}
 
-	// Validate URL format
-	if _, err := url.Parse(p.url); err != nil {
+	// Validate URL format strictly.
+	u, err := url.ParseRequestURI(p.url)
+	if err != nil || u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("%w: invalid URL format: %v", errUtils.ErrInvalidProviderConfig, err)
 	}
 

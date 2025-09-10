@@ -31,6 +31,9 @@ type ssoProvider struct {
 
 // NewSSOProvider creates a new AWS SSO provider.
 func NewSSOProvider(name string, config *schema.Provider) (*ssoProvider, error) {
+ 	if config == nil {
+ 		return nil, fmt.Errorf("%w: provider config is required", errUtils.ErrInvalidProviderConfig)
+ 	}
 	if config.Kind != "aws/iam-identity-center" {
 		return nil, fmt.Errorf("%w: invalid provider kind for SSO provider: %s", errUtils.ErrInvalidProviderKind, config.Kind)
 	}

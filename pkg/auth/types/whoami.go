@@ -33,10 +33,15 @@ func (w *WhoamiInfo) Rehydrate(store CredentialStore) error {
 	if w.Credentials != nil || w.CredentialsRef == "" {
 		return nil
 	}
+	// Be tolerant of a nil store to avoid panics in consumers.
+	if store == nil {
+		return nil
+	}
 	creds, err := store.Retrieve(w.CredentialsRef)
 	if err != nil {
 		return err
 	}
 	w.Credentials = creds
 	return nil
+}
 }

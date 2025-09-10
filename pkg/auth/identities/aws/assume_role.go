@@ -47,7 +47,7 @@ func (i *assumeRoleIdentity) toAWSCredentials(result *sts.AssumeRoleOutput) (typ
 		return nil, fmt.Errorf("%w: STS returned empty credentials", errUtils.ErrAuthenticationFailed)
 	}
 	expiration := ""
-	if result.Credentials != nil {
+	if result.Credentials != nil && result.Credentials.Expiration != nil {
 		expiration = result.Credentials.Expiration.Format(time.RFC3339)
 	}
 	return &types.AWSCredentials{

@@ -50,17 +50,17 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display success message
-	u.PrintfMarkdown("**Authentication successful!**\n")
-	u.PrintfMarkdown("Provider: %s\n", whoami.Provider)
-	u.PrintfMarkdown("Identity: %s\n", whoami.Identity)
+	u.PrintfMessageToTUI("**Authentication successful!**\n")
+	u.PrintfMessageToTUI("Provider: %s\n", whoami.Provider)
+	u.PrintfMessageToTUI("Identity: %s\n", whoami.Identity)
 	if whoami.Account != "" {
-		u.PrintfMarkdown("Account: %s\n", whoami.Account)
+		u.PrintfMessageToTUI("Account: %s\n", whoami.Account)
 	}
 	if whoami.Region != "" {
-		u.PrintfMarkdown("Region: %s\n", whoami.Region)
+		u.PrintfMessageToTUI("Region: %s\n", whoami.Region)
 	}
 	if whoami.Expiration != nil {
-		u.PrintfMarkdown("Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
+		u.PrintfMessageToTUI("Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
 	}
 
 	return nil
