@@ -44,4 +44,3 @@ func (w *WhoamiInfo) Rehydrate(store CredentialStore) error {
 	w.Credentials = creds
 	return nil
 }
-}

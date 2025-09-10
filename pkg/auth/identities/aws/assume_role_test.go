@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/stretchr/testify/assert"
@@ -112,14 +113,12 @@ func TestAssumeRoleIdentity_toAWSCredentials(t *testing.T) {
 	// Valid conversion
 	exp := time.Now().Add(time.Hour)
 	out := &sts.AssumeRoleOutput{Credentials: &ststypes.Credentials{
-		AccessKeyId:     strPtr("AKIA123"),
-		SecretAccessKey: strPtr("secret"),
-		SessionToken:    strPtr("token"),
+		AccessKeyId:     aws.String("AKIA123"),
+		SecretAccessKey: aws.String("secret"),
+		SessionToken:    aws.String("token"),
 		Expiration:      &exp,
 	}}
 	creds, err := i.toAWSCredentials(out)
 	require.NoError(t, err)
 	assert.Equal(t, "us-east-2", creds.(*types.AWSCredentials).Region)
 }
-
-func strPtr(s string) *string { return &s }
