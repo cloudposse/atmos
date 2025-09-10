@@ -1,8 +1,6 @@
 package stream
 
 import (
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 )
@@ -159,28 +157,20 @@ func (r *ProgressReporter) notifyProgress() {
 // Finalize is called at the end of all test execution and returns the final output.
 func (r *ProgressReporter) Finalize(passed, failed, skipped int, elapsed time.Duration) string {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	packageResults := r.packageResults
+	r.mu.Unlock()
 	
-	// Build the final output string with all results
-	var output strings.Builder
-	
-	// TODO: Display all package results like stream mode does
-	// For now, just build a summary
-	
-	// Add final summary
-	total := passed + failed + skipped
-	if total > 0 {
-		output.WriteString("\n\n")
-		output.WriteString("Test Results:\n")
-		output.WriteString(fmt.Sprintf("  ✓ Passed:  %d\n", passed))
-		output.WriteString(fmt.Sprintf("  ✗ Failed:  %d\n", failed))
-		output.WriteString(fmt.Sprintf("  ⊘ Skipped: %d\n", skipped))
-		output.WriteString(fmt.Sprintf("  Total:     %d\n", total))
-		output.WriteString("\n")
-		output.WriteString(fmt.Sprintf("ℹ Tests completed in %.2fs\n", elapsed.Seconds()))
+	// Display all package results using StreamReporter for consistent formatting
+	streamReporter := NewStreamReporter(r.showFilter, r.testFilter, r.verbosityLevel)
+	for _, pkg := range packageResults {
+		streamReporter.OnPackageComplete(pkg)
 	}
 	
-	return output.String()
+	// Display the final summary with colors
+	streamReporter.Finalize(passed, failed, skipped, elapsed)
+	
+	// Return empty string since we've already written to stderr
+	return ""
 }
 
 // GetCompletedTests returns the number of completed tests.

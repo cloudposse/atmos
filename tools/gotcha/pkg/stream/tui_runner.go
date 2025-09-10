@@ -72,6 +72,7 @@ func NewTUIRunner(testPackages []string, testArgs, outputFile, coverProfile, sho
 func (r *TUIRunner) Init() tea.Cmd {
 	return tea.Batch(
 		r.spinner.Tick,
+		tickCmd(),  // Start polling for progress updates
 		r.runTests(),
 	)
 }
@@ -156,13 +157,8 @@ func (r *TUIRunner) runTests() tea.Cmd {
 		// Get final summary
 		processor.PrintSummary()
 		
-		// Store final output
-		r.finalOutput = progressReporter.Finalize(
-			progressReporter.passedTests,
-			progressReporter.failedTests,
-			progressReporter.skippedTests,
-			time.Since(r.startTime),
-		)
+		// Don't store final output - StreamProcessor already printed it
+		// The ProgressReporter's Finalize returns empty string anyway
 		
 		// Determine exit code
 		if processErr != nil {
@@ -229,14 +225,11 @@ func (r *TUIRunner) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (r *TUIRunner) View() string {
 	if r.done {
 		if r.aborted {
-			return fmt.Sprintf("\n✗ Test run aborted\n")
+			return "\n✗ Test run aborted\n"
 		}
-		// Return final output
-		return r.finalOutput
+		// Clear the progress line
+		return "\n"
 	}
-	
-	// Build progress display
-	var b strings.Builder
 	
 	// Calculate progress
 	var progressPercent float64
@@ -248,30 +241,47 @@ func (r *TUIRunner) View() string {
 		}
 	}
 	
-	// Header
-	elapsed := time.Since(r.startTime)
-	b.WriteString(fmt.Sprintf("\n%s Running tests... ", r.spinner.View()))
-	b.WriteString(fmt.Sprintf("(%.1fs)\n", elapsed.Seconds()))
+	// Update progress bar percentage
+	r.progress.SetPercent(progressPercent)
+	
+	// Build status line components (everything on one line)
+	spin := r.spinner.View() + " "
+	
+	// Status text
+	var info string
+	if r.activePackage != "" {
+		pkgName := r.activePackage
+		const maxWidth = 50
+		if len(pkgName) > maxWidth {
+			pkgName = pkgName[:maxWidth-3] + "..."
+		}
+		info = fmt.Sprintf("Testing %-*s", maxWidth, pkgName)
+	} else {
+		info = fmt.Sprintf("%-*s", 57, "Starting tests...")
+	}
 	
 	// Progress bar
-	b.WriteString(r.progress.View())
-	b.WriteString("\n")
+	prog := r.progress.View()
 	
-	// Status line
-	if r.activePackage != "" {
-		b.WriteString(fmt.Sprintf("Testing: %s\n", 
-			lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render(r.activePackage)))
-	}
-	
-	// Test count
+	// Percentage and count
+	var percentage string
+	var testCount string
 	if r.totalTests > 0 {
-		b.WriteString(fmt.Sprintf("Progress: %d/%d tests (%.0f%%)\n", 
-			r.completedTests, r.totalTests, progressPercent*100))
+		percentage = fmt.Sprintf("%3.0f%%", progressPercent*100)
+		testCount = fmt.Sprintf("(%d/%d)", r.completedTests, r.totalTests)
 	} else {
-		b.WriteString(fmt.Sprintf("Progress: %d tests completed\n", r.completedTests))
+		percentage = "   "
+		testCount = fmt.Sprintf("(%d)", r.completedTests)
 	}
 	
-	return b.String()
+	// Elapsed time
+	elapsed := time.Since(r.startTime)
+	timeStr := fmt.Sprintf("[%.1fs]", elapsed.Seconds())
+	
+	// Assemble complete status line
+	statusLine := spin + info + "  " + prog + " " + percentage + " " + testCount + "  " + timeStr
+	
+	return statusLine + "\n"
 }
 
 // GetExitCode returns the exit code.
