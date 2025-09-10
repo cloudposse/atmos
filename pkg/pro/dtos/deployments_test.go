@@ -60,29 +60,21 @@ func TestDeploymentsUploadRequest(t *testing.T) {
 				Component:     "web-app",
 				Stack:         "prod",
 				ComponentType: "terraform",
-				DriftDetectionEnabled: true,
-				Workflows: []schema.DeploymentWorkflow{
-					{
-						Event:   "detect",
-						Workflow: "atmos-pro-terraform-plan.yaml",
-					},
-					{
-						Event:   "remediate",
-						Workflow: "atmos-pro-terraform-apply.yaml",
-					},
-				},
+				Settings:      map[string]interface{}{"drift_detection_enabled": true},
+				Vars:          map[string]interface{}{"environment": "prod"},
+				Env:           map[string]interface{}{"TF_VAR_region": "us-west-2"},
+				Backend:       map[string]interface{}{"type": "s3"},
+				Metadata:      map[string]interface{}{"description": "Web application"},
 			},
 			{
 				Component:     "api",
 				Stack:         "staging",
 				ComponentType: "helm",
-				DriftDetectionEnabled: false,
-				Workflows: []schema.DeploymentWorkflow{
-					{
-						Event:   "detect",
-						Workflow: "atmos-pro-helm-plan.yaml",
-					},
-				},
+				Settings:      map[string]interface{}{"drift_detection_enabled": false},
+				Vars:          map[string]interface{}{"environment": "staging"},
+				Env:           map[string]interface{}{"HELM_NAMESPACE": "staging"},
+				Backend:       map[string]interface{}{"type": "local"},
+				Metadata:      map[string]interface{}{"description": "API service"},
 			},
 		}
 
@@ -99,21 +91,26 @@ func TestDeploymentsUploadRequest(t *testing.T) {
 		assert.Equal(t, "test-owner", req.RepoOwner)
 		assert.Equal(t, "github.com", req.RepoHost)
 		assert.Len(t, req.Deployments, 2)
+
+		// Test first deployment
 		assert.Equal(t, "web-app", req.Deployments[0].Component)
 		assert.Equal(t, "prod", req.Deployments[0].Stack)
 		assert.Equal(t, "terraform", req.Deployments[0].ComponentType)
-		assert.True(t, req.Deployments[0].DriftDetectionEnabled)
-		assert.Len(t, req.Deployments[0].Workflows, 2)
-		assert.Equal(t, "detect", req.Deployments[0].Workflows[0].Event)
-		assert.Equal(t, "atmos-pro-terraform-plan.yaml", req.Deployments[0].Workflows[0].Workflow)
-		assert.Equal(t, "remediate", req.Deployments[0].Workflows[1].Event)
-		assert.Equal(t, "atmos-pro-terraform-apply.yaml", req.Deployments[0].Workflows[1].Workflow)
+		assert.Equal(t, map[string]interface{}{"drift_detection_enabled": true}, req.Deployments[0].Settings)
+		assert.Equal(t, map[string]interface{}{"environment": "prod"}, req.Deployments[0].Vars)
+		assert.Equal(t, map[string]interface{}{"TF_VAR_region": "us-west-2"}, req.Deployments[0].Env)
+		assert.Equal(t, map[string]interface{}{"type": "s3"}, req.Deployments[0].Backend)
+		assert.Equal(t, map[string]interface{}{"description": "Web application"}, req.Deployments[0].Metadata)
 
+		// Test second deployment
 		assert.Equal(t, "api", req.Deployments[1].Component)
 		assert.Equal(t, "staging", req.Deployments[1].Stack)
 		assert.Equal(t, "helm", req.Deployments[1].ComponentType)
-		assert.False(t, req.Deployments[1].DriftDetectionEnabled)
-		assert.Len(t, req.Deployments[1].Workflows, 1)
+		assert.Equal(t, map[string]interface{}{"drift_detection_enabled": false}, req.Deployments[1].Settings)
+		assert.Equal(t, map[string]interface{}{"environment": "staging"}, req.Deployments[1].Vars)
+		assert.Equal(t, map[string]interface{}{"HELM_NAMESPACE": "staging"}, req.Deployments[1].Env)
+		assert.Equal(t, map[string]interface{}{"type": "local"}, req.Deployments[1].Backend)
+		assert.Equal(t, map[string]interface{}{"description": "API service"}, req.Deployments[1].Metadata)
 	})
 
 	t.Run("valid request with empty deployments", func(t *testing.T) {
