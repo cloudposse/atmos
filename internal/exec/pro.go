@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -12,7 +13,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // Error variables for pro package.
@@ -242,21 +242,11 @@ func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, clie
 		gitSHA = ""
 	}
 
-	// Get GitHub run ID from environment variables using viper
-	v := viper.New()
-	if err := v.BindEnv("github_run_id", "GITHUB_RUN_ID"); err != nil {
-		log.Error(err)
-		return err
-	}
-	if err := v.BindEnv("atmos_pro_run_id", "ATMOS_PRO_RUN_ID"); err != nil {
-		log.Error(err)
-		return err
-	}
-
-	atmosProRunID := v.GetString("github_run_id")
-	if atmosProRunID == "" {
-		atmosProRunID = v.GetString("atmos_pro_run_id")
-	}
+	// Get run ID from environment variables.
+	// Note: This is an exception to the general rule of using viper.BindEnv for environment variables.
+	// The run ID is always provided by the CI/CD environment and is not part of the stack configuration.
+	//nolint:forbidigo // Exception: Run ID is always from CI/CD environment, not config
+	atmosProRunID := os.Getenv("ATMOS_PRO_RUN_ID")
 
 	// Create the DTO
 	dto := dtos.DeploymentStatusUploadRequest{

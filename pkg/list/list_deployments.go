@@ -1,6 +1,7 @@
 package list
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -22,6 +23,16 @@ import (
 const (
 	componentHeader = "Component"
 	stackHeader     = "Stack"
+)
+
+// Static error definitions for deployment operations.
+var (
+	ErrGetLocalRepo          = errors.New("failed to get local repo")
+	ErrGetRepoInfo           = errors.New("failed to get repo info")
+	ErrInitCliConfig         = errors.New("failed to initialize CLI config")
+	ErrCreateAPIClient       = errors.New("failed to create API client")
+	ErrUploadDeployments     = errors.New("failed to upload deployments")
+	ErrExecuteDescribeStacks = errors.New("failed to execute describe stacks")
 )
 
 // processComponentConfig processes a single component configuration and returns a deployment if valid.
@@ -192,26 +203,26 @@ func formatDeployments(deployments []schema.Deployment) string {
 func uploadDeployments(deployments []schema.Deployment) error {
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		log.Error(err)
-		return err
+		log.Error(ErrGetLocalRepo.Error(), "error", err)
+		return fmt.Errorf("%w: %w", ErrGetLocalRepo, err)
 	}
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		log.Error(err)
-		return err
+		log.Error(ErrGetRepoInfo.Error(), "error", err)
+		return fmt.Errorf("%w: %w", ErrGetRepoInfo, err)
 	}
 
 	// Initialize CLI config for API client
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
-		log.Error(err)
-		return err
+		log.Error(ErrInitCliConfig.Error(), "error", err)
+		return fmt.Errorf("%w: %w", ErrInitCliConfig, err)
 	}
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
 	if err != nil {
-		log.Error(err)
-		return err
+		log.Error(ErrCreateAPIClient.Error(), "error", err)
+		return fmt.Errorf("%w: %w", ErrCreateAPIClient, err)
 	}
 
 	req := dtos.DeploymentsUploadRequest{
@@ -224,8 +235,8 @@ func uploadDeployments(deployments []schema.Deployment) error {
 
 	err = apiClient.UploadDeployments(&req)
 	if err != nil {
-		log.Error(err)
-		return err
+		log.Error(ErrUploadDeployments.Error(), "error", err)
+		return fmt.Errorf("%w: %w", ErrUploadDeployments, err)
 	}
 
 	log.Info("Successfully uploaded deployments to Atmos Pro API.")
@@ -237,7 +248,8 @@ func processDeployments(atmosConfig *schema.AtmosConfiguration) ([]schema.Deploy
 	// Get all stacks with template processing enabled to render template variables
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
-		return nil, err
+		log.Error(ErrExecuteDescribeStacks.Error(), "error", err)
+		return nil, fmt.Errorf("%w: %w", ErrExecuteDescribeStacks, err)
 	}
 
 	// Collect deployments
