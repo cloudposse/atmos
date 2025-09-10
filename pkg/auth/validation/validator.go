@@ -149,6 +149,9 @@ func (v *validator) ValidateChains(identities map[string]*schema.Identity, provi
 	for name, identity := range identities {
 		if identity.Via != nil {
 			if identity.Via.Identity != "" {
+				if _, ok := identities[identity.Via.Identity]; !ok {
+					return fmt.Errorf("%w: referenced identity %q does not exist", errUtils.ErrInvalidAuthConfig, identity.Via.Identity)
+				}
 				graph[name] = append(graph[name], identity.Via.Identity)
 			}
 		}
