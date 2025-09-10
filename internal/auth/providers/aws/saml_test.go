@@ -14,19 +14,19 @@ import (
 )
 
 func TestNewSAMLProvider_ValidateInputs(t *testing.T) {
-	// Wrong kind
+	// Wrong kind.
 	_, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/iam-identity-center", URL: "https://idp", Region: "us-east-1"})
 	assert.Error(t, err)
 
-	// Missing URL
+	// Missing URL.
 	_, err = NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", Region: "us-east-1"})
 	assert.Error(t, err)
 
-	// Missing region
+	// Missing region.
 	_, err = NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp"})
 	assert.Error(t, err)
 
-	// Valid
+	// Valid.
 	p, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})
 	require.NoError(t, err)
 	assert.Equal(t, "aws/saml", p.Kind())
@@ -37,13 +37,13 @@ func TestSAMLProvider_RequestedSessionSeconds(t *testing.T) {
 	p := &samlProvider{config: &schema.Provider{Session: &schema.SessionConfig{Duration: ""}}}
 	assert.Equal(t, int32(3600), p.requestedSessionSeconds())
 
-	p.config.Session.Duration = "5m" // less than min -> clamp to 900
+	p.config.Session.Duration = "5m" // less than min -> clamp to 900.
 	assert.Equal(t, int32(900), p.requestedSessionSeconds())
 
 	p.config.Session.Duration = "30m"
 	assert.Equal(t, int32(1800), p.requestedSessionSeconds())
 
-	p.config.Session.Duration = "13h" // more than max -> clamp to 43200
+	p.config.Session.Duration = "13h" // more than max -> clamp to 43200.
 	assert.Equal(t, int32(43200), p.requestedSessionSeconds())
 }
 
@@ -106,21 +106,21 @@ func TestSAMLProvider_PreAuthenticate(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	// Chain too short -> no change, no error
+	// Chain too short -> no change, no error.
 	err = sp.PreAuthenticate(stubSamlMgr{chain: []string{"prov"}, idmap: map[string]schema.Identity{}})
 	assert.NoError(t, err)
 
-	// Missing identity referenced -> error
+	// Missing identity referenced -> error.
 	err = sp.PreAuthenticate(stubSamlMgr{chain: []string{"prov", "dev"}, idmap: map[string]schema.Identity{}})
 	assert.Error(t, err)
 
-	// Identity exists but missing assume_role -> error
+	// Identity exists but missing assume_role -> error.
 	err = sp.PreAuthenticate(stubSamlMgr{chain: []string{"prov", "dev"}, idmap: map[string]schema.Identity{
 		"dev": {Kind: "aws/assume-role", Principal: map[string]any{}},
 	}})
 	assert.Error(t, err)
 
-	// Proper identity -> captures hint
+	// Proper identity -> captures hint.
 	err = sp.PreAuthenticate(stubSamlMgr{chain: []string{"prov", "dev"}, idmap: map[string]schema.Identity{
 		"dev": {Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/Dev"}},
 	}})
@@ -139,7 +139,7 @@ func TestSAMLProvider_selectRole(t *testing.T) {
 	require.NotNil(t, sel)
 	assert.Equal(t, "arn:aws:iam::123:role/DevAccess", sel.RoleARN)
 
-	// No hint match -> first
+	// No hint match -> first.
 	sp.RoleToAssumeFromAssertion = "nonexistent"
 	sel = sp.selectRole(roles)
 	require.NotNil(t, sel)
