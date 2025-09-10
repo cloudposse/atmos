@@ -100,9 +100,15 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 
 	// Display user code and verification URI if not in CI
 	if !telemetry.IsCI() {
-		if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
-			log.Debug(err)
-			utils.PrintfMarkdown("🔐 Please visit %s and enter code: %s", *authResp.VerificationUriComplete, *authResp.UserCode)
+		if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
+			if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
+				log.Debug(err)
+				if authResp.UserCode != nil {
+					utils.PrintfMessageToTUI("🔐 Please visit %s and enter code: %s.", *authResp.VerificationUriComplete, *authResp.UserCode)
+				} else {
+					utils.PrintfMessageToTUI("🔐 Please visit %s and complete authentication.", *authResp.VerificationUriComplete)
+				}
+			}
 		}
 	}
 	// Poll for token using helper to keep function size small
