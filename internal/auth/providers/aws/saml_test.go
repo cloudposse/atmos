@@ -40,8 +40,8 @@ func TestSAMLProvider_RequestedSessionSeconds(t *testing.T) {
 	p.config.Session.Duration = "5m" // less than min -> clamp to 900
 	assert.Equal(t, int32(900), p.requestedSessionSeconds())
 
-	p.config.Session.Duration = "10m"
-	assert.Equal(t, int32(600), p.requestedSessionSeconds())
+	p.config.Session.Duration = "30m"
+	assert.Equal(t, int32(1800), p.requestedSessionSeconds())
 
 	p.config.Session.Duration = "13h" // more than max -> clamp to 43200
 	assert.Equal(t, int32(43200), p.requestedSessionSeconds())
@@ -125,7 +125,7 @@ func TestSAMLProvider_PreAuthenticate(t *testing.T) {
 		"dev": {Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/Dev"}},
 	}})
 	require.NoError(t, err)
-	assert.Contains(t, sp.RoleToAssumeFromAssertion, "/role/Dev")
+	assert.Contains(t, sp.RoleToAssumeFromAssertion, "arn:aws:iam::123:role/Dev")
 }
 
 func TestSAMLProvider_selectRole(t *testing.T) {

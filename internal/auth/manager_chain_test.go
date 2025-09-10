@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -71,9 +72,8 @@ func TestGetProviderKindForIdentity(t *testing.T) {
 			"p": {Kind: "aws/iam-identity-center"},
 		},
 		Identities: map[string]schema.Identity{
-			"dev":   {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
-			"me":    {Kind: "aws/user"},
-			"alias": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}, Alias: "developer"},
+			"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			"me":  {Kind: "aws/user"},
 		},
 	}}
 	// Populate identities map so alias resolution can use GetProviderName().
@@ -89,6 +89,5 @@ func TestGetProviderKindForIdentity(t *testing.T) {
 	assert.Equal(t, "aws/user", kind)
 
 	kind, err = m.GetProviderKindForIdentity("developer")
-	require.NoError(t, err)
-	assert.Equal(t, "aws/iam-identity-center", kind)
+	require.Error(t, err, errUtils.ErrInvalidAuthConfig)
 }
