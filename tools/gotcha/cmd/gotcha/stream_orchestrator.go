@@ -34,7 +34,7 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 
 	// Step 4: Load test count from cache
 	loadTestCountFromCache(config, cmd, logger)
-	
+
 	// Step 5: Log what we'll be showing
 	var filterDescription string
 	switch config.ShowFilter {
@@ -51,7 +51,7 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 	default:
 		filterDescription = config.ShowFilter
 	}
-	
+
 	logger.Info("Test display configuration",
 		"showing", filterDescription,
 		"verbosity", config.VerbosityLevel,
