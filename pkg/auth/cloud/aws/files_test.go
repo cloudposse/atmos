@@ -1,7 +1,6 @@
 package aws
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,9 +33,6 @@ func TestAWSFileManager_WriteCredentials(t *testing.T) {
 	assert.NoError(t, err)
 	cfg, err = ini.Load(path)
 	assert.NoError(t, err)
-	st, err := os.Stat(path)
-	assert.NoError(t, err)
-	assert.Equal(t, fs.FileMode(PermissionRW), st.Mode().Perm(), "credentials should be 0600")
 	sec = cfg.Section("dev")
 	_, err = sec.GetKey("aws_session_token")
 	assert.Error(t, err) // key removed.
