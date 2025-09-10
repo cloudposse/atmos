@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	log "github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
@@ -204,25 +205,25 @@ func uploadDeployments(deployments []schema.Deployment) error {
 	repo, err := git.GetLocalRepo()
 	if err != nil {
 		log.Error(ErrGetLocalRepo.Error(), "error", err)
-		return fmt.Errorf("%w: %w", ErrGetLocalRepo, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrGetLocalRepo, err)
 	}
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
 		log.Error(ErrGetRepoInfo.Error(), "error", err)
-		return fmt.Errorf("%w: %w", ErrGetRepoInfo, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrGetRepoInfo, err)
 	}
 
 	// Initialize CLI config for API client
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		log.Error(ErrInitCliConfig.Error(), "error", err)
-		return fmt.Errorf("%w: %w", ErrInitCliConfig, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrInitCliConfig, err)
 	}
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
 	if err != nil {
 		log.Error(ErrCreateAPIClient.Error(), "error", err)
-		return fmt.Errorf("%w: %w", ErrCreateAPIClient, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrCreateAPIClient, err)
 	}
 
 	req := dtos.DeploymentsUploadRequest{
@@ -236,7 +237,7 @@ func uploadDeployments(deployments []schema.Deployment) error {
 	err = apiClient.UploadDeployments(&req)
 	if err != nil {
 		log.Error(ErrUploadDeployments.Error(), "error", err)
-		return fmt.Errorf("%w: %w", ErrUploadDeployments, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrUploadDeployments, err)
 	}
 
 	log.Info("Successfully uploaded deployments to Atmos Pro API.")
@@ -249,7 +250,7 @@ func processDeployments(atmosConfig *schema.AtmosConfiguration) ([]schema.Deploy
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
 		log.Error(ErrExecuteDescribeStacks.Error(), "error", err)
-		return nil, fmt.Errorf("%w: %w", ErrExecuteDescribeStacks, err)
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, ErrExecuteDescribeStacks, err)
 	}
 
 	// Collect deployments
