@@ -98,7 +98,7 @@ func TestPermissionSetIdentity_buildCredsFromRole(t *testing.T) {
 		AccessKeyId:     strPtr("AKIAxyz"),
 		SecretAccessKey: strPtr("secret"),
 		SessionToken:    strPtr("token"),
-		Expiration:      &expMs,
+		Expiration:      expMs,
 	}}
 	creds, err := i.buildCredsFromRole(out, "eu-west-1")
 	require.NoError(t, err)

@@ -9,7 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/internal/auth/types"
+    "github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestNewAssumeRoleIdentity(t *testing.T) {
@@ -118,7 +119,7 @@ func TestAssumeRoleIdentity_toAWSCredentials(t *testing.T) {
 	}}
 	creds, err := i.toAWSCredentials(out)
 	require.NoError(t, err)
-	assert.Equal(t, "us-east-2", creds.(*AWSCredentials).Region)
+	assert.Equal(t, "us-east-2", creds.(*types.AWSCredentials).Region)
 }
 
 func strPtr(s string) *string { return &s }

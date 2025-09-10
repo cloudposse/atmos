@@ -80,7 +80,7 @@ func TestSAMLProvider_ValidateAndEnvironment(t *testing.T) {
 	assert.Equal(t, "true", env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"]) // set when download flag is true
 }
 
-// stub manager for PreAuthenticate
+// stub manager for PreAuthenticate.
 type stubSamlMgr struct {
 	chain []string
 	idmap map[string]schema.Identity

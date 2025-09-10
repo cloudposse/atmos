@@ -20,6 +20,7 @@ const (
 	identityNameKey          = "identityName"
 	buildAuthenticationChain = "buildAuthenticationChain"
 	buildChainRecursive      = "buildChainRecursive"
+	backtickedQuotedFmt      = "`%q`"
 )
 
 // manager implements the Authmanager interface.
@@ -138,18 +139,18 @@ func (m *manager) GetChain() []string {
 // Whoami returns information about the specified identity's credentials.
 func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	if _, exists := m.identities[identityName]; !exists {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrIdentityNotFound, fmt.Sprintf("`%q`", identityName))
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
 	// Try to retrieve credentials for the resolved identity.
 	creds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNoCredentialsFound, fmt.Sprintf("`%q`", identityName))
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNoCredentialsFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
 	// Check if credentials are expired
 	if expired, err := m.credentialStore.IsExpired(identityName); err != nil || expired {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrExpiredCredentials, fmt.Sprintf("`%q`", identityName))
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
 	return m.buildWhoamiInfo(identityName, creds), nil
@@ -187,7 +188,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 	default:
 		// Multiple default identities found.
 		if telemetry.IsCI() {
-			return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf("`%q`", defaultIdentities))
+			return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedQuotedFmt, defaultIdentities))
 		}
 		// In interactive mode, prompt user to choose from default identities
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)

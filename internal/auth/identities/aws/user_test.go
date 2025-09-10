@@ -56,7 +56,7 @@ func TestIsStandaloneAWSUserChain(t *testing.T) {
 	assert.True(t, IsStandaloneAWSUserChain([]string{"dev"}, map[string]schema.Identity{"dev": {Kind: "aws/user"}}))
 }
 
-// stubUser satisfies types.Identity for testing AuthenticateStandaloneAWSUser
+// stubUser satisfies types.Identity for testing AuthenticateStandaloneAWSUser.
 type stubUser struct{ creds types.ICredentials }
 
 func (s stubUser) Kind() string                     { return "aws/user" }
