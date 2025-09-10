@@ -37,5 +37,4 @@ func runAddToolCmd(cmd *cobra.Command, args []string) error {
 func init() {
 	toolchainAddCmd.Flags().String("file", "", "Path to tool-versions file (defaults to global --tool-versions-file)")
 	_ = viper.BindEnv("toolchain.file_path", "TOOLCHAIN_PATH_RELATIVE", "ATMOS_TOOLCHAIN_PATH_RELATIVE")
-
 }
