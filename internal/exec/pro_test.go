@@ -36,6 +36,11 @@ func (m *MockGitRepo) GetRepoInfo(repo *gogit.Repository) (atmosgit.RepoInfo, er
 	return args.Get(0).(atmosgit.RepoInfo), args.Error(1)
 }
 
+func (m *MockGitRepo) GetCurrentCommitSHA() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
 // Test helper function to create a test info with pro settings.
 func createTestInfo(proEnabled bool) schema.ConfigAndStacksInfo {
 	info := schema.ConfigAndStacksInfo{
@@ -132,6 +137,7 @@ func TestUploadDeploymentStatus(t *testing.T) {
 
 	// Set up mock expectations for git functions
 	mockGitRepo.On("GetLocalRepo").Return(testRepoInfo, nil)
+	mockGitRepo.On("GetCurrentCommitSHA").Return("abc123def456", nil)
 
 	// Test cases
 	testCases := []struct {
