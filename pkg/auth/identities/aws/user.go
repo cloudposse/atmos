@@ -112,7 +112,10 @@ func (i *userIdentity) Authenticate(ctx context.Context, baseCreds types.ICreden
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider.
 func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string) error {
-	awsFileManager := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager()
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
+	}
 
 	// Write credentials to ~/.aws/atmos/aws-user/credentials
 	if err := awsFileManager.WriteCredentials(awsUserProviderName, i.name, creds); err != nil {
@@ -240,7 +243,10 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
 	// Get AWS file environment variables using "aws-user" as mock provider
-	awsFileManager := awsCloud.NewAWSFileManager()
+	awsFileManager, err := awsCloud.NewAWSFileManager()
+	if err != nil {
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
+	}
 	awsEnvVars := awsFileManager.GetEnvironmentVariables(awsUserProviderName, i.name)
 
 	// Convert to map format

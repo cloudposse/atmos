@@ -21,6 +21,7 @@ const (
 )
 
 var (
+	ErrGetHomeDir                    = errors.New("failed to get home directory")
 	ErrCreateCredentialsFile         = errors.New("failed to create credentials file")
 	ErrCreateConfigFile              = errors.New("failed to create config file")
 	ErrLoadCredentialsFile           = errors.New("failed to load credentials file")
@@ -39,11 +40,14 @@ type AWSFileManager struct {
 }
 
 // NewAWSFileManager creates a new AWS file manager instance.
-func NewAWSFileManager() *AWSFileManager {
-	homeDir, _ := homedir.Dir()
+func NewAWSFileManager() (*AWSFileManager, error) {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return nil, ErrGetHomeDir
+	}
 	return &AWSFileManager{
 		baseDir: filepath.Join(homeDir, ".aws", "atmos"),
-	}
+	}, nil
 }
 
 // WriteCredentials writes AWS credentials to the provider-specific file with identity profile.

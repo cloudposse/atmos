@@ -116,6 +116,8 @@ var (
 	ErrInvalidArgumentError = errors.New("invalid argument error")
 	ErrMissingInput         = errors.New("missing input")
 
+	ErrAuthAwsFileManagerFailed = errors.New("failed to create AWS file manager")
+
 	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
 	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
 )

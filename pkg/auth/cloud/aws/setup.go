@@ -17,7 +17,10 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials) err
 	}
 
 	// Create AWS file manager.
-	fileManager := NewAWSFileManager()
+	fileManager, err := NewAWSFileManager()
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
+	}
 
 	// Write credentials file.
 	if err := fileManager.WriteCredentials(providerName, identityName, awsCreds); err != nil {
@@ -39,7 +42,10 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials) err
 
 // SetEnvironmentVariables sets the AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE environment variables.
 func SetEnvironmentVariables(stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string) error {
-	m := NewAWSFileManager()
+	m, err := NewAWSFileManager()
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthAwsFileManagerFailed, err)
+	}
 	credentialsPath := m.GetCredentialsPath(providerName)
 	configPath := m.GetConfigPath(providerName)
 
