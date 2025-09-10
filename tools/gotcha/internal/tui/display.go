@@ -121,7 +121,7 @@ func (m *TestModel) GenerateFinalSummary() string {
 			summary.WriteString(fmt.Sprintf("  Function Coverage:  %5.1f%%\n", avgFunctionCoverage))
 		} else {
 			// Only statement coverage available
-			summary.WriteString(fmt.Sprintf("  Coverage:  %5.1f%%\n", avgStatementCoverage))
+			summary.WriteString(fmt.Sprintf("  Statement Coverage: %5.1f%%\n", avgStatementCoverage))
 		}
 	}
 

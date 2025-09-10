@@ -118,6 +118,9 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 		}
 	}
 
+	// Add blank line before tests section
+	fmt.Fprintln(os.Stderr)
+	
 	// Display tests based on show filter
 	testsDisplayed := false
 	for _, testName := range pkg.TestOrder {
@@ -367,6 +370,7 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 		}
 	} else if len(r.packageCoverages) > 0 {
 		// Fallback to legacy coverage calculation
+		// This is statement coverage from standard Go test output
 		totalCoverage := 0.0
 		for _, cov := range r.packageCoverages {
 			totalCoverage += cov
