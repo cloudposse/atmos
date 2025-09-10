@@ -15,12 +15,12 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "\n[DISPLAY-PKG] Starting display for package: %s\n", pkg.Package)
-			fmt.Fprintf(f, "  Status: %s, HasTests: %v, TestCount: %d\n", 
+			fmt.Fprintf(f, "  Status: %s, HasTests: %v, TestCount: %d\n",
 				pkg.Status, pkg.HasTests, len(pkg.Tests))
 			f.Close()
 		}
 	}
-	
+
 	// Display package header - ▶ icon in white, package name in cyan
 	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
@@ -86,21 +86,21 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Display tests based on show filter
 	// Track if any tests were actually displayed
 	testsDisplayed := false
-	
+
 	// Debug: Log all tests in TestOrder
 	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "\n[DISPLAY-DEBUG] Package %s TestOrder:\n", pkg.Package)
 			for i, name := range pkg.TestOrder {
 				if test := pkg.Tests[name]; test != nil {
-					fmt.Fprintf(f, "  [%d] %s: parent=%s, status=%s, subtests=%d\n", 
+					fmt.Fprintf(f, "  [%d] %s: parent=%s, status=%s, subtests=%d\n",
 						i, name, test.Parent, test.Status, len(test.Subtests))
 				}
 			}
 			f.Close()
 		}
 	}
-	
+
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
 

@@ -209,7 +209,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 					pkg.TestOrder = append(pkg.TestOrder, parentName)
 					pkg.HasTests = true
 				}
-				
+
 				test.Parent = parentName
 				test.Name = subtestName // Store just the subtest name
 				parent.Subtests[event.Test] = test

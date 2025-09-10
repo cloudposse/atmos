@@ -208,20 +208,20 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 func replayWithStreamProcessor(jsonData []byte, showFilter, verbosityLevel string) error {
 	// Create a dummy writer for JSON output (required by StreamProcessor)
 	var jsonBuffer bytes.Buffer
-	
+
 	// Create a stream processor
 	processor := stream.NewStreamProcessor(&jsonBuffer, showFilter, "", verbosityLevel)
-	
+
 	// Create a reader for the JSON data
 	reader := bytes.NewReader(jsonData)
-	
+
 	// Process the stream
 	if err := processor.ProcessStream(reader); err != nil {
 		return fmt.Errorf("failed to process stream: %w", err)
 	}
-	
+
 	// Print the final summary
 	processor.PrintSummary()
-	
+
 	return nil
 }
