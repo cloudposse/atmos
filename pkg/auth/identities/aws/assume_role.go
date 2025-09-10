@@ -198,20 +198,42 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, stackInfo *sc
 }
 
 // sanitizeRoleSessionName sanitizes the role session name to be used in AssumeRole.
+// Allowed characters are ASCII letters, digits, and "+=,.@-".
+// Anything else is replaced with '-'.
 func sanitizeRoleSessionName(s string) string {
 	// Allowed: letters, digits, + = , . @ -  characters.
 	var b strings.Builder
 	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
-			r == '+' || r == '=' || r == ',' || r == '.' || r == '@' || r == '-' {
+		if isAllowed(r) {
 			b.WriteRune(r)
 		} else {
 			b.WriteByte('-')
 		}
 	}
 	name := b.String()
+	return sanitizeRoleSessionNameLengthAndTrim(name)
+}
+
+func isAtoZ(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+}
+
+func isDigit(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+func isAllowed(r rune) bool {
+	return isAtoZ(r) || isDigit(r) || r == '+' || r == '=' || r == ',' || r == '.' || r == '@' || r == '-'
+}
+
+func sanitizeRoleSessionNameLengthAndTrim(name string) string {
 	if len(name) > maxSessionNameLength {
 		name = name[:maxSessionNameLength]
+	}
+	// Remove trailing dashes to ensure valid session name
+	name = strings.TrimRight(name, "-")
+	if name == "" {
+		name = "atmos-session"
 	}
 	return name
 }

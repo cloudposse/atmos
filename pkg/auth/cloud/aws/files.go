@@ -63,7 +63,8 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 	// Load existing INI file or create new one
 	cfg, err := ini.Load(credentialsPath)
 	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
+		// ini.Load returns a wrapped error, check if the file doesn't exist
+		if !os.IsNotExist(err) {
 			errUtils.CheckErrorAndPrint(ErrLoadCredentialsFile, identityName, "failed to load credentials file")
 			return ErrLoadCredentialsFile
 		}

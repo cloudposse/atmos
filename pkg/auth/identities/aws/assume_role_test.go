@@ -15,11 +15,11 @@ import (
 )
 
 func TestNewAssumeRoleIdentity(t *testing.T) {
-	// Wrong kind should error
+	// Wrong kind should error.
 	_, err := NewAssumeRoleIdentity("role", &schema.Identity{Kind: "aws/permission-set"})
 	assert.Error(t, err)
 
-	// Correct kind succeeds
+	// Correct kind succeeds.
 	id, err := NewAssumeRoleIdentity("role", &schema.Identity{Kind: "aws/assume-role"})
 	assert.NoError(t, err)
 	assert.NotNil(t, id)
@@ -27,15 +27,15 @@ func TestNewAssumeRoleIdentity(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_ValidateAndProviderName(t *testing.T) {
-	// Missing principal -> error
+	// Missing principal -> error.
 	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role"}}
 	assert.Error(t, i.Validate())
 
-	// Missing assume_role -> error
+	// Missing assume_role -> error.
 	i = &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{}}}
 	assert.Error(t, i.Validate())
 
-	// Valid minimal config with provider via
+	// Valid minimal config with provider via.
 	i = &assumeRoleIdentity{name: "role", config: &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "aws-sso"},
@@ -45,18 +45,18 @@ func TestAssumeRoleIdentity_ValidateAndProviderName(t *testing.T) {
 		},
 	}}
 	require.NoError(t, i.Validate())
-	// Provider name resolves from Via.Provider
+	// Provider name resolves from Via.Provider.
 	prov, err := i.GetProviderName()
 	assert.NoError(t, err)
 	assert.Equal(t, "aws-sso", prov)
 
-	// Via.Identity fallback
+	// Via.Identity fallback.
 	i.config.Via = &schema.IdentityVia{Identity: "base"}
 	prov, err = i.GetProviderName()
 	assert.NoError(t, err)
 	assert.Equal(t, "base", prov)
 
-	// Neither set -> error
+	// Neither set -> error.
 	i.config.Via = &schema.IdentityVia{}
 	_, err = i.GetProviderName()
 	assert.Error(t, err)
@@ -74,7 +74,7 @@ func TestAssumeRoleIdentity_Environment(t *testing.T) {
 }
 
 func TestAssumeRoleIdentity_BuildAssumeRoleInput(t *testing.T) {
-	// External ID and duration should be set when provided
+	// External ID and duration should be set when provided.
 	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{
 		Kind: "aws/assume-role",
 		Principal: map[string]any{
@@ -83,14 +83,14 @@ func TestAssumeRoleIdentity_BuildAssumeRoleInput(t *testing.T) {
 			"duration":    "15m",
 		},
 	}}
-	// Validate populates role arn
+	// Validate populates role arn.
 	require.NoError(t, i.Validate())
 	in := i.buildAssumeRoleInput()
 	require.NotNil(t, in)
 	assert.NotNil(t, in.ExternalId)
 	assert.Equal(t, int32(900), *in.DurationSeconds)
 
-	// Invalid duration -> no DurationSeconds set
+	// Invalid duration -> no DurationSeconds set.
 	i = &assumeRoleIdentity{name: "role", config: &schema.Identity{
 		Kind: "aws/assume-role",
 		Principal: map[string]any{
@@ -106,11 +106,11 @@ func TestAssumeRoleIdentity_BuildAssumeRoleInput(t *testing.T) {
 func TestAssumeRoleIdentity_toAWSCredentials(t *testing.T) {
 	i := &assumeRoleIdentity{name: "role", region: "us-east-2"}
 
-	// Nil result -> error
+	// Nil result -> error.
 	_, err := i.toAWSCredentials(nil)
 	assert.Error(t, err)
 
-	// Valid conversion
+	// Valid conversion.
 	exp := time.Now().Add(time.Hour)
 	out := &sts.AssumeRoleOutput{Credentials: &ststypes.Credentials{
 		AccessKeyId:     aws.String("AKIA123"),
@@ -121,4 +121,55 @@ func TestAssumeRoleIdentity_toAWSCredentials(t *testing.T) {
 	creds, err := i.toAWSCredentials(out)
 	require.NoError(t, err)
 	assert.Equal(t, "us-east-2", creds.(*types.AWSCredentials).Region)
+}
+func Test_sanitizeRoleSessionName(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "valid",
+			args: args{s: "atmos-dev-1699566677"},
+			want: "atmos-dev-1699566677",
+		},
+		{
+			name: "invalid characters replaced",
+			args: args{s: "atmos-dev-1699566677!"},
+			want: "atmos-dev-1699566677",
+		},
+		{
+			name: "multiple invalid characters",
+			args: args{s: "atmos-dev-1699566677!@#$%^&*()"},
+			want: "atmos-dev-1699566677-@",
+		},
+		{
+			name: "mixed valid and invalid",
+			args: args{s: "atmos-dev-1699566677!@#$%^&*()_-"},
+			want: "atmos-dev-1699566677-@",
+		},
+		{
+			name: "equals sign replaced",
+			args: args{s: "atmos-dev-1699566677!@#$%^&*()_-="},
+			want: "atmos-dev-1699566677-@----------=",
+		},
+		{
+			name: "control character replaced",
+			args: args{s: "atmos-dev-1699566677!@#$%^&*()_-=" + string([]rune{0x7f})},
+			want: "atmos-dev-1699566677-@----------=",
+		},
+		{
+			name: "truncated to max length",
+			args: args{s: "very-long-role-session-name-that-exceeds-the-maximum-allowed-length-of-64-characters"},
+			want: "very-long-role-session-name-that-exceeds-the-maximum-allowed-len",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equalf(t, tt.want, sanitizeRoleSessionName(tt.args.s), "sanitizeRoleSessionName(%v)", tt.args.s)
+		})
+	}
 }
