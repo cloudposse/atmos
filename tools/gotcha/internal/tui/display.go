@@ -257,6 +257,21 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		}
 	}
 
+	// Debug: Log all tests in TestOrder
+	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintf(f, "[DISPLAY-DEBUG] Package %s has %d tests in TestOrder\n", pkg.Package, len(pkg.TestOrder))
+			for i, name := range pkg.TestOrder {
+				test := pkg.Tests[name]
+				if test != nil {
+					fmt.Fprintf(f, "[DISPLAY-DEBUG]   [%d] %s: status=%s, parent=%s, subtests=%d\n",
+						i, name, test.Status, test.Parent, len(test.Subtests))
+				}
+			}
+			f.Close()
+		}
+	}
+
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
 		if test == nil {
@@ -268,12 +283,14 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 
 		shouldShow := m.shouldShowTest(test.Status)
 		if shouldShow || m.showFilter == "collapsed" {
-			// Display with appropriate indentation
-			indent := ""
+			// For parent tests, use the full formatter to show mini indicators
+			// For subtests, use the simple line display
 			if isSubtest {
-				indent = "  " // Indent subtests
+				m.displayTestAsLine(&output, test, "  ")
+			} else {
+				formatter := NewTestFormatter(m)
+				formatter.FormatTest(&output, test)
 			}
-			m.displayTestAsLine(&output, test, indent)
 		}
 	}
 

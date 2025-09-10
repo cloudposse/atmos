@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	pkgErrors "github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
 )
 
 // newParseCmd creates the parse subcommand.
@@ -49,6 +50,8 @@ func newParseCmd(logger *log.Logger) *cobra.Command {
 	parseCmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
 	parseCmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
 	parseCmd.Flags().Bool("generate-summary", false, "Write test summary to test-summary.md file")
+	parseCmd.Flags().String("show", "all", "Test display filter: all, failed, passed, skipped, none")
+	parseCmd.Flags().String("verbosity", "normal", "Output verbosity: normal, verbose, with-output")
 
 	// CI Integration flags
 	parseCmd.Flags().Bool("ci", false, "CI mode - automatically detect and integrate with CI systems")
@@ -69,6 +72,8 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	_ = viper.BindPFlag("coverprofile", cmd.Flags().Lookup("coverprofile"))
 	_ = viper.BindPFlag("exclude-mocks", cmd.Flags().Lookup("exclude-mocks"))
 	_ = viper.BindPFlag("generate-summary", cmd.Flags().Lookup("generate-summary"))
+	_ = viper.BindPFlag("show", cmd.Flags().Lookup("show"))
+	_ = viper.BindPFlag("verbosity", cmd.Flags().Lookup("verbosity"))
 	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
 	_ = viper.BindEnv("post-comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
 	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
@@ -80,6 +85,8 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	coverprofile := viper.GetString("coverprofile")
 	excludeMocks := viper.GetBool("exclude-mocks")
 	generateSummary := viper.GetBool("generate-summary")
+	showFilter := viper.GetString("show")
+	verbosityLevel := viper.GetString("verbosity")
 
 	// Get CI settings
 	ciMode, _ := cmd.Flags().GetBool("ci")
@@ -105,7 +112,7 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		return fmt.Errorf("failed to read input file: %w", err)
 	}
 
-	// Parse the test events
+	// Parse the test events for summary data
 	jsonReader := bytes.NewReader(jsonData)
 	summary, err := parser.ParseTestJSON(jsonReader, coverprofile, excludeMocks)
 	if err != nil {
@@ -130,9 +137,14 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Handle different output formats
 	switch format {
 	case "terminal":
-		// Display summary to terminal
-		if err := output.HandleConsoleOutput(summary); err != nil {
-			return fmt.Errorf("failed to print terminal summary: %w", err)
+		// For terminal output, replay the JSON events through StreamProcessor
+		// to get proper display with mini indicators for subtests
+		if err := replayWithStreamProcessor(jsonData, showFilter, verbosityLevel); err != nil {
+			// Fall back to simple output if replay fails
+			logger.Debug("Failed to replay with stream processor, using simple output", "error", err)
+			if err := output.HandleConsoleOutput(summary); err != nil {
+				return fmt.Errorf("failed to print terminal summary: %w", err)
+			}
 		}
 
 	case "json":
@@ -188,5 +200,28 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		return &testFailureError{code: 1}
 	}
 
+	return nil
+}
+
+// replayWithStreamProcessor replays JSON test events through the StreamProcessor
+// to display tests with proper formatting including mini indicators for subtests.
+func replayWithStreamProcessor(jsonData []byte, showFilter, verbosityLevel string) error {
+	// Create a dummy writer for JSON output (required by StreamProcessor)
+	var jsonBuffer bytes.Buffer
+	
+	// Create a stream processor
+	processor := stream.NewStreamProcessor(&jsonBuffer, showFilter, "", verbosityLevel)
+	
+	// Create a reader for the JSON data
+	reader := bytes.NewReader(jsonData)
+	
+	// Process the stream
+	if err := processor.ProcessStream(reader); err != nil {
+		return fmt.Errorf("failed to process stream: %w", err)
+	}
+	
+	// Print the final summary
+	processor.PrintSummary()
+	
 	return nil
 }

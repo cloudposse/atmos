@@ -11,6 +11,16 @@ import (
 
 // displayPackageResult outputs the buffered results for a completed package.
 func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
+	// Debug: Log package display start
+	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintf(f, "\n[DISPLAY-PKG] Starting display for package: %s\n", pkg.Package)
+			fmt.Fprintf(f, "  Status: %s, HasTests: %v, TestCount: %d\n", 
+				pkg.Status, pkg.HasTests, len(pkg.Tests))
+			f.Close()
+		}
+	}
+	
 	// Display package header - ▶ icon in white, package name in cyan
 	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
@@ -76,8 +86,28 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Display tests based on show filter
 	// Track if any tests were actually displayed
 	testsDisplayed := false
+	
+	// Debug: Log all tests in TestOrder
+	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintf(f, "\n[DISPLAY-DEBUG] Package %s TestOrder:\n", pkg.Package)
+			for i, name := range pkg.TestOrder {
+				if test := pkg.Tests[name]; test != nil {
+					fmt.Fprintf(f, "  [%d] %s: parent=%s, status=%s, subtests=%d\n", 
+						i, name, test.Parent, test.Status, len(test.Subtests))
+				}
+			}
+			f.Close()
+		}
+	}
+	
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
+
+		// Skip subtests here - they'll be displayed under their parent
+		if test.Parent != "" {
+			continue
+		}
 
 		// For tests without subtests, display normally
 		if len(test.Subtests) == 0 {
@@ -86,13 +116,19 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 				p.displayTestLine(test, "")
 			}
 		} else {
-			// For tests with subtests, display each subtest individually
-			for _, subtestName := range test.SubtestOrder {
-				subtest := test.Subtests[subtestName]
-				if p.shouldShowTestStatus(subtest.Status) {
-					testsDisplayed = true
-					p.displayTestLine(subtest, "  ")
+			// For tests with subtests:
+			// 1. Display the parent test with mini indicators
+			// Debug: Log parent test info
+			if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+				if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+					fmt.Fprintf(f, "[DISPLAY-DEBUG] Parent test %s: status=%s, subtests=%d, shouldShow=%v\n",
+						testName, test.Status, len(test.Subtests), p.shouldShowTestStatus(test.Status))
+					f.Close()
 				}
+			}
+			if p.shouldShowTestStatus(test.Status) || test.Status == "fail" {
+				testsDisplayed = true
+				p.displayTest(test, "")
 			}
 		}
 	}

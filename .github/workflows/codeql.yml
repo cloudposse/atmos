@@ -98,6 +98,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: golangci-lint.sarif
+          category: golangci-lint-atmos
 
       - name: Run golangci-lint on tools/gotcha
         uses: golangci/golangci-lint-action@v7
@@ -113,6 +114,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: tools/gotcha/gotcha-golangci-lint.sarif
+          category: golangci-lint-gotcha
 
   pr-semver-labels:
     name: PR Semver Labels

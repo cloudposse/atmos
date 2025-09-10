@@ -193,12 +193,27 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				parentName := parts[0]
 				subtestName := parts[1]
 
-				if parent, ok := pkg.Tests[parentName]; ok {
-					test.Parent = parentName
-					test.Name = subtestName // Store just the subtest name
-					parent.Subtests[event.Test] = test
-					parent.SubtestOrder = append(parent.SubtestOrder, event.Test)
+				// Ensure parent test exists in pkg.Tests and TestOrder
+				parent, ok := pkg.Tests[parentName]
+				if !ok {
+					// Create parent test if it doesn't exist yet
+					parent = &TestResult{
+						Name:         parentName,
+						FullName:     parentName,
+						Status:       "running",
+						Output:       []string{},
+						Subtests:     make(map[string]*TestResult),
+						SubtestOrder: []string{},
+					}
+					pkg.Tests[parentName] = parent
+					pkg.TestOrder = append(pkg.TestOrder, parentName)
+					pkg.HasTests = true
 				}
+				
+				test.Parent = parentName
+				test.Name = subtestName // Store just the subtest name
+				parent.Subtests[event.Test] = test
+				parent.SubtestOrder = append(parent.SubtestOrder, event.Test)
 				// Note: We don't add subtests to pkg.Tests or pkg.TestOrder
 			} else {
 				// Top-level test

@@ -126,6 +126,11 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
 
+		// Skip subtests here - they'll be displayed under their parent
+		if test.Parent != "" {
+			continue
+		}
+
 		// For tests without subtests, display normally
 		if len(test.Subtests) == 0 {
 			if r.shouldShowTestStatus(test.Status) {
@@ -133,13 +138,11 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 				r.displayTestLine(test, "")
 			}
 		} else {
-			// For tests with subtests, display each subtest individually
-			for _, subtestName := range test.SubtestOrder {
-				subtest := test.Subtests[subtestName]
-				if r.shouldShowTestStatus(subtest.Status) {
-					testsDisplayed = true
-					r.displayTestLine(subtest, "  ")
-				}
+			// For tests with subtests:
+			// 1. Display the parent test with mini indicators
+			if r.shouldShowTestStatus(test.Status) || test.Status == "fail" {
+				testsDisplayed = true
+				r.displayTest(test, "")
 			}
 		}
 	}
@@ -218,6 +221,98 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 }
 
 // displayTestLine outputs a test as a simple one-line entry without subtest progress.
+// displayTest outputs a test result with mini indicators for subtests.
+func (r *StreamReporter) displayTest(test *TestResult, indent string) {
+	// Skip running tests
+	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
+		return
+	}
+
+	// Determine status icon
+	var statusIcon string
+	switch test.Status {
+	case "pass":
+		statusIcon = tui.PassStyle.Render(tui.CheckPass)
+	case "fail":
+		statusIcon = tui.FailStyle.Render(tui.CheckFail)
+	case "skip":
+		statusIcon = tui.SkipStyle.Render(tui.CheckSkip)
+	}
+
+	// Build display line
+	var line strings.Builder
+	line.WriteString(indent + "  ")
+	line.WriteString(statusIcon)
+	line.WriteString(" ")
+	line.WriteString(tui.TestNameStyle.Render(test.Name))
+
+	// Add duration for completed tests
+	if test.Elapsed > 0 {
+		line.WriteString(" ")
+		line.WriteString(tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
+	}
+
+	// Add mini progress indicator for tests with subtests
+	if len(test.Subtests) > 0 {
+		// Calculate subtest statistics
+		passed := 0
+		failed := 0
+		skipped := 0
+
+		for _, subtest := range test.Subtests {
+			switch subtest.Status {
+			case "pass":
+				passed++
+			case "fail":
+				failed++
+			case "skip":
+				skipped++
+			}
+		}
+
+		total := passed + failed + skipped
+		if total > 0 {
+			// Add mini progress indicator
+			miniProgress := r.generateSubtestProgress(passed, total)
+			percentage := (passed * 100) / total
+
+			line.WriteString(" ")
+			line.WriteString(miniProgress)
+			line.WriteString(fmt.Sprintf(" %d%% passed", percentage))
+		}
+	}
+
+	fmt.Fprintln(os.Stderr, line.String())
+
+	// Display test output for failures (respecting show filter)
+	if test.Status == "fail" && len(test.Output) > 0 && r.showFilter != "none" {
+		if r.verbosityLevel == "with-output" || r.verbosityLevel == "verbose" {
+			// With full output, properly render tabs and maintain formatting
+			for _, outputLine := range test.Output {
+				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
+				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+				fmt.Fprint(os.Stderr, indent+"    "+formatted)
+			}
+		} else {
+			// Default: show output as-is
+			for _, outputLine := range test.Output {
+				fmt.Fprint(os.Stderr, indent+"    "+outputLine)
+			}
+		}
+		fmt.Fprintln(os.Stderr, "") // Add blank line after output
+	}
+
+	// Display subtests if test failed or show filter is "all"
+	if len(test.Subtests) > 0 && (test.Status == "fail" || r.showFilter == "all") {
+		for _, subtestName := range test.SubtestOrder {
+			subtest := test.Subtests[subtestName]
+			if r.shouldShowTestStatus(subtest.Status) {
+				r.displayTestLine(subtest, indent+"  ")
+			}
+		}
+	}
+}
+
 func (r *StreamReporter) displayTestLine(test *TestResult, indent string) {
 	// Skip running tests
 	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
@@ -391,4 +486,44 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	}
 
 	return output.String()
+}
+
+// generateSubtestProgress creates a visual progress indicator for subtest results.
+func (r *StreamReporter) generateSubtestProgress(passed, total int) string {
+	const maxDots = 10 // Maximum number of dots to show for readability
+
+	if total == 0 {
+		return ""
+	}
+
+	// Determine how many dots to show (actual count up to maxDots)
+	dotsToShow := total
+	if dotsToShow > maxDots {
+		dotsToShow = maxDots
+	}
+
+	// Calculate how many dots for passed vs failed
+	passedDots := passed
+	failedDots := total - passed
+
+	// If we need to scale down to maxDots, do it proportionally
+	if total > maxDots {
+		passedDots = (passed * maxDots) / total
+		failedDots = maxDots - passedDots
+	}
+
+	// Build the indicator with colored dots
+	var indicator strings.Builder
+
+	// Add green dots for passed tests
+	for i := 0; i < passedDots; i++ {
+		indicator.WriteString(tui.PassStyle.Render("●"))
+	}
+
+	// Add red dots for failed tests
+	for i := 0; i < failedDots; i++ {
+		indicator.WriteString(tui.FailStyle.Render("●"))
+	}
+
+	return indicator.String()
 }

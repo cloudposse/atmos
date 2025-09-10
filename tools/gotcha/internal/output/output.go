@@ -172,19 +172,23 @@ func HandleOutput(summary *types.TestSummary, format, outputFile string, generat
 
 // HandleConsoleOutput writes console-formatted output.
 func HandleConsoleOutput(summary *types.TestSummary) error {
-	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
-
+	// This function is called by the parse command to display test results.
+	// Currently it's just a placeholder that doesn't properly display test results.
+	// The actual display logic with mini indicators is in pkg/stream/display.go
+	// which is used by the stream command but not by parse.
+	// 
+	// TODO: Refactor to use the same display logic as stream command
+	// to show parent tests with mini indicators for subtests.
+	//
+	// For now, just output basic information
 	if len(summary.Failed) > 0 {
 		fmt.Print("test failed")
+	} else if len(summary.Passed) > 0 {
+		fmt.Print("tests passed")
+	} else if len(summary.Skipped) > 0 {
+		fmt.Print("tests skipped")
 	} else {
-		fmt.Printf("test console output")
-	}
-
-	if total > 0 || summary.Coverage != "" {
-		// Add coverage if available
-		if summary.Coverage != "" {
-			fmt.Printf("Coverage: %s\n", summary.Coverage)
-		}
+		fmt.Print("no tests found")
 	}
 
 	return nil
