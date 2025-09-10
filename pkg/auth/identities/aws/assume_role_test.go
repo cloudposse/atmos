@@ -122,6 +122,7 @@ func TestAssumeRoleIdentity_toAWSCredentials(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "us-east-2", creds.(*types.AWSCredentials).Region)
 }
+
 func Test_sanitizeRoleSessionName(t *testing.T) {
 	type args struct {
 		s string
