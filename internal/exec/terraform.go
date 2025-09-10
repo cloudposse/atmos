@@ -388,7 +388,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Prepare the terraform command
 	allArgsAndFlags := strings.Fields(info.SubCommand)
-	uploadDeploymentStatussFlag := false
+	uploadDeploymentStatusFlag := false
 
 	switch info.SubCommand {
 	case "plan":
@@ -401,8 +401,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
 		// Check if the upload-drift-results flag is set in the command line arguments
-		uploadDeploymentStatussFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag)
-		if uploadDeploymentStatussFlag {
+		uploadDeploymentStatusFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag)
+		if uploadDeploymentStatusFlag {
 			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
 				allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
 			}
@@ -556,7 +556,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		)
 		if err != nil {
 			// For Terraform Plan, we need to return the result to the pro API if upload flag is set
-			if uploadDeploymentStatussFlag && shouldUploadDeploymentStatus(&info) {
+			if uploadDeploymentStatusFlag && shouldUploadDeploymentStatus(&info) {
 				var exitCode int
 				var osErr *osexec.ExitError
 				if errors.As(err, &osErr) {
