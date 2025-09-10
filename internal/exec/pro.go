@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -13,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // Error variables for pro package.
@@ -242,10 +242,14 @@ func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, clie
 		gitSHA = ""
 	}
 
-	// Get GitHub run ID from environment variable
-	atmosProRunID := os.Getenv("GITHUB_RUN_ID")
+	// Get GitHub run ID from environment variables using viper
+	v := viper.New()
+	v.BindEnv("github_run_id", "GITHUB_RUN_ID")
+	v.BindEnv("atmos_pro_run_id", "ATMOS_PRO_RUN_ID")
+
+	atmosProRunID := v.GetString("github_run_id")
 	if atmosProRunID == "" {
-		atmosProRunID = os.Getenv("ATMOS_PRO_RUN_ID")
+		atmosProRunID = v.GetString("atmos_pro_run_id")
 	}
 
 	// Create the DTO
