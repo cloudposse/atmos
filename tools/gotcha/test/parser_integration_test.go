@@ -15,12 +15,12 @@ import (
 // TestParser_WithRealGoTestOutput verifies the parser works with real go test JSON output
 func TestParser_WithRealGoTestOutput(t *testing.T) {
 	tests := []struct {
-		name           string
-		testDir        string
-		expectPass     int
-		expectFail     int
-		expectSkip     int
-		shouldCmdFail  bool
+		name          string
+		testDir       string
+		expectPass    int
+		expectFail    int
+		expectSkip    int
+		shouldCmdFail bool
 	}{
 		{
 			name:          "All passing tests",

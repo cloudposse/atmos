@@ -71,7 +71,7 @@ func checkForToolsDirectory(dir string) (string, bool) {
 	parent := filepath.Dir(dir)
 	parentName := filepath.Base(parent)
 	currentName := filepath.Base(dir)
-	
+
 	if parentName == "tools" {
 		if globalLogger != nil {
 			globalLogger.Debug("Found tools directory", "parent", parent, "tool", currentName)
@@ -114,7 +114,7 @@ func detectProjectContext() string {
 		if name, found := checkForToolsDirectory(dir); found {
 			return name
 		}
-		
+
 		// Check for git root
 		if name, found := checkForGitRoot(dir); found {
 			return name

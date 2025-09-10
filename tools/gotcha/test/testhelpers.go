@@ -98,23 +98,23 @@ func TestSkip1(t *testing.T) {
 // CreateTestFiles creates test files from templates in the specified directory.
 func CreateTestFiles(t *testing.T, dir string, templateNames ...string) {
 	templates := GetTestTemplates()
-	
+
 	for _, name := range templateNames {
 		tmpl, ok := templates[name]
 		require.True(t, ok, "Unknown template: %s", name)
-		
+
 		filePath := filepath.Join(dir, tmpl.Name)
-		err := os.WriteFile(filePath, []byte(tmpl.Content), 0644)
+		err := os.WriteFile(filePath, []byte(tmpl.Content), 0o644)
 		require.NoError(t, err, "Failed to write test file: %s", filePath)
 	}
-	
+
 	// Create go.mod file if it doesn't exist
 	goModPath := filepath.Join(dir, "go.mod")
 	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
 		goModContent := `module testpkg
 
 go 1.21`
-		err := os.WriteFile(goModPath, []byte(goModContent), 0644)
+		err := os.WriteFile(goModPath, []byte(goModContent), 0o644)
 		require.NoError(t, err, "Failed to write go.mod")
 	}
 }
@@ -122,16 +122,16 @@ go 1.21`
 // CreateMixedTestFile creates a test file with custom content.
 func CreateMixedTestFile(t *testing.T, dir string, filename string, content string) {
 	filePath := filepath.Join(dir, filename)
-	err := os.WriteFile(filePath, []byte(content), 0644)
+	err := os.WriteFile(filePath, []byte(content), 0o644)
 	require.NoError(t, err, "Failed to write test file: %s", filePath)
-	
+
 	// Create go.mod file if it doesn't exist
 	goModPath := filepath.Join(dir, "go.mod")
 	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
 		goModContent := `module testpkg
 
 go 1.21`
-		err := os.WriteFile(goModPath, []byte(goModContent), 0644)
+		err := os.WriteFile(goModPath, []byte(goModContent), 0o644)
 		require.NoError(t, err, "Failed to write go.mod")
 	}
 }
