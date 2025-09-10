@@ -110,6 +110,7 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 type GitRepoInterface interface {
 	GetLocalRepo() (*RepoInfo, error)
 	GetRepoInfo(repo *git.Repository) (RepoInfo, error)
+	GetCurrentCommitSHA() (string, error)
 }
 
 // DefaultGitRepo is the default implementation of GitRepoInterface.
@@ -131,4 +132,19 @@ func (d *DefaultGitRepo) GetLocalRepo() (*RepoInfo, error) {
 // GetRepoInfo returns the repository information for the given git.Repository.
 func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 	return GetRepoInfo(repo)
+}
+
+// GetCurrentCommitSHA returns the SHA of the current HEAD commit.
+func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
+	repo, err := GetLocalRepo()
+	if err != nil {
+		return "", fmt.Errorf("failed to get local repository: %w", err)
+	}
+
+	ref, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("failed to get HEAD reference: %w", err)
+	}
+
+	return ref.Hash().String(), nil
 }

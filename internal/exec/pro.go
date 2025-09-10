@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -233,15 +234,31 @@ func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, clie
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetLocalRepo, err)
 	}
 
+	// Get current git SHA
+	gitSHA, err := gitRepo.GetCurrentCommitSHA()
+	if err != nil {
+		// Log warning but don't fail the upload
+		log.Warn(fmt.Sprintf("Failed to get current git SHA: %v", err))
+		gitSHA = ""
+	}
+
+	// Get GitHub run ID from environment variable
+	atmosProRunID := os.Getenv("GITHUB_RUN_ID")
+	if atmosProRunID == "" {
+		atmosProRunID = os.Getenv("ATMOS_PRO_RUN_ID")
+	}
+
 	// Create the DTO
 	dto := dtos.DeploymentStatusUploadRequest{
-		RepoURL:   repoInfo.RepoUrl,
-		RepoName:  repoInfo.RepoName,
-		RepoOwner: repoInfo.RepoOwner,
-		RepoHost:  repoInfo.RepoHost,
-		Stack:     info.Stack,
-		Component: info.Component,
-		HasDrift:  exitCode == 2,
+		AtmosProRunID: atmosProRunID,
+		GitSHA:        gitSHA,
+		RepoURL:       repoInfo.RepoUrl,
+		RepoName:      repoInfo.RepoName,
+		RepoOwner:     repoInfo.RepoOwner,
+		RepoHost:      repoInfo.RepoHost,
+		Stack:         info.Stack,
+		Component:     info.Component,
+		HasDrift:      exitCode == 2,
 	}
 
 	// Upload the deployment status
