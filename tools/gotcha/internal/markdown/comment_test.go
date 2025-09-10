@@ -195,11 +195,11 @@ func TestPlatformInHeader(t *testing.T) {
 		platform string
 		expected string
 	}{
-		{"linux", "🐧"},
-		{"darwin", "🍎"},
-		{"windows", "🪟"},
-		{"unknown", "💻"},
-		{"", "💻"},
+		{"linux", "Test Results (linux)"},
+		{"darwin", "Test Results (darwin)"},
+		{"windows", "Test Results (windows)"},
+		{"ubuntu-latest", "Test Results (ubuntu-latest)"},
+		{"", "Test Results"},
 	}
 
 	for _, tt := range tests {
@@ -210,6 +210,89 @@ func TestPlatformInHeader(t *testing.T) {
 
 			comment := GenerateAdaptiveComment(summary, "test-uuid", tt.platform)
 			assert.Contains(t, comment, tt.expected)
+		})
+	}
+}
+
+func TestDiscriminatorInCommentTitle(t *testing.T) {
+	tests := []struct {
+		name          string
+		discriminator string
+		hasFailed     bool
+		expectedTitle string
+	}{
+		{
+			name:          "discriminator with passing tests",
+			discriminator: "linux",
+			hasFailed:     false,
+			expectedTitle: "# ✅ Test Results (linux)",
+		},
+		{
+			name:          "discriminator with failing tests",
+			discriminator: "windows",
+			hasFailed:     true,
+			expectedTitle: "# ❌ Test Results (windows)",
+		},
+		{
+			name:          "no discriminator with passing tests",
+			discriminator: "",
+			hasFailed:     false,
+			expectedTitle: "# ✅ Test Results",
+		},
+		{
+			name:          "matrix job discriminator",
+			discriminator: "ubuntu-latest",
+			hasFailed:     false,
+			expectedTitle: "# ✅ Test Results (ubuntu-latest)",
+		},
+		{
+			name:          "compound discriminator project/os",
+			discriminator: "atmos/linux",
+			hasFailed:     false,
+			expectedTitle: "# ✅ Test Results (atmos/linux)",
+		},
+		{
+			name:          "compound discriminator tool/os",
+			discriminator: "gotcha/windows",
+			hasFailed:     true,
+			expectedTitle: "# ❌ Test Results (gotcha/windows)",
+		},
+		{
+			name:          "project context only",
+			discriminator: "atmos",
+			hasFailed:     false,
+			expectedTitle: "# ✅ Test Results (atmos)",
+		},
+		{
+			name:          "tool context with platform",
+			discriminator: "gotcha/ubuntu-latest",
+			hasFailed:     false,
+			expectedTitle: "# ✅ Test Results (gotcha/ubuntu-latest)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			summary := &types.TestSummary{}
+			if tt.hasFailed {
+				summary.Failed = []types.TestResult{{Package: "test", Test: "TestFail"}}
+			} else {
+				summary.Passed = []types.TestResult{{Package: "test", Test: "TestPass"}}
+			}
+
+			comment := GenerateAdaptiveComment(summary, "test-uuid", tt.discriminator)
+			
+			// The title should be on its own line after the UUID comment
+			lines := strings.Split(comment, "\n")
+			var titleFound bool
+			for _, line := range lines {
+				if strings.HasPrefix(line, "# ") {
+					assert.Equal(t, tt.expectedTitle, line, "Title mismatch for discriminator '%s'", tt.discriminator)
+					titleFound = true
+					break
+				}
+			}
+			assert.True(t, titleFound, "Could not find title line starting with '# '")
 		})
 	}
 }

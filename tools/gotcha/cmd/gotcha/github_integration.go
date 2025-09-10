@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -62,6 +64,50 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 
 	// Return the original strategy if it's not a known value
 	return strategy
+}
+
+// detectProjectContext auto-detects the project context based on the current working directory.
+func detectProjectContext() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+
+	// Check if we're in a tools subdirectory
+	if strings.Contains(cwd, "/tools/") {
+		// Extract the tool name from path like /path/to/tools/gotcha
+		parts := strings.Split(cwd, "/tools/")
+		if len(parts) > 1 {
+			// Get the part after /tools/
+			toolPath := parts[1]
+			// Get the first directory component (tool name)
+			toolParts := strings.Split(toolPath, string(os.PathSeparator))
+			if len(toolParts) > 0 && toolParts[0] != "" {
+				return toolParts[0]
+			}
+		}
+	}
+
+	// Check if we're in the root project directory or a subdirectory
+	// Try to get the repository name from the path
+	// Look for common patterns like .git directory to find repo root
+	dir := cwd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			// Found the repository root
+			return filepath.Base(dir)
+		}
+		
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached the root of the filesystem
+			break
+		}
+		dir = parent
+	}
+
+	// Default to basename of current directory
+	return filepath.Base(cwd)
 }
 
 // shouldPostComment determines if a comment should be posted based on strategy.
@@ -131,6 +177,40 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 
 	logger.Debug("Comment UUID found", "uuid", commentUUID)
 
+	// Get the job discriminator (for multi-job scenarios like matrix builds)
+	_ = viper.BindEnv("job-discriminator", "GOTCHA_JOB_DISCRIMINATOR", "JOB_DISCRIMINATOR")
+	jobDiscriminator := viper.GetString("job-discriminator")
+	if jobDiscriminator != "" {
+		logger.Debug("Job discriminator found", "discriminator", jobDiscriminator)
+	}
+
+	// Get the project context (to distinguish between main project and tools)
+	_ = viper.BindEnv("project-context", "GOTCHA_PROJECT_CONTEXT", "PROJECT_CONTEXT")
+	projectContext := viper.GetString("project-context")
+	
+	// Auto-detect project context if not explicitly set
+	if projectContext == "" {
+		projectContext = detectProjectContext()
+	}
+	
+	if projectContext != "" {
+		logger.Debug("Project context determined", "context", projectContext)
+	}
+
+	// Combine project context and job discriminator into compound discriminator
+	var discriminator string
+	if projectContext != "" && jobDiscriminator != "" {
+		discriminator = fmt.Sprintf("%s/%s", projectContext, jobDiscriminator)
+	} else if projectContext != "" {
+		discriminator = projectContext
+	} else if jobDiscriminator != "" {
+		discriminator = jobDiscriminator
+	}
+	
+	if discriminator != "" {
+		logger.Debug("Using compound discriminator", "discriminator", discriminator)
+	}
+
 	// Get the CI provider
 	provider := ci.DetectIntegration(logger)
 	if provider == nil {
@@ -164,8 +244,8 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 
 	logger.Debug("Comment manager created successfully")
 
-	// Generate the comment content
-	commentContent := markdown.GenerateGitHubComment(summary, commentUUID)
+	// Generate the comment content with discriminator
+	commentContent := markdown.GenerateAdaptiveComment(summary, commentUUID, discriminator)
 
 	// Post the comment
 	logger.Info("Posting comment to GitHub PR",

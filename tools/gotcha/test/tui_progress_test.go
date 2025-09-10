@@ -5,17 +5,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestTUIProgressBar_FormatTerminal tests that the progress bar appears with format:terminal
+// TestTUIProgressBar_FormatTerminal tests that the progress bar appears with format:terminal.
 func TestTUIProgressBar_FormatTerminal(t *testing.T) {
-	t.Skip("TUI test requires manual verification - cannot capture TUI output in test")
+	t.Skipf("TUI test requires manual verification - cannot capture TUI output in test")
 
 	tempDir := t.TempDir()
 
@@ -87,7 +85,7 @@ packages:
 	// that it's using TUI mode by looking for certain patterns
 }
 
-// TestStreamMode_NoProgressBar tests that format:stream does NOT show progress bar
+// TestStreamMode_NoProgressBar tests that format:stream does NOT show progress bar.
 func TestStreamMode_NoProgressBar(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -151,7 +149,7 @@ packages:
 	// overwritten in TUI mode, but in stream mode the output is simpler)
 }
 
-// TestFormatDifference documents the difference between stream and terminal formats
+// TestFormatDifference documents the difference between stream and terminal formats.
 func TestFormatDifference(t *testing.T) {
 	t.Logf(`
 Format differences in gotcha:
@@ -185,7 +183,7 @@ Format differences in gotcha:
 `)
 }
 
-// TestProgressBarConfiguration shows how to enable the progress bar
+// TestProgressBarConfiguration shows how to enable the progress bar.
 func TestProgressBarConfiguration(t *testing.T) {
 	configurations := []struct {
 		name        string
@@ -240,7 +238,7 @@ packages: ["."]`,
 	}
 }
 
-// TestCurrentBehavior documents the current behavior with format:stream
+// TestCurrentBehavior documents the current behavior with format:stream.
 func TestCurrentBehavior(t *testing.T) {
 	t.Logf(`
 Current Behavior Analysis:

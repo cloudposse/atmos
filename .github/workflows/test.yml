@@ -277,6 +277,7 @@ jobs:
             tool: ${{ github.event.pull_request.draft && '*' || 'never-match' }}
     env:
       GOTCHA_COMMENT_UUID: tools-test-${{ matrix.tool }}-${{ matrix.os }}
+      GOTCHA_JOB_DISCRIMINATOR: ${{ matrix.os }}
     steps:
       - name: Check out code
         if: ${{ ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
