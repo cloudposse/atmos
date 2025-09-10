@@ -34,8 +34,31 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 
 	// Step 4: Load test count from cache
 	loadTestCountFromCache(config, cmd, logger)
+	
+	// Step 5: Log what we'll be showing
+	var filterDescription string
+	switch config.ShowFilter {
+	case "all":
+		filterDescription = "all tests"
+	case "failed":
+		filterDescription = "failed and skipped tests only"
+	case "passed":
+		filterDescription = "passed tests only"
+	case "skipped":
+		filterDescription = "skipped tests only"
+	case "none":
+		filterDescription = "summary only (no individual tests)"
+	default:
+		filterDescription = config.ShowFilter
+	}
+	
+	logger.Info("Test display configuration",
+		"showing", filterDescription,
+		"verbosity", config.VerbosityLevel,
+		"packages", len(config.TestPackages),
+	)
 
-	// Step 5: Execute tests based on mode
+	// Step 6: Execute tests based on mode
 	var exitCode int
 
 	// Check for force-TUI mode

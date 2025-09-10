@@ -12,6 +12,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
+	internalLogger "github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
@@ -24,6 +25,9 @@ import (
 
 // runStreamInteractive runs tests in interactive TUI mode.
 func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, error) {
+	// Set the global logger for packages that use it
+	internalLogger.SetLogger(logger)
+	
 	logger.Debug("Confirmed running in TUI mode")
 	logger.Debug("Starting interactive TUI mode")
 
@@ -138,6 +142,9 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 
 // runStreamInCI runs tests in CI mode (non-interactive).
 func runStreamInCI(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, error) {
+	// Set the global logger for packages that use it
+	internalLogger.SetLogger(logger)
+	
 	logger.Debug("Starting CI streaming mode", "format", config.Format)
 
 	// Run tests in simple mode
