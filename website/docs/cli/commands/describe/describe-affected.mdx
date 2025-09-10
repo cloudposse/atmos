@@ -101,11 +101,12 @@ atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 atmos describe affected --ssh-key <path_to_ssh_key>
 atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>
 atmos describe affected --repo-path <path_to_already_cloned_repo>
-atmos describe affected --include-spacelift-admin-stacks=true
-atmos describe affected --clone-target-ref=true
-atmos describe affected --include-dependents=true
-atmos describe affected --include-settings=true
-atmos describe affected --stack=plat-ue2-prod
+atmos describe affected --include-spacelift-admin-stacks
+atmos describe affected --clone-target-ref
+atmos describe affected --include-settings
+atmos describe affected --include-dependents
+atmos describe affected --stack <stack>
+atmos describe affected --stack <stack> --include-dependents --dependents-stack <stack>
 atmos describe affected --upload=true
 atmos describe affected --query <yq-expression>
 atmos describe affected --process-templates=false
@@ -269,6 +270,14 @@ Affected components and stacks:
         Include the dependent components and stacks.
 
         `atmos describe affected --include-dependents=true`
+    </dd>
+
+    <dt>`--dependents-stack` <em>(optional)</em></dt>
+    <dd>
+        Filter the dependent components by a specific stack.
+        Only used when `--include-dependents` is set to `true`.
+
+        `atmos describe dependents <component> -s <stack> --dependents-stack <stack>`
     </dd>
 
     <dt>`--include-settings` <em>(optional)</em></dt>

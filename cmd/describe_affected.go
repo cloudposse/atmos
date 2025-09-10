@@ -30,7 +30,7 @@ func init() {
 	describeAffectedCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block")
 	describeAffectedCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "Include the Spacelift admin stack of any stack that is affected by config changes")
 	describeAffectedCmd.PersistentFlags().Bool("include-dependents", false, "Include the dependent components and stacks")
-	describeAffectedCmd.PersistentFlags().String("dependents-stack", "", "Filter dependents by a specific stack")
+	describeAffectedCmd.PersistentFlags().String("dependents-stack", "", "Filter the dependent components by a specific stack. Only used when `--include-dependents` is set to `true`")
 	describeAffectedCmd.PersistentFlags().Bool("include-settings", false, "Include the `settings` section for each affected component")
 	describeAffectedCmd.PersistentFlags().Bool("upload", false, "Upload the affected components and stacks to a specified HTTP endpoint")
 	AddStackCompletion(describeAffectedCmd)

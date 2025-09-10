@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: build
 ---
 
-import File from '@site/src/components/File'
+import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
@@ -17,6 +17,8 @@ The builds specified within a template are executed in parallel, unless otherwis
 The artifacts that are created will be outputted at the end of the build, and a Packer manifest
 (if configured in the Atmos component) will be updated with the results of the build.
 :::
+
+<Screengrab title="atmos packer build --help" slug="atmos-packer-build--help" />
 
 ## Usage
 
