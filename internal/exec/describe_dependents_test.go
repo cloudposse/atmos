@@ -312,15 +312,17 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 
 	// Matrix-driven cases
 	cases := []struct {
-		name      string
-		component string
-		stack     string
-		expected  []schema.Dependent
+		name            string
+		component       string
+		stack           string
+		dependentsStack string
+		expected        []schema.Dependent
 	}{
 		{
-			name:      "ue1-network-vpc",
-			component: "vpc",
-			stack:     "ue1-network",
+			name:            "ue1-network-vpc",
+			component:       "vpc",
+			stack:           "ue1-network",
+			dependentsStack: "",
 			expected: []schema.Dependent{
 				{
 					Component:     "tgw/attachment",
@@ -339,9 +341,10 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 			},
 		},
 		{
-			name:      "uw2-network-vpc",
-			component: "vpc",
-			stack:     "uw2-network",
+			name:            "uw2-network-vpc",
+			component:       "vpc",
+			stack:           "uw2-network",
+			dependentsStack: "",
 			expected: []schema.Dependent{
 				{
 					Component:     "tgw/attachment",
@@ -353,9 +356,10 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 			},
 		},
 		{
-			name:      "ue1-prod-vpc",
-			component: "vpc",
-			stack:     "ue1-prod",
+			name:            "ue1-prod-vpc",
+			component:       "vpc",
+			stack:           "ue1-prod",
+			dependentsStack: "",
 			expected: []schema.Dependent{
 				{
 					Component:     "tgw/attachment",
@@ -367,9 +371,10 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 			},
 		},
 		{
-			name:      "uw2-prod-vpc",
-			component: "vpc",
-			stack:     "uw2-prod",
+			name:            "uw2-prod-vpc",
+			component:       "vpc",
+			stack:           "uw2-prod",
+			dependentsStack: "",
 			expected: []schema.Dependent{
 				{
 					Component:     "tgw/attachment",
@@ -381,9 +386,10 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 			},
 		},
 		{
-			name:      "ue1-network-tgw-hub",
-			component: "tgw/hub",
-			stack:     "ue1-network",
+			name:            "ue1-network-tgw-hub",
+			component:       "tgw/hub",
+			stack:           "ue1-network",
+			dependentsStack: "",
 			expected: []schema.Dependent{
 				{
 					Component:     "tgw/attachment",
@@ -423,16 +429,18 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 			},
 		},
 		{
-			name:      "uw2-network-tgw-cross-region-hub-connector",
-			component: "tgw/cross-region-hub-connector",
-			stack:     "uw2-network",
-			expected:  []schema.Dependent{},
+			name:            "uw2-network-tgw-cross-region-hub-connector",
+			component:       "tgw/cross-region-hub-connector",
+			stack:           "uw2-network",
+			dependentsStack: "",
+			expected:        []schema.Dependent{},
 		},
 		{
-			name:      "ue1-network-tgw-attachment",
-			component: "tgw/attachment",
-			stack:     "ue1-network",
-			expected:  []schema.Dependent{},
+			name:            "ue1-network-tgw-attachment",
+			component:       "tgw/attachment",
+			stack:           "ue1-network",
+			dependentsStack: "",
+			expected:        []schema.Dependent{},
 		},
 		{
 			name:      "uw2-network-tgw-attachment",
@@ -452,12 +460,42 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 			stack:     "uw2-prod",
 			expected:  []schema.Dependent{},
 		},
+		{
+			name:            "ue1-network-tgw-hub-with-same-dependents-stack",
+			component:       "tgw/hub",
+			stack:           "ue1-network",
+			dependentsStack: "ue1-network",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: componentPath,
+					Stack:         "ue1-network",
+					StackSlug:     "ue1-network-tgw-attachment",
+				},
+			},
+		},
+		{
+			name:            "ue1-network-tgw-hub-with-diff-dependents-stack",
+			component:       "tgw/hub",
+			stack:           "ue1-network",
+			dependentsStack: "uw2-prod",
+			expected: []schema.Dependent{
+				{
+					Component:     "tgw/attachment",
+					ComponentType: "terraform",
+					ComponentPath: componentPath,
+					Stack:         "uw2-prod",
+					StackSlug:     "uw2-prod-tgw-attachment",
+				},
+			},
+		},
 	}
 
 	for _, tc := range cases {
 		tc := tc // capture
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false, true, true, nil, "")
+			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false, true, true, nil, tc.dependentsStack)
 			require.NoError(t, err)
 
 			// Order-agnostic equality on struct slices
