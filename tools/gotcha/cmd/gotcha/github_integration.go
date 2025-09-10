@@ -119,7 +119,7 @@ func detectProjectContext() string {
 		if name, found := checkForGitRoot(dir); found {
 			return name
 		}
-		
+
 		// Stop if we've reached the filesystem root
 		parent := filepath.Dir(dir)
 		if parent == dir {
