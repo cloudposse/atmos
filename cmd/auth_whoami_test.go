@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	authTypes "github.com/cloudposse/atmos/internal/auth/types"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"

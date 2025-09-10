@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cloudposse/atmos/internal/auth"
-	"github.com/cloudposse/atmos/internal/auth/credentials"
-	"github.com/cloudposse/atmos/internal/auth/validation"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"

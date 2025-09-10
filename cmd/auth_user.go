@@ -7,9 +7,9 @@ import (
 	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/auth/credentials"
-	"github.com/cloudposse/atmos/internal/auth/types"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"

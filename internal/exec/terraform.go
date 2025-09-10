@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	auth "github.com/cloudposse/atmos/internal/auth"
+	auth "github.com/cloudposse/atmos/pkg/auth"
 
 	log "github.com/charmbracelet/log"
 
