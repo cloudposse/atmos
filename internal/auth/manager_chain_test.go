@@ -88,6 +88,6 @@ func TestGetProviderKindForIdentity(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "aws/user", kind)
 
-	kind, err = m.GetProviderKindForIdentity("developer")
+	_, err = m.GetProviderKindForIdentity("developer")
 	require.Error(t, err, errUtils.ErrInvalidAuthConfig)
 }
