@@ -86,6 +86,39 @@ func TestDetectProjectContext(t *testing.T) {
 			},
 			expected: "workspace",
 		},
+		{
+			name: "GitHub Actions workspace with numeric identifier",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				// Simulate /home/runner/work/001/tools/gotcha structure
+				toolDir := filepath.Join(tempDir, "runner", "work", "001", "tools", "gotcha")
+				require.NoError(t, os.MkdirAll(toolDir, 0o755))
+
+				// Create a .git directory at what would be the repo root (001)
+				gitDir := filepath.Join(tempDir, "runner", "work", "001", ".git")
+				require.NoError(t, os.MkdirAll(gitDir, 0o755))
+
+				return toolDir
+			},
+			expected: "gotcha", // Should skip numeric "001" and extract "gotcha" from tools/gotcha
+		},
+		{
+			name: "GitHub Actions - numeric workspace but git at higher level",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				// Simulate /home/runner/work/atmos/atmos/tools/gotcha structure
+				// where the repo is checked out twice (common in GitHub Actions)
+				toolDir := filepath.Join(tempDir, "runner", "work", "atmos", "atmos", "tools", "gotcha")
+				require.NoError(t, os.MkdirAll(toolDir, 0o755))
+
+				// Create a .git directory at the inner atmos directory
+				gitDir := filepath.Join(tempDir, "runner", "work", "atmos", "atmos", ".git")
+				require.NoError(t, os.MkdirAll(gitDir, 0o755))
+
+				return toolDir
+			},
+			expected: "gotcha", // Should extract gotcha from tools/gotcha
+		},
 	}
 
 	for _, tt := range tests {

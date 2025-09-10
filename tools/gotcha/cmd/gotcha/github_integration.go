@@ -70,44 +70,55 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 func detectProjectContext() string {
 	cwd, err := os.Getwd()
 	if err != nil {
+		if globalLogger != nil {
+			globalLogger.Debug("Failed to get working directory", "error", err)
+		}
 		return ""
 	}
 
-	// Check if we're in a tools subdirectory
-	if strings.Contains(cwd, "/tools/") {
-		// Extract the tool name from path like /path/to/tools/gotcha
-		parts := strings.Split(cwd, "/tools/")
-		if len(parts) > 1 {
-			// Get the part after /tools/
-			toolPath := parts[1]
-			// Get the first directory component (tool name)
-			toolParts := strings.Split(toolPath, string(os.PathSeparator))
-			if len(toolParts) > 0 && toolParts[0] != "" {
-				return toolParts[0]
-			}
-		}
+	if globalLogger != nil {
+		globalLogger.Debug("Detecting project context", "cwd", cwd)
 	}
 
-	// Check if we're in the root project directory or a subdirectory
-	// Try to get the repository name from the path
-	// Look for common patterns like .git directory to find repo root
+	// Walk up the directory tree looking for a tools directory
 	dir := cwd
 	for {
+		parent := filepath.Dir(dir)
+		parentName := filepath.Base(parent)
+		currentName := filepath.Base(dir)
+		
+		// Check if parent directory is named "tools"
+		if parentName == "tools" {
+			// We're in a tools subdirectory, return the tool name
+			if globalLogger != nil {
+				globalLogger.Debug("Found tools directory", "parent", parent, "tool", currentName)
+			}
+			return currentName
+		}
+		
+		// Check if we've found a .git directory (repository root)
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 			// Found the repository root
-			return filepath.Base(dir)
+			repoName := filepath.Base(dir)
+			if globalLogger != nil {
+				globalLogger.Debug("Found repository root", "dir", dir, "repo", repoName)
+			}
+			return repoName
 		}
-
-		parent := filepath.Dir(dir)
+		
+		// Stop if we've reached the filesystem root
 		if parent == dir {
-			// Reached the root of the filesystem
 			break
 		}
 		dir = parent
 	}
 
 	// Default to basename of current directory
-	return filepath.Base(cwd)
+	baseName := filepath.Base(cwd)
+	if globalLogger != nil {
+		globalLogger.Debug("Using current directory name as fallback", "name", baseName)
+	}
+	return baseName
 }
 
 // shouldPostComment determines if a comment should be posted based on strategy.
