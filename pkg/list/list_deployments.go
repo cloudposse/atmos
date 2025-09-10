@@ -16,7 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -34,6 +33,7 @@ var (
 	ErrCreateAPIClient       = errors.New("failed to create API client")
 	ErrUploadDeployments     = errors.New("failed to upload deployments")
 	ErrExecuteDescribeStacks = errors.New("failed to execute describe stacks")
+	ErrProcessDeployments    = errors.New("failed to process deployments")
 )
 
 // processComponentConfig processes a single component configuration and returns a deployment if valid.
@@ -267,7 +267,8 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	// Inline initializeConfig
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		return err
+		log.Error(ErrInitCliConfig.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrInitCliConfig, err)
 	}
 
 	// Get flags
@@ -276,12 +277,13 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	// Process deployments
 	deployments, err := processDeployments(&atmosConfig)
 	if err != nil {
-		return err
+		log.Error(ErrProcessDeployments.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrProcessDeployments, err)
 	}
 
 	// Inline handleOutput
 	output := formatDeployments(deployments)
-	u.PrintfMessageToTUI("%s", output)
+	fmt.Fprint(os.Stdout, output)
 
 	// Handle upload if requested
 	if upload {
