@@ -218,8 +218,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 	return sessionCreds, nil
 }
 
-// buildGetSessionTokenInput builds the STS GetSessionToken input, prompting for MFA if required.
-// promptMfaTokenFunc is a helper indirection to allow tests to stub MFA prompting.
+// PromptMfaTokenFunc is a helper indirection to allow tests to stub MFA prompting.
 // In production, it displays a form to collect the token.
 var promptMfaTokenFunc = func(longLivedCreds *types.AWSCredentials) (string, error) {
 	var mfaToken string
