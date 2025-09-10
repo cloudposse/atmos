@@ -41,7 +41,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, dependentsStack string) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -609,6 +609,7 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 		true,
 		true,
 		nil,
+		"",
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
@@ -764,6 +765,7 @@ func TestDescribeAffectedScenarios(t *testing.T) {
 		false,
 		false,
 		nil,
+		"",
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices
