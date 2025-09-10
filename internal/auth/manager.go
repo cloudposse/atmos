@@ -66,16 +66,16 @@ func NewAuthManager(
 	}
 
 	// Initialize providers
-    if err := m.initializeProviders(); err != nil {
-        errUtils.CheckErrorAndPrint(errUtils.ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
-        return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingProviders, err)
-    }
+	if err := m.initializeProviders(); err != nil {
+		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingProviders, err)
+	}
 
-    // Initialize identities
-    if err := m.initializeIdentities(); err != nil {
-        errUtils.CheckErrorAndPrint(errUtils.ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
-        return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingIdentities, err)
-    }
+	// Initialize identities
+	if err := m.initializeIdentities(); err != nil {
+		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingIdentities, err)
+	}
 
 	return m, nil
 }
@@ -116,15 +116,15 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
 	if identity, exists := m.identities[identityName]; exists {
-        providerName, perr := identity.GetProviderName()
-        if perr != nil {
-            errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderName", "")
-            return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, perr)
-        }
-        if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
-            errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PostAuthenticate", "")
-            return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
-        }
+		providerName, perr := identity.GetProviderName()
+		if perr != nil {
+			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderName", "")
+			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, perr)
+		}
+		if err := identity.PostAuthenticate(ctx, m.stackInfo, providerName, identityName, finalCreds); err != nil {
+			errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PostAuthenticate", "")
+			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
+		}
 	}
 
 	return m.buildWhoamiInfo(identityName, finalCreds), nil
@@ -276,7 +276,6 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 		}
 		return providerName
 	}
-
 
 	return ""
 }
@@ -529,10 +528,10 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		log.Debug("Authenticating identity step", "step", i, logKeyIdentity, identityStep, "kind", identity.Kind())
 
 		// Each identity receives credentials from the previous step
-        nextCreds, err := identity.Authenticate(ctx, currentCreds)
-        if err != nil {
-            return nil, fmt.Errorf("%w: identity %q authentication failed at chain step %d: %w", errUtils.ErrAuthenticationFailed, identityStep, i, err)
-        }
+		nextCreds, err := identity.Authenticate(ctx, currentCreds)
+		if err != nil {
+			return nil, fmt.Errorf("%w: identity %q authentication failed at chain step %d: %w", errUtils.ErrAuthenticationFailed, identityStep, i, err)
+		}
 
 		currentCreds = nextCreds
 
@@ -581,9 +580,9 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	visited[identityName] = true
 
 	// Find the identity
-    identity, exists := m.config.Identities[identityName]
-    if !exists {
-    }
+	identity, exists := m.config.Identities[identityName]
+	if !exists {
+	}
 
 	if !exists {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildChainRecursive, fmt.Sprintf("identity %q not found", identityName))
