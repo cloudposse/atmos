@@ -169,10 +169,15 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 	var tokenExpiresAt time.Time
 	expiresIn := authResp.ExpiresIn
 	interval := authResp.Interval
+	// Normalize to a sane minimum to avoid divide-by-zero and busy-waiting.
+	if interval <= 0 {
+		interval = 1
+	}
+
+	intervalDur := time.Duration(interval) * time.Second
 
 	// Initial delay before first poll
-	time.Sleep(time.Duration(interval) * time.Second)
-
+	time.Sleep(intervalDur)
 	for i := 0; i < int(expiresIn/interval); i++ {
 		tokenResp, err := oidcClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
 			ClientId:     registerResp.ClientId,
@@ -190,10 +195,12 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 		var slowDownErr *types.SlowDownException
 
 		if errors.As(err, &authPendingErr) {
-			time.Sleep(time.Duration(interval) * time.Second)
+			time.Sleep(intervalDur)
 			continue
 		} else if errors.As(err, &slowDownErr) {
-			time.Sleep(time.Duration(interval*2) * time.Second)
+			// Slow down: double the interval as requested by the server
+			intervalDur = time.Duration(interval*2) * time.Second
+			time.Sleep(intervalDur)
 			continue
 		}
 
