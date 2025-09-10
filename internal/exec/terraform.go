@@ -577,6 +577,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				if err := uploadDeploymentStatus(&info, exitCode, client, gitRepo); err != nil {
 					return err
 				}
+
+				// For terraform plan with upload flag, don't return error for expected exit codes
+				// Exit code 0 = no changes, Exit code 2 = changes detected (both are normal)
+				if exitCode == 0 || exitCode == 2 {
+					return nil
+				}
 			}
 			// For other commands or failure, return the error as is
 			return err
