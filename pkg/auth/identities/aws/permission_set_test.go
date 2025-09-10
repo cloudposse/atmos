@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	ssotypes "github.com/aws/aws-sdk-go-v2/service/sso/types"
 	"github.com/stretchr/testify/assert"
@@ -95,9 +96,9 @@ func TestPermissionSetIdentity_buildCredsFromRole(t *testing.T) {
 	// Valid conversion
 	expMs := time.Now().Add(2 * time.Hour).UnixMilli()
 	out := &sso.GetRoleCredentialsOutput{RoleCredentials: &ssotypes.RoleCredentials{
-		AccessKeyId:     strPtr("AKIAxyz"),
-		SecretAccessKey: strPtr("secret"),
-		SessionToken:    strPtr("token"),
+		AccessKeyId:     aws.String("AKIAxyz"),
+		SecretAccessKey: aws.String("secret"),
+		SessionToken:    aws.String("token"),
 		Expiration:      expMs,
 	}}
 	creds, err := i.buildCredsFromRole(out, "eu-west-1")
