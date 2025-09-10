@@ -91,9 +91,9 @@ Run `atmos describe affected --help` to see all the available options
 
 ```shell
 atmos describe affected
-atmos describe affected --verbose=true
+atmos describe affected --verbose
 atmos describe affected --ref refs/heads/main
-atmos describe affected --ref refs/heads/my-new-branch --verbose=true
+atmos describe affected --ref refs/heads/my-new-branch --verbose
 atmos describe affected --ref refs/heads/main --format json
 atmos describe affected --ref refs/tags/v1.16.0 --file affected.yaml --format yaml
 atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file affected.json
@@ -107,7 +107,7 @@ atmos describe affected --include-settings
 atmos describe affected --include-dependents
 atmos describe affected --stack <stack>
 atmos describe affected --stack <stack> --include-dependents --dependents-stack <stack>
-atmos describe affected --upload=true
+atmos describe affected --upload
 atmos describe affected --query <yq-expression>
 atmos describe affected --process-templates=false
 atmos describe affected --process-functions=false
@@ -119,9 +119,9 @@ atmos describe affected --exclude-locked
 
 # Example Output
 
-<Terminal title="atmos describe affected --verbose=true">
+<Terminal title="atmos describe affected --verbose">
 ```shell
-> atmos describe affected --verbose=true
+> atmos describe affected --verbose
 
 Cloning repo 'https://github.com/cloudposse/atmos' into the temp dir '/var/folders/g5/lbvzy_ld2hx4mgrgyp19bvb00000gn/T/16710736261366892599'
 
@@ -252,7 +252,7 @@ Affected components and stacks:
     <dd>
         Clone the target reference with which to compare the current branch.
 
-        `atmos describe affected --clone-target-ref=true`
+        `atmos describe affected --clone-target-ref`
 
         If set to `false` (default), the target reference will be checked out instead.
         This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory
@@ -269,7 +269,7 @@ Affected components and stacks:
     <dd>
         Include the dependent components and stacks.
 
-        `atmos describe affected --include-dependents=true`
+        `atmos describe affected --include-dependents`
     </dd>
 
     <dt>`--dependents-stack` <em>(optional)</em></dt>
@@ -277,14 +277,16 @@ Affected components and stacks:
         Filter the dependent components by a specific stack.
         Only used when `--include-dependents` is set to `true`.
 
-        `atmos describe dependents <component> -s <stack> --dependents-stack <stack>`
+        `atmos describe affected --include-dependents --dependents-stack <stack>`
+
+        `atmos describe affected -s <stack> --include-dependents --dependents-stack <stack>`
     </dd>
 
     <dt>`--include-settings` <em>(optional)</em></dt>
     <dd>
         Include the `settings` section for each affected component.
 
-        `atmos describe affected --include-settings=true`
+        `atmos describe affected --include-settings`
     </dd>
 
     <dt>`--query` <em>(optional)</em></dt>
@@ -335,7 +337,7 @@ Affected components and stacks:
     <dd>
         Upload the affected components and stacks to a specified HTTP endpoint.
 
-        `atmos describe affected --upload=true`
+        `atmos describe affected --upload`
 
         Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,
         where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,
@@ -559,7 +561,7 @@ where:
 
                 This will be included only if all of the following is true:
 
-                - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks=true` flag
+                - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks` flag
 
                 - Any of the affected Atmos components has configured the section `settings.spacelift.admin_stack_selector` pointing to the Spacelift admin
                   stack that manages the components.
@@ -575,7 +577,7 @@ where:
                       # The `admin_stack_selector` attribute is used to find the affected Spacelift
                       # admin stack for each affected Atmos stack
                       # when executing the command
-                      # `atmos describe affected --include-spacelift-admin-stacks=true`
+                      # `atmos describe affected --include-spacelift-admin-stacks`
                       admin_stack_selector:
                         component: infrastructure-tenant1
                         tenant: tenant1
@@ -797,7 +799,7 @@ are also not included in the output since they are explicitly disabled.
 
 ## Output Example
 
-<Terminal title="atmos describe affected --include-spacelift-admin-stacks=true">
+<Terminal title="atmos describe affected --include-spacelift-admin-stacks">
 ```json
 [
   {
@@ -944,9 +946,9 @@ For more details on how to configure component dependencies, refer to [`atmos de
 In the above configuration, `component-3` depends on `component-2`, whereas `component-2` depends on `component-1`.
 
 If all the components are affected (modified) in the current working branch,
-the `atmos describe affected --include-dependents=true` command will produce the following result:
+the `atmos describe affected --include-dependents` command will produce the following result:
 
-<Terminal title="atmos describe affected --include-dependents=true">
+<Terminal title="atmos describe affected --include-dependents">
  ```json
   [
     {
@@ -1063,7 +1065,7 @@ automatically set to `true`, so the affected components will be uploaded with th
 
 The payload of the HTTP POST request will be a JSON object with the following schema:
 
-<Terminal title="Payload of 'atmos describe affected --upload=true' command">
+<Terminal title="Payload of 'atmos describe affected --upload' command">
   ```json
     {
        "base_sha": "6746ba4df9e87690c33297fe740011e5ccefc1f9",
