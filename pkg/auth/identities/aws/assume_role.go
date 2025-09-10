@@ -93,21 +93,20 @@ func (i *assumeRoleIdentity) buildAssumeRoleInput() *sts.AssumeRoleInput {
 
 // NewAssumeRoleIdentity creates a new AWS assume role identity.
 func NewAssumeRoleIdentity(name string, config *schema.Identity) (types.Identity, error) {
-    if name == "" {
-        return nil, fmt.Errorf("%w: identity name is empty", errUtils.ErrInvalidIdentityConfig)
-    }
-    if config == nil {
-        return nil, fmt.Errorf("%w: identity config is nil", errUtils.ErrInvalidIdentityConfig)
-    }
-    if config.Kind != "aws/assume-role" {
-        return nil, fmt.Errorf("%w: invalid identity kind for assume role: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
-    }
+	if name == "" {
+		return nil, fmt.Errorf("%w: identity name is empty", errUtils.ErrInvalidIdentityConfig)
+	}
+	if config == nil {
+		return nil, fmt.Errorf("%w: identity config is nil", errUtils.ErrInvalidIdentityConfig)
+	}
+	if config.Kind != "aws/assume-role" {
+		return nil, fmt.Errorf("%w: invalid identity kind for assume role: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
+	}
 
-    return &assumeRoleIdentity{
-        name:   name,
-        config: config,
-    }, nil
-}
+	return &assumeRoleIdentity{
+		name:   name,
+		config: config,
+	}, nil
 }
 
 // Kind returns the identity kind.
