@@ -3,6 +3,7 @@ package stream
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,16 +21,24 @@ type StreamReporter struct {
 	
 	// Track packages we've already displayed to avoid duplicates
 	displayedPackages map[string]bool
+	
+	// Track package coverage for total calculation
+	packageCoverages         []float64
+	packageStatementCoverages []float64
+	packageFunctionCoverages  []float64
 }
 
 // NewStreamReporter creates a new StreamReporter with the given configuration.
 func NewStreamReporter(showFilter, testFilter, verbosityLevel string) *StreamReporter {
 	return &StreamReporter{
-		showFilter:        showFilter,
-		testFilter:        testFilter,
-		verbosityLevel:    verbosityLevel,
-		startTime:         time.Now(),
-		displayedPackages: make(map[string]bool),
+		showFilter:                showFilter,
+		testFilter:                testFilter,
+		verbosityLevel:            verbosityLevel,
+		startTime:                 time.Now(),
+		displayedPackages:         make(map[string]bool),
+		packageCoverages:          make([]float64, 0),
+		packageStatementCoverages: make([]float64, 0),
+		packageFunctionCoverages:  make([]float64, 0),
 	}
 }
 
@@ -48,7 +57,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	r.displayedPackages[pkg.Package] = true
 	
 	// Display package header - ▶ icon in white, package name in cyan
-	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
+	fmt.Fprintf(os.Stderr, "▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
 
 	// Flush output immediately in CI environments to prevent buffering
@@ -110,7 +119,6 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	}
 
 	// Display tests based on show filter
-	// Track if any tests were actually displayed
 	testsDisplayed := false
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
@@ -137,15 +145,41 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	// This ensures summaries are shown even when individual tests are filtered out
 	totalTests := passedCount + failedCount + skippedCount
 	if totalTests > 0 {
-		// Add spacing before summary only if tests were displayed
+		// Add spacing before summary only if individual tests were displayed
 		if testsDisplayed {
 			fmt.Fprintf(os.Stderr, "\n")
 		}
-
+		
 		var summaryLine string
 		coverageStr := ""
-		if pkg.Coverage != "" {
+		
+		// Build coverage string with both statement and function coverage
+		if pkg.StatementCoverage != "" && pkg.StatementCoverage != "0.0%" {
+			if pkg.FunctionCoverage != "" && pkg.FunctionCoverage != "N/A" {
+				coverageStr = fmt.Sprintf(" (statements: %s, functions: %s)", 
+					pkg.StatementCoverage, pkg.FunctionCoverage)
+			} else {
+				// Only statement coverage available from standard Go test output
+				coverageStr = fmt.Sprintf(" (%s statement coverage)", pkg.StatementCoverage)
+			}
+			// Parse and store statement coverage for total calculation
+			if coverageValue := parseCoverageValue(pkg.StatementCoverage); coverageValue >= 0 {
+				r.packageStatementCoverages = append(r.packageStatementCoverages, coverageValue)
+				r.packageCoverages = append(r.packageCoverages, coverageValue) // Keep for backward compat
+			}
+			// Parse and store function coverage if available
+			if pkg.FunctionCoverage != "" && pkg.FunctionCoverage != "N/A" {
+				if funcCoverage := parseCoverageValue(pkg.FunctionCoverage); funcCoverage >= 0 {
+					r.packageFunctionCoverages = append(r.packageFunctionCoverages, funcCoverage)
+				}
+			}
+		} else if pkg.Coverage != "" {
+			// Fallback to legacy coverage if new fields aren't set
 			coverageStr = fmt.Sprintf(" (%s coverage)", pkg.Coverage)
+			if coverageValue := parseCoverageValue(pkg.Coverage); coverageValue >= 0 {
+				r.packageCoverages = append(r.packageCoverages, coverageValue)
+				r.packageStatementCoverages = append(r.packageStatementCoverages, coverageValue)
+			}
 		}
 
 		if failedCount > 0 {
@@ -238,7 +272,8 @@ func (r *StreamReporter) shouldShowTestStatus(status string) bool {
 	case "all":
 		return true
 	case "failed":
-		return status == "fail"
+		// Show both failed and skipped tests when filter is "failed"
+		return status == "fail" || status == "skip"
 	case "passed":
 		return status == "pass"
 	case "skipped":
@@ -272,6 +307,22 @@ func (r *StreamReporter) SetEstimatedTotal(total int) {
 	// Stream reporter doesn't use estimates
 }
 
+// parseCoverageValue extracts the numeric coverage percentage from a coverage string.
+// Returns -1 if the coverage value cannot be parsed.
+func parseCoverageValue(coverage string) float64 {
+	// Remove "% of statements" or just "%" suffix
+	coverage = strings.TrimSuffix(coverage, " of statements")
+	coverage = strings.TrimSuffix(coverage, "%")
+	coverage = strings.TrimSpace(coverage)
+	
+	// Parse the numeric value
+	value, err := strconv.ParseFloat(coverage, 64)
+	if err != nil {
+		return -1
+	}
+	return value
+}
+
 // Finalize is called at the end of all test execution and returns any final output.
 func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Duration) string {
 	total := passed + failed + skipped
@@ -283,12 +334,46 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	
 	output.WriteString("\n\n")
 	output.WriteString(fmt.Sprintf("%s\n", tui.StatsHeaderStyle.Render("Test Results:")))
-	output.WriteString(fmt.Sprintf("  %s Passed:  %d\n", tui.PassStyle.Render(tui.CheckPass), passed))
-	output.WriteString(fmt.Sprintf("  %s Failed:  %d\n", tui.FailStyle.Render(tui.CheckFail), failed))
-	output.WriteString(fmt.Sprintf("  %s Skipped: %d\n", tui.SkipStyle.Render(tui.CheckSkip), skipped))
-	output.WriteString(fmt.Sprintf("  Total:     %d\n", total))
+	// Right-align numbers for better readability
+	output.WriteString(fmt.Sprintf("  %s Passed:  %5d\n", tui.PassStyle.Render(tui.CheckPass), passed))
+	output.WriteString(fmt.Sprintf("  %s Failed:  %5d\n", tui.FailStyle.Render(tui.CheckFail), failed))
+	output.WriteString(fmt.Sprintf("  %s Skipped: %5d\n", tui.SkipStyle.Render(tui.CheckSkip), skipped))
+	output.WriteString(fmt.Sprintf("  Total:     %5d\n", total))
 	
-	// TODO: Add average coverage calculation when we have package results
+	// Add coverage calculations for both statement and function coverage
+	if len(r.packageStatementCoverages) > 0 {
+		// Calculate statement coverage average
+		totalStatementCoverage := 0.0
+		for _, cov := range r.packageStatementCoverages {
+			totalStatementCoverage += cov
+		}
+		avgStatementCoverage := totalStatementCoverage / float64(len(r.packageStatementCoverages))
+		
+		// Calculate function coverage average if available
+		if len(r.packageFunctionCoverages) > 0 {
+			totalFunctionCoverage := 0.0
+			for _, cov := range r.packageFunctionCoverages {
+				totalFunctionCoverage += cov
+			}
+			avgFunctionCoverage := totalFunctionCoverage / float64(len(r.packageFunctionCoverages))
+			
+			// Show both types
+			output.WriteString(fmt.Sprintf("  Statement Coverage: %5.1f%%\n", avgStatementCoverage))
+			output.WriteString(fmt.Sprintf("  Function Coverage:  %5.1f%%\n", avgFunctionCoverage))
+		} else {
+			// Only statement coverage available (standard Go test output)
+			// Display as "Statement Coverage" to be explicit about what we're showing
+			output.WriteString(fmt.Sprintf("  Statement Coverage: %5.1f%%\n", avgStatementCoverage))
+		}
+	} else if len(r.packageCoverages) > 0 {
+		// Fallback to legacy coverage calculation
+		totalCoverage := 0.0
+		for _, cov := range r.packageCoverages {
+			totalCoverage += cov
+		}
+		avgCoverage := totalCoverage / float64(len(r.packageCoverages))
+		output.WriteString(fmt.Sprintf("  Statement Coverage: %5.1f%%\n", avgCoverage))
+	}
 	
 	output.WriteString("\n")
 	output.WriteString(fmt.Sprintf("%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds()))
@@ -301,5 +386,5 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 		os.Stderr.Sync()
 	}
 	
-	return ""
+	return output.String()
 }

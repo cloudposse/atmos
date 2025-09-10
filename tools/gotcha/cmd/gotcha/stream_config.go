@@ -60,21 +60,71 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 	// Extract test arguments
 	config.TestArgs = extractTestArguments(cmd)
 
-	// Get filter flags
-	config.ShowFilter, _ = cmd.Flags().GetString("show")
+	// Get filter flags - use viper for show filter to respect config file
+	// Only use flag value if it was explicitly set, otherwise use viper
+	if cmd.Flags().Changed("show") {
+		config.ShowFilter, _ = cmd.Flags().GetString("show")
+	} else {
+		config.ShowFilter = viper.GetString("show")
+		// Default to "all" if not set anywhere
+		if config.ShowFilter == "" {
+			config.ShowFilter = "all"
+		}
+	}
+	
+	// Log the show filter value for debugging config issues
+	logger.Debug("ShowFilter configuration", 
+		"showFilter", config.ShowFilter, 
+		"viperValue", viper.GetString("show"), 
+		"flagChanged", cmd.Flags().Changed("show"),
+		"configFile", viper.ConfigFileUsed())
+	
+	// Get other filter patterns from flags
 	config.IncludePatterns, _ = cmd.Flags().GetString("include")
 	config.ExcludePatterns, _ = cmd.Flags().GetString("exclude")
 
-	// Get output settings
-	config.Format, _ = cmd.Flags().GetString("format")
-	config.OutputFile, _ = cmd.Flags().GetString("output")
-	config.Alert, _ = cmd.Flags().GetBool("alert")
+	// Get output settings - use flag value only if explicitly set, otherwise use viper
+	if cmd.Flags().Changed("format") {
+		config.Format, _ = cmd.Flags().GetString("format")
+	} else {
+		config.Format = viper.GetString("format")
+		if config.Format == "" {
+			config.Format = "terminal"
+		}
+	}
+	
+	if cmd.Flags().Changed("output") {
+		config.OutputFile, _ = cmd.Flags().GetString("output")
+	} else {
+		config.OutputFile = viper.GetString("output")
+	}
+	
+	if cmd.Flags().Changed("alert") {
+		config.Alert, _ = cmd.Flags().GetBool("alert")
+	} else {
+		config.Alert = viper.GetBool("alert")
+	}
+	
 	config.VerbosityLevel, _ = cmd.Flags().GetString("verbosity")
 
-	// Get coverage settings
-	config.Cover, _ = cmd.Flags().GetBool("cover")
-	config.CoverProfile, _ = cmd.Flags().GetString("coverprofile")
-	config.CoverPkg, _ = cmd.Flags().GetString("coverpkg")
+	// Get coverage settings - use flag value only if explicitly set, otherwise use viper
+	if cmd.Flags().Changed("cover") {
+		config.Cover, _ = cmd.Flags().GetBool("cover")
+	} else {
+		config.Cover = viper.GetBool("cover")
+	}
+	
+	if cmd.Flags().Changed("coverprofile") {
+		config.CoverProfile, _ = cmd.Flags().GetString("coverprofile")
+	} else {
+		config.CoverProfile = viper.GetString("coverprofile")
+	}
+	
+	if cmd.Flags().Changed("coverpkg") {
+		config.CoverPkg, _ = cmd.Flags().GetString("coverpkg")
+	} else {
+		config.CoverPkg = viper.GetString("coverpkg")
+	}
 
 	// Handle coverage flags
 	if config.Cover && config.CoverProfile == "" {

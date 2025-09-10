@@ -57,11 +57,16 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 					if strings.Contains(event.Output, "coverage: [no statements]") {
 						// No statements to cover
 						pkg.Coverage = "0.0%"
+						pkg.StatementCoverage = "0.0%"
+						pkg.FunctionCoverage = "N/A"
 					} else if strings.Contains(event.Output, "coverage: [no test files]") {
 						// No test files - shouldn't happen with actual tests
 						pkg.Coverage = "0.0%"
+						pkg.StatementCoverage = "0.0%"
+						pkg.FunctionCoverage = "N/A"
 					} else {
 						// Extract percentage from normal coverage output
+						// Format: "coverage: 75.2% of statements"
 						if matches := strings.Fields(event.Output); len(matches) >= 2 {
 							for i, field := range matches {
 								if field == "coverage:" && i+1 < len(matches) {
@@ -69,9 +74,17 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 									// Keep only valid percentage values
 									if strings.HasSuffix(coverage, "%") {
 										pkg.Coverage = coverage
+										pkg.StatementCoverage = coverage
+										// Function coverage will be calculated separately if available
+										// For now, we'll use the same value or N/A
+										if pkg.FunctionCoverage == "" {
+											pkg.FunctionCoverage = "N/A"
+										}
 									} else {
 										// Handle edge cases
 										pkg.Coverage = "0.0%"
+										pkg.StatementCoverage = "0.0%"
+										pkg.FunctionCoverage = "N/A"
 									}
 									break
 								}

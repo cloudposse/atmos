@@ -49,21 +49,38 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 		"ciMode", config.CIMode,
 		"forceTUI", forceTUI)
 	
-	if (config.Format == "terminal" && isTTY && !config.CIMode) || forceTUI {
+	// Support both "terminal" and "stream" formats for TUI mode (backward compatibility)
+	// "stream" was the original format name for TUI with progress bar
+	isTUIFormat := config.Format == "terminal" || config.Format == "stream"
+	
+	if (isTUIFormat && isTTY && !config.CIMode) || forceTUI {
 		// Interactive TUI mode
 		logger.Debug("Entering TUI mode",
 			"forceTUI", forceTUI,
 			"isTTY", isTTY,
+			"format", config.Format,
 			"reason", func() string {
 				if forceTUI {
 					return "GOTCHA_FORCE_TUI=true"
 				}
-				return "TTY detected"
+				return "TTY detected with TUI format"
 			}())
 		exitCode, err = runStreamInteractive(cmd, config, logger)
 	} else {
 		// CI or non-interactive mode
-		logger.Debug("Entering stream mode",
+		
+		// Log when terminal/stream format is downgraded due to no TTY
+		if isTUIFormat && !isTTY && !config.CIMode {
+			logger.Info("Terminal format requested but no TTY detected, using non-interactive mode",
+				"format", config.Format,
+				"tip", "Run in an interactive terminal to see progress bar")
+		} else if isTUIFormat && config.CIMode {
+			logger.Info("Terminal format requested but CI mode detected, using non-interactive mode",
+				"format", config.Format,
+				"ciMode", config.CIMode)
+		}
+		
+		logger.Debug("Entering non-TUI mode",
 			"isTTY", isTTY,
 			"format", config.Format,
 			"ciMode", config.CIMode,
@@ -74,8 +91,8 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 				if config.CIMode {
 					return "CI mode enabled"
 				}
-				if config.Format != "terminal" {
-					return fmt.Sprintf("Format is %s", config.Format)
+				if !isTUIFormat {
+					return fmt.Sprintf("Format is %s (not terminal/stream)", config.Format)
 				}
 				return "Unknown"
 			}())

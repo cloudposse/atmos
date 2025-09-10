@@ -13,7 +13,8 @@ func (m *TestModel) shouldShowTest(status string) bool {
 	case "all":
 		return true
 	case "failed":
-		return status == "fail"
+		// Show both failed and skipped tests when filter is "failed"
+		return status == "fail" || status == "skip"
 	case "passed":
 		return status == "pass"
 	case "skipped":
@@ -80,21 +81,48 @@ func (m *TestModel) GenerateFinalSummary() string {
 	summary.WriteString(fmt.Sprintf("  Total:     %5d\n", totalTests))
 
 	// Add coverage summary if available
-	packagesWithCoverage := 0
-	totalCoverage := 0.0
+	packagesWithStatementCoverage := 0
+	packagesWithFunctionCoverage := 0
+	totalStatementCoverage := 0.0
+	totalFunctionCoverage := 0.0
+	
 	for _, pkg := range m.packageResults {
-		if pkg.Coverage != "" && pkg.Coverage != "0.0%" {
-			packagesWithCoverage++
-			// Extract percentage (e.g., "75.2%" -> 75.2)
+		// Try statement coverage first
+		if pkg.StatementCoverage != "" && pkg.StatementCoverage != "0.0%" && pkg.StatementCoverage != "N/A" {
+			packagesWithStatementCoverage++
+			var pct float64
+			fmt.Sscanf(pkg.StatementCoverage, "%f%%", &pct)
+			totalStatementCoverage += pct
+		} else if pkg.Coverage != "" && pkg.Coverage != "0.0%" {
+			// Fallback to legacy coverage
+			packagesWithStatementCoverage++
 			var pct float64
 			fmt.Sscanf(pkg.Coverage, "%f%%", &pct)
-			totalCoverage += pct
+			totalStatementCoverage += pct
+		}
+		
+		// Check function coverage
+		if pkg.FunctionCoverage != "" && pkg.FunctionCoverage != "0.0%" && pkg.FunctionCoverage != "N/A" {
+			packagesWithFunctionCoverage++
+			var pct float64
+			fmt.Sscanf(pkg.FunctionCoverage, "%f%%", &pct)
+			totalFunctionCoverage += pct
 		}
 	}
 
-	if packagesWithCoverage > 0 {
-		avgCoverage := totalCoverage / float64(packagesWithCoverage)
-		summary.WriteString(fmt.Sprintf("  Coverage:  %5.1f%%\n", avgCoverage))
+	// Display coverage based on what's available
+	if packagesWithStatementCoverage > 0 {
+		avgStatementCoverage := totalStatementCoverage / float64(packagesWithStatementCoverage)
+		
+		if packagesWithFunctionCoverage > 0 {
+			avgFunctionCoverage := totalFunctionCoverage / float64(packagesWithFunctionCoverage)
+			// Show both types
+			summary.WriteString(fmt.Sprintf("  Statement Coverage: %5.1f%%\n", avgStatementCoverage))
+			summary.WriteString(fmt.Sprintf("  Function Coverage:  %5.1f%%\n", avgFunctionCoverage))
+		} else {
+			// Only statement coverage available
+			summary.WriteString(fmt.Sprintf("  Coverage:  %5.1f%%\n", avgStatementCoverage))
+		}
 	}
 
 	// Log completion time
@@ -156,7 +184,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 
 	// Package header
 	// Display package header - ▶ icon in white, package name in cyan
-	output.WriteString(fmt.Sprintf("\n▶ %s\n", PackageHeaderStyle.Render(pkg.Package)))
+	output.WriteString(fmt.Sprintf("▶ %s\n", PackageHeaderStyle.Render(pkg.Package)))
 
 	// Check for "No tests"
 	// Check for package-level failures (e.g., TestMain failures)
@@ -200,8 +228,6 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	}
 
 	// Display tests in order (including subtests as individual entries)
-	// Track if any tests were actually displayed
-	testsDisplayed := false
 	
 	// Debug: Log test order details
 	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
@@ -212,6 +238,22 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 				fmt.Fprintf(f, "[DISPLAY-DEBUG]   TestOrder[%d]: %s\n", i, name)
 			}
 			f.Close()
+		}
+	}
+	
+	// Add blank line before tests section (if any tests will be displayed)
+	firstTestCheck := false
+	for _, testName := range pkg.TestOrder {
+		test := pkg.Tests[testName]
+		if test != nil {
+			shouldShow := m.shouldShowTest(test.Status)
+			if shouldShow || m.showFilter == "collapsed" {
+				if !firstTestCheck {
+					output.WriteString("\n")
+					firstTestCheck = true
+				}
+				break
+			}
 		}
 	}
 	
@@ -226,12 +268,6 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		
 		shouldShow := m.shouldShowTest(test.Status)
 		if shouldShow || m.showFilter == "collapsed" {
-			// Add blank line before first test
-			if !testsDisplayed {
-				output.WriteString("\n")
-				testsDisplayed = true
-			}
-			
 			// Display with appropriate indentation
 			indent := ""
 			if isSubtest {
@@ -246,14 +282,25 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	totalTests := passedCount + failedCount + skippedCount
 	if totalTests > 0 {
 		// Add spacing before summary only if tests were displayed
-		if testsDisplayed {
+		if firstTestCheck {
 			output.WriteString("\n")
 		}
 		
 		var summaryLine string
 		coverageStr := ""
-		if pkg.Coverage != "" {
-			coverageStr = fmt.Sprintf(" (%s coverage)", pkg.Coverage)
+		
+		// Build coverage string with both statement and function coverage
+		if pkg.StatementCoverage != "" && pkg.StatementCoverage != "0.0%" {
+			if pkg.FunctionCoverage != "" && pkg.FunctionCoverage != "N/A" {
+				coverageStr = fmt.Sprintf(" (statements: %s, functions: %s)", 
+					pkg.StatementCoverage, pkg.FunctionCoverage)
+			} else {
+				// Only statement coverage available from standard Go test output
+				coverageStr = fmt.Sprintf(" (%s statement coverage)", pkg.StatementCoverage)
+			}
+		} else if pkg.Coverage != "" {
+			// Fallback to legacy coverage if new fields aren't set
+			coverageStr = fmt.Sprintf(" (%s statement coverage)", pkg.Coverage)
 		}
 
 		if failedCount > 0 {

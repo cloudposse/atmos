@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	// Import CI integrations to register them.
@@ -137,9 +136,6 @@ func initConfig() {
 			fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 		}
 	}
-
-	// Re-initialize the logger after config is loaded to pick up any log level changes
-	initGlobalLogger()
 }
 
 // Execute runs the root command.
@@ -147,11 +143,12 @@ func Execute() error {
 	// Initialize environment configuration first to avoid os.Getenv usage
 	config.InitEnvironment()
 
-	// Initialize the logger immediately so it's available for command creation
-	initGlobalLogger()
+	// Initialize config BEFORE creating commands so viper values are available
+	// This allows the config file to be read before command creation
+	initConfig()
 
-	// Initialize configuration
-	cobra.OnInitialize(initConfig)
+	// Initialize the logger after config is loaded
+	initGlobalLogger()
 
 	// Create root command using Cobra
 	rootCmd := &cobra.Command{
@@ -183,18 +180,9 @@ experience with intuitive visual feedback and comprehensive test result analysis
   gotcha stream --include=".*api.*" --exclude=".*mock.*" -- -race -short`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Default behavior is to run stream command
-			streamCmd := newStreamCmd(globalLogger)
-			streamCmd.SetArgs(args)
-
-			// Copy flag values from root to stream command
-			cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-				if streamCmd.Flags().Lookup(flag.Name) != nil {
-					streamCmd.Flags().Set(flag.Name, flag.Value.String())
-				}
-			})
-
-			return streamCmd.Execute()
+			// Simply delegate to runStream
+			// This ensures viper config is properly respected
+			return runStream(cmd, args, globalLogger)
 		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
