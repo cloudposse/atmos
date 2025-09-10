@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // OIDCCredentials defines OIDC-specific credential fields.
@@ -35,13 +37,13 @@ func (c *OIDCCredentials) GetExpiration() (*time.Time, error) {
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, fmt.Errorf("decode oidc payload: %w", err)
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthOidcDecodeFailed, err)
 	}
 	var claims struct {
 		Exp int64 `json:"exp"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil, fmt.Errorf("unmarshal oidc claims: %w", err)
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthOidcUnmarshalFailed, err)
 	}
 	if claims.Exp == 0 {
 		return nil, nil
@@ -52,5 +54,11 @@ func (c *OIDCCredentials) GetExpiration() (*time.Time, error) {
 
 // BuildWhoamiInfo implements ICredentials for OIDCCredentials.
 func (c *OIDCCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
-	// No additional fields to populate for generic OIDC creds
+	if info == nil {
+		return
+	}
+	// Typically, this is not used for OIDC credentials. As we just fetched the credentials from GitHub, they won't expire.
+	if exp, _ := c.GetExpiration(); exp != nil {
+		info.Expiration = exp
+	}
 }
