@@ -90,8 +90,26 @@ testacc-ci: get $(GOTCHA_BIN)
 		--post-comment=adaptive \
 		-- -coverpkg=github.com/cloudposse/atmos/... $(TESTARGS)
 
+# Test tools
+test-tools: test-gotcha
+
+# Test gotcha tool
+test-gotcha:
+	@echo "Testing gotcha tool..."
+	@cd tools/gotcha && go test -v -race -coverprofile=coverage.out ./...
+	@cd tools/gotcha && go build -o gotcha . && ./gotcha --format=markdown --output=test-output.md ./...
+
+# Build tools
+build-tools: build-gotcha
+
+# Build gotcha tool
+build-gotcha:
+	@echo "Building gotcha tool..."
+	@cd tools/gotcha && go build -v -o gotcha .
+
 # Clean test artifacts
 clean-test:
 	rm -f test-results.json test-summary.md coverage.out coverage.html
+	rm -f tools/gotcha/coverage.out tools/gotcha/test-output.md tools/gotcha/gotcha
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-ci clean-test
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-ci clean-test test-tools test-gotcha build-tools build-gotcha
