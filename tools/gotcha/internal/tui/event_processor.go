@@ -215,12 +215,12 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 	// Debug: Log all test run events
 	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-			fmt.Fprintf(f, "[RUN-DEBUG] Test run event for package %s: %s (isSubtest: %v)\n", 
+			fmt.Fprintf(f, "[RUN-DEBUG] Test run event for package %s: %s (isSubtest: %v)\n",
 				event.Package, event.Test, isSubtest)
 			f.Close()
 		}
 	}
-	
+
 	m.currentTest = event.Test
 	// Count all tests including subtests for accurate progress
 	// Always increment the actual test count
@@ -245,7 +245,7 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 				SubtestOrder: []string{},
 			}
 			pkg.Tests[parentTest] = parent
-			
+
 			// Also add the parent to TestOrder if it's not already there
 			// This ensures parent appears before its subtests in display
 			if !contains(pkg.TestOrder, parentTest) {
@@ -261,7 +261,7 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 		}
 		parent.Subtests[event.Test] = subtest
 		parent.SubtestOrder = append(parent.SubtestOrder, event.Test)
-		
+
 		// IMPORTANT: Add subtest to both pkg.Tests AND pkg.TestOrder for display
 		// This ensures subtests are accessible and visible in the TUI output
 		pkg.Tests[event.Test] = subtest
@@ -277,11 +277,11 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 		}
 		pkg.Tests[event.Test] = test
 		pkg.TestOrder = append(pkg.TestOrder, event.Test)
-		
+
 		// Debug: Log when we add a test to TestOrder
 		if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
 			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-				fmt.Fprintf(f, "[EVENT-DEBUG] Added test to TestOrder for package %s: %s (total in order: %d)\n", 
+				fmt.Fprintf(f, "[EVENT-DEBUG] Added test to TestOrder for package %s: %s (total in order: %d)\n",
 					event.Package, event.Test, len(pkg.TestOrder))
 				f.Close()
 			}

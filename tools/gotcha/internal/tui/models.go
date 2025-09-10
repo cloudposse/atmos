@@ -20,18 +20,18 @@ type SubtestStats struct {
 
 // PackageResult stores complete information about a tested package.
 type PackageResult struct {
-	Package            string
-	StartTime          time.Time
-	EndTime            time.Time
-	Status             string // "pass", "fail", "skip", "running"
-	Tests              map[string]*TestResult
-	TestOrder          []string // Maintain test execution order
-	Coverage           string   // Legacy: single coverage value (for backward compatibility)
-	StatementCoverage  string   // Statement coverage percentage (e.g., "75.2%")
-	FunctionCoverage   string   // Function coverage percentage (e.g., "80.0%")
-	Output             []string // Package-level output (build errors, etc.)
-	Elapsed            float64
-	HasTests           bool
+	Package           string
+	StartTime         time.Time
+	EndTime           time.Time
+	Status            string // "pass", "fail", "skip", "running"
+	Tests             map[string]*TestResult
+	TestOrder         []string // Maintain test execution order
+	Coverage          string   // Legacy: single coverage value (for backward compatibility)
+	StatementCoverage string   // Statement coverage percentage (e.g., "75.2%")
+	FunctionCoverage  string   // Function coverage percentage (e.g., "80.0%")
+	Output            []string // Package-level output (build errors, etc.)
+	Elapsed           float64
+	HasTests          bool
 }
 
 // TestResult stores individual test information.

@@ -36,7 +36,7 @@ func TestTUISubtestIntegration(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
-		
+
 		err := cmd.Run()
 		// Don't check error as tests might fail, we care about the output
 		_ = err
@@ -48,17 +48,17 @@ func TestTUISubtestIntegration(t *testing.T) {
 		lines := strings.Split(output, "\n")
 		displayedTests := 0
 		var testNames []string
-		
+
 		for _, line := range lines {
 			// Match test result lines
 			if strings.Contains(line, "✔") || strings.Contains(line, "✘") || strings.Contains(line, "⊘") {
 				// Extract test name (skip summary lines)
-				if !strings.Contains(line, "Passed:") && 
-				   !strings.Contains(line, "Failed:") && 
-				   !strings.Contains(line, "Skipped:") &&
-				   !strings.Contains(line, "All") &&
-				   !strings.Contains(line, "tests passed") &&
-				   !strings.Contains(line, "tests failed") {
+				if !strings.Contains(line, "Passed:") &&
+					!strings.Contains(line, "Failed:") &&
+					!strings.Contains(line, "Skipped:") &&
+					!strings.Contains(line, "All") &&
+					!strings.Contains(line, "tests passed") &&
+					!strings.Contains(line, "tests failed") {
 					displayedTests++
 					testNames = append(testNames, strings.TrimSpace(line))
 				}
@@ -94,13 +94,13 @@ func TestTUISubtestIntegration(t *testing.T) {
 
 		// The regression: total count doesn't match displayed tests
 		// In stream mode with --show=all, they should be close
-		assert.Greater(t, displayedTests, 10, 
+		assert.Greater(t, displayedTests, 10,
 			"Should display many individual test names with --show=all")
-		
+
 		if totalCount > 0 {
 			// Allow some discrepancy for setup/teardown, but not huge
 			ratio := float64(displayedTests) / float64(totalCount)
-			assert.Greater(t, ratio, 0.5, 
+			assert.Greater(t, ratio, 0.5,
 				"BUG: Only showing %d test names but total is %d (ratio: %.2f)",
 				displayedTests, totalCount, ratio)
 		}
@@ -109,15 +109,15 @@ func TestTUISubtestIntegration(t *testing.T) {
 	t.Run("verify_subtest_count_in_json_output", func(t *testing.T) {
 		// Run gotcha with JSON output to get accurate counts
 		outputFile := filepath.Join(t.TempDir(), "test-output.json")
-		cmd := exec.Command(gotchaPath, 
+		cmd := exec.Command(gotchaPath,
 			"--show=all",
 			"--output", outputFile,
 			"--format", "json",
 			"./test")
-		
+
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
-		
+
 		err := cmd.Run()
 		_ = err // Ignore error, we want to check the output
 
@@ -154,10 +154,10 @@ func TestTUISubtestIntegration(t *testing.T) {
 			// JSON structure might be different, just check raw content
 			t.Logf("JSON unmarshal failed, checking raw content")
 			content := string(data)
-			
+
 			// Count occurrences of test patterns
 			testCount := strings.Count(content, `"name"`)
-			assert.Greater(t, testCount, 20, 
+			assert.Greater(t, testCount, 20,
 				"JSON should contain many test entries")
 			return
 		}
@@ -174,7 +174,7 @@ func TestTUISubtestIntegration(t *testing.T) {
 		}
 
 		t.Logf("JSON summary reports: %d total tests", result.Summary.TotalTests)
-		t.Logf("JSON contains: %d top-level tests, %d total including subtests", 
+		t.Logf("JSON contains: %d top-level tests, %d total including subtests",
 			topLevelTests, totalInJSON)
 
 		// Verify subtests are included
@@ -185,20 +185,20 @@ func TestTUISubtestIntegration(t *testing.T) {
 	t.Run("verify_tui_test_mode_behavior", func(t *testing.T) {
 		// Run gotcha in TEST_MODE to simulate TUI without TTY
 		cmd := exec.Command(gotchaPath, "--show=all", "./test")
-		cmd.Env = append(os.Environ(), 
+		cmd.Env = append(os.Environ(),
 			"GOTCHA_TEST_MODE=true",
 			"GOTCHA_FORCE_TUI=true")
-		
+
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
-		
+
 		// Set a timeout as TUI mode might hang
 		done := make(chan error, 1)
 		go func() {
 			done <- cmd.Run()
 		}()
-		
+
 		select {
 		case <-done:
 			// Command completed
@@ -215,15 +215,15 @@ func TestTUISubtestIntegration(t *testing.T) {
 		lines := strings.Split(output, "\n")
 		displayedTests := 0
 		totalCount := 0
-		
+
 		for _, line := range lines {
 			if strings.Contains(line, "✔") || strings.Contains(line, "✘") || strings.Contains(line, "⊘") {
-				if !strings.Contains(line, "Passed:") && 
-				   !strings.Contains(line, "Failed:") && 
-				   !strings.Contains(line, "Skipped:") &&
-				   !strings.Contains(line, "All") &&
-				   !strings.Contains(line, "tests passed") &&
-				   !strings.Contains(line, "tests failed") {
+				if !strings.Contains(line, "Passed:") &&
+					!strings.Contains(line, "Failed:") &&
+					!strings.Contains(line, "Skipped:") &&
+					!strings.Contains(line, "All") &&
+					!strings.Contains(line, "tests passed") &&
+					!strings.Contains(line, "tests failed") {
 					displayedTests++
 				}
 			}
@@ -248,7 +248,7 @@ func TestGotchaSubtestCounting(t *testing.T) {
 	// Create a temporary test file with known structure
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "example_test.go")
-	
+
 	testCode := `package example
 
 import "testing"
@@ -289,14 +289,14 @@ func TestTableDriven(t *testing.T) {
 }
 `
 
-	err := os.WriteFile(testFile, []byte(testCode), 0644)
+	err := os.WriteFile(testFile, []byte(testCode), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goMod := `module example
 go 1.21
 `
-	err = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0o644)
 	require.NoError(t, err)
 
 	// Run go test with JSON output to get ground truth
@@ -309,7 +309,7 @@ go 1.21
 	lines := strings.Split(string(output), "\n")
 	runEvents := 0
 	var allTests []string
-	
+
 	for _, line := range lines {
 		if strings.Contains(line, `"Action":"run"`) {
 			runEvents++
@@ -330,7 +330,7 @@ go 1.21
 	// Total: 11 tests
 	assert.Equal(t, 11, runEvents, "Should have 11 total test run events")
 	assert.Equal(t, 11, len(allTests), "Should have 11 test names")
-	
+
 	// Verify we have subtests
 	subtests := 0
 	for _, name := range allTests {
@@ -354,7 +354,7 @@ go 1.21
 	cmd.Run() // Ignore error
 
 	output2 := stdout.String()
-	
+
 	// Check if gotcha shows all 11 tests or just 3
 	if strings.Contains(output2, "Total:") {
 		var total int
@@ -364,18 +364,18 @@ go 1.21
 				break
 			}
 		}
-		
+
 		t.Logf("Gotcha reports total: %d (expected 11)", total)
-		
+
 		// The bug would show total=11 but only display 3 test names
 		displayCount := strings.Count(output2, "TestSimple") +
-		               strings.Count(output2, "TestWithSubtests") +
-		               strings.Count(output2, "TestTableDriven") +
-		               strings.Count(output2, "subtest") +
-		               strings.Count(output2, "case")
-		
+			strings.Count(output2, "TestWithSubtests") +
+			strings.Count(output2, "TestTableDriven") +
+			strings.Count(output2, "subtest") +
+			strings.Count(output2, "case")
+
 		t.Logf("Test names displayed: ~%d", displayCount)
-		
+
 		if total == 11 && displayCount < 8 {
 			t.Logf("BUG CONFIRMED: Total shows 11 but only ~%d test names visible", displayCount)
 		}

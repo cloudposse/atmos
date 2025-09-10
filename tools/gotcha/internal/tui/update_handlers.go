@@ -136,11 +136,11 @@ func (m *TestModel) handleStreamOutput(msg streamOutputMsg) tea.Cmd {
 			if result, exists := m.packageResults[pkg]; exists {
 				// Check if package is complete (not running) OR no longer active
 				isComplete := result.Status != "running" || !m.activePackages[pkg]
-				
+
 				if isComplete && !m.displayedPackages[pkg] {
 					// Mark as displayed and generate output
 					m.displayedPackages[pkg] = true
-					
+
 					// If still marked as running but not active, mark it as done
 					if result.Status == "running" && !m.activePackages[pkg] {
 						// Package finished but didn't send proper completion event
@@ -163,18 +163,18 @@ func (m *TestModel) handleStreamOutput(msg streamOutputMsg) tea.Cmd {
 							}
 						}
 					}
-					
+
 					output := m.displayPackageResult(result)
-					
+
 					// Debug logging for package display
 					if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
 						if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-							fmt.Fprintf(f, "[TUI-DEBUG] Package display: %s, status=%s, output_len=%d, has_tests=%v, active=%v\n", 
+							fmt.Fprintf(f, "[TUI-DEBUG] Package display: %s, status=%s, output_len=%d, has_tests=%v, active=%v\n",
 								pkg, result.Status, len(output), result.HasTests, m.activePackages[pkg])
 							f.Close()
 						}
 					}
-					
+
 					if output != "" {
 						// Use tea.Printf to print the output once
 						cmds = append(cmds, tea.Printf("%s", output))
@@ -217,7 +217,7 @@ func (m *TestModel) handleTestComplete(msg testCompleteMsg) tea.Cmd {
 	for _, pkg := range m.packageOrder {
 		if result, exists := m.packageResults[pkg]; exists && !m.displayedPackages[pkg] {
 			m.displayedPackages[pkg] = true
-			
+
 			// Fix status if still running
 			if result.Status == "running" {
 				if !result.HasTests && len(result.Tests) == 0 {
@@ -226,7 +226,7 @@ func (m *TestModel) handleTestComplete(msg testCompleteMsg) tea.Cmd {
 					result.Status = "pass" // Assume pass if no failures recorded
 				}
 			}
-			
+
 			output := m.displayPackageResult(result)
 			if output != "" {
 				displayCmds = append(displayCmds, tea.Printf("%s", output))

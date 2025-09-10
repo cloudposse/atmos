@@ -24,18 +24,18 @@ type SubtestStats struct {
 
 // PackageResult stores complete information about a tested package.
 type PackageResult struct {
-	Package            string
-	StartTime          time.Time
-	EndTime            time.Time
-	Status             string // "pass", "fail", "skip", "running"
-	Tests              map[string]*TestResult
-	TestOrder          []string // Maintain test execution order
-	Coverage           string   // Legacy: single coverage value (for backward compatibility)
-	StatementCoverage  string   // Statement coverage percentage (e.g., "75.2%")
-	FunctionCoverage   string   // Function coverage percentage (e.g., "80.0%")
-	Output             []string // Package-level output (build errors, etc.)
-	Elapsed            float64
-	HasTests           bool
+	Package           string
+	StartTime         time.Time
+	EndTime           time.Time
+	Status            string // "pass", "fail", "skip", "running"
+	Tests             map[string]*TestResult
+	TestOrder         []string // Maintain test execution order
+	Coverage          string   // Legacy: single coverage value (for backward compatibility)
+	StatementCoverage string   // Statement coverage percentage (e.g., "75.2%")
+	FunctionCoverage  string   // Function coverage percentage (e.g., "80.0%")
+	Output            []string // Package-level output (build errors, etc.)
+	Elapsed           float64
+	HasTests          bool
 }
 
 // TestResult stores individual test information.
@@ -77,7 +77,7 @@ type StreamProcessor struct {
 	passed  int
 	failed  int
 	skipped int
-	
+
 	// TestReporter for handling display
 	reporter TestReporter
 }
@@ -103,7 +103,7 @@ func NewStreamProcessor(jsonWriter io.Writer, showFilter, testFilter, verbosityL
 		testFilter:     testFilter,
 		verbosityLevel: verbosityLevel,
 		startTime:      time.Now(),
-		
+
 		// Create default stream reporter for backward compatibility
 		reporter: NewStreamReporter(showFilter, testFilter, verbosityLevel),
 	}
@@ -143,7 +143,7 @@ func (p *StreamProcessor) ProcessStream(input io.Reader) error {
 			f.Close()
 		}
 	}
-	
+
 	scanner := bufio.NewScanner(input)
 
 	// Track if we're in CI for periodic flushing

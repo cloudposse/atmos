@@ -48,7 +48,7 @@ func TestSkip1(t *testing.T) {
 	t.Skip("This test is skipped")
 }
 `
-	err := os.WriteFile(testFile1, []byte(testContent1), 0644)
+	err := os.WriteFile(testFile1, []byte(testContent1), 0o644)
 	require.NoError(t, err)
 
 	// Second test file with more tests
@@ -72,7 +72,7 @@ func TestFail2(t *testing.T) {
 	t.FailNow()
 }
 `
-	err = os.WriteFile(testFile2, []byte(testContent2), 0644)
+	err = os.WriteFile(testFile2, []byte(testContent2), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod for the test package
@@ -81,7 +81,7 @@ func TestFail2(t *testing.T) {
 
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent), 0644)
+	err = os.WriteFile(goModFile, []byte(goModContent), 0o644)
 	require.NoError(t, err)
 
 	// Create a .gotcha.yaml config file that EXACTLY matches the user's config
@@ -128,17 +128,17 @@ filter:
     # - ".*mock.*"         # exclude packages containing "mock"
     # - ".*_test$"         # exclude test packages
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build the gotcha binary from the root of the gotcha directory
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test-binary")
 	t.Logf("Building gotcha binary at %s", gotchaBinary)
-	
+
 	// Get the absolute path to the gotcha directory
 	gotchaDir, err := filepath.Abs("..")
 	require.NoError(t, err)
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -150,7 +150,7 @@ filter:
 	// This should use the root command which should respect the config
 	cmd := exec.Command(gotchaBinary, ".")
 	cmd.Dir = tempDir
-	
+
 	// Capture output
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -170,7 +170,7 @@ filter:
 
 	// Parse the output to see what tests were displayed
 	lines := strings.Split(output, "\n")
-	
+
 	var testResults []string
 	for _, line := range lines {
 		// Look for test output patterns in stream format
@@ -239,7 +239,7 @@ func TestPassB(t *testing.T) {}
 func TestFailA(t *testing.T) { t.Fatal("fail") }
 func TestSkipA(t *testing.T) { t.Skip("skip") }
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
@@ -247,7 +247,7 @@ func TestSkipA(t *testing.T) { t.Skip("skip") }
 	goModContent := `module testpkg
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent), 0644)
+	err = os.WriteFile(goModFile, []byte(goModContent), 0o644)
 	require.NoError(t, err)
 
 	// Create the same .gotcha.yaml config
@@ -258,14 +258,14 @@ packages:
 show: failed
 output: test-results.json
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build the gotcha binary
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test-binary")
 	gotchaDir, err := filepath.Abs("..")
 	require.NoError(t, err)
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -277,13 +277,13 @@ output: test-results.json
 	t.Run("explicit_stream_subcommand", func(t *testing.T) {
 		cmd := exec.Command(gotchaBinary, "stream", ".")
 		cmd.Dir = tempDir
-		
+
 		var output bytes.Buffer
 		cmd.Stdout = &output
 		cmd.Stderr = &output
 
 		_ = cmd.Run()
-		
+
 		outputStr := output.String()
 		t.Logf("Output with 'gotcha stream .':\n%s", outputStr)
 
@@ -295,13 +295,13 @@ output: test-results.json
 	t.Run("root_command", func(t *testing.T) {
 		cmd := exec.Command(gotchaBinary, ".")
 		cmd.Dir = tempDir
-		
+
 		var output bytes.Buffer
 		cmd.Stdout = &output
 		cmd.Stderr = &output
 
 		_ = cmd.Run()
-		
+
 		outputStr := output.String()
 		t.Logf("Output with 'gotcha .':\n%s", outputStr)
 

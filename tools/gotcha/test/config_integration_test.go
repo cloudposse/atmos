@@ -38,7 +38,7 @@ func TestSkip(t *testing.T) {
 	t.Skip("This test is skipped")
 }
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod for the test package
@@ -47,7 +47,7 @@ func TestSkip(t *testing.T) {
 
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent), 0644)
+	err = os.WriteFile(goModFile, []byte(goModContent), 0o644)
 	require.NoError(t, err)
 
 	// Create a .gotcha.yaml config file with show: failed
@@ -58,7 +58,7 @@ show: failed
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build the gotcha binary if it doesn't exist
@@ -75,7 +75,7 @@ packages:
 	// Run gotcha in the temp directory
 	cmd := exec.Command(gotchaBinary)
 	cmd.Dir = tempDir
-	
+
 	// Capture output
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -91,7 +91,7 @@ packages:
 
 	// Parse the output to see what tests were displayed
 	lines := strings.Split(output, "\n")
-	
+
 	var sawTestPass, sawTestFail, sawTestSkip bool
 	for _, line := range lines {
 		// Look for test output patterns
@@ -137,7 +137,7 @@ func TestSimple(t *testing.T) {
 	t.Fatal("fail")
 }
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
@@ -145,7 +145,7 @@ func TestSimple(t *testing.T) {
 	goModContent := `module testpkg
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent), 0644)
+	err = os.WriteFile(goModFile, []byte(goModContent), 0o644)
 	require.NoError(t, err)
 
 	// Create a .gotcha.yaml with specific settings
@@ -154,7 +154,7 @@ go 1.21
 show: failed
 output: from-config.json
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build gotcha binary
@@ -169,7 +169,7 @@ output: from-config.json
 	// Run with debug logging to see config loading
 	cmd := exec.Command(gotchaBinary, "--log-level=debug")
 	cmd.Dir = tempDir
-	
+
 	var output bytes.Buffer
 	cmd.Stderr = &output
 	cmd.Stdout = &output
@@ -191,7 +191,7 @@ output: from-config.json
 // TestCacheYaml_LogsAllTestsRegardlessOfFilter tests that cache.yaml logs all tests
 func TestCacheYaml_LogsAllTestsRegardlessOfFilter(t *testing.T) {
 	t.Skip("Cache functionality not yet implemented - will be fixed in next commit")
-	
+
 	// This test will verify that even with show: failed, the cache.yaml
 	// contains information about ALL tests for estimation purposes
 }

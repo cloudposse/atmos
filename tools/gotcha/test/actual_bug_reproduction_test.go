@@ -38,7 +38,7 @@ func TestPass3(t *testing.T) {
 	// Yet another passing test
 }
 `
-	err := os.WriteFile(testFile1, []byte(testContent1), 0644)
+	err := os.WriteFile(testFile1, []byte(testContent1), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod for the test package
@@ -47,7 +47,7 @@ func TestPass3(t *testing.T) {
 
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent), 0644)
+	err = os.WriteFile(goModFile, []byte(goModContent), 0o644)
 	require.NoError(t, err)
 
 	// Create exact .gotcha.yaml config as user provided
@@ -90,14 +90,14 @@ filter:
   # Regex patterns to exclude packages
   exclude: []
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build the gotcha binary
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test-binary")
 	gotchaDir, err := filepath.Abs("..")
 	require.NoError(t, err)
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -108,7 +108,7 @@ filter:
 	// Run gotcha WITHOUT any subcommand - this reproduces the exact user scenario
 	cmd := exec.Command(gotchaBinary, ".")
 	cmd.Dir = tempDir
-	
+
 	// Capture output
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -128,7 +128,7 @@ filter:
 
 	// THIS IS THE BUG: With show: failed and all tests passing,
 	// we should see NO test details at all, but gotcha shows "All X tests passed"
-	
+
 	// Check for the problematic output
 	if strings.Contains(output, "All") && strings.Contains(output, "tests passed") {
 		t.Errorf("BUG CONFIRMED: gotcha shows 'All X tests passed' even with 'show: failed' filter")
@@ -179,7 +179,7 @@ func TestPass3(t *testing.T) {}
 func TestFail1(t *testing.T) { t.Fatal("fail") }
 func TestSkip1(t *testing.T) { t.Skip("skip") }
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
@@ -187,7 +187,7 @@ func TestSkip1(t *testing.T) { t.Skip("skip") }
 	goModContent := `module testpkg
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent), 0644)
+	err = os.WriteFile(goModFile, []byte(goModContent), 0o644)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with show: failed
@@ -197,14 +197,14 @@ show: failed
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build the gotcha binary
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test-binary")
 	gotchaDir, err := filepath.Abs("..")
 	require.NoError(t, err)
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -215,7 +215,7 @@ packages:
 	// Run gotcha
 	cmd := exec.Command(gotchaBinary, ".")
 	cmd.Dir = tempDir
-	
+
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -239,7 +239,7 @@ packages:
 // TestCacheYamlLogging tests that cache.yaml should log ALL tests regardless of filter
 func TestCacheYamlLogging(t *testing.T) {
 	t.Skip("Cache functionality regression - to be fixed")
-	
+
 	// This test would verify that:
 	// 1. cache.yaml is created/updated
 	// 2. It contains ALL test information, not just filtered tests

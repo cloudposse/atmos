@@ -33,7 +33,7 @@ func TestSubtestDisplayRegression(t *testing.T) {
 
 		// Simulate test events for a package with subtests
 		pkg := "github.com/example/pkg"
-		
+
 		// Package start
 		model.processEvent(&types.TestEvent{
 			Action:  "start",
@@ -108,12 +108,12 @@ func TestSubtestDisplayRegression(t *testing.T) {
 		require.NotNil(t, pkgResult)
 
 		// BUG: TestOrder only contains parent test, not subtests
-		assert.Equal(t, 1, len(pkgResult.TestOrder), 
+		assert.Equal(t, 1, len(pkgResult.TestOrder),
 			"BUG: TestOrder only contains parent test, should contain all tests for display")
 
 		// But Tests map has the parent test
 		assert.Equal(t, 1, len(pkgResult.Tests))
-		
+
 		// And the parent test has subtests
 		parentTest := pkgResult.Tests["TestParent"]
 		require.NotNil(t, parentTest)
@@ -121,7 +121,7 @@ func TestSubtestDisplayRegression(t *testing.T) {
 
 		// The counts show all tests
 		assert.Equal(t, 4, model.passCount, "Should count all 4 passed tests (1 parent + 3 subtests)")
-		
+
 		// But display would only show 1 test name (the parent)
 		// This is the core issue - counting doesn't match display
 	})
@@ -141,13 +141,13 @@ func TestSubtestDisplayRegression(t *testing.T) {
 
 		// Simulate multiple packages with different test structures
 		packages := []struct {
-			name           string
-			topLevelTests  []string
+			name            string
+			topLevelTests   []string
 			subtestsPerTest int
 		}{
-			{"github.com/example/pkg1", []string{"TestA", "TestB"}, 5},      // 2 top-level, 10 subtests
-			{"github.com/example/pkg2", []string{"TestMain"}, 20},           // 1 top-level, 20 subtests
-			{"github.com/example/pkg3", []string{}, 0},                      // No tests (blank display)
+			{"github.com/example/pkg1", []string{"TestA", "TestB"}, 5},          // 2 top-level, 10 subtests
+			{"github.com/example/pkg2", []string{"TestMain"}, 20},               // 1 top-level, 20 subtests
+			{"github.com/example/pkg3", []string{}, 0},                          // No tests (blank display)
 			{"github.com/example/pkg4", []string{"TestX", "TestY", "TestZ"}, 0}, // 3 top-level, no subtests
 		}
 
@@ -214,12 +214,12 @@ func TestSubtestDisplayRegression(t *testing.T) {
 		// Verify the mismatch
 		assert.Equal(t, 36, totalTestsRun, "Total tests run (including subtests)")
 		assert.Equal(t, 36, model.passCount, "Total tests passed")
-		
+
 		// BUG: Only top-level tests are in TestOrder for display
-		assert.Equal(t, 6, totalTestsInOrder, 
+		assert.Equal(t, 6, totalTestsInOrder,
 			"BUG: Only 6 tests in TestOrder (top-level only), but 36 tests ran")
 
-		// This reproduces the exact issue: 
+		// This reproduces the exact issue:
 		// - User sees "Total: 36" in summary
 		// - But only 6 test names would be displayed
 		// - pkg3 would show completely blank (no tests)
@@ -250,7 +250,7 @@ func TestSubtestDisplayRegression(t *testing.T) {
 		// The pattern is TestXXX with all actual tests as subtests
 		testCases := []string{
 			"TestIntegration/database_connection",
-			"TestIntegration/api_authentication", 
+			"TestIntegration/api_authentication",
 			"TestIntegration/data_validation",
 			"TestIntegration/error_handling",
 			"TestIntegration/concurrent_access",
@@ -258,7 +258,7 @@ func TestSubtestDisplayRegression(t *testing.T) {
 
 		// Note: TestIntegration parent never gets a "run" event in some cases
 		// It only exists as a container for subtests
-		
+
 		for _, tc := range testCases {
 			model.processEvent(&types.TestEvent{
 				Action:  "run",
@@ -298,10 +298,10 @@ func TestSubtestDisplayRegression(t *testing.T) {
 		// Generate display to verify it's blank
 		display := model.displayPackageResult(pkgResult)
 		assert.Contains(t, display, pkg, "Package name should be shown")
-		
+
 		// BUG: The display would show "No tests" or be blank
 		// even though 5 tests actually ran and passed
-		assert.NotContains(t, display, "database_connection", 
+		assert.NotContains(t, display, "database_connection",
 			"BUG: Subtest names are not displayed")
 	})
 
@@ -320,9 +320,9 @@ func TestSubtestDisplayRegression(t *testing.T) {
 		// Simulate a realistic test run similar to Atmos
 		// This reproduces the "1700+ tests but only 35 displayed" issue
 		type packageInfo struct {
-			pkg           string
-			topLevel      int
-			subtests      int
+			pkg      string
+			topLevel int
+			subtests int
 		}
 
 		packages := []packageInfo{
@@ -424,7 +424,7 @@ func TestSubtestDisplayRegression(t *testing.T) {
 		assert.Greater(t, totalTests, 400, "Should have 400+ total tests including subtests")
 		assert.Equal(t, totalTests, model.passCount, "All tests should pass")
 		assert.Equal(t, 22, displayableTests, "Only top-level tests are displayable")
-		assert.Equal(t, 22, actuallyDisplayed, 
+		assert.Equal(t, 22, actuallyDisplayed,
 			"BUG: Only 22 test names would be displayed out of 400+ tests!")
 
 		// This reproduces the core issue:
@@ -452,7 +452,7 @@ func TestTUIPackageWithNoTestsDisplay(t *testing.T) {
 		Action:  "start",
 		Package: "github.com/example/utils",
 	})
-	
+
 	model.processEvent(&types.TestEvent{
 		Action:  "output",
 		Package: "github.com/example/utils",
@@ -467,7 +467,7 @@ func TestTUIPackageWithNoTestsDisplay(t *testing.T) {
 
 	pkgResult := model.packageResults["github.com/example/utils"]
 	require.NotNil(t, pkgResult)
-	
+
 	display := model.displayPackageResult(pkgResult)
 	assert.Contains(t, display, "No tests", "Should show 'No tests' for packages without test files")
 }

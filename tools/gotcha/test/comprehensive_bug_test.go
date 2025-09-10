@@ -49,7 +49,7 @@ func TestSuite1_Skip1(t *testing.T) {
 	t.Skip("This test is skipped")
 }
 `
-	err := os.WriteFile(testFile1, []byte(testContent1), 0644)
+	err := os.WriteFile(testFile1, []byte(testContent1), 0o644)
 	require.NoError(t, err)
 
 	testFile2 := filepath.Join(tempDir, "suite2_test.go")
@@ -66,7 +66,7 @@ func TestSuite2_Fail1(t *testing.T) { t.Error("fail") }
 func TestSuite2_Fail2(t *testing.T) { t.Fatal("fail") }
 func TestSuite2_Skip1(t *testing.T) { t.Skip("skip") }
 `
-	err = os.WriteFile(testFile2, []byte(testContent2), 0644)
+	err = os.WriteFile(testFile2, []byte(testContent2), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
@@ -74,7 +74,7 @@ func TestSuite2_Skip1(t *testing.T) { t.Skip("skip") }
 	goModContent := `module testpkg
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent), 0644)
+	err = os.WriteFile(goModFile, []byte(goModContent), 0o644)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with exact user configuration
@@ -94,14 +94,14 @@ filter:
     - ".*"
   exclude: []
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build the gotcha binary
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test-binary")
 	gotchaDir, err := filepath.Abs("..")
 	require.NoError(t, err)
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -112,7 +112,7 @@ filter:
 	// Run gotcha
 	cmd := exec.Command(gotchaBinary, ".")
 	cmd.Dir = tempDir
-	
+
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -120,10 +120,10 @@ filter:
 	_ = cmd.Run() // Ignore error from failed tests
 
 	output := stderr.String() + stdout.String()
-	
+
 	t.Run("show_failed_filter", func(t *testing.T) {
 		t.Logf("Full output:\n%s", output)
-		
+
 		// Count individual test displays
 		lines := strings.Split(output, "\n")
 		var displayedTests []string
@@ -139,12 +139,12 @@ filter:
 				}
 			}
 		}
-		
+
 		t.Logf("Individual tests displayed: %d", len(displayedTests))
 		for _, test := range displayedTests {
 			t.Logf("  %s", test)
 		}
-		
+
 		// Count by type
 		var passCount, failCount, skipCount int
 		for _, test := range displayedTests {
@@ -156,21 +156,21 @@ filter:
 				skipCount++
 			}
 		}
-		
+
 		// BUG CHECK: With show:failed, NO passing tests should be displayed individually
 		if passCount > 0 {
 			t.Errorf("BUG: %d passing tests shown individually with 'show: failed' filter", passCount)
 		}
-		
+
 		// Failed and skipped tests SHOULD be shown
 		assert.Equal(t, 3, failCount, "All 3 failed tests should be shown")
 		assert.Equal(t, 2, skipCount, "All 2 skipped tests should be shown")
-		
+
 		// Check for the "All X tests passed" summary line (should not appear with show:failed)
 		if strings.Contains(output, "All") && strings.Contains(output, "tests passed") {
 			t.Error("BUG: Shows 'All X tests passed' summary with 'show: failed' filter")
 		}
-		
+
 		// Check if it shows "X tests failed, Y passed" which is acceptable
 		if strings.Contains(output, "tests failed") && strings.Contains(output, "passed") {
 			t.Log("Shows 'X tests failed, Y passed' summary - this is acceptable")
@@ -185,17 +185,17 @@ filter:
 			t.Errorf("test-results.json not created: %v", err)
 			return
 		}
-		
+
 		var results map[string]interface{}
 		err = json.Unmarshal(data, &results)
 		require.NoError(t, err, "test-results.json should be valid JSON")
-		
+
 		// The JSON should contain ALL tests, not just filtered ones
 		resultsStr := string(data)
 		assert.Contains(t, resultsStr, "TestSuite1_Pass1", "JSON should contain all tests including passed")
 		assert.Contains(t, resultsStr, "TestSuite1_Fail1", "JSON should contain failed tests")
 		assert.Contains(t, resultsStr, "TestSuite1_Skip1", "JSON should contain skipped tests")
-		
+
 		t.Logf("test-results.json contains %d bytes of data", len(data))
 	})
 
@@ -203,24 +203,24 @@ filter:
 		// Check if cache.yaml was created/updated
 		cacheDir := filepath.Join(tempDir, ".gotcha")
 		cacheFile := filepath.Join(cacheDir, "cache.yaml")
-		
+
 		if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
 			t.Error("BUG: cache.yaml was not created")
 			return
 		}
-		
+
 		data, err := os.ReadFile(cacheFile)
 		require.NoError(t, err)
-		
+
 		var cache map[string]interface{}
 		err = yaml.Unmarshal(data, &cache)
 		require.NoError(t, err, "cache.yaml should be valid YAML")
-		
+
 		// Check if it contains test discovery information
 		if discovery, ok := cache["discovery"].(map[string]interface{}); ok {
 			if testCounts, ok := discovery["test_counts"].(map[string]interface{}); ok {
 				t.Logf("cache.yaml contains test_counts: %v", testCounts)
-				
+
 				// Should have cached the test count for current pattern
 				if pkgInfo, ok := testCounts["."].(map[string]interface{}); ok {
 					if count, ok := pkgInfo["count"].(int); ok {
@@ -233,7 +233,7 @@ filter:
 		} else {
 			t.Error("cache.yaml missing discovery section")
 		}
-		
+
 		t.Logf("cache.yaml contents:\n%s", string(data))
 	})
 
@@ -263,12 +263,12 @@ func TestC(t *testing.T) {}
 func TestD(t *testing.T) {}
 func TestE(t *testing.T) {}
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goModFile := filepath.Join(tempDir, "go.mod")
-	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0644)
+	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0o644)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with show: failed
@@ -277,13 +277,13 @@ func TestE(t *testing.T) {}
 show: failed
 packages: ["."]
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build and run gotcha
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test")
 	gotchaDir, _ := filepath.Abs("..")
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -291,7 +291,7 @@ packages: ["."]
 
 	cmd := exec.Command(gotchaBinary, ".")
 	cmd.Dir = tempDir
-	
+
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -302,13 +302,13 @@ packages: ["."]
 	outputStr := output.String()
 	t.Logf("Output with all passing and show:failed:\n%s", outputStr)
 
-	// THE BUG: With show:failed and all tests passing, 
+	// THE BUG: With show:failed and all tests passing,
 	// it should NOT show "All 5 tests passed"
 	if strings.Contains(outputStr, "All") && strings.Contains(outputStr, "tests passed") {
 		t.Error("BUG CONFIRMED: Shows 'All X tests passed' even with show:failed when all tests pass")
 		t.Log("Expected behavior: With show:failed, when all tests pass, don't show the 'All X tests passed' line")
 	}
-	
+
 	// Should still show the summary statistics
 	assert.Contains(t, outputStr, "Test Results:", "Should show test results summary")
 	assert.Contains(t, outputStr, "Passed:", "Should show passed count in summary")

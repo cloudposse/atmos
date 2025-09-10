@@ -26,7 +26,7 @@ import (
 func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, error) {
 	logger.Debug("Confirmed running in TUI mode")
 	logger.Debug("Starting interactive TUI mode")
-	
+
 	// Write to debug file if specified
 	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
@@ -57,7 +57,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 
 	// Create Bubble Tea program options
 	var opts []tea.ProgramOption
-	
+
 	// Check if we're in test mode (for AI or CI testing)
 	if os.Getenv("GOTCHA_TEST_MODE") == "true" {
 		// Use WithoutRenderer for headless testing
@@ -66,7 +66,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 		opts = append(opts, tea.WithInput(nil))
 		logger.Debug("Running in test mode with WithoutRenderer and no input")
 	}
-	
+
 	// Create Bubble Tea program without AltScreen to allow normal terminal scrolling
 	p := tea.NewProgram(&model, opts...)
 
@@ -80,7 +80,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 	var exitCode int
 	if m, ok := finalModel.(*tui.TestModel); ok {
 		exitCode = m.GetExitCode()
-		
+
 		// Print final summary
 		summary := m.GenerateFinalSummary()
 		if summary != "" {

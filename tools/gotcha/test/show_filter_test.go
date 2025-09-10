@@ -49,12 +49,12 @@ func TestSkip1(t *testing.T) {
 	t.Skip("This test is skipped")
 }
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goModFile := filepath.Join(tempDir, "go.mod")
-	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0644)
+	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0o644)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with show: failed
@@ -64,13 +64,13 @@ show: failed
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build gotcha
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test")
 	gotchaDir, _ := filepath.Abs("..")
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -79,7 +79,7 @@ packages:
 	// Run gotcha
 	cmd := exec.Command(gotchaBinary, ".")
 	cmd.Dir = tempDir
-	
+
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -132,23 +132,23 @@ packages:
 	}
 
 	// THE BUG: With show:failed, individual passing test lines should NOT be displayed
-	assert.Equal(t, 0, len(individualPassingTests), 
+	assert.Equal(t, 0, len(individualPassingTests),
 		"BUG: Individual passing test lines (✔ TestPassX) should NOT be shown with show:failed filter")
-	
+
 	// Failed and skipped individual test lines SHOULD be displayed
-	assert.Equal(t, 2, len(individualFailingTests), 
+	assert.Equal(t, 2, len(individualFailingTests),
 		"Individual failing test lines should be shown with show:failed")
-	assert.Equal(t, 1, len(individualSkippedTests), 
+	assert.Equal(t, 1, len(individualSkippedTests),
 		"Individual skipped test lines should be shown with show:failed")
 
 	// Verify that summary lines ARE shown (this is correct behavior)
-	assert.Contains(t, outputStr, "tests failed", 
+	assert.Contains(t, outputStr, "tests failed",
 		"Summary line 'X tests failed, Y passed' should be shown regardless of filter")
-	assert.Contains(t, outputStr, "Test Results:", 
+	assert.Contains(t, outputStr, "Test Results:",
 		"Test Results summary should be shown regardless of filter")
-	assert.Contains(t, outputStr, "Passed:", 
+	assert.Contains(t, outputStr, "Passed:",
 		"Passed count in summary should be shown regardless of filter")
-	assert.Contains(t, outputStr, "Failed:", 
+	assert.Contains(t, outputStr, "Failed:",
 		"Failed count in summary should be shown regardless of filter")
 }
 
@@ -167,12 +167,12 @@ func TestPass2(t *testing.T) {}
 func TestFail1(t *testing.T) { t.Fatal("fail") }
 func TestSkip1(t *testing.T) { t.Skip("skip") }
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goModFile := filepath.Join(tempDir, "go.mod")
-	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0644)
+	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0o644)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with show: all
@@ -182,13 +182,13 @@ show: all
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build and run gotcha
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test")
 	gotchaDir, _ := filepath.Abs("..")
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -196,7 +196,7 @@ packages:
 
 	cmd := exec.Command(gotchaBinary, ".")
 	cmd.Dir = tempDir
-	
+
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -210,12 +210,12 @@ packages:
 	assert.Contains(t, outputStr, "✔", "Should show passing tests with show:all")
 	assert.Contains(t, outputStr, "✘", "Should show failing tests with show:all")
 	assert.Contains(t, outputStr, "⊘", "Should show skipped tests with show:all")
-	
+
 	// Count individual test displays
 	passCount := 0
 	failCount := 0
 	skipCount := 0
-	
+
 	lines := strings.Split(outputStr, "\n")
 	for _, line := range lines {
 		if strings.Contains(line, "✔") && strings.Contains(line, "TestPass") {
@@ -228,7 +228,7 @@ packages:
 			skipCount++
 		}
 	}
-	
+
 	assert.Equal(t, 2, passCount, "Should show 2 individual passing tests with show:all")
 	assert.Equal(t, 1, failCount, "Should show 1 individual failing test with show:all")
 	assert.Equal(t, 1, skipCount, "Should show 1 individual skipped test with show:all")

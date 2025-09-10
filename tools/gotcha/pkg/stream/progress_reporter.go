@@ -9,30 +9,30 @@ import (
 // It buffers all output and only shows a progress bar during execution.
 type ProgressReporter struct {
 	mu sync.Mutex
-	
+
 	// Progress tracking
 	totalTests     int
 	completedTests int
 	passedTests    int
 	failedTests    int
 	skippedTests   int
-	
+
 	// Package tracking
 	totalPackages     int
 	completedPackages int
 	activePackage     string
-	
+
 	// Timing
 	startTime time.Time
-	
+
 	// Buffered results for final display
 	packageResults []*PackageResult
-	
+
 	// Configuration
 	showFilter     string
 	testFilter     string
 	verbosityLevel string
-	
+
 	// Progress callback for UI updates
 	onProgressUpdate func(completed, total int, activePackage string, elapsed time.Duration)
 }
@@ -59,10 +59,10 @@ func (r *ProgressReporter) SetProgressCallback(callback func(completed, total in
 func (r *ProgressReporter) OnPackageStart(pkg *PackageResult) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	r.totalPackages++
 	r.activePackage = pkg.Package
-	
+
 	// Count tests in this package for progress tracking
 	testCount := 0
 	for _, test := range pkg.Tests {
@@ -70,7 +70,7 @@ func (r *ProgressReporter) OnPackageStart(pkg *PackageResult) {
 		testCount += len(test.Subtests)
 	}
 	r.totalTests += testCount
-	
+
 	r.notifyProgress()
 }
 
@@ -78,10 +78,10 @@ func (r *ProgressReporter) OnPackageStart(pkg *PackageResult) {
 func (r *ProgressReporter) OnPackageComplete(pkg *PackageResult) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	r.completedPackages++
 	r.packageResults = append(r.packageResults, pkg)
-	
+
 	// Count test results
 	for _, test := range pkg.Tests {
 		r.updateTestCounts(test)
@@ -89,12 +89,12 @@ func (r *ProgressReporter) OnPackageComplete(pkg *PackageResult) {
 			r.updateTestCounts(subtest)
 		}
 	}
-	
+
 	// Clear active package if it was this one
 	if r.activePackage == pkg.Package {
 		r.activePackage = ""
 	}
-	
+
 	r.notifyProgress()
 }
 
@@ -121,7 +121,7 @@ func (r *ProgressReporter) OnTestStart(pkg *PackageResult, test *TestResult) {
 func (r *ProgressReporter) OnTestComplete(pkg *PackageResult, test *TestResult) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	r.updateTestCounts(test)
 	r.notifyProgress()
 }
@@ -130,7 +130,7 @@ func (r *ProgressReporter) OnTestComplete(pkg *PackageResult, test *TestResult) 
 func (r *ProgressReporter) UpdateProgress(completed, total int, elapsed time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	r.completedTests = completed
 	r.totalTests = total
 	r.notifyProgress()
@@ -140,7 +140,7 @@ func (r *ProgressReporter) UpdateProgress(completed, total int, elapsed time.Dur
 func (r *ProgressReporter) SetEstimatedTotal(total int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	r.totalTests = total
 	r.notifyProgress()
 }
@@ -159,16 +159,16 @@ func (r *ProgressReporter) Finalize(passed, failed, skipped int, elapsed time.Du
 	r.mu.Lock()
 	packageResults := r.packageResults
 	r.mu.Unlock()
-	
+
 	// Display all package results using StreamReporter for consistent formatting
 	streamReporter := NewStreamReporter(r.showFilter, r.testFilter, r.verbosityLevel)
 	for _, pkg := range packageResults {
 		streamReporter.OnPackageComplete(pkg)
 	}
-	
+
 	// Display the final summary with colors
 	streamReporter.Finalize(passed, failed, skipped, elapsed)
-	
+
 	// Return empty string since we've already written to stderr
 	return ""
 }

@@ -71,14 +71,14 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 			config.ShowFilter = "all"
 		}
 	}
-	
+
 	// Log the show filter value for debugging config issues
-	logger.Debug("ShowFilter configuration", 
-		"showFilter", config.ShowFilter, 
-		"viperValue", viper.GetString("show"), 
+	logger.Debug("ShowFilter configuration",
+		"showFilter", config.ShowFilter,
+		"viperValue", viper.GetString("show"),
 		"flagChanged", cmd.Flags().Changed("show"),
 		"configFile", viper.ConfigFileUsed())
-	
+
 	// Get other filter patterns from flags
 	config.IncludePatterns, _ = cmd.Flags().GetString("include")
 	config.ExcludePatterns, _ = cmd.Flags().GetString("exclude")
@@ -92,19 +92,19 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 			config.Format = "terminal"
 		}
 	}
-	
+
 	if cmd.Flags().Changed("output") {
 		config.OutputFile, _ = cmd.Flags().GetString("output")
 	} else {
 		config.OutputFile = viper.GetString("output")
 	}
-	
+
 	if cmd.Flags().Changed("alert") {
 		config.Alert, _ = cmd.Flags().GetBool("alert")
 	} else {
 		config.Alert = viper.GetBool("alert")
 	}
-	
+
 	config.VerbosityLevel, _ = cmd.Flags().GetString("verbosity")
 
 	// Get coverage settings - use flag value only if explicitly set, otherwise use viper
@@ -113,13 +113,13 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 	} else {
 		config.Cover = viper.GetBool("cover")
 	}
-	
+
 	if cmd.Flags().Changed("coverprofile") {
 		config.CoverProfile, _ = cmd.Flags().GetString("coverprofile")
 	} else {
 		config.CoverProfile = viper.GetString("coverprofile")
 	}
-	
+
 	if cmd.Flags().Changed("coverpkg") {
 		config.CoverPkg, _ = cmd.Flags().GetString("coverpkg")
 	} else {

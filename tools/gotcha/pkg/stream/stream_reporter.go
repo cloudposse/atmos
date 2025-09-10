@@ -18,12 +18,12 @@ type StreamReporter struct {
 	testFilter     string
 	verbosityLevel string
 	startTime      time.Time
-	
+
 	// Track packages we've already displayed to avoid duplicates
 	displayedPackages map[string]bool
-	
+
 	// Track package coverage for total calculation
-	packageCoverages         []float64
+	packageCoverages          []float64
 	packageStatementCoverages []float64
 	packageFunctionCoverages  []float64
 }
@@ -55,7 +55,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 		return
 	}
 	r.displayedPackages[pkg.Package] = true
-	
+
 	// Display package header - ▶ icon in white, package name in cyan
 	fmt.Fprintf(os.Stderr, "▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
@@ -104,7 +104,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 		case "skip":
 			skippedCount++
 		}
-		
+
 		// Count all subtests
 		for _, subtest := range test.Subtests {
 			switch subtest.Status {
@@ -120,12 +120,12 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 
 	// Add blank line before tests section
 	fmt.Fprintln(os.Stderr)
-	
+
 	// Display tests based on show filter
 	testsDisplayed := false
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
-		
+
 		// For tests without subtests, display normally
 		if len(test.Subtests) == 0 {
 			if r.shouldShowTestStatus(test.Status) {
@@ -152,14 +152,14 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 		if testsDisplayed {
 			fmt.Fprintf(os.Stderr, "\n")
 		}
-		
+
 		var summaryLine string
 		coverageStr := ""
-		
+
 		// Build coverage string with both statement and function coverage
 		if pkg.StatementCoverage != "" && pkg.StatementCoverage != "0.0%" {
 			if pkg.FunctionCoverage != "" && pkg.FunctionCoverage != "N/A" {
-				coverageStr = fmt.Sprintf(" (statements: %s, functions: %s)", 
+				coverageStr = fmt.Sprintf(" (statements: %s, functions: %s)",
 					pkg.StatementCoverage, pkg.FunctionCoverage)
 			} else {
 				// Only statement coverage available from standard Go test output
@@ -317,7 +317,7 @@ func parseCoverageValue(coverage string) float64 {
 	coverage = strings.TrimSuffix(coverage, " of statements")
 	coverage = strings.TrimSuffix(coverage, "%")
 	coverage = strings.TrimSpace(coverage)
-	
+
 	// Parse the numeric value
 	value, err := strconv.ParseFloat(coverage, 64)
 	if err != nil {
@@ -334,7 +334,7 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	}
 
 	var output strings.Builder
-	
+
 	output.WriteString("\n\n")
 	output.WriteString(fmt.Sprintf("%s\n", tui.StatsHeaderStyle.Render("Test Results:")))
 	// Right-align numbers for better readability
@@ -342,7 +342,7 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	output.WriteString(fmt.Sprintf("  %s Failed:  %5d\n", tui.FailStyle.Render(tui.CheckFail), failed))
 	output.WriteString(fmt.Sprintf("  %s Skipped: %5d\n", tui.SkipStyle.Render(tui.CheckSkip), skipped))
 	output.WriteString(fmt.Sprintf("  Total:     %5d\n", total))
-	
+
 	// Add coverage calculations for both statement and function coverage
 	if len(r.packageStatementCoverages) > 0 {
 		// Calculate statement coverage average
@@ -351,7 +351,7 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 			totalStatementCoverage += cov
 		}
 		avgStatementCoverage := totalStatementCoverage / float64(len(r.packageStatementCoverages))
-		
+
 		// Calculate function coverage average if available
 		if len(r.packageFunctionCoverages) > 0 {
 			totalFunctionCoverage := 0.0
@@ -359,7 +359,7 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 				totalFunctionCoverage += cov
 			}
 			avgFunctionCoverage := totalFunctionCoverage / float64(len(r.packageFunctionCoverages))
-			
+
 			// Show both types
 			output.WriteString(fmt.Sprintf("  Statement Coverage: %5.1f%%\n", avgStatementCoverage))
 			output.WriteString(fmt.Sprintf("  Function Coverage:  %5.1f%%\n", avgFunctionCoverage))
@@ -378,17 +378,17 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 		avgCoverage := totalCoverage / float64(len(r.packageCoverages))
 		output.WriteString(fmt.Sprintf("  Statement Coverage: %5.1f%%\n", avgCoverage))
 	}
-	
+
 	output.WriteString("\n")
 	output.WriteString(fmt.Sprintf("%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds()))
-	
+
 	// Write to stderr and return
 	fmt.Fprint(os.Stderr, output.String())
-	
+
 	// Ensure output is flushed
 	if config.IsCI() {
 		os.Stderr.Sync()
 	}
-	
+
 	return output.String()
 }

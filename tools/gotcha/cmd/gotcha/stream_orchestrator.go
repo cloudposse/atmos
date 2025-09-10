@@ -37,22 +37,22 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 
 	// Step 5: Execute tests based on mode
 	var exitCode int
-	
+
 	// Check for force-TUI mode
 	forceTUI := os.Getenv("GOTCHA_FORCE_TUI") == "true"
 	isTTY := utils.IsTTY()
-	
+
 	// Log mode selection decision
 	logger.Debug("Mode selection",
 		"format", config.Format,
 		"isTTY", isTTY,
 		"ciMode", config.CIMode,
 		"forceTUI", forceTUI)
-	
+
 	// Support both "terminal" and "stream" formats for TUI mode (backward compatibility)
 	// "stream" was the original format name for TUI with progress bar
 	isTUIFormat := config.Format == "terminal" || config.Format == "stream"
-	
+
 	if (isTUIFormat && isTTY && !config.CIMode) || forceTUI {
 		// Interactive TUI mode
 		logger.Debug("Entering TUI mode",
@@ -68,7 +68,7 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 		exitCode, err = runStreamInteractive(cmd, config, logger)
 	} else {
 		// CI or non-interactive mode
-		
+
 		// Log when terminal/stream format is downgraded due to no TTY
 		if isTUIFormat && !isTTY && !config.CIMode {
 			logger.Info("Terminal format requested but no TTY detected, using non-interactive mode",
@@ -79,7 +79,7 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 				"format", config.Format,
 				"ciMode", config.CIMode)
 		}
-		
+
 		logger.Debug("Entering non-TUI mode",
 			"isTTY", isTTY,
 			"format", config.Format,

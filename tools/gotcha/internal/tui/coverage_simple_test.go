@@ -95,16 +95,16 @@ func TestTUI_ShowFailedFilterShowsOnlyFailedAndSkippedTests(t *testing.T) {
 	output := model.displayPackageResult(pkg)
 
 	// With show="failed", only failed and skipped tests should be shown
-	
+
 	// Failed tests SHOULD be shown
 	assert.Contains(t, output, "TestFail", "Failed tests should be displayed with failed filter")
-	
+
 	// Skipped tests SHOULD be shown
 	assert.Contains(t, output, "TestSkip", "Skipped tests should be displayed with failed filter")
-	
+
 	// Passed tests should NOT be shown
 	assert.NotContains(t, output, "TestPass", "Passed tests should NOT be displayed with failed filter")
-	
+
 	// Package summary with coverage should always be displayed
 	assert.Contains(t, output, "65.0% coverage", "Package summary with coverage should always be displayed")
 }

@@ -16,7 +16,7 @@ import (
 // TestTUIProgressBar_FormatTerminal tests that the progress bar appears with format:terminal
 func TestTUIProgressBar_FormatTerminal(t *testing.T) {
 	t.Skip("TUI test requires manual verification - cannot capture TUI output in test")
-	
+
 	tempDir := t.TempDir()
 
 	// Create a slow test that gives us time to see the progress bar
@@ -40,12 +40,12 @@ func TestSlow3(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 }
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goModFile := filepath.Join(tempDir, "go.mod")
-	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0644)
+	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0o644)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with format: terminal (for TUI with progress bar)
@@ -55,13 +55,13 @@ show: all
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build gotcha
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test")
 	gotchaDir, _ := filepath.Abs("..")
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -71,7 +71,7 @@ packages:
 	cmd := exec.Command(gotchaBinary, ".")
 	cmd.Dir = tempDir
 	cmd.Env = append(os.Environ(), "GOTCHA_FORCE_TUI=true")
-	
+
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -101,12 +101,12 @@ func TestA(t *testing.T) {}
 func TestB(t *testing.T) {}
 func TestC(t *testing.T) {}
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o644)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goModFile := filepath.Join(tempDir, "go.mod")
-	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0644)
+	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), 0o644)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with format: stream (NO progress bar)
@@ -116,13 +116,13 @@ show: all
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	err = os.WriteFile(configFile, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Build gotcha
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test")
 	gotchaDir, _ := filepath.Abs("..")
-	
+
 	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
@@ -131,7 +131,7 @@ packages:
 	// Run normally (stream mode)
 	cmd := exec.Command(gotchaBinary, ".")
 	cmd.Dir = tempDir
-	
+
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -145,9 +145,9 @@ packages:
 	// In stream mode, we should see the package header and test results
 	assert.Contains(t, outputStr, "▶", "Should show package header")
 	assert.Contains(t, outputStr, "Test Results:", "Should show test results summary")
-	
+
 	// But we should NOT see TUI-specific elements like spinner or progress percentage
-	// (Note: We can't definitively test for absence of progress bar since it's 
+	// (Note: We can't definitively test for absence of progress bar since it's
 	// overwritten in TUI mode, but in stream mode the output is simpler)
 }
 

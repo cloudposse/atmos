@@ -516,15 +516,15 @@ func (m *TestModel) DebugPackageTracking() {
 			fmt.Fprintf(f, "Total packages in packageOrder: %d\n", len(m.packageOrder))
 			fmt.Fprintf(f, "Total packages in packageResults: %d\n", len(m.packageResults))
 			fmt.Fprintf(f, "Total packages in displayedPackages: %d\n", len(m.displayedPackages))
-			fmt.Fprintf(f, "Total tests counted: passed=%d, failed=%d, skipped=%d (total=%d)\n", 
+			fmt.Fprintf(f, "Total tests counted: passed=%d, failed=%d, skipped=%d (total=%d)\n",
 				m.passCount, m.failCount, m.skipCount, m.passCount+m.failCount+m.skipCount)
-			
+
 			// List packages in order
 			fmt.Fprintf(f, "\nPackages in packageOrder:\n")
 			for i, pkg := range m.packageOrder {
 				fmt.Fprintf(f, "  %d. %s\n", i+1, pkg)
 			}
-			
+
 			// Find packages in results but not in order (this would be the bug)
 			fmt.Fprintf(f, "\nPackages in results but NOT in order (BUG if any):\n")
 			bugCount := 0
@@ -546,7 +546,7 @@ func (m *TestModel) DebugPackageTracking() {
 			} else {
 				fmt.Fprintf(f, "  FOUND %d UNTRACKED PACKAGES!\n", bugCount)
 			}
-			
+
 			fmt.Fprintf(f, "=====================================\n")
 			f.Close()
 		}

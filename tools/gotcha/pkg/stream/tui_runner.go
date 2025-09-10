@@ -23,11 +23,11 @@ type TUIRunner struct {
 	verbosityLevel string
 	estimatedTotal int
 	alert          bool
-	
+
 	// Bubble Tea components
 	spinner  spinner.Model
 	progress progress.Model
-	
+
 	// State
 	startTime      time.Time
 	completedTests int
@@ -45,13 +45,13 @@ func NewTUIRunner(testPackages []string, testArgs, outputFile, coverProfile, sho
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
-	
+
 	// Create progress bar with custom style
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithoutPercentage(),
 	)
-	
+
 	return &TUIRunner{
 		testPackages:   testPackages,
 		testArgs:       testArgs,
@@ -72,7 +72,7 @@ func NewTUIRunner(testPackages []string, testArgs, outputFile, coverProfile, sho
 func (r *TUIRunner) Init() tea.Cmd {
 	return tea.Batch(
 		r.spinner.Tick,
-		tickCmd(),  // Start polling for progress updates
+		tickCmd(), // Start polling for progress updates
 		r.runTests(),
 	)
 }
@@ -82,46 +82,46 @@ func (r *TUIRunner) runTests() tea.Cmd {
 	return func() tea.Msg {
 		// Build the go test command
 		args := []string{"test", "-json"}
-		
+
 		// Add coverage if requested
 		if r.coverProfile != "" {
 			args = append(args, fmt.Sprintf("-coverprofile=%s", r.coverProfile))
 		}
-		
+
 		// Add verbose flag
 		args = append(args, "-v")
-		
+
 		// Add test arguments
 		if r.testArgs != "" {
 			testArgsList := strings.Fields(r.testArgs)
 			args = append(args, testArgsList...)
 		}
-		
+
 		// Add packages
 		args = append(args, r.testPackages...)
-		
+
 		// Create the command
 		cmd := exec.Command("go", args...)
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			return testErrorMsg{err: err}
 		}
-		
+
 		// Pass through stderr to console
 		cmd.Stderr = os.Stderr
-		
+
 		// Start the command
 		if err := cmd.Start(); err != nil {
 			return testErrorMsg{err: err}
 		}
-		
+
 		// Create output file for JSON
 		jsonFile, err := os.Create(r.outputFile)
 		if err != nil {
 			return testErrorMsg{err: err}
 		}
 		defer jsonFile.Close()
-		
+
 		// Extract test filter from args
 		var testFilter string
 		for i := 0; i < len(args)-1; i++ {
@@ -130,10 +130,10 @@ func (r *TUIRunner) runTests() tea.Cmd {
 				break
 			}
 		}
-		
+
 		// Create progress reporter
 		progressReporter := NewProgressReporter(r.showFilter, testFilter, r.verbosityLevel)
-		
+
 		// Set callback to send progress updates
 		progressReporter.SetProgressCallback(func(completed, total int, activePackage string, elapsed time.Duration) {
 			// This will be called from the processor's goroutine
@@ -144,22 +144,22 @@ func (r *TUIRunner) runTests() tea.Cmd {
 			}
 			r.activePackage = activePackage
 		})
-		
+
 		// Create stream processor with progress reporter
 		processor := NewStreamProcessorWithReporter(jsonFile, progressReporter)
-		
+
 		// Process the stream
 		processErr := processor.ProcessStream(stdout)
-		
+
 		// Wait for command to complete
 		testErr := cmd.Wait()
-		
+
 		// Get final summary
 		processor.PrintSummary()
-		
+
 		// Don't store final output - StreamProcessor already printed it
 		// The ProgressReporter's Finalize returns empty string anyway
-		
+
 		// Determine exit code
 		if processErr != nil {
 			r.exitCode = 1
@@ -170,7 +170,7 @@ func (r *TUIRunner) runTests() tea.Cmd {
 				r.exitCode = 1
 			}
 		}
-		
+
 		return testCompleteMsg{exitCode: r.exitCode}
 	}
 }
@@ -185,39 +185,39 @@ func (r *TUIRunner) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			r.done = true
 			return r, tea.Quit
 		}
-		
+
 	case spinner.TickMsg:
 		if !r.done {
 			var cmd tea.Cmd
 			r.spinner, cmd = r.spinner.Update(msg)
 			return r, cmd
 		}
-		
+
 	case progress.FrameMsg:
 		if !r.done {
 			progressModel, cmd := r.progress.Update(msg)
 			r.progress = progressModel.(progress.Model)
 			return r, cmd
 		}
-		
+
 	case testCompleteMsg:
 		r.exitCode = msg.exitCode
 		r.done = true
 		return r, tea.Quit
-		
+
 	case testErrorMsg:
 		r.exitCode = 1
 		r.done = true
 		fmt.Fprintf(os.Stderr, "Error: %v\n", msg.err)
 		return r, tea.Quit
-		
+
 	case tickMsg:
 		// Poll for progress updates
 		if !r.done {
 			return r, tickCmd()
 		}
 	}
-	
+
 	return r, nil
 }
 
@@ -230,7 +230,7 @@ func (r *TUIRunner) View() string {
 		// Clear the progress line
 		return "\n"
 	}
-	
+
 	// Calculate progress
 	var progressPercent float64
 	if r.totalTests > 0 {
@@ -240,13 +240,13 @@ func (r *TUIRunner) View() string {
 			progressPercent = 1.0
 		}
 	}
-	
+
 	// Update progress bar percentage
 	r.progress.SetPercent(progressPercent)
-	
+
 	// Build status line components (everything on one line)
 	spin := r.spinner.View() + " "
-	
+
 	// Status text
 	var info string
 	if r.activePackage != "" {
@@ -259,10 +259,10 @@ func (r *TUIRunner) View() string {
 	} else {
 		info = fmt.Sprintf("%-*s", 57, "Starting tests...")
 	}
-	
+
 	// Progress bar
 	prog := r.progress.View()
-	
+
 	// Percentage and count
 	var percentage string
 	var testCount string
@@ -273,14 +273,14 @@ func (r *TUIRunner) View() string {
 		percentage = "   "
 		testCount = fmt.Sprintf("(%d)", r.completedTests)
 	}
-	
+
 	// Elapsed time
 	elapsed := time.Since(r.startTime)
 	timeStr := fmt.Sprintf("[%.1fs]", elapsed.Seconds())
-	
+
 	// Assemble complete status line
 	statusLine := spin + info + "  " + prog + " " + percentage + " " + testCount + "  " + timeStr
-	
+
 	return statusLine + "\n"
 }
 

@@ -59,7 +59,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		case "skip":
 			skippedCount++
 		}
-		
+
 		// Count all subtests
 		for _, subtest := range test.Subtests {
 			switch subtest.Status {
@@ -78,7 +78,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	testsDisplayed := false
 	for _, testName := range pkg.TestOrder {
 		test := pkg.Tests[testName]
-		
+
 		// For tests without subtests, display normally
 		if len(test.Subtests) == 0 {
 			if p.shouldShowTestStatus(test.Status) {
