@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	awsarn "github.com/aws/aws-sdk-go-v2/aws/arn"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -30,7 +31,7 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 
 	// Validate logs.
 	if err := v.ValidateLogsConfig(&config.Logs); err != nil {
-		return fmt.Errorf("%w: logs configuration validation failed: %v", errUtils.ErrInvalidAuthConfig, err)
+		return fmt.Errorf("logs configuration validation failed: %w", errors.Join(errUtils.ErrInvalidAuthConfig, err))
 	}
 
 	// Validate providers.
@@ -204,10 +205,6 @@ func (v *validator) validateSAMLProvider(provider *schema.Provider) error {
 
 // validateGitHubOIDCProvider validates GitHub OIDC provider configuration.
 func (v *validator) validateGitHubOIDCProvider(provider *schema.Provider) error {
-	if provider.Region == "" {
-		return fmt.Errorf("%w: region is required for GitHub OIDC provider", errUtils.ErrInvalidAuthConfig)
-	}
-
 	return nil
 }
 
@@ -247,8 +244,8 @@ func (v *validator) validateAssumeRoleIdentity(identity *schema.Identity) error 
 		return fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidAuthConfig)
 	}
 
-	if !strings.HasPrefix(roleArn, "arn:aws:iam::") {
-		return fmt.Errorf("%w: invalid role ARN format", errUtils.ErrInvalidAuthConfig)
+	if !awsarn.IsARN(roleArn) {
+		return fmt.Errorf("%w: invalid role ARN format %q", errUtils.ErrInvalidAuthConfig, roleArn)
 	}
 
 	return nil
