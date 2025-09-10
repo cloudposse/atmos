@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"fmt"
@@ -284,11 +284,9 @@ func TestArgumentParsingWithDashSeparator(t *testing.T) {
 				if dashPos+1 < len(tt.args) {
 					passthroughArgs = tt.args[dashPos+1:]
 				}
-			} else {
+			} else if len(tt.args) > 0 {
 				// No separator, all args are packages
-				if len(tt.args) > 0 {
-					testPackages = tt.args
-				}
+				testPackages = tt.args
 			}
 
 			// Default to ./... if no packages specified

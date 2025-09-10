@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	pkgErrors "github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 // newParseCmd creates the parse subcommand.
@@ -62,38 +63,75 @@ func newParseCmd(logger *log.Logger) *cobra.Command {
 	return parseCmd
 }
 
+// handleOutputFormat processes the output based on the specified format.
+func handleOutputFormat(format, outputFile string, jsonData []byte, summary *types.TestSummary, showFilter, verbosityLevel string, logger *log.Logger) error {
+	switch format {
+	case "terminal":
+		// For terminal output, replay the JSON events through StreamProcessor
+		// to get proper display with mini indicators for subtests
+		if err := replayWithStreamProcessor(jsonData, showFilter, verbosityLevel); err != nil {
+			// Fall back to simple output if replay fails
+			logger.Debug("Failed to replay with stream processor, using simple output", "error", err)
+			if err := output.HandleConsoleOutput(summary); err != nil {
+				return fmt.Errorf("failed to print terminal summary: %w", err)
+			}
+		}
+
+	case "json":
+		if err := output.WriteSummary(summary, "json", outputFile); err != nil {
+			return fmt.Errorf("failed to write JSON output: %w", err)
+		}
+		logger.Info("JSON summary written", "file", outputFile)
+
+	case FormatMarkdown:
+		if err := output.WriteSummary(summary, FormatMarkdown, outputFile); err != nil {
+			return fmt.Errorf("failed to write markdown output: %w", err)
+		}
+		logger.Info("Markdown summary written", "file", outputFile)
+
+	default:
+		return fmt.Errorf("%w: %s", pkgErrors.ErrUnsupportedFormat, format)
+	}
+	return nil
+}
+
+// bindParseFlags binds command flags to viper for environment variable support.
+func bindParseFlags(cmd *cobra.Command) {
+	_ = viper.BindPFlag(FlagFormat, cmd.Flags().Lookup(FlagFormat))
+	_ = viper.BindPFlag(FlagOutput, cmd.Flags().Lookup(FlagOutput))
+	_ = viper.BindPFlag(FlagCoverprofile, cmd.Flags().Lookup(FlagCoverprofile))
+	_ = viper.BindPFlag(FlagExcludeMocks, cmd.Flags().Lookup(FlagExcludeMocks))
+	_ = viper.BindPFlag(FlagGenerateSummary, cmd.Flags().Lookup(FlagGenerateSummary))
+	_ = viper.BindPFlag(FlagShow, cmd.Flags().Lookup(FlagShow))
+	_ = viper.BindPFlag(FlagVerbosity, cmd.Flags().Lookup(FlagVerbosity))
+	_ = viper.BindPFlag(FlagPostComment, cmd.Flags().Lookup(FlagPostComment))
+	_ = viper.BindEnv(FlagPostComment, "GOTCHA_POST_COMMENT", "POST_COMMENT")
+	_ = viper.BindPFlag(FlagGithubToken, cmd.Flags().Lookup(FlagGithubToken))
+	_ = viper.BindEnv(FlagGithubToken, "GITHUB_TOKEN")
+}
+
 // runParse executes the parse command.
 func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	inputFile := args[0]
 
 	// Bind flags to viper for environment variable support
-	_ = viper.BindPFlag("format", cmd.Flags().Lookup("format"))
-	_ = viper.BindPFlag("output", cmd.Flags().Lookup("output"))
-	_ = viper.BindPFlag("coverprofile", cmd.Flags().Lookup("coverprofile"))
-	_ = viper.BindPFlag("exclude-mocks", cmd.Flags().Lookup("exclude-mocks"))
-	_ = viper.BindPFlag("generate-summary", cmd.Flags().Lookup("generate-summary"))
-	_ = viper.BindPFlag("show", cmd.Flags().Lookup("show"))
-	_ = viper.BindPFlag("verbosity", cmd.Flags().Lookup("verbosity"))
-	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
-	_ = viper.BindEnv("post-comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
-	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
-	_ = viper.BindEnv("github-token", "GITHUB_TOKEN")
+	bindParseFlags(cmd)
 
 	// Get output settings
-	format := viper.GetString("format")
-	outputFile := viper.GetString("output")
-	coverprofile := viper.GetString("coverprofile")
-	excludeMocks := viper.GetBool("exclude-mocks")
-	generateSummary := viper.GetBool("generate-summary")
-	showFilter := viper.GetString("show")
-	verbosityLevel := viper.GetString("verbosity")
+	format := viper.GetString(FlagFormat)
+	outputFile := viper.GetString(FlagOutput)
+	coverprofile := viper.GetString(FlagCoverprofile)
+	excludeMocks := viper.GetBool(FlagExcludeMocks)
+	generateSummary := viper.GetBool(FlagGenerateSummary)
+	showFilter := viper.GetString(FlagShow)
+	verbosityLevel := viper.GetString(FlagVerbosity)
 
 	// Get CI settings
 	ciMode, _ := cmd.Flags().GetBool("ci")
-	postStrategy := viper.GetString("post-comment")
+	postStrategy := viper.GetString(FlagPostComment)
 
 	// Check if post-comment flag was actually set by the user
-	postFlagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
+	postFlagPresent := cmd.Flags().Changed(FlagPostComment) || viper.IsSet(FlagPostComment)
 
 	// Normalize the posting strategy
 	postStrategy = normalizePostingStrategy(postStrategy, postFlagPresent)
@@ -127,46 +165,22 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		switch format {
 		case "json":
 			outputFile = fmt.Sprintf("%s-summary.json", baseName)
-		case "markdown":
+		case FormatMarkdown:
 			outputFile = fmt.Sprintf("%s-summary.md", baseName)
 		default:
 			// Terminal output doesn't need a file
 		}
 	}
 
-	// Handle different output formats
-	switch format {
-	case "terminal":
-		// For terminal output, replay the JSON events through StreamProcessor
-		// to get proper display with mini indicators for subtests
-		if err := replayWithStreamProcessor(jsonData, showFilter, verbosityLevel); err != nil {
-			// Fall back to simple output if replay fails
-			logger.Debug("Failed to replay with stream processor, using simple output", "error", err)
-			if err := output.HandleConsoleOutput(summary); err != nil {
-				return fmt.Errorf("failed to print terminal summary: %w", err)
-			}
-		}
-
-	case "json":
-		if err := output.WriteSummary(summary, "json", outputFile); err != nil {
-			return fmt.Errorf("failed to write JSON output: %w", err)
-		}
-		logger.Info("JSON summary written", "file", outputFile)
-
-	case "markdown":
-		if err := output.WriteSummary(summary, "markdown", outputFile); err != nil {
-			return fmt.Errorf("failed to write markdown output: %w", err)
-		}
-		logger.Info("Markdown summary written", "file", outputFile)
-
-	default:
-		return fmt.Errorf("%w: %s", pkgErrors.ErrUnsupportedFormat, format)
+	// Handle output format
+	if err := handleOutputFormat(format, outputFile, jsonData, summary, showFilter, verbosityLevel, logger); err != nil {
+		return err
 	}
 
 	// Generate summary file if requested
 	if generateSummary {
 		summaryFile := "test-summary.md"
-		if err := output.WriteSummary(summary, "markdown", summaryFile); err != nil {
+		if err := output.WriteSummary(summary, FormatMarkdown, summaryFile); err != nil {
 			logger.Error("Failed to write test summary", "error", err)
 		} else {
 			logger.Info("Test summary written", "file", summaryFile)

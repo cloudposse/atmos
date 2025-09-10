@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"context"
@@ -26,20 +26,50 @@ var (
 	ErrCommentUUIDRequired = errors.New("comment UUID is required")
 )
 
+// exitError represents an error with a specific exit code.
+type exitError struct {
+	code int
+}
+
+func (e *exitError) Error() string {
+	return fmt.Sprintf("exit with code %d", e.code)
+}
+
+func (e *exitError) ExitCode() int {
+	return e.code
+}
+
 // Global logger instance with consistent styling.
 var globalLogger *log.Logger
 
 // configFile holds the path to the config file if specified via --config flag.
 var configFile string
 
-// initGlobalLogger initializes the global logger with solid background colors per PRD spec.
-func initGlobalLogger() {
-	// Get the current color profile to preserve it
-	profile := lipgloss.ColorProfile()
+// parseLogLevel parses a log level string and returns the corresponding log.Level.
+func parseLogLevel(levelStr string) log.Level {
+	if levelStr == "" {
+		levelStr = "info" // Default to info level
+	}
 
-	globalLogger = log.New(os.Stderr)
-	globalLogger.SetColorProfile(profile)
-	globalLogger.SetStyles(&log.Styles{
+	switch strings.ToLower(levelStr) {
+	case "debug":
+		return log.DebugLevel
+	case "info":
+		return log.InfoLevel
+	case "warn", "warning":
+		return log.WarnLevel
+	case "error":
+		return log.ErrorLevel
+	case "fatal":
+		return log.FatalLevel
+	default:
+		return log.InfoLevel
+	}
+}
+
+// getLoggerStyles returns the logger styles configuration.
+func getLoggerStyles() *log.Styles {
+	return &log.Styles{
 		Levels: map[log.Level]lipgloss.Style{
 			log.DebugLevel: lipgloss.NewStyle().
 				SetString("DEBUG").
@@ -76,32 +106,20 @@ func initGlobalLogger() {
 		// Optional: style the separator between key and value
 		Separator: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#999999")), // Medium gray for separator
-	})
-
-	// Get log level from configuration (flag > env > config > default)
-	logLevelStr := viper.GetString("log.level")
-	if logLevelStr == "" {
-		logLevelStr = "info" // Default to info level
 	}
+}
+
+// initGlobalLogger initializes the global logger with solid background colors per PRD spec.
+func initGlobalLogger() {
+	// Get the current color profile to preserve it
+	profile := lipgloss.ColorProfile()
+
+	globalLogger = log.New(os.Stderr)
+	globalLogger.SetColorProfile(profile)
+	globalLogger.SetStyles(getLoggerStyles())
 
 	// Parse and set log level
-	var logLevel log.Level
-	switch strings.ToLower(logLevelStr) {
-	case "debug":
-		logLevel = log.DebugLevel
-	case "info":
-		logLevel = log.InfoLevel
-	case "warn", "warning":
-		logLevel = log.WarnLevel
-	case "error":
-		logLevel = log.ErrorLevel
-	case "fatal":
-		logLevel = log.FatalLevel
-	default:
-		logLevel = log.InfoLevel
-	}
-
-	globalLogger.SetLevel(logLevel)
+	globalLogger.SetLevel(parseLogLevel(viper.GetString("log.level")))
 
 	// Show timestamp in non-CI environments
 	if !config.IsCI() {
@@ -193,7 +211,9 @@ experience with intuitive visual feedback and comprehensive test result analysis
 	rootCmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
 
 	// Bind log-level flag to viper
-	viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
+	if err := viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level")); err != nil {
+		globalLogger.Error("Failed to bind log-level flag", "error", err)
+	}
 
 	// Add flags from stream command to root for convenience
 	streamCmd := newStreamCmd(globalLogger)
@@ -224,9 +244,9 @@ experience with intuitive visual feedback and comprehensive test result analysis
 		// Check if it's a test failure error to get the correct exit code
 		var testErr *testFailureError
 		if errors.As(err, &testErr) {
-			// Don't return the error - we handle it with os.Exit
+			// Don't return the error - we handle it with exit code
 			// This prevents double error output
-			os.Exit(testErr.ExitCode())
+			return &exitError{code: testErr.ExitCode()}
 		}
 		return err
 	}

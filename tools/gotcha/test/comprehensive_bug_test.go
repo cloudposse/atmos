@@ -1,3 +1,8 @@
+//go:build gotcha_binary_integration
+// +build gotcha_binary_integration
+
+// DEPRECATED: This test builds the gotcha binary. Use testdata approach instead.
+// See parser_integration_test.go for the recommended pattern.
 package test
 
 import (

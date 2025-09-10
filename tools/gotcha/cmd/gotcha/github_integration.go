@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"context"
@@ -41,12 +41,12 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 	case "true", "yes", "1", "on":
 		return "always"
 	case "false", "no", "0", "off":
-		return "never"
+		return FlagNever
 	}
 
 	// Normalize named strategies to lowercase
 	switch lower {
-	case "always", "never", "adaptive", "on-failure", "on-skip":
+	case "always", FlagNever, "adaptive", "on-failure", "on-skip":
 		return lower
 	case "linux", "darwin", "windows":
 		return lower
@@ -54,7 +54,7 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 
 	// Default to "never" if empty (when flag is present but empty)
 	if strategy == "" && flagPresent {
-		return "never"
+		return FlagNever
 	}
 
 	// Default to "on-failure" if still empty (when no flag and no env)
@@ -64,6 +64,33 @@ func normalizePostingStrategy(strategy string, flagPresent bool) string {
 
 	// Return the original strategy if it's not a known value
 	return strategy
+}
+
+// checkForToolsDirectory checks if the parent directory is named "tools".
+func checkForToolsDirectory(dir string) (string, bool) {
+	parent := filepath.Dir(dir)
+	parentName := filepath.Base(parent)
+	currentName := filepath.Base(dir)
+	
+	if parentName == "tools" {
+		if globalLogger != nil {
+			globalLogger.Debug("Found tools directory", "parent", parent, "tool", currentName)
+		}
+		return currentName, true
+	}
+	return "", false
+}
+
+// checkForGitRoot checks if the directory contains a .git directory.
+func checkForGitRoot(dir string) (string, bool) {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		repoName := filepath.Base(dir)
+		if globalLogger != nil {
+			globalLogger.Debug("Found repository root", "dir", dir, "repo", repoName)
+		}
+		return repoName, true
+	}
+	return "", false
 }
 
 // detectProjectContext auto-detects the project context based on the current working directory.
@@ -80,33 +107,21 @@ func detectProjectContext() string {
 		globalLogger.Debug("Detecting project context", "cwd", cwd)
 	}
 
-	// Walk up the directory tree looking for a tools directory
+	// Walk up the directory tree
 	dir := cwd
 	for {
-		parent := filepath.Dir(dir)
-		parentName := filepath.Base(parent)
-		currentName := filepath.Base(dir)
-		
-		// Check if parent directory is named "tools"
-		if parentName == "tools" {
-			// We're in a tools subdirectory, return the tool name
-			if globalLogger != nil {
-				globalLogger.Debug("Found tools directory", "parent", parent, "tool", currentName)
-			}
-			return currentName
+		// Check for tools directory
+		if name, found := checkForToolsDirectory(dir); found {
+			return name
 		}
 		
-		// Check if we've found a .git directory (repository root)
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-			// Found the repository root
-			repoName := filepath.Base(dir)
-			if globalLogger != nil {
-				globalLogger.Debug("Found repository root", "dir", dir, "repo", repoName)
-			}
-			return repoName
+		// Check for git root
+		if name, found := checkForGitRoot(dir); found {
+			return name
 		}
 		
 		// Stop if we've reached the filesystem root
+		parent := filepath.Dir(dir)
 		if parent == dir {
 			break
 		}
@@ -143,7 +158,7 @@ func shouldPostCommentWithOS(strategy string, summary *types.TestSummary, goos s
 	switch normalizedStrategy {
 	case "always":
 		return true
-	case "never", "off", "":
+	case FlagNever, "off", "":
 		return false
 	case "onfailure":
 		return len(summary.Failed) > 0
@@ -167,39 +182,34 @@ func shouldPostCommentWithOS(strategy string, summary *types.TestSummary, goos s
 	}
 }
 
-// postGitHubComment posts a comment to GitHub PR if conditions are met.
-func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *log.Logger) error {
-	// Ensure GitHub token is available via viper (for the CI provider to use)
-	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
-	_ = viper.BindEnv("github-token", "GITHUB_TOKEN")
+// getCommentUUID retrieves and validates the comment UUID.
+func getCommentUUID(cmd *cobra.Command, logger *log.Logger) (string, error) {
+	_ = viper.BindPFlag(FlagCommentUUID, cmd.Flags().Lookup(FlagCommentUUID))
+	_ = viper.BindEnv(FlagCommentUUID, "GOTCHA_COMMENT_UUID", "COMMENT_UUID")
+	commentUUID := viper.GetString(FlagCommentUUID)
 
-	// Get the comment UUID
-	_ = viper.BindPFlag("comment-uuid", cmd.Flags().Lookup("comment-uuid"))
-	_ = viper.BindEnv("comment-uuid", "GOTCHA_COMMENT_UUID", "COMMENT_UUID")
-	commentUUID := viper.GetString("comment-uuid")
-
-	// Comment UUID is required for posting
 	if commentUUID == "" {
 		logger.Error("Comment UUID is required but not set",
 			"GOTCHA_COMMENT_UUID", config.GetCommentUUID(),
 			"COMMENT_UUID", viper.GetString("comment.uuid"))
-		return fmt.Errorf("%w", ErrCommentUUIDRequired)
+		return "", fmt.Errorf("%w", ErrCommentUUIDRequired)
 	}
 
 	logger.Debug("Comment UUID found", "uuid", commentUUID)
+	return commentUUID, nil
+}
 
-	// Get the job discriminator (for multi-job scenarios like matrix builds)
+// getDiscriminator builds the discriminator from project context and job discriminator.
+func getDiscriminator(logger *log.Logger) string {
 	_ = viper.BindEnv("job-discriminator", "GOTCHA_JOB_DISCRIMINATOR", "JOB_DISCRIMINATOR")
 	jobDiscriminator := viper.GetString("job-discriminator")
 	if jobDiscriminator != "" {
 		logger.Debug("Job discriminator found", "discriminator", jobDiscriminator)
 	}
 
-	// Get the project context (to distinguish between main project and tools)
 	_ = viper.BindEnv("project-context", "GOTCHA_PROJECT_CONTEXT", "PROJECT_CONTEXT")
 	projectContext := viper.GetString("project-context")
 
-	// Auto-detect project context if not explicitly set
 	if projectContext == "" {
 		projectContext = detectProjectContext()
 	}
@@ -208,19 +218,35 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		logger.Debug("Project context determined", "context", projectContext)
 	}
 
-	// Combine project context and job discriminator into compound discriminator
 	var discriminator string
-	if projectContext != "" && jobDiscriminator != "" {
+	switch {
+	case projectContext != "" && jobDiscriminator != "":
 		discriminator = fmt.Sprintf("%s/%s", projectContext, jobDiscriminator)
-	} else if projectContext != "" {
+	case projectContext != "":
 		discriminator = projectContext
-	} else if jobDiscriminator != "" {
+	case jobDiscriminator != "":
 		discriminator = jobDiscriminator
 	}
 
 	if discriminator != "" {
 		logger.Debug("Using compound discriminator", "discriminator", discriminator)
 	}
+
+	return discriminator
+}
+
+// postGitHubComment posts a comment to GitHub PR if conditions are met.
+func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *log.Logger) error {
+	// Ensure GitHub token is available via viper (for the CI provider to use)
+	_ = viper.BindPFlag(FlagGithubToken, cmd.Flags().Lookup(FlagGithubToken))
+	_ = viper.BindEnv(FlagGithubToken, "GITHUB_TOKEN")
+
+	commentUUID, err := getCommentUUID(cmd, logger)
+	if err != nil {
+		return err
+	}
+
+	discriminator := getDiscriminator(logger)
 
 	// Get the CI provider
 	provider := ci.DetectIntegration(logger)
