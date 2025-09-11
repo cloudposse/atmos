@@ -115,4 +115,13 @@ var (
 	ErrFailedToGetComponentFlag  = errors.New("failed to get component flag")
 	ErrFailedToGetStackFlag      = errors.New("failed to get stack flag")
 	ErrOPAPolicyViolations       = errors.New("opa policy violations")
+
+	// List package errors.
+	ErrGetLocalRepo          = errors.New("failed to get local repo")
+	ErrGetRepoInfo           = errors.New("failed to get repo info")
+	ErrInitCliConfig         = errors.New("failed to initialize CLI config")
+	ErrUploadDeployments     = errors.New("failed to upload deployments")
+	ErrExecuteDescribeStacks = errors.New("failed to execute describe stacks")
+	ErrProcessDeployments    = errors.New("failed to process deployments")
+	ErrParseFlag             = errors.New("failed to parse flag")
 )

@@ -2,7 +2,6 @@ package list
 
 import (
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -24,18 +23,6 @@ import (
 const (
 	componentHeader = "Component"
 	stackHeader     = "Stack"
-)
-
-// Static error definitions for deployment operations.
-var (
-	ErrGetLocalRepo          = errors.New("failed to get local repo")
-	ErrGetRepoInfo           = errors.New("failed to get repo info")
-	ErrInitCliConfig         = errors.New("failed to initialize CLI config")
-	ErrCreateAPIClient       = errors.New("failed to create API client")
-	ErrUploadDeployments     = errors.New("failed to upload deployments")
-	ErrExecuteDescribeStacks = errors.New("failed to execute describe stacks")
-	ErrProcessDeployments    = errors.New("failed to process deployments")
-	ErrParseFlag             = errors.New("failed to parse flag")
 )
 
 // processComponentConfig processes a single component configuration and returns a deployment if valid.
@@ -214,26 +201,26 @@ func formatDeployments(deployments []schema.Deployment) string {
 func uploadDeployments(deployments []schema.Deployment) error {
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		log.Error(ErrGetLocalRepo.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrGetLocalRepo, err)
+		log.Error(errUtils.ErrGetLocalRepo.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrGetLocalRepo, err)
 	}
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		log.Error(ErrGetRepoInfo.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrGetRepoInfo, err)
+		log.Error(errUtils.ErrGetRepoInfo.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrGetRepoInfo, err)
 	}
 
 	// Initialize CLI config for API client.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		log.Error(ErrInitCliConfig.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrInitCliConfig, err)
+		log.Error(errUtils.ErrInitCliConfig.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitCliConfig, err)
 	}
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
 	if err != nil {
-		log.Error(ErrCreateAPIClient.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrCreateAPIClient, err)
+		log.Error(errUtils.ErrFailedToCreateAPIClient.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
 	req := dtos.DeploymentsUploadRequest{
@@ -246,8 +233,8 @@ func uploadDeployments(deployments []schema.Deployment) error {
 
 	err = apiClient.UploadDeployments(&req)
 	if err != nil {
-		log.Error(ErrUploadDeployments.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrUploadDeployments, err)
+		log.Error(errUtils.ErrUploadDeployments.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrUploadDeployments, err)
 	}
 
 	log.Info("Successfully uploaded deployments to Atmos Pro API.")
@@ -259,8 +246,8 @@ func processDeployments(atmosConfig *schema.AtmosConfiguration) ([]schema.Deploy
 	// Get all stacks with template processing enabled to render template variables.
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
-		log.Error(ErrExecuteDescribeStacks.Error(), "error", err)
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, ErrExecuteDescribeStacks, err)
+		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrExecuteDescribeStacks, err)
 	}
 
 	// Collect deployments.
@@ -277,22 +264,22 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	// Inline initializeConfig.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Error(ErrInitCliConfig.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrInitCliConfig, err)
+		log.Error(errUtils.ErrInitCliConfig.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitCliConfig, err)
 	}
 
 	// Get flags.
 	upload, err := cmd.Flags().GetBool("upload")
 	if err != nil {
-		log.Error(ErrParseFlag.Error(), "flag", "upload", "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrParseFlag, err)
+		log.Error(errUtils.ErrParseFlag.Error(), "flag", "upload", "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrParseFlag, err)
 	}
 
 	// Process deployments.
 	deployments, err := processDeployments(&atmosConfig)
 	if err != nil {
-		log.Error(ErrProcessDeployments.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrProcessDeployments, err)
+		log.Error(errUtils.ErrProcessDeployments.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrProcessDeployments, err)
 	}
 
 	// Inline handleOutput.
