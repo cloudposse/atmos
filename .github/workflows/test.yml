@@ -307,11 +307,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Run gotcha's own tests
-          go test -v -race -coverprofile=coverage.out ./...
-          
           # Test gotcha binary on its own tests (dogfooding)
-          ./gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} --format=markdown --output=test-output.md ./...
+          ./gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} --cover --coverprofile=coverage.out --format=markdown --output=test-output.md ./...
 
       - name: Upload gotcha test results
         if: ${{ matrix.tool == 'gotcha' && always() && ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}

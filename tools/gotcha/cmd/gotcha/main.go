@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"errors"
@@ -6,7 +6,8 @@ import (
 	"os"
 )
 
-func main() {
+// Main is the entry point called from the root main.go
+func Main() {
 	if err := Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 

@@ -2,16 +2,16 @@
 .PHONY: build install test lint clean
 
 build:
-	go build -o build/gotcha .
+	go build -o gotcha .
 
 install:
 	go install .
 
-test:
-	go test ./...
+test: build
+	./gotcha ./...
 
 lint:
 	golangci-lint run ./...
 
 clean:
-	rm -rf build/
+	rm -rf build/ gotcha

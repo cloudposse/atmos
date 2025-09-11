@@ -1,4 +1,4 @@
-package main
+package cmd
 
 // Flag constants used across multiple files.
 const (
