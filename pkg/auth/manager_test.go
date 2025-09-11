@@ -204,19 +204,19 @@ func TestManager_promptForIdentity(t *testing.T) {
 
 // --- Additional helpers for manager tests ---.
 type (
-    testCreds struct{ exp *time.Time }
-    testStore struct {
-        data        map[string]any
-        expired     map[string]bool
-        retrieveErr map[string]error
-    }
-    testProvider struct {
-        name    string
-        kind    string
-        creds   *testCreds
-        authErr error
-        preErr  error
-    }
+	testCreds struct{ exp *time.Time }
+	testStore struct {
+		data        map[string]any
+		expired     map[string]bool
+		retrieveErr map[string]error
+	}
+	testProvider struct {
+		name    string
+		kind    string
+		creds   *testCreds
+		authErr error
+		preErr  error
+	}
 )
 
 func (c *testCreds) IsExpired() bool {
@@ -429,71 +429,76 @@ func TestManager_GetProviderKindForIdentity_UnknownProvider(t *testing.T) {
 func ptrTime(t time.Time) *time.Time { return &t }
 
 func TestManager_findFirstValidCachedCredentials(t *testing.T) {
-    s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
-    now := time.Now().UTC().Add(10 * time.Minute)
-    m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	now := time.Now().UTC().Add(10 * time.Minute)
+	m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
 
-    // Seed: id2 valid, id1 valid
-    s.data["id2"] = &testCreds{exp: &now}
-    s.expired["id2"] = false
-    s.data["id1"] = &testCreds{exp: &now}
-    s.expired["id1"] = false
-    idx := m.findFirstValidCachedCredentials()
-    require.Equal(t, 2, idx)
+	// Seed: id2 valid, id1 valid
+	s.data["id2"] = &testCreds{exp: &now}
+	s.expired["id2"] = false
+	s.data["id1"] = &testCreds{exp: &now}
+	s.expired["id1"] = false
+	idx := m.findFirstValidCachedCredentials()
+	require.Equal(t, 2, idx)
 
-    // Mark id2 expired, should pick id1
-    s.expired["id2"] = true
-    idx = m.findFirstValidCachedCredentials()
-    require.Equal(t, 1, idx)
+	// Mark id2 expired, should pick id1
+	s.expired["id2"] = true
+	idx = m.findFirstValidCachedCredentials()
+	require.Equal(t, 1, idx)
 
-    // Both expired -> -1
-    s.expired["id1"] = true
-    idx = m.findFirstValidCachedCredentials()
-    require.Equal(t, -1, idx)
+	// Both expired -> -1
+	s.expired["id1"] = true
+	idx = m.findFirstValidCachedCredentials()
+	require.Equal(t, -1, idx)
 }
 
 func TestManager_authenticateIdentityChain_IdentityMissing(t *testing.T) {
-    m := &manager{identities: map[string]types.Identity{}, chain: []string{"prov", "step1"}}
-    _, err := m.authenticateIdentityChain(context.Background(), 1, &testCreds{})
-    assert.Error(t, err)
+	m := &manager{identities: map[string]types.Identity{}, chain: []string{"prov", "step1"}}
+	_, err := m.authenticateIdentityChain(context.Background(), 1, &testCreds{})
+	assert.Error(t, err)
 }
 
 type stubUserID struct{ out types.ICredentials }
-func (s stubUserID) Kind() string { return "aws/user" }
+
+func (s stubUserID) Kind() string                     { return "aws/user" }
 func (s stubUserID) GetProviderName() (string, error) { return "aws-user", nil }
-func (s stubUserID) Authenticate(_ context.Context, _ types.ICredentials) (types.ICredentials, error) { return s.out, nil }
-func (s stubUserID) Validate() error { return nil }
+func (s stubUserID) Authenticate(_ context.Context, _ types.ICredentials) (types.ICredentials, error) {
+	return s.out, nil
+}
+func (s stubUserID) Validate() error                         { return nil }
 func (s stubUserID) Environment() (map[string]string, error) { return map[string]string{}, nil }
-func (s stubUserID) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error { return nil }
+func (s stubUserID) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
+	return nil
+}
 
 func TestManager_authenticateFromIndex_StandaloneAWSUser(t *testing.T) {
-    creds := &testCreds{}
-    m := &manager{
-        config: &schema.AuthConfig{Identities: map[string]schema.Identity{"dev": {Kind: "aws/user"}}},
-        identities: map[string]types.Identity{"dev": stubUserID{out: creds}},
-        chain: []string{"dev"},
-    }
-    out, err := m.authenticateFromIndex(context.Background(), -1)
-    require.NoError(t, err)
-    assert.Equal(t, creds, out)
+	creds := &testCreds{}
+	m := &manager{
+		config:     &schema.AuthConfig{Identities: map[string]schema.Identity{"dev": {Kind: "aws/user"}}},
+		identities: map[string]types.Identity{"dev": stubUserID{out: creds}},
+		chain:      []string{"dev"},
+	}
+	out, err := m.authenticateFromIndex(context.Background(), -1)
+	require.NoError(t, err)
+	assert.Equal(t, creds, out)
 }
 
 func TestManager_authenticateProviderChain_PreAuthError(t *testing.T) {
-    m := &manager{providers: map[string]types.Provider{"p": &testProvider{name: "p", preErr: assert.AnError}}, chain: []string{"p"}}
-    _, err := m.authenticateProviderChain(context.Background(), 0)
-    assert.Error(t, err)
+	m := &manager{providers: map[string]types.Provider{"p": &testProvider{name: "p", preErr: assert.AnError}}, chain: []string{"p"}}
+	_, err := m.authenticateProviderChain(context.Background(), 0)
+	assert.Error(t, err)
 }
 
 func TestManager_buildWhoamiInfo_SetsRefAndEnv(t *testing.T) {
-    s := &testStore{data: map[string]any{}}
-    ident := stubIdentity{provider: "p"}
-    m := &manager{credentialStore: s, identities: map[string]types.Identity{"dev": ident}}
-    exp := time.Now().UTC().Add(30 * time.Minute)
-    c := &testCreds{exp: &exp}
+	s := &testStore{data: map[string]any{}}
+	ident := stubIdentity{provider: "p"}
+	m := &manager{credentialStore: s, identities: map[string]types.Identity{"dev": ident}}
+	exp := time.Now().UTC().Add(30 * time.Minute)
+	c := &testCreds{exp: &exp}
 
-    info := m.buildWhoamiInfo("dev", c)
-    assert.Equal(t, "p", info.Provider)
-    assert.Equal(t, "dev", info.Identity)
-    assert.Equal(t, "dev", info.CredentialsRef)
-    assert.Nil(t, info.Credentials)
+	info := m.buildWhoamiInfo("dev", c)
+	assert.Equal(t, "p", info.Provider)
+	assert.Equal(t, "dev", info.Identity)
+	assert.Equal(t, "dev", info.CredentialsRef)
+	assert.Nil(t, info.Credentials)
 }

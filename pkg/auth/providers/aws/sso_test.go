@@ -1,15 +1,15 @@
 package aws
 
 import (
-    "context"
-    "testing"
-    "time"
+	"context"
+	"testing"
+	"time"
 
-    "github.com/aws/aws-sdk-go-v2/service/ssooidc"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-    "github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -120,22 +120,22 @@ func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 }
 
 func TestSSOProvider_promptDeviceAuth_SafeInCI(t *testing.T) {
-    t.Setenv("GO_TEST", "1")
-    t.Setenv("CI", "1")
-    p, err := NewSSOProvider("sso", &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL})
-    require.NoError(t, err)
-    // With a full verification URL, OpenUrl is skipped under GO_TEST and CI.
-    url := "https://company.awsapps.com/start/#/device?user_code=WDDD-HRQV"
-    p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
+	t.Setenv("GO_TEST", "1")
+	t.Setenv("CI", "1")
+	p, err := NewSSOProvider("sso", &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL})
+	require.NoError(t, err)
+	// With a full verification URL, OpenUrl is skipped under GO_TEST and CI.
+	url := "https://company.awsapps.com/start/#/device?user_code=WDDD-HRQV"
+	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
 
 func TestSSOProvider_promptDeviceAuth_NilURL(t *testing.T) {
-    t.Setenv("GO_TEST", "1")
-    t.Setenv("CI", "1")
-    p, err := NewSSOProvider("sso", &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL})
-    require.NoError(t, err)
-    // Nil URL should be safe and no-op.
-    p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{})
+	t.Setenv("GO_TEST", "1")
+	t.Setenv("CI", "1")
+	p, err := NewSSOProvider("sso", &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL})
+	require.NoError(t, err)
+	// Nil URL should be safe and no-op.
+	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{})
 }
 
 func TestSSOProvider_getSessionDuration(t *testing.T) {
