@@ -28,7 +28,7 @@ Global Flags:
                                      (comma-separated or repeated flag) (default
                                      [])
 
-    -i, --identity string            Specify the identity to authenticate to.
+    -i, --identity string            Specify the target identity to assume.
 
         --logs-file string           The file to write Atmos logs to. Logs can
                                      be written to any file or any standard file

@@ -30,7 +30,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - "Validate the authentication configuration"
+        - "Validate the authentication configuration in atmos.yaml"
         - "Usage:"
         - "atmos auth validate"
       exit_code: 0
@@ -86,7 +86,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - "Export environment variables for the authenticated identity to use with external tools."
+        - "Outputs environment variables for the assumed identity"
         - "Usage:"
         - "atmos auth env"
         - "--format"

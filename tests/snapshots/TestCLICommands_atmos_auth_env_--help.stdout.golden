@@ -4,7 +4,7 @@ This information is used to shape Atmos roadmap and prioritize features.
 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
 by visiting the following URL: https://atmos.tools/cli/telemetry
 
-Export environment variables for the authenticated identity to use with external tools.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+Outputs environment variables for the assumed identity, suitable for use by external tools such as Terraform or Helm.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
 
 Usage:
 
@@ -31,7 +31,7 @@ Global Flags:
                                      (comma-separated or repeated flag) (default
                                      [])
 
-    -i, --identity string            Specify the identity to authenticate to.
+    -i, --identity string            Specify the target identity to assume.
 
         --logs-file string           The file to write Atmos logs to. Logs can
                                      be written to any file or any standard file
