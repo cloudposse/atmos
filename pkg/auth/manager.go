@@ -396,7 +396,7 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
 func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (types.ICredentials, error) {
-	// Todo Ideally this wouldn't be here, and would be handled by an identity interface function.
+	// TODO Ideally this wouldn't be here, and would be handled by an identity interface function.
 	// Handle special case: standalone AWS user identity.
 	if aws.IsStandaloneAWSUserChain(m.chain, m.config.Identities) {
 		return aws.AuthenticateStandaloneAWSUser(ctx, m.chain[0], m.identities)
