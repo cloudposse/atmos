@@ -7,6 +7,7 @@ import (
 	"time"
 
 	log "github.com/charmbracelet/log"
+	atmosErrors "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
@@ -36,22 +37,22 @@ func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUpl
 
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToMarshalRequestBody, err)
+		return fmt.Errorf(cfg.ErrFormatString, atmosErrors.ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "PATCH", url, bytes.NewBuffer(data))
 	if err != nil {
-		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAuthRequest, err)
+		return fmt.Errorf(cfg.ErrFormatString, atmosErrors.ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToMakeRequest, err)
+		return fmt.Errorf(cfg.ErrFormatString, atmosErrors.ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if err := handleAPIResponse(resp, "UploadDeploymentStatus"); err != nil {
-		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDeploymentStatus, err)
+		return fmt.Errorf(cfg.ErrFormatString, atmosErrors.ErrFailedToUploadDeploymentStatus, err)
 	}
 
 	log.Debug(fmt.Sprintf("\nUploaded deployment status at %s", url))

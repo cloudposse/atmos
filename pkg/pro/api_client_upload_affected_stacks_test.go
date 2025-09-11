@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	atmosErrors "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -62,22 +63,22 @@ func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
 		{
 			name:          "server returns 400 bad request",
 			statusCode:    http.StatusBadRequest,
-			expectedError: ErrFailedToUploadStacks,
+			expectedError: atmosErrors.ErrFailedToUploadStacks,
 		},
 		{
 			name:          "server returns 401 unauthorized",
 			statusCode:    http.StatusUnauthorized,
-			expectedError: ErrFailedToUploadStacks,
+			expectedError: atmosErrors.ErrFailedToUploadStacks,
 		},
 		{
 			name:          "server returns 403 forbidden",
 			statusCode:    http.StatusForbidden,
-			expectedError: ErrFailedToUploadStacks,
+			expectedError: atmosErrors.ErrFailedToUploadStacks,
 		},
 		{
 			name:          "server returns 500 internal server error",
 			statusCode:    http.StatusInternalServerError,
-			expectedError: ErrFailedToUploadStacks,
+			expectedError: atmosErrors.ErrFailedToUploadStacks,
 		},
 	}
 
@@ -125,7 +126,7 @@ func TestUploadAffectedStacks_NetworkError(t *testing.T) {
 
 	err := client.UploadAffectedStacks(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToMakeRequest)
+	assert.ErrorIs(t, err, atmosErrors.ErrFailedToMakeRequest)
 }
 
 func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
@@ -145,5 +146,5 @@ func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
 
 	err := client.UploadAffectedStacks(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToCreateAuthRequest)
+	assert.ErrorIs(t, err, atmosErrors.ErrFailedToCreateAuthRequest)
 }

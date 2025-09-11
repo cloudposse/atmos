@@ -134,10 +134,6 @@ func TestShouldUploadDeploymentStatus(t *testing.T) {
 }
 
 func TestUploadDeploymentStatus(t *testing.T) {
-	// Create mock clients
-	mockProClient := new(MockProAPIClient)
-	mockGitRepo := new(MockGitRepo)
-
 	// Create test repo info
 	testRepoInfo := &atmosgit.RepoInfo{
 		RepoUrl:   "https://github.com/test/repo",
@@ -145,10 +141,6 @@ func TestUploadDeploymentStatus(t *testing.T) {
 		RepoOwner: "test",
 		RepoHost:  "github.com",
 	}
-
-	// Set up mock expectations for git functions
-	mockGitRepo.On("GetLocalRepo").Return(testRepoInfo, nil)
-	mockGitRepo.On("GetCurrentCommitSHA").Return("abc123def456", nil)
 
 	// Test cases
 	testCases := []struct {
@@ -190,11 +182,21 @@ func TestUploadDeploymentStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Create fresh mock clients for each subtest
+			mockProClient := new(MockProAPIClient)
+			mockGitRepo := new(MockGitRepo)
+
 			// Create test info
 			info := createTestInfo(tc.proEnabled)
 
-			// Set up mock expectations for pro client
-			if tc.proEnabled && (tc.exitCode == 0 || tc.exitCode == 2) {
+			// Set up mock expectations based on exit code
+			// The function only processes exit codes 0 and 2
+			if tc.exitCode == 0 || tc.exitCode == 2 {
+				// Set up mock expectations for git functions
+				mockGitRepo.On("GetLocalRepo").Return(testRepoInfo, nil)
+				mockGitRepo.On("GetCurrentCommitSHA").Return("abc123def456", nil)
+
+				// Set up mock expectations for pro client
 				mockProClient.On("UploadDeploymentStatus", mock.AnythingOfType("*dtos.DeploymentStatusUploadRequest")).Return(nil)
 			}
 

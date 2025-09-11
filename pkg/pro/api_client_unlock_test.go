@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	atmosErrors "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
@@ -45,7 +46,7 @@ func TestUnlockStack_Success(t *testing.T) {
 		Key: "test-owner/test-repo/test-stack/test-component",
 	}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.NoError(t, err)
 	assert.True(t, response.Success)
 }
@@ -61,25 +62,25 @@ func TestUnlockStack_HTTPErrors(t *testing.T) {
 			name:          "server returns 400 bad request",
 			statusCode:    http.StatusBadRequest,
 			responseBody:  `{"success": false, "errorMessage": "Bad request"}`,
-			expectedError: ErrFailedToUnlockStack,
+			expectedError: atmosErrors.ErrFailedToUnlockStack,
 		},
 		{
 			name:          "server returns 401 unauthorized",
 			statusCode:    http.StatusUnauthorized,
 			responseBody:  `{"success": false, "errorMessage": "Unauthorized"}`,
-			expectedError: ErrFailedToUnlockStack,
+			expectedError: atmosErrors.ErrFailedToUnlockStack,
 		},
 		{
 			name:          "server returns 404 not found",
 			statusCode:    http.StatusNotFound,
 			responseBody:  `{"success": false, "errorMessage": "Lock not found"}`,
-			expectedError: ErrFailedToUnlockStack,
+			expectedError: atmosErrors.ErrFailedToUnlockStack,
 		},
 		{
 			name:          "server returns 500 internal server error",
 			statusCode:    http.StatusInternalServerError,
 			responseBody:  `{"success": false, "errorMessage": "Internal Server Error"}`,
-			expectedError: ErrFailedToUnlockStack,
+			expectedError: atmosErrors.ErrFailedToUnlockStack,
 		},
 	}
 
@@ -100,7 +101,7 @@ func TestUnlockStack_HTTPErrors(t *testing.T) {
 
 			dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-			response, err := client.UnlockStack(dto)
+			response, err := client.UnlockStack(&dto)
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, tc.expectedError)
 			assert.False(t, response.Success)
@@ -118,9 +119,9 @@ func TestUnlockStack_NetworkError(t *testing.T) {
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToMakeRequest)
+	assert.ErrorIs(t, err, atmosErrors.ErrFailedToMakeRequest)
 	assert.False(t, response.Success)
 }
 
@@ -140,9 +141,9 @@ func TestUnlockStack_InvalidJSONResponse(t *testing.T) {
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToUnmarshalJSON)
+	assert.ErrorIs(t, err, atmosErrors.ErrFailedToUnmarshalJSON)
 	assert.False(t, response.Success)
 }
 
@@ -168,9 +169,9 @@ func TestUnlockStack_ReadBodyError(t *testing.T) {
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToReadResponseBody)
+	assert.ErrorIs(t, err, atmosErrors.ErrFailedToReadResponseBody)
 	assert.False(t, response.Success)
 
 	mockRoundTripper.AssertExpectations(t)
@@ -187,9 +188,9 @@ func TestUnlockStack_RequestCreationError(t *testing.T) {
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToCreateAuthRequest)
+	assert.ErrorIs(t, err, atmosErrors.ErrFailedToCreateAuthRequest)
 	assert.False(t, response.Success)
 }
 
@@ -216,9 +217,9 @@ func TestUnlockStack_SuccessFalseWithContext(t *testing.T) {
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToUnlockStack)
+	assert.ErrorIs(t, err, atmosErrors.ErrFailedToUnlockStack)
 	assert.Contains(t, err.Error(), "Lock not found or already expired")
 	assert.False(t, response.Success)
 }
