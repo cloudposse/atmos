@@ -55,7 +55,7 @@ func (s *keyringStore) Store(alias string, creds types.ICredentials) error {
 		return fmt.Errorf("%w: unsupported credential type %T", ErrCredentialStore, creds)
 	}
 	if err != nil {
-		return fmt.Errorf("%w: failed to marshal credentials: %v", ErrCredentialStore, err)
+		return errors.Join(fmt.Errorf("failed to marshal credentials: %w", err), ErrCredentialStore)
 	}
 
 	env := credentialEnvelope{Type: typ, Data: raw}
@@ -65,7 +65,7 @@ func (s *keyringStore) Store(alias string, creds types.ICredentials) error {
 	}
 
 	if err := keyring.Set(alias, KeyringUser, string(data)); err != nil {
-		return fmt.Errorf("%w: failed to store credentials in keyring: %v", ErrCredentialStore, err)
+		return errors.Join(fmt.Errorf("failed to store credentials in keyring: %w", err), ErrCredentialStore)
 	}
 	return nil
 }
