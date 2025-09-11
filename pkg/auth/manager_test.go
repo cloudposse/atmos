@@ -19,7 +19,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 		isCI            bool
 		expectedResult  string
 		expectedError   string
-		skipInteractive bool // Skip tests that require user interaction
+		skipInteractive bool // Skip tests that require user interaction.
 	}{
 		{
 			name: "no default identities - CI mode",
@@ -37,7 +37,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 				"identity2": {Kind: "aws/user", Default: false},
 			},
 			isCI:            false,
-			skipInteractive: true, // Skip because it requires user interaction
+		skipInteractive: true, // Skip because it requires user interaction.
 		},
 		{
 			name: "single default identity - CI mode",
@@ -75,7 +75,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 				"identity3": {Kind: "aws/user", Default: false},
 			},
 			isCI:            false,
-			skipInteractive: true, // Skip because it requires user interaction
+		skipInteractive: true, // Skip because it requires user interaction.
 		},
 		{
 			name:          "no identities at all - CI mode",
@@ -87,7 +87,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			name:            "no identities at all - interactive mode",
 			identities:      map[string]schema.Identity{},
 			isCI:            false,
-			skipInteractive: true, // Skip because it requires user interaction
+		skipInteractive: true, // Skip because it requires user interaction.
 		},
 	}
 
@@ -97,7 +97,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 				t.Skipf("Skipping interactive test - requires user input.")
 			}
 
-			// Set up CI environment variable
+			// Set up CI environment variable.
 			originalCI := os.Getenv("CI")
 			if tt.isCI {
 				os.Setenv("CI", "true")
@@ -112,17 +112,17 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 				}
 			}()
 
-			// Create manager with test identities
+			// Create manager with test identities.
 			manager := &manager{
 				config: &schema.AuthConfig{
 					Identities: tt.identities,
 				},
 			}
 
-			// Call the function
+			// Call the function.
 			result, err := manager.GetDefaultIdentity()
 
-			// Assert results
+			// Assert results.
 			if tt.expectedError != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
@@ -136,7 +136,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 }
 
 func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
-	// Test that multiple defaults are returned in a consistent order
+	// Test that multiple defaults are returned in a consistent order.
 	identities := map[string]schema.Identity{
 		"zebra":   {Kind: "aws/user", Default: true},
 		"alpha":   {Kind: "aws/user", Default: true},
@@ -144,7 +144,7 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 		"charlie": {Kind: "aws/user", Default: true},
 	}
 
-	// Set CI mode to get deterministic error message
+	// Set CI mode to get deterministic error message.
 	os.Setenv("CI", "true")
 	defer os.Unsetenv("CI")
 
@@ -157,13 +157,13 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 	_, err := manager.GetDefaultIdentity()
 	require.Error(t, err)
 
-	// The error should contain all three default identities
+	// The error should contain all three default identities.
 	errorMsg := err.Error()
 	assert.Contains(t, errorMsg, "multiple default identities found:")
 	assert.Contains(t, errorMsg, "alpha")
 	assert.Contains(t, errorMsg, "charlie")
 	assert.Contains(t, errorMsg, "zebra")
-	// Should not contain the non-default identity
+	// Should not contain the non-default identity.
 	assert.NotContains(t, errorMsg, "beta")
 }
 
@@ -182,7 +182,7 @@ func TestManager_ListIdentities(t *testing.T) {
 
 	result := manager.ListIdentities()
 
-	// Should return all identity names
+	// Should return all identity names.
 	assert.Len(t, result, 3)
 	assert.Contains(t, result, "identity1")
 	assert.Contains(t, result, "identity2")
@@ -192,14 +192,14 @@ func TestManager_ListIdentities(t *testing.T) {
 func TestManager_promptForIdentity(t *testing.T) {
 	manager := &manager{}
 
-	// Test with empty identities list
+	// Test with empty identities list.
 	_, err := manager.promptForIdentity("Choose identity:", []string{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no identities available")
 
-	// Note: We can't easily test the interactive prompt without mocking huh.Form
-	// In a real test environment, you might want to use dependency injection
-	// to mock the form interaction
+	// Note: We can't easily test the interactive prompt without mocking huh.Form.
+	// In a real test environment, you might want to use dependency injection.
+	// To mock the form interaction.
 }
 
 // --- Additional helpers for manager tests ---.
@@ -352,21 +352,21 @@ func TestManager_Whoami_Paths(t *testing.T) {
 		},
 		credentialStore: s,
 	}
-	// Not found
+	// Not found.
 	_, err := m.Whoami(context.Background(), "ghost")
 	assert.Error(t, err)
 
-	// No creds
+	// No creds.
 	_, err = m.Whoami(context.Background(), "dev")
 	assert.Error(t, err)
 
-	// Expired
+	// Expired.
 	s.data["dev"] = &testCreds{}
 	s.expired["dev"] = true
 	_, err = m.Whoami(context.Background(), "dev")
 	assert.Error(t, err)
 
-	// Success
+	// Success.
 	s.expired["dev"] = false
 	info, err := m.Whoami(context.Background(), "dev")
 	require.NoError(t, err)
@@ -379,11 +379,11 @@ func TestManager_Whoami_Paths(t *testing.T) {
 func TestManager_authenticateWithProvider_Paths(t *testing.T) {
 	s := &testStore{}
 	m := &manager{credentialStore: s, providers: map[string]types.Provider{}}
-	// Missing provider
+	// Missing provider.
 	_, err := m.authenticateWithProvider(context.Background(), "p")
 	assert.Error(t, err)
 
-	// Success
+	// Success.
 	m.providers["p"] = &testProvider{name: "p", creds: &testCreds{}}
 	_, err = m.authenticateWithProvider(context.Background(), "p")
 	assert.NoError(t, err)
@@ -392,15 +392,15 @@ func TestManager_authenticateWithProvider_Paths(t *testing.T) {
 func TestManager_retrieveCachedCredentials_and_determineStart(t *testing.T) {
 	s := &testStore{data: map[string]any{"x": &testCreds{}}}
 	m := &manager{credentialStore: s, chain: []string{"x"}}
-	// determine
+	// Determine start index.
 	assert.Equal(t, 0, m.determineStartingIndex(-1))
 	assert.Equal(t, 2, m.determineStartingIndex(2))
 
-	// retrieve ok
+	// Retrieve credentials succeeds.
 	_, err := m.retrieveCachedCredentials(m.chain, 0)
 	assert.NoError(t, err)
 
-	// retrieve error
+	// Retrieve credentials returns error.
 	s2 := &testStore{retrieveErr: map[string]error{"y": assert.AnError}}
 	m2 := &manager{credentialStore: s2, chain: []string{"y"}}
 	_, err = m2.retrieveCachedCredentials(m2.chain, 0)
@@ -408,11 +408,11 @@ func TestManager_retrieveCachedCredentials_and_determineStart(t *testing.T) {
 }
 
 func TestManager_initializeProvidersAndIdentities(t *testing.T) {
-	// Providers: invalid kind
+	// Providers: invalid kind.
 	m := &manager{config: &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}}
 	assert.Error(t, m.initializeProviders())
 
-	// Identities: invalid kind
+	// Identities: invalid kind.
 	m = &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{"x": {Kind: "unknown"}}}}
 	assert.Error(t, m.initializeIdentities())
 }
@@ -433,7 +433,7 @@ func TestManager_findFirstValidCachedCredentials(t *testing.T) {
 	now := time.Now().UTC().Add(10 * time.Minute)
 	m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
 
-	// Seed: id2 valid, id1 valid
+	// Seed: id2 valid, id1 valid.
 	s.data["id2"] = &testCreds{exp: &now}
 	s.expired["id2"] = false
 	s.data["id1"] = &testCreds{exp: &now}
@@ -441,12 +441,12 @@ func TestManager_findFirstValidCachedCredentials(t *testing.T) {
 	idx := m.findFirstValidCachedCredentials()
 	require.Equal(t, 2, idx)
 
-	// Mark id2 expired, should pick id1
+	// Mark id2 expired, should pick id1.
 	s.expired["id2"] = true
 	idx = m.findFirstValidCachedCredentials()
 	require.Equal(t, 1, idx)
 
-	// Both expired -> -1
+	// Both expired -> -1.
 	s.expired["id1"] = true
 	idx = m.findFirstValidCachedCredentials()
 	require.Equal(t, -1, idx)
