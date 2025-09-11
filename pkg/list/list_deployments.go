@@ -124,14 +124,14 @@ func createDeployment(stackName, componentName, componentType string, componentC
 	}
 
 	// Skip abstract components.
-	if componentType, ok := deployment.Metadata["type"].(string); ok && componentType == "abstract" {
+	if metadataType, ok := deployment.Metadata["type"].(string); ok && metadataType == "abstract" {
 		return nil
 	}
 
 	return deployment
 }
 
-// filterProEnabledDeployments returns only deployments that have Atmos Pro drift detection explicitly enabled
+// filterProEnabledDeployments returns only deployments that have Atmos Pro drift detection explicitly enabled.
 // via settings.pro.drift_detection.enabled == true.
 func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deployment {
 	filtered := make([]schema.Deployment, 0, len(deployments))
@@ -149,28 +149,13 @@ func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deplo
 
 // sortDeployments sorts deployments by stack and component.
 func sortDeployments(deployments []schema.Deployment) []schema.Deployment {
-	type deploymentRow struct {
-		Component string
-		Stack     string
-		Index     int // Add index to track original position.
-	}
-	rowsData := make([]deploymentRow, 0, len(deployments))
-	for i, d := range deployments {
-		rowsData = append(rowsData, deploymentRow{Component: d.Component, Stack: d.Stack, Index: i})
-	}
-	sort.Slice(rowsData, func(i, j int) bool {
-		if rowsData[i].Stack != rowsData[j].Stack {
-			return rowsData[i].Stack < rowsData[j].Stack
+	sort.SliceStable(deployments, func(i, j int) bool {
+		if deployments[i].Stack != deployments[j].Stack {
+			return deployments[i].Stack < deployments[j].Stack
 		}
-		return rowsData[i].Component < rowsData[j].Component
+		return deployments[i].Component < deployments[j].Component
 	})
-
-	// Create a new slice with sorted deployments.
-	sortedDeployments := make([]schema.Deployment, len(deployments))
-	for i, row := range rowsData {
-		sortedDeployments[i] = deployments[row.Index]
-	}
-	return sortedDeployments
+	return deployments
 }
 
 // formatDeployments formats the deployments for output.
@@ -214,7 +199,7 @@ func uploadDeployments(deployments []schema.Deployment) error {
 	}
 
 	// Initialize CLI config for API client.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		log.Error(ErrInitCliConfig.Error(), "error", err)
 		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrInitCliConfig, err)
@@ -274,7 +259,7 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	// Get flags.
 	upload, err := cmd.Flags().GetBool("upload")
 	if err != nil {
-		log.Error(ErrParseFlag.Error(), "error", err)
+		log.Error(ErrParseFlag.Error(), "flag", "upload", "error", err)
 		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrParseFlag, err)
 	}
 
@@ -292,6 +277,10 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	// Handle upload if requested.
 	if upload {
 		proDeployments := filterProEnabledDeployments(deployments)
+		if len(proDeployments) == 0 {
+			log.Info("No Atmos Pro-enabled deployments found; nothing to upload.")
+			return nil
+		}
 		return uploadDeployments(proDeployments)
 	}
 
