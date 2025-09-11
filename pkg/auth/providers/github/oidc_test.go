@@ -133,7 +133,7 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup
+            // Setup.
 			tt.setupEnv()
 			defer tt.cleanupEnv()
 
@@ -144,7 +144,7 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 			provider, err := NewOIDCProvider("github-oidc", config)
 			require.NoError(t, err)
 
-			// Test
+            // Test.
 			ctx := context.Background()
 			// Local OIDC endpoint.
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -245,13 +245,13 @@ func TestOIDCProvider_isGitHubActions(t *testing.T) {
 			provider, err := NewOIDCProvider("github-oidc", config)
 			require.NoError(t, err)
 
-			// Access the private method through reflection or make it public for testing
-			// For now, we'll test the behavior through Authenticate
+            // Access the private method through reflection or make it public for testing.
+            // For now, we'll test the behavior through Authenticate.
 			ctx := context.Background()
 			_, err = provider.Authenticate(ctx)
 
 			if tt.expected {
-				// Should not fail due to GitHub Actions check (may fail for other reasons like missing tokens)
+                // Should not fail due to GitHub Actions check (may fail for other reasons like missing tokens).
 				if err != nil {
 					assert.NotContains(t, err.Error(), "GitHub OIDC authentication is only available in GitHub Actions environment")
 				}
@@ -261,4 +261,12 @@ func TestOIDCProvider_isGitHubActions(t *testing.T) {
 			}
 		})
 	}
+}
+
+
+func TestOIDCProvider_NameAndPreAuthenticate(t *testing.T) {
+	p, err := NewOIDCProvider("github-oidc", &schema.Provider{Kind: "github/oidc", Region: "us-east-1"})
+	require.NoError(t, err)
+	require.Equal(t, "github-oidc", p.Name())
+	require.NoError(t, p.PreAuthenticate(nil))
 }

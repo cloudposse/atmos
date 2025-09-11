@@ -54,16 +54,16 @@ func NewAWSFileManager() (*AWSFileManager, error) {
 func (m *AWSFileManager) WriteCredentials(providerName, identityName string, creds *types.AWSCredentials) error {
 	credentialsPath := m.GetCredentialsPath(providerName)
 
-	// Ensure directory exists
+    // Ensure directory exists.
 	if err := os.MkdirAll(filepath.Dir(credentialsPath), PermissionRWX); err != nil {
 		errUtils.CheckErrorAndPrint(ErrCreateCredentialsFile, identityName, "failed to create credentials directory")
 		return ErrCreateCredentialsFile
 	}
 
-	// Load existing INI file or create new one
+    // Load existing INI file or create new one.
 	cfg, err := ini.Load(credentialsPath)
 	if err != nil {
-		// ini.Load returns a wrapped error, check if the file doesn't exist
+        // ini.Load returns a wrapped error, check if the file doesn't exist.
 		if !os.IsNotExist(err) {
 			errUtils.CheckErrorAndPrint(ErrLoadCredentialsFile, identityName, "failed to load credentials file")
 			return ErrLoadCredentialsFile
@@ -71,7 +71,7 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 		cfg = ini.Empty()
 	}
 
-	// Get or create the profile section
+    // Get or create the profile section.
 	section, err := cfg.GetSection(identityName)
 	if err != nil {
 		section, err = cfg.NewSection(identityName)
@@ -81,17 +81,17 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 		}
 	}
 
-	// Set credentials
+    // Set credentials.
 	section.Key("aws_access_key_id").SetValue(creds.AccessKeyID)
 	section.Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
 	if creds.SessionToken != "" {
 		section.Key("aws_session_token").SetValue(creds.SessionToken)
 	} else {
-		// Remove session token if not present
+        // Remove session token if not present.
 		section.DeleteKey("aws_session_token")
 	}
 
-	// Save file with proper permissions
+    // Save file with proper permissions.
 	if err := cfg.SaveTo(credentialsPath); err != nil {
 		errUtils.CheckErrorAndPrint(ErrWriteCredentialsFile, identityName, "failed to write credentials file")
 		return ErrWriteCredentialsFile
@@ -110,13 +110,13 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputFormat string) error {
 	configPath := m.GetConfigPath(providerName)
 
-	// Ensure directory exists
+    // Ensure directory exists.
 	if err := os.MkdirAll(filepath.Dir(configPath), PermissionRWX); err != nil {
 		errUtils.CheckErrorAndPrint(ErrCreateConfigFile, identityName, "failed to create config directory")
 		return ErrCreateConfigFile
 	}
 
-	// Load existing INI file or create new one
+    // Load existing INI file or create new one.
 	cfg, err := ini.Load(configPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -125,7 +125,7 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 		}
 		cfg = ini.Empty()
 	}
-	// Get or create the profile section (AWS config uses "profile name" format, except for "default")
+    // Get or create the profile section (AWS config uses "profile name" format, except for "default").
 	var profileSectionName string
 	if identityName == "default" {
 		profileSectionName = "default"
@@ -136,29 +136,29 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 	section := cfg.Section(profileSectionName)
 	log.Debug("AWS WriteConfig", "providerName", providerName, "identityName", identityName, "region", region, "outputFormat", outputFormat)
 
-	// Set config values only if they are not empty
+    // Set config values only if they are not empty.
 	if region != "" {
 		section.Key("region").SetValue(region)
 	} else {
-		// Remove region key if not present
+        // Remove region key if not present.
 		section.DeleteKey("region")
 	}
 
-	// Set output format only if explicitly provided
+    // Set output format only if explicitly provided.
 	if outputFormat != "" {
 		section.Key("output").SetValue(outputFormat)
 	} else {
-		// Remove output key if not present
+        // Remove output key if not present.
 		section.DeleteKey("output")
 	}
 
-	// Save file with proper permissions
+    // Save file with proper permissions.
 	if err := cfg.SaveTo(configPath); err != nil {
 		errUtils.CheckErrorAndPrint(ErrWriteConfigFile, identityName, "failed to write config file")
 		return ErrWriteConfigFile
 	}
 
-	// Set proper file permissions
+    // Set proper file permissions.
 	if err := os.Chmod(configPath, PermissionRW); err != nil {
 		errUtils.CheckErrorAndPrint(ErrSetConfigFilePermissions, identityName, "failed to set config file permissions")
 		return ErrSetConfigFilePermissions

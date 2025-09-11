@@ -71,18 +71,18 @@ func (p *ssoProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 
 // Authenticate performs AWS SSO authentication.
 func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
-	// Note: SSO provider no longer caches credentials directly
-	// Caching is handled at the manager level to prevent duplicates
+    // Note: SSO provider no longer caches credentials directly.
+    // Caching is handled at the manager level to prevent duplicates.
 
-	// Initialize AWS config for the SSO region
+    // Initialize AWS config for the SSO region.
 	cfg := aws.Config{
 		Region: p.region,
 	}
 
-	// Create OIDC client for device authorization
+    // Create OIDC client for device authorization.
 	oidcClient := ssooidc.NewFromConfig(cfg)
 
-	// Register the client
+    // Register the client.
 	registerResp, err := oidcClient.RegisterClient(ctx, &ssooidc.RegisterClientInput{
 		ClientName: aws.String("atmos-auth"),
 		ClientType: aws.String("public"),
@@ -91,7 +91,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		return nil, fmt.Errorf("%w: failed to register SSO client: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Start device authorization
+    // Start device authorization.
 	authResp, err := oidcClient.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
 		ClientId:     registerResp.ClientId,
 		ClientSecret: registerResp.ClientSecret,
@@ -102,13 +102,13 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	}
 
 	p.promptDeviceAuth(authResp)
-	// Poll for token using helper to keep function size small
+    // Poll for token using helper to keep function size small.
 	accessToken, tokenExpiresAt, err := p.pollForAccessToken(ctx, oidcClient, registerResp, authResp)
 	if err != nil {
 		return nil, err
 	}
 
-	// Calculate expiration time
+    // Calculate expiration time.
 	// Use token expiration (fallback to session duration if unavailable).
 	expiration := tokenExpiresAt
 	if expiration.IsZero() {
@@ -157,12 +157,12 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
-// Note: SSO caching is now handled at the manager level to prevent duplicate entries
+// Note: SSO caching is now handled at the manager level to prevent duplicate entries.
 
 // getSessionDuration returns the session duration in minutes.
 func (p *ssoProvider) getSessionDuration() int {
 	if p.config.Session != nil && p.config.Session.Duration != "" {
-		// Parse duration (e.g., "15m", "1h")
+        // Parse duration (e.g., "15m", "1h").
 		if duration, err := time.ParseDuration(p.config.Session.Duration); err == nil {
 			return int(duration.Minutes())
 		}
@@ -183,7 +183,7 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 
 	intervalDur := time.Duration(interval) * time.Second
 
-	// Initial delay before first poll
+    // Initial delay before first poll.
 	time.Sleep(intervalDur)
 	for i := 0; i < int(expiresIn/interval); i++ {
 		tokenResp, err := oidcClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
@@ -205,7 +205,7 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 			time.Sleep(intervalDur)
 			continue
 		} else if errors.As(err, &slowDownErr) {
-			// Slow down: double the interval as requested by the server
+            // Slow down: double the interval as requested by the server.
 			intervalDur = time.Duration(interval*2) * time.Second
 			time.Sleep(intervalDur)
 			continue

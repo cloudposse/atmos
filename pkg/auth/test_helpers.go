@@ -7,7 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestHelpers provides common test utilities for auth package tests
+// TestHelpers provides common test utilities for auth package tests.
 
 // CreateTestProvider creates a test provider configuration.
 func CreateTestProvider(kind, region string) *schema.Provider {

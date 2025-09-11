@@ -31,7 +31,7 @@ type manager struct {
 	credentialStore types.CredentialStore
 	validator       types.Validator
 	stackInfo       *schema.ConfigAndStacksInfo
-	// chain holds the most recently constructed authentication chain
+    // chain holds the most recently constructed authentication chain.
 	// where index 0 is the provider name, followed by identities in order.
 	chain []string
 }
@@ -65,13 +65,13 @@ func NewAuthManager(
 		stackInfo:       stackInfo,
 	}
 
-	// Initialize providers
+    // Initialize providers.
 	if err := m.initializeProviders(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
 		return nil, errUtils.ErrInitializingProviders
 	}
 
-	// Initialize identities
+    // Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
 		return nil, errUtils.ErrInitializingIdentities
@@ -97,17 +97,17 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		return nil, errUtils.ErrInvalidAuthConfig
 	}
 
-	// Build the complete authentication chain
+    // Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "Check your atmos.yaml.")
 		return nil, errUtils.ErrInvalidAuthConfig
 	}
-	// Persist the chain for later retrieval by providers or callers
+    // Persist the chain for later retrieval by providers or callers.
 	m.chain = chain
 	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
-	// Perform hierarchical credential validation (bottom-up)
+    // Perform hierarchical credential validation (bottom-up).
 	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateHierarchical", "")
@@ -148,7 +148,7 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNoCredentialsFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
-	// Check if credentials are expired
+    // Check if credentials are expired.
 	if expired, err := m.credentialStore.IsExpired(identityName); err != nil || expired {
 		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
@@ -163,7 +163,7 @@ func (m *manager) Validate() error {
 
 // GetDefaultIdentity returns the name of the default identity, if any.
 func (m *manager) GetDefaultIdentity() (string, error) {
-	// Find all default identities
+    // Find all default identities.
 	var defaultIdentities []string
 	for name, identity := range m.config.Identities {
 		if identity.Default {
@@ -171,18 +171,18 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 		}
 	}
 
-	// Handle different scenarios based on number of default identities found
+    // Handle different scenarios based on number of default identities found.
 	switch len(defaultIdentities) {
 	case 0:
-		// No default identities found
+        // No default identities found.
 		if telemetry.IsCI() {
 			return "", errUtils.ErrNoDefaultIdentity
 		}
-		// In interactive mode, prompt user to choose from all identities
+        // In interactive mode, prompt user to choose from all identities.
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
 
 	case 1:
-		// Exactly one default identity found - use it
+        // Exactly one default identity found - use it.
 		return defaultIdentities[0], nil
 
 	default:
@@ -190,7 +190,7 @@ func (m *manager) GetDefaultIdentity() (string, error) {
 		if telemetry.IsCI() {
 			return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedQuotedFmt, defaultIdentities))
 		}
-		// In interactive mode, prompt user to choose from default identities
+        // In interactive mode, prompt user to choose from default identities.
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
 	}
 }
@@ -264,10 +264,10 @@ func (m *manager) initializeIdentities() error {
 	return nil
 }
 
-// getProviderForIdentity returns the provider name for the given identity
+// getProviderForIdentity returns the provider name for the given identity.
 // Uses the identity's GetProviderName() method to eliminate complex conditionals.
 func (m *manager) getProviderForIdentity(identityName string) string {
-	// First try to find by identity name
+    // First try to find by identity name.
 	if identity, exists := m.identities[identityName]; exists {
 		providerName, err := identity.GetProviderName()
 		if err != nil {
@@ -277,7 +277,7 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 		return providerName
 	}
 
-	// If not found by name, try to find by alias
+    // If not found by name, try to find by alias.
 	for name, identity := range m.identities {
 		if m.config.Identities[name].Alias == identityName {
 			providerName, err := identity.GetProviderName()
@@ -292,16 +292,16 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 	return ""
 }
 
-// GetProviderForIdentity returns the provider name for the given identity
+// GetProviderForIdentity returns the provider name for the given identity.
 // Recursively resolves through identity chains to find the root provider.
 func (m *manager) GetProviderForIdentity(identityName string) string {
 	return m.getProviderForIdentity(identityName)
 }
 
-// GetProviderKindForIdentity returns the provider kind for the given identity
+// GetProviderKindForIdentity returns the provider kind for the given identity.
 // by building the authentication chain and getting the root provider's kind.
 func (m *manager) GetProviderKindForIdentity(identityName string) (string, error) {
-	// Build the complete authentication chain
+    // Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
@@ -313,10 +313,10 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 		return "", errUtils.ErrInvalidAuthConfig
 	}
 
-	// The first element in the chain is the root provider name
+    // The first element in the chain is the root provider name.
 	providerName := chain[0]
 
-	// Look up the provider configuration and return its kind
+    // Look up the provider configuration and return its kind.
 	if provider, exists := m.config.Providers[providerName]; exists {
 		return provider.Kind, nil
 	}
@@ -331,13 +331,13 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation.
 func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity string) (types.ICredentials, error) {
-	// Step 1: Bottom-up validation - check cached credentials from target to root
+    // Step 1: Bottom-up validation - check cached credentials from target to root.
 	validFromIndex := m.findFirstValidCachedCredentials()
 
 	if validFromIndex != -1 {
 		log.Debug("Found valid cached credentials", "validFromIndex", validFromIndex, "chainStep", m.getChainStepName(validFromIndex))
 
-		// If target identity (last element in chain) has valid cached credentials, use them
+        // If target identity (last element in chain) has valid cached credentials, use them.
 		if validFromIndex == len(m.chain)-1 {
 			last := m.chain[len(m.chain)-1]
 			if cachedCreds, err := m.credentialStore.Retrieve(last); err == nil {
@@ -347,18 +347,18 @@ func (m *manager) authenticateHierarchical(ctx context.Context, targetIdentity s
 		}
 	}
 
-	// Step 2: Selective re-authentication from first invalid point down to target
+    // Step 2: Selective re-authentication from first invalid point down to target.
 	return m.authenticateFromIndex(ctx, validFromIndex)
 }
 
-// findFirstValidCachedCredentials checks cached credentials from bottom to top of chain
+// findFirstValidCachedCredentials checks cached credentials from bottom to top of chain.
 // Returns the index of the first valid cached credentials, or -1 if none found.
 func (m *manager) findFirstValidCachedCredentials() int {
-	// Check from target identity (bottom) up to provider (top)
+    // Check from target identity (bottom) up to provider (top).
 	for i := len(m.chain) - 1; i >= 0; i-- {
 		identityName := m.chain[i]
 
-		// Check if we have cached credentials for this level
+		// Check if we have cached credentials for this level.
 		cachedCreds, err := m.credentialStore.Retrieve(identityName)
 		if err != nil {
 			continue
@@ -368,7 +368,7 @@ func (m *manager) findFirstValidCachedCredentials() int {
 			if expTime != nil {
 				log.Debug("Found valid cached credentials", "chainIndex", i, identityNameKey, identityName, "expiration", *expTime)
 			} else {
-				// Non-AWS credentials or no expiration info, assume valid
+            // Non-AWS credentials or no expiration info, assume valid.
 				log.Debug("Found valid cached credentials (non-AWS)", "chainIndex", i, identityNameKey, identityName)
 			}
 			return i
@@ -396,13 +396,13 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
 func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (types.ICredentials, error) {
-	// Todo Ideally this wouldn't be here, and would be handled by an identity interface function
-	// Handle special case: standalone AWS user identity
+    // Todo Ideally this wouldn't be here, and would be handled by an identity interface function.
+    // Handle special case: standalone AWS user identity.
 	if aws.IsStandaloneAWSUserChain(m.chain, m.config.Identities) {
 		return aws.AuthenticateStandaloneAWSUser(ctx, m.chain[0], m.identities)
 	}
 
-	// Handle regular provider-based authentication chains
+    // Handle regular provider-based authentication chains.
 	return m.authenticateProviderChain(ctx, startIndex)
 }
 
@@ -411,7 +411,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 	var currentCreds types.ICredentials
 	var err error
 
-	// Determine actual starting point for authentication
+    // Determine actual starting point for authentication.
 	actualStartIndex := m.determineStartingIndex(startIndex)
 
 	// Retrieve cached credentials if starting from a cached point.
@@ -421,9 +421,9 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 		currentCreds, actualStartIndex = m.fetchCachedCredentials(actualStartIndex)
 	}
 
-	// Step 1: Authenticate with provider if needed
+		// Step 1: Authenticate with provider if needed.
 	if actualStartIndex == 0 { //nolint:nestif
-		// Allow provider to inspect the chain and prepare pre-auth preferences
+			// Allow provider to inspect the chain and prepare pre-auth preferences.
 		if provider, exists := m.providers[m.chain[0]]; exists {
 			if err := provider.PreAuthenticate(m); err != nil {
 				errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "PreAuthenticate", "")
@@ -437,7 +437,7 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 		actualStartIndex = 1
 	}
 
-	// Step 2: Authenticate through identity chain
+		// Step 2: Authenticate through identity chain.
 	return m.authenticateIdentityChain(ctx, actualStartIndex, currentCreds)
 }
 
@@ -447,7 +447,7 @@ func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, in
 		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
 		return nil, 0
 	}
-	// Skip re-authenticating the identity at startIndex, since we already have its output
+		// Skip re-authenticating the identity at startIndex, since we already have its output.
 	return currentCreds, startIndex + 1
 }
 
@@ -501,7 +501,7 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 		return nil, errUtils.ErrAuthenticationFailed
 	}
 
-	// Cache provider credentials
+		// Cache provider credentials.
 	if err := m.credentialStore.Store(providerName, credentials); err != nil {
 		log.Debug("Failed to cache provider credentials", "error", err)
 	} else {
@@ -528,7 +528,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 
 	currentCreds := initialCreds
 
-	// Step 2: Authenticate through identity chain starting from startIndex
+    // Step 2: Authenticate through identity chain starting from startIndex.
 	for i := startIndex; i < len(m.chain); i++ {
 		identityStep := m.chain[i]
 		identity, exists := m.identities[identityStep]
@@ -539,7 +539,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 
 		log.Debug("Authenticating identity step", "step", i, logKeyIdentity, identityStep, "kind", identity.Kind())
 
-		// Each identity receives credentials from the previous step
+        // Each identity receives credentials from the previous step.
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
 			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
@@ -547,7 +547,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 
 		currentCreds = nextCreds
 
-		// Cache credentials for this level
+        // Cache credentials for this level.
 		if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
 			log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
 		} else {
@@ -560,20 +560,20 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 	return currentCreds, nil
 }
 
-// buildAuthenticationChain builds the authentication chain from target identity to source provider
+// buildAuthenticationChain builds the authentication chain from target identity to source provider.
 // Returns a slice where [0] is the provider name, [1..n] are identity names in authentication order.
 func (m *manager) buildAuthenticationChain(identityName string) ([]string, error) {
 	var chain []string
 	visited := make(map[string]bool)
 
-	// Recursively build the chain
+    // Recursively build the chain.
 	err := m.buildChainRecursive(identityName, &chain, visited)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, fmt.Sprintf("failed to build authentication chain for identity %q: %v", identityName, err))
 		return nil, errUtils.ErrInvalidAuthConfig
 	}
 
-	// Reverse the chain so provider is first, then identities in authentication order
+    // Reverse the chain so provider is first, then identities in authentication order.
 	for i := 0; i < len(chain)/2; i++ {
 		j := len(chain) - 1 - i
 		chain[i], chain[j] = chain[j], chain[i]
@@ -584,14 +584,14 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 
 // buildChainRecursive recursively builds the authentication chain.
 func (m *manager) buildChainRecursive(identityName string, chain *[]string, visited map[string]bool) error {
-	// Check for circular dependencies
+    // Check for circular dependencies.
 	if visited[identityName] {
 		errUtils.CheckErrorAndPrint(errUtils.ErrCircularDependency, buildChainRecursive, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
 		return errUtils.ErrCircularDependency
 	}
 	visited[identityName] = true
 
-	// Find the identity
+    // Find the identity.
 	identity, exists := m.config.Identities[identityName]
 
 	if !exists {
@@ -599,10 +599,10 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return errUtils.ErrInvalidAuthConfig
 	}
 
-	// AWS User identities don't require via configuration - they are standalone
+    // AWS User identities don't require via configuration - they are standalone.
 	if identity.Via == nil {
 		if identity.Kind == "aws/user" {
-			// AWS User is standalone - just add it to the chain and return
+            // AWS User is standalone - just add it to the chain and return.
 			*chain = append(*chain, identityName)
 			return nil
 		}
@@ -610,16 +610,16 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return errUtils.ErrInvalidIdentityConfig
 	}
 
-	// Add current identity to chain
+    // Add current identity to chain.
 	*chain = append(*chain, identityName)
 
-	// If this identity points to a provider, add it and stop
+    // If this identity points to a provider, add it and stop.
 	if identity.Via.Provider != "" {
 		*chain = append(*chain, identity.Via.Provider)
 		return nil
 	}
 
-	// If this identity points to another identity, recurse
+    // If this identity points to another identity, recurse.
 	if identity.Via.Identity != "" {
 		return m.buildChainRecursive(identity.Via.Identity, chain, visited)
 	}
@@ -638,25 +638,25 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 		LastUpdated: time.Now(),
 	}
 
-	// Populate high-level fields from the concrete credential type
+    // Populate high-level fields from the concrete credential type.
 	info.Credentials = creds
 	creds.BuildWhoamiInfo(info)
 	if expTime, err := creds.GetExpiration(); err == nil && expTime != nil {
 		info.Expiration = expTime
 	}
-	// Get environment variables
+    // Get environment variables.
 	if identity, exists := m.identities[identityName]; exists {
 		if env, err := identity.Environment(); err == nil {
 			info.Environment = env
 		}
 	}
 
-	// Store credentials in the keystore and set a reference handle
-	// Use the identity name as the opaque handle for retrieval. Only clear
+    // Store credentials in the keystore and set a reference handle.
+    // Use the identity name as the opaque handle for retrieval. Only clear
 	// in-memory credentials if storage succeeded to avoid losing access.
 	if err := m.credentialStore.Store(identityName, creds); err == nil {
 		info.CredentialsRef = identityName
-		// Clear raw credentials to avoid accidental serialization of secrets
+        // Clear raw credentials to avoid accidental serialization of secrets.
 		info.Credentials = nil
 	}
 

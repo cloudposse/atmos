@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -173,4 +174,68 @@ func Test_sanitizeRoleSessionName(t *testing.T) {
 			assert.Equalf(t, tt.want, sanitizeRoleSessionName(tt.args.s), "sanitizeRoleSessionName(%v)", tt.args.s)
 		})
 	}
+}
+
+func TestNewAssumeRoleIdentity_InvalidInputs(t *testing.T) {
+    // Empty name.
+	_, err := NewAssumeRoleIdentity("", &schema.Identity{Kind: "aws/assume-role"})
+	assert.Error(t, err)
+
+    // Nil config.
+	_, err = NewAssumeRoleIdentity("role", nil)
+	assert.Error(t, err)
+}
+
+func TestAssumeRoleIdentity_Validate_SetsRegion(t *testing.T) {
+	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]any{
+			"assume_role": "arn:aws:iam::123456789012:role/Dev",
+			"region":      "us-west-2",
+		},
+	}}
+	require.NoError(t, i.Validate())
+	assert.Equal(t, "us-west-2", i.region)
+}
+
+func TestAssumeRoleIdentity_newSTSClient_RegionFallbackAndPersist(t *testing.T) {
+	// If identity.region and base.Region are empty, default to us-east-1 and persist.
+	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"}}}
+	base := &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "SECRET"}
+	_, err := i.newSTSClient(context.Background(), base)
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", i.region)
+}
+
+func TestAssumeRoleIdentity_sanitizeRoleSessionName_EdgeCases(t *testing.T) {
+	// Trailing dashes are trimmed.
+	assert.Equal(t, "abc", sanitizeRoleSessionName("abc---"))
+	// All invalid -> becomes atmos-session.
+	assert.Equal(t, "atmos-session", sanitizeRoleSessionName("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"))
+}
+
+func TestAssumeRoleIdentity_PostAuthenticate_SetsEnvAndFiles(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{
+		"assume_role": "arn:aws:iam::123:role/x",
+	}}}
+	stack := &schema.ConfigAndStacksInfo{}
+	creds := &types.AWSCredentials{AccessKeyID: "AK", SecretAccessKey: "SE", SessionToken: "TK", Region: "us-east-1"}
+	err := i.PostAuthenticate(context.Background(), stack, "aws-sso", "role", creds)
+	require.NoError(t, err)
+	// AWS files/env are set under the provider namespace.
+	require.Contains(t, stack.ComponentEnvSection["AWS_SHARED_CREDENTIALS_FILE"], "aws-sso")
+}
+
+func TestAssumeRoleIdentity_toAWSCredentials_DefaultRegion(t *testing.T) {
+	// When i.region is empty, AWSCreds should serialize with default region.
+	i := &assumeRoleIdentity{name: "role", region: ""}
+	out := &sts.AssumeRoleOutput{Credentials: &ststypes.Credentials{
+		AccessKeyId:     aws.String("AKIA"),
+		SecretAccessKey: aws.String("SECRET"),
+		SessionToken:    aws.String("TOKEN"),
+	}}
+	c, err := i.toAWSCredentials(out)
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", c.(*types.AWSCredentials).Region)
 }

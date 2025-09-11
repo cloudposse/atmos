@@ -11,7 +11,7 @@ import (
 type Provider interface {
 	// Kind returns the provider kind (e.g., "aws/iam-identity-center").
 	Kind() string
-	// Name returns the provider name as defined in configuration
+    // Name returns the provider name as defined in configuration.
 	Name() string
 	// PreAuthenticate allows the provider to inspect the authentication chain prior to authentication
 	// so that it can set up any provider-specific preferences based on downstream identities (e.g.,

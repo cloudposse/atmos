@@ -71,13 +71,13 @@ func TestStore_UnsupportedType(t *testing.T) {
 func TestDelete_Flow(t *testing.T) {
 	s := NewCredentialStore()
 	alias := "to-delete"
-	// Delete non-existent -> error
+    // Delete non-existent -> error.
 	assert.Error(t, s.Delete(alias))
 
-	// Store then delete -> ok
+    // Store then delete -> ok.
 	assert.NoError(t, s.Store(alias, &types.OIDCCredentials{Token: "hdr.payload."}))
 	assert.NoError(t, s.Delete(alias))
-	// Retrieve after delete -> error
+    // Retrieve after delete -> error.
 	_, err := s.Retrieve(alias)
 	assert.Error(t, err)
 }
@@ -105,14 +105,14 @@ func TestIsExpired(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, isExp)
 
-	// Missing alias -> returns true with error
+    // Missing alias -> returns true with error.
 	isExp, err = s.IsExpired("missing")
 	assert.Error(t, err)
 	assert.True(t, isExp)
 }
 
 func TestGetAnySetAny(t *testing.T) {
-	// Use the concrete keyring store to access helper methods
+    // Use the concrete keyring store to access helper methods.
 	s := NewKeyringAuthStore()
 	type demo struct {
 		A string

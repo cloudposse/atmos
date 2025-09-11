@@ -69,7 +69,7 @@ func TestGetConfigLogLevels(t *testing.T) {
 }
 
 func TestDecodeAuthConfigFromStack(t *testing.T) {
-	// Success with minimal providers/identities map
+    // Success with minimal providers/identities map.
 	stack := &schema.ConfigAndStacksInfo{
 		ComponentAuthSection: schema.AtmosSectionMapType{
 			"providers": map[string]any{
@@ -100,30 +100,30 @@ func TestDecodeAuthConfigFromStack(t *testing.T) {
 	assert.Contains(t, cfg.Providers, "aws-sso")
 	assert.Contains(t, cfg.Identities, "dev")
 
-	// Invalid type should surface ErrInvalidAuthConfig
+    // Invalid type should surface ErrInvalidAuthConfig.
 	bad := &schema.ConfigAndStacksInfo{ComponentAuthSection: schema.AtmosSectionMapType{"providers": 42}}
 	_, err = decodeAuthConfigFromStack(bad)
 	assert.Error(t, err)
 }
 
 func TestResolveTargetIdentityName(t *testing.T) {
-	// Directly specified on stack wins
+    // Directly specified on stack wins.
 	stack := &schema.ConfigAndStacksInfo{Identity: "explicit"}
 	name, err := resolveTargetIdentityName(stack, &stubAuthManager{defaultIdentity: "default"})
 	assert.NoError(t, err)
 	assert.Equal(t, "explicit", name)
 
-	// Fallback to manager default
+    // Fallback to manager default.
 	stack.Identity = ""
 	name, err = resolveTargetIdentityName(stack, &stubAuthManager{defaultIdentity: "team"})
 	assert.NoError(t, err)
 	assert.Equal(t, "team", name)
 
-	// Manager error returns ErrDefaultIdentity
+    // Manager error returns ErrDefaultIdentity.
 	_, err = resolveTargetIdentityName(stack, &stubAuthManager{defaultErr: errors.New("boom")})
 	assert.Error(t, err)
 
-	// Manager returns empty default -> ErrNoDefaultIdentity
+    // Manager returns empty default -> ErrNoDefaultIdentity.
 	_, err = resolveTargetIdentityName(stack, &stubAuthManager{defaultIdentity: ""})
 	assert.Error(t, err)
 }

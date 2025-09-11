@@ -17,7 +17,7 @@ var ErrCredentialStore = errors.New("credential store")
 var ErrNotSupported = errors.New("not supported")
 
 const (
-	// KeyringUser is the "account" used to store credentials in the keyring
+    // KeyringUser is the "account" used to store credentials in the keyring.
 	// here we use atmos-auth to provide a consistent way to search for atmos credentials.
 	KeyringUser = "atmos-auth"
 )
@@ -30,7 +30,7 @@ func NewCredentialStore() types.CredentialStore {
 	return &keyringStore{}
 }
 
-// Store stores credentials for the given alias
+// Store stores credentials for the given alias.
 // envelope used to persist interface credentials.
 type credentialEnvelope struct {
 	Type string          `json:"type"`
@@ -111,9 +111,9 @@ func (s *keyringStore) Delete(alias string) error {
 
 // List returns all stored credential aliases.
 func (s *keyringStore) List() ([]string, error) {
-	// Note: go-keyring doesn't provide a list function
-	// This is a limitation - we'd need to maintain a separate index
-	// or use a different storage backend for full functionality
+    // Note: go-keyring doesn't provide a list function.
+    // This is a limitation - we'd need to maintain a separate index.
+    // or use a different storage backend for full functionality.
 	return nil, fmt.Errorf("%w: listing credentials is not supported with keyring backend", ErrCredentialStore)
 }
 
@@ -123,7 +123,7 @@ func (s *keyringStore) IsExpired(alias string) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	// Delegate to the credential's IsExpired implementation
+    // Delegate to the credential's IsExpired implementation.
 	return creds.IsExpired(), nil
 }
 

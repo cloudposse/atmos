@@ -85,7 +85,7 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 
 	log.Info("GitHub OIDC authentication successful", "provider", p.name)
 
-	// Return the JWT token as credentials (used by downstream identities)
+	// Return the JWT token as credentials (used by downstream identities).
 	return &types.OIDCCredentials{
 		Token:    jwtToken,
 		Provider: "github",
@@ -175,14 +175,14 @@ func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToke
 
 // Validate validates the provider configuration.
 func (p *oidcProvider) Validate() error {
-	// GitHub OIDC provider doesn't require additional configuration
-	// It relies on GitHub Actions environment variables
+	// GitHub OIDC provider doesn't require additional configuration.
+	// It relies on GitHub Actions environment variables.
 	return nil
 }
 
 // Environment returns environment variables for this provider.
 func (p *oidcProvider) Environment() (map[string]string, error) {
-	// GitHub OIDC provider doesn't set additional environment variables
-	// The OIDC token is passed to downstream identities via credentials
+	// GitHub OIDC provider doesn't set additional environment variables.
+	// The OIDC token is passed to downstream identities via credentials.
 	return map[string]string{}, nil
 }

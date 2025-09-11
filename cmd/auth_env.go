@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sort"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -84,16 +86,34 @@ func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]
 
 // outputEnvAsExport outputs environment variables as shell export statements.
 func outputEnvAsExport(envVars map[string]string) error {
-	for key, value := range envVars {
-		fmt.Printf("export %s=\"%s\"\n", key, value)
+	keys := make([]string, 0, len(envVars))
+	for k := range envVars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		value := envVars[key]
+		// Escape single quotes for safe single-quoted shell literals: ' -> '\''
+		safe := strings.ReplaceAll(value, "'", "'\\''")
+		fmt.Printf("export %s='%s'\n", key, safe)
 	}
 	return nil
 }
 
 // outputEnvAsDotenv outputs environment variables in .env format.
 func outputEnvAsDotenv(envVars map[string]string) error {
-	for key, value := range envVars {
-		fmt.Printf("%s=%s\n", key, value)
+	keys := make([]string, 0, len(envVars))
+	for k := range envVars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		value := envVars[key]
+		// Use the same safe single-quoted escaping as export output
+		safe := strings.ReplaceAll(value, "'", "'\\''")
+		fmt.Printf("%s='%s'\n", key, safe)
 	}
 	return nil
 }

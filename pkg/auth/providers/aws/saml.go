@@ -36,7 +36,7 @@ type samlProvider struct {
 	config *schema.Provider
 	url    string
 	region string
-	// RoleToAssumeFromAssertion is set by PreAuthenticate based on the next identity in the chain
+    // RoleToAssumeFromAssertion is set by PreAuthenticate based on the next identity in the chain.
 	RoleToAssumeFromAssertion string
 }
 
@@ -104,20 +104,20 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
 	}
 
-	// Set up browser automation if needed
+    // Set up browser automation if needed.
 	p.setupBrowserAutomation()
 
-	// Create config and client + login details
+    // Create config and client + login details.
 	samlConfig := p.createSAMLConfig()
 	loginDetails := p.createLoginDetails()
 
-	// Create the SAML client
+    // Create the SAML client.
 	samlClient, err := saml2aws.NewSAMLClient(samlConfig)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create SAML client: %v", errUtils.ErrInvalidProviderConfig, err)
 	}
 
-	// Authenticate and get assertion
+    // Authenticate and get assertion.
 	assertionB64, err := p.authenticateAndGetAssertion(samlClient, loginDetails)
 	if err != nil {
 		return nil, err
@@ -141,7 +141,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, fmt.Errorf("%w: no role selected", errUtils.ErrAuthenticationFailed)
 	}
 
-	// Assume role
+		// Assume role.
 	awsCreds, err := p.assumeRoleWithSAML(ctx, assertionB64, selectedRole)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
@@ -177,7 +177,7 @@ func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
 		Username: p.config.Username,
 	}
 
-	// If password is provided in config, use it; otherwise prompt
+		// If password is provided in config, use it; otherwise prompt.
 	if p.config.Password != "" {
 		loginDetails.Password = p.config.Password
 	}
@@ -221,7 +221,7 @@ func (p *samlProvider) selectRole(awsRoles []*saml2aws.AWSRole) *saml2aws.AWSRol
 
 // assumeRoleWithSAML assumes an AWS role using SAML assertion.
 func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion string, role *saml2aws.AWSRole) (*types.AWSCredentials, error) {
-	// Load AWS configuration (v2)
+    // Load AWS configuration (v2).
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(p.region))
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create AWS config: %v", errUtils.ErrAuthenticationFailed, err)
@@ -229,7 +229,7 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 
 	stsClient := sts.NewFromConfig(cfg)
 
-	// Assume role with SAML
+    // Assume role with SAML.
 	input := &sts.AssumeRoleWithSAMLInput{
 		RoleArn:         aws.String(role.RoleARN),
 		PrincipalArn:    aws.String(role.PrincipalARN),
@@ -242,7 +242,7 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 		return nil, fmt.Errorf("%w: failed to assume role with SAML: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Convert to AWSCredentials
+    // Convert to AWSCredentials.
 	creds := &types.AWSCredentials{
 		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
 		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
@@ -256,7 +256,7 @@ func (p *samlProvider) assumeRoleWithSAML(ctx context.Context, samlAssertion str
 
 // requestedSessionSeconds returns the desired session duration within STS/account limits.
 func (p *samlProvider) requestedSessionSeconds() int32 {
-	// Defaults
+    // Defaults.
 	var sec int32 = samlDefaultSessionSec
 	if p.config == nil || p.config.Session == nil || p.config.Session.Duration == "" {
 		return sec
@@ -279,7 +279,7 @@ func (p *samlProvider) getProviderType() string {
 		return p.config.ProviderType
 	}
 
-	// Auto-detect provider type based on URL
+    // Auto-detect provider type based on URL.
 	if strings.Contains(p.url, "accounts.google.com") {
 		return "Browser" // Use Browser for Google Apps SAML for better compatibility
 	}
@@ -290,7 +290,7 @@ func (p *samlProvider) getProviderType() string {
 		return "ADFS"
 	}
 
-	// Default to Browser for generic SAML
+    // Default to Browser for generic SAML.
 	return "Browser"
 }
 
@@ -317,11 +317,11 @@ func (p *samlProvider) Validate() error {
 func (p *samlProvider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
-	// Set AWS region
+    // Set AWS region.
 	env["AWS_DEFAULT_REGION"] = p.region
 	env["AWS_REGION"] = p.region
 
-	// Set saml2aws specific environment variables if needed
+    // Set saml2aws specific environment variables if needed.
 	if p.config.DownloadBrowserDriver {
 		env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"] = "true"
 	}
@@ -331,12 +331,12 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 
 // setupBrowserAutomation sets up browser automation for SAML authentication.
 func (p *samlProvider) setupBrowserAutomation() {
-	// Set environment variables for browser automation
+    // Set environment variables for browser automation.
 	if p.config.DownloadBrowserDriver {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
 	}
 
-	// For Google Apps SAML, we need to use Browser provider type
+    // For Google Apps SAML, we need to use Browser provider type.
 	if strings.Contains(p.url, "accounts.google.com") {
 		log.Debug("Detected Google Apps SAML, using Browser provider")
 	}

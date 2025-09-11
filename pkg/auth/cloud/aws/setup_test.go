@@ -25,7 +25,7 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	credPath := filepath.Join(tmp, ".aws", "atmos", "prov", "credentials")
 	cfgPath := filepath.Join(tmp, ".aws", "atmos", "prov", "config")
 
-	// Verify credentials file
+    // Verify credentials file.
 	cfg, err := ini.Load(credPath)
 	require.NoError(t, err)
 	_, err = os.Stat(credPath)
@@ -35,7 +35,7 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	assert.Equal(t, "secret", sec.Key("aws_secret_access_key").String())
 	assert.Equal(t, "token", sec.Key("aws_session_token").String())
 
-	// Verify config file
+    // Verify config file.
 	cfg2, err := ini.Load(cfgPath)
 	require.NoError(t, err)
 	_, err = os.Stat(cfgPath)

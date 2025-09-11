@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -274,4 +275,27 @@ func TestUser_generateSessionToken_toAWSCredentials(t *testing.T) {
 	assert.Equal(t, "TMPAKIA", sessionCreds.AccessKeyID)
 	assert.Equal(t, region, sessionCreds.Region)
 	assert.NotEmpty(t, sessionCreds.Expiration)
+}
+
+func TestUser_credentialsFromStore_ErrorsWhenMissing(t *testing.T) {
+	id, err := NewUserIdentity("nostore", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+	ui := id.(*userIdentity)
+	creds, err := ui.credentialsFromStore()
+	assert.Nil(t, creds)
+	assert.Error(t, err)
+}
+
+func TestUser_buildGetSessionTokenInput_MFAError(t *testing.T) {
+	id, _ := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
+	ui := id.(*userIdentity)
+
+	// Stub MFA prompt to return error and verify it propagates.
+	old := promptMfaTokenFunc
+	defer func() { promptMfaTokenFunc = old }()
+	promptMfaTokenFunc = func(_ *types.AWSCredentials) (string, error) { return "", errors.New("prompt failed") }
+
+	in, err := ui.buildGetSessionTokenInput(&types.AWSCredentials{MfaArn: "arn:aws:iam::111111111111:mfa/me"})
+	assert.Nil(t, in)
+	assert.Error(t, err)
 }
