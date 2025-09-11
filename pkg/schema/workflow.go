@@ -9,7 +9,7 @@ type WorkflowStep struct {
 	Command string       `yaml:"command" json:"command" mapstructure:"command"`
 	Stack   string       `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 	Type    string       `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
-	Retry   *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry,omitempty"`
+	Retry   *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 }
 
 type WorkflowDefinition struct {

@@ -2,6 +2,8 @@ package pro
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
 	log "github.com/charmbracelet/log"
@@ -19,7 +21,10 @@ func (c *AtmosProAPIClient) UploadDeployments(dto *dtos.DeploymentsUploadRequest
 		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToMarshalPayload, err)
 	}
 
-	log.Debug(fmt.Sprintf("Uploading deployments DTO: %s", data))
+	// Log safe metadata instead of full payload to prevent secret leakage
+	hash := sha256.Sum256([]byte(data))
+	log.Debug(fmt.Sprintf("Uploading deployments DTO: repo=%s/%s, deployments_count=%d, payload_hash=%s",
+		dto.RepoOwner, dto.RepoName, len(dto.Deployments), hex.EncodeToString(hash[:])))
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
 	if err != nil {
@@ -35,7 +40,7 @@ func (c *AtmosProAPIClient) UploadDeployments(dto *dtos.DeploymentsUploadRequest
 	defer resp.Body.Close()
 
 	if err := handleAPIResponse(resp, "UploadDeployments"); err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToUploadDeploymentStatus, err)
+		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToUploadDeployments, err)
 	}
 	log.Debug(fmt.Sprintf("\nUploaded deployments to %s", url))
 

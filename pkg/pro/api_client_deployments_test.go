@@ -2,6 +2,7 @@ package pro
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	atmosErrors "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -147,7 +149,7 @@ func TestUploadDeployments_Error(t *testing.T) {
 
 	err := apiClient.UploadDeployments(&dto)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to upload deployment status")
+	assert.True(t, errors.Is(err, atmosErrors.ErrFailedToUploadDeployments))
 
 	mockRoundTripper.AssertExpectations(t)
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 
 	log "github.com/charmbracelet/log"
@@ -15,7 +16,11 @@ import (
 func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error {
 	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/deployments/{stack}/{component}
 	url := fmt.Sprintf("%s/%s/repos/%s/%s/deployments/%s/%s",
-		c.BaseURL, c.BaseAPIEndpoint, dto.RepoOwner, dto.RepoName, dto.Stack, dto.Component)
+		c.BaseURL, c.BaseAPIEndpoint,
+		url.PathEscape(dto.RepoOwner),
+		url.PathEscape(dto.RepoName),
+		url.PathEscape(dto.Stack),
+		url.PathEscape(dto.Component))
 	log.Debug(fmt.Sprintf("\nUploading drift status at %s", url))
 
 	// Map HasDrift to the correct status format

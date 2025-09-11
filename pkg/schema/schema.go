@@ -295,7 +295,7 @@ type Terraform struct {
 	DeployRunInit           bool          `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
 	InitRunReconfigure      bool          `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
 	AutoGenerateBackendFile bool          `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
-	WorkspacesEnabled       *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled,omitempty"`
+	WorkspacesEnabled       *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
 	Command                 string        `yaml:"command" json:"command" mapstructure:"command"`
 	Shell                   ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
 	Init                    TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
@@ -708,11 +708,11 @@ type AtmosVendorConfig struct {
 
 // ComponentManifest defines the structure of the component manifest file (component.yaml).
 type ComponentManifest struct {
-	APIVersion string         `yaml:"apiVersion,omitempty" json:"apiVersion,omitempty" mapstructure:"apiVersion,omitempty"`
-	Kind       string         `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind,omitempty"`
-	Metadata   map[string]any `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata,omitempty"`
-	Spec       map[string]any `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec,omitempty"`
-	Vars       map[string]any `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars,omitempty"`
+	APIVersion string         `yaml:"apiVersion,omitempty" json:"apiVersion,omitempty" mapstructure:"apiVersion"`
+	Kind       string         `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind"`
+	Metadata   map[string]any `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	Spec       map[string]any `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
+	Vars       map[string]any `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"`
 }
 
 type Vendor struct {
