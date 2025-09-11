@@ -313,11 +313,11 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 					pkg.StatementCoverage, pkg.FunctionCoverage)
 			} else {
 				// Only statement coverage available from standard Go test output
-				coverageStr = fmt.Sprintf(" (%s statement coverage)", pkg.StatementCoverage)
+				coverageStr = fmt.Sprintf(" (%s coverage)", pkg.StatementCoverage)
 			}
 		} else if pkg.Coverage != "" {
 			// Fallback to legacy coverage if new fields aren't set
-			coverageStr = fmt.Sprintf(" (%s statement coverage)", pkg.Coverage)
+			coverageStr = fmt.Sprintf(" (%s coverage)", pkg.Coverage)
 		}
 
 		if failedCount > 0 {
