@@ -34,6 +34,7 @@ var (
 	ErrUploadDeployments     = errors.New("failed to upload deployments")
 	ErrExecuteDescribeStacks = errors.New("failed to execute describe stacks")
 	ErrProcessDeployments    = errors.New("failed to process deployments")
+	ErrParseFlag             = errors.New("failed to parse flag")
 )
 
 // processComponentConfig processes a single component configuration and returns a deployment if valid.
@@ -272,7 +273,11 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	}
 
 	// Get flags
-	upload, _ := cmd.Flags().GetBool("upload")
+	upload, err := cmd.Flags().GetBool("upload")
+	if err != nil {
+		log.Error(ErrParseFlag.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrParseFlag, err)
+	}
 
 	// Process deployments
 	deployments, err := processDeployments(&atmosConfig)
