@@ -111,7 +111,7 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 
 	for _, key := range keys {
 		value := envVars[key]
-    	// Use the same safe single-quoted escaping as bash output
+		// Use the same safe single-quoted escaping as bash output
 		safe := strings.ReplaceAll(value, "'", "'\\''")
 		fmt.Printf("%s='%s'\n", key, safe)
 	}
