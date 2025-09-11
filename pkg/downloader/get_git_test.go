@@ -298,8 +298,8 @@ func TestGetRunCommand_StartError_NotExitErrorPath(t *testing.T) {
 		t.Fatalf("expected error when command cannot start")
 	}
 	msg := err.Error()
-	// Should match the "error running <path>: <buf>" form (buf empty for start errors)
-	if !strings.HasPrefix(msg, "error running ") {
+	// Should match the "failed to execute git command: <path>: <buf>" form (buf empty for start errors)
+	if !strings.HasPrefix(msg, "failed to execute git command: ") {
 		t.Fatalf("unexpected error prefix: %q", msg)
 	}
 	if !strings.Contains(msg, cmd.Path) {
@@ -657,7 +657,7 @@ func TestGetCustom_SSHKeyWithOldGit(t *testing.T) {
 
 	err := g.GetCustom(dst, u)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "error using ssh key: git version requirement not met")
+	require.Contains(t, err.Error(), "error using SSH key: git version requirement not met")
 }
 
 // Test checkout method.
