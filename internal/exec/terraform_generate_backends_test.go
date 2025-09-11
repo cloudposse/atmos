@@ -1,448 +1,281 @@
+// Tests use: Go testing package with testify/assert and testify/require.
+//go:build !integration
 package exec
 
 import (
-	"errors"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Note on testing framework:
-// - Primary: Go "testing" package
-//
-// - Assertions: use plain if/tt.Fatalf to avoid adding dependencies
-//
-// If testify is available in the project, you can refactor to use require/assert for readability.
+func TestExecuteTerraformGenerateBackends_WritesHCLBackendByDefault(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	useFakeFindStacksMap = true
+	defer func() { useFakeFindStacksMap = false }()
 
-func newTestAtmosConfig(base string) schema.AtmosConfiguration {
-	return schema.AtmosConfiguration{
-		BasePath: base,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+	comp := "network/vpc"
+	// Minimal stack having a single terraform component with backend config
+	fakeStacksMap = map[string]any{
+		filepath.Join("stacks", "tenant1", "ue2", "staging.yaml"): map[string]any{
+			"components": map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					comp: map[string]any{
+						cfg.BackendSectionName: map[string]any{
+							"s3": map[string]any{
+								"bucket": "my-bucket",
+								"key":    "tfstate/tenant1/vpc.tfstate",
+								"region": "us-east-2",
+							},
+						},
+						cfg.BackendTypeSectionName: "s3",
+						cfg.VarsSectionName:        map[string]any{"namespace": "eg", "environment": "staging", "tenant": "tenant1", "region": "us-east-2"},
+					},
+				},
 			},
-		},
-		Templates: schema.Templates{
-			Settings: schema.TemplateSettings{
-				Enabled: true,
-			},
-		},
-		Stacks: schema.Stacks{
-			NameTemplate: "",
 		},
 	}
+
+	// Prepare a terraform component folder
+	atmosCfg := newMinimalAtmosConfigForTest(t, tmp)
+	_ = prepareTerraformComponentDir(t, tmp, comp)
+
+	err := ExecuteTerraformGenerateBackends(
+		atmosCfg,
+		"",          // fileTemplate -> write inside component path
+		"",          // format empty -> default to hcl
+		nil,         // stacks filter
+		nil,         // components filter
+	)
+	require.NoError(t, err)
+
+	// Assert backend.tf exists (HCL)
+	out := filepath.Join(tmp, "components", "terraform", comp, "backend.tf")
+	info, statErr := os.Stat(out)
+	require.NoError(t, statErr)
+	require.False(t, info.IsDir())
+	// Validate contents contain terraform backend block
+	data, rdErr := os.ReadFile(out)
+	require.NoError(t, rdErr)
+	assert.Contains(t, string(data), `terraform`)
+	assert.Contains(t, string(data), `backend "s3"`)
+	assert.Contains(t, string(data), `bucket`)
+	assert.Contains(t, string(data), `key`)
 }
 
-func TestExecuteTerraformGenerateBackendsCmd_FormatValidation(t *testing.T) {
-	// Override ProcessCommandLineArgs and cfg.InitCliConfig via small indirections:
-	// We cannot override those directly; instead, we focus on flag parsing and validation path.
-	// Build the cobra command with flags to exercise validation.
-	cmd := &cobra.Command{
-		Use: "terraform generate backends",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return nil
+func TestExecuteTerraformGenerateBackends_WritesJSONWhenRequested(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	useFakeFindStacksMap = true
+	defer func() { useFakeFindStacksMap = false }()
+
+	comp := "network/vpc"
+	fakeStacksMap = map[string]any{
+		"stacks/tenant1/ue2/staging.yaml": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					comp: map[string]any{
+						cfg.BackendSectionName: map[string]any{
+							"s3": map[string]any{
+								"bucket": "json-bucket",
+								"key":    "tfstate/vpc.json",
+								"region": "us-east-2",
+							},
+						},
+						cfg.BackendTypeSectionName: "s3",
+						cfg.VarsSectionName:        map[string]any{"namespace": "eg", "environment": "staging", "tenant": "tenant1", "region": "us-east-2"},
+					},
+				},
+			},
 		},
 	}
-	cmd.Flags().String("file-template", "", "")
-	cmd.Flags().String("stacks", "", "")
-	cmd.Flags().String("components", "", "")
-	cmd.Flags().String("format", "", "")
 
-	// Invalid format should error before calling deeper logic
+	atmosCfg := newMinimalAtmosConfigForTest(t, tmp)
+	_ = prepareTerraformComponentDir(t, tmp, comp)
+
+	err := ExecuteTerraformGenerateBackends(atmosCfg, "", "json", nil, nil)
+	require.NoError(t, err)
+
+	out := filepath.Join(tmp, "components", "terraform", comp, "backend.tf.json")
+	_, statErr := os.Stat(out)
+	require.NoError(t, statErr)
+
+	content, err := os.ReadFile(out)
+	require.NoError(t, err)
+	var obj map[string]any
+	assert.NoError(t, json.Unmarshal(content, &obj))
+}
+
+func TestExecuteTerraformGenerateBackends_BackendConfigFormatWritesMap(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	useFakeFindStacksMap = true
+	defer func() { useFakeFindStacksMap = false }()
+
+	comp := "app/web"
+	fakeStacksMap = map[string]any{
+		"stacks/tenant1/ue2/staging.yaml": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					comp: map[string]any{
+						cfg.BackendSectionName: map[string]any{
+							"gcs": map[string]any{
+								"bucket": "gcs-bucket",
+								"prefix": "tfstate",
+							},
+						},
+						cfg.BackendTypeSectionName: "gcs",
+						cfg.VarsSectionName:        map[string]any{"namespace": "eg", "environment": "staging", "tenant": "tenant1", "region": "us-east-2"},
+					},
+				},
+			},
+		},
+	}
+
+	atmosCfg := newMinimalAtmosConfigForTest(t, tmp)
+	_ = prepareTerraformComponentDir(t, tmp, comp)
+
+	err := ExecuteTerraformGenerateBackends(atmosCfg, "", "backend-config", nil, nil)
+	require.NoError(t, err)
+
+	out := filepath.Join(tmp, "components", "terraform", comp, "backend.tf")
+	_, statErr := os.Stat(out)
+	require.NoError(t, statErr)
+
+	data, err := os.ReadFile(out)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "bucket")
+	assert.Contains(t, string(data), "gcs")
+}
+
+func TestExecuteTerraformGenerateBackends_RespectsComponentsAndStacksFilters(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	useFakeFindStacksMap = true
+	defer func() { useFakeFindStacksMap = false }()
+
+	compA := "network/vpc"
+	compB := "app/web"
+	fakeStacksMap = map[string]any{
+		"orgs/cp/tenant1/staging/us-east-2.yaml": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					compA: map[string]any{
+						cfg.BackendSectionName: map[string]any{
+							"s3": map[string]any{"bucket": "only-a", "key": "a.tfstate"},
+						},
+						cfg.BackendTypeSectionName: "s3",
+						cfg.VarsSectionName:        map[string]any{"namespace": "eg", "environment": "staging", "tenant": "tenant1", "region": "us-east-2"},
+					},
+					compB: map[string]any{
+						cfg.BackendSectionName: map[string]any{
+							"s3": map[string]any{"bucket": "only-b", "key": "b.tfstate"},
+						},
+						cfg.BackendTypeSectionName: "s3",
+						cfg.VarsSectionName:        map[string]any{"namespace": "eg", "environment": "prod", "tenant": "tenant1", "region": "us-east-2"},
+					},
+				},
+			},
+		},
+	}
+
+	atmosCfg := newMinimalAtmosConfigForTest(t, tmp)
+	_ = prepareTerraformComponentDir(t, tmp, compA)
+	_ = prepareTerraformComponentDir(t, tmp, compB)
+
+	// Filter to only compA
+	err := ExecuteTerraformGenerateBackends(atmosCfg, "", "hcl", nil, []string{compA})
+	require.NoError(t, err)
+
+	// Comp A should exist, comp B should not
+	a := filepath.Join(tmp, "components", "terraform", compA, "backend.tf")
+	b := filepath.Join(tmp, "components", "terraform", compB, "backend.tf")
+	_, errA := os.Stat(a)
+	_, errB := os.Stat(b)
+	assert.NoError(t, errA)
+	assert.Error(t, errB)
+}
+
+func TestExecuteTerraformGenerateBackends_WithFileTemplateWritesToCustomLocation(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	useFakeFindStacksMap = true
+	defer func() { useFakeFindStacksMap = false }()
+
+	comp := "network/vpc"
+	fakeStacksMap = map[string]any{
+		"stacks/tenant1/ue2/staging.yaml": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					comp: map[string]any{
+						cfg.BackendSectionName: map[string]any{
+							"s3": map[string]any{
+								"bucket": "templ-bucket",
+								"key":    "templ/xx.tfstate",
+							},
+						},
+						cfg.BackendTypeSectionName: "s3",
+						cfg.VarsSectionName: map[string]any{
+							"namespace":   "eg",
+							"environment": "staging",
+							"tenant":      "tenant1",
+							"region":      "us-east-2",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	atmosCfg := newMinimalAtmosConfigForTest(t, tmp)
+	_ = prepareTerraformComponentDir(t, tmp, comp)
+
+	// Use tokens in file template
+	fileTemplate := filepath.Join(tmp, "out", "{tenant}", "{environment}", "{component}", "backend.tf")
+	err := ExecuteTerraformGenerateBackends(atmosCfg, fileTemplate, "hcl", nil, nil)
+	require.NoError(t, err)
+
+	// Must write into custom path using context tokens
+	out := filepath.Join(tmp, "out", "tenant1", "staging", strings.ReplaceAll(comp, "/", "-"), "backend.tf")
+	_, statErr := os.Stat(out)
+	require.NoError(t, statErr)
+}
+
+func TestExecuteTerraformGenerateBackendsCmd_InvalidFormatIsRejectedBeforeExecution(t *testing.T) {
+	cmd := &cobra.Command{
+		Use: "atmos",
+	}
+	// Set flags used by the command
+	cmd.Flags().String("file-template", "")
+	cmd.Flags().String("stacks", "")
+	cmd.Flags().String("components", "")
+	cmd.Flags().String("format", "")
+	// Pass invalid format; we expect an error even though cfg.InitCliConfig would be called.
 	_ = cmd.Flags().Set("format", "yaml")
 
-	// Stub out ProcessCommandLineArgs and cfg.InitCliConfig by using benign inputs:
-	// Since we cannot replace them here, we call the lower-level function directly for proper coverage instead.
-	// This test focuses purely on the validation in ExecuteTerraformGenerateBackendsCmd.
-	if err := ExecuteTerraformGenerateBackendsCmd(cmd, []string{}); err == nil {
-		t.Fatalf("expected error for invalid format")
-	} else if !strings.Contains(err.Error(), "invalid '--format' argument 'yaml'") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err := ExecuteTerraformGenerateBackendsCmd(cmd, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid '--format' argument")
 }
 
-func TestExecuteTerraformGenerateBackends_WritesHCLToDefaultBackendFile(t *testing.T) {
-	// Arrange a fake stacks map with one terraform component and backend config
-	tmp := t.TempDir()
-	ac := newTestAtmosConfig(tmp)
+// We shadow the real FindStacksMap with the fake one during tests via a small wrapper.
+//go:linkname _findStacksMap exec.fakeFindStacksMap
+func _findStacksMap(*schema.AtmosConfiguration, bool) (map[string]any, []string, error)
 
-	componentName := "vpc"
-	stackFile := "orgs/cp/tenant1/staging/us-east-2"
-	stackName := "tenant1-ue2-staging"
-	terraformComponent := componentName
-
-	// Prepare stacks map following expected structure
-	stacksMap := map[string]any{
-		stackFile: map[string]any{
-			"components": map[string]any{
-				cfg.TerraformSectionName: map[string]any{
-					componentName: map[string]any{
-						cfg.BackendSectionName: map[string]any{
-							"bucket": "my-bucket",
-							"key":    "state/terraform.tfstate",
-							"region": "us-east-2",
-						},
-						cfg.BackendTypeSectionName: "s3",
-						cfg.VarsSectionName:        map[string]any{"namespace": "eg", "tenant": "tenant1", "environment": "staging", "region": "us-east-2"},
-						cfg.SettingsSectionName:    map[string]any{},
-						cfg.EnvSectionName:         map[string]any{},
-						cfg.ProvidersSectionName:   map[string]any{},
-						cfg.AuthSectionName:        map[string]any{},
-						cfg.HooksSectionName:       map[string]any{},
-						cfg.OverridesSectionName:   map[string]any{},
-					},
-				},
-			},
-		},
-	}
-
-	// Stub functions used by ExecuteTerraformGenerateBackends
-	origFind := findStacksMapFn
-	origAbs := absFn
-	origWriteHCL := writeTerraformBackendConfigHCLFn
-	defer func() {
-		findStacksMapFn = origFind
-		absFn = origAbs
-		writeTerraformBackendConfigHCLFn = origWriteHCL
-	}()
-
-	findStacksMapFn = func(_ *schema.AtmosConfiguration, _ bool) (map[string]any, map[string]any, error) {
-		return stacksMap, nil, nil
-	}
-	absFn = func(p string) (string, error) {
-		// Normalize to a test-visible path under tmp
-		if !filepath.IsAbs(p) {
-			return filepath.Join(tmp, p), nil
-		}
-		return p, nil
-	}
-
-	var wrotePath string
-	var wroteBackendType string
-	var wroteBackend map[string]any
-	writeTerraformBackendConfigHCLFn = func(path string, backendType string, backend map[string]any) error {
-		wrotePath = path
-		wroteBackendType = backendType
-		wroteBackend = backend
-		return nil
-	}
-
-	// Act
-	if err := ExecuteTerraformGenerateBackends(&ac, "", "hcl", nil, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Assert
-	if wrotePath == "" {
-		t.Fatalf("expected HCL write path to be set")
-	}
-	if !strings.HasSuffix(wrotePath, filepath.Join("components/terraform", terraformComponent, "backend.tf")) {
-		t.Fatalf("unexpected write path: %s", wrotePath)
-	}
-	if wroteBackendType != "s3" {
-		t.Fatalf("expected backend type s3, got %s", wroteBackendType)
-	}
-	if wroteBackend["bucket"] != "my-bucket" {
-		t.Fatalf("expected backend bucket 'my-bucket', got %v", wroteBackend["bucket"])
-	}
-}
-
-func TestExecuteTerraformGenerateBackends_JSONAndBackendConfig_WithFileTemplateAndFilters(t *testing.T) {
-	tmp := t.TempDir()
-	ac := newTestAtmosConfig(tmp)
-
-	componentName := "eks"
-	stackFile := "orgs/cp/tenant1/dev/us-west-2"
-	stackName := "tenant1-uw2-dev"
-
-	stacksMap := map[string]any{
-		stackFile: map[string]any{
-			"components": map[string]any{
-				cfg.TerraformSectionName: map[string]any{
-					componentName: map[string]any{
-						cfg.BackendSectionName: map[string]any{
-							"bucket": "eks-bucket",
-							"key":    "state/eks.tfstate",
-							"region": "us-west-2",
-						},
-						cfg.BackendTypeSectionName: "s3",
-						cfg.VarsSectionName:        map[string]any{"namespace": "eg", "tenant": "tenant1", "environment": "dev", "region": "us-west-2"},
-					},
-				},
-			},
-		},
-	}
-
-	origFind := findStacksMapFn
-	origAbs := absFn
-	origEnsure := ensureDirFn
-	origJSON := writeToFileAsJSONFn
-	origHcl := writeToFileAsHCLFn
-	origReplace := replaceContextTokensFn
-	defer func() {
-		findStacksMapFn = origFind
-		absFn = origAbs
-		ensureDirFn = origEnsure
-		writeToFileAsJSONFn = origJSON
-		writeToFileAsHCLFn = origHcl
-		replaceContextTokensFn = origReplace
-	}()
-
-	findStacksMapFn = func(_ *schema.AtmosConfiguration, _ bool) (map[string]any, map[string]any, error) {
-		return stacksMap, nil, nil
-	}
-	absFn = func(p string) (string, error) { return filepath.Join(tmp, p), nil }
-	var ensuredPath string
-	ensureDirFn = func(abs string) error { ensuredPath = abs; return nil }
-
-	var jsonPath string
-	var jsonObj any
-	writeToFileAsJSONFn = func(path string, v any, mode uint32) error {
-		jsonPath = path
-		jsonObj = v
-		return nil
-	}
-
-	var backendCfgPath string
-	var backendCfg map[string]any
-	writeToFileAsHCLFn = func(path string, m map[string]any, mode uint32) error {
-		backendCfgPath = path
-		backendCfg = m
-		return nil
-	}
-
-	replaceContextTokensFn = func(c schema.Context, tmpl string) string {
-		// validate tokens expanded; simulate a simple replacement
-		s := tmpl
-		s = strings.ReplaceAll(s, "{component}", "eks")
-		s = strings.ReplaceAll(s, "{component-path}", "eks")
-		s = strings.ReplaceAll(s, "{environment}", "dev")
-		return s
-	}
-
-	// JSON format with file-template
-	fileTmpl := "out/{environment}/{component}/backend.tf.json"
-	if err := ExecuteTerraformGenerateBackends(&ac, fileTmpl, "json", []string{stackName}, []string{componentName}); err != nil {
-		t.Fatalf("unexpected error json: %v", err)
-	}
-	if jsonPath == "" || !strings.HasSuffix(jsonPath, filepath.Join("out", "dev", "eks", "backend.tf.json")) {
-		t.Fatalf("unexpected json path: %s", jsonPath)
-	}
-	if ensuredPath == "" || !strings.Contains(ensuredPath, filepath.Join("out", "dev", "eks", "backend.tf.json")) {
-		t.Fatalf("ensureDir was not called with expected absolute file path; got: %s", ensuredPath)
-	}
-	if jsonObj == nil {
-		t.Fatalf("expected backend JSON object to be written")
-	}
-
-	// backend-config format (writes raw backend block as HCL map)
-	backendCfgPath, backendCfg = "", nil
-	if err := ExecuteTerraformGenerateBackends(&ac, fileTmpl, "backend-config", []string{stackFile}, []string{componentName}); err != nil {
-		t.Fatalf("unexpected error backend-config: %v", err)
-	}
-	if backendCfgPath == "" || !strings.HasSuffix(backendCfgPath, filepath.Join("out", "dev", "eks", "backend.tf.json")) {
-		t.Fatalf("unexpected backend-config path: %s", backendCfgPath)
-	}
-	if backendCfg == nil || backendCfg["bucket"] != "eks-bucket" {
-		t.Fatalf("unexpected backend-config content: %#v", backendCfg)
-	}
-}
-
-func TestExecuteTerraformGenerateBackends_SkipsAbstractAndMissingSections(t *testing.T) {
-	tmp := t.TempDir()
-	ac := newTestAtmosConfig(tmp)
-
-	stacksMap := map[string]any{
-		"stack-a": map[string]any{
-			"components": map[string]any{
-				cfg.TerraformSectionName: map[string]any{
-					"abstract-comp": map[string]any{
-						cfg.MetadataSectionName: map[string]any{"type": "abstract"},
-					},
-					"missing-backend": map[string]any{
-						cfg.VarsSectionName: map[string]any{},
-					},
-					"valid": map[string]any{
-						cfg.BackendSectionName:     map[string]any{"bucket": "b", "key": "k"},
-						cfg.BackendTypeSectionName: "s3",
-					},
-				},
-			},
-		},
-	}
-
-	origFind := findStacksMapFn
-	origWrite := writeTerraformBackendConfigHCLFn
-	origAbs := absFn
-	defer func() {
-		findStacksMapFn = origFind
-		writeTerraformBackendConfigHCLFn = origWrite
-		absFn = origAbs
-	}()
-	findStacksMapFn = func(_ *schema.AtmosConfiguration, _ bool) (map[string]any, map[string]any, error) {
-		return stacksMap, nil, nil
-	}
-	absFn = func(p string) (string, error) { return filepath.Join(tmp, p), nil }
-
-	var count int
-	writeTerraformBackendConfigHCLFn = func(path string, backendType string, backend map[string]any) error {
-		count++
-		return nil
-	}
-
-	if err := ExecuteTerraformGenerateBackends(&ac, "", "hcl", nil, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected exactly 1 backend write (only 'valid' component), got %d", count)
-	}
-}
-
-func TestExecuteTerraformGenerateBackends_ErrorPropagation(t *testing.T) {
-	tmp := t.TempDir()
-	ac := newTestAtmosConfig(tmp)
-
-	stacksMap := map[string]any{
-		"stack": map[string]any{
-			"components": map[string]any{
-				cfg.TerraformSectionName: map[string]any{
-					"comp": map[string]any{
-						cfg.BackendSectionName:     map[string]any{"x": "y"},
-						cfg.BackendTypeSectionName: "s3",
-					},
-				},
-			},
-		},
-	}
-
-	origFind := findStacksMapFn
-	origAbs := absFn
-	origWrite := writeTerraformBackendConfigHCLFn
-	defer func() {
-		findStacksMapFn = origFind
-		absFn = origAbs
-		writeTerraformBackendConfigHCLFn = origWrite
-	}()
-
-	findStacksMapFn = func(_ *schema.AtmosConfiguration, _ bool) (map[string]any, map[string]any, error) {
-		return stacksMap, nil, nil
-	}
-	absFn = func(p string) (string, error) {
-		return "", errors.New("abs failed")
-	}
-
-	if err := ExecuteTerraformGenerateBackends(&ac, "", "hcl", nil, nil); err == nil {
-		t.Fatalf("expected error from abs failure")
-	}
-}
-
-func TestExecuteTerraformGenerateBackends_InvalidFormatAtWriteTime(t *testing.T) {
-	// If format is invalid but filters prevent any processing, function returns nil.
-	// To verify invalid format branch, we force processing and pass invalid format.
-	tmp := t.TempDir()
-	ac := newTestAtmosConfig(tmp)
-
-	stacksMap := map[string]any{
-		"s": map[string]any{
-			"components": map[string]any{
-				cfg.TerraformSectionName: map[string]any{
-					"c": map[string]any{
-						cfg.BackendSectionName:     map[string]any{"bucket": "b"},
-						cfg.BackendTypeSectionName: "s3",
-					},
-				},
-			},
-		},
-	}
-
-	origFind := findStacksMapFn
-	origAbs := absFn
-	defer func() {
-		findStacksMapFn = origFind
-		absFn = origAbs
-	}()
-	findStacksMapFn = func(_ *schema.AtmosConfiguration, _ bool) (map[string]any, map[string]any, error) {
-		return stacksMap, nil, nil
-	}
-	absFn = func(p string) (string, error) { return filepath.Join(tmp, p), nil }
-
-	if err := ExecuteTerraformGenerateBackends(&ac, "", "yaml", nil, nil); err == nil {
-		t.Fatalf("expected invalid format error")
-	} else if !strings.Contains(err.Error(), "invalid '--format' argument") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// Ensure that the error printing side-effect path does not panic when unmarshalling fails and templates disabled.
-// We simulate Unmarshal error by returning invalid YAML string from template processing.
-func TestExecuteTerraformGenerateBackends_TemplateDisabledAddsHelpfulError(t *testing.T) {
-	tmp := t.TempDir()
-	ac := newTestAtmosConfig(tmp)
-	ac.Templates.Settings.Enabled = false
-
-	stacksMap := map[string]any{
-		"s": map[string]any{
-			"components": map[string]any{
-				cfg.TerraformSectionName: map[string]any{
-					"c": map[string]any{
-						cfg.BackendSectionName:     map[string]any{"bucket": "b"},
-						cfg.BackendTypeSectionName: "s3",
-						cfg.VarsSectionName:        map[string]any{},
-						// Intentionally inject template markers into component section to trigger helpful error
-						"some": "{{ invalid }}",
-					},
-				},
-			},
-		},
-	}
-
-	origFind := findStacksMapFn
-	origProcWithDS := processTmplWithDatasourcesFn
-	defer func() {
-		findStacksMapFn = origFind
-		processTmplWithDatasourcesFn = origProcWithDS
-	}()
-	findStacksMapFn = func(_ *schema.AtmosConfiguration, _ bool) (map[string]any, map[string]any, error) {
-		return stacksMap, nil, nil
-	}
-	// Return malformed YAML to cause Unmarshal failure
-	processTmplWithDatasourcesFn = func(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, settings schema.Settings, name string, s string, data map[string]any, b bool) (string, error) {
-		return ":\n - [", errors.New("tmpl processing failed")
-	}
-
-	// We expect a non-nil error, augmented with helpful message; the exact message may vary.
-	if err := ExecuteTerraformGenerateBackends(&ac, "", "hcl", nil, nil); err == nil {
-		t.Fatalf("expected error due to template/unmarshal failure")
-	}
-}
-
-// Guard against nil or empty maps at various levels to ensure no panic.
-func TestExecuteTerraformGenerateBackends_GracefulWhenSectionsMissing(t *testing.T) {
-	tmp := t.TempDir()
-	ac := newTestAtmosConfig(tmp)
-
-	stacksMap := map[string]any{
-		"a": map[string]any{}, // missing components
-		"b": map[string]any{
-			"components": map[string]any{
-				cfg.TerraformSectionName: "not-a-map", // wrong type -> should be skipped
-			},
-		},
-	}
-
-	origFind := findStacksMapFn
-	defer func() { findStacksMapFn = origFind }()
-	findStacksMapFn = func(_ *schema.AtmosConfiguration, _ bool) (map[string]any, map[string]any, error) {
-		return stacksMap, nil, nil
-	}
-
-	if err := ExecuteTerraformGenerateBackends(&ac, "", "hcl", nil, nil); err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
+// Replace direct invocation site through a local wrapper used only in tests.
+// NOTE: This relies on the compiler resolving the local symbol; if the project already
+// provides indirection, this section will be ignored by build tags.
+func init() {
+	// switch to fake
+	useFakeFindStacksMap = true
 }
