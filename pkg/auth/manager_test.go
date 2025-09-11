@@ -37,7 +37,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 				"identity2": {Kind: "aws/user", Default: false},
 			},
 			isCI:            false,
-		skipInteractive: true, // Skip because it requires user interaction.
+			skipInteractive: true, // Skip because it requires user interaction.
 		},
 		{
 			name: "single default identity - CI mode",
@@ -75,7 +75,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 				"identity3": {Kind: "aws/user", Default: false},
 			},
 			isCI:            false,
-		skipInteractive: true, // Skip because it requires user interaction.
+			skipInteractive: true, // Skip because it requires user interaction.
 		},
 		{
 			name:          "no identities at all - CI mode",
@@ -87,7 +87,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			name:            "no identities at all - interactive mode",
 			identities:      map[string]schema.Identity{},
 			isCI:            false,
-		skipInteractive: true, // Skip because it requires user interaction.
+			skipInteractive: true, // Skip because it requires user interaction.
 		},
 	}
 
