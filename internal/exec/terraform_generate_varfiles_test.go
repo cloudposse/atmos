@@ -15,11 +15,11 @@ import (
 func withTempDir(t *testing.T) (string, func()) {
 	t.Helper()
 	tmp, err := os.MkdirTemp("", "varfiles-tests-*")
-	if err \!= nil {
+	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 	cwd, _ := os.Getwd()
-	if err := os.Chdir(tmp); err \!= nil {
+	if err := os.Chdir(tmp); err != nil {
 		t.Fatalf("failed to chdir: %v", err)
 	}
 	return tmp, func() {
@@ -67,7 +67,7 @@ func Test_ExecuteTerraformGenerateVarfilesCmd_InvalidFormat(t *testing.T) {
 	if err == nil {
 		t.Skip("ExecuteTerraformGenerateVarfilesCmd did not surface invalid format before other initialization; skipping as environment dependent")
 	}
-	if err \!= nil && \!strings.Contains(err.Error(), "invalid '--format'") {
+	if err != nil && !strings.Contains(err.Error(), "invalid '--format'") {
 		// If the early init failed, surface the error for visibility rather than failing the suite.
 		t.Logf("received error (may be from early init): %v", err)
 	}
@@ -88,7 +88,7 @@ func Test_ExecuteTerraformGenerateVarfiles_NoStacks_NoError(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	// Call with empty filters and a file template; since there are no stacks, should return nil without writing files.
 	err := ExecuteTerraformGenerateVarfiles(atmosConfig, "out/{component}.tfvars.json", "json", nil, nil)
-	if err \!= nil {
+	if err != nil {
 		t.Fatalf("expected no error when no stacks are found, got: %v", err)
 	}
 }
@@ -105,10 +105,10 @@ func Test_ExecuteTerraformGenerateVarfiles_InvalidFormat_Branch(t *testing.T) {
 	// but without access to internals this may still be a no-op. Thus this test asserts that the
 	// function does not crash and returns nil in absence of stacks.
 	err := ExecuteTerraformGenerateVarfiles(atmosConfig, "out/{component}.tfvars.bogus", "bogus", []string{"non-existent-stack"}, []string{"non-existent-component"})
-	if err \!= nil {
+	if err != nil {
 		// Depending on repository internals, returning an error here can also be valid;
 		// assert only on the known error message if present.
-		if \!strings.Contains(err.Error(), "invalid '--format'") {
+		if !strings.Contains(err.Error(), "invalid '--format'") {
 			t.Logf("received error (environment dependent): %v", err)
 		}
 	}
