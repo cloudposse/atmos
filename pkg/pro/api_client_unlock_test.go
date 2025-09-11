@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -39,7 +40,9 @@ func TestUnlockStack_Success(t *testing.T) {
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{
@@ -96,7 +99,9 @@ func TestUnlockStack_HTTPErrors(t *testing.T) {
 				BaseURL:         server.URL,
 				BaseAPIEndpoint: "api",
 				APIToken:        "test-token",
-				HTTPClient:      http.DefaultClient,
+				HTTPClient: &http.Client{
+					Timeout: time.Second * 5,
+				},
 			}
 
 			dto := dtos.UnlockStackRequest{Key: "test-key"}
@@ -114,7 +119,9 @@ func TestUnlockStack_NetworkError(t *testing.T) {
 		BaseURL:         "http://invalid-host-that-does-not-exist:12345",
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
@@ -136,7 +143,9 @@ func TestUnlockStack_InvalidJSONResponse(t *testing.T) {
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
@@ -183,7 +192,9 @@ func TestUnlockStack_RequestCreationError(t *testing.T) {
 		BaseURL:         "://invalid-url", // Malformed URL
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
@@ -212,7 +223,9 @@ func TestUnlockStack_SuccessFalseWithContext(t *testing.T) {
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}

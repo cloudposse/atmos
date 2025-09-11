@@ -80,7 +80,7 @@ var (
 	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
 	ErrMerge                    = errors.New("merge error")
 
-	// Pro API client errors
+	// Pro API client errors.
 	ErrFailedToCreateRequest          = errors.New("failed to create request")
 	ErrFailedToMarshalPayload         = errors.New("failed to marshal payload")
 	ErrFailedToCreateAuthRequest      = errors.New("failed to create authenticated request")
@@ -104,8 +104,8 @@ var (
 	ErrFailedToUploadDeploymentStatus = errors.New("failed to upload deployment status")
 	ErrAPIResponseError               = errors.New("API response error")
 
-	// Exec package errors
-	ErrComponentAndStackRequired = errors.New("both '--component' and '--stack' flag must be provided")
+	// Exec package errors.
+	ErrComponentAndStackRequired = errors.New("both '--component' and '--stack' flags must be provided")
 	ErrFailedToGetLocalRepo      = errors.New("failed to get local repository")
 	ErrFailedToGetRepoInfo       = errors.New("failed to get repository info")
 	ErrFailedToCreateAPIClient   = errors.New("failed to create API client")
@@ -114,4 +114,5 @@ var (
 	ErrFailedToCreateLogger      = errors.New("failed to create logger")
 	ErrFailedToGetComponentFlag  = errors.New("failed to get component flag")
 	ErrFailedToGetStackFlag      = errors.New("failed to get stack flag")
+	ErrOPAPolicyViolations       = errors.New("opa policy violations")
 )

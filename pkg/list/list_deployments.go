@@ -134,7 +134,7 @@ func createDeployment(stackName, componentName, componentType string, componentC
 
 // isProDriftDetectionEnabled checks if a deployment has Atmos Pro drift detection enabled.
 // Returns true if settings.pro.drift_detection.enabled == true and settings.pro.enabled != false.
-func isProDriftDetectionEnabled(deployment schema.Deployment) bool {
+func isProDriftDetectionEnabled(deployment *schema.Deployment) bool {
 	proSettings, ok := deployment.Settings["pro"].(map[string]any)
 	if !ok {
 		return false
@@ -159,7 +159,7 @@ func isProDriftDetectionEnabled(deployment schema.Deployment) bool {
 func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deployment {
 	filtered := make([]schema.Deployment, 0, len(deployments))
 	for _, deployment := range deployments {
-		if isProDriftDetectionEnabled(deployment) {
+		if isProDriftDetectionEnabled(&deployment) {
 			filtered = append(filtered, deployment)
 		}
 	}

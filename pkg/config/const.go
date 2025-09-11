@@ -114,7 +114,4 @@ const (
 
 	ComponentStr = "component"
 	StackStr     = "stack"
-
-	// Error format string used for error wrapping.
-	ErrFormatString = "%w: %s"
 )
