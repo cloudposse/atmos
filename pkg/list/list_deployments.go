@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -145,9 +146,9 @@ func isProDriftDetectionEnabled(deployment *schema.Deployment) bool {
 // via settings.pro.drift_detection.enabled == true, but excludes deployments where settings.pro.enabled == false.
 func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deployment {
 	filtered := make([]schema.Deployment, 0, len(deployments))
-	for _, deployment := range deployments {
-		if isProDriftDetectionEnabled(&deployment) {
-			filtered = append(filtered, deployment)
+	for i := range deployments {
+		if isProDriftDetectionEnabled(&deployments[i]) {
+			filtered = append(filtered, deployments[i])
 		}
 	}
 	return filtered
@@ -184,11 +185,15 @@ func formatDeployments(deployments []schema.Deployment) string {
 			}
 		}
 		csvWriter.Flush()
+		if err := csvWriter.Error(); err != nil {
+			log.Error(errUtils.ErrFailedToFinalizeCSVOutput.Error(), "error", err)
+			return ""
+		}
 		return output.String()
 	}
 
 	// For TTY mode, create a styled table with only Component and Stack columns.
-	var tableRows [][]string
+	tableRows := make([][]string, 0, len(deployments))
 	for _, d := range deployments {
 		row := []string{d.Component, d.Stack}
 		tableRows = append(tableRows, row)
@@ -201,20 +206,23 @@ func formatDeployments(deployments []schema.Deployment) string {
 func uploadDeployments(deployments []schema.Deployment) error {
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		log.Error(errUtils.ErrGetLocalRepo.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrGetLocalRepo, err)
+		log.Error(errUtils.ErrFailedToGetLocalRepo.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
 	}
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		log.Error(errUtils.ErrGetRepoInfo.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrGetRepoInfo, err)
+		log.Error(errUtils.ErrFailedToGetRepoInfo.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
+	}
+	if repoInfo.RepoUrl == "" || repoInfo.RepoName == "" || repoInfo.RepoOwner == "" || repoInfo.RepoHost == "" {
+		log.Warn("Git repo info is incomplete; upload may be rejected.", "repo_url", repoInfo.RepoUrl, "repo_name", repoInfo.RepoName, "repo_owner", repoInfo.RepoOwner, "repo_host", repoInfo.RepoHost)
 	}
 
 	// Initialize CLI config for API client.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		log.Error(errUtils.ErrInitCliConfig.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitCliConfig, err)
+		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
@@ -233,11 +241,11 @@ func uploadDeployments(deployments []schema.Deployment) error {
 
 	err = apiClient.UploadDeployments(&req)
 	if err != nil {
-		log.Error(errUtils.ErrUploadDeployments.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrUploadDeployments, err)
+		log.Error(errUtils.ErrFailedToUploadDeployments.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadDeployments, err)
 	}
 
-	log.Info("Successfully uploaded deployments to Atmos Pro API.")
+	u.PrintfMessageToTUI("Successfully uploaded deployments to Atmos Pro API.")
 	return nil
 }
 
@@ -264,8 +272,8 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	// Inline initializeConfig.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Error(errUtils.ErrInitCliConfig.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitCliConfig, err)
+		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 
 	// Get flags.
@@ -290,7 +298,7 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	if upload {
 		proDeployments := filterProEnabledDeployments(deployments)
 		if len(proDeployments) == 0 {
-			log.Info("No Atmos Pro-enabled deployments found; nothing to upload.")
+			u.PrintfMessageToTUI("No Atmos Pro-enabled deployments found; nothing to upload.")
 			return nil
 		}
 		return uploadDeployments(proDeployments)
