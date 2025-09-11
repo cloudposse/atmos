@@ -1,4 +1,4 @@
-– Get the list off toolchain tools
+- Get the list of toolchain tools
 ```
  $ atmos toolchain list
 ```
