@@ -504,7 +504,6 @@ func TestManager_buildWhoamiInfo_SetsRefAndEnv(t *testing.T) {
 	assert.Nil(t, info.Credentials)
 }
 
-
 // dummyValidator implements types.Validator for tests.
 type dummyValidator struct{}
 
