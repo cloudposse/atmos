@@ -1,9 +1,12 @@
 package auth
 
 import (
+	"context"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -198,3 +201,228 @@ func TestManager_promptForIdentity(t *testing.T) {
 	// In a real test environment, you might want to use dependency injection
 	// to mock the form interaction
 }
+
+// --- Additional helpers for manager tests ---.
+type (
+	testCreds struct{ exp *time.Time }
+	testStore struct {
+		data        map[string]any
+		expired     map[string]bool
+		retrieveErr map[string]error
+	}
+	testProvider struct {
+		name    string
+		kind    string
+		creds   *testCreds
+		authErr error
+	}
+)
+
+func (c *testCreds) IsExpired() bool {
+	if c.exp == nil {
+		return false
+	}
+	return time.Now().After(*c.exp)
+}
+func (c *testCreds) GetExpiration() (*time.Time, error)     { return c.exp, nil }
+func (c *testCreds) BuildWhoamiInfo(info *types.WhoamiInfo) {}
+
+func (s *testStore) Store(alias string, creds types.ICredentials) error {
+	if s.data == nil {
+		s.data = map[string]any{}
+	}
+	s.data[alias] = creds
+	return nil
+}
+
+func (s *testStore) Retrieve(alias string) (types.ICredentials, error) {
+	if s.retrieveErr != nil {
+		if err, ok := s.retrieveErr[alias]; ok {
+			return nil, err
+		}
+	}
+	if s.data == nil {
+		return nil, assert.AnError
+	}
+	v, ok := s.data[alias]
+	if !ok {
+		return nil, assert.AnError
+	}
+	return v.(types.ICredentials), nil
+}
+func (s *testStore) Delete(alias string) error { delete(s.data, alias); return nil }
+func (s *testStore) List() ([]string, error)   { return nil, nil }
+func (s *testStore) IsExpired(alias string) (bool, error) {
+	if s.expired != nil {
+		return s.expired[alias], nil
+	}
+	return false, nil
+}
+
+func (p *testProvider) Kind() string {
+	if p.kind == "" {
+		return "aws/iam-identity-center"
+	}
+	return p.kind
+}
+func (p *testProvider) Name() string                              { return p.name }
+func (p *testProvider) PreAuthenticate(_ types.AuthManager) error { return nil }
+func (p *testProvider) Authenticate(_ context.Context) (types.ICredentials, error) {
+	if p.authErr != nil {
+		return nil, p.authErr
+	}
+	if p.creds == nil {
+		return &testCreds{}, nil
+	}
+	return p.creds, nil
+}
+func (p *testProvider) Validate() error                         { return nil }
+func (p *testProvider) Environment() (map[string]string, error) { return map[string]string{}, nil }
+
+func TestManager_getProviderForIdentity_NameAndAlias(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{Identities: map[string]schema.Identity{
+			"real": {Kind: "aws/permission-set", Alias: "alias"},
+		}},
+		identities: map[string]types.Identity{
+			"real": stubIdentity{provider: "p"},
+		},
+	}
+	assert.Equal(t, "p", m.getProviderForIdentity("real"))
+	assert.Equal(t, "p", m.getProviderForIdentity("alias"))
+	assert.Equal(t, "", m.getProviderForIdentity("missing"))
+}
+
+func TestManager_buildAuthenticationChain_Errors(t *testing.T) {
+	m := &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{}}}
+	_, err := m.buildAuthenticationChain("ghost")
+	require.Error(t, err)
+
+	m = &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{
+		"dev": {Kind: "aws/permission-set"},
+	}}}
+	_, err = m.buildAuthenticationChain("dev")
+	require.Error(t, err)
+
+	m = &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{
+		"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{}},
+	}}}
+	_, err = m.buildAuthenticationChain("dev")
+	require.Error(t, err)
+
+	m = &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{
+		"a": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Identity: "b"}},
+		"b": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Identity: "a"}},
+	}}}
+	_, err = m.buildAuthenticationChain("a")
+	require.Error(t, err)
+}
+
+func TestManager_isCredentialValid(t *testing.T) {
+	now := time.Now().UTC()
+	s := &testStore{expired: map[string]bool{"ok": false, "expired": true}}
+	m := &manager{credentialStore: s}
+
+	// Expired -> false
+	valid, exp := m.isCredentialValid("expired", &testCreds{exp: ptrTime(now.Add(1 * time.Hour))})
+	assert.False(t, valid)
+	assert.Nil(t, exp)
+
+	// Not expired, far future -> true, non-nil exp
+	texp := now.Add(10 * time.Minute)
+	valid, exp = m.isCredentialValid("ok", &testCreds{exp: &texp})
+	assert.True(t, valid)
+	require.NotNil(t, exp)
+
+	// Not expired, no expiration -> true, nil exp
+	valid, exp = m.isCredentialValid("ok", &testCreds{exp: nil})
+	assert.True(t, valid)
+	assert.Nil(t, exp)
+}
+
+func TestManager_Whoami_Paths(t *testing.T) {
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{Identities: map[string]schema.Identity{
+			"dev": {Kind: "aws/user"},
+		}},
+		identities: map[string]types.Identity{
+			"dev": stubIdentity{provider: "p"},
+		},
+		credentialStore: s,
+	}
+	// Not found
+	_, err := m.Whoami(context.Background(), "ghost")
+	assert.Error(t, err)
+
+	// No creds
+	_, err = m.Whoami(context.Background(), "dev")
+	assert.Error(t, err)
+
+	// Expired
+	s.data["dev"] = &testCreds{}
+	s.expired["dev"] = true
+	_, err = m.Whoami(context.Background(), "dev")
+	assert.Error(t, err)
+
+	// Success
+	s.expired["dev"] = false
+	info, err := m.Whoami(context.Background(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "p", info.Provider)
+	assert.Equal(t, "dev", info.Identity)
+	assert.Equal(t, "dev", info.CredentialsRef)
+	assert.Nil(t, info.Credentials)
+}
+
+func TestManager_authenticateWithProvider_Paths(t *testing.T) {
+	s := &testStore{}
+	m := &manager{credentialStore: s, providers: map[string]types.Provider{}}
+	// Missing provider
+	_, err := m.authenticateWithProvider(context.Background(), "p")
+	assert.Error(t, err)
+
+	// Success
+	m.providers["p"] = &testProvider{name: "p", creds: &testCreds{}}
+	_, err = m.authenticateWithProvider(context.Background(), "p")
+	assert.NoError(t, err)
+}
+
+func TestManager_retrieveCachedCredentials_and_determineStart(t *testing.T) {
+	s := &testStore{data: map[string]any{"x": &testCreds{}}}
+	m := &manager{credentialStore: s, chain: []string{"x"}}
+	// determine
+	assert.Equal(t, 0, m.determineStartingIndex(-1))
+	assert.Equal(t, 2, m.determineStartingIndex(2))
+
+	// retrieve ok
+	_, err := m.retrieveCachedCredentials(m.chain, 0)
+	assert.NoError(t, err)
+
+	// retrieve error
+	s2 := &testStore{retrieveErr: map[string]error{"y": assert.AnError}}
+	m2 := &manager{credentialStore: s2, chain: []string{"y"}}
+	_, err = m2.retrieveCachedCredentials(m2.chain, 0)
+	assert.Error(t, err)
+}
+
+func TestManager_initializeProvidersAndIdentities(t *testing.T) {
+	// Providers: invalid kind
+	m := &manager{config: &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}}
+	assert.Error(t, m.initializeProviders())
+
+	// Identities: invalid kind
+	m = &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{"x": {Kind: "unknown"}}}}
+	assert.Error(t, m.initializeIdentities())
+}
+
+func TestManager_GetProviderKindForIdentity_UnknownProvider(t *testing.T) {
+	m := &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{
+		"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+	}}}
+	_, err := m.GetProviderKindForIdentity("dev")
+	assert.Error(t, err)
+}
+
+// ptrTime helper.
+func ptrTime(t time.Time) *time.Time { return &t }
