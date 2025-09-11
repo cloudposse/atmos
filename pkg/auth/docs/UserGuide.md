@@ -235,7 +235,7 @@ atmos auth whoami --identity dev-admin
 
 # Get environment variables
 atmos auth env
-atmos auth env --identity prod-admin --format export
+atmos auth env --identity prod-admin --format bash
 atmos auth env --format json
 atmos auth env --format dotenv
 
@@ -268,10 +268,10 @@ components:
 
 ## Environment Variable Formats
 
-### Export Format
+### Bash Format
 
 ```bash
-atmos auth env --format export
+atmos auth env --format bash
 # Output:
 export AWS_ACCESS_KEY_ID="AKIA..."
 export AWS_SECRET_ACCESS_KEY="..."

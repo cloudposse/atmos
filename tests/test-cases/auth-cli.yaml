@@ -90,7 +90,7 @@ tests:
         - "Usage:"
         - "atmos auth env"
         - "--format"
-        - "export"
+        - "bash"
         - "json"
         - "dotenv"
       exit_code: 0
@@ -114,17 +114,17 @@ tests:
         - "failed to retrieve AWS User credentials"
       exit_code: 1
 
-  - name: atmos auth env --format export --identity test-user
+  - name: atmos auth env --format bash --identity test-user
     enabled: false # need mocks
     snapshot: true
-    description: "Test auth env with export format"
+    description: "Test auth env with bash format"
     workdir: "fixtures/scenarios/atmos-auth/"
     command: "atmos"
     args:
       - "auth"
       - "env"
       - "--format"
-      - "export"
+      - "bash"
       - "--identity"
       - "test-user"
     expect:

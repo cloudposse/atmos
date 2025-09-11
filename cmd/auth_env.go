@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var SupportedFormats = []string{"json", "export", "dotenv"}
+var SupportedFormats = []string{"json", "bash", "dotenv"}
 
 // authEnvCmd exports authentication environment variables.
 var authEnvCmd = &cobra.Command{
@@ -69,7 +69,7 @@ var authEnvCmd = &cobra.Command{
 		switch format {
 		case "json":
 			return outputEnvAsJSON(&atmosConfig, envVars)
-		case "export":
+		case "bash":
 			return outputEnvAsExport(envVars)
 		case "dotenv":
 			return outputEnvAsDotenv(envVars)
@@ -111,7 +111,7 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 
 	for _, key := range keys {
 		value := envVars[key]
-		// Use the same safe single-quoted escaping as export output
+    	// Use the same safe single-quoted escaping as bash output
 		safe := strings.ReplaceAll(value, "'", "'\\''")
 		fmt.Printf("%s='%s'\n", key, safe)
 	}
@@ -119,7 +119,7 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 }
 
 func init() {
-	authEnvCmd.Flags().StringP("format", "f", "export", "Output format: export, json, dotenv.")
+	authEnvCmd.Flags().StringP("format", "f", "bash", "Output format: bash, json, dotenv.")
 	_ = viper.BindEnv("auth_env_format", "ATMOS_AUTH_ENV_FORMAT")
 	_ = viper.BindPFlag("auth_env_format", authEnvCmd.Flags().Lookup("format"))
 	_ = authEnvCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

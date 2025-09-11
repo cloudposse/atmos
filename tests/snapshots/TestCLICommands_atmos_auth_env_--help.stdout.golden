@@ -13,8 +13,8 @@ Usage:
 
 Flags:
 
-    -f, --format string    Output format: export, json, dotenv. (default
-                           export)
+    -f, --format string    Output format: bash, json, dotenv. (default
+                           bash)
 
     -h, --help             help for env
 
@@ -56,5 +56,4 @@ Global Flags:
 
 
 Use atmos auth env --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
-
 

@@ -23,8 +23,8 @@ func TestAuthEnvCmd(t *testing.T) {
 		expectedOutput []string
 	}{
 		{
-			name: "export format with default identity",
-			args: []string{"--format", "export"},
+			name: "bash format with default identity",
+			args: []string{"--format", "bash"},
 			setupConfig: func() *schema.AtmosConfiguration {
 				return &schema.AtmosConfiguration{
 					Auth: schema.AuthConfig{
@@ -243,7 +243,7 @@ func TestAuthEnvCmd(t *testing.T) {
 				},
 			}
 			cmd.Flags().StringP("identity", "i", "", "Identity to get environment for")
-			cmd.Flags().StringP("format", "f", "export", "Output format (export, json, dotenv)")
+			cmd.Flags().StringP("format", "f", "bash", "Output format (bash, json, dotenv)")
 
 			// Capture output
 			var buf bytes.Buffer
@@ -278,7 +278,7 @@ func TestAuthEnvCmdFlags(t *testing.T) {
 		Use: "env",
 	}
 	cmd.Flags().StringP("identity", "i", "", "Identity to get environment for")
-	cmd.Flags().StringP("format", "f", "export", "Output format (export, json, dotenv)")
+	cmd.Flags().StringP("format", "f", "bash", "Output format (bash, json, dotenv)")
 
 	// Test that required flags are present
 	identityFlag := cmd.Flags().Lookup("identity")
@@ -288,7 +288,7 @@ func TestAuthEnvCmdFlags(t *testing.T) {
 	formatFlag := cmd.Flags().Lookup("format")
 	require.NotNil(t, formatFlag)
 	assert.Equal(t, "f", formatFlag.Shorthand)
-	assert.Equal(t, "export", formatFlag.DefValue)
+	assert.Equal(t, "bash", formatFlag.DefValue)
 }
 
 func TestFormatEnvironmentVariables(t *testing.T) {
@@ -302,7 +302,7 @@ func TestFormatEnvironmentVariables(t *testing.T) {
 		expected []string
 	}{
 		{
-			format: "export",
+			format: "bash",
 			expected: []string{
 				"export AWS_PROFILE='test-profile'",
 				"export AWS_REGION='us-east-1'",
