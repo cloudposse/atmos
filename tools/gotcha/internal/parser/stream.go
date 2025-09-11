@@ -23,7 +23,8 @@ func ShouldShowErrorLine(line string) bool {
 		return false
 	}
 
-	// Show actual error messages
+	// Show actual error messages (case-insensitive for some patterns)
+	lowerLine := strings.ToLower(trimmed)
 	if strings.Contains(line, "_test.go:") || // File:line references
 		strings.Contains(line, "Error:") ||
 		strings.Contains(line, "Error Trace:") ||
@@ -32,7 +33,14 @@ func ShouldShowErrorLine(line string) bool {
 		strings.Contains(line, "expected:") ||
 		strings.Contains(line, "actual:") ||
 		strings.Contains(line, "got:") ||
-		strings.Contains(line, "want:") {
+		strings.Contains(line, "want:") ||
+		strings.HasPrefix(lowerLine, "fail ") || // FAIL package lines
+		strings.Contains(lowerLine, "error:") ||
+		strings.Contains(lowerLine, "warning:") ||
+		strings.Contains(lowerLine, "panic:") ||
+		strings.Contains(lowerLine, "compilation error") ||
+		strings.Contains(lowerLine, "build error") ||
+		strings.Contains(lowerLine, "race condition") {
 		return true
 	}
 
@@ -49,6 +57,7 @@ func ShouldShowErrorLine(line string) bool {
 		return false
 	}
 
-	// When in doubt, show it if it's indented (part of test output)
-	return strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t")
+	// Don't show indented lines by default - they're usually normal test output
+	// The error patterns above will catch actual errors
+	return false
 }

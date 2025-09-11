@@ -297,7 +297,7 @@ func TestParseFunctionCoverageLine(t *testing.T) {
 
 func TestParseCoverageProfile(t *testing.T) {
 	// Use existing coverage file that has valid entries.
-	coverageFile := "test.out"
+	coverageFile := "../../fixtures/test.coverage.out"
 
 	tests := []struct {
 		name         string

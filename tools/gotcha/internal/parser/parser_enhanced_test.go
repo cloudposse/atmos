@@ -149,7 +149,7 @@ invalid json line that should be skipped
 		{
 			name:         "test with coverage file",
 			jsonInput:    `{"Time":"2023-01-01T00:00:00Z","Action":"pass","Package":"example/pkg","Test":"TestWithCoverage"}`,
-			coverProfile: "test.out", // Use our test coverage file
+			coverProfile: "../../fixtures/test.coverage.out", // Use our test coverage file
 			excludeMocks: true,
 			wantErr:      false,
 			checkResult: func(summary *types.TestSummary) error {

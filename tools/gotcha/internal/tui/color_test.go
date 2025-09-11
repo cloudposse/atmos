@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 )
@@ -48,7 +49,7 @@ func TestColorConfiguration(t *testing.T) {
 		{
 			name:     "No color support",
 			envVars:  map[string]string{},
-			expected: termenv.Ascii,
+			expected: termenv.ANSI, // Default to ANSI for modern terminals
 		},
 		{
 			name: "Force color via FORCE_COLOR",
@@ -90,6 +91,9 @@ func TestColorConfiguration(t *testing.T) {
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
+
+			// Initialize viper environment bindings to read the env vars
+			config.InitEnvironment()
 
 			// Test the color profile detection
 			profile := detectColorProfile()
@@ -165,6 +169,9 @@ func TestColorOutput(t *testing.T) {
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
+
+			// Initialize viper environment bindings to read the env vars
+			config.InitEnvironment()
 
 			// Configure color profile
 			ConfigureColors()

@@ -140,7 +140,7 @@ func TestGenerateAdaptiveComment(t *testing.T) {
 			}
 
 			if tt.expected.hasElapsedTime {
-				assert.Contains(t, comment, "elapsed", "Should contain elapsed time")
+				assert.Contains(t, comment, "Total Time:", "Should contain total time")
 			}
 		})
 	}

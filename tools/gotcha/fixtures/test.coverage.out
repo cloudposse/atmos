@@ -1,0 +1,17 @@
+mode: atomic
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/coverage.go:10.50,12.2 1 5
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/coverage.go:15.60,17.16 2 3
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/coverage.go:17.16,19.3 1 0
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/coverage.go:20.2,20.12 1 3
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/coverage_mock.go:5.30,7.2 1 0
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/coverage_mock.go:10.40,12.2 1 0
+github.com/cloudposse/atmos/tools/gotcha/internal/parser/parser.go:25.75,28.16 3 10
+github.com/cloudposse/atmos/tools/gotcha/internal/parser/parser.go:28.16,30.3 1 2
+github.com/cloudposse/atmos/tools/gotcha/internal/parser/parser.go:31.2,32.16 2 8
+github.com/cloudposse/atmos/tools/gotcha/internal/parser/parser.go:32.16,34.3 1 1
+github.com/cloudposse/atmos/tools/gotcha/internal/parser/parser.go:35.2,35.15 1 7
+github.com/cloudposse/atmos/tools/gotcha/pkg/utils/utils.go:10.25,12.2 1 100
+github.com/cloudposse/atmos/tools/gotcha/pkg/utils/utils.go:15.35,17.2 1 50
+github.com/cloudposse/atmos/tools/gotcha/pkg/utils/utils.go:20.45,22.2 1 75
+github.com/cloudposse/atmos/tools/gotcha/pkg/mock/mock_service.go:8.30,10.2 1 0
+github.com/cloudposse/atmos/tools/gotcha/pkg/mock/mock_service.go:13.40,15.2 1 0

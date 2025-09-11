@@ -430,6 +430,8 @@ func (m *TestModel) View() string {
 
 	// Calculate the display width of all components except the progress bar
 	// We need to account for ANSI color codes not contributing to display width
+	prefix := "  🧪  "
+	prefixWidth := lipgloss.Width(prefix)
 	spinWidth := lipgloss.Width(spin)
 	infoWidth := lipgloss.Width(info)
 	percentageWidth := lipgloss.Width(percentage)
@@ -438,8 +440,8 @@ func (m *TestModel) View() string {
 	bufferWidth := lipgloss.Width(bufferStr)
 
 	// Calculate total fixed width (including spaces)
-	// spin + info + "  " + [progress] + " " + percentage + " " + testCount + "  " + time + " " + buffer
-	fixedWidth := spinWidth + infoWidth + 2 + 1 + percentageWidth + 1 + testCountWidth + 2 + timeWidth + 1 + bufferWidth
+	// prefix + spin + info + "  " + [progress] + " " + percentage + " " + testCount + "  " + time + " " + buffer
+	fixedWidth := prefixWidth + spinWidth + infoWidth + 2 + 1 + percentageWidth + 1 + testCountWidth + 2 + timeWidth + 1 + bufferWidth
 
 	// Calculate available width for progress bar (with some padding)
 	availableWidth := terminalWidth - fixedWidth - 2 // 2 chars padding for safety
@@ -464,7 +466,8 @@ func (m *TestModel) View() string {
 
 	// Assemble the complete status line with fixed spacing
 	// All sections are now fixed-width, so no jumping should occur
-	statusLine := spin + info + "  " + prog + " " + percentage + " " + testCount + "  " + timeStr + " " + bufferStr
+	// Add test tube emoji with 2-space indent at the beginning
+	statusLine := prefix + spin + info + "  " + prog + " " + percentage + " " + testCount + "  " + timeStr + " " + bufferStr
 
 	return statusLine + "\n"
 }
