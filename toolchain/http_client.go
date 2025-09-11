@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -39,14 +40,23 @@ type GitHubAuthenticatedTransport struct {
 
 // RoundTrip implements http.RoundTripper interface.
 func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Add GitHub token to requests to GitHub API and raw content
-	if t.isGitHubRequest(req.URL.String()) {
+	host := req.URL.Hostname()
+	if (host == "api.github.com" || host == "raw.githubusercontent.com") && t.GitHubToken != "" {
 		req.Header.Set("Authorization", "Bearer "+t.GitHubToken)
-		// Also set User-Agent to identify the client
 		req.Header.Set("User-Agent", "atmos-toolchain/1.0")
 	}
 
-	return t.Base.RoundTrip(req)
+	base := t.Base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+
+	resp, err := base.RoundTrip(req)
+	if err != nil {
+		return nil, fmt.Errorf("GitHub transport roundtrip: %w", err)
+	}
+
+	return resp, nil
 }
 
 // isGitHubRequest checks if the request is to a GitHub domain that requires authentication.
