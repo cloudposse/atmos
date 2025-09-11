@@ -34,7 +34,7 @@ func TestValidateProvider(t *testing.T) {
 	err = v.ValidateProvider("aws-saml", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})
 	assert.NoError(t, err)
 
-    // Unsupported kind.
+	// Unsupported kind.
 	err = v.ValidateProvider("x", &schema.Provider{Kind: "unknown/kind"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), errUtils.ErrInvalidProviderKind.Error())

@@ -236,7 +236,7 @@ func sanitizeRoleSessionNameLengthAndTrim(name string) string {
 	if len(name) > maxSessionNameLength {
 		name = name[:maxSessionNameLength]
 	}
-    // Remove trailing dashes to ensure valid session name.
+	// Remove trailing dashes to ensure valid session name.
 	name = strings.TrimRight(name, "-")
 	if name == "" {
 		name = "atmos-session"

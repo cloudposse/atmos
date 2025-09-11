@@ -34,13 +34,13 @@ func TestAWSCredentials_IsExpired(t *testing.T) {
 func TestAWSCredentials_GetExpiration(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
-    // Blank.
+	// Blank.
 	c := &AWSCredentials{}
 	exp, err := c.GetExpiration()
 	assert.NoError(t, err)
 	assert.Nil(t, exp)
 
-    // Valid.
+	// Valid.
 	c.Expiration = now.Add(30 * time.Minute).Format(time.RFC3339)
 	exp, err = c.GetExpiration()
 	assert.NoError(t, err)
@@ -48,7 +48,7 @@ func TestAWSCredentials_GetExpiration(t *testing.T) {
 		assert.WithinDuration(t, now.Add(30*time.Minute), *exp, time.Second)
 	}
 
-    // Invalid.
+	// Invalid.
 	c.Expiration = "bogus"
 	exp, err = c.GetExpiration()
 	assert.Nil(t, exp)

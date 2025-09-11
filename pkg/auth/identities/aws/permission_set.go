@@ -49,7 +49,7 @@ func (i *permissionSetIdentity) Kind() string {
 //
 
 func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
-    // Note: Caching is now handled at the manager level to prevent duplicates.
+	// Note: Caching is now handled at the manager level to prevent duplicates.
 
 	awsBase, ok := baseCreds.(*types.AWSCredentials)
 	if !ok {
@@ -58,7 +58,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 
 	log.Debug("Permission set authentication started.", "identity", i.name)
 
-    // Get permission set and account info.
+	// Get permission set and account info.
 	permissionSetName, err := i.getPermissionSetName()
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 		return nil, err
 	}
 
-    // Create SSO client and resolve account ID if needed.
+	// Create SSO client and resolve account ID if needed.
 	ssoClient, err := i.newSSOClient(ctx, awsBase)
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 		return nil, err
 	}
 
-    // Get role credentials for the permission set.
+	// Get role credentials for the permission set.
 	roleCredsResp, err := ssoClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
 		AccountId:   awssdk.String(accountID),
 		RoleName:    awssdk.String(permissionSetName),
@@ -96,7 +96,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 
 	log.Debug("Permission set authentication successful.", "identity", i.name)
 
-    // Note: Caching handled at manager level.
+	// Note: Caching handled at manager level.
 	return creds, nil
 }
 
@@ -106,14 +106,14 @@ func (i *permissionSetIdentity) Validate() error {
 		return fmt.Errorf("%w: principal is required", errUtils.ErrInvalidIdentityConfig)
 	}
 
-    // Check permission set name in principal or spec (backward compatibility).
+	// Check permission set name in principal or spec (backward compatibility).
 	var permissionSetName string
 	var ok bool
 	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
 		return fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrInvalidIdentityConfig)
 	}
 
-    // Check account info in principal.
+	// Check account info in principal.
 	var accountSpec map[string]interface{}
 	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
 		return fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
@@ -134,7 +134,7 @@ func (i *permissionSetIdentity) Validate() error {
 func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
-    // Add environment variables from identity config.
+	// Add environment variables from identity config.
 	for _, envVar := range i.config.Env {
 		env[envVar.Key] = envVar.Value
 	}
@@ -152,7 +152,7 @@ func (i *permissionSetIdentity) GetProviderName() (string, error) {
 
 // PostAuthenticate sets up AWS files after authentication.
 func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
-    // Setup AWS files using shared AWS cloud package.
+	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %v", errUtils.ErrAwsAuth, err)
 	}

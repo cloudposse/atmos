@@ -97,23 +97,23 @@ func TestSSOProvider_Environment_Simple(t *testing.T) {
 }
 
 func TestSSOProvider_NameAndKind(t *testing.T) {
-    config := &schema.Provider{
-        Kind:     testSSOKind,
-        Region:   testRegion,
-        StartURL: testStartURL,
-    }
-    provider, err := NewSSOProvider(testProviderName, config)
-    require.NoError(t, err)
-    assert.Equal(t, testProviderName, provider.Name())
-    assert.Equal(t, testSSOKind, provider.Kind())
+	config := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+	provider, err := NewSSOProvider(testProviderName, config)
+	require.NoError(t, err)
+	assert.Equal(t, testProviderName, provider.Name())
+	assert.Equal(t, testSSOKind, provider.Kind())
 }
 
 func TestSSOProvider_PreAuthenticate_NoOp(t *testing.T) {
-    config := &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL}
-    provider, err := NewSSOProvider(testProviderName, config)
-    require.NoError(t, err)
-    // PreAuthenticate is a no-op for SSO and should not error.
-    assert.NoError(t, provider.PreAuthenticate(nil))
+	config := &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL}
+	provider, err := NewSSOProvider(testProviderName, config)
+	require.NoError(t, err)
+	// PreAuthenticate is a no-op for SSO and should not error.
+	assert.NoError(t, provider.PreAuthenticate(nil))
 }
 
 func TestSSOProvider_Authenticate_Simple(t *testing.T) {
@@ -159,24 +159,24 @@ func TestSSOProvider_promptDeviceAuth_NilURL(t *testing.T) {
 }
 
 func TestSSOProvider_getSessionDuration(t *testing.T) {
-    // Default when no session configured.
+	// Default when no session configured.
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x"})
 	require.NoError(t, err)
 	assert.Equal(t, 60, p.getSessionDuration())
 
-    // Valid duration string.
+	// Valid duration string.
 	p, err = NewSSOProvider("sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x", Session: &schema.SessionConfig{Duration: "15m"}})
 	require.NoError(t, err)
 	assert.Equal(t, 15, p.getSessionDuration())
 
-    // Invalid duration string -> default.
+	// Invalid duration string -> default.
 	p, err = NewSSOProvider("sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x", Session: &schema.SessionConfig{Duration: "bogus"}})
 	require.NoError(t, err)
 	assert.Equal(t, 60, p.getSessionDuration())
 }
 
 func TestSSOProvider_Validate_Errors(t *testing.T) {
-    // Create valid provider, then mutate fields to trigger Validate errors.
+	// Create valid provider, then mutate fields to trigger Validate errors.
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x"})
 	require.NoError(t, err)
 
@@ -187,7 +187,6 @@ func TestSSOProvider_Validate_Errors(t *testing.T) {
 	p.startURL = ""
 	assert.Error(t, p.Validate())
 }
-
 
 func TestSSOProvider_NameAndPreAuthenticate_NoOp(t *testing.T) {
 	p, err := NewSSOProvider("aws-sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x"})

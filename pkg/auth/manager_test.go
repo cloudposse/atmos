@@ -324,18 +324,18 @@ func TestManager_isCredentialValid(t *testing.T) {
 	s := &testStore{expired: map[string]bool{"ok": false, "expired": true}}
 	m := &manager{credentialStore: s}
 
-    // Expired -> false.
+	// Expired -> false.
 	valid, exp := m.isCredentialValid("expired", &testCreds{exp: ptrTime(now.Add(1 * time.Hour))})
 	assert.False(t, valid)
 	assert.Nil(t, exp)
 
-    // Not expired, far future -> true, non-nil exp.
+	// Not expired, far future -> true, non-nil exp.
 	texp := now.Add(10 * time.Minute)
 	valid, exp = m.isCredentialValid("ok", &testCreds{exp: &texp})
 	assert.True(t, valid)
 	require.NotNil(t, exp)
 
-    // Not expired, no expiration -> true, nil exp.
+	// Not expired, no expiration -> true, nil exp.
 	valid, exp = m.isCredentialValid("ok", &testCreds{exp: nil})
 	assert.True(t, valid)
 	assert.Nil(t, exp)

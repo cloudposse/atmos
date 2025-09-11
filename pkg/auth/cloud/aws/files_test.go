@@ -58,7 +58,7 @@ func TestAWSFileManager_WriteConfig(t *testing.T) {
 	assert.NoError(t, err)
 	sec = cfg.Section("default")
 	assert.Equal(t, "us-west-1", sec.Key("region").String())
-    // output should be removed when empty.
+	// output should be removed when empty.
 	_, err = sec.GetKey("output")
 	assert.Error(t, err)
 

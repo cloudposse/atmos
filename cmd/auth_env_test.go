@@ -1,17 +1,17 @@
 package cmd
 
 import (
-    "bytes"
-    "encoding/json"
-    "fmt"
-    "sort"
-    "strings"
-    "testing"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+	"testing"
 
-    "github.com/cloudposse/atmos/pkg/schema"
-    "github.com/spf13/cobra"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAuthEnvCmd(t *testing.T) {
@@ -46,11 +46,11 @@ func TestAuthEnvCmd(t *testing.T) {
 					},
 				}
 			},
-        expectedOutput: []string{
-            "export AWS_SHARED_CREDENTIALS_FILE='/home/user/.aws/atmos/test-provider/credentials'",
-            "export AWS_CONFIG_FILE='/home/user/.aws/atmos/test-provider/config'",
-            "export AWS_PROFILE='test-identity'",
-        },
+			expectedOutput: []string{
+				"export AWS_SHARED_CREDENTIALS_FILE='/home/user/.aws/atmos/test-provider/credentials'",
+				"export AWS_CONFIG_FILE='/home/user/.aws/atmos/test-provider/config'",
+				"export AWS_PROFILE='test-identity'",
+			},
 		},
 		{
 			name: "json format with specific identity",
@@ -105,11 +105,11 @@ func TestAuthEnvCmd(t *testing.T) {
 					},
 				}
 			},
-        expectedOutput: []string{
-            "AWS_SHARED_CREDENTIALS_FILE='/home/user/.aws/atmos/test-provider/credentials'",
-            "AWS_CONFIG_FILE='/home/user/.aws/atmos/test-provider/config'",
-            "AWS_PROFILE='test-identity'",
-        },
+			expectedOutput: []string{
+				"AWS_SHARED_CREDENTIALS_FILE='/home/user/.aws/atmos/test-provider/credentials'",
+				"AWS_CONFIG_FILE='/home/user/.aws/atmos/test-provider/config'",
+				"AWS_PROFILE='test-identity'",
+			},
 		},
 		{
 			name: "no default identity",
@@ -209,34 +209,34 @@ func TestAuthEnvCmd(t *testing.T) {
 						}
 						jsonData, _ := json.MarshalIndent(envMap, "", "  ")
 						cmd.Println(string(jsonData))
-                case "dotenv":
-                    // Collect and sort keys for deterministic output
-                    keys := make([]string, 0, len(envVars))
-                    envMap := make(map[string]string, len(envVars))
-                    for _, env := range envVars {
-                        keys = append(keys, env.Key)
-                        envMap[env.Key] = env.Value
-                    }
-                    sort.Strings(keys)
-                    for _, k := range keys {
-                        v := envMap[k]
-                        safe := strings.ReplaceAll(v, "'", "'\\''")
-                        cmd.Printf("%s='%s'\n", k, safe)
-                    }
-                default: // export format
-                    // Collect and sort keys for deterministic output
-                    keys := make([]string, 0, len(envVars))
-                    envMap := make(map[string]string, len(envVars))
-                    for _, env := range envVars {
-                        keys = append(keys, env.Key)
-                        envMap[env.Key] = env.Value
-                    }
-                    sort.Strings(keys)
-                    for _, k := range keys {
-                        v := envMap[k]
-                        safe := strings.ReplaceAll(v, "'", "'\\''")
-                        cmd.Printf("export %s='%s'\n", k, safe)
-                    }
+					case "dotenv":
+						// Collect and sort keys for deterministic output
+						keys := make([]string, 0, len(envVars))
+						envMap := make(map[string]string, len(envVars))
+						for _, env := range envVars {
+							keys = append(keys, env.Key)
+							envMap[env.Key] = env.Value
+						}
+						sort.Strings(keys)
+						for _, k := range keys {
+							v := envMap[k]
+							safe := strings.ReplaceAll(v, "'", "'\\''")
+							cmd.Printf("%s='%s'\n", k, safe)
+						}
+					default: // export format
+						// Collect and sort keys for deterministic output
+						keys := make([]string, 0, len(envVars))
+						envMap := make(map[string]string, len(envVars))
+						for _, env := range envVars {
+							keys = append(keys, env.Key)
+							envMap[env.Key] = env.Value
+						}
+						sort.Strings(keys)
+						for _, k := range keys {
+							v := envMap[k]
+							safe := strings.ReplaceAll(v, "'", "'\\''")
+							cmd.Printf("export %s='%s'\n", k, safe)
+						}
 					}
 
 					return nil
@@ -297,72 +297,72 @@ func TestFormatEnvironmentVariables(t *testing.T) {
 		{Key: "AWS_REGION", Value: "us-east-1"},
 	}
 
-    tests := []struct {
-        format   string
-        expected []string
-    }{
-        {
-            format: "export",
-            expected: []string{
-                "export AWS_PROFILE='test-profile'",
-                "export AWS_REGION='us-east-1'",
-            },
-        },
-        {
-            format: "dotenv",
-            expected: []string{
-                "AWS_PROFILE='test-profile'",
-                "AWS_REGION='us-east-1'",
-            },
-        },
-        {
-            format: "json",
-            expected: []string{
-                `"AWS_PROFILE": "test-profile"`,
-                `"AWS_REGION": "us-east-1"`,
-            },
-        },
-    }
+	tests := []struct {
+		format   string
+		expected []string
+	}{
+		{
+			format: "export",
+			expected: []string{
+				"export AWS_PROFILE='test-profile'",
+				"export AWS_REGION='us-east-1'",
+			},
+		},
+		{
+			format: "dotenv",
+			expected: []string{
+				"AWS_PROFILE='test-profile'",
+				"AWS_REGION='us-east-1'",
+			},
+		},
+		{
+			format: "json",
+			expected: []string{
+				`"AWS_PROFILE": "test-profile"`,
+				`"AWS_REGION": "us-east-1"`,
+			},
+		},
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.format, func(t *testing.T) {
 			var output strings.Builder
 
-        switch tt.format {
-        case "json":
-            envMap := make(map[string]string)
-            for _, env := range envVars {
-                envMap[env.Key] = env.Value
-            }
-            jsonData, _ := json.MarshalIndent(envMap, "", "  ")
-            output.WriteString(string(jsonData))
-        case "dotenv":
-            keys := []string{}
-            m := map[string]string{}
-            for _, env := range envVars {
-                keys = append(keys, env.Key)
-                m[env.Key] = env.Value
-            }
-            sort.Strings(keys)
-            for _, k := range keys {
-                v := m[k]
-                safe := strings.ReplaceAll(v, "'", "'\\''")
-                output.WriteString(k + "='" + safe + "'\n")
-            }
-        default: // export
-            keys := []string{}
-            m := map[string]string{}
-            for _, env := range envVars {
-                keys = append(keys, env.Key)
-                m[env.Key] = env.Value
-            }
-            sort.Strings(keys)
-            for _, k := range keys {
-                v := m[k]
-                safe := strings.ReplaceAll(v, "'", "'\\''")
-                output.WriteString("export " + k + "='" + safe + "'\n")
-            }
-        }
+			switch tt.format {
+			case "json":
+				envMap := make(map[string]string)
+				for _, env := range envVars {
+					envMap[env.Key] = env.Value
+				}
+				jsonData, _ := json.MarshalIndent(envMap, "", "  ")
+				output.WriteString(string(jsonData))
+			case "dotenv":
+				keys := []string{}
+				m := map[string]string{}
+				for _, env := range envVars {
+					keys = append(keys, env.Key)
+					m[env.Key] = env.Value
+				}
+				sort.Strings(keys)
+				for _, k := range keys {
+					v := m[k]
+					safe := strings.ReplaceAll(v, "'", "'\\''")
+					output.WriteString(k + "='" + safe + "'\n")
+				}
+			default: // export
+				keys := []string{}
+				m := map[string]string{}
+				for _, env := range envVars {
+					keys = append(keys, env.Key)
+					m[env.Key] = env.Value
+				}
+				sort.Strings(keys)
+				for _, k := range keys {
+					v := m[k]
+					safe := strings.ReplaceAll(v, "'", "'\\''")
+					output.WriteString("export " + k + "='" + safe + "'\n")
+				}
+			}
 
 			result := output.String()
 			for _, expected := range tt.expected {

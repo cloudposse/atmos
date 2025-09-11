@@ -177,11 +177,11 @@ func Test_sanitizeRoleSessionName(t *testing.T) {
 }
 
 func TestNewAssumeRoleIdentity_InvalidInputs(t *testing.T) {
-    // Empty name.
+	// Empty name.
 	_, err := NewAssumeRoleIdentity("", &schema.Identity{Kind: "aws/assume-role"})
 	assert.Error(t, err)
 
-    // Nil config.
+	// Nil config.
 	_, err = NewAssumeRoleIdentity("role", nil)
 	assert.Error(t, err)
 }

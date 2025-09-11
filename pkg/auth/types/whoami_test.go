@@ -21,24 +21,24 @@ func (s *stubStore) IsExpired(alias string) (bool, error)         { return false
 
 func TestWhoami_Rehydrate_NilReceiver(t *testing.T) {
 	var w *WhoamiInfo
-    // Should be a no-op and not panic.
+	// Should be a no-op and not panic.
 	assert.NoError(t, w.Rehydrate(nil))
 }
 
 func TestWhoami_Rehydrate_NoRefOrAlreadyPresent(t *testing.T) {
-    // No ref.
+	// No ref.
 	w := &WhoamiInfo{}
 	assert.NoError(t, w.Rehydrate(&stubStore{}))
 	assert.Nil(t, w.Credentials)
 
-    // Already populated.
+	// Already populated.
 	w = &WhoamiInfo{Credentials: &AWSCredentials{AccessKeyID: "x"}}
 	assert.NoError(t, w.Rehydrate(&stubStore{}))
 }
 
 func TestWhoami_Rehydrate_NilStore(t *testing.T) {
 	w := &WhoamiInfo{CredentialsRef: "alias"}
-    // Nil store is tolerated.
+	// Nil store is tolerated.
 	assert.NoError(t, w.Rehydrate(nil))
 	assert.Nil(t, w.Credentials)
 }

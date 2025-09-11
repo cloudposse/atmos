@@ -42,7 +42,7 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 		}
 	}
 
-    // Validate identities.
+	// Validate identities.
 
 	for name, identity := range config.Identities {
 		if err := v.ValidateIdentity(name, &identity, convertProviders(config.Providers)); err != nil {
@@ -50,7 +50,7 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 		}
 	}
 
-    // Validate chains.
+	// Validate chains.
 	if err := v.ValidateChains(convertIdentities(config.Identities), convertProviders(config.Providers)); err != nil {
 		return fmt.Errorf("identity chain validation failed: %w", errors.Join(errUtils.ErrInvalidAuthConfig, err))
 	}
@@ -60,10 +60,10 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 
 // ValidateLogsConfig validates the logs configuration.
 func (v *validator) ValidateLogsConfig(logs *schema.Logs) error {
-    if logs.Level == "" {
-        // Default to Info if not specified.
-        return nil
-    }
+	if logs.Level == "" {
+		// Default to Info if not specified.
+		return nil
+	}
 
 	validLevels := []string{"Debug", "Info", "Warn", "Error"}
 	for _, validLevel := range validLevels {
@@ -85,8 +85,8 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 		return fmt.Errorf("%w: provider kind is required", errUtils.ErrInvalidProviderConfig)
 	}
 
-    // TODO replace with Provider Interface Validate().
-    // Validate based on provider kind.
+	// TODO replace with Provider Interface Validate().
+	// Validate based on provider kind.
 	switch provider.Kind {
 	case "aws/iam-identity-center":
 		return v.validateSSOProvider(provider)
@@ -109,13 +109,13 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 		return fmt.Errorf("%w: identity kind is required", errUtils.ErrInvalidIdentityConfig)
 	}
 
-    // Validate via configuration - AWS User identities don't require via provider.
+	// Validate via configuration - AWS User identities don't require via provider.
 	if err := v.validateViaConfiguration(identity, providers); err != nil {
 		return err
 	}
 
-    // TODO replace with Identity Interface Validate().
-    // Validate based on identity kind.
+	// TODO replace with Identity Interface Validate().
+	// Validate based on identity kind.
 	switch identity.Kind {
 	case "aws/permission-set":
 		return v.validatePermissionSetIdentity(identity)
@@ -143,7 +143,7 @@ func (v *validator) validateViaConfiguration(identity *schema.Identity, provider
 
 // ValidateChains validates identity chains for cycles and invalid references.
 func (v *validator) ValidateChains(identities map[string]*schema.Identity, providers map[string]*schema.Provider) error {
-    // Build dependency graph.
+	// Build dependency graph.
 	graph := make(map[string][]string)
 
 	for name, identity := range identities {
@@ -157,14 +157,14 @@ func (v *validator) ValidateChains(identities map[string]*schema.Identity, provi
 		}
 	}
 
-    // Check for cycles using DFS.
+	// Check for cycles using DFS.
 	visited := make(map[string]bool)
 	recStack := make(map[string]bool)
 
 	for name := range identities {
 		if !visited[name] {
 			if v.hasCycle(name, graph, visited, recStack) {
-                    // Return a domain-specific sentinel to enable precise error checks by callers/tests.
+				// Return a domain-specific sentinel to enable precise error checks by callers/tests.
 				return fmt.Errorf("%w: circular dependency detected in identity chain involving %q", ErrIdentityCycle, name)
 			}
 		}
@@ -198,7 +198,7 @@ func (v *validator) validateSAMLProvider(provider *schema.Provider) error {
 		return fmt.Errorf("%w: region is required for AWS SAML provider", errUtils.ErrInvalidAuthConfig)
 	}
 
-    // Validate URL format.
+	// Validate URL format.
 	if _, err := url.Parse(provider.URL); err != nil {
 		return fmt.Errorf("invalid URL format: %w", errors.Join(errUtils.ErrInvalidAuthConfig, err))
 	}
@@ -256,7 +256,7 @@ func (v *validator) validateAssumeRoleIdentity(identity *schema.Identity) error 
 
 // validateUserIdentity validates AWS user identity configuration.
 func (v *validator) validateUserIdentity(identity *schema.Identity) error {
-    // User identities typically don't require additional validation.
+	// User identities typically don't require additional validation.
 	return nil
 }
 

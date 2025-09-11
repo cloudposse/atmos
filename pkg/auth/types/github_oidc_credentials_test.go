@@ -19,20 +19,20 @@ func jwtWithExp(t time.Time) string {
 	}{Exp: t.Unix()}
 	raw, _ := json.Marshal(payloadStruct)
 	payload := base64.RawURLEncoding.EncodeToString(raw)
-    // signature part is ignored by our parser; include a placeholder.
+	// signature part is ignored by our parser; include a placeholder.
 	return fmt.Sprintf("%s.%s.", header, payload)
 }
 
 func TestOIDCCredentials_GetExpiration(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
-    // No parts -> nil, nil.
+	// No parts -> nil, nil.
 	c := &OIDCCredentials{Token: "not-a-jwt"}
 	exp, err := c.GetExpiration()
 	assert.NoError(t, err)
 	assert.Nil(t, exp)
 
-    // Valid exp.
+	// Valid exp.
 	c.Token = jwtWithExp(now.Add(42 * time.Minute))
 	exp, err = c.GetExpiration()
 	assert.NoError(t, err)
@@ -40,14 +40,14 @@ func TestOIDCCredentials_GetExpiration(t *testing.T) {
 		assert.WithinDuration(t, now.Add(42*time.Minute), *exp, time.Second)
 	}
 
-    // Bad base64 in payload -> decode error.
+	// Bad base64 in payload -> decode error.
 	c.Token = "aGVh.Zm9v+notbase64.sig"
 	exp, err = c.GetExpiration()
 	assert.Nil(t, exp)
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrAuthOidcDecodeFailed))
 
-    // Bad JSON in payload -> unmarshal error.
+	// Bad JSON in payload -> unmarshal error.
 	header := base64.RawURLEncoding.EncodeToString([]byte("{}"))
 	payload := base64.RawURLEncoding.EncodeToString([]byte("not-json"))
 	c.Token = fmt.Sprintf("%s.%s.", header, payload)
@@ -68,7 +68,7 @@ func TestOIDCCredentials_IsExpired_WithSkew(t *testing.T) {
 	c2 := &OIDCCredentials{Token: jwtWithExp(far)}
 	assert.False(t, c2.IsExpired())
 
-    // No exp -> not expired.
+	// No exp -> not expired.
 	c3 := &OIDCCredentials{Token: "header.payload."}
 	assert.False(t, c3.IsExpired())
 }
@@ -83,6 +83,6 @@ func TestOIDCCredentials_BuildWhoamiInfo(t *testing.T) {
 		assert.WithinDuration(t, texp.Truncate(time.Second), w.Expiration.Truncate(time.Second), time.Second)
 	}
 
-    // Nil target is tolerated.
+	// Nil target is tolerated.
 	c.BuildWhoamiInfo(nil)
 }

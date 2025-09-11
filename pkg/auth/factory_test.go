@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewProvider_Factory(t *testing.T) {
-    // Supported kinds construct without error when minimally valid.
+	// Supported kinds construct without error when minimally valid.
 	sso, err := NewProvider("aws-sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://example.awsapps.com/start"})
 	assert.NoError(t, err)
 	assert.NotNil(t, sso)
@@ -22,7 +22,7 @@ func TestNewProvider_Factory(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, oidc)
 
-    // Unsupported.
+	// Unsupported.
 	_, err = NewProvider("x", &schema.Provider{Kind: "unknown/kind"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), errUtils.ErrInvalidProviderKind.Error())

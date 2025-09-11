@@ -1,17 +1,17 @@
 package cmd
 
 import (
-    "os"
-    "sort"
-    "strings"
-    "testing"
+	"os"
+	"sort"
+	"strings"
+	"testing"
 
-    "github.com/cloudposse/atmos/pkg/auth"
-    "github.com/cloudposse/atmos/pkg/auth/credentials"
-    "github.com/cloudposse/atmos/pkg/auth/validation"
-    "github.com/cloudposse/atmos/pkg/schema"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
@@ -93,15 +93,15 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 			{Key: "AWS_SHARED_CREDENTIALS_FILE", Value: "/path/to/credentials"},
 		}
 
-    // Test export format
-    exportOutput := formatEnvironmentVariables(testEnvVars, "export")
-    assert.Contains(t, exportOutput, "export AWS_PROFILE='test-profile'")
-    assert.Contains(t, exportOutput, "export AWS_REGION='us-east-1'")
+		// Test export format
+		exportOutput := formatEnvironmentVariables(testEnvVars, "export")
+		assert.Contains(t, exportOutput, "export AWS_PROFILE='test-profile'")
+		assert.Contains(t, exportOutput, "export AWS_REGION='us-east-1'")
 
-    // Test dotenv format
-    dotenvOutput := formatEnvironmentVariables(testEnvVars, "dotenv")
-    assert.Contains(t, dotenvOutput, "AWS_PROFILE='test-profile'")
-    assert.Contains(t, dotenvOutput, "AWS_REGION='us-east-1'")
+		// Test dotenv format
+		dotenvOutput := formatEnvironmentVariables(testEnvVars, "dotenv")
+		assert.Contains(t, dotenvOutput, "AWS_PROFILE='test-profile'")
+		assert.Contains(t, dotenvOutput, "AWS_REGION='us-east-1'")
 
 		// Test JSON format
 		jsonOutput := formatEnvironmentVariables(testEnvVars, "json")
@@ -112,47 +112,47 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 
 // formatEnvironmentVariables is a helper function to test environment variable formatting.
 func formatEnvironmentVariables(envVars []schema.EnvironmentVariable, format string) string {
-    switch format {
-    case "json":
-        envMap := make(map[string]string)
-        for _, env := range envVars {
-            envMap[env.Key] = env.Value
-        }
-        // Simple JSON formatting for testing
-        result := "{\n"
-        for key, value := range envMap {
-            result += `  "` + key + `": "` + value + `",` + "\n"
-        }
-        result += "}"
-        return result
-    case "dotenv":
-        result := ""
-        // Deterministic order
-        keys := make([]string, 0, len(envVars))
-        m := make(map[string]string)
-        for _, env := range envVars {
-            keys = append(keys, env.Key)
-            m[env.Key] = env.Value
-        }
-        sort.Strings(keys)
-        for _, k := range keys {
-            v := strings.ReplaceAll(m[k], "'", "'\\''")
-            result += k + "='" + v + "'\n"
-        }
-        return result
-    default: // export format
-        result := ""
-        keys := make([]string, 0, len(envVars))
-        m := make(map[string]string)
-        for _, env := range envVars {
-            keys = append(keys, env.Key)
-            m[env.Key] = env.Value
-        }
-        sort.Strings(keys)
-        for _, k := range keys {
-            v := strings.ReplaceAll(m[k], "'", "'\\''")
-            result += "export " + k + "='" + v + "'\n"
-        }
-        return result
-    }
+	switch format {
+	case "json":
+		envMap := make(map[string]string)
+		for _, env := range envVars {
+			envMap[env.Key] = env.Value
+		}
+		// Simple JSON formatting for testing
+		result := "{\n"
+		for key, value := range envMap {
+			result += `  "` + key + `": "` + value + `",` + "\n"
+		}
+		result += "}"
+		return result
+	case "dotenv":
+		result := ""
+		// Deterministic order
+		keys := make([]string, 0, len(envVars))
+		m := make(map[string]string)
+		for _, env := range envVars {
+			keys = append(keys, env.Key)
+			m[env.Key] = env.Value
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := strings.ReplaceAll(m[k], "'", "'\\''")
+			result += k + "='" + v + "'\n"
+		}
+		return result
+	default: // export format
+		result := ""
+		keys := make([]string, 0, len(envVars))
+		m := make(map[string]string)
+		for _, env := range envVars {
+			keys = append(keys, env.Key)
+			m[env.Key] = env.Value
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := strings.ReplaceAll(m[k], "'", "'\\''")
+			result += "export " + k + "='" + v + "'\n"
+		}
+		return result
+	}
 }
