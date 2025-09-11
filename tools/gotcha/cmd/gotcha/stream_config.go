@@ -86,10 +86,13 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 	// Get output settings - use flag value only if explicitly set, otherwise use viper
 	if cmd.Flags().Changed("format") {
 		config.Format, _ = cmd.Flags().GetString("format")
+		logger.Debug("Format from flag", "format", config.Format)
 	} else {
 		config.Format = viper.GetString("format")
+		logger.Debug("Format from viper", "format", config.Format, "configFile", viper.ConfigFileUsed())
 		if config.Format == "" {
 			config.Format = "terminal"
+			logger.Debug("Format defaulted to terminal")
 		}
 	}
 
@@ -176,12 +179,24 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 // detectCIMode auto-detects CI environment.
 func (c *StreamConfig) detectCIMode(logger *log.Logger) {
 	if !c.CIMode {
-		// Using viper for environment detection
-		if viper.GetBool("ci") || viper.GetBool("github.actions") {
+		// Check if we're actually in a CI environment (environment variable set)
+		inCI := os.Getenv("CI") != "" || os.Getenv("GOTCHA_CI") != ""
+		inGitHubActions := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("GOTCHA_GITHUB_ACTIONS") != ""
+		
+		// Check if CI features are enabled in config
+		ciEnabled := viper.GetBool("ci")
+		githubActionsEnabled := viper.GetBool("github.actions")
+		
+		// Only enable CI mode if we're in CI AND the feature is enabled
+		// For generic CI: just being in CI is enough (no config needed)
+		// For GitHub Actions: need both environment AND config enablement
+		if inCI || (inGitHubActions && githubActionsEnabled) {
 			c.CIMode = true
-			logger.Debug("CI mode auto-detected",
-				"CI", viper.GetBool("ci"),
-				"GITHUB_ACTIONS", viper.GetBool("github.actions"))
+			logger.Debug("CI mode detected",
+				"inCI", inCI,
+				"ciEnabled", ciEnabled,
+				"inGitHubActions", inGitHubActions,
+				"githubActionsEnabled", githubActionsEnabled)
 		}
 	}
 }

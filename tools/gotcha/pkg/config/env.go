@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	
 	"github.com/spf13/viper"
 )
 
@@ -63,18 +65,27 @@ func InitEnvironment() {
 
 // IsCI returns true if running in a CI environment.
 func IsCI() bool {
-	// Check multiple CI indicators
-	return viper.GetBool("ci") ||
-		viper.GetBool("github.actions") ||
-		viper.GetString("continuous.integration") != "" ||
-		viper.GetString("build.number") != "" ||
-		viper.GetString("jenkins.url") != "" ||
-		viper.GetBool("travis") ||
-		viper.GetBool("circleci")
+	// Check for actual CI environment indicators (environment variables)
+	// We don't check config here - config enables features, doesn't force CI mode
+	return os.Getenv("CI") != "" ||
+		os.Getenv("GOTCHA_CI") != "" ||
+		os.Getenv("GITHUB_ACTIONS") != "" ||
+		os.Getenv("CONTINUOUS_INTEGRATION") != "" ||
+		os.Getenv("BUILD_NUMBER") != "" ||
+		os.Getenv("JENKINS_URL") != "" ||
+		os.Getenv("TRAVIS") != "" ||
+		os.Getenv("CIRCLECI") != ""
 }
 
 // IsGitHubActions returns true if running in GitHub Actions.
 func IsGitHubActions() bool {
+	// Check if we're actually in GitHub Actions environment
+	return os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("GOTCHA_GITHUB_ACTIONS") != ""
+}
+
+// IsGitHubActionsEnabled returns true if GitHub Actions features are enabled in config.
+func IsGitHubActionsEnabled() bool {
+	// This checks the config setting, not the environment
 	return viper.GetBool("github.actions")
 }
 

@@ -26,7 +26,7 @@ alert: false
 # Log level for debugging
 # Options: debug, info, warn, error, fatal
 log:
-  level: error
+  level: info
 
 # Test execution settings
 test:
@@ -52,6 +52,7 @@ coverage:
 # GitHub integration
 github:
   # Enable GitHub Actions specific features
+  # NOTE: This enables GitHub Actions features when running in GitHub Actions environment
   actions: true
   
   # Create step summary when running in GitHub Actions

@@ -7,8 +7,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
@@ -232,6 +234,11 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	// Create the command
 	cmd := exec.Command("go", testArgs...)
 	cmd.Stderr = os.Stderr // Pass through stderr
+	
+	// Set process group so we can kill all child processes on interrupt
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
 
 	// Get stdout pipe
 	stdout, err := cmd.StdoutPipe()
@@ -243,6 +250,32 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	if err := cmd.Start(); err != nil {
 		return 1
 	}
+
+	// Setup signal handling for Ctrl+C
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Track if we've been interrupted
+	var interrupted bool
+
+	// Handle signals in a goroutine
+	go func() {
+		<-sigChan
+		interrupted = true
+		
+		// Print abort message
+		fmt.Fprintf(os.Stderr, "\n\n\033[1;31m✗ Test run aborted\033[0m\n")
+		
+		// Kill the test process
+		if cmd.Process != nil {
+			// Send interrupt signal to the process group to kill all child processes
+			if cmd.Process.Pid > 0 {
+				// On Unix systems, kill the entire process group
+				syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			}
+			cmd.Process.Kill()
+		}
+	}()
 
 	// Create JSON output file
 	jsonFile, err := os.Create(outputFile)
@@ -259,6 +292,15 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// Wait for command to complete
 	testErr := cmd.Wait()
+
+	// Stop listening for signals
+	signal.Stop(sigChan)
+	close(sigChan)
+
+	// If interrupted, return with exit code 130 (standard for SIGINT)
+	if interrupted {
+		return 130
+	}
 
 	// Print summary regardless of errors
 	processor.PrintSummary()

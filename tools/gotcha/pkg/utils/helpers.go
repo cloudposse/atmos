@@ -109,13 +109,38 @@ func IsTTY() bool {
 		// Use cross-platform TTY detection
 		stdoutTTY := isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 		stdinTTY := isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
-		return stdoutTTY && stdinTTY
+		stderrTTY := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
+		
+		// Debug logging
+		if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+				fmt.Fprintf(f, "[ForceTTY] stdout: %v, stdin: %v, stderr: %v\n", stdoutTTY, stdinTTY, stderrTTY)
+				f.Close()
+			}
+		}
+		
+		return stdoutTTY && stdinTTY && stderrTTY
 	}
 
 	// Cross-platform TTY detection using go-isatty
 	// Works correctly on Windows, macOS, and Linux
 	stdoutTTY := isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 	stdinTTY := isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
+	stderrTTY := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
+
+	// Debug logging
+	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintf(f, "[IsTTY] stdout: %v, stdin: %v, stderr: %v, cwd: %s\n", 
+				stdoutTTY, stdinTTY, stderrTTY, func() string {
+					if cwd, err := os.Getwd(); err == nil {
+						return cwd
+					}
+					return "unknown"
+				}())
+			f.Close()
+		}
+	}
 
 	// Windows CI environments often report as TTY but aren't really interactive
 	// Disable TUI mode in CI environments on Windows to prevent issues
@@ -123,7 +148,8 @@ func IsTTY() bool {
 		return false
 	}
 
-	return stdoutTTY && stdinTTY
+	// We need stderr to be a TTY as well since we output to stderr
+	return stdoutTTY && stdinTTY && stderrTTY
 }
 
 // EmitAlert outputs a terminal bell (\a) if alert is enabled.

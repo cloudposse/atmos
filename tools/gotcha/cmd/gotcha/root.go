@@ -165,10 +165,7 @@ func Execute() error {
 	// This allows the config file to be read before command creation
 	initConfig()
 
-	// Initialize the logger after config is loaded
-	initGlobalLogger()
-
-	// Create root command using Cobra
+	// Create root command using Cobra first to set up flags
 	rootCmd := &cobra.Command{
 		Use:   "gotcha [path]",
 		Short: "A beautiful test runner for Go with real-time progress tracking",
@@ -210,10 +207,19 @@ experience with intuitive visual feedback and comprehensive test result analysis
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is .gotcha.yaml)")
 	rootCmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
 
-	// Bind log-level flag to viper
+	// Bind log-level flag to viper BEFORE initializing logger
+	// This ensures flag values override config file values
 	if err := viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level")); err != nil {
-		globalLogger.Error("Failed to bind log-level flag", "error", err)
+		// Can't use logger yet, it's not initialized
+		fmt.Fprintf(os.Stderr, "Failed to bind log-level flag: %v\n", err)
 	}
+	
+	// Parse flags early to get their values into viper
+	// This is needed to ensure flag values override config file values
+	rootCmd.ParseFlags(os.Args[1:])
+	
+	// NOW initialize the logger with the correct log level
+	initGlobalLogger()
 
 	// Add flags from stream command to root for convenience
 	streamCmd := newStreamCmd(globalLogger)
