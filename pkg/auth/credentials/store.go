@@ -114,7 +114,7 @@ func (s *keyringStore) List() ([]string, error) {
 	// Note: go-keyring doesn't provide a list function.
 	// This is a limitation - we'd need to maintain a separate index.
 	// or use a different storage backend for full functionality.
-	return nil, fmt.Errorf("%w: listing credentials is not supported with keyring backend", ErrCredentialStore)
+	return nil, fmt.Errorf("%w: listing credentials is not supported with keyring backend", ErrNotSupported)
 }
 
 // IsExpired checks if credentials for the given alias are expired.
