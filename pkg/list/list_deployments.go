@@ -123,7 +123,7 @@ func createDeployment(stackName, componentName, componentType string, componentC
 		deployment.Metadata = metadata
 	}
 
-	// Skip abstract components
+	// Skip abstract components.
 	if componentType, ok := deployment.Metadata["type"].(string); ok && componentType == "abstract" {
 		return nil
 	}
@@ -152,7 +152,7 @@ func sortDeployments(deployments []schema.Deployment) []schema.Deployment {
 	type deploymentRow struct {
 		Component string
 		Stack     string
-		Index     int // Add index to track original position
+		Index     int // Add index to track original position.
 	}
 	rowsData := make([]deploymentRow, 0, len(deployments))
 	for i, d := range deployments {
@@ -165,7 +165,7 @@ func sortDeployments(deployments []schema.Deployment) []schema.Deployment {
 		return rowsData[i].Component < rowsData[j].Component
 	})
 
-	// Create a new slice with sorted deployments
+	// Create a new slice with sorted deployments.
 	sortedDeployments := make([]schema.Deployment, len(deployments))
 	for i, row := range rowsData {
 		sortedDeployments[i] = deployments[row.Index]
@@ -180,18 +180,17 @@ func formatDeployments(deployments []schema.Deployment) string {
 		CustomHeaders: []string{componentHeader, stackHeader},
 	}
 
-	// If not in a TTY environment, output CSV
+	// If not in a TTY environment, output CSV.
 	if !formatOpts.TTY {
 		var output strings.Builder
 		output.WriteString(fmt.Sprintf("%s,%s\n", componentHeader, stackHeader))
 		for _, d := range deployments {
 			output.WriteString(fmt.Sprintf("%s,%s\n", d.Component, d.Stack))
 		}
-		fmt.Print(output.String())
 		return output.String()
 	}
 
-	// For TTY mode, create a styled table with only Component and Stack columns
+	// For TTY mode, create a styled table with only Component and Stack columns.
 	var tableRows [][]string
 	for _, d := range deployments {
 		row := []string{d.Component, d.Stack}
@@ -214,7 +213,7 @@ func uploadDeployments(deployments []schema.Deployment) error {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrGetRepoInfo, err)
 	}
 
-	// Initialize CLI config for API client
+	// Initialize CLI config for API client.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		log.Error(ErrInitCliConfig.Error(), "error", err)
@@ -247,17 +246,17 @@ func uploadDeployments(deployments []schema.Deployment) error {
 
 // processDeployments collects, filters, and sorts deployments.
 func processDeployments(atmosConfig *schema.AtmosConfiguration) ([]schema.Deployment, error) {
-	// Get all stacks with template processing enabled to render template variables
+	// Get all stacks with template processing enabled to render template variables.
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
 		log.Error(ErrExecuteDescribeStacks.Error(), "error", err)
 		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, ErrExecuteDescribeStacks, err)
 	}
 
-	// Collect deployments
+	// Collect deployments.
 	deployments := collectDeployments(stacksMap)
 
-	// Sort deployments
+	// Sort deployments.
 	deployments = sortDeployments(deployments)
 
 	return deployments, nil
@@ -265,32 +264,32 @@ func processDeployments(atmosConfig *schema.AtmosConfiguration) ([]schema.Deploy
 
 // ExecuteListDeploymentsCmd executes the list deployments command.
 func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
-	// Inline initializeConfig
+	// Inline initializeConfig.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		log.Error(ErrInitCliConfig.Error(), "error", err)
 		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrInitCliConfig, err)
 	}
 
-	// Get flags
+	// Get flags.
 	upload, err := cmd.Flags().GetBool("upload")
 	if err != nil {
 		log.Error(ErrParseFlag.Error(), "error", err)
 		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrParseFlag, err)
 	}
 
-	// Process deployments
+	// Process deployments.
 	deployments, err := processDeployments(&atmosConfig)
 	if err != nil {
 		log.Error(ErrProcessDeployments.Error(), "error", err)
 		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrProcessDeployments, err)
 	}
 
-	// Inline handleOutput
+	// Inline handleOutput.
 	output := formatDeployments(deployments)
 	fmt.Fprint(os.Stdout, output)
 
-	// Handle upload if requested
+	// Handle upload if requested.
 	if upload {
 		proDeployments := filterProEnabledDeployments(deployments)
 		return uploadDeployments(proDeployments)
