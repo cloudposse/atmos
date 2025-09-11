@@ -64,11 +64,6 @@ func SliceOfInterfacesToSliceOfStrings(input []any) []string {
 	return res
 }
 
-// Deprecated: use SliceOfInterfacesToSliceOfStrings
-func SliceOfInterfacesToSliceOdStrings(input []any) []string {
-	return SliceOfInterfacesToSliceOfStrings(input)
-}
-
 // SliceOfInterfacesToSliceOfStringsWithTypeAssertion takes a slice of interfaces and converts it to a slice of strings using type assertion.
 // This function returns an error if any element is not a string.
 func SliceOfInterfacesToSliceOfStringsWithTypeAssertion(input []any) ([]string, error) {

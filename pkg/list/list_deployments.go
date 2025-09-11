@@ -132,21 +132,35 @@ func createDeployment(stackName, componentName, componentType string, componentC
 	return deployment
 }
 
+// isProDriftDetectionEnabled checks if a deployment has Atmos Pro drift detection enabled.
+// Returns true if settings.pro.drift_detection.enabled == true and settings.pro.enabled != false.
+func isProDriftDetectionEnabled(deployment schema.Deployment) bool {
+	proSettings, ok := deployment.Settings["pro"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	// Skip if pro is explicitly disabled
+	if proEnabled, ok := proSettings["enabled"].(bool); ok && !proEnabled {
+		return false
+	}
+
+	driftDetection, ok := proSettings["drift_detection"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	enabled, ok := driftDetection["enabled"].(bool)
+	return ok && enabled
+}
+
 // filterProEnabledDeployments returns only deployments that have Atmos Pro drift detection explicitly enabled.
 // via settings.pro.drift_detection.enabled == true, but excludes deployments where settings.pro.enabled == false.
 func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deployment {
 	filtered := make([]schema.Deployment, 0, len(deployments))
 	for _, deployment := range deployments {
-		if proSettings, ok := deployment.Settings["pro"].(map[string]any); ok {
-			// Skip if pro is explicitly disabled
-			if proEnabled, ok := proSettings["enabled"].(bool); ok && !proEnabled {
-				continue
-			}
-			if driftDetection, ok := proSettings["drift_detection"].(map[string]any); ok {
-				if enabled, ok := driftDetection["enabled"].(bool); ok && enabled {
-					filtered = append(filtered, deployment)
-				}
-			}
+		if isProDriftDetectionEnabled(deployment) {
+			filtered = append(filtered, deployment)
 		}
 	}
 	return filtered
@@ -174,9 +188,13 @@ func formatDeployments(deployments []schema.Deployment) string {
 	if !formatOpts.TTY {
 		var output strings.Builder
 		csvWriter := csv.NewWriter(&output)
-		csvWriter.Write([]string{componentHeader, stackHeader})
+		if err := csvWriter.Write([]string{componentHeader, stackHeader}); err != nil {
+			return ""
+		}
 		for _, d := range deployments {
-			csvWriter.Write([]string{d.Component, d.Stack})
+			if err := csvWriter.Write([]string{d.Component, d.Stack}); err != nil {
+				return ""
+			}
 		}
 		csvWriter.Flush()
 		return output.String()
