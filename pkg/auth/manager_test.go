@@ -1,16 +1,16 @@
 package auth
 
 import (
-    "context"
-    "os"
-    "testing"
-    "time"
+	"context"
+	"os"
+	"testing"
+	"time"
 
-    errUtils "github.com/cloudposse/atmos/errors"
-    "github.com/cloudposse/atmos/pkg/auth/types"
-    "github.com/cloudposse/atmos/pkg/schema"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestManager_GetDefaultIdentity(t *testing.T) {
@@ -491,17 +491,17 @@ func TestManager_authenticateProviderChain_PreAuthError(t *testing.T) {
 }
 
 func TestManager_buildWhoamiInfo_SetsRefAndEnv(t *testing.T) {
-    s := &testStore{data: map[string]any{}}
-    ident := stubIdentity{provider: "p"}
-    m := &manager{credentialStore: s, identities: map[string]types.Identity{"dev": ident}}
-    exp := time.Now().UTC().Add(30 * time.Minute)
-    c := &testCreds{exp: &exp}
+	s := &testStore{data: map[string]any{}}
+	ident := stubIdentity{provider: "p"}
+	m := &manager{credentialStore: s, identities: map[string]types.Identity{"dev": ident}}
+	exp := time.Now().UTC().Add(30 * time.Minute)
+	c := &testCreds{exp: &exp}
 
-    info := m.buildWhoamiInfo("dev", c)
-    assert.Equal(t, "p", info.Provider)
-    assert.Equal(t, "dev", info.Identity)
-    assert.Equal(t, "dev", info.CredentialsRef)
-    assert.Nil(t, info.Credentials)
+	info := m.buildWhoamiInfo("dev", c)
+	assert.Equal(t, "p", info.Provider)
+	assert.Equal(t, "dev", info.Identity)
+	assert.Equal(t, "dev", info.CredentialsRef)
+	assert.Nil(t, info.Credentials)
 }
 
 // --- Additional manager tests (moved from more_test) ---
@@ -509,140 +509,141 @@ func TestManager_buildWhoamiInfo_SetsRefAndEnv(t *testing.T) {
 // dummyValidator implements types.Validator for tests.
 type dummyValidator struct{}
 
-func (dummyValidator) ValidateAuthConfig(_ *schema.AuthConfig) error { return nil }
+func (dummyValidator) ValidateAuthConfig(_ *schema.AuthConfig) error       { return nil }
 func (dummyValidator) ValidateProvider(_ string, _ *schema.Provider) error { return nil }
 func (dummyValidator) ValidateIdentity(_ string, _ *schema.Identity, _ map[string]*schema.Provider) error {
-    return nil
+	return nil
 }
+
 func (dummyValidator) ValidateChains(_ map[string]*schema.Identity, _ map[string]*schema.Provider) error {
-    return nil
+	return nil
 }
 
 // stubPSIdentity is a simple permission-set identity for Authenticate() tests.
 type stubPSIdentity struct {
-    provider   string
-    out        types.ICredentials
-    postCalled *bool
-    postErr    error
-    env        map[string]string
+	provider   string
+	out        types.ICredentials
+	postCalled *bool
+	postErr    error
+	env        map[string]string
 }
 
-func (s stubPSIdentity) Kind() string { return "aws/permission-set" }
+func (s stubPSIdentity) Kind() string                     { return "aws/permission-set" }
 func (s stubPSIdentity) GetProviderName() (string, error) { return s.provider, nil }
 func (s stubPSIdentity) Authenticate(_ context.Context, base types.ICredentials) (types.ICredentials, error) {
-    if s.out != nil {
-        return s.out, nil
-    }
-    return base, nil
+	if s.out != nil {
+		return s.out, nil
+	}
+	return base, nil
 }
-func (s stubPSIdentity) Validate() error { return nil }
+func (s stubPSIdentity) Validate() error                         { return nil }
 func (s stubPSIdentity) Environment() (map[string]string, error) { return s.env, nil }
 func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ string, _ types.ICredentials) error {
-    if s.postCalled != nil {
-        *s.postCalled = true
-    }
-    return s.postErr
+	if s.postCalled != nil {
+		*s.postCalled = true
+	}
+	return s.postErr
 }
 
 func TestNewAuthManager_ParamValidation(t *testing.T) {
-    t.Run("nil config", func(t *testing.T) {
-        _, err := NewAuthManager(nil, &testStore{}, dummyValidator{}, nil)
-        assert.ErrorIs(t, err, errUtils.ErrNilParam)
-    })
-    t.Run("nil store", func(t *testing.T) {
-        _, err := NewAuthManager(&schema.AuthConfig{}, nil, dummyValidator{}, nil)
-        assert.ErrorIs(t, err, errUtils.ErrNilParam)
-    })
-    t.Run("nil validator", func(t *testing.T) {
-        _, err := NewAuthManager(&schema.AuthConfig{}, &testStore{}, nil, nil)
-        assert.ErrorIs(t, err, errUtils.ErrNilParam)
-    })
+	t.Run("nil config", func(t *testing.T) {
+		_, err := NewAuthManager(nil, &testStore{}, dummyValidator{}, nil)
+		assert.ErrorIs(t, err, errUtils.ErrNilParam)
+	})
+	t.Run("nil store", func(t *testing.T) {
+		_, err := NewAuthManager(&schema.AuthConfig{}, nil, dummyValidator{}, nil)
+		assert.ErrorIs(t, err, errUtils.ErrNilParam)
+	})
+	t.Run("nil validator", func(t *testing.T) {
+		_, err := NewAuthManager(&schema.AuthConfig{}, &testStore{}, nil, nil)
+		assert.ErrorIs(t, err, errUtils.ErrNilParam)
+	})
 }
 
 func TestNewAuthManager_InitializeErrors(t *testing.T) {
-    t.Run("invalid provider kind", func(t *testing.T) {
-        cfg := &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}
-        _, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil)
-        assert.ErrorIs(t, err, errUtils.ErrInitializingProviders)
-    })
+	t.Run("invalid provider kind", func(t *testing.T) {
+		cfg := &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}
+		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil)
+		assert.ErrorIs(t, err, errUtils.ErrInitializingProviders)
+	})
 
-    t.Run("invalid identity kind", func(t *testing.T) {
-        cfg := &schema.AuthConfig{Identities: map[string]schema.Identity{"x": {Kind: "unknown"}}}
-        _, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil)
-        assert.ErrorIs(t, err, errUtils.ErrInitializingIdentities)
-    })
+	t.Run("invalid identity kind", func(t *testing.T) {
+		cfg := &schema.AuthConfig{Identities: map[string]schema.Identity{"x": {Kind: "unknown"}}}
+		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil)
+		assert.ErrorIs(t, err, errUtils.ErrInitializingIdentities)
+	})
 }
 
 func TestManager_Authenticate_Errors(t *testing.T) {
-    m := &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{}}}
+	m := &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{}}}
 
-    // Empty identity name.
-    _, err := m.Authenticate(context.Background(), "")
-    assert.ErrorIs(t, err, errUtils.ErrNilParam)
+	// Empty identity name.
+	_, err := m.Authenticate(context.Background(), "")
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 
-    // Identity not found.
-    _, err = m.Authenticate(context.Background(), "missing")
-    assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	// Identity not found.
+	_, err = m.Authenticate(context.Background(), "missing")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
 
-    // Identity present but invalid chain.
-    m = &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{
-        "dev": {Kind: "aws/permission-set"},
-    }}}
-    _, err = m.Authenticate(context.Background(), "dev")
-    assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	// Identity present but invalid chain.
+	m = &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{
+		"dev": {Kind: "aws/permission-set"},
+	}}}
+	_, err = m.Authenticate(context.Background(), "dev")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
 }
 
 func TestManager_Authenticate_SuccessFlow(t *testing.T) {
-    s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
-    called := false
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	called := false
 
-    // Build a provider-based chain: p -> dev
-    m := &manager{
-        config: &schema.AuthConfig{
-            Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
-            Identities: map[string]schema.Identity{
-                "dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
-            },
-        },
-        providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
-        identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postCalled: &called, env: map[string]string{"FOO": "BAR"}}},
-        credentialStore: s,
-        validator:       dummyValidator{},
-    }
+	// Build a provider-based chain: p -> dev
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
+		identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postCalled: &called, env: map[string]string{"FOO": "BAR"}}},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
 
-    info, err := m.Authenticate(context.Background(), "dev")
-    require.NoError(t, err)
-    assert.Equal(t, []string{"p", "dev"}, m.GetChain())
-    assert.Equal(t, "p", info.Provider)
-    assert.Equal(t, "dev", info.Identity)
-    assert.Equal(t, "dev", info.CredentialsRef)
-    assert.Nil(t, info.Credentials)
-    assert.Equal(t, "BAR", info.Environment["FOO"])
-    assert.True(t, called, "PostAuthenticate should be called")
+	info, err := m.Authenticate(context.Background(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"p", "dev"}, m.GetChain())
+	assert.Equal(t, "p", info.Provider)
+	assert.Equal(t, "dev", info.Identity)
+	assert.Equal(t, "dev", info.CredentialsRef)
+	assert.Nil(t, info.Credentials)
+	assert.Equal(t, "BAR", info.Environment["FOO"])
+	assert.True(t, called, "PostAuthenticate should be called")
 }
 
 func TestManager_Authenticate_UsesCachedTargetCredentials(t *testing.T) {
-    now := ptrTime(time.Now().UTC().Add(30 * time.Minute))
+	now := ptrTime(time.Now().UTC().Add(30 * time.Minute))
 
-    // Pre-seed store with valid creds for target identity.
-    s := &testStore{data: map[string]any{"dev": &testCreds{exp: now}}, expired: map[string]bool{"dev": false}}
+	// Pre-seed store with valid creds for target identity.
+	s := &testStore{data: map[string]any{"dev": &testCreds{exp: now}}, expired: map[string]bool{"dev": false}}
 
-    called := false
-    m := &manager{
-        config: &schema.AuthConfig{
-            Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
-            Identities: map[string]schema.Identity{
-                "dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
-            },
-        },
-        providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
-        identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postCalled: &called}},
-        credentialStore: s,
-        validator:       dummyValidator{},
-    }
+	called := false
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
+		identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postCalled: &called}},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
 
-    info, err := m.Authenticate(context.Background(), "dev")
-    require.NoError(t, err)
-    assert.Equal(t, "dev", info.Identity)
-    assert.True(t, called, "PostAuthenticate should be called when using cached credentials")
+	info, err := m.Authenticate(context.Background(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "dev", info.Identity)
+	assert.True(t, called, "PostAuthenticate should be called when using cached credentials")
 }

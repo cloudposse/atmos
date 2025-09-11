@@ -111,12 +111,12 @@ func (s *keyringStore) Delete(alias string) error {
 
 // List returns all stored credential aliases.
 func (s *keyringStore) List() ([]string, error) {
-    // Note: go-keyring doesn't provide a list function.
-    // This is a limitation - we'd need to maintain a separate index.
-    // or use a different storage backend for full functionality.
-    // Join both the generic store error and specific not-supported sentinel
-    // so callers can detect either condition with errors.Is.
-    return nil, errors.Join(fmt.Errorf("%w: listing credentials is not supported with keyring backend", ErrCredentialStore), ErrNotSupported)
+	// Note: go-keyring doesn't provide a list function.
+	// This is a limitation - we'd need to maintain a separate index.
+	// or use a different storage backend for full functionality.
+	// Join both the generic store error and specific not-supported sentinel
+	// so callers can detect either condition with errors.Is.
+	return nil, errors.Join(fmt.Errorf("%w: listing credentials is not supported with keyring backend", ErrCredentialStore), ErrNotSupported)
 }
 
 // IsExpired checks if credentials for the given alias are expired.
