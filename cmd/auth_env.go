@@ -100,7 +100,7 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 
 func init() {
 	authEnvCmd.Flags().StringP("format", "f", "export", "Output format: export, json, dotenv.")
-	viper.MustBindEnv("auth_env_format", "AUTH_ENV_FORMAT", "ATMOS_AUTH_ENV_FORMAT")
+	_ = viper.BindEnv("auth_env_format", "ATMOS_AUTH_ENV_FORMAT")
 	_ = viper.BindPFlag("auth_env_format", authEnvCmd.Flags().Lookup("format"))
 	_ = authEnvCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return SupportedFormats, cobra.ShellCompDirectiveNoFileComp
