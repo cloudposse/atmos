@@ -154,7 +154,7 @@ func isProDriftDetectionEnabled(deployment *schema.Deployment) bool {
 	return ok && enabled
 }
 
-// filterProEnabledDeployments returns only deployments that have Atmos Pro drift detection explicitly enabled.
+// filterProEnabledDeployments returns only deployments that have Atmos Pro drift detection explicitly enabled
 // via settings.pro.drift_detection.enabled == true, but excludes deployments where settings.pro.enabled == false.
 func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deployment {
 	filtered := make([]schema.Deployment, 0, len(deployments))
