@@ -504,7 +504,6 @@ func TestManager_buildWhoamiInfo_SetsRefAndEnv(t *testing.T) {
 	assert.Nil(t, info.Credentials)
 }
 
-// --- Additional manager tests (moved from more_test) ---
 
 // dummyValidator implements types.Validator for tests.
 type dummyValidator struct{}
@@ -597,7 +596,7 @@ func TestManager_Authenticate_SuccessFlow(t *testing.T) {
 	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
 	called := false
 
-	// Build a provider-based chain: p -> dev
+	// Build a provider-based chain: p -> dev.
 	m := &manager{
 		config: &schema.AuthConfig{
 			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
