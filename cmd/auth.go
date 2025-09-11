@@ -22,13 +22,13 @@ var authCmd = &cobra.Command{
 func init() {
 	// Avoid adding "stack" at the group level unless subcommands require it.
 	// AddStackCompletion(authCmd)
-	authCmd.PersistentFlags().String(ProfileFlagName, "", "Specify the profile to use for authentication.")
-	authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the target identity to assume.")
-	// Bind to Viper and env.
-	viper.MustBindEnv(ProfileFlagName, ProfileFlagName, "ATMOS_PROFILE")
-	viper.MustBindEnv(IdentityFlagName, IdentityFlagName, "ATMOS_IDENTITY")
-	_ = viper.BindPFlag(ProfileFlagName, authCmd.PersistentFlags().Lookup(ProfileFlagName))
-	_ = viper.BindPFlag(IdentityFlagName, authCmd.PersistentFlags().Lookup(IdentityFlagName))
+authCmd.PersistentFlags().String(ProfileFlagName, "", "Specify the profile to use for authentication.")
+authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the target identity to assume.")
+// Bind to Viper and env (flags > env > config > defaults).
+_ = viper.BindEnv(ProfileFlagName, "ATMOS_PROFILE", "PROFILE")
+_ = viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY")
+_ = viper.BindPFlag(ProfileFlagName, authCmd.PersistentFlags().Lookup(ProfileFlagName))
+_ = viper.BindPFlag(IdentityFlagName, authCmd.PersistentFlags().Lookup(IdentityFlagName))
 
 	RootCmd.AddCommand(authCmd)
 }
