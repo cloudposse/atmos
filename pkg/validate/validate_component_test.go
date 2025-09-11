@@ -80,5 +80,5 @@ func TestValidateComponent4(t *testing.T) {
 		nil,
 		0)
 	assert.Error(t, err)
-	assert.Equal(t, "'service_1_name' variable length must be greater than 10 chars", err.Error())
+	assert.Equal(t, "opa policy violations: 'service_1_name' variable length must be greater than 10 chars", err.Error())
 }

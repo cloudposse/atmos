@@ -174,7 +174,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 }
 
 // doStackLockAction is a private helper function that handles the common logic for stack lock/unlock operations.
-func (c *AtmosProAPIClient) doStackLockAction(params schema.StackLockActionParams) error {
+func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionParams) error {
 	data, err := json.Marshal(params.Body)
 	if err != nil {
 		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToMarshalRequestBody, err)
@@ -226,7 +226,7 @@ func (c *AtmosProAPIClient) LockStack(dto *dtos.LockStackRequest) (dtos.LockStac
 	log.Debug(fmt.Sprintf("\nLocking stack at %s", url))
 
 	var responseData dtos.LockStackResponse
-	err := c.doStackLockAction(schema.StackLockActionParams{
+	err := c.doStackLockAction(&schema.StackLockActionParams{
 		Method:  http.MethodPost,
 		URL:     url,
 		Body:    dto,
@@ -247,7 +247,7 @@ func (c *AtmosProAPIClient) UnlockStack(dto *dtos.UnlockStackRequest) (dtos.Unlo
 	log.Debug(fmt.Sprintf("\nUnlocking stack at %s", url))
 
 	var responseData dtos.UnlockStackResponse
-	err := c.doStackLockAction(schema.StackLockActionParams{
+	err := c.doStackLockAction(&schema.StackLockActionParams{
 		Method:  http.MethodDelete,
 		URL:     url,
 		Body:    dto,
