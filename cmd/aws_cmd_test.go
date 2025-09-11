@@ -1,5 +1,12 @@
 package cmd
 
+import (
+	"strings"
+	"testing"
+
+	"github.com/spf13/cobra"
+)
+
 // sanity to avoid unused imports when conditions differ across envs
 func TestAwsCmd_SanityBuild(t *testing.T) {}
 
@@ -15,16 +22,10 @@ func cloneCmdMeta(c *cobra.Command) *cobra.Command {
 
 }
 
-
-import (
-	"strings"
-	"testing"
-
-	"github.com/spf13/cobra"
-)
+//
 
 func TestAwsCmd_Metadata(t *testing.T) {
-	if awsCmd.Use \!= "aws" {
+	if awsCmd.Use != "aws" {
 		t.Fatalf("Use mismatch: got %q, want %q", awsCmd.Use, "aws")
 	}
 	if strings.TrimSpace(awsCmd.Short) == "" {
@@ -35,24 +36,21 @@ func TestAwsCmd_Metadata(t *testing.T) {
 	}
 }
 
-
 func TestAwsCmd_UnknownFlagsWhitelist(t *testing.T) {
 	if awsCmd.FParseErrWhitelist.UnknownFlags {
 		t.Fatalf("UnknownFlags whitelist must be false to reject unknown flags")
 	}
 }
 
-
 func TestAwsCmd_NoArgsValidation(t *testing.T) {
 	// Directly invoke the Args validator to avoid executing the command.
-	if err := awsCmd.Args(awsCmd, []string{}); err \!= nil {
+	if err := awsCmd.Args(awsCmd, []string{}); err != nil {
 		t.Fatalf("NoArgs should accept empty args, got error: %v", err)
 	}
 	if err := awsCmd.Args(awsCmd, []string{"unexpected"}); err == nil {
 		t.Fatalf("NoArgs should reject extra args but returned no error")
 	}
 }
-
 
 func TestAwsCmd_UnknownFlagParsingErrors(t *testing.T) {
 	// Work on a cloned command to keep global flags clean.
@@ -65,18 +63,16 @@ func TestAwsCmd_UnknownFlagParsingErrors(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error for unknown flag, got nil")
 	}
-	if \!strings.Contains(err.Error(), "unknown flag") {
+	if !strings.Contains(err.Error(), "unknown flag") {
 		t.Fatalf("expected 'unknown flag' in error, got: %v", err)
 	}
 }
 
-
 func TestAwsCmd_HasNoRunFunction(t *testing.T) {
-	if awsCmd.Run \!= nil || awsCmd.RunE \!= nil {
+	if awsCmd.Run != nil || awsCmd.RunE != nil {
 		t.Fatalf("awsCmd should not define Run/RunE; it is a grouping command")
 	}
 }
-
 
 // compile-time check for RootCmd presence
 var _ = RootCmd
@@ -89,11 +85,10 @@ func TestAwsCmd_IsRegisteredUnderRoot(t *testing.T) {
 			break
 		}
 	}
-	if \!found {
+	if !found {
 		t.Fatalf("awsCmd not registered under RootCmd")
 	}
 }
-
 
 // reference to ensure doubleDashHint is linked (value not asserted strictly due to empty flag name)
 func TestAwsCmd_UsageIncludesDoubleDashHint(t *testing.T) {
@@ -103,7 +98,7 @@ func TestAwsCmd_UsageIncludesDoubleDashHint(t *testing.T) {
 		t.Fatalf("expected non-empty usage output")
 	}
 	// If the hint is non-empty, prefer it to be visible in help text.
-	if doubleDashHint \!= "" && \!strings.Contains(usage, doubleDashHint) {
+	if doubleDashHint != "" && !strings.Contains(usage, doubleDashHint) {
 		// Non-fatal, but signal as failure to keep behavior intentional.
 		t.Fatalf("usage/help text does not include doubleDashHint")
 	}
