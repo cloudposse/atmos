@@ -18,7 +18,8 @@ var SupportedFormats = []string{"json", "export", "dotenv"}
 // authEnvCmd exports authentication environment variables.
 var authEnvCmd = &cobra.Command{
 	Use:   "env",
-	Short: "Export authentication environment variables",
+	Short: "Export temporary cloud credentials as environment variables",
+	Long:  "Outputs environment variables for the assumed identity, suitable for use by external tools such as Terraform or Helm.",
 	Long:  "Export environment variables for the authenticated identity to use with external tools.",
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
@@ -107,6 +108,6 @@ func init() {
 	})
 
 	_ = viper.BindPFlag("identity", authCmd.PersistentFlags().Lookup("identity"))
-	viper.MustBindEnv("identity", "IDENTITY", "ATMOS_IDENTITY")
+	viper.MustBindEnv("identity", "ATMOS_IDENTITY")
 	authCmd.AddCommand(authEnvCmd)
 }

@@ -13,8 +13,11 @@ const (
 // authCmd groups authentication-related subcommands.
 var authCmd = &cobra.Command{
 	Use:                "auth",
-	Short:              "Authentication commands",
-	Long:               "Commands to authenticate and manage identities for Atmos.",
+	Short:              "Authenticate with cloud providers and identity services.",
+	Long:               "Obtain, refresh, and configure credentials from external
+identity providers such as AWS SSO, Vault, or OIDC. Provides the
+necessary authentication context for tools like Terraform and Helm
+to interact with cloud infrastructure.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 }
@@ -23,7 +26,7 @@ func init() {
 	// Avoid adding "stack" at the group level unless subcommands require it.
 	// AddStackCompletion(authCmd)
 	authCmd.PersistentFlags().String(ProfileFlagName, "", "Specify the profile to use for authentication.")
-	authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the identity to authenticate to.")
+	authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the target identity to assume.")
 	// Bind to Viper and env.
 	viper.MustBindEnv(ProfileFlagName, ProfileFlagName, "ATMOS_PROFILE")
 	viper.MustBindEnv(IdentityFlagName, IdentityFlagName, "ATMOS_IDENTITY")
