@@ -17,7 +17,7 @@ type mockAPI struct {
 	err      error
 }
 
-func (m *mockAPI) UploadDriftDetection(req *dtos.DeploymentsUploadRequest) error {
+func (m *mockAPI) UploadDeployments(req *dtos.DeploymentsUploadRequest) error {
 	m.captured = req
 	return m.err
 }
@@ -123,7 +123,7 @@ func TestListDeploymentsCommandLogic(t *testing.T) {
 				api := &mockAPI{err: tc.uploadErr}
 				proDeps := filterProEnabledDeployments(list)
 				dto := dtos.DeploymentsUploadRequest{Deployments: proDeps}
-				err = api.UploadDriftDetection(&dto)
+				err = api.UploadDeployments(&dto)
 				if tc.expectError {
 					assert.Error(t, err)
 					return
