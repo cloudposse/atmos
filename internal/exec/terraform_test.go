@@ -669,7 +669,7 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 
 			// Create stack file
 			stackFile := filepath.Join(stackDir, "mock.yaml")
-			stackContent := fmt.Sprintf(`components:\n  terraform:\n    %s:\n      settings:\n        pro:\n          enabled: %v\n      vars:\n        foo: %s-a\n        bar: %s-b\n        baz: %s-c`,
+			stackContent := fmt.Sprintf("components:\n  terraform:\n    %s:\n      settings:\n        pro:\n          enabled: %v\n      vars:\n        foo: %s-a\n        bar: %s-b\n        baz: %s-c",
 				tc.component, tc.proEnabled, tc.component, tc.component, tc.component)
 			if err := os.WriteFile(stackFile, []byte(stackContent), 0o644); err != nil {
 				t.Fatalf("Failed to write stack file: %v", err)
