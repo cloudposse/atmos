@@ -1,6 +1,7 @@
 package list
 
 import (
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"os"
@@ -132,11 +133,15 @@ func createDeployment(stackName, componentName, componentType string, componentC
 }
 
 // filterProEnabledDeployments returns only deployments that have Atmos Pro drift detection explicitly enabled.
-// via settings.pro.drift_detection.enabled == true.
+// via settings.pro.drift_detection.enabled == true, but excludes deployments where settings.pro.enabled == false.
 func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deployment {
 	filtered := make([]schema.Deployment, 0, len(deployments))
 	for _, deployment := range deployments {
 		if proSettings, ok := deployment.Settings["pro"].(map[string]any); ok {
+			// Skip if pro is explicitly disabled
+			if proEnabled, ok := proSettings["enabled"].(bool); ok && !proEnabled {
+				continue
+			}
 			if driftDetection, ok := proSettings["drift_detection"].(map[string]any); ok {
 				if enabled, ok := driftDetection["enabled"].(bool); ok && enabled {
 					filtered = append(filtered, deployment)
@@ -168,10 +173,12 @@ func formatDeployments(deployments []schema.Deployment) string {
 	// If not in a TTY environment, output CSV.
 	if !formatOpts.TTY {
 		var output strings.Builder
-		output.WriteString(fmt.Sprintf("%s,%s\n", componentHeader, stackHeader))
+		csvWriter := csv.NewWriter(&output)
+		csvWriter.Write([]string{componentHeader, stackHeader})
 		for _, d := range deployments {
-			output.WriteString(fmt.Sprintf("%s,%s\n", d.Component, d.Stack))
+			csvWriter.Write([]string{d.Component, d.Stack})
 		}
+		csvWriter.Flush()
 		return output.String()
 	}
 

@@ -34,6 +34,16 @@ func TestFilterProEnabledDeployments(t *testing.T) {
 			Stack:     "stack1",
 			Settings:  map[string]interface{}{},
 		},
+		{
+			Component: "disabled-pro",
+			Stack:     "stack1",
+			Settings: map[string]interface{}{
+				"pro": map[string]interface{}{
+					"enabled":         false,
+					"drift_detection": map[string]interface{}{"enabled": true},
+				},
+			},
+		},
 	}
 
 	filtered := filterProEnabledDeployments(deployments)

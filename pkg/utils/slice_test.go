@@ -12,9 +12,7 @@ func TestSliceOfInterfacesToSliceOfStrings(t *testing.T) {
 	input = append(input, "b")
 	input = append(input, "c")
 
-	result, err := SliceOfInterfacesToSliceOfStrings(input)
-
-	assert.Nil(t, err)
+	result := SliceOfInterfacesToSliceOfStrings(input)
 	assert.Equal(t, len(input), len(result))
 	assert.Equal(t, input[0].(string), result[0])
 	assert.Equal(t, input[1].(string), result[1])
@@ -52,9 +50,16 @@ func TestSliceRemoveString(t *testing.T) {
 			remove:   "a",
 			expected: []string{"b", "a", "c"},
 		},
+		{
+			name:     "remove last element",
+			input:    []string{"a", "b", "c"},
+			remove:   "c",
+			expected: []string{"a", "b"},
+		},
 	}
 
 	for _, tc := range testCases {
+		tc := tc // rebind to avoid range-variable capture
 		t.Run(tc.name, func(t *testing.T) {
 			result := SliceRemoveString(tc.input, tc.remove)
 			assert.Equal(t, tc.expected, result)

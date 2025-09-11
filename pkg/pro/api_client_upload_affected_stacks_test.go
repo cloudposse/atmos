@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -28,7 +29,7 @@ func TestUploadAffectedStacks_Success(t *testing.T) {
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
+		HTTPClient:      &http.Client{Timeout: 2 * time.Second},
 	}
 
 	dto := dtos.UploadAffectedStacksRequest{
@@ -92,7 +93,7 @@ func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
 				BaseURL:         server.URL,
 				BaseAPIEndpoint: "api",
 				APIToken:        "test-token",
-				HTTPClient:      http.DefaultClient,
+				HTTPClient:      &http.Client{Timeout: 2 * time.Second},
 			}
 
 			dto := dtos.UploadAffectedStacksRequest{
@@ -113,7 +114,7 @@ func TestUploadAffectedStacks_NetworkError(t *testing.T) {
 		BaseURL:         "http://invalid-host-that-does-not-exist:12345",
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
+		HTTPClient:      &http.Client{Timeout: 2 * time.Second},
 	}
 
 	dto := dtos.UploadAffectedStacksRequest{
@@ -133,7 +134,7 @@ func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
 		BaseURL:         "://invalid-url", // Malformed URL
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
+		HTTPClient:      &http.Client{Timeout: 2 * time.Second},
 	}
 
 	dto := dtos.UploadAffectedStacksRequest{

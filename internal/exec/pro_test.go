@@ -16,6 +16,11 @@ type MockProAPIClient struct {
 	mock.Mock
 }
 
+func (m *MockProAPIClient) UploadDeployments(req *dtos.DeploymentsUploadRequest) error {
+	args := m.Called(req)
+	return args.Error(0)
+}
+
 func (m *MockProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error {
 	args := m.Called(dto)
 	return args.Error(0)
@@ -28,11 +33,17 @@ type MockGitRepo struct {
 
 func (m *MockGitRepo) GetLocalRepo() (*atmosgit.RepoInfo, error) {
 	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).(*atmosgit.RepoInfo), args.Error(1)
 }
 
 func (m *MockGitRepo) GetRepoInfo(repo *gogit.Repository) (atmosgit.RepoInfo, error) {
 	args := m.Called(repo)
+	if args.Get(0) == nil {
+		return atmosgit.RepoInfo{}, args.Error(1)
+	}
 	return args.Get(0).(atmosgit.RepoInfo), args.Error(1)
 }
 
