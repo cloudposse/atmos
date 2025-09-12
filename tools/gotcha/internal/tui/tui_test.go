@@ -181,10 +181,10 @@ func TestGetExitCode(t *testing.T) {
 
 func TestGenerateFinalSummary(t *testing.T) {
 	model := &TestModel{
-		passCount:    10,
-		failCount:    2,
-		skipCount:    3,
-		startTime:    time.Now().Add(-5 * time.Second),
+		passCount: 10,
+		failCount: 2,
+		skipCount: 3,
+		startTime: time.Now().Add(-5 * time.Second),
 		packageResults: map[string]*PackageResult{
 			"pkg1": {StatementCoverage: "80.5%"},
 			"pkg2": {StatementCoverage: "90.0%"},
@@ -199,7 +199,7 @@ func TestGenerateFinalSummary(t *testing.T) {
 	assert.Contains(t, summary, "10 Passed")
 	assert.Contains(t, summary, "2 Failed")
 	assert.Contains(t, summary, "3 Skipped")
-	assert.Contains(t, summary, "in ")  // Contains time duration
+	assert.Contains(t, summary, "in ") // Contains time duration
 }
 
 func TestView(t *testing.T) {
@@ -216,8 +216,8 @@ func TestView(t *testing.T) {
 	view := model.View()
 
 	// Check for essential UI elements
-	assert.Contains(t, view, TestRunnerIndicator)  // Test runner indicator
-	assert.Contains(t, view, "Starting tests...")  // Status message
+	assert.Contains(t, view, TestRunnerIndicator) // Test runner indicator
+	assert.Contains(t, view, "Starting tests...") // Status message
 }
 
 func TestUpdate(t *testing.T) {

@@ -46,7 +46,7 @@ func TestTUIWithTeatest(t *testing.T) {
 		// Create teatest wrapper with fixed terminal size (use pointer)
 		tm := teatest.NewTestModel(t, &model,
 			teatest.WithInitialTermSize(80, 24))
-		
+
 		// Send a quit message to terminate the model
 		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 
@@ -117,7 +117,7 @@ func TestTUIWithTeatest(t *testing.T) {
 
 		// Allow time for processing
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Send test complete message to properly terminate the TUI
 		tm.Send(tui.TestCompleteMsg{ExitCode: 0})
 
@@ -158,7 +158,7 @@ func TestTUIWithTeatest(t *testing.T) {
 		eventJSON, err := json.Marshal(completeEvent)
 		require.NoError(t, err)
 		tm.Send(tui.StreamOutputMsg{Line: string(eventJSON)})
-		
+
 		// Send test complete message to properly terminate the TUI
 		tm.Send(tui.TestCompleteMsg{ExitCode: 0})
 
@@ -215,7 +215,7 @@ func TestTUIPackageTracking(t *testing.T) {
 		eventJSON, _ = json.Marshal(passEvent)
 		tm.Send(tui.StreamOutputMsg{Line: string(eventJSON)})
 	}
-	
+
 	// Send test complete message to properly terminate the TUI
 	tm.Send(tui.TestCompleteMsg{ExitCode: 0})
 
