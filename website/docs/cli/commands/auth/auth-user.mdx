@@ -17,18 +17,39 @@ Use this group to manage static user credentials (currently AWS IAM users) store
 
 Configure static AWS user credentials (stored securely in keyring).
 
-#### Usage
+## Usage
 
 ```shell
 atmos auth user configure
 ```
 
-#### Description
+## Description
 
 - Prompts for `AWS Access Key ID`, `AWS Secret Access Key`, and optional `AWS User MFA ARN`.
 - Stores credentials securely in the OS keychain using an alias matching the selected `aws/user` identity name.
 - Only identities with `kind: aws/user` are selectable.
 
-#### Notes
+## Examples
+
+```shell
+# Configure credentials for an aws/user identity
+atmos auth user configure
+```
+
+## Arguments
+
+<dl>
+  <dt>n/a</dt>
+  <dd>No positional arguments.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>n/a</dt>
+  <dd>No flags.</dd>
+</dl>
+
+## Notes
 
 - Define at least one `aws/user` identity in `auth.identities` of `atmos.yaml` before running this.

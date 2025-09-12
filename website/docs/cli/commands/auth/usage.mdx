@@ -17,6 +17,46 @@ Atmos Auth provides a unified authentication system for cloud providers, support
 
 <Screengrab title="atmos auth --help" slug="atmos-auth--help" />
 
+## Examples
+
+```shell
+# Validate configuration
+atmos auth validate
+
+# Authenticate with the default identity
+atmos auth login
+
+# Authenticate with a specific identity
+atmos auth login --identity admin
+
+# Print environment variables in JSON
+atmos auth env --format json
+
+# Execute a command with authentication context
+atmos auth exec -- terraform plan
+
+# Show current authentication status
+atmos auth whoami
+```
+
+## Arguments
+
+<dl>
+  <dt>n/a</dt>
+  <dd>No positional arguments. Use subcommands.</dd>
+  
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>Specify the default identity for subcommands. Can be overridden per command.</dd>
+
+  <dt>`--profile`</dt>
+  <dd>Atmos profile used to resolve configuration when running auth subcommands.</dd>
+</dl>
+
 ## Subcommands
 
 <DocCardList/>
@@ -524,4 +564,3 @@ deploy:
 - Use different identities for different environments
 - Separate providers for different security domains
 - Implement proper identity chaining for cross-account access
-
