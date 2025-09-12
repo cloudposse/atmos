@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	coveragePkg "github.com/cloudposse/atmos/tools/gotcha/internal/coverage"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
@@ -425,6 +426,27 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		}
 	}
 
+	// Process coverage BEFORE checking exit code (as abort message appears after summary)
+	// This ensures coverage analysis runs even if the process is marked as interrupted
+	if coverProfile != "" {
+		// Check if file exists first
+		if _, err := os.Stat(coverProfile); err == nil {
+			// Always show function coverage if we have a profile
+			logger.Info("Analyzing coverage results...")
+			if err := coveragePkg.ShowFunctionCoverageReport(coverProfile, logger); err != nil {
+				logger.Debug("Function coverage unavailable", "error", err)
+			}
+			
+			// Also process with config if available
+			coverageConfig := getCoverageConfig()
+			if coverageConfig.Enabled && (coverageConfig.Analysis.Functions || coverageConfig.Analysis.Statements) {
+				if err := coveragePkg.ProcessCoverage(coverProfile, coverageConfig, logger); err != nil {
+					logger.Debug("Coverage processing failed", "error", err)
+				}
+			}
+		}
+	}
+
 	// Return with the test exit code
 	if exitCode != 0 {
 		return &testFailureError{code: exitCode}
@@ -440,6 +462,38 @@ type testFailureError struct {
 
 func (e *testFailureError) Error() string {
 	return fmt.Sprintf("tests failed with exit code %d", e.code)
+}
+
+// getCoverageConfig retrieves the coverage configuration from viper.
+func getCoverageConfig() config.CoverageConfig {
+	var cfg config.CoverageConfig
+	
+	// Set defaults
+	cfg.Enabled = viper.GetBool("coverage.enabled")
+	cfg.Profile = viper.GetString("coverage.profile")
+	
+	// Analysis settings
+	cfg.Analysis.Functions = viper.GetBool("coverage.analysis.functions")
+	cfg.Analysis.Statements = viper.GetBool("coverage.analysis.statements")
+	cfg.Analysis.Uncovered = viper.GetBool("coverage.analysis.uncovered")
+	cfg.Analysis.Exclude = viper.GetStringSlice("coverage.analysis.exclude")
+	
+	// Output settings
+	cfg.Output.Terminal.Format = viper.GetString("coverage.output.terminal.format")
+	cfg.Output.Terminal.ShowUncovered = viper.GetInt("coverage.output.terminal.show_uncovered")
+	
+	// Threshold settings
+	cfg.Thresholds.Total = viper.GetFloat64("coverage.thresholds.total")
+	cfg.Thresholds.FailUnder = viper.GetBool("coverage.thresholds.fail_under")
+	
+	// If coverage isn't configured but we have a profile, enable basic analysis
+	if !cfg.Enabled && cfg.Profile != "" {
+		cfg.Enabled = true
+		cfg.Analysis.Functions = true
+		cfg.Analysis.Statements = true
+	}
+	
+	return cfg
 }
 
 func (e *testFailureError) ExitCode() int {

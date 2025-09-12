@@ -114,13 +114,23 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 	if cmd.Flags().Changed("cover") {
 		config.Cover, _ = cmd.Flags().GetBool("cover")
 	} else {
+		// Check both locations for backward compatibility
 		config.Cover = viper.GetBool("cover")
+		if !config.Cover {
+			// Try the new structured location
+			config.Cover = viper.GetBool("coverage.enabled")
+		}
 	}
 
 	if cmd.Flags().Changed("coverprofile") {
 		config.CoverProfile, _ = cmd.Flags().GetString("coverprofile")
 	} else {
+		// Check both locations for backward compatibility
 		config.CoverProfile = viper.GetString("coverprofile")
+		if config.CoverProfile == "" {
+			// Try the new structured location
+			config.CoverProfile = viper.GetString("coverage.profile")
+		}
 	}
 
 	if cmd.Flags().Changed("coverpkg") {

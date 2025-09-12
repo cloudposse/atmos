@@ -3,10 +3,15 @@ package tui
 import "github.com/charmbracelet/lipgloss"
 
 const (
-	// Unicode symbols.
+	// Unicode symbols for test status indicators.
 	CheckPass = "✔" // UTF-8 check mark
 	CheckFail = "✘" // UTF-8 cross mark
 	CheckSkip = "⊘" // UTF-8 circled division slash
+	
+	// Unicode symbols for section headers and indicators.
+	TestRunnerIndicator     = "🧪" // Test runner/execution indicator
+	CoverageReportIndicator = "📊" // Coverage statistics indicator
+	SummaryHeaderIndicator  = "🧪" // Final summary header indicator
 
 	// Color constants using hex values (mapped to ANSI by Lipgloss based on terminal capabilities).
 	// These follow the PRD specification while maintaining compatibility across all environments.
@@ -51,6 +56,11 @@ var (
 				Foreground(lipgloss.Color(colorBlue)).
 				Bold(true)
 )
+
+// GetDivider returns a styled divider line.
+func GetDivider() string {
+	return DurationStyle.Render("─────────────────────────────────────────────────────")
+}
 
 // SetRenderer sets the current renderer for style creation.
 func SetRenderer(r *lipgloss.Renderer) {

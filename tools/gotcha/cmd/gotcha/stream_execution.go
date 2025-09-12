@@ -24,7 +24,7 @@ import (
 )
 
 // runStreamInteractive runs tests in interactive TUI mode.
-func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, error) {
+func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, *types.TestSummary, error) {
 	// Set the global logger for packages that use it
 	internalLogger.SetLogger(logger)
 
@@ -77,18 +77,69 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 	// Run the TUI
 	finalModel, err := p.Run()
 	if err != nil {
-		return 1, fmt.Errorf("error running TUI: %w", err)
+		return 1, nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	// Get the exit code from the model
+	// Get the exit code and test summary from the model
 	var exitCode int
+	var testSummary *types.TestSummary
 	if m, ok := finalModel.(*tui.TestModel); ok {
 		exitCode = m.GetExitCode()
 
-		// Print final summary
+		// Print the single-line summary from TUI
 		summary := m.GenerateFinalSummary()
 		if summary != "" {
 			fmt.Fprint(os.Stderr, summary)
+		}
+		
+		// Build test summary for return
+		testSummary = &types.TestSummary{
+			Passed:   make([]types.TestResult, 0),
+			Failed:   make([]types.TestResult, 0),
+			Skipped:  make([]types.TestResult, 0),
+			Coverage: "",
+		}
+		
+		// Collect test results from package results
+		for _, pkg := range m.GetPackageResults() {
+			for testName, test := range pkg.Tests {
+				testResult := types.TestResult{
+					Package:    pkg.Package,
+					Test:       testName,
+					Status:     test.Status,
+					Duration:   test.Elapsed,
+					SkipReason: test.SkipReason,
+				}
+				
+				switch test.Status {
+				case "pass":
+					testSummary.Passed = append(testSummary.Passed, testResult)
+				case "fail":
+					testSummary.Failed = append(testSummary.Failed, testResult)
+				case "skip":
+					testSummary.Skipped = append(testSummary.Skipped, testResult)
+				}
+			}
+		}
+		
+		// Calculate average coverage
+		totalCoverage := 0.0
+		packageCount := 0
+		for _, pkg := range m.GetPackageResults() {
+			if pkg.StatementCoverage != "" && pkg.StatementCoverage != "0.0%" && pkg.StatementCoverage != "N/A" {
+				var pct float64
+				fmt.Sscanf(pkg.StatementCoverage, "%f%%", &pct)
+				totalCoverage += pct
+				packageCount++
+			} else if pkg.Coverage != "" && pkg.Coverage != "0.0%" {
+				var pct float64
+				fmt.Sscanf(pkg.Coverage, "%f%%", &pct)
+				totalCoverage += pct
+				packageCount++
+			}
+		}
+		if packageCount > 0 {
+			testSummary.Coverage = fmt.Sprintf("%.1f%%", totalCoverage/float64(packageCount))
 		}
 
 		// Update cache with actual test count and package details if successful
@@ -104,7 +155,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 					if err := cacheManager.UpdateTestCount(pattern, actualTestCount, len(m.GetTestPackages())); err != nil {
 						logger.Error("Failed to update test count cache", "error", err)
 					} else {
-						logger.Warn("Updated test count cache", "pattern", pattern, "count", actualTestCount)
+						logger.Debug("Updated test count cache", "pattern", pattern, "count", actualTestCount)
 					}
 
 					// Update per-package details
@@ -137,11 +188,17 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 	// Emit alert if requested
 	utils.EmitAlert(config.Alert)
 
-	return exitCode, nil
+	return exitCode, testSummary, nil
 }
 
 // runStreamInCI runs tests in CI mode (non-interactive).
 func runStreamInCI(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, error) {
+	exitCode, _, err := runStreamInCIWithSummary(cmd, config, logger)
+	return exitCode, err
+}
+
+// runStreamInCIWithSummary runs tests in CI mode and returns the test summary.
+func runStreamInCIWithSummary(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, *types.TestSummary, error) {
 	// Set the global logger for packages that use it
 	internalLogger.SetLogger(logger)
 
@@ -159,39 +216,52 @@ func runStreamInCI(cmd *cobra.Command, config *StreamConfig, logger *log.Logger)
 	)
 
 	// Process and format output
-	if err := processTestOutput(config, cmd, logger); err != nil {
-		return exitCode, err
+	summary, err := processTestOutputWithSummary(config, cmd, logger)
+	if err != nil {
+		return exitCode, nil, err
 	}
 
-	return exitCode, nil
+	return exitCode, summary, nil
 }
 
 // processTestOutput processes test output for non-terminal formats.
 func processTestOutput(config *StreamConfig, cmd *cobra.Command, logger *log.Logger) error {
+	summary, err := processTestOutputWithSummary(config, cmd, logger)
+	if err != nil {
+		return err
+	}
+	_ = summary // Summary is returned by the WithSummary variant
+	return nil
+}
+
+// processTestOutputWithSummary processes test output and returns the summary.
+func processTestOutputWithSummary(config *StreamConfig, cmd *cobra.Command, logger *log.Logger) (*types.TestSummary, error) {
 	// Read and parse the JSON output
 	jsonData, err := os.ReadFile(config.OutputFile)
 	if err != nil {
-		return fmt.Errorf("failed to read test output: %w", err)
+		return nil, fmt.Errorf("failed to read test output: %w", err)
 	}
 
 	// Parse the test events
 	jsonReader := bytes.NewReader(jsonData)
 	summary, err := parser.ParseTestJSON(jsonReader, config.CoverProfile, config.ExcludeMocks)
 	if err != nil {
-		return fmt.Errorf("failed to parse test output: %w", err)
+		return nil, fmt.Errorf("failed to parse test output: %w", err)
 	}
 
 	// Handle different output formats
 	if err := formatAndWriteOutput(summary, config, logger); err != nil {
-		return err
+		return summary, err
 	}
 
 	// Handle CI comment posting if enabled
 	if config.CIMode {
-		return handleCICommentPosting(summary, config, cmd, logger)
+		if err := handleCICommentPosting(summary, config, cmd, logger); err != nil {
+			return summary, err
+		}
 	}
 
-	return nil
+	return summary, nil
 }
 
 // formatAndWriteOutput formats and writes test output based on format type.
