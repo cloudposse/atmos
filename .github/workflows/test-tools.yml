@@ -46,6 +46,10 @@ jobs:
         exclude:
           # Skip windows on draft PRs
           - os: ${{ github.event.pull_request.draft && 'windows-latest' || 'none' }}
+    env:
+      GOTCHA_COMMENT_UUID: tools-test-gotcha-${{ matrix.os }}
+      GOTCHA_JOB_DISCRIMINATOR: ${{ matrix.os }}
+      GOTCHA_PROJECT_CONTEXT: gotcha
 
     steps:
       - name: Check out code
