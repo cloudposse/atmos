@@ -18,7 +18,7 @@ stacks:
     - "**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 logs:
   file: "/dev/stderr"
@@ -83,4 +83,3 @@ auth:
       kind: aws/user
       credentials:
         region: us-east-1
-
