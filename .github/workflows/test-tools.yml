@@ -1,0 +1,132 @@
+name: Tools Tests
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    paths:
+      - "tools/**"
+      - ".github/workflows/test-tools.yml"
+      - "go.mod"
+      - "go.sum"
+
+  push:
+    branches:
+      - main
+      - release/v*
+    paths:
+      - "tools/**"
+      - ".github/workflows/test-tools.yml"
+      - "go.mod"
+      - "go.sum"
+
+  workflow_dispatch:
+    inputs:
+      enable-tmate:
+        description: 'Enable tmate debugging'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+          - 'on-failure'
+
+jobs:
+  # Test tools (gotcha and others)
+  gotcha:
+    name: "[gotcha] Test on ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+        exclude:
+          # Skip windows on draft PRs
+          - os: ${{ github.event.pull_request.draft && 'windows-latest' || 'none' }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/gotcha/go.sum
+
+      - name: Install Go dependencies
+        working-directory: tools/gotcha
+        run: |
+          go mod download
+          go mod tidy
+
+      - name: Build gotcha
+        if: ${{ ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
+        working-directory: tools/gotcha
+        run: |
+          go build -v -o gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} .
+
+      - name: Test gotcha
+        if: ${{ ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
+        working-directory: tools/gotcha
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Run unit tests
+          go test -v -race -coverprofile=coverage.out ./...
+          
+          # Test gotcha binary on its own tests (dogfooding)
+          ./gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} --cover --coverprofile=coverage-integration.out --format=markdown --output=test-output.md ./...
+
+      - name: Upload gotcha test results
+        if: ${{ always() && ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gotcha-test-results-${{ matrix.os }}
+          path: |
+            tools/gotcha/test-output.md
+            tools/gotcha/coverage.out
+            tools/gotcha/coverage-integration.out
+          retention-days: 7
+
+      - name: Upload gotcha coverage to Codecov
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          files: tools/gotcha/coverage.out
+          flags: gotcha
+          name: gotcha-coverage
+          verbose: true
+
+  # Lint gotcha code
+  lint-gotcha:
+    name: "[gotcha] Lint"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/gotcha/go.sum
+
+      - name: golangci-lint for gotcha
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62.2
+          working-directory: tools/gotcha
+          args: --timeout=10m
