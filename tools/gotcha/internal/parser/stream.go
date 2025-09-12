@@ -25,7 +25,7 @@ func ShouldShowErrorLine(line string) bool {
 
 	// Show actual error messages (case-insensitive for some patterns)
 	lowerLine := strings.ToLower(trimmed)
-	if strings.Contains(line, "_test.go:") && 
+	if strings.Contains(line, "_test.go:") &&
 		(strings.Contains(line, "Error") || strings.Contains(line, "Failed") || strings.Contains(line, "assertion")) || // Test file errors
 		strings.Contains(line, ".go:") && strings.Contains(lowerLine, "error") || // Go file compilation errors like "./main.go:10:1: syntax error"
 		strings.Contains(line, "Error:") ||

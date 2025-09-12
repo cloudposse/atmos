@@ -14,14 +14,14 @@ func getTerminalWidth() int {
 	if err == nil && width > 0 {
 		return width
 	}
-	
+
 	// Fallback to COLUMNS environment variable if set
 	if cols := os.Getenv("COLUMNS"); cols != "" {
 		if w, err := strconv.Atoi(cols); err == nil && w > 0 {
 			return w
 		}
 	}
-	
+
 	// Final fallback to a reasonable default
 	return 80
 }

@@ -32,8 +32,8 @@ type TerminalOutput struct {
 
 // CoverageThresholds defines coverage threshold requirements.
 type CoverageThresholds struct {
-	Total     float64             `mapstructure:"total" yaml:"total"`
-	Packages  []PackageThreshold  `mapstructure:"packages" yaml:"packages"`
+	Total     float64            `mapstructure:"total" yaml:"total"`
+	Packages  []PackageThreshold `mapstructure:"packages" yaml:"packages"`
 	FailUnder bool               `mapstructure:"fail_under" yaml:"fail_under"`
 }
 

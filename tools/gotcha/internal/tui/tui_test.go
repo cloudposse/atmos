@@ -196,13 +196,13 @@ func TestGenerateFinalSummary(t *testing.T) {
 
 	// Check for expected content in summary - matches actual format
 	assert.Contains(t, summary, "Total:")
-	assert.Contains(t, summary, "15")  // Total test count
+	assert.Contains(t, summary, "15") // Total test count
 	assert.Contains(t, summary, "Passed:")
-	assert.Contains(t, summary, "10")  // Pass count
+	assert.Contains(t, summary, "10") // Pass count
 	assert.Contains(t, summary, "Failed:")
-	assert.Contains(t, summary, "2")   // Fail count
+	assert.Contains(t, summary, "2") // Fail count
 	assert.Contains(t, summary, "Skipped:")
-	assert.Contains(t, summary, "3")   // Skip count
+	assert.Contains(t, summary, "3") // Skip count
 	assert.Contains(t, summary, "Tests completed in")
 }
 

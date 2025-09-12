@@ -462,7 +462,7 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))  // White
 	coverageStyle := lipgloss.NewStyle().Bold(true).Foreground(getCoverageColor(avgCoverage))
 	// Use same white color as Total Functions for consistency, or amber if high count
-	uncoveredStyle := valueStyle // Use same white style as other values for consistency
+	uncoveredStyle := valueStyle                // Use same white style as other values for consistency
 	if len(uncoveredFuncs) > len(functions)/4 { // If more than 25% uncovered, use amber
 		uncoveredStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")) // Yellow/amber
 	}
