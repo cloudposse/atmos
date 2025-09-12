@@ -1,0 +1,41 @@
+---
+title: atmos auth login
+sidebar_label: login
+sidebar_class_name: command
+id: login
+description: Authenticate to cloud providers using an identity defined in atmos.yaml.
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note Purpose
+Use this command to authenticate with a configured identity. Credentials are cached and reused until expiration.
+:::
+
+<Screengrab title="atmos auth login --help" slug="atmos-auth-login--help" />
+
+## Usage
+
+```shell
+atmos auth login [--identity <name>]
+```
+
+## Examples
+
+```shell
+# Use default identity
+atmos auth login
+
+# Use specific identity
+atmos auth login --identity admin
+```
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>Specify the identity to authenticate. If omitted, the default identity is used.</dd>
+</dl>
+
+## Notes
+
+- Prints provider, identity, account, region, and expiration when successful.

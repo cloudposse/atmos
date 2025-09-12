@@ -1,0 +1,34 @@
+---
+title: atmos auth user
+sidebar_label: user
+sidebar_class_name: command
+id: user
+description: Manage cloud provider user credentials in the local keychain.
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note Purpose
+Use this group to manage static user credentials (currently AWS IAM users) stored securely in your system keychain.
+:::
+
+<Screengrab title="atmos auth user configure --help" slug="atmos-auth-user-configure--help" />
+
+## Subcommand: configure
+
+Configure static AWS user credentials (stored securely in keyring).
+
+#### Usage
+
+```shell
+atmos auth user configure
+```
+
+#### Description
+
+- Prompts for `AWS Access Key ID`, `AWS Secret Access Key`, and optional `AWS User MFA ARN`.
+- Stores credentials securely in the OS keychain using an alias matching the selected `aws/user` identity name.
+- Only identities with `kind: aws/user` are selectable.
+
+#### Notes
+
+- Define at least one `aws/user` identity in `auth.identities` of `atmos.yaml` before running this.
