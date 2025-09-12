@@ -110,7 +110,7 @@ func IsTTY() bool {
 		stdoutTTY := isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 		stdinTTY := isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
 		stderrTTY := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
-		
+
 		// Debug logging
 		if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
 			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
@@ -118,7 +118,7 @@ func IsTTY() bool {
 				f.Close()
 			}
 		}
-		
+
 		return stdoutTTY && stdinTTY && stderrTTY
 	}
 
@@ -131,7 +131,7 @@ func IsTTY() bool {
 	// Debug logging
 	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-			fmt.Fprintf(f, "[IsTTY] stdout: %v, stdin: %v, stderr: %v, cwd: %s\n", 
+			fmt.Fprintf(f, "[IsTTY] stdout: %v, stdin: %v, stderr: %v, cwd: %s\n",
 				stdoutTTY, stdinTTY, stderrTTY, func() string {
 					if cwd, err := os.Getwd(); err == nil {
 						return cwd

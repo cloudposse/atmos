@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	"github.com/charmbracelet/lipgloss"
-	
+	log "github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -92,54 +92,54 @@ func ShowFunctionCoverageReport(profilePath string, logger *log.Logger) error {
 func parseFunctionCoverageOutput(output string) []FunctionCoverageInfo {
 	var functions []FunctionCoverageInfo
 	scanner := bufio.NewScanner(strings.NewReader(output))
-	
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "total:") {
 			continue
 		}
-		
+
 		// Parse line format: path/to/file.go:line:\t\tFunctionName\t\tcoverage%
 		parts := strings.Fields(line)
 		if len(parts) < 3 {
 			continue
 		}
-		
+
 		// Extract file:line
 		// Format is: path/to/file.go:linenum:\t\tfunction\t\tcoverage
-		filePart := strings.TrimSuffix(parts[0], ":")  // Remove trailing colon
+		filePart := strings.TrimSuffix(parts[0], ":") // Remove trailing colon
 		colonIdx := strings.LastIndex(filePart, ":")
 		if colonIdx == -1 {
 			continue
 		}
-		
+
 		filePath := filePart[:colonIdx]
 		lineStr := strings.TrimSpace(filePart[colonIdx+1:])
 		lineNum, err := strconv.Atoi(lineStr)
 		if err != nil {
 			lineNum = 0
 		}
-		
+
 		// Extract function name
 		functionName := parts[1]
-		
+
 		// Extract coverage percentage
 		coverageStr := parts[2]
 		coverageStr = strings.TrimSuffix(coverageStr, "%")
 		coverage, _ := strconv.ParseFloat(coverageStr, 64)
-		
+
 		// Extract package from path
 		pkg := extractPackageFromPath(filePath)
-		
+
 		functions = append(functions, FunctionCoverageInfo{
 			Package:  pkg,
-			File:     filepath.Base(filePath),  // Just the filename
+			File:     filepath.Base(filePath), // Just the filename
 			Function: functionName,
 			Line:     lineNum,
 			Coverage: coverage,
 		})
 	}
-	
+
 	return functions
 }
 
@@ -150,7 +150,7 @@ func extractPackageFromPath(path string) string {
 	if strings.HasPrefix(path, prefix) {
 		path = strings.TrimPrefix(path, prefix)
 	}
-	
+
 	// Get directory part (package)
 	dir := filepath.Dir(path)
 	if dir == "." {
@@ -190,38 +190,38 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 	if len(functions) == 0 {
 		return
 	}
-	
+
 	// Group functions by package
 	packageGroups := make(map[string][]FunctionCoverageInfo)
 	for _, fn := range functions {
 		packageGroups[fn.Package] = append(packageGroups[fn.Package], fn)
 	}
-	
+
 	// Sort packages
 	var packages []string
 	for pkg := range packageGroups {
 		packages = append(packages, pkg)
 	}
 	sort.Strings(packages)
-	
+
 	// Define styles
 	packageStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")) // Bright blue
-	fileStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))             // Gray
-	lineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))             // Darker gray
-	treeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("238"))             // Very dark gray for tree characters
-	
+	fileStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))              // Gray
+	lineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))              // Darker gray
+	treeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("238"))              // Very dark gray for tree characters
+
 	// Now we can use the extracted getCoverageColor and getCoverageSymbol functions
-	
+
 	fmt.Printf("\n%s Function Coverage Report\n", tui.CoverageReportIndicator)
-	
+
 	// Calculate totals
 	var totalFunctions int
 	var totalCoverage float64
 	var uncoveredCount int
-	
+
 	for _, pkg := range packages {
 		funcs := packageGroups[pkg]
-		
+
 		// Sort functions by file and line
 		sort.Slice(funcs, func(i, j int) bool {
 			if funcs[i].File != funcs[j].File {
@@ -229,7 +229,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 			}
 			return funcs[i].Line < funcs[j].Line
 		})
-		
+
 		// Calculate package average
 		var pkgTotal float64
 		for _, fn := range funcs {
@@ -241,11 +241,11 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 			}
 		}
 		pkgAvg := pkgTotal / float64(len(funcs))
-		
+
 		// Display package header with average
 		pkgColor := getCoverageColor(pkgAvg)
 		pkgSymbol := lipgloss.NewStyle().Foreground(pkgColor).Render(getCoverageSymbol(pkgAvg))
-		
+
 		// Shorten package path for display
 		displayPkg := pkg
 		if strings.HasPrefix(pkg, "cmd/") {
@@ -261,14 +261,14 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 				displayPkg = fmt.Sprintf("pkg/%s", parts[1])
 			}
 		}
-		
-		fmt.Printf("%s %s %s\n", 
+
+		fmt.Printf("%s %s %s\n",
 			pkgSymbol,
 			packageStyle.Render(displayPkg),
 			lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(fmt.Sprintf("(%.1f%%)", pkgAvg)))
-		
+
 		// No need for extra spacing - will be handled by file display
-		
+
 		// Group functions by file (without any line numbers in the key)
 		fileGroups := make(map[string][]FunctionCoverageInfo)
 		for _, fn := range funcs {
@@ -279,27 +279,27 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 			}
 			fileGroups[cleanFile] = append(fileGroups[cleanFile], fn)
 		}
-		
+
 		// Sort files
 		var files []string
 		for file := range fileGroups {
 			files = append(files, file)
 		}
 		sort.Strings(files)
-		
+
 		for fileIdx, file := range files {
 			fileFuncs := fileGroups[file]
-			
+
 			// Sort functions by coverage percentage (ascending - lowest coverage first)
 			sort.Slice(fileFuncs, func(i, j int) bool {
 				return fileFuncs[i].Coverage < fileFuncs[j].Coverage
 			})
-			
+
 			// Add spacing before first file
 			if fileIdx == 0 {
 				fmt.Printf("  %s\n", treeStyle.Render("│"))
 			}
-			
+
 			// Determine if this is the last file in package
 			isLastFile := fileIdx == len(files)-1
 			fileTreeChar := "├─"
@@ -308,30 +308,30 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 				fileTreeChar = "└─"
 				funcPrefix = "   "
 			}
-			
+
 			// Display file
 			fmt.Printf("  %s %s\n", treeStyle.Render(fileTreeChar), fileStyle.Render(file))
-			
+
 			// Add extra vertical bar line after file name
 			fmt.Printf("  %s\n", treeStyle.Render(funcPrefix))
-			
+
 			// Display functions with proper indentation
 			for i, fn := range fileFuncs {
 				coverageColor := getCoverageColor(fn.Coverage)
 				coverageStyle := lipgloss.NewStyle().Foreground(coverageColor)
-				
+
 				// Determine tree character
 				treeChar := "├──"
 				if i == len(fileFuncs)-1 {
 					treeChar = "└──"
 				}
-				
+
 				// Format function name with padding
 				funcName := fn.Function
 				if len(funcName) > 28 {
 					funcName = funcName[:25] + "..."
 				}
-				
+
 				// Display function with line number and aligned coverage on the right
 				fmt.Printf("  %s%s %-28s %s %s\n",
 					treeStyle.Render(funcPrefix),
@@ -340,7 +340,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 					lineStyle.Render(fmt.Sprintf(":%4d", fn.Line)),
 					coverageStyle.Render(fmt.Sprintf("%6.1f%%", fn.Coverage)))
 			}
-			
+
 			// Add spacing between files (except for last file)
 			if !isLastFile {
 				fmt.Printf("  %s\n", treeStyle.Render("│"))
@@ -350,7 +350,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 			fmt.Println()
 		}
 	}
-	
+
 	// Display summary
 	avgCoverage := totalCoverage / float64(totalFunctions)
 	fmt.Printf("\n%s\n", tui.GetDivider())
@@ -411,7 +411,7 @@ func showDetailedFunctionCoverage(functions []types.CoverageFunction, logger *lo
 
 	fmt.Printf("\n%s Function Coverage (Detailed):\n", tui.CoverageReportIndicator)
 	fmt.Println(tui.GetDivider())
-	
+
 	for _, fn := range functions {
 		coverageIcon := "✅"
 		if fn.Coverage < 80 {
@@ -420,8 +420,8 @@ func showDetailedFunctionCoverage(functions []types.CoverageFunction, logger *lo
 		if fn.Coverage == 0 {
 			coverageIcon = "❌"
 		}
-		
-		fmt.Printf("%s %-40s %6.1f%%  %s\n", 
+
+		fmt.Printf("%s %-40s %6.1f%%  %s\n",
 			coverageIcon,
 			truncateString(fn.Function, 40),
 			fn.Coverage,
@@ -439,7 +439,7 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 	// Calculate statistics
 	var totalCoverage float64
 	var uncoveredFuncs []types.CoverageFunction
-	
+
 	for _, fn := range functions {
 		totalCoverage += fn.Coverage
 		if fn.Coverage == 0.0 {
@@ -448,14 +448,14 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 	}
 
 	avgCoverage := totalCoverage / float64(len(functions))
-	
+
 	// Create styles for the summary
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FFFF")) // Cyan
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B0B0B0"))  // Light gray
-	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF")) // White
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B0B0B0"))             // Light gray
+	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))  // White
 	coverageStyle := lipgloss.NewStyle().Bold(true).Foreground(getCoverageColor(avgCoverage))
 	uncoveredStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF6B6B")) // Light red
-	
+
 	fmt.Printf("\n%s %s\n", tui.CoverageReportIndicator, headerStyle.Render("Function Coverage Summary:"))
 	fmt.Printf("   %s %s\n", labelStyle.Render("Total Functions:"), valueStyle.Render(fmt.Sprintf("%d", len(functions))))
 	fmt.Printf("   %s %s\n", labelStyle.Render("Average Coverage:"), coverageStyle.Render(fmt.Sprintf("%.1f%% (avg of functions)", avgCoverage)))
@@ -468,13 +468,13 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 		if limit > len(uncoveredFuncs) {
 			limit = len(uncoveredFuncs)
 		}
-		
+
 		for i := 0; i < limit; i++ {
-			fmt.Printf("      • %s in %s\n", 
+			fmt.Printf("      • %s in %s\n",
 				uncoveredFuncs[i].Function,
 				shortenPath(uncoveredFuncs[i].File))
 		}
-		
+
 		if len(uncoveredFuncs) > limit {
 			fmt.Printf("      ... and %d more\n", len(uncoveredFuncs)-limit)
 		}
@@ -512,7 +512,7 @@ func checkCoverageThresholds(data *types.CoverageData, thresholds config.Coverag
 
 	// TODO: Implement per-package threshold checking
 	// This would require parsing the coverage profile in more detail
-	
+
 	return nil
 }
 
@@ -546,11 +546,11 @@ func OpenBrowser(htmlPath string, logger *log.Logger) error {
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
-	
+
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to open browser: %w", err)
 	}
-	
+
 	logger.Info("Coverage report opened in browser", "file", htmlPath)
 	return nil
 }

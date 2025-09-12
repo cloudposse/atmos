@@ -7,7 +7,7 @@ const (
 	CheckPass = "✔" // UTF-8 check mark
 	CheckFail = "✘" // UTF-8 cross mark
 	CheckSkip = "⊘" // UTF-8 circled division slash
-	
+
 	// Unicode symbols for section headers and indicators.
 	TestRunnerIndicator     = "🧪" // Test runner/execution indicator
 	CoverageReportIndicator = "📊" // Coverage statistics indicator

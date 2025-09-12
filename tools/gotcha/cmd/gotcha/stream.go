@@ -436,7 +436,7 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 			if err := coveragePkg.ShowFunctionCoverageReport(coverProfile, logger); err != nil {
 				logger.Debug("Function coverage unavailable", "error", err)
 			}
-			
+
 			// Also process with config if available
 			coverageConfig := getCoverageConfig()
 			if coverageConfig.Enabled && (coverageConfig.Analysis.Functions || coverageConfig.Analysis.Statements) {
@@ -467,32 +467,32 @@ func (e *testFailureError) Error() string {
 // getCoverageConfig retrieves the coverage configuration from viper.
 func getCoverageConfig() config.CoverageConfig {
 	var cfg config.CoverageConfig
-	
+
 	// Set defaults
 	cfg.Enabled = viper.GetBool("coverage.enabled")
 	cfg.Profile = viper.GetString("coverage.profile")
-	
+
 	// Analysis settings
 	cfg.Analysis.Functions = viper.GetBool("coverage.analysis.functions")
 	cfg.Analysis.Statements = viper.GetBool("coverage.analysis.statements")
 	cfg.Analysis.Uncovered = viper.GetBool("coverage.analysis.uncovered")
 	cfg.Analysis.Exclude = viper.GetStringSlice("coverage.analysis.exclude")
-	
+
 	// Output settings
 	cfg.Output.Terminal.Format = viper.GetString("coverage.output.terminal.format")
 	cfg.Output.Terminal.ShowUncovered = viper.GetInt("coverage.output.terminal.show_uncovered")
-	
+
 	// Threshold settings
 	cfg.Thresholds.Total = viper.GetFloat64("coverage.thresholds.total")
 	cfg.Thresholds.FailUnder = viper.GetBool("coverage.thresholds.fail_under")
-	
+
 	// If coverage isn't configured but we have a profile, enable basic analysis
 	if !cfg.Enabled && cfg.Profile != "" {
 		cfg.Enabled = true
 		cfg.Analysis.Functions = true
 		cfg.Analysis.Statements = true
 	}
-	
+
 	return cfg
 }
 

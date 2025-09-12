@@ -213,11 +213,11 @@ experience with intuitive visual feedback and comprehensive test result analysis
 		// Can't use logger yet, it's not initialized
 		fmt.Fprintf(os.Stderr, "Failed to bind log-level flag: %v\n", err)
 	}
-	
+
 	// Parse flags early to get their values into viper
 	// This is needed to ensure flag values override config file values
 	rootCmd.ParseFlags(os.Args[1:])
-	
+
 	// NOW initialize the logger with the correct log level
 	initGlobalLogger()
 

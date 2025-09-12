@@ -234,7 +234,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	// Create the command
 	cmd := exec.Command("go", testArgs...)
 	cmd.Stderr = os.Stderr // Pass through stderr
-	
+
 	// Set process group so we can kill all child processes on interrupt
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
@@ -262,10 +262,10 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	go func() {
 		<-sigChan
 		interrupted = true
-		
+
 		// Print abort message
 		fmt.Fprintf(os.Stderr, "\n\n\033[1;31m✗ Test run aborted\033[0m\n")
-		
+
 		// Kill the test process
 		if cmd.Process != nil {
 			// Send interrupt signal to the process group to kill all child processes

@@ -91,7 +91,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 		if summary != "" {
 			fmt.Fprint(os.Stderr, summary)
 		}
-		
+
 		// Build test summary for return
 		testSummary = &types.TestSummary{
 			Passed:   make([]types.TestResult, 0),
@@ -99,7 +99,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 			Skipped:  make([]types.TestResult, 0),
 			Coverage: "",
 		}
-		
+
 		// Collect test results from package results
 		for _, pkg := range m.GetPackageResults() {
 			for testName, test := range pkg.Tests {
@@ -110,7 +110,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 					Duration:   test.Elapsed,
 					SkipReason: test.SkipReason,
 				}
-				
+
 				switch test.Status {
 				case "pass":
 					testSummary.Passed = append(testSummary.Passed, testResult)
@@ -121,7 +121,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 				}
 			}
 		}
-		
+
 		// Calculate average coverage
 		totalCoverage := 0.0
 		packageCount := 0

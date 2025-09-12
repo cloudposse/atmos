@@ -192,11 +192,11 @@ func (c *StreamConfig) detectCIMode(logger *log.Logger) {
 		// Check if we're actually in a CI environment (environment variable set)
 		inCI := os.Getenv("CI") != "" || os.Getenv("GOTCHA_CI") != ""
 		inGitHubActions := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("GOTCHA_GITHUB_ACTIONS") != ""
-		
+
 		// Check if CI features are enabled in config
 		ciEnabled := viper.GetBool("ci")
 		githubActionsEnabled := viper.GetBool("github.actions")
-		
+
 		// Only enable CI mode if we're in CI AND the feature is enabled
 		// For generic CI: just being in CI is enough (no config needed)
 		// For GitHub Actions: need both environment AND config enablement

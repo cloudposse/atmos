@@ -136,13 +136,13 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 		if _, err := os.Stat(config.CoverProfile); err == nil {
 			// Show divider before coverage
 			fmt.Fprintf(os.Stderr, "\n%s\n", tui.GetDivider())
-			
+
 			// Always show function coverage if we have a profile
 			logger.Info("Analyzing coverage results...")
 			if err := coveragePkg.ShowFunctionCoverageReport(config.CoverProfile, logger); err != nil {
 				logger.Debug("Function coverage unavailable", "error", err)
 			}
-			
+
 			// Also process with config if available
 			coverageConfig := getCoverageConfig()
 			if coverageConfig.Enabled && (coverageConfig.Analysis.Functions || coverageConfig.Analysis.Statements) {
@@ -152,7 +152,7 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 			}
 		}
 	}
-	
+
 	// Display comprehensive test summary at the very end
 	displayFinalTestSummary(testSummary)
 
@@ -170,16 +170,16 @@ func displayFinalTestSummary(summary *types.TestSummary) {
 	if summary == nil {
 		return
 	}
-	
+
 	passed := len(summary.Passed)
 	failed := len(summary.Failed)
 	skipped := len(summary.Skipped)
 	total := passed + failed + skipped
-	
+
 	if total == 0 {
 		return
 	}
-	
+
 	// Add divider before final summary
 	fmt.Fprintf(os.Stderr, "\n%s\n", tui.GetDivider())
 	fmt.Fprintf(os.Stderr, "\n%s\n", tui.StatsHeaderStyle.Render(tui.SummaryHeaderIndicator+" Final Test Summary"))
@@ -187,7 +187,7 @@ func displayFinalTestSummary(summary *types.TestSummary) {
 	fmt.Fprintf(os.Stderr, "  %s Failed:  %5d\n", tui.FailStyle.Render(tui.CheckFail), failed)
 	fmt.Fprintf(os.Stderr, "  %s Skipped: %5d\n", tui.SkipStyle.Render(tui.CheckSkip), skipped)
 	fmt.Fprintf(os.Stderr, "  Total:     %5d\n", total)
-	
+
 	// Don't display coverage here - it's already shown above in the coverage report
 	// This avoids confusion with duplicate/conflicting coverage values
 }
