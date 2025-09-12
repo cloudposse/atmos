@@ -43,6 +43,13 @@
 **/cache.*.txt
 .gotcha/cache.yaml
 
+# Ignore gotcha test binaries and scripts
+gotcha-sorted
+test_gotcha.sh
+tools/gotcha/test-gotcha
+test_workflow.md
+GOTCHA_TUI_FIX_SUMMARY.md
+
 # Ignore components vendored during tests
 examples/demo-vendoring/components/**
 tests/fixtures/scenarios/vendor-globs/components/**

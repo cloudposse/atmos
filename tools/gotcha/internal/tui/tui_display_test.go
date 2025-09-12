@@ -215,7 +215,9 @@ func TestGenerateSubtestProgress(t *testing.T) {
 
 			// For large numbers, just check it's not too long
 			if tt.total > 10 {
-				assert.LessOrEqual(t, len(result)/len("●"), 10)
+				// Count actual dots (not ANSI code length)
+				dotCount := strings.Count(result, "●")
+				assert.LessOrEqual(t, dotCount, 10)
 			} else if tt.passed == 0 {
 				// Check for empty string when no tests passed
 				assert.Equal(t, "", result)

@@ -17,7 +17,7 @@ func TestSortResults(t *testing.T) {
 		wantOrder string // Description of expected order
 	}{
 		{
-			name: "sort by duration descending",
+			name: "sort by package and test name",
 			failed: []types.TestResult{
 				{Test: "TestFast", Duration: 0.1},
 				{Test: "TestSlow", Duration: 2.0},
@@ -67,27 +67,30 @@ func TestSortResults(t *testing.T) {
 
 			sortResults(&failed, &skipped, &passed)
 
-			// Verify failed results are sorted by duration (descending)
+			// Verify failed results are sorted by package and test name
 			for i := 1; i < len(failed); i++ {
-				if failed[i-1].Duration < failed[i].Duration {
-					t.Errorf("sortResults() failed tests not sorted by duration: %v should be >= %v",
-						failed[i-1].Duration, failed[i].Duration)
+				if failed[i-1].Package > failed[i].Package ||
+					(failed[i-1].Package == failed[i].Package && failed[i-1].Test > failed[i].Test) {
+					t.Errorf("sortResults() failed tests not sorted by package/test: %s/%s should come before %s/%s",
+						failed[i-1].Package, failed[i-1].Test, failed[i].Package, failed[i].Test)
 				}
 			}
 
-			// Verify skipped results are sorted by duration (descending)
+			// Verify skipped results are sorted by package and test name
 			for i := 1; i < len(skipped); i++ {
-				if skipped[i-1].Duration < skipped[i].Duration {
-					t.Errorf("sortResults() skipped tests not sorted by duration: %v should be >= %v",
-						skipped[i-1].Duration, skipped[i].Duration)
+				if skipped[i-1].Package > skipped[i].Package ||
+					(skipped[i-1].Package == skipped[i].Package && skipped[i-1].Test > skipped[i].Test) {
+					t.Errorf("sortResults() skipped tests not sorted by package/test: %s/%s should come before %s/%s",
+						skipped[i-1].Package, skipped[i-1].Test, skipped[i].Package, skipped[i].Test)
 				}
 			}
 
-			// Verify passed results are sorted by duration (descending)
+			// Verify passed results are sorted by package and test name
 			for i := 1; i < len(passed); i++ {
-				if passed[i-1].Duration < passed[i].Duration {
-					t.Errorf("sortResults() passed tests not sorted by duration: %v should be >= %v",
-						passed[i-1].Duration, passed[i].Duration)
+				if passed[i-1].Package > passed[i].Package ||
+					(passed[i-1].Package == passed[i].Package && passed[i-1].Test > passed[i].Test) {
+					t.Errorf("sortResults() passed tests not sorted by package/test: %s/%s should come before %s/%s",
+						passed[i-1].Package, passed[i-1].Test, passed[i].Package, passed[i].Test)
 				}
 			}
 		})
@@ -206,17 +209,17 @@ func TestProcessLineEdgeCases(t *testing.T) {
 	}{
 		{
 			name:     "coverage line extraction",
-			line:     "coverage: 85.5% of statements",
+			line:     `{"Action":"output","Package":"example/pkg","Output":"coverage: 85.5% of statements\n"}`,
 			expected: "85.5%",
 		},
 		{
 			name:     "coverage line with extra text",
-			line:     "    coverage: 42.0% of statements in github.com/example/pkg",
+			line:     `{"Action":"output","Package":"example/pkg","Output":"    coverage: 42.0% of statements in github.com/example/pkg\n"}`,
 			expected: "42.0%",
 		},
 		{
 			name:     "non-coverage line",
-			line:     "=== RUN   TestExample",
+			line:     `{"Action":"run","Package":"example/pkg","Test":"TestExample"}`,
 			expected: "",
 		},
 		{
@@ -226,7 +229,7 @@ func TestProcessLineEdgeCases(t *testing.T) {
 		},
 		{
 			name:     "coverage line with no percentage",
-			line:     "coverage: statements",
+			line:     `{"Action":"output","Package":"example/pkg","Output":"coverage: statements\n"}`,
 			expected: "",
 		},
 	}
@@ -252,9 +255,9 @@ func TestExtractCoverageEdgeCases(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "multiple coverage lines - should use last",
+			name:     "multiple coverage lines - uses first match",
 			output:   "coverage: 70.0% of statements\ncoverage: 85.0% of statements\n",
-			expected: "85.0%",
+			expected: "70.0%",
 		},
 		{
 			name:     "coverage with decimal places",

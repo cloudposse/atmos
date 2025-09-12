@@ -10,6 +10,7 @@ import (
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github" // Register GitHub integration
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"     // Import mock integration
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"   // Register mock integration
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -66,6 +67,9 @@ func TestDetectIntegration(t *testing.T) {
 			}
 		}()
 
+		// Initialize viper to pick up the environment variables
+		config.InitEnvironment()
+
 		integration := ci.DetectIntegration(logger)
 		assert.NotNil(t, integration, "Integration should not be nil when GOTCHA_USE_MOCK=true")
 		if integration != nil {
@@ -93,9 +97,14 @@ func TestDetectIntegration(t *testing.T) {
 			}
 		}()
 
+		// Initialize viper to pick up the environment variables
+		config.InitEnvironment()
+
 		integration := ci.DetectIntegration(logger)
 		assert.NotNil(t, integration)
-		assert.Equal(t, "mock", integration.Provider())
+		if integration != nil {
+			assert.Equal(t, "mock", integration.Provider())
+		}
 	})
 }
 

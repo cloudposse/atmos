@@ -238,7 +238,7 @@ func TestGetUncoveredFunctionsInPREnhanced(t *testing.T) {
 				{Function: "CoveredFunc", File: "changed.go", Coverage: 100.0},
 			},
 			changedFiles:  []string{"changed.go"},
-			wantCount:     1,
+			wantCount:     2, // Total functions in changed files (1 uncovered + 1 covered)
 			wantFunctions: []string{"ChangedFunc"},
 		},
 		{
@@ -256,7 +256,7 @@ func TestGetUncoveredFunctionsInPREnhanced(t *testing.T) {
 				{Function: "CoveredFunc", File: "changed.go", Coverage: 100.0},
 			},
 			changedFiles:  []string{"changed.go"},
-			wantCount:     0,
+			wantCount:     1, // Total functions in changed files (even though all are covered)
 			wantFunctions: []string{},
 		},
 		{

@@ -36,6 +36,11 @@ func (m *TestModel) generateSubtestProgress(passed, total int) string {
 		return ""
 	}
 
+	// If no tests passed, return empty string (no progress to show)
+	if passed == 0 {
+		return ""
+	}
+
 	// Determine how many dots to show (actual count up to maxDots)
 	dotsToShow := total
 	if dotsToShow > maxDots {

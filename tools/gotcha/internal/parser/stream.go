@@ -25,7 +25,9 @@ func ShouldShowErrorLine(line string) bool {
 
 	// Show actual error messages (case-insensitive for some patterns)
 	lowerLine := strings.ToLower(trimmed)
-	if strings.Contains(line, "_test.go:") || // File:line references
+	if strings.Contains(line, "_test.go:") && 
+		(strings.Contains(line, "Error") || strings.Contains(line, "Failed") || strings.Contains(line, "assertion")) || // Test file errors
+		strings.Contains(line, ".go:") && strings.Contains(lowerLine, "error") || // Go file compilation errors like "./main.go:10:1: syntax error"
 		strings.Contains(line, "Error:") ||
 		strings.Contains(line, "Error Trace:") ||
 		strings.Contains(line, "Test:") ||
@@ -34,13 +36,16 @@ func ShouldShowErrorLine(line string) bool {
 		strings.Contains(line, "actual:") ||
 		strings.Contains(line, "got:") ||
 		strings.Contains(line, "want:") ||
-		strings.HasPrefix(lowerLine, "fail ") || // FAIL package lines
+		strings.HasPrefix(lowerLine, "fail") || // FAIL package lines (with tab or space)
+		strings.HasPrefix(trimmed, "#") || // Compilation errors start with #
 		strings.Contains(lowerLine, "error:") ||
 		strings.Contains(lowerLine, "warning:") ||
+		strings.Contains(lowerLine, "warn:") ||
 		strings.Contains(lowerLine, "panic:") ||
 		strings.Contains(lowerLine, "compilation error") ||
 		strings.Contains(lowerLine, "build error") ||
-		strings.Contains(lowerLine, "race condition") {
+		strings.Contains(lowerLine, "race condition") ||
+		strings.Contains(lowerLine, "data race") {
 		return true
 	}
 

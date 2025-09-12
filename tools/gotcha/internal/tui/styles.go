@@ -57,9 +57,29 @@ var (
 				Bold(true)
 )
 
-// GetDivider returns a styled divider line.
+// GetDivider returns a styled divider line that adapts to terminal width.
 func GetDivider() string {
-	return DurationStyle.Render("─────────────────────────────────────────────────────")
+	width := getTerminalWidth()
+	if width <= 0 {
+		width = 80 // Default fallback
+	}
+	
+	// Leave some margin to avoid wrapping
+	dividerWidth := width - 2
+	if dividerWidth < 20 {
+		dividerWidth = 20 // Minimum width
+	}
+	if dividerWidth > 100 {
+		dividerWidth = 100 // Maximum width to avoid overly long lines
+	}
+	
+	// Create divider of appropriate length
+	divider := ""
+	for i := 0; i < dividerWidth; i++ {
+		divider += "─"
+	}
+	
+	return DurationStyle.Render(divider)
 }
 
 // SetRenderer sets the current renderer for style creation.

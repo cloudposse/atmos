@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -152,6 +153,9 @@ func TestDetectContext(t *testing.T) {
 			for key, value := range tt.env {
 				os.Setenv(key, value)
 			}
+
+			// Initialize viper to pick up the environment variables
+			config.InitEnvironment()
 
 			// Create event file if needed
 			var eventFile *os.File

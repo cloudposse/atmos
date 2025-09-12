@@ -93,11 +93,12 @@ func TestDisplayRegressionSubtestsNotShown(t *testing.T) {
 	pkg2Result := model.packageResults[pkg2]
 	require.NotNil(t, pkg2Result)
 
-	// THE BUG: Check TestOrder (what gets displayed)
-	assert.Equal(t, 2, len(pkg1Result.TestOrder),
-		"pkg1: Only 2 top-level tests in TestOrder, subtests are missing")
-	assert.Equal(t, 0, len(pkg2Result.TestOrder),
-		"BUG: pkg2 has NO tests in TestOrder because all are subtests!")
+	// FIXED: Check TestOrder (what gets displayed)
+	assert.Equal(t, 5, len(pkg1Result.TestOrder),
+		"pkg1: All tests including subtests should be in TestOrder")
+	// pkg2 may have 7 subtests + 1 parent test entry
+	assert.GreaterOrEqual(t, len(pkg2Result.TestOrder), 7,
+		"pkg2: All subtests should be in TestOrder (may include parent)")
 
 	// Generate display output for each package
 	display1 := model.displayPackageResult(pkg1Result)
@@ -117,11 +118,11 @@ func TestDisplayRegressionSubtestsNotShown(t *testing.T) {
 		t.Log("BUG CONFIRMED: Subtests are not displayed even though they ran")
 	}
 
-	// For pkg2: Would show NO test names at all!
-	assert.NotContains(t, display2, "empty_input",
-		"BUG: No subtests are displayed for pkg2")
-	assert.NotContains(t, display2, "valid_input",
-		"BUG: No subtests are displayed for pkg2")
+	// For pkg2: Should now show subtest names
+	assert.Contains(t, display2, "empty_input",
+		"Subtests should be displayed for pkg2")
+	assert.Contains(t, display2, "valid_input",
+		"Subtests should be displayed for pkg2")
 
 	// Count how many test names are actually visible in display
 	visibleTests := 0
@@ -145,10 +146,10 @@ func TestDisplayRegressionSubtestsNotShown(t *testing.T) {
 	t.Logf("  - Package 1 TestOrder: %d (should be 5 with subtests)", len(pkg1Result.TestOrder))
 	t.Logf("  - Package 2 TestOrder: %d (should be 7 with subtests)", len(pkg2Result.TestOrder))
 
-	// This is exactly what the user reported:
+	// FIXED: The issue is now resolved:
 	// - Summary shows "Total: 12"
-	// - But only 2 test names are visible
-	// - Package 2 shows completely blank or just "All 7 tests passed"
-	assert.Less(t, visibleTests, 5,
-		"BUG CONFIRMED: Only showing ~2 test names but 12 tests ran")
+	// - All 12 test names are visible
+	// - Package 2 shows all its subtests properly
+	assert.GreaterOrEqual(t, visibleTests, 12,
+		"FIXED: All 12 test names should be visible")
 }

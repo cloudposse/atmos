@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -49,6 +50,9 @@ func TestWriteMarkdownContentWithGitHubActions(t *testing.T) {
 			os.Unsetenv("GITHUB_STEP_SUMMARY")
 		}
 	}()
+
+	// Initialize viper to pick up the environment variables
+	config.InitEnvironment()
 
 	summary := &types.TestSummary{
 		Passed: []types.TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},

@@ -9,12 +9,16 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock" // Register integration
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 func Example_usingMockIntegration() {
 	// Enable mock integration via environment
 	os.Setenv("GOTCHA_USE_MOCK", "true")
 	defer os.Unsetenv("GOTCHA_USE_MOCK")
+
+	// Initialize viper to pick up the environment variables
+	config.InitEnvironment()
 
 	logger := log.New(nil)
 

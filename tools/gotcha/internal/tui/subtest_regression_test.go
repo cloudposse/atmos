@@ -107,12 +107,12 @@ func TestSubtestDisplayRegression(t *testing.T) {
 		pkgResult := model.packageResults[pkg]
 		require.NotNil(t, pkgResult)
 
-		// BUG: TestOrder only contains parent test, not subtests
-		assert.Equal(t, 1, len(pkgResult.TestOrder),
-			"BUG: TestOrder only contains parent test, should contain all tests for display")
+		// FIXED: TestOrder now contains all tests (parent + subtests) for proper display
+		assert.Equal(t, 4, len(pkgResult.TestOrder),
+			"TestOrder should contain all tests for display (1 parent + 3 subtests)")
 
-		// But Tests map has the parent test
-		assert.Equal(t, 1, len(pkgResult.Tests))
+		// Tests map now includes all tests (parent + subtests)
+		assert.Equal(t, 4, len(pkgResult.Tests))
 
 		// And the parent test has subtests
 		parentTest := pkgResult.Tests["TestParent"]
@@ -215,15 +215,15 @@ func TestSubtestDisplayRegression(t *testing.T) {
 		assert.Equal(t, 36, totalTestsRun, "Total tests run (including subtests)")
 		assert.Equal(t, 36, model.passCount, "Total tests passed")
 
-		// BUG: Only top-level tests are in TestOrder for display
-		assert.Equal(t, 6, totalTestsInOrder,
-			"BUG: Only 6 tests in TestOrder (top-level only), but 36 tests ran")
+		// FIXED: All tests (including subtests) are now in TestOrder for display
+		assert.Equal(t, 36, totalTestsInOrder,
+			"All 36 tests (including subtests) should be in TestOrder for display")
 
-		// This reproduces the exact issue:
+		// The fix ensures:
 		// - User sees "Total: 36" in summary
-		// - But only 6 test names would be displayed
-		// - pkg3 would show completely blank (no tests)
-		// - pkg2 would show only "TestMain" despite having 20 subtests
+		// - All 36 test names are displayed
+		// - pkg3 shows its subtests properly
+		// - pkg2 shows "TestMain" and all 20 subtests
 	})
 
 	t.Run("packages_with_only_subtests_display_blank", func(t *testing.T) {
@@ -288,21 +288,21 @@ func TestSubtestDisplayRegression(t *testing.T) {
 		pkgResult := model.packageResults[pkg]
 		require.NotNil(t, pkgResult)
 
-		// BUG: TestOrder is empty because no top-level tests ran
-		assert.Equal(t, 0, len(pkgResult.TestOrder),
-			"BUG: TestOrder is empty - package would display blank despite having 5 tests")
+		// FIXED: TestOrder contains all subtests (may include implicit parent)
+		assert.GreaterOrEqual(t, len(pkgResult.TestOrder), 5,
+			"TestOrder should contain at least 5 subtests for display")
 
-		// But we counted 5 tests
+		// We counted 5 tests
 		assert.Equal(t, 5, model.passCount, "5 subtests passed")
 
-		// Generate display to verify it's blank
+		// Generate display to verify it shows the tests
 		display := model.displayPackageResult(pkgResult)
 		assert.Contains(t, display, pkg, "Package name should be shown")
 
-		// BUG: The display would show "No tests" or be blank
-		// even though 5 tests actually ran and passed
-		assert.NotContains(t, display, "database_connection",
-			"BUG: Subtest names are not displayed")
+		// FIXED: The display now shows the subtest names
+		// All 5 tests are properly displayed
+		assert.Contains(t, display, "database_connection",
+			"Subtest names should be displayed")
 	})
 
 	t.Run("actual_test_count_vs_displayed_count", func(t *testing.T) {
@@ -418,19 +418,19 @@ func TestSubtestDisplayRegression(t *testing.T) {
 			}
 		}
 
-		// Verify the massive discrepancy
-		// The exact count depends on how subtests are distributed
-		// What matters is the huge difference between total and displayed
+		// FIXED: All tests are now displayable
+		// Subtests are now included in TestOrder for complete visibility
 		assert.Greater(t, totalTests, 400, "Should have 400+ total tests including subtests")
 		assert.Equal(t, totalTests, model.passCount, "All tests should pass")
-		assert.Equal(t, 22, displayableTests, "Only top-level tests are displayable")
-		assert.Equal(t, 22, actuallyDisplayed,
-			"BUG: Only 22 test names would be displayed out of 400+ tests!")
+		assert.Equal(t, 22, displayableTests, "22 top-level tests before fix")
+		// Allow for implicit parent tests that may be created
+		assert.GreaterOrEqual(t, actuallyDisplayed, totalTests,
+			"FIXED: All tests are now displayed (may include implicit parents)")
 
-		// This reproduces the core issue:
+		// The fix ensures:
 		// Summary shows: "Total: 412"
-		// But user only sees ~22 test names in the output
-		// Most of the tests (390 subtests) are invisible
+		// User sees all 412 test names in the output
+		// All tests (including 390 subtests) are visible
 	})
 }
 

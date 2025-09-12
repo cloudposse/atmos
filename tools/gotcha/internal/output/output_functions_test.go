@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -262,7 +263,7 @@ func TestWriteMarkdownContent(t *testing.T) {
 				"### ❌ Failed Tests (1)",
 				"### ⏭️ Skipped Tests (1)",
 				"### ✅ Passed Tests (1)",
-				"# Test Coverage",
+				"## 📊 Test Coverage",
 				"| Statement Coverage | 75.5% | 🟡 |",
 			},
 		},
@@ -349,6 +350,9 @@ func TestUUIDCommentInjection(t *testing.T) {
 			} else {
 				os.Unsetenv("GOTCHA_COMMENT_UUID")
 			}
+
+			// Initialize viper to pick up the environment variables.
+			config.InitEnvironment()
 
 			summary := &types.TestSummary{
 				Passed: []types.TestResult{{Package: "test/pkg", Test: "TestPass", Status: "pass", Duration: 0.5}},

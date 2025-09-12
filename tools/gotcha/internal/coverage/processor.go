@@ -312,8 +312,15 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 			// Display file
 			fmt.Printf("  %s %s\n", treeStyle.Render(fileTreeChar), fileStyle.Render(file))
 
-			// Add extra vertical bar line after file name
-			fmt.Printf("  %s\n", treeStyle.Render(funcPrefix))
+			// Only add vertical connector if there are functions to display
+			if len(fileFuncs) > 0 {
+				// Add vertical connector line after file name
+				if !isLastFile {
+					fmt.Printf("  %s\n", treeStyle.Render("│  "))
+				} else {
+					fmt.Printf("  %s\n", treeStyle.Render("   │"))
+				}
+			}
 
 			// Display functions with proper indentation
 			for i, fn := range fileFuncs {
@@ -454,7 +461,11 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B0B0B0"))             // Light gray
 	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))  // White
 	coverageStyle := lipgloss.NewStyle().Bold(true).Foreground(getCoverageColor(avgCoverage))
-	uncoveredStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF6B6B")) // Light red
+	// Use same white color as Total Functions for consistency, or amber if high count
+	uncoveredStyle := valueStyle // Use same white style as other values for consistency
+	if len(uncoveredFuncs) > len(functions)/4 { // If more than 25% uncovered, use amber
+		uncoveredStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")) // Yellow/amber
+	}
 
 	fmt.Printf("\n%s %s\n", tui.CoverageReportIndicator, headerStyle.Render("Function Coverage Summary:"))
 	fmt.Printf("   %s %s\n", labelStyle.Render("Total Functions:"), valueStyle.Render(fmt.Sprintf("%d", len(functions))))
@@ -469,9 +480,28 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 			limit = len(uncoveredFuncs)
 		}
 
+		// Calculate column widths for nice alignment
+		maxFuncLen := 0
 		for i := 0; i < limit; i++ {
-			fmt.Printf("      • %s in %s\n",
-				uncoveredFuncs[i].Function,
+			if len(uncoveredFuncs[i].Function) > maxFuncLen {
+				maxFuncLen = len(uncoveredFuncs[i].Function)
+			}
+		}
+		// Cap the max length to prevent too wide columns
+		if maxFuncLen > 30 {
+			maxFuncLen = 30
+		}
+
+		// Display in column format with bullet points for compatibility
+		for i := 0; i < limit; i++ {
+			funcName := uncoveredFuncs[i].Function
+			if len(funcName) > 30 {
+				funcName = funcName[:27] + "..."
+			}
+			// Use padding for alignment while keeping bullet format for tests
+			fmt.Printf("      • %-*s in %s\n",
+				maxFuncLen,
+				funcName,
 				shortenPath(uncoveredFuncs[i].File))
 		}
 

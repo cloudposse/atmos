@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -52,10 +53,8 @@ func TestWriteCoverageSection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			// Note: writeLegacyCoverageSection is now in formatter package
-			// This test should be moved to formatter package tests
-			// For now, we'll skip the actual test implementation
-			buf.WriteString("Statement Coverage: " + tt.coverage)
+			// Use the markdown package function that actually writes coverage with emojis
+			markdown.WriteBasicCoverage(&buf, tt.coverage)
 			output := buf.String()
 
 			checkContainsAll(t, output, tt.wantEmoji, tt.wantText, "Statement Coverage")
