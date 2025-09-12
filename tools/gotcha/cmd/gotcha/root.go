@@ -114,7 +114,7 @@ func getLoggerStyles() *log.Styles {
 func initGlobalLogger() {
 	// Force color profile based on environment
 	var profile termenv.Profile
-	
+
 	// Check for forced color
 	if forceColor := os.Getenv("FORCE_COLOR"); forceColor != "" {
 		switch forceColor {
