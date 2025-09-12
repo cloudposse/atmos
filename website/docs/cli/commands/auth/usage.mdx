@@ -439,6 +439,15 @@ atmos auth exec --identity <name> -- env | grep AWS
 
 Enable debug logging for detailed troubleshooting:
 
+```bash
+# Verbose CLI output
+atmos auth validate --verbose
+atmos auth login --identity <name> --verbose
+
+# Set log level explicitly
+ATMOS_LOG_LEVEL=Debug atmos auth whoami
+```
+
 ### Logs Configuration
 
 Configure logging in `atmos.yaml`:
