@@ -76,12 +76,6 @@ jobs:
         run: |
           go build -v -o gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} .
 
-      - name: Run unit tests
-        if: ${{ ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
-        working-directory: tools/gotcha
-        run: |
-          go test -v -race -coverprofile=coverage.out ./...
-
       - name: Test gotcha with itself (dogfooding)
         if: ${{ ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
         working-directory: tools/gotcha
@@ -90,7 +84,14 @@ jobs:
         run: |
           # Test gotcha binary on its own tests (dogfooding)
           # Use --format=github to automatically write to GITHUB_STEP_SUMMARY
-          ./gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} --cover --coverprofile=coverage-integration.out --format=github --output=test-output.md ./...
+          # Run with -race flag to detect race conditions
+          ./gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} \
+            --race \
+            --cover \
+            --coverprofile=coverage.out \
+            --format=github \
+            --output=test-output.md \
+            ./...
 
       - name: Upload gotcha test results
         if: ${{ always() && ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
@@ -100,7 +101,6 @@ jobs:
           path: |
             tools/gotcha/test-output.md
             tools/gotcha/coverage.out
-            tools/gotcha/coverage-integration.out
           retention-days: 7
 
       - name: Upload gotcha coverage to Codecov
