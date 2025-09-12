@@ -76,27 +76,27 @@ func getLoggerStyles() *log.Styles {
 				SetString("DEBUG").
 				Background(lipgloss.Color("#3F51B5")). // Indigo background
 				Foreground(lipgloss.Color("#000000")). // Black foreground
-				Padding(0, 1),
+				Padding(0, 1, 0, 1),  // Top, Right, Bottom, Left padding
 			log.InfoLevel: lipgloss.NewStyle().
 				SetString("INFO").
 				Background(lipgloss.Color("#4CAF50")). // Green background
 				Foreground(lipgloss.Color("#000000")). // Black foreground
-				Padding(0, 1),
+				Padding(0, 1, 0, 1),  // Top, Right, Bottom, Left padding
 			log.WarnLevel: lipgloss.NewStyle().
 				SetString("WARN").
 				Background(lipgloss.Color("#FF9800")). // Orange background
 				Foreground(lipgloss.Color("#000000")). // Black foreground
-				Padding(0, 1),
+				Padding(0, 1, 0, 1),  // Top, Right, Bottom, Left padding
 			log.ErrorLevel: lipgloss.NewStyle().
 				SetString("ERROR").
 				Background(lipgloss.Color("#F44336")). // Red background
 				Foreground(lipgloss.Color("#000000")). // Black foreground
-				Padding(0, 1),
+				Padding(0, 1, 0, 1),  // Top, Right, Bottom, Left padding
 			log.FatalLevel: lipgloss.NewStyle().
 				SetString("FATAL").
 				Background(lipgloss.Color("#F44336")). // Red background
 				Foreground(lipgloss.Color("#FFFFFF")). // White foreground
-				Padding(0, 1),
+				Padding(0, 1, 0, 1),  // Top, Right, Bottom, Left padding
 		},
 		// Style the keys with a darker gray color
 		Key: lipgloss.NewStyle().

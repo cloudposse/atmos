@@ -158,10 +158,27 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 
 	// Step 8: Exit with appropriate code
 	if exitCode != 0 {
+		// Log why we're exiting non-zero
+		logger.Debug("Exiting with non-zero code",
+			"exitCode", exitCode,
+			"testsRun", func() int {
+				if testSummary != nil {
+					return len(testSummary.Passed) + len(testSummary.Failed) + len(testSummary.Skipped)
+				}
+				return 0
+			}(),
+			"testsFailed", func() int {
+				if testSummary != nil {
+					return len(testSummary.Failed)
+				}
+				return 0
+			}(),
+		)
 		// Return testFailureError to indicate test failure with specific exit code
 		return &testFailureError{code: exitCode}
 	}
 
+	logger.Debug("All tests passed, exiting with code 0")
 	return nil
 }
 
