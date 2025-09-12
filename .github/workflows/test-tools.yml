@@ -89,12 +89,7 @@ jobs:
           # Use --format=github to automatically write to GITHUB_STEP_SUMMARY
           # Note: Temporarily disabled -race flag due to known race conditions in TUI tests with teatest
           # These are test-only issues, not affecting production code
-          ./gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} \
-            --cover \
-            --coverprofile=coverage.out \
-            --format=github \
-            --output=test-output.md \
-            ./...
+          ./gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} --cover --coverprofile=coverage.out --format=github --output=test-output.md ./...
 
       - name: Upload gotcha test results
         if: ${{ always() && ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}

@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/fang"
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -111,8 +112,30 @@ func getLoggerStyles() *log.Styles {
 
 // initGlobalLogger initializes the global logger with solid background colors per PRD spec.
 func initGlobalLogger() {
-	// Get the current color profile to preserve it
-	profile := lipgloss.ColorProfile()
+	// Force color profile based on environment
+	var profile termenv.Profile
+	
+	// Check for forced color
+	if forceColor := os.Getenv("FORCE_COLOR"); forceColor != "" {
+		switch forceColor {
+		case "1":
+			profile = termenv.ANSI
+		case "2":
+			profile = termenv.ANSI256
+		case "3":
+			profile = termenv.TrueColor
+		default:
+			profile = termenv.ANSI256 // Default to 256 colors
+		}
+	} else if os.Getenv("NO_COLOR") != "" {
+		profile = termenv.Ascii
+	} else if os.Getenv("GITHUB_ACTIONS") == "true" {
+		// GitHub Actions supports 256 colors
+		profile = termenv.ANSI256
+	} else {
+		// Auto-detect
+		profile = lipgloss.ColorProfile()
+	}
 
 	globalLogger = log.New(os.Stderr)
 	globalLogger.SetColorProfile(profile)

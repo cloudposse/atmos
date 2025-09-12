@@ -300,20 +300,43 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	// Print summary regardless of errors
 	processor.PrintSummary()
 
+	// Log exit reason
+	var exitCode int
+	var exitReason string
+
 	// Return processing error if any
 	if processErr != nil {
-		return 1
-	}
-
-	// Handle test command exit code - pass through unmodified
-	if testErr != nil {
+		exitCode = 1
+		exitReason = fmt.Sprintf("Processing error: %v", processErr)
+	} else if testErr != nil {
+		// Handle test command exit code - pass through unmodified
 		if exitErr, ok := testErr.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
+			exitCode = exitErr.ExitCode()
+			if exitCode == 1 && processor.failed == 0 {
+				// This is odd - tests passed but go test exited with 1
+				exitReason = fmt.Sprintf("Tests passed but 'go test' exited with code %d (possible build/compilation issue)", exitCode)
+			} else if processor.failed > 0 {
+				exitReason = fmt.Sprintf("%d test(s) failed, exiting with code %d", processor.failed, exitCode)
+			} else {
+				exitReason = fmt.Sprintf("'go test' exited with code %d", exitCode)
+			}
+		} else {
+			exitCode = 1
+			exitReason = fmt.Sprintf("Test execution error: %v", testErr)
 		}
-		return 1
+	} else {
+		exitCode = 0
+		exitReason = fmt.Sprintf("All %d tests passed successfully", processor.passed)
 	}
 
-	return 0
+	// Log the exit reason to stderr
+	if exitCode != 0 {
+		fmt.Fprintf(os.Stderr, "\n❌ Exiting with code %d: %s\n", exitCode, exitReason)
+	} else if verbosityLevel == "verbose" || verbosityLevel == "with-output" {
+		fmt.Fprintf(os.Stderr, "\n✅ Exiting with code 0: %s\n", exitReason)
+	}
+
+	return exitCode
 }
 
 // findTest locates a test within the package result hierarchy.
