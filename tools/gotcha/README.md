@@ -240,6 +240,102 @@ gotcha parse --coverprofile=coverage.out --format=both
 - `--config`: Path to custom configuration file (default: search for `.gotcha.yaml`)
 - `--no-cache`: Skip cache for current run
 
+## Coverage Analysis
+
+Gotcha provides integrated coverage analysis that automatically runs after tests complete, eliminating the need for separate `go tool cover` commands.
+
+### Automatic Coverage Analysis
+
+When you run tests with `--coverprofile`, Gotcha automatically:
+1. Collects coverage data during test execution
+2. Analyzes function-level coverage using `go tool cover -func`
+3. Displays a comprehensive coverage summary
+4. Shows uncovered functions to help identify gaps
+5. Checks coverage thresholds (if configured)
+
+### Example Output
+
+```bash
+$ gotcha stream ./pkg/utils --coverprofile=coverage.out
+
+✔ All 101 tests passed (77.8% statement coverage)
+
+INFO  Analyzing coverage results...
+
+📊 Function Coverage Summary:
+github.com/cloudposse/atmos/tools/gotcha/pkg/utils/helpers.go:17:      IsValidShowFilter       100.0%
+github.com/cloudposse/atmos/tools/gotcha/pkg/utils/helpers.go:28:      FilterPackages          100.0%
+github.com/cloudposse/atmos/tools/gotcha/pkg/utils/helpers.go:101:     IsTTY                   0.0%
+github.com/cloudposse/atmos/tools/gotcha/pkg/utils/test_detection.go:16: IsLikelyTestName      71.4%
+...
+total:                                                                  (statements)            77.8%
+
+📊 Function Coverage Summary:
+   Total Functions: 13
+   Average Coverage: 73.2%
+   Uncovered Functions: 3
+
+   🔴 Top Uncovered Functions:
+      • IsTTY in .../utils/helpers.go
+      • EmitAlert in .../utils/helpers.go
+      • ShortPackage in .../utils/utils.go
+
+📈 Statement Coverage: 77.8%
+```
+
+### Coverage Configuration
+
+Configure coverage behavior in `.gotcha.yaml`:
+
+```yaml
+coverage:
+  enabled: true
+  profile: coverage.out
+  
+  analysis:
+    functions: true      # Show function-level coverage
+    statements: true     # Show statement coverage summary
+    uncovered: false     # Show only uncovered functions
+    exclude:
+      - "**/mock*.go"    # Exclude mock files
+      - "**/*_test.go"   # Exclude test files
+  
+  output:
+    terminal:
+      format: summary    # summary, detailed, or none
+      show_uncovered: 10 # Number of uncovered functions to show
+  
+  thresholds:
+    total: 80           # Minimum required coverage percentage
+    fail_under: true    # Fail tests if below threshold
+```
+
+### Coverage Thresholds
+
+Enforce minimum coverage requirements:
+
+```yaml
+coverage:
+  thresholds:
+    total: 80           # Require 80% overall coverage
+    fail_under: true    # Exit with error if threshold not met
+```
+
+When enabled, Gotcha will fail the test run if coverage falls below the threshold, making it easy to maintain coverage standards in CI/CD pipelines.
+
+### Excluding Files from Coverage
+
+Control which files are included in coverage analysis:
+
+```yaml
+coverage:
+  analysis:
+    exclude:
+      - "**/mock*.go"        # Exclude all mock files
+      - "**/*_test.go"       # Exclude test files
+      - "**/generated/*.go"  # Exclude generated code
+```
+
 ## Configuration
 
 ### Configuration Precedence
@@ -255,71 +351,186 @@ Gotcha uses a clear configuration hierarchy with the following precedence (highe
 
 Gotcha automatically searches for `.gotcha.yaml` configuration files in the current directory and parent directories. You can also specify a custom config file with the `--config` flag.
 
+#### Complete Configuration Schema
+
 ```yaml
-# Logging configuration
-log:
-  level: info  # debug, info, warn, error, fatal
+# Output verbosity level
+# Options: standard, with-output, minimal, verbose
+#   - standard: Default output, no test output shown
+#   - with-output: Shows complete stdout/stderr output for failed tests (recommended)
+#   - minimal: Only show essential information
+#   - verbose: Maximum detail including output for all tests
+verbosity: with-output
 
-# Output format: stream, markdown, github
-format: stream
-
-# Space-separated list of packages to test
-packages:
-  - "./..."
-
-# Additional arguments to pass to go test
-testargs: "-timeout 40m"
-
-# Filter displayed tests: all, failed, passed, skipped
+# Show filter for test display
+# Options: all, failed, passed, skipped, collapsed, none
+#   - all: Show all tests
+#   - failed: Only show failed tests
+#   - passed: Only show passed tests
+#   - skipped: Only show skipped tests
+#   - collapsed: Show tests in collapsed format
+#   - none: Don't show individual tests, only summary
 show: all
 
-# Output file for test results
-output: gotcha-results.json
+# Alert when tests complete
+# Set to true to emit a terminal bell when tests finish
+alert: false
 
-# Coverage profile file
-coverprofile: coverage.out
+# Log level for debugging
+# Options: debug, info, warn, error, fatal
+log:
+  level: info
 
-# Exclude mock files from coverage
-exclude-mocks: true
+# Test execution settings
+test:
+  # Timeout for tests (e.g., "30m", "1h")
+  timeout: 30m
+  
+  # Number of parallel test executions
+  # Set to 0 for default (number of CPUs)
+  parallel: 0
 
-# Package filtering
-filter:
-  include:
-    - ".*"
-  exclude: []
+# Coverage settings
+coverage:
+  # Enable coverage collection and analysis
+  enabled: true
+  
+  # Coverage profile output file
+  profile: coverage.out
+  
+  # Coverage analysis options
+  analysis:
+    # Run 'go tool cover -func' after tests to show function coverage
+    functions: true
+    
+    # Show statement coverage summary
+    statements: true
+    
+    # Show only uncovered code (helpful for finding gaps)
+    uncovered: false
+    
+    # Exclude files from analysis (glob patterns)
+    exclude:
+      - "**/mock*.go"
+      - "**/*_test.go"
+  
+  # Coverage output formats
+  output:
+    # Terminal output settings
+    terminal:
+      # Format: summary, detailed, or none
+      format: summary
+      
+      # Show top N uncovered functions
+      show_uncovered: 10
+  
+  # Coverage thresholds
+  thresholds:
+    # Overall coverage threshold (0 = disabled)
+    total: 0
+    
+    # Fail tests if below threshold
+    fail_under: false
 
-# VCS integration
+# GitHub integration
+github:
+  # Enable GitHub Actions specific features
+  # NOTE: This enables GitHub Actions features when running in GitHub Actions environment
+  actions: true
+  
+  # Create step summary when running in GitHub Actions
+  step_summary: true
+
+# TUI (Terminal User Interface) settings
+tui:
+  # Enable terminal bell alerts in TUI mode
+  alert: true
+  
+  # Color profile for terminal output
+  # Options: auto, always, never
+  colors: auto
+
+# VCS (Version Control System) integration
 vcs:
-  platform: github  # github, gitlab, bitbucket, azuredevops
-  post-comment: adaptive  # always, never, adaptive, on-failure, on-skip, <platform>
+  # Platform: github, gitlab, bitbucket, azuredevops
+  platform: github
+  
+  # Comment posting strategy
+  # Options: always, never, adaptive, on-failure, on-skip, <platform>
+  post-comment: adaptive
+  
+  # Generate job summary (for GitHub Actions)
   generate-summary: true
 
 # Performance settings
 cache:
+  # Enable test count caching
   enabled: true
+  
+  # Cache expiration time
   max-age: 24h
+
+# Package filtering
+filter:
+  # Regular expressions to include packages
+  include:
+    - ".*"
+  
+  # Regular expressions to exclude packages
+  exclude: []
+
+# Additional test arguments
+# These are passed directly to 'go test'
+testargs: ""
+
+# Output file for test results
+output: ""
+
+# Exclude mock files from coverage
+exclude-mocks: true
 ```
 
 ### Environment Variables
 
+All configuration options can be set via environment variables using the `GOTCHA_` prefix.
+
 | Variable | Description | Default |
 |----------|-------------|---------|
+| **General** | | |
 | `GOTCHA_LOG_LEVEL` | Logging level (debug, info, warn, error, fatal) | `info` |
+| `GOTCHA_VERBOSITY` | Output verbosity (standard, with-output, minimal, verbose) | `with-output` |
+| `GOTCHA_SHOW` | Filter displayed tests (all, failed, passed, skipped, collapsed, none) | `all` |
+| `GOTCHA_ALERT` | Enable terminal bell on completion | `false` |
+| `GOTCHA_OUTPUT` | Output file path | - |
+| **Coverage** | | |
+| `GOTCHA_COVERAGE_ENABLED` | Enable coverage analysis | `true` |
+| `GOTCHA_COVERAGE_PROFILE` | Coverage profile output file | `coverage.out` |
+| `GOTCHA_COVERAGE_ANALYSIS_FUNCTIONS` | Show function coverage | `true` |
+| `GOTCHA_COVERAGE_ANALYSIS_STATEMENTS` | Show statement coverage | `true` |
+| `GOTCHA_COVERAGE_ANALYSIS_UNCOVERED` | Show only uncovered code | `false` |
+| `GOTCHA_COVERAGE_OUTPUT_TERMINAL_FORMAT` | Terminal output format (summary, detailed, none) | `summary` |
+| `GOTCHA_COVERAGE_OUTPUT_TERMINAL_SHOW_UNCOVERED` | Number of uncovered functions to show | `10` |
+| `GOTCHA_COVERAGE_THRESHOLDS_TOTAL` | Overall coverage threshold | `0` |
+| `GOTCHA_COVERAGE_THRESHOLDS_FAIL_UNDER` | Fail if below threshold | `false` |
+| `GOTCHA_EXCLUDE_MOCKS` | Exclude mock files from coverage | `true` |
+| **VCS Integration** | | |
 | `GOTCHA_COMMENT_UUID` | UUID for comment deduplication | - |
-| `GOTCHA_POST_COMMENT` | Comment posting strategy | - |
+| `GOTCHA_POST_COMMENT` | Comment posting strategy | `adaptive` |
 | `GOTCHA_JOB_DISCRIMINATOR` | Unique identifier for multi-job CI | - |
 | `GOTCHA_VCS_PLATFORM` | Force specific VCS platform | auto-detect |
-| `GOTCHA_SHOW` | Filter displayed tests (all, failed, passed, skipped) | `all` |
-| `GOTCHA_OUTPUT` | Output file path | - |
-| `GOTCHA_FORCE_TTY` | Force TTY mode | `false` |
-| `GOTCHA_FORCE_NO_TTY` | Force non-TTY mode | `false` |
-| `GOTCHA_USE_MOCK` | Use mock VCS provider for testing | `false` |
-| `NO_COLOR` | Disable colors (standard convention) | `false` |
-| `FORCE_COLOR` | Force color output (1=ANSI, 2=ANSI256, 3=TrueColor) | - |
+| **GitHub Integration** | | |
 | `GITHUB_TOKEN` | GitHub authentication token | - |
 | `GITHUB_STEP_SUMMARY` | Path to GitHub step summary file | - |
-| `CI` | CI environment detection | - |
 | `GITHUB_ACTIONS` | GitHub Actions environment detection | - |
+| **Terminal Control** | | |
+| `GOTCHA_FORCE_TTY` | Force TTY mode | `false` |
+| `GOTCHA_FORCE_NO_TTY` | Force non-TTY mode | `false` |
+| `NO_COLOR` | Disable colors (standard convention) | `false` |
+| `FORCE_COLOR` | Force color output (1=ANSI, 2=ANSI256, 3=TrueColor) | - |
+| **Testing** | | |
+| `GOTCHA_USE_MOCK` | Use mock VCS provider for testing | `false` |
+| **CI Detection** | | |
+| `CI` | CI environment detection | - |
 
 ### Custom Configuration File
 

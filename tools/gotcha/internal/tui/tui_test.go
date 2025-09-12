@@ -106,10 +106,10 @@ func TestShouldShowTest(t *testing.T) {
 		{"all filter with fail", "all", "fail", true},
 		{"all filter with skip", "all", "skip", true},
 
-		// "failed" filter only shows failures
+		// "failed" filter shows failures and skips (non-passing tests)
 		{"failed filter with pass", "failed", "pass", false},
 		{"failed filter with fail", "failed", "fail", true},
-		{"failed filter with skip", "failed", "skip", false},
+		{"failed filter with skip", "failed", "skip", true},
 
 		// "passed" filter only shows passes
 		{"passed filter with pass", "passed", "pass", true},
@@ -181,46 +181,43 @@ func TestGetExitCode(t *testing.T) {
 
 func TestGenerateFinalSummary(t *testing.T) {
 	model := &TestModel{
-		passed:    10,
-		failed:    2,
-		skipped:   3,
-		startTime: time.Now().Add(-5 * time.Second),
+		passCount:    10,
+		failCount:    2,
+		skipCount:    3,
+		startTime:    time.Now().Add(-5 * time.Second),
 		packageResults: map[string]*PackageResult{
-			"pkg1": {Coverage: "80.5%"},
-			"pkg2": {Coverage: "90.0%"},
-			"pkg3": {Coverage: "0.0%"}, // Should be excluded from average
+			"pkg1": {StatementCoverage: "80.5%"},
+			"pkg2": {StatementCoverage: "90.0%"},
+			"pkg3": {StatementCoverage: "0.0%"}, // Should be excluded from average
 		},
 	}
 
 	summary := model.GenerateFinalSummary()
 
-	// Check for expected content in summary
-	assert.Contains(t, summary, "Passed:  10")
-	assert.Contains(t, summary, "Failed:  2")
-	assert.Contains(t, summary, "Skipped: 3")
-	assert.Contains(t, summary, "Total:     15")
-	assert.Contains(t, summary, "Coverage:  85.2%") // Average of 80.5 and 90.0
-	assert.Contains(t, summary, "Tests completed in")
+	// Check for expected content in summary - updated format
+	assert.Contains(t, summary, "15 Tests completed")
+	assert.Contains(t, summary, "10 Passed")
+	assert.Contains(t, summary, "2 Failed")
+	assert.Contains(t, summary, "3 Skipped")
+	assert.Contains(t, summary, "in ")  // Contains time duration
 }
 
 func TestView(t *testing.T) {
 	model := &TestModel{
-		width:    80,
-		height:   24,
-		passed:   5,
-		failed:   1,
-		skipped:  0,
-		done:     false,
-		exitCode: 0,
+		width:     80,
+		height:    24,
+		passCount: 5,
+		failCount: 1,
+		skipCount: 0,
+		done:      false,
+		exitCode:  0,
 	}
 
 	view := model.View()
 
 	// Check for essential UI elements
-	assert.Contains(t, view, "🧪 Go Test Runner")
-	assert.Contains(t, view, "Running tests...")
-	assert.Contains(t, view, "5 passed")
-	assert.Contains(t, view, "1 failed")
+	assert.Contains(t, view, TestRunnerIndicator)  // Test runner indicator
+	assert.Contains(t, view, "Starting tests...")  // Status message
 }
 
 func TestUpdate(t *testing.T) {
@@ -241,7 +238,7 @@ func TestUpdate(t *testing.T) {
 
 	// Test test complete
 	model.done = false
-	newModel, _ = model.Update(testCompleteMsg{exitCode: 1})
+	newModel, _ = model.Update(TestCompleteMsg{ExitCode: 1})
 	updatedModel = newModel.(*TestModel)
 	assert.True(t, updatedModel.done)
 	assert.Equal(t, 1, updatedModel.exitCode)

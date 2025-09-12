@@ -104,18 +104,18 @@ func (m *TestModel) handleSubprocessReady(msg subprocessReadyMsg) tea.Cmd {
 }
 
 // handleStreamOutput processes streaming test output.
-func (m *TestModel) handleStreamOutput(msg streamOutputMsg) tea.Cmd {
+func (m *TestModel) handleStreamOutput(msg StreamOutputMsg) tea.Cmd {
 	// Write to JSON file if open
 	if m.jsonFile != nil {
 		m.jsonWriter.Lock()
-		_, _ = m.jsonFile.Write([]byte(msg.line))
+		_, _ = m.jsonFile.Write([]byte(msg.Line))
 		_, _ = m.jsonFile.Write([]byte("\n"))
 		m.jsonWriter.Unlock()
 	}
 
 	// Parse JSON event
 	var event types.TestEvent
-	if err := json.Unmarshal([]byte(msg.line), &event); err == nil {
+	if err := json.Unmarshal([]byte(msg.Line), &event); err == nil {
 		m.processEvent(&event)
 
 		// Check if any packages completed and display them once
@@ -202,10 +202,10 @@ func (m *TestModel) handleTestFail() tea.Cmd {
 }
 
 // handleTestComplete processes test completion messages.
-func (m *TestModel) handleTestComplete(msg testCompleteMsg) tea.Cmd {
+func (m *TestModel) handleTestComplete(msg TestCompleteMsg) tea.Cmd {
 	m.done = true
 	m.endTime = time.Now()
-	m.exitCode = msg.exitCode
+	m.exitCode = msg.ExitCode
 
 	// Close JSON file
 	if m.jsonFile != nil {

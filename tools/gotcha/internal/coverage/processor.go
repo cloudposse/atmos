@@ -463,7 +463,7 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 
 	// Show top uncovered functions if requested
 	if showUncovered > 0 && len(uncoveredFuncs) > 0 {
-		fmt.Printf("\n   ❌ Top Uncovered Functions:\n")
+		fmt.Printf("\n   🔴 Top Uncovered Functions:\n")
 		limit := showUncovered
 		if limit > len(uncoveredFuncs) {
 			limit = len(uncoveredFuncs)

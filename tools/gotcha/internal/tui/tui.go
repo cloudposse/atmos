@@ -156,11 +156,11 @@ func (m *TestModel) readNextLine() tea.Cmd {
 					m.exitCode = state.ExitCode()
 				}
 			}
-			return testCompleteMsg{exitCode: m.exitCode}
+			return TestCompleteMsg{ExitCode: m.exitCode}
 		}
 
 		line := m.scanner.Text()
-		return streamOutputMsg{line: line}
+		return StreamOutputMsg{Line: line}
 	}
 }
 
@@ -179,13 +179,13 @@ func (m *TestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case subprocessReadyMsg:
 		return m, m.handleSubprocessReady(msg)
 
-	case streamOutputMsg:
+	case StreamOutputMsg:
 		return m, m.handleStreamOutput(msg)
 
 	case testFailMsg:
 		return m, m.handleTestFail()
 
-	case testCompleteMsg:
+	case TestCompleteMsg:
 		return m, m.handleTestComplete(msg)
 
 	case spinner.TickMsg:
@@ -269,18 +269,18 @@ func (m *TestModel) UpdateOld(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Start reading lines
 		cmds = append(cmds, m.readNextLine())
 
-	case streamOutputMsg:
+	case StreamOutputMsg:
 		// Write to JSON file if open
 		if m.jsonFile != nil {
 			m.jsonWriter.Lock()
-			_, _ = m.jsonFile.Write([]byte(msg.line))
+			_, _ = m.jsonFile.Write([]byte(msg.Line))
 			_, _ = m.jsonFile.Write([]byte("\n"))
 			m.jsonWriter.Unlock()
 		}
 
 		// Parse JSON event
 		var event types.TestEvent
-		if err := json.Unmarshal([]byte(msg.line), &event); err == nil {
+		if err := json.Unmarshal([]byte(msg.Line), &event); err == nil {
 			m.processEvent(&event)
 
 			// Update progress based on test completion
@@ -306,10 +306,10 @@ func (m *TestModel) UpdateOld(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.readNextLine())
 		}
 
-	case testCompleteMsg:
+	case TestCompleteMsg:
 		m.done = true
 		m.endTime = time.Now()
-		m.exitCode = msg.exitCode
+		m.exitCode = msg.ExitCode
 
 		// Close JSON file
 		if m.jsonFile != nil {
@@ -430,7 +430,7 @@ func (m *TestModel) View() string {
 
 	// Calculate the display width of all components except the progress bar
 	// We need to account for ANSI color codes not contributing to display width
-	prefix := "  🧪  "
+	prefix := "  " + TestRunnerIndicator + "  "
 	prefixWidth := lipgloss.Width(prefix)
 	spinWidth := lipgloss.Width(spin)
 	infoWidth := lipgloss.Width(info)

@@ -46,6 +46,9 @@ func TestTUIWithTeatest(t *testing.T) {
 		// Create teatest wrapper with fixed terminal size (use pointer)
 		tm := teatest.NewTestModel(t, &model,
 			teatest.WithInitialTermSize(80, 24))
+		
+		// Send a quit message to terminate the model
+		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 
 		// Get the final model after initialization
 		finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
@@ -108,12 +111,15 @@ func TestTUIWithTeatest(t *testing.T) {
 		for _, event := range events {
 			eventJSON, err := json.Marshal(event)
 			require.NoError(t, err)
-			// Use streamOutputMsg which is what the TUI expects
-			tm.Send(streamOutputMsg{line: string(eventJSON)})
+			// Use StreamOutputMsg which is what the TUI expects
+			tm.Send(tui.StreamOutputMsg{Line: string(eventJSON)})
 		}
 
 		// Allow time for processing
 		time.Sleep(100 * time.Millisecond)
+		
+		// Send test complete message to properly terminate the TUI
+		tm.Send(tui.TestCompleteMsg{ExitCode: 0})
 
 		// Get final model
 		finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(2*time.Second))
@@ -151,10 +157,13 @@ func TestTUIWithTeatest(t *testing.T) {
 		}
 		eventJSON, err := json.Marshal(completeEvent)
 		require.NoError(t, err)
-		tm.Send(streamOutputMsg{line: string(eventJSON)})
+		tm.Send(tui.StreamOutputMsg{Line: string(eventJSON)})
+		
+		// Send test complete message to properly terminate the TUI
+		tm.Send(tui.TestCompleteMsg{ExitCode: 0})
 
-		// Get the final output
-		output, err := io.ReadAll(tm.FinalOutput(t, teatest.WithFinalTimeout(time.Second)))
+		// Get the final output (needs 2.5s timeout as model auto-quits after 2s)
+		output, err := io.ReadAll(tm.FinalOutput(t, teatest.WithFinalTimeout(3*time.Second)))
 		require.NoError(t, err)
 
 		// Output should contain some TUI rendering
@@ -194,7 +203,7 @@ func TestTUIPackageTracking(t *testing.T) {
 			Package: pkg,
 		}
 		eventJSON, _ := json.Marshal(startEvent)
-		tm.Send(streamOutputMsg{line: string(eventJSON)})
+		tm.Send(tui.StreamOutputMsg{Line: string(eventJSON)})
 
 		// Package pass event
 		passEvent := types.TestEvent{
@@ -204,11 +213,14 @@ func TestTUIPackageTracking(t *testing.T) {
 			Elapsed: 1.0,
 		}
 		eventJSON, _ = json.Marshal(passEvent)
-		tm.Send(streamOutputMsg{line: string(eventJSON)})
+		tm.Send(tui.StreamOutputMsg{Line: string(eventJSON)})
 	}
+	
+	// Send test complete message to properly terminate the TUI
+	tm.Send(tui.TestCompleteMsg{ExitCode: 0})
 
-	// Get final model
-	finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(2*time.Second))
+	// Get final model (needs 2.5s timeout as model auto-quits after 2s)
+	finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
 	tuiModel, ok := finalModel.(*tui.TestModel)
 	require.True(t, ok)
 

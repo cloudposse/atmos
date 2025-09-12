@@ -7,8 +7,8 @@ import (
 // Message types for Bubble Tea.
 type (
 	// TestCompleteMsg signals that all tests have completed.
-	testCompleteMsg struct {
-		exitCode int
+	TestCompleteMsg struct {
+		ExitCode int
 	}
 )
 
@@ -29,7 +29,7 @@ type subprocessReadyMsg struct {
 	proc io.ReadCloser
 }
 
-// streamOutputMsg contains a line of output from the test process.
-type streamOutputMsg struct {
-	line string
+// StreamOutputMsg contains a line of output from the test process.
+type StreamOutputMsg struct {
+	Line string
 }
