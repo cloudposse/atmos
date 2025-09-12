@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
@@ -235,10 +234,8 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	cmd := exec.Command("go", testArgs...)
 	cmd.Stderr = os.Stderr // Pass through stderr
 
-	// Set process group so we can kill all child processes on interrupt
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-	}
+	// Set platform-specific command attributes for proper process group handling
+	setPlatformSpecificCmd(cmd)
 
 	// Get stdout pipe
 	stdout, err := cmd.StdoutPipe()
@@ -251,9 +248,9 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		return 1
 	}
 
-	// Setup signal handling for Ctrl+C
+	// Setup signal handling for Ctrl+C (platform-specific)
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sigChan, getInterruptSignals()...)
 
 	// Track if we've been interrupted
 	var interrupted bool
@@ -268,11 +265,9 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 		// Kill the test process
 		if cmd.Process != nil {
-			// Send interrupt signal to the process group to kill all child processes
-			if cmd.Process.Pid > 0 {
-				// On Unix systems, kill the entire process group
-				syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-			}
+			// Kill the process group (platform-specific implementation)
+			killProcessGroup(cmd.Process.Pid)
+			// Also kill the main process
 			cmd.Process.Kill()
 		}
 	}()
