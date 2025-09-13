@@ -61,7 +61,7 @@ func init() {
 	ToolChainCmd.AddCommand(toolchainAddCmd)
 	ToolChainCmd.AddCommand(toolchainRemoveCmd)
 	ToolChainCmd.AddCommand(toolchainSetCmd)
-	ToolChainCmd.AddCommand(toolchainGetCmd)
+	ToolChainCmd.AddCommand(toolchainVersionsCmd)
 	ToolChainCmd.AddCommand(toolchainCleanCmd)
 	ToolChainCmd.AddCommand(toolchainExecCmd)
 	ToolChainCmd.AddCommand(toolchainListCmd)
