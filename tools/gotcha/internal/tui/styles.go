@@ -35,8 +35,8 @@ var (
 	SkipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAmber))
 
 	// Text styles.
-	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray)) // Light gray for test names
-	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))  // Dark gray for durations
+	TestNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorLightGray))            // Light gray for test names
+	DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))             // Dark gray for durations
 	FaintStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray)).Faint(true) // Faint gray for skip reasons
 
 	// UI element styles.

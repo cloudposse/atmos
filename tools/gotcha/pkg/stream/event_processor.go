@@ -278,11 +278,11 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			if test := p.findTest(pkg, event.Test); test != nil {
 				test.Status = "skip"
 				test.Elapsed = event.Elapsed
-				
+
 				// Extract skip reason from output
 				for _, line := range test.Output {
 					trimmedLine := strings.TrimSpace(line)
-					
+
 					// Look for skip reason in test output (format: "    filename.go:line: reason")
 					// Example: "    skip_test.go:9: SKIP: This test is skipped for demonstration purposes"
 					if strings.Contains(line, ".go:") && strings.Contains(line, ": ") {
@@ -298,7 +298,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 							}
 						}
 					}
-					
+
 					// Alternative pattern: Look for t.Skip or t.Skipf calls
 					if strings.Contains(trimmedLine, "t.Skip") || strings.Contains(trimmedLine, "Skipping") {
 						// Extract the message after the last colon
