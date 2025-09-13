@@ -30,7 +30,7 @@ func initialSpinnerModel(message string) spinnerModel {
 }
 
 func (m spinnerModel) Init() tea.Cmd {
-	return bspinner.Tick
+	return m.spinner.Tick
 }
 
 func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

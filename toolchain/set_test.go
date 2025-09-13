@@ -849,11 +849,6 @@ func TestRenderMarkdownEdgeCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := renderMarkdown(tc.content, tc.width)
 
-			// Should not panic and should return some result
-			if result == "" && tc.content != "" {
-				// Empty result is acceptable for some edge cases
-			}
-
 			// Ensure no border characters remain
 			borderChars := []string{"┌", "┐", "└", "┘", "─", "│", "├", "┤", "┬", "┴"}
 			for _, char := range borderChars {

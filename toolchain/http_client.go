@@ -59,31 +59,6 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 	return resp, nil
 }
 
-// isGitHubRequest checks if the request is to a GitHub domain that requires authentication.
-func (t *GitHubAuthenticatedTransport) isGitHubRequest(url string) bool {
-	// Only apply authentication to GitHub API requests, not raw content
-	return contains(url, "api.github.com") ||
-		(contains(url, "github.com") && !contains(url, "raw.githubusercontent.com"))
-}
-
-// contains is a helper function to check if a string contains a substring.
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		(len(s) > len(substr) && (s[:len(substr)] == substr ||
-			s[len(s)-len(substr):] == substr ||
-			containsSubstring(s, substr))))
-}
-
-// containsSubstring checks if a string contains a substring (simplified).
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
 // GetGitHubToken retrieves GitHub token from Viper configuration.
 func GetGitHubToken() string {
 	return viper.GetString("github-token")

@@ -2,8 +2,6 @@ package toolchain
 
 import (
 	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -20,12 +18,6 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/gabriel-vasile/mimetype"
 	"gopkg.in/yaml.v3"
-)
-
-var (
-	logLevel        string
-	githubToken     string
-	toolsConfigFile string
 )
 
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
@@ -226,7 +218,7 @@ func (i *Installer) findTool(owner, repo, version string) (*Tool, error) {
 
 	// Search through all registries
 	for _, registry := range i.registries {
-		tool, err := i.searchRegistry(registry, owner, repo, version)
+		tool, err := i.searchRegistry(registry, owner, repo)
 		if err == nil {
 			return tool, nil
 		}
@@ -236,27 +228,7 @@ func (i *Installer) findTool(owner, repo, version string) (*Tool, error) {
 }
 
 // searchRegistry searches a specific registry for a tool.
-func (i *Installer) searchRegistry(registry, owner, repo, version string) (*Tool, error) {
-	// For demonstration, we'll use a hardcoded tool for github-comment
-	// In a real implementation, you'd scan the registry
-
-	if owner == "suzuki-shunsuke" && repo == "github-comment" {
-		// Return a hardcoded tool for demonstration
-		return &Tool{
-			Name:      "github-comment",
-			Type:      "github_release",
-			RepoOwner: "suzuki-shunsuke",
-			RepoName:  "github-comment",
-			Asset:     "github-comment_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz",
-			Files: []File{
-				{
-					Name: "github-comment",
-					Src:  "github-comment",
-				},
-			},
-		}, nil
-	}
-
+func (i *Installer) searchRegistry(registry, owner, repo string) (*Tool, error) {
 	// Try to fetch from Aqua registry for remote registries
 	if strings.HasPrefix(registry, "http") {
 		// Use the Aqua registry implementation
@@ -272,56 +244,11 @@ func (i *Installer) searchRegistry(registry, owner, repo, version string) (*Tool
 	}
 
 	// Try local registry
-	return i.searchLocalRegistry(registry, owner, repo, version)
-}
-
-// fetchFromRemoteRegistry fetches tool definition from a remote registry.
-func (i *Installer) fetchFromRemoteRegistry(registryURL, owner, repo, version string) (*Tool, error) {
-	// Create cache directory for registry files
-	registryCacheDir := filepath.Join(i.cacheDir, "registries")
-	if err := os.MkdirAll(registryCacheDir, 0o755); err != nil {
-		return nil, fmt.Errorf("failed to create registry cache directory: %w", err)
-	}
-
-	// Create cache key for this registry
-	hash := sha256.Sum256([]byte(registryURL))
-	cacheKey := hex.EncodeToString(hash[:])
-	cacheFile := filepath.Join(registryCacheDir, cacheKey+".yaml")
-
-	// Check if we have a cached version
-	if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
-		// Fetch from remote
-		url := fmt.Sprintf("%s/%s/%s.yaml", registryURL, owner, repo)
-		client := NewDefaultHTTPClient()
-		resp, err := client.Get(url)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch from remote registry: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("failed to fetch from remote registry: HTTP %d", resp.StatusCode)
-		}
-
-		// Save to cache
-		file, err := os.Create(cacheFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create cache file: %w", err)
-		}
-		defer file.Close()
-
-		_, err = io.Copy(file, resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to write cache file: %w", err)
-		}
-	}
-
-	// Load from cache
-	return i.loadToolFile(cacheFile)
+	return i.searchLocalRegistry(registry, owner, repo)
 }
 
 // searchLocalRegistry searches a local registry for a tool.
-func (i *Installer) searchLocalRegistry(registryPath, owner, repo, version string) (*Tool, error) {
+func (i *Installer) searchLocalRegistry(registryPath, owner, repo string) (*Tool, error) {
 	toolFile := filepath.Join(registryPath, owner, repo+".yaml")
 	if _, err := os.Stat(toolFile); os.IsNotExist(err) {
 		return nil, fmt.Errorf("tool file not found: %s", toolFile)
