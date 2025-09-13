@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"sort"
 	"strings"
 	"testing"
 
@@ -169,10 +170,21 @@ func TestStreamProcessorSubtestOutput(t *testing.T) {
 			// If no output found, check for subtest output
 			if !exists || len(output) == 0 {
 				testPrefix := tt.parentTest + "/"
-				for testName, testOutput := range tt.buffers {
-					if strings.HasPrefix(testName, testPrefix) && len(testOutput) > 0 {
-						output = append(output, testOutput...)
+				
+				// Collect all matching test names and sort them for deterministic order
+				var matchingTests []string
+				for testName := range tt.buffers {
+					if strings.HasPrefix(testName, testPrefix) && len(tt.buffers[testName]) > 0 {
+						matchingTests = append(matchingTests, testName)
 					}
+				}
+				
+				// Sort the test names to ensure deterministic order
+				sort.Strings(matchingTests)
+				
+				// Now collect output in sorted order
+				for _, testName := range matchingTests {
+					output = append(output, tt.buffers[testName]...)
 				}
 			}
 
