@@ -50,6 +50,7 @@ type TestResult struct {
 	Parent       string   // Parent test name for subtests
 	Subtests     map[string]*TestResult
 	SubtestOrder []string
+	SkipReason   string // Reason for skipping (extracted from output)
 }
 
 // StreamProcessor handles real-time test output with buffering.

@@ -210,6 +210,12 @@ func (p *StreamProcessor) displayTestLine(test *TestResult, indent string) {
 		line.WriteString(" ")
 		line.WriteString(tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
 	}
+	
+	// Add skip reason if present
+	if test.Status == "skip" && test.SkipReason != "" {
+		line.WriteString(" ")
+		line.WriteString(tui.FaintStyle.Render("— " + test.SkipReason))
+	}
 
 	fmt.Fprintln(os.Stderr, line.String())
 
