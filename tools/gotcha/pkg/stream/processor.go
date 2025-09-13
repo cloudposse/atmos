@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -329,11 +330,22 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		exitReason = fmt.Sprintf("All %d tests passed successfully", processor.passed)
 	}
 
-	// Log the exit reason to stderr
+	// Log the exit reason using the logger
+	log := logger.GetLogger()
 	if exitCode != 0 {
-		fmt.Fprintf(os.Stderr, "\n❌ Exiting with code %d: %s\n", exitCode, exitReason)
+		// Check if this is the specific case where tests passed but go test failed
+		if processor.failed == 0 && processor.passed > 0 {
+			// This is likely a parsing issue or test setup problem, not a test failure
+			log.Warn("Test process exited with non-zero code but no tests failed",
+				"exitCode", exitCode,
+				"testsRun", processor.passed,
+				"testsSkipped", processor.skipped,
+				"hint", "Check for panics, TestMain failures, or build errors")
+		} else {
+			log.Error("Test run failed", "exitCode", exitCode, "reason", exitReason)
+		}
 	} else if verbosityLevel == "verbose" || verbosityLevel == "with-output" {
-		fmt.Fprintf(os.Stderr, "\n✅ Exiting with code 0: %s\n", exitReason)
+		log.Info("Test run completed successfully", "exitCode", 0, "reason", exitReason)
 	}
 
 	return exitCode
