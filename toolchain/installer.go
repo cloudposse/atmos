@@ -67,7 +67,11 @@ type Installer struct {
 
 // NewInstallerWithResolver allows injecting a custom ToolResolver (for tests).
 func NewInstallerWithResolver(resolver ToolResolver) *Installer {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Warn("Falling back to temp dir for cache.", "error", err)
+		homeDir = os.TempDir()
+	}
 	cacheDir := filepath.Join(homeDir, ".cache", "tools-cache")
 	binDir := filepath.Join(GetToolsDirPath(), "bin")
 	registries := []string{
