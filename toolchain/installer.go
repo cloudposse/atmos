@@ -585,21 +585,20 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 	}
 	defer os.RemoveAll(tempDir)
 
-cmd := exec.Command("unzip", "-o", zipPath, "-d", tempDir)
-if output, err := cmd.CombinedOutput(); err != nil {
-	var exitCode int
-	// Case 1: Command ran but failed (non-zero exit)
-	if exitErr, ok := err.(*exec.ExitError); ok {
-		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
-			exitCode = status.ExitStatus()
+	cmd := exec.Command("unzip", "-o", zipPath, "-d", tempDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		var exitCode int
+		// Case 1: Command ran but failed (non-zero exit)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
+				exitCode = status.ExitStatus()
+			}
+			log.Debug("Command failed.", "exit_code", exitCode)
+		} else {
+			// Case 2: Command did NOT run at all (e.g., not found)
+			log.Debug("Command execution failed.", "error", err)
 		}
-		log.Debug("Command failed.", "exit_code", exitCode)
-	} else {
-		// Case 2: Command did NOT run at all (e.g., not found)
-		log.Debug("Command execution failed.", "error", err)
-	}
-	return fmt.Errorf("failed to extract ZIP: %w, output: %s", err, string(output))
-}
+		return fmt.Errorf("failed to extract ZIP: %w, output: %s", err, string(output))
 	}
 
 	binaryName := tool.Name
