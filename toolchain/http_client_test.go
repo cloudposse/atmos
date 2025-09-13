@@ -32,7 +32,7 @@ func TestGetGitHubToken(t *testing.T) {
 	}
 }
 
-// MockTransport is a mock implementation of http.RoundTripper for testing
+// MockTransport is a mock implementation of http.RoundTripper for testing.
 type MockTransport struct {
 	RoundTripFunc func(req *http.Request) (*http.Response, error)
 }

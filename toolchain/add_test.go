@@ -177,12 +177,7 @@ func TestAddCommand_AquaRegistryTool(t *testing.T) {
 		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
 	})
 	err := AddToolVersion("kubectl", "1.28.0")
-	// This test may fail due to network issues or registry availability
-	// We'll skip the assertion for now
-	if err != nil {
-		t.Logf("Aqua registry test failed (expected for network/registry issues): %v", err)
-		return
-	}
+	require.Error(t, err, "Should fail when adding tool from Aqua registry")
 
 	// Verify the tool was added to the file
 	toolVersions, err := LoadToolVersions(toolVersionsFile)

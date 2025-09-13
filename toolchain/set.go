@@ -129,13 +129,13 @@ func (m versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "up", "k":
 				// Scroll up by scroll speed amount
 				for i := 0; i < m.scrollSpeed; i++ {
-					m.viewport.LineUp(1)
+					m.viewport.ScrollUp(1)
 				}
 				return m, nil
 			case "down", "j":
 				// Scroll down by scroll speed amount
 				for i := 0; i < m.scrollSpeed; i++ {
-					m.viewport.LineDown(1)
+					m.viewport.ScrollDown(1)
 				}
 				return m, nil
 			case "pgup":

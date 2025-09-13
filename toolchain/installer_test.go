@@ -236,10 +236,6 @@ func TestNewInstaller(t *testing.T) {
 		resolver:   mockResolver,
 	}
 
-	if installer == nil {
-		t.Fatal("NewInstaller() returned nil")
-	}
-
 	if installer.binDir != "./.tools/bin" {
 		t.Errorf("NewInstaller() binDir = %v, want ./.tools/bin", installer.binDir)
 	}
