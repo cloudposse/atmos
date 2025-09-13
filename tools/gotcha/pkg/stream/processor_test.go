@@ -170,7 +170,7 @@ func TestStreamProcessorSubtestOutput(t *testing.T) {
 			// If no output found, check for subtest output
 			if !exists || len(output) == 0 {
 				testPrefix := tt.parentTest + "/"
-				
+
 				// Collect all matching test names and sort them for deterministic order
 				var matchingTests []string
 				for testName := range tt.buffers {
@@ -178,10 +178,10 @@ func TestStreamProcessorSubtestOutput(t *testing.T) {
 						matchingTests = append(matchingTests, testName)
 					}
 				}
-				
+
 				// Sort the test names to ensure deterministic order
 				sort.Strings(matchingTests)
-				
+
 				// Now collect output in sorted order
 				for _, testName := range matchingTests {
 					output = append(output, tt.buffers[testName]...)
