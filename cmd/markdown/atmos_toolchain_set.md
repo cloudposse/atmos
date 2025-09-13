@@ -3,7 +3,7 @@
  $ atmos toolchain set <tool> 1.11.4
 ```
 
-- Set the tool versions interactive UI
+- Open the interactive UI to set tool versions
 ```
  $ atmos toolchain set hashicorp/terraform
 ```
