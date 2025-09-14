@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -26,13 +24,6 @@ var ToolChainCmd = &cobra.Command{
 		// Set log level
 		return nil
 	},
-}
-
-func toolchainInit(atmosConfig *schema.AtmosConfiguration) {
-	atmosConfig.Toolchain.FilePath = toolVersionsFile
-	atmosConfig.Toolchain.ToolsDir = toolsDir
-	atmosConfig.Toolchain.ToolsConfigFile = toolsConfigFile
-	toolchain.SetAtmosConfig(atmosConfig)
 }
 
 func init() {
