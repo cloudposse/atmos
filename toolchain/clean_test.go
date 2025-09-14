@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -126,6 +127,10 @@ func TestCleanToolsAndCaches(t *testing.T) {
 		{
 			name: "PermissionError_ToolsDir",
 			setup: func(t *testing.T) (string, string, string) {
+				if runtime.GOOS == "windows" {
+					t.Skip()
+					return "", "", ""
+				}
 				base := t.TempDir()
 				toolsDir := filepath.Join(base, "tools")
 				cacheDir := filepath.Join(base, "cache")
@@ -153,6 +158,10 @@ func TestCleanToolsAndCaches(t *testing.T) {
 		{
 			name: "PermissionError_CacheDir",
 			setup: func(t *testing.T) (string, string, string) {
+				if runtime.GOOS == "windows" {
+					t.Skip()
+					return "", "", ""
+				}
 				base := t.TempDir()
 				toolsDir := filepath.Join(base, "tools")
 				cacheDir := filepath.Join(base, "cache")
