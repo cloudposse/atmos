@@ -249,7 +249,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// Create the command
 	cmd := exec.Command("go", testArgs...)
-	
+
 	// Capture stderr while also displaying it
 	var stderrBuffer bytes.Buffer
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuffer)
@@ -349,7 +349,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		exitCode = 0
 		exitReason = fmt.Sprintf("All %d tests passed successfully", processor.passed)
 	}
-	
+
 	// Store the exit reason for retrieval by the caller
 	lastExitReason = exitReason
 
@@ -403,7 +403,7 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 			return fmt.Sprintf("TestMain failed with exit code %d (check TestMain implementation - ensure it calls os.Exit(m.Run()))", exitCode)
 		}
 		return fmt.Sprintf("Test setup failed with exit code %d (possible TestMain or init() issue)", exitCode)
-		
+
 	case strings.Contains(stderr, "panic:"):
 		// Extract panic message if possible
 		lines := strings.Split(stderr, "\n")
@@ -414,16 +414,16 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 			}
 		}
 		return fmt.Sprintf("Test process panicked with exit code %d", exitCode)
-		
+
 	case strings.Contains(stderr, "undefined:") || strings.Contains(stderr, "cannot find"):
 		return fmt.Sprintf("Build/compilation error with exit code %d (check for undefined symbols or missing dependencies)", exitCode)
-		
+
 	case strings.Contains(stderr, "log.Fatal") || strings.Contains(stderr, "logger.Fatal"):
 		return fmt.Sprintf("Test called log.Fatal or logger.Fatal (exit code %d)", exitCode)
-		
+
 	case strings.Contains(stderr, "os.Exit"):
 		return fmt.Sprintf("Test called os.Exit(%d) directly", exitCode)
-		
+
 	default:
 		// Generic process failure
 		return fmt.Sprintf("Test process failed with exit code %d (no test failures detected - possible process-level issue)", exitCode)

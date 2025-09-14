@@ -468,17 +468,17 @@ func (e *testFailureError) Error() string {
 	if e.reason != "" {
 		return e.reason
 	}
-	
+
 	// If no tests failed but exit code is non-zero, it's a process failure.
 	if e.testsFailed == 0 && e.testsPassed > 0 {
 		return fmt.Sprintf("test process failed with exit code %d (no test failures detected)", e.code)
 	}
-	
+
 	// If tests failed, report that.
 	if e.testsFailed > 0 {
 		return fmt.Sprintf("tests failed with exit code %d", e.code)
 	}
-	
+
 	// Generic fallback.
 	return fmt.Sprintf("exit with code %d", e.code)
 }

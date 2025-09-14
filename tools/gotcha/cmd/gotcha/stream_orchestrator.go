@@ -165,7 +165,7 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 			testsFailed = len(testSummary.Failed)
 			testsPassed = len(testSummary.Passed)
 		}
-		
+
 		// Log why we're exiting non-zero
 		logger.Debug("Exiting with non-zero code",
 			"exitCode", exitCode,
@@ -177,10 +177,10 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 			}(),
 			"testsFailed", testsFailed,
 		)
-		
+
 		// Get the enhanced error reason from the stream processor
 		exitReason := stream.GetLastExitReason()
-		
+
 		// Return testFailureError with context
 		return &testFailureError{
 			code:        exitCode,
