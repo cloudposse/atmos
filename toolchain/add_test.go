@@ -176,14 +176,14 @@ func TestAddCommand_AquaRegistryTool(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{FilePath: toolVersionsFile},
 	})
-	err := AddToolVersion("kubectl", "1.28.0")
+	err := AddToolVersion("kubectl", "v1.2.7")
 	require.Error(t, err, "Should fail when adding tool from Aqua registry")
 
 	// Verify the tool was added to the file
 	toolVersions, err := LoadToolVersions(toolVersionsFile)
 	require.NoError(t, err)
 	assert.Contains(t, toolVersions.Tools, "kubectl")
-	assert.Contains(t, toolVersions.Tools["kubectl"], "1.28.0")
+	assert.Contains(t, toolVersions.Tools["kubectl"], "v1.2.7")
 }
 
 func TestAddCommand_EdgeCases(t *testing.T) {
