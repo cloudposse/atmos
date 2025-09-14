@@ -112,8 +112,8 @@ func TestGotchaHandlesBuildError(t *testing.T) {
 	stderrOutput := stderr.String()
 
 	// Should capture build error - look for either "build failed" or our error message
-	buildErrorDetected := strings.Contains(stderrOutput, "build failed") || 
-	                     strings.Contains(stderrOutput, "Test process failed with exit code")
+	buildErrorDetected := strings.Contains(stderrOutput, "build failed") ||
+		strings.Contains(stderrOutput, "Test process failed with exit code")
 	assert.True(t, buildErrorDetected, "Should detect build error")
 }
 
