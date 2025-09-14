@@ -2,6 +2,7 @@ package stream
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -221,6 +222,20 @@ func (p *StreamProcessor) PrintSummary() {
 	}
 }
 
+// TestExecutionResult contains the exit code and reason for test execution.
+type TestExecutionResult struct {
+	ExitCode   int
+	ExitReason string
+}
+
+// lastExitReason stores the last exit reason from test execution for retrieval by the caller.
+var lastExitReason string
+
+// GetLastExitReason returns the last exit reason from test execution.
+func GetLastExitReason() string {
+	return lastExitReason
+}
+
 // RunTestsWithSimpleStreaming runs tests and processes output in real-time.
 func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter string, verbosityLevel string) int {
 	// Extract test filter from args if present
@@ -234,7 +249,10 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// Create the command
 	cmd := exec.Command("go", testArgs...)
-	cmd.Stderr = os.Stderr // Pass through stderr
+	
+	// Capture stderr while also displaying it
+	var stderrBuffer bytes.Buffer
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuffer)
 
 	// Set platform-specific command attributes for proper process group handling
 	setPlatformSpecificCmd(cmd)
@@ -305,6 +323,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	// Log exit reason
 	var exitCode int
 	var exitReason string
+	capturedStderr := stderrBuffer.String()
 
 	// Return processing error if any
 	if processErr != nil {
@@ -315,8 +334,8 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		if exitErr, ok := testErr.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 			if exitCode == 1 && processor.failed == 0 {
-				// This is odd - tests passed but go test exited with 1
-				exitReason = fmt.Sprintf("Tests passed but 'go test' exited with code %d (possible build/compilation issue)", exitCode)
+				// Tests passed but go test exited with 1 - analyze stderr for root cause
+				exitReason = analyzeProcessFailure(capturedStderr, exitCode)
 			} else if processor.failed > 0 {
 				exitReason = fmt.Sprintf("%d test(s) failed, exiting with code %d", processor.failed, exitCode)
 			} else {
@@ -330,6 +349,9 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		exitCode = 0
 		exitReason = fmt.Sprintf("All %d tests passed successfully", processor.passed)
 	}
+	
+	// Store the exit reason for retrieval by the caller
+	lastExitReason = exitReason
 
 	// Log the exit reason using the logger
 	log := logger.GetLogger()
@@ -369,4 +391,41 @@ func (p *StreamProcessor) findTest(pkg *PackageResult, testName string) *TestRes
 
 	// Top-level test
 	return pkg.Tests[testName]
+}
+
+// analyzeProcessFailure analyzes stderr output to determine the root cause of process failure.
+func analyzeProcessFailure(stderr string, exitCode int) string {
+	// Check for common failure patterns in stderr
+	switch {
+	case strings.Contains(stderr, "[setup failed]"):
+		// TestMain or init failure
+		if strings.Contains(stderr, "TestMain") || strings.Contains(stderr, "func TestMain") {
+			return fmt.Sprintf("TestMain failed with exit code %d (check TestMain implementation - ensure it calls os.Exit(m.Run()))", exitCode)
+		}
+		return fmt.Sprintf("Test setup failed with exit code %d (possible TestMain or init() issue)", exitCode)
+		
+	case strings.Contains(stderr, "panic:"):
+		// Extract panic message if possible
+		lines := strings.Split(stderr, "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "panic:") {
+				panicMsg := strings.TrimSpace(strings.TrimPrefix(line, "panic:"))
+				return fmt.Sprintf("Test process panicked: %s (exit code %d)", panicMsg, exitCode)
+			}
+		}
+		return fmt.Sprintf("Test process panicked with exit code %d", exitCode)
+		
+	case strings.Contains(stderr, "undefined:") || strings.Contains(stderr, "cannot find"):
+		return fmt.Sprintf("Build/compilation error with exit code %d (check for undefined symbols or missing dependencies)", exitCode)
+		
+	case strings.Contains(stderr, "log.Fatal") || strings.Contains(stderr, "logger.Fatal"):
+		return fmt.Sprintf("Test called log.Fatal or logger.Fatal (exit code %d)", exitCode)
+		
+	case strings.Contains(stderr, "os.Exit"):
+		return fmt.Sprintf("Test called os.Exit(%d) directly", exitCode)
+		
+	default:
+		// Generic process failure
+		return fmt.Sprintf("Test process failed with exit code %d (no test failures detected - possible process-level issue)", exitCode)
+	}
 }

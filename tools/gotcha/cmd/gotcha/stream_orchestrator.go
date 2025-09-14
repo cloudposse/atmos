@@ -9,6 +9,7 @@ import (
 
 	coveragePkg "github.com/cloudposse/atmos/tools/gotcha/internal/coverage"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
@@ -158,6 +159,13 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 
 	// Step 8: Exit with appropriate code
 	if exitCode != 0 {
+		testsFailed := 0
+		testsPassed := 0
+		if testSummary != nil {
+			testsFailed = len(testSummary.Failed)
+			testsPassed = len(testSummary.Passed)
+		}
+		
 		// Log why we're exiting non-zero
 		logger.Debug("Exiting with non-zero code",
 			"exitCode", exitCode,
@@ -167,15 +175,19 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 				}
 				return 0
 			}(),
-			"testsFailed", func() int {
-				if testSummary != nil {
-					return len(testSummary.Failed)
-				}
-				return 0
-			}(),
+			"testsFailed", testsFailed,
 		)
-		// Return testFailureError to indicate test failure with specific exit code
-		return &testFailureError{code: exitCode}
+		
+		// Get the enhanced error reason from the stream processor
+		exitReason := stream.GetLastExitReason()
+		
+		// Return testFailureError with context
+		return &testFailureError{
+			code:        exitCode,
+			testsFailed: testsFailed,
+			testsPassed: testsPassed,
+			reason:      exitReason,
+		}
 	}
 
 	logger.Debug("All tests passed, exiting with code 0")

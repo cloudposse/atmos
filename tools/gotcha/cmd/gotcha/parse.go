@@ -211,7 +211,11 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 	// Return with appropriate exit code based on test results
 	if len(summary.Failed) > 0 {
-		return &testFailureError{code: 1}
+		return &testFailureError{
+			code:        1,
+			testsFailed: len(summary.Failed),
+			testsPassed: len(summary.Passed),
+		}
 	}
 
 	return nil

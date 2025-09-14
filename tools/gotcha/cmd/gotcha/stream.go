@@ -457,11 +457,30 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 
 // testFailureError is used to indicate test failures with specific exit codes.
 type testFailureError struct {
-	code int
+	code        int
+	testsFailed int
+	testsPassed int
+	reason      string
 }
 
 func (e *testFailureError) Error() string {
-	return fmt.Sprintf("tests failed with exit code %d", e.code)
+	// Provide a more descriptive error message based on the context.
+	if e.reason != "" {
+		return e.reason
+	}
+	
+	// If no tests failed but exit code is non-zero, it's a process failure.
+	if e.testsFailed == 0 && e.testsPassed > 0 {
+		return fmt.Sprintf("test process failed with exit code %d (no test failures detected)", e.code)
+	}
+	
+	// If tests failed, report that.
+	if e.testsFailed > 0 {
+		return fmt.Sprintf("tests failed with exit code %d", e.code)
+	}
+	
+	// Generic fallback.
+	return fmt.Sprintf("exit with code %d", e.code)
 }
 
 // getCoverageConfig retrieves the coverage configuration from viper.
