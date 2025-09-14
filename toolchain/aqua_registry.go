@@ -56,6 +56,11 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*Tool, error) {
 	// Try multiple registry sources
 	registries := []string{
 		"https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs",
+		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/kubernetes/kubernetes",
+		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/hashicorp",
+		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/helm",
+		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/opentofu",
+		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
 	}
 
 	for _, registry := range registries {
