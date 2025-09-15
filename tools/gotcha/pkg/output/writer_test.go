@@ -11,11 +11,11 @@ import (
 
 func TestNewWriter(t *testing.T) {
 	tests := []struct {
-		name         string
-		setupEnv     func()
-		cleanupEnv   func()
-		wantUnified  bool
-		description  string
+		name        string
+		setupEnv    func()
+		cleanupEnv  func()
+		wantUnified bool
+		description string
 	}{
 		{
 			name: "standard terminal mode",

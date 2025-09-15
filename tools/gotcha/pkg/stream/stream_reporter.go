@@ -287,12 +287,12 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
-				r.writer.PrintUI(indent+"    "+formatted)
+				r.writer.PrintUI(indent + "    " + formatted)
 			}
 		} else {
 			// Default: show output as-is
 			for _, outputLine := range test.Output {
-				r.writer.PrintUI(indent+"    "+outputLine)
+				r.writer.PrintUI(indent + "    " + outputLine)
 			}
 		}
 		r.writer.PrintUI("\n") // Add blank line after output
@@ -354,12 +354,12 @@ func (r *StreamReporter) displayTestLine(test *TestResult, indent string) {
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
-				r.writer.PrintUI(indent+"    "+formatted)
+				r.writer.PrintUI(indent + "    " + formatted)
 			}
 		} else {
 			// Default: show output as-is
 			for _, outputLine := range test.Output {
-				r.writer.PrintUI(indent+"    "+outputLine)
+				r.writer.PrintUI(indent + "    " + outputLine)
 			}
 		}
 		r.writer.PrintUI("\n") // Add blank line after output

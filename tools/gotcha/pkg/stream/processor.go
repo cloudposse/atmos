@@ -84,7 +84,7 @@ type StreamProcessor struct {
 
 	// TestReporter for handling display
 	reporter TestReporter
-	
+
 	// Writer for output management
 	writer *output.Writer
 }
@@ -238,7 +238,7 @@ func GetLastExitReason() string {
 func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter string, verbosityLevel string) int {
 	// Create a writer for output management
 	writer := output.New()
-	
+
 	// Extract test filter from args if present
 	var testFilter string
 	for i := 0; i < len(testArgs)-1; i++ {
