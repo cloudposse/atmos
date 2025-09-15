@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 
@@ -318,7 +319,8 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, e
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", requestToken))
 
-	resp, err := http.DefaultClient.Do(req)
+	client := getHTTPClientWithTimeout()
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Debug("getGitHubOIDCToken", "error", err)
 		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetOIDCToken, err)
@@ -343,6 +345,21 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, e
 	return tokenResp.Value, nil
 }
 
+// getHTTPClientWithTimeout returns a configured HTTP client with reasonable timeouts for OIDC operations.
+func getHTTPClientWithTimeout() *http.Client {
+	return &http.Client{
+		Timeout: DefaultHTTPTimeoutSecs * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout: 10 * time.Second,
+			}).DialContext,
+			IdleConnTimeout:       30 * time.Second,
+			ResponseHeaderTimeout: 15 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
+}
+
 // exchangeOIDCTokenForAtmosToken exchanges a GitHub OIDC token for an Atmos Pro token.
 func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID string) (string, error) {
 	url := fmt.Sprintf("%s/%s/auth/github-oidc", baseURL, baseAPIEndpoint)
@@ -364,7 +381,8 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	client := getHTTPClientWithTimeout()
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToExchangeOIDCToken, err)
 	}

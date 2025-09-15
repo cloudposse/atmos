@@ -16,13 +16,13 @@ import (
 // UploadDeploymentStatus uploads the drift detection result status to the pro API.
 func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error {
 	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/deployments/{stack}/{component}
-	url := fmt.Sprintf("%s/%s/repos/%s/%s/deployments/%s/%s",
+	targetUrl := fmt.Sprintf("%s/%s/repos/%s/%s/deployments/%s/%s",
 		c.BaseURL, c.BaseAPIEndpoint,
 		url.PathEscape(dto.RepoOwner),
 		url.PathEscape(dto.RepoName),
 		url.PathEscape(dto.Stack),
 		url.PathEscape(dto.Component))
-	log.Debug(fmt.Sprintf("\nUploading drift status at %s", url))
+	log.Debug(fmt.Sprintf("\nUploading drift status at %s", targetUrl))
 
 	// Map HasDrift to the correct status format
 	status := "in_sync"
@@ -45,7 +45,7 @@ func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUpl
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalRequestBody, err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "PATCH", url, bytes.NewBuffer(data))
+	req, err := getAuthenticatedRequest(c, "PATCH", targetUrl, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
 	}
@@ -60,7 +60,7 @@ func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUpl
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadDeploymentStatus, err)
 	}
 
-	log.Debug(fmt.Sprintf("\nUploaded deployment status at %s", url))
+	log.Debug(fmt.Sprintf("\nUploaded deployment status at %s", targetUrl))
 
 	return nil
 }
