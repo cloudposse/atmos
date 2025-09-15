@@ -279,6 +279,13 @@ func formatAndWriteOutput(summary *types.TestSummary, config *StreamConfig, logg
 			return fmt.Errorf("failed to write markdown output: %w", err)
 		}
 		logger.Info("Markdown output written", "file", outputPath)
+
+	case "github":
+		outputPath := strings.TrimSuffix(config.OutputFile, filepath.Ext(config.OutputFile)) + ".md"
+		if err := output.WriteSummary(summary, "github", outputPath); err != nil {
+			return fmt.Errorf("failed to write github output: %w", err)
+		}
+		logger.Info("GitHub summary written", "file", outputPath)
 	}
 
 	return nil

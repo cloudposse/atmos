@@ -177,9 +177,11 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 
 	// Determine output file if not specified
 	if config.OutputFile == "" {
-		config.OutputFile = "test-output.json"
-		if config.Format == "markdown" {
+		switch config.Format {
+		case "markdown", "github":
 			config.OutputFile = "test-output.md"
+		default:
+			config.OutputFile = "test-output.json"
 		}
 	}
 
