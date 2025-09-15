@@ -26,6 +26,8 @@ func TestParseSkipReason(t *testing.T) {
 		assert.Equal(t, "skip", skip.Status)
 		// Check that the skip reason was captured
 		assert.NotEmpty(t, skip.SkipReason, "Skip reason should not be empty")
+		// Debug: print what we actually got
+		t.Logf("Captured skip reason: %q", skip.SkipReason)
 		assert.Contains(t, skip.SkipReason, "Skipping test on Windows")
 	}
 }

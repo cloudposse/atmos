@@ -1,3 +1,6 @@
+//go:build !windows
+// +build !windows
+
 // Package main provides a PTY wrapper for running gotcha with a pseudo-terminal.
 // This is useful for testing TUI mode in headless environments like CI or AI agents.
 package main

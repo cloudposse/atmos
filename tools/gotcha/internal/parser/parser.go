@@ -86,21 +86,52 @@ func processLineWithElapsedAndSkipReason(line string, tests map[string]types.Tes
 		output := strings.TrimSpace(event.Output)
 		key := event.Package + "." + event.Test
 
-		// Look for skip patterns
+		// Two patterns to handle:
+		// Pattern 1: Skip reason appears BEFORE --- SKIP line (common with t.Skipf)
+		// Pattern 2: Skip reason appears AFTER --- SKIP line (common with t.Skip in subtests)
+		
 		if strings.Contains(output, "--- SKIP:") {
-			// Mark that we found a skip, reason will come in next output
+			// Mark that we found a skip, reason might come in next output
 			if _, exists := skipReasons[key]; !exists {
-				skipReasons[key] = ""
+				skipReasons[key] = "" // Mark as pending
 			}
-		} else if _, tracking := skipReasons[key]; tracking && skipReasons[key] == "" {
-			// This might be the skip reason (usually comes after --- SKIP line)
-			if output != "" && !strings.HasPrefix(output, "===") && !strings.HasPrefix(output, "---") {
-				// Remove leading tab/spaces and testing.go references
-				reason := strings.TrimSpace(output)
-				if idx := strings.Index(reason, ": "); idx > 0 && strings.Contains(reason[:idx], "testing.go") {
-					reason = strings.TrimSpace(reason[idx+2:])
+		} else if output != "" && !strings.HasPrefix(output, "===") {
+			// Check if this is a skip reason
+			// Look for common skip patterns
+			if strings.Contains(output, "Skipping") || strings.Contains(output, "Skip") || strings.Contains(output, "skipping") {
+				// Extract the reason from the output
+				reason := output
+				// If it has the pattern "filename.go:linenum: message", extract the message
+				if idx := strings.Index(reason, ".go:"); idx > 0 {
+					// Find the colon after the line number
+					afterFile := reason[idx+4:] // Skip past ".go:"
+					if colonIdx := strings.Index(afterFile, ": "); colonIdx > 0 {
+						// Extract everything after "filename.go:linenum: "
+						reason = strings.TrimSpace(afterFile[colonIdx+2:])
+					}
+				} else {
+					// No file reference, try to extract after first colon
+					if idx := strings.Index(reason, ": "); idx > 0 {
+						reason = strings.TrimSpace(reason[idx+2:])
+					}
 				}
 				if reason != "" {
+					skipReasons[key] = reason
+				}
+			} else if _, tracking := skipReasons[key]; tracking && skipReasons[key] == "" {
+				// This might be the skip reason after --- SKIP line
+				// Handle format: "    filename.go:line: reason"
+				reason := output
+				// Look for pattern: filename.go:linenum: 
+				if idx := strings.Index(reason, ".go:"); idx > 0 {
+					// Find the colon after the line number
+					afterFile := reason[idx+4:] // Skip past ".go:"
+					if colonIdx := strings.Index(afterFile, ": "); colonIdx > 0 {
+						// Extract everything after "filename.go:linenum: "
+						reason = strings.TrimSpace(afterFile[colonIdx+2:])
+					}
+				}
+				if reason != "" && reason != output {
 					skipReasons[key] = reason
 				}
 			}

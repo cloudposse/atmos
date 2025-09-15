@@ -45,42 +45,48 @@ func WriteSummary(summary *types.TestSummary, format, outputFile string) error {
 
 // writeGitHubSummary handles GitHub-specific summary writing.
 func writeGitHubSummary(summary *types.TestSummary, outputFile string) error {
-	// 1. Write to GITHUB_STEP_SUMMARY (if available).
-	githubWriter, githubPath, err := openGitHubOutput("")
-	if err == nil {
+	// Check if we're running in GitHub Actions
+	githubStepSummary := config.GetGitHubStepSummary()
+	
+	if githubStepSummary != "" {
+		// Running in GitHub Actions - write to GITHUB_STEP_SUMMARY only
+		githubWriter, githubPath, err := openGitHubOutput("")
+		if err != nil {
+			return fmt.Errorf("failed to open GITHUB_STEP_SUMMARY: %w", err)
+		}
 		defer func() {
 			if closer, ok := githubWriter.(io.Closer); ok {
 				closer.Close()
 			}
 		}()
+		
 		markdown.WriteContent(githubWriter, summary, constants.FormatGitHub)
-		if githubPath != "" {
-			if fileInfo, err := os.Stat(githubPath); err == nil {
-				fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s (%d bytes)\n", tui.PassStyle.Render(tui.CheckPass), githubPath, fileInfo.Size())
-			} else {
-				fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s\n", tui.PassStyle.Render(tui.CheckPass), githubPath)
-			}
+		
+		if fileInfo, err := os.Stat(githubPath); err == nil {
+			fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s (%d bytes)\n", tui.PassStyle.Render(tui.CheckPass), githubPath, fileInfo.Size())
+		} else {
+			fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s\n", tui.PassStyle.Render(tui.CheckPass), githubPath)
 		}
-	}
-
-	// 2. ALWAYS write to a regular file for persistence.
-	regularFile := outputFile
-	if regularFile == "" {
-		regularFile = "test-summary.md" // Default file if none specified.
-	}
-
-	file, err := os.Create(regularFile)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer file.Close()
-
-	markdown.WriteContent(file, summary, constants.FormatGitHub)
-	absPath, _ := filepath.Abs(regularFile)
-	if fileInfo, err := os.Stat(regularFile); err == nil {
-		fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s (%d bytes)\n", tui.PassStyle.Render(tui.CheckPass), absPath, fileInfo.Size())
 	} else {
-		fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s\n", tui.PassStyle.Render(tui.CheckPass), absPath)
+		// Running locally - write to a regular file
+		regularFile := outputFile
+		if regularFile == "" {
+			regularFile = "test-summary.md" // Default file if none specified.
+		}
+
+		file, err := os.Create(regularFile)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %w", err)
+		}
+		defer file.Close()
+
+		markdown.WriteContent(file, summary, constants.FormatGitHub)
+		absPath, _ := filepath.Abs(regularFile)
+		if fileInfo, err := os.Stat(regularFile); err == nil {
+			fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s (%d bytes)\n", tui.PassStyle.Render(tui.CheckPass), absPath, fileInfo.Size())
+		} else {
+			fmt.Fprintf(os.Stderr, "%s Markdown summary written to %s\n", tui.PassStyle.Render(tui.CheckPass), absPath)
+		}
 	}
 
 	return nil
@@ -110,7 +116,9 @@ func openGitHubOutput(outputFile string) (io.Writer, string, error) {
 
 	if githubStepSummary != "" {
 		// Running in GitHub Actions - write to GITHUB_STEP_SUMMARY.
-		file, err := os.OpenFile(githubStepSummary, os.O_APPEND|os.O_WRONLY, constants.FilePermissions)
+		// Use O_CREATE|O_WRONLY|O_TRUNC to overwrite any existing content
+		// This prevents duplication when multiple test runs happen
+		file, err := os.OpenFile(githubStepSummary, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, constants.FilePermissions)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to open GITHUB_STEP_SUMMARY: %w", err)
 		}
