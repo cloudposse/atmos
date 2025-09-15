@@ -194,29 +194,5 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 	return nil
 }
 
-// displayFinalTestSummary displays the final test results summary.
-func displayFinalTestSummary(summary *types.TestSummary) {
-	if summary == nil {
-		return
-	}
-
-	passed := len(summary.Passed)
-	failed := len(summary.Failed)
-	skipped := len(summary.Skipped)
-	total := passed + failed + skipped
-
-	if total == 0 {
-		return
-	}
-
-	// Add divider before final summary
-	fmt.Fprintf(os.Stderr, "\n%s\n", tui.GetDivider())
-	fmt.Fprintf(os.Stderr, "\n%s\n", tui.StatsHeaderStyle.Render(tui.SummaryHeaderIndicator+" Final Test Summary"))
-	fmt.Fprintf(os.Stderr, "  %s Passed:  %5d\n", tui.PassStyle.Render(tui.CheckPass), passed)
-	fmt.Fprintf(os.Stderr, "  %s Failed:  %5d\n", tui.FailStyle.Render(tui.CheckFail), failed)
-	fmt.Fprintf(os.Stderr, "  %s Skipped: %5d\n", tui.SkipStyle.Render(tui.CheckSkip), skipped)
-	fmt.Fprintf(os.Stderr, "  Total:     %5d\n", total)
-
-	// Don't display coverage here - it's already shown above in the coverage report
-	// This avoids confusion with duplicate/conflicting coverage values
-}
+// Note: displayFinalTestSummary function was removed to avoid duplicate summaries.
+// The test summary is displayed by the stream processor's PrintSummary() method.
