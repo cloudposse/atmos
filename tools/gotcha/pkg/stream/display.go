@@ -3,7 +3,6 @@ package stream
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
@@ -26,11 +25,10 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
 
-	// Flush output immediately in CI environments to prevent buffering
-	// Note: Skip on Windows as Sync() can hang on pipes/console handles
-	if config.IsCI() && runtime.GOOS != "windows" {
-		os.Stderr.Sync()
-	}
+	// Note: We don't call Sync() on stderr because:
+	// 1. stderr is typically unbuffered or line-buffered already
+	// 2. Sync() is meant for regular files, not console streams
+	// 3. Calling Sync() on pipes (like in tests) can cause hangs
 
 	// Check for package-level failures (e.g., TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
@@ -176,11 +174,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		}
 	}
 
-	// Flush output after displaying package results
-	// Note: Skip on Windows as Sync() can hang on pipes/console handles
-	if config.IsCI() && runtime.GOOS != "windows" {
-		os.Stderr.Sync()
-	}
+	// Output is already flushed automatically due to line buffering on stderr
 }
 
 // displayTestLine outputs a test as a simple one-line entry without subtest progress.

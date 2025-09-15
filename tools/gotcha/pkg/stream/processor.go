@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -151,11 +150,6 @@ func (p *StreamProcessor) ProcessStream(input io.Reader) error {
 
 	scanner := bufio.NewScanner(input)
 
-	// Track if we're in CI for periodic flushing
-	inCI := config.IsCI()
-	lastFlush := time.Now()
-	flushInterval := 100 * time.Millisecond // Flush frequently in CI
-
 	for scanner.Scan() {
 		line := scanner.Bytes()
 
@@ -172,12 +166,8 @@ func (p *StreamProcessor) ProcessStream(input io.Reader) error {
 
 		p.processEvent(&event)
 
-		// Periodic flush in CI to ensure output appears promptly
-		// Note: Skip on Windows as Sync() can hang on pipes/console handles
-		if inCI && runtime.GOOS != "windows" && time.Since(lastFlush) > flushInterval {
-			os.Stderr.Sync()
-			lastFlush = time.Now()
-		}
+		// Output is automatically flushed due to line buffering on stderr
+		// We don't need explicit Sync() calls which can cause issues with pipes
 	}
 
 	// After processing all events, check for incomplete packages

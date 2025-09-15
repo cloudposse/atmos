@@ -3,7 +3,6 @@ package stream
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -61,11 +60,10 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	fmt.Fprintf(os.Stderr, "▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
 
-	// Flush output immediately in CI environments to prevent buffering
-	// Note: Skip on Windows as Sync() can hang on pipes/console handles
-	if config.IsCI() && runtime.GOOS != "windows" {
-		os.Stderr.Sync()
-	}
+	// Note: We don't call Sync() on stderr because:
+	// 1. stderr is typically unbuffered or line-buffered already
+	// 2. Sync() is meant for regular files, not console streams
+	// 3. Calling Sync() on pipes (like in tests) can cause hangs
 
 	// Check for package-level failures (e.g., TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
@@ -216,11 +214,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 		}
 	}
 
-	// Flush output after displaying package results
-	// Note: Skip on Windows as Sync() can hang on pipes/console handles
-	if config.IsCI() && runtime.GOOS != "windows" {
-		os.Stderr.Sync()
-	}
+	// Output is already flushed automatically due to line buffering on stderr
 }
 
 // displayTestLine outputs a test as a simple one-line entry without subtest progress.
@@ -489,11 +483,7 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	// Write to stderr and return
 	fmt.Fprint(os.Stderr, output.String())
 
-	// Ensure output is flushed
-	// Note: Skip on Windows as Sync() can hang on pipes/console handles
-	if config.IsCI() && runtime.GOOS != "windows" {
-		os.Stderr.Sync()
-	}
+	// Output is already flushed automatically due to line buffering on stderr
 
 	return output.String()
 }
