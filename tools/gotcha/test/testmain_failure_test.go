@@ -203,7 +203,7 @@ func createTestPackageWithTestMainFailure(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "gotcha-test-*")
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	
+
 	// Create go.mod.
 	modContent := `module testpkg
 go 1.21
@@ -242,7 +242,7 @@ func createTestPackageWithInitPanic(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "gotcha-test-*")
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	
+
 	// Create go.mod.
 	modContent := `module testpkg
 go 1.21
@@ -272,7 +272,7 @@ func createTestPackageWithBuildError(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "gotcha-test-*")
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	
+
 	// Create go.mod.
 	modContent := `module testpkg
 go 1.21
@@ -299,7 +299,7 @@ func createTestPackageWithFailingTest(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "gotcha-test-*")
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	
+
 	// Create go.mod.
 	modContent := `module testpkg
 go 1.21
@@ -325,7 +325,7 @@ func createTestPackageWithTestMainNoExit(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "gotcha-test-*")
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	
+
 	// Create go.mod.
 	modContent := `module testpkg
 go 1.21
