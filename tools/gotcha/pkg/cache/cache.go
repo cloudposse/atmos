@@ -299,7 +299,7 @@ func (m *Manager) UpdatePackageDetails(packages map[string]PackageDetail) error 
 	defer m.mu.Unlock()
 
 	if m.file == nil {
-		return fmt.Errorf("cache not initialized")
+		return pkgErrors.ErrCacheNotInitialized
 	}
 
 	// Update package details

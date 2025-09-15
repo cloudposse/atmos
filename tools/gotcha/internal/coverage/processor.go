@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -537,7 +538,7 @@ func checkCoverageThresholds(data *types.CoverageData, thresholds config.Coverag
 
 	// Check total threshold
 	if thresholds.Total > 0 && coverage < thresholds.Total {
-		return fmt.Errorf("coverage %.1f%% is below threshold %.1f%%", coverage, thresholds.Total)
+		return fmt.Errorf("%w: %.1f%% is below threshold %.1f%%", errors.ErrCoverageBelowThreshold, coverage, thresholds.Total)
 	}
 
 	// TODO: Implement per-package threshold checking
@@ -574,7 +575,7 @@ func OpenBrowser(htmlPath string, logger *log.Logger) error {
 	case "windows":
 		cmd = exec.Command("cmd", "/c", "start", htmlPath)
 	default:
-		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+		return fmt.Errorf("%w: %s", errors.ErrUnsupportedPlatform, runtime.GOOS)
 	}
 
 	if err := cmd.Start(); err != nil {

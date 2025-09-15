@@ -4,8 +4,9 @@ import "errors"
 
 // Cache errors.
 var (
-	ErrCacheDisabled = errors.New("cache is disabled")
-	ErrNoCacheToSave = errors.New("no cache to save")
+	ErrCacheDisabled       = errors.New("cache is disabled")
+	ErrNoCacheToSave       = errors.New("no cache to save")
+	ErrCacheNotInitialized = errors.New("cache not initialized")
 )
 
 // Format errors.
@@ -32,4 +33,10 @@ var (
 	ErrTestFailed        = errors.New("test execution failed")
 	ErrInvalidTestData   = errors.New("invalid test data")
 	ErrNoPackagesMatched = errors.New("no packages matched the filters")
+)
+
+// Coverage errors.
+var (
+	ErrCoverageBelowThreshold = errors.New("coverage is below threshold")
+	ErrUnsupportedPlatform    = errors.New("unsupported platform")
 )
