@@ -79,6 +79,16 @@ jobs:
         run: |
           go build -v -o gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} .
 
+      - name: Run vanilla go test (debug baseline)
+        if: ${{ ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
+        working-directory: tools/gotcha
+        run: |
+          # Run vanilla go test to see what Go is reporting directly
+          # This will help us understand why gotcha exits non-zero
+          echo "=== Running vanilla go test ==="
+          go test -v -cover -coverprofile=vanilla-coverage.out github.com/cloudposse/atmos/tools/gotcha/... || echo "Exit code: $?"
+          echo "=== End vanilla go test ==="
+
       - name: Test gotcha with itself (dogfooding)
         if: ${{ ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
         working-directory: tools/gotcha
