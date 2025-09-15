@@ -26,7 +26,7 @@ func WriteContent(output io.Writer, summary *types.TestSummary, format string) {
 	}
 
 	// Extract discriminator from UUID if available
-	// UUID format is typically "project-context-gotcha-platform" 
+	// UUID format is typically "project-context-gotcha-platform"
 	// We want to extract "gotcha/platform" as the discriminator
 	discriminator := ""
 	if uuid != "" && strings.Contains(uuid, "gotcha-") {
