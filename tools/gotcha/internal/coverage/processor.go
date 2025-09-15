@@ -312,7 +312,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 
 			// Display file
 			fmt.Printf("  %s %s\n", treeStyle.Render(fileTreeChar), fileStyle.Render(file))
-			
+
 			// Display vertical connector line between file and functions (if there are functions)
 			if len(fileFuncs) > 0 {
 				fmt.Printf("  %s\n", treeStyle.Render(funcPrefix))
