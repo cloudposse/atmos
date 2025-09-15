@@ -13,14 +13,14 @@ import (
 )
 
 // TestShowFailedFilter_ParsesCorrectly verifies that gotcha correctly parses
-// test output and identifies failed, passed, and skipped tests
+// test output and identifies failed, passed, and skipped tests.
 func TestShowFailedFilter_ParsesCorrectly(t *testing.T) {
 	// Run go test on our mixed testdata
 	testDir := filepath.Join("testdata", "mixed_tests")
 
 	cmd := exec.Command("go", "test", "-json", "./...")
 	cmd.Dir = testDir
-	output, err := cmd.CombinedOutput()
+	output, _ := cmd.CombinedOutput()
 
 	// We expect the command to fail because there are failing tests
 	// but we should still get output
@@ -57,7 +57,7 @@ func TestShowFailedFilter_ParsesCorrectly(t *testing.T) {
 }
 
 // TestFilteredOutput_ShowsOnlyFailures verifies that when filtering for failures,
-// only failed tests are included in the parsed output
+// only failed tests are included in the parsed output.
 func TestFilteredOutput_ShowsOnlyFailures(t *testing.T) {
 	// Run go test on our mixed testdata
 	testDir := filepath.Join("testdata", "mixed_tests")
@@ -76,7 +76,7 @@ func TestFilteredOutput_ShowsOnlyFailures(t *testing.T) {
 	assert.Greater(t, len(summary.Passed), 0, "Should have passed tests that would be filtered out")
 }
 
-// TestAllTestsPass_ShowFilter verifies behavior when all tests pass
+// TestAllTestsPass_ShowFilter verifies behavior when all tests pass.
 func TestAllTestsPass_ShowFilter(t *testing.T) {
 	// Run go test on our passing testdata
 	testDir := filepath.Join("testdata", "passing_tests")
@@ -96,7 +96,7 @@ func TestAllTestsPass_ShowFilter(t *testing.T) {
 	assert.Equal(t, 0, len(summary.Skipped), "Should have no skipped tests")
 }
 
-// TestAllTestsFail_ShowFilter verifies behavior when all tests fail
+// TestAllTestsFail_ShowFilter verifies behavior when all tests fail.
 func TestAllTestsFail_ShowFilter(t *testing.T) {
 	// Run go test on our failing testdata
 	testDir := filepath.Join("testdata", "failing_tests")

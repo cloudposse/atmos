@@ -22,13 +22,13 @@ func init() {
 	lipgloss.SetColorProfile(termenv.Ascii)
 }
 
-// streamOutputMsg represents a line of output from the test stream
+// streamOutputMsg represents a line of output from the test stream.
 type streamOutputMsg struct {
 	line string
 }
 
-// TestTUIWithTeatest tests the TUI mode using the teatest library
-// This allows testing without a real TTY
+// TestTUIWithTeatest tests the TUI mode using the teatest library.
+// This allows testing without a real TTY.
 func TestTUIWithTeatest(t *testing.T) {
 	t.Run("basic TUI initialization", func(t *testing.T) {
 		// Create a new test model with minimal configuration
@@ -171,7 +171,7 @@ func TestTUIWithTeatest(t *testing.T) {
 	})
 }
 
-// TestTUIPackageTracking tests that packages are properly tracked in the TUI
+// TestTUIPackageTracking tests that packages are properly tracked in the TUI.
 func TestTUIPackageTracking(t *testing.T) {
 	model := tui.NewTestModel(
 		[]string{"./pkg1", "./pkg2", "./pkg3"},
@@ -230,7 +230,7 @@ func TestTUIPackageTracking(t *testing.T) {
 	assert.NotNil(t, tuiModel)
 }
 
-// TestTUIWithoutRealTTY verifies the TUI can be tested without a real TTY
+// TestTUIWithoutRealTTY verifies the TUI can be tested without a real TTY.
 func TestTUIWithoutRealTTY(t *testing.T) {
 	// This test specifically validates that teatest allows us to test
 	// the TUI without requiring a real terminal

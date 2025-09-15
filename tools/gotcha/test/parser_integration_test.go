@@ -12,7 +12,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 )
 
-// TestParser_WithRealGoTestOutput verifies the parser works with real go test JSON output
+// TestParser_WithRealGoTestOutput verifies the parser works with real go test JSON output.
 func TestParser_WithRealGoTestOutput(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -88,7 +88,7 @@ func TestParser_WithRealGoTestOutput(t *testing.T) {
 	}
 }
 
-// TestParser_HandlesEmptyCoverage verifies the parser handles tests without coverage
+// TestParser_HandlesEmptyCoverage verifies the parser handles tests without coverage.
 func TestParser_HandlesEmptyCoverage(t *testing.T) {
 	// Run go test without coverage
 	testDir := filepath.Join("testdata", "passing_tests")
