@@ -312,15 +312,10 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 
 			// Display file
 			fmt.Printf("  %s %s\n", treeStyle.Render(fileTreeChar), fileStyle.Render(file))
-
-			// Only add vertical connector if there are functions to display
+			
+			// Display vertical connector line between file and functions (if there are functions)
 			if len(fileFuncs) > 0 {
-				// Add vertical connector line after file name
-				if !isLastFile {
-					fmt.Printf("  %s\n", treeStyle.Render("│  "))
-				} else {
-					fmt.Printf("  %s\n", treeStyle.Render("   │"))
-				}
+				fmt.Printf("  %s\n", treeStyle.Render(funcPrefix))
 			}
 
 			// Display functions with proper indentation
