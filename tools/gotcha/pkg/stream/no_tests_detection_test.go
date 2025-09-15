@@ -131,10 +131,10 @@ func TestNoTestsDetection(t *testing.T) {
 func captureStreamProcessorOutput(jsonStream io.Reader) string {
 	// Create a buffer to capture output
 	var outputBuf bytes.Buffer
-	
+
 	// Create a custom writer that writes to our buffer
 	customWriter := output.NewCustom(&outputBuf, &outputBuf)
-	
+
 	// Create a temp JSON file for output
 	tmpFile, err := os.CreateTemp("", "test-output-*.json")
 	if err != nil {
@@ -144,7 +144,7 @@ func captureStreamProcessorOutput(jsonStream io.Reader) string {
 
 	// Create a custom reporter with our writer
 	reporter := NewStreamReporter(customWriter, "all", "", "standard")
-	
+
 	// Create processor with custom reporter
 	processor := NewStreamProcessorWithReporter(tmpFile, reporter)
 

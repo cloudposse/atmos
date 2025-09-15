@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	
+
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 )
 
@@ -16,11 +16,11 @@ import (
 func TestStreamReporter_ShowsCoverageInPackageSummary(t *testing.T) {
 	// Create a buffer to capture output
 	var outputBuf bytes.Buffer
-	
+
 	// Create a custom writer that writes to our buffer
 	// This ensures we capture output regardless of GitHub Actions environment
 	customWriter := output.NewCustom(&outputBuf, &outputBuf)
-	
+
 	reporter := NewStreamReporter(customWriter, "all", "", "standard")
 
 	// Create a package with coverage
@@ -53,10 +53,10 @@ func TestStreamReporter_ShowsCoverageInPackageSummary(t *testing.T) {
 func TestStreamReporter_ShowFailedFilterShowsOnlyFailedAndSkippedTests(t *testing.T) {
 	// Create a buffer to capture output
 	var outputBuf bytes.Buffer
-	
+
 	// Create a custom writer that writes to our buffer
 	customWriter := output.NewCustom(&outputBuf, &outputBuf)
-	
+
 	// Create reporter with show="failed"
 	reporter := NewStreamReporter(customWriter, "failed", "", "standard")
 
@@ -161,10 +161,10 @@ func TestStreamReporter_ShowsTotalCoverageInFinalSummary(t *testing.T) {
 func TestStreamReporter_CoverageNotShownAsStatementBreakdown(t *testing.T) {
 	// Create a buffer to capture output
 	var outputBuf bytes.Buffer
-	
+
 	// Create a custom writer that writes to our buffer
 	customWriter := output.NewCustom(&outputBuf, &outputBuf)
-	
+
 	reporter := NewStreamReporter(customWriter, "all", "", "standard")
 
 	// Create a package with coverage that should show "of statements"
