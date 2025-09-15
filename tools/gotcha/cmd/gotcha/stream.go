@@ -14,10 +14,11 @@ import (
 	"github.com/spf13/viper"
 
 	coveragePkg "github.com/cloudposse/atmos/tools/gotcha/internal/coverage"
-	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
+	internalOutput "github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -102,7 +103,9 @@ This is the default command when running gotcha without arguments.`,
 // - stream_execution.go: Test execution and output processing
 // - stream_orchestrator.go: Main orchestration logic.
 func runStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
-	return orchestrateStream(cmd, args, logger)
+	// Create the output writer for unified output handling
+	writer := output.New()
+	return orchestrateStream(cmd, args, logger, writer)
 }
 
 // runStreamOld is the original 324-line implementation preserved for reference.
@@ -390,14 +393,14 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		// Handle different output formats
 		switch format {
 		case "json":
-			if err := output.WriteSummary(summary, "json", outputFile); err != nil {
+			if err := internalOutput.WriteSummary(summary, "json", outputFile); err != nil {
 				return fmt.Errorf("failed to write JSON output: %w", err)
 			}
 			logger.Info("JSON output written", "file", outputFile)
 
 		case "markdown":
 			outputPath := strings.TrimSuffix(outputFile, filepath.Ext(outputFile)) + ".md"
-			if err := output.WriteSummary(summary, "markdown", outputPath); err != nil {
+			if err := internalOutput.WriteSummary(summary, "markdown", outputPath); err != nil {
 				return fmt.Errorf("failed to write markdown output: %w", err)
 			}
 			logger.Info("Markdown output written", "file", outputPath)
@@ -433,14 +436,17 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		if _, err := os.Stat(coverProfile); err == nil {
 			// Always show function coverage if we have a profile
 			logger.Info("Analyzing coverage results...")
-			if err := coveragePkg.ShowFunctionCoverageReport(coverProfile, logger); err != nil {
+			// Create a temporary writer for the old implementation
+			// TODO: Remove this when runStreamOld is removed
+			tempWriter := output.New()
+			if err := coveragePkg.ShowFunctionCoverageReport(coverProfile, tempWriter, logger); err != nil {
 				logger.Debug("Function coverage unavailable", "error", err)
 			}
 
 			// Also process with config if available
 			coverageConfig := getCoverageConfig()
 			if coverageConfig.Enabled && (coverageConfig.Analysis.Functions || coverageConfig.Analysis.Statements) {
-				if err := coveragePkg.ProcessCoverage(coverProfile, coverageConfig, logger); err != nil {
+				if err := coveragePkg.ProcessCoverage(coverProfile, coverageConfig, tempWriter, logger); err != nil {
 					logger.Debug("Coverage processing failed", "error", err)
 				}
 			}

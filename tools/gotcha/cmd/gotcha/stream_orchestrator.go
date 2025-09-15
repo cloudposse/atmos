@@ -9,6 +9,7 @@ import (
 
 	coveragePkg "github.com/cloudposse/atmos/tools/gotcha/internal/coverage"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
@@ -17,12 +18,15 @@ import (
 // orchestrateStream coordinates the execution of the stream command.
 // This function orchestrates configuration extraction, test preparation,
 // and delegates to appropriate execution modes (TUI or CI).
-func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) error {
+func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger, writer *output.Writer) error {
 	// Step 1: Extract and validate configuration
 	config, err := extractStreamConfig(cmd, args, logger)
 	if err != nil {
 		return fmt.Errorf("failed to extract configuration: %w", err)
 	}
+	
+	// Set the writer in the config for downstream use
+	config.Writer = writer
 
 	// Step 2: Validate show filter
 	if !utils.IsValidShowFilter(config.ShowFilter) {
@@ -136,18 +140,18 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 		// Check if file exists first
 		if _, err := os.Stat(config.CoverProfile); err == nil {
 			// Show divider before coverage
-			fmt.Fprintf(os.Stderr, "\n%s\n", tui.GetDivider())
+			config.Writer.PrintUI("\n%s\n", tui.GetDivider())
 
 			// Always show function coverage if we have a profile
 			logger.Info("Analyzing coverage results...")
-			if err := coveragePkg.ShowFunctionCoverageReport(config.CoverProfile, logger); err != nil {
+			if err := coveragePkg.ShowFunctionCoverageReport(config.CoverProfile, config.Writer, logger); err != nil {
 				logger.Debug("Function coverage unavailable", "error", err)
 			}
 
 			// Also process with config if available
 			coverageConfig := getCoverageConfig()
 			if coverageConfig.Enabled && (coverageConfig.Analysis.Functions || coverageConfig.Analysis.Statements) {
-				if err := coveragePkg.ProcessCoverage(config.CoverProfile, coverageConfig, logger); err != nil {
+				if err := coveragePkg.ProcessCoverage(config.CoverProfile, coverageConfig, config.Writer, logger); err != nil {
 					logger.Debug("Coverage processing failed", "error", err)
 				}
 			}

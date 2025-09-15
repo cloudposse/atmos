@@ -17,11 +17,12 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 // ProcessCoverage processes coverage data based on configuration after tests complete.
-func ProcessCoverage(coverProfile string, cfg config.CoverageConfig, logger *log.Logger) error {
+func ProcessCoverage(coverProfile string, cfg config.CoverageConfig, writer *output.Writer, logger *log.Logger) error {
 	if !cfg.Enabled || coverProfile == "" {
 		return nil
 	}
@@ -41,14 +42,14 @@ func ProcessCoverage(coverProfile string, cfg config.CoverageConfig, logger *log
 
 	// Show function coverage if requested
 	if cfg.Analysis.Functions {
-		if err := showFunctionCoverage(coverageData, cfg, logger); err != nil {
+		if err := showFunctionCoverage(coverageData, cfg, writer, logger); err != nil {
 			logger.Warn("Failed to show function coverage", "error", err)
 		}
 	}
 
 	// Show statement coverage if requested
 	if cfg.Analysis.Statements {
-		showStatementCoverage(coverageData, cfg, logger)
+		showStatementCoverage(coverageData, cfg, writer, logger)
 	}
 
 	// Check thresholds
@@ -74,7 +75,7 @@ type FunctionCoverageInfo struct {
 }
 
 // ShowFunctionCoverageReport runs go tool cover -func and displays the output as a tree.
-func ShowFunctionCoverageReport(profilePath string, logger *log.Logger) error {
+func ShowFunctionCoverageReport(profilePath string, writer *output.Writer, logger *log.Logger) error {
 	cmd := exec.Command("go", "tool", "cover", "-func", profilePath)
 	output, err := cmd.Output()
 	if err != nil {
@@ -85,7 +86,7 @@ func ShowFunctionCoverageReport(profilePath string, logger *log.Logger) error {
 
 	// Parse and display as tree
 	functions := parseFunctionCoverageOutput(string(output))
-	displayFunctionCoverageTree(functions)
+	displayFunctionCoverageTree(functions, writer)
 	return nil
 }
 
@@ -187,7 +188,7 @@ func getCoverageSymbol(coverage float64) string {
 }
 
 // displayFunctionCoverageTree displays functions grouped by package in a tree format.
-func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
+func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *output.Writer) {
 	if len(functions) == 0 {
 		return
 	}
@@ -213,7 +214,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 
 	// Now we can use the extracted getCoverageColor and getCoverageSymbol functions
 
-	fmt.Printf("\n%s Function Coverage Report\n", tui.CoverageReportIndicator)
+	writer.PrintData("\n%s Function Coverage Report\n", tui.CoverageReportIndicator)
 
 	// Calculate totals
 	var totalFunctions int
@@ -263,7 +264,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 			}
 		}
 
-		fmt.Printf("%s %s %s\n",
+		writer.PrintData("%s %s %s\n",
 			pkgSymbol,
 			packageStyle.Render(displayPkg),
 			lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(fmt.Sprintf("(%.1f%%)", pkgAvg)))
@@ -298,7 +299,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 
 			// Add spacing before first file
 			if fileIdx == 0 {
-				fmt.Printf("  %s\n", treeStyle.Render("│"))
+				writer.PrintData("  %s\n", treeStyle.Render("│"))
 			}
 
 			// Determine if this is the last file in package
@@ -311,11 +312,11 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 			}
 
 			// Display file
-			fmt.Printf("  %s %s\n", treeStyle.Render(fileTreeChar), fileStyle.Render(file))
+			writer.PrintData("  %s %s\n", treeStyle.Render(fileTreeChar), fileStyle.Render(file))
 
 			// Display vertical connector line between file and functions (if there are functions)
 			if len(fileFuncs) > 0 {
-				fmt.Printf("  %s\n", treeStyle.Render(funcPrefix))
+				writer.PrintData("  %s\n", treeStyle.Render(funcPrefix))
 			}
 
 			// Display functions with proper indentation
@@ -336,7 +337,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 				}
 
 				// Display function with line number and aligned coverage on the right
-				fmt.Printf("  %s%s %-28s %s %s\n",
+				writer.PrintData("  %s%s %-28s %s %s\n",
 					treeStyle.Render(funcPrefix),
 					treeStyle.Render(treeChar),
 					funcName,
@@ -346,18 +347,18 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo) {
 
 			// Add spacing between files (except for last file)
 			if !isLastFile {
-				fmt.Printf("  %s\n", treeStyle.Render("│"))
+				writer.PrintData("  %s\n", treeStyle.Render("│"))
 			}
 		}
 		if len(packages) > 1 && pkg != packages[len(packages)-1] {
-			fmt.Println()
+			writer.PrintData("\n")
 		}
 	}
 
 	// Display summary
 	avgCoverage := totalCoverage / float64(totalFunctions)
-	fmt.Printf("\n%s\n", tui.GetDivider())
-	fmt.Printf("📈 Summary: %d functions, %.1f%% average coverage, %d uncovered\n",
+	writer.PrintData("\n%s\n", tui.GetDivider())
+	writer.PrintData("📈 Summary: %d functions, %.1f%% average coverage, %d uncovered\n",
 		totalFunctions, avgCoverage, uncoveredCount)
 }
 
@@ -372,7 +373,7 @@ func shouldExcludeMocks(excludePatterns []string) bool {
 }
 
 // showFunctionCoverage displays function coverage based on configuration.
-func showFunctionCoverage(data *types.CoverageData, cfg config.CoverageConfig, logger *log.Logger) error {
+func showFunctionCoverage(data *types.CoverageData, cfg config.CoverageConfig, writer *output.Writer, logger *log.Logger) error {
 	functions := data.FunctionCoverage
 
 	// Apply filtering based on config
@@ -383,13 +384,13 @@ func showFunctionCoverage(data *types.CoverageData, cfg config.CoverageConfig, l
 	// Format output based on terminal config
 	switch cfg.Output.Terminal.Format {
 	case "detailed":
-		showDetailedFunctionCoverage(functions, logger)
+		showDetailedFunctionCoverage(functions, writer, logger)
 	case "summary":
-		showFunctionCoverageSummary(functions, cfg.Output.Terminal.ShowUncovered, logger)
+		showFunctionCoverageSummary(functions, cfg.Output.Terminal.ShowUncovered, writer, logger)
 	case "none":
 		// Don't show anything
 	default:
-		showFunctionCoverageSummary(functions, 5, logger) // Default top 5
+		showFunctionCoverageSummary(functions, 5, writer, logger) // Default top 5
 	}
 
 	return nil
@@ -407,13 +408,13 @@ func filterUncoveredFunctions(functions []types.CoverageFunction) []types.Covera
 }
 
 // showDetailedFunctionCoverage shows all function coverage details.
-func showDetailedFunctionCoverage(functions []types.CoverageFunction, logger *log.Logger) {
+func showDetailedFunctionCoverage(functions []types.CoverageFunction, writer *output.Writer, logger *log.Logger) {
 	if len(functions) == 0 {
 		return
 	}
 
-	fmt.Printf("\n%s Function Coverage (Detailed):\n", tui.CoverageReportIndicator)
-	fmt.Println(tui.GetDivider())
+	writer.PrintData("\n%s Function Coverage (Detailed):\n", tui.CoverageReportIndicator)
+	writer.PrintData("%s\n", tui.GetDivider())
 
 	for _, fn := range functions {
 		coverageIcon := "✅"
@@ -424,17 +425,17 @@ func showDetailedFunctionCoverage(functions []types.CoverageFunction, logger *lo
 			coverageIcon = "❌"
 		}
 
-		fmt.Printf("%s %-40s %6.1f%%  %s\n",
+		writer.PrintData("%s %-40s %6.1f%%  %s\n",
 			coverageIcon,
 			truncateString(fn.Function, 40),
 			fn.Coverage,
 			shortenPath(fn.File))
 	}
-	fmt.Println(tui.GetDivider())
+	writer.PrintData("%s\n", tui.GetDivider())
 }
 
 // showFunctionCoverageSummary shows a summary of function coverage.
-func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncovered int, logger *log.Logger) {
+func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncovered int, writer *output.Writer, logger *log.Logger) {
 	if len(functions) == 0 {
 		return
 	}
@@ -463,14 +464,14 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 		uncoveredStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")) // Yellow/amber
 	}
 
-	fmt.Printf("\n%s %s\n", tui.CoverageReportIndicator, headerStyle.Render("Function Coverage Summary:"))
-	fmt.Printf("   %s %s\n", labelStyle.Render("Total Functions:"), valueStyle.Render(fmt.Sprintf("%d", len(functions))))
-	fmt.Printf("   %s %s\n", labelStyle.Render("Average Coverage:"), coverageStyle.Render(fmt.Sprintf("%.1f%% (avg of functions)", avgCoverage)))
-	fmt.Printf("   %s %s\n", labelStyle.Render("Uncovered Functions:"), uncoveredStyle.Render(fmt.Sprintf("%d", len(uncoveredFuncs))))
+	writer.PrintData("\n%s %s\n", tui.CoverageReportIndicator, headerStyle.Render("Function Coverage Summary:"))
+	writer.PrintData("   %s %s\n", labelStyle.Render("Total Functions:"), valueStyle.Render(fmt.Sprintf("%d", len(functions))))
+	writer.PrintData("   %s %s\n", labelStyle.Render("Average Coverage:"), coverageStyle.Render(fmt.Sprintf("%.1f%% (avg of functions)", avgCoverage)))
+	writer.PrintData("   %s %s\n", labelStyle.Render("Uncovered Functions:"), uncoveredStyle.Render(fmt.Sprintf("%d", len(uncoveredFuncs))))
 
 	// Show top uncovered functions if requested
 	if showUncovered > 0 && len(uncoveredFuncs) > 0 {
-		fmt.Printf("\n   🔴 Top Uncovered Functions:\n")
+		writer.PrintData("\n   🔴 Top Uncovered Functions:\n")
 		limit := showUncovered
 		if limit > len(uncoveredFuncs) {
 			limit = len(uncoveredFuncs)
@@ -495,29 +496,29 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 				funcName = funcName[:27] + "..."
 			}
 			// Use padding for alignment while keeping bullet format for tests
-			fmt.Printf("      • %-*s in %s\n",
+			writer.PrintData("      • %-*s in %s\n",
 				maxFuncLen,
 				funcName,
 				shortenPath(uncoveredFuncs[i].File))
 		}
 
 		if len(uncoveredFuncs) > limit {
-			fmt.Printf("      ... and %d more\n", len(uncoveredFuncs)-limit)
+			writer.PrintData("      ... and %d more\n", len(uncoveredFuncs)-limit)
 		}
 	}
 }
 
 // showStatementCoverage displays statement coverage information.
-func showStatementCoverage(data *types.CoverageData, cfg config.CoverageConfig, logger *log.Logger) {
+func showStatementCoverage(data *types.CoverageData, cfg config.CoverageConfig, writer *output.Writer, logger *log.Logger) {
 	if data.StatementCoverage == "" {
 		return
 	}
 
 	// Show coverage with mock exclusion info
 	if len(data.FilteredFiles) > 0 && cfg.Output.Terminal.Format != "none" {
-		fmt.Printf("\n Statement Coverage: %s (excluding %d mocks)\n", data.StatementCoverage, len(data.FilteredFiles))
+		writer.PrintData("\n Statement Coverage: %s (excluding %d mocks)\n", data.StatementCoverage, len(data.FilteredFiles))
 	} else {
-		fmt.Printf("\n Statement Coverage: %s\n", data.StatementCoverage)
+		writer.PrintData("\n Statement Coverage: %s\n", data.StatementCoverage)
 	}
 }
 

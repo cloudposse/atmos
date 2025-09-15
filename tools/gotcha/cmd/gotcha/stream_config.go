@@ -9,6 +9,8 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 )
 
 // StreamConfig holds all configuration for the stream command.
@@ -44,6 +46,9 @@ type StreamConfig struct {
 
 	// Derived settings
 	ExcludeMocks bool
+	
+	// Output writer for unified output handling
+	Writer *output.Writer
 }
 
 // extractStreamConfig extracts all configuration from the command.
