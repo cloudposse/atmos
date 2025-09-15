@@ -68,8 +68,8 @@ func TestWriteMarkdownContentWithGitHubActions(t *testing.T) {
 		t.Error("WriteContent() should not include timestamp when GITHUB_STEP_SUMMARY is set")
 	}
 
-	// Should include test results.
-	if !strings.Contains(output, "# Test Results") {
+	// Should include test results header (may include emoji and discriminator).
+	if !strings.Contains(output, "Test Results") {
 		t.Error("WriteContent() missing test results header")
 	}
 }

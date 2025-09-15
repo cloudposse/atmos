@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -141,9 +142,16 @@ go 1.21`
 // This prevents test executions from polluting GitHub Actions step summaries.
 func CreateGotchaCommand(binary string, args ...string) *exec.Cmd {
 	cmd := exec.Command(binary, args...)
-	// Clear GITHUB_STEP_SUMMARY to prevent test output from polluting CI summary
-	// This ensures that when tests run gotcha on temporary test packages,
-	// those sub-runs don't append their summaries to the main GitHub step summary
-	cmd.Env = append(os.Environ(), "GITHUB_STEP_SUMMARY=")
+	// Build environment with GITHUB_STEP_SUMMARY removed
+	// We need to preserve other env vars (especially PATH on Windows)
+	env := os.Environ()
+	filteredEnv := make([]string, 0, len(env))
+	for _, e := range env {
+		// Skip GITHUB_STEP_SUMMARY to prevent test output from polluting CI summary
+		if !strings.HasPrefix(e, "GITHUB_STEP_SUMMARY=") {
+			filteredEnv = append(filteredEnv, e)
+		}
+	}
+	cmd.Env = filteredEnv
 	return cmd
 }
