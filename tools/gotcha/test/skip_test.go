@@ -17,7 +17,7 @@ func TestSkipWindows(t *testing.T) {
 }
 
 func TestSkipReason(t *testing.T) {
-	t.Skipf("Skipping test: database connection not available in CI environment")
+	t.Skipf("Skipping test: example skip with formatted reason - test number %d", 42)
 }
 
 func TestAnotherSkip(t *testing.T) {

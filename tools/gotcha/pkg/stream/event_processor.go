@@ -143,6 +143,8 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				// (e.g., TestMain failure, compilation error, etc.)
 				if len(pkg.Tests) == 0 && !p.packagesWithNoTests[event.Package] {
 					pkg.HasTests = true
+					// Count build failures as test failures in statistics
+					p.failed++
 				}
 
 				// Mark package for display after lock release

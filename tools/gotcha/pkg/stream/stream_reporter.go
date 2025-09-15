@@ -64,10 +64,10 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	r.writer.PrintUI("▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
 
-	// Check for package-level failures (e.g., TestMain failures)
+	// Check for package-level failures (e.g., build failures, TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
-		// Package failed without running any tests (likely TestMain failure)
-		r.writer.PrintUI("  %s Package failed to run tests\n", tui.FailStyle.Render(tui.CheckFail))
+		// Package failed without running any tests (likely build failure or TestMain failure)
+		r.writer.PrintUI("  %s Package failed (build error or initialization failure)\n", tui.FailStyle.Render(tui.CheckFail))
 
 		// Display any package-level output (error messages)
 		if len(pkg.Output) > 0 {

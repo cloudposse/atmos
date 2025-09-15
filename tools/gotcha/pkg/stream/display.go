@@ -29,10 +29,10 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// 2. Sync() is meant for regular files, not console streams
 	// 3. Calling Sync() on pipes (like in tests) can cause hangs
 
-	// Check for package-level failures (e.g., TestMain failures)
+	// Check for package-level failures (e.g., build failures, TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
-		// Package failed without running any tests (likely TestMain failure)
-		p.writer.PrintUI("  %s Package failed to run tests\n", tui.FailStyle.Render(tui.CheckFail))
+		// Package failed without running any tests (likely build failure or TestMain failure)
+		p.writer.PrintUI("  %s Package failed (build error or initialization failure)\n", tui.FailStyle.Render(tui.CheckFail))
 
 		// Display any package-level output (error messages)
 		if len(pkg.Output) > 0 {
