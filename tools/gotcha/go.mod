@@ -1,6 +1,6 @@
 module github.com/cloudposse/atmos/tools/gotcha
 
-go 1.23
+go 1.24.0
 
 require (
 	github.com/charmbracelet/bubbles v0.21.0
@@ -8,13 +8,17 @@ require (
 	github.com/charmbracelet/fang v0.4.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/log v0.4.2
+	github.com/charmbracelet/x/exp/teatest v0.0.0-20250908230358-4a9fe61cc9a4
+	github.com/creack/pty v1.1.24
 	github.com/google/go-github/v59 v59.0.0
+	github.com/mattn/go-isatty v0.0.20
 	github.com/muesli/termenv v0.16.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/oauth2 v0.18.0
 	golang.org/x/term v0.31.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -27,9 +31,7 @@ require (
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20250603201427-c31516f43444 // indirect
 	github.com/charmbracelet/x/exp/golden v0.0.0-20241011142426-46044092ad91 // indirect
-	github.com/charmbracelet/x/exp/teatest v0.0.0-20250908230358-4a9fe61cc9a4 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
-	github.com/creack/pty v1.1.24 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
@@ -40,7 +42,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
@@ -70,5 +71,4 @@ require (
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
