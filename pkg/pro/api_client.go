@@ -19,13 +19,17 @@ import (
 )
 
 const (
-	DefaultHTTPTimeoutSecs = 30
-	logKeyOperation        = "operation"
-	logKeyRequest          = "request"
-	logKeyStatus           = "status"
-	logKeySuccess          = "success"
-	logKeyTraceID          = "trace_id"
-	logKeyContext          = "context"
+	DefaultHTTPTimeoutSecs           = 30
+	DefaultDialTimeoutSecs           = 10
+	DefaultIdleConnTimeoutSecs       = 30
+	DefaultResponseHeaderTimeoutSecs = 15
+	DefaultExpectContinueTimeoutSecs = 1
+	logKeyOperation                  = "operation"
+	logKeyRequest                    = "request"
+	logKeyStatus                     = "status"
+	logKeySuccess                    = "success"
+	logKeyTraceID                    = "trace_id"
+	logKeyContext                    = "context"
 )
 
 func logProAPIResponse(operation string, apiResponse dtos.AtmosApiResponse) {
@@ -296,7 +300,7 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 
 	// For error HTTP responses, return an error
 	errorMsg := logAndReturnProAPIError(operation, apiResponse)
-	return fmt.Errorf("%w: %s", errUtils.ErrAPIResponseError, errorMsg)
+	return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrAPIResponseError, errorMsg)
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
@@ -351,11 +355,11 @@ func getHTTPClientWithTimeout() *http.Client {
 		Timeout: DefaultHTTPTimeoutSecs * time.Second,
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
-				Timeout: 10 * time.Second,
+				Timeout: DefaultDialTimeoutSecs * time.Second,
 			}).DialContext,
-			IdleConnTimeout:       30 * time.Second,
-			ResponseHeaderTimeout: 15 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       DefaultIdleConnTimeoutSecs * time.Second,
+			ResponseHeaderTimeout: DefaultResponseHeaderTimeoutSecs * time.Second,
+			ExpectContinueTimeout: DefaultExpectContinueTimeoutSecs * time.Second,
 		},
 	}
 }
