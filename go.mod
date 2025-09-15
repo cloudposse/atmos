@@ -1,6 +1,6 @@
 module github.com/cloudposse/atmos
 
-go 1.24.6
+go 1.23
 
 require (
 	cloud.google.com/go/secretmanager v1.15.0

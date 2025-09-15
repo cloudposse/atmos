@@ -86,7 +86,7 @@ jobs:
           # Run vanilla go test to see what Go is reporting directly
           # This will help us understand why gotcha exits non-zero
           echo "=== Running vanilla go test ==="
-          go test -v -cover -coverprofile=vanilla-coverage.out github.com/cloudposse/atmos/tools/gotcha/... || echo "Exit code: $?"
+          go test -v github.com/cloudposse/atmos/tools/gotcha/... || echo "Exit code: $?"
           echo "=== End vanilla go test ==="
 
       - name: Test gotcha with itself (dogfooding)
