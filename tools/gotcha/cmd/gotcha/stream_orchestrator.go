@@ -24,7 +24,7 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger, wr
 	if err != nil {
 		return fmt.Errorf("failed to extract configuration: %w", err)
 	}
-	
+
 	// Set the writer in the config for downstream use
 	config.Writer = writer
 

@@ -9,7 +9,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	
+
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 )
 
@@ -46,7 +46,7 @@ type StreamConfig struct {
 
 	// Derived settings
 	ExcludeMocks bool
-	
+
 	// Output writer for unified output handling
 	Writer *output.Writer
 }
