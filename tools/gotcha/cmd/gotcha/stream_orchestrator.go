@@ -154,8 +154,8 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger) er
 		}
 	}
 
-	// Display comprehensive test summary at the very end
-	displayFinalTestSummary(testSummary)
+	// Note: Test summary is already displayed by the stream processor's PrintSummary() method
+	// We don't call displayFinalTestSummary here to avoid duplicate summaries
 
 	// Step 8: Exit with appropriate code
 	if exitCode != 0 {

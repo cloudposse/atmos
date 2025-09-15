@@ -287,12 +287,12 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
-				r.writer.PrintUI(indent + "    " + formatted)
+				r.writer.PrintUI("%s", indent + "    " + formatted)
 			}
 		} else {
 			// Default: show output as-is
 			for _, outputLine := range test.Output {
-				r.writer.PrintUI(indent + "    " + outputLine)
+				r.writer.PrintUI("%s", indent + "    " + outputLine)
 			}
 		}
 		r.writer.PrintUI("\n") // Add blank line after output
@@ -354,12 +354,12 @@ func (r *StreamReporter) displayTestLine(test *TestResult, indent string) {
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
-				r.writer.PrintUI(indent + "    " + formatted)
+				r.writer.PrintUI("%s", indent + "    " + formatted)
 			}
 		} else {
 			// Default: show output as-is
 			for _, outputLine := range test.Output {
-				r.writer.PrintUI(indent + "    " + outputLine)
+				r.writer.PrintUI("%s", indent + "    " + outputLine)
 			}
 		}
 		r.writer.PrintUI("\n") // Add blank line after output
@@ -480,7 +480,7 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	output.WriteString(fmt.Sprintf("%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds()))
 
 	// Write to stderr and return
-	r.writer.PrintUI(output.String())
+	r.writer.PrintUI("%s", output.String())
 
 	// Output is already flushed automatically due to line buffering on stderr
 
