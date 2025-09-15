@@ -65,13 +65,13 @@ packages:
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test")
 	gotchaDir, _ := filepath.Abs("..")
 
-	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
+	buildCmd := CreateGotchaCommand("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
 	require.NoError(t, buildErr, "Build failed: %s", buildOut)
 
 	// Run with GOTCHA_FORCE_TUI to ensure TUI mode
-	cmd := exec.Command(gotchaBinary, ".")
+	cmd := CreateGotchaCommand(gotchaBinary, ".")
 	cmd.Dir = tempDir
 	cmd.Env = append(os.Environ(), "GOTCHA_FORCE_TUI=true")
 
@@ -126,13 +126,13 @@ packages:
 	gotchaBinary := filepath.Join(tempDir, "gotcha-test")
 	gotchaDir, _ := filepath.Abs("..")
 
-	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
+	buildCmd := CreateGotchaCommand("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
 	require.NoError(t, buildErr, "Build failed: %s", buildOut)
 
 	// Run normally (stream mode)
-	cmd := exec.Command(gotchaBinary, ".")
+	cmd := CreateGotchaCommand(gotchaBinary, ".")
 	cmd.Dir = tempDir
 
 	var output bytes.Buffer

@@ -103,7 +103,7 @@ filter:
 	gotchaDir, err := filepath.Abs("..")
 	require.NoError(t, err)
 
-	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
+	buildCmd := CreateGotchaCommand("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
 	if buildErr != nil {
@@ -111,7 +111,7 @@ filter:
 	}
 
 	// Run gotcha WITHOUT any subcommand - this reproduces the exact user scenario
-	cmd := exec.Command(gotchaBinary, ".")
+	cmd := CreateGotchaCommand(gotchaBinary, ".")
 	cmd.Dir = tempDir
 
 	// Capture output
@@ -210,7 +210,7 @@ packages:
 	gotchaDir, err := filepath.Abs("..")
 	require.NoError(t, err)
 
-	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
+	buildCmd := CreateGotchaCommand("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
 	if buildErr != nil {
@@ -218,7 +218,7 @@ packages:
 	}
 
 	// Run gotcha
-	cmd := exec.Command(gotchaBinary, ".")
+	cmd := CreateGotchaCommand(gotchaBinary, ".")
 	cmd.Dir = tempDir
 
 	var output bytes.Buffer

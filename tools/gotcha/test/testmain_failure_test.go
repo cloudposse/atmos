@@ -23,7 +23,7 @@ func TestGotchaHandlesTestMainFailure(t *testing.T) {
 
 	// Run gotcha on the test package.
 	outputFile := filepath.Join(t.TempDir(), "test-output.json")
-	cmd := exec.Command(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
+	cmd := CreateGotchaCommand(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
 	cmd.Dir = testPkg // Set working directory to the test package directory
 
 	var stdout, stderr bytes.Buffer
@@ -67,8 +67,10 @@ func TestGotchaHandlesInitPanic(t *testing.T) {
 
 	// Run gotcha on the test package.
 	outputFile := filepath.Join(t.TempDir(), "test-output.json")
-	cmd := exec.Command(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
+	cmd := CreateGotchaCommand(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
 	cmd.Dir = testPkg // Set working directory to the test package directory
+	// Clear GITHUB_STEP_SUMMARY to prevent test output from polluting CI summary
+	cmd.Env = append(os.Environ(), "GITHUB_STEP_SUMMARY=")
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -98,8 +100,10 @@ func TestGotchaHandlesBuildError(t *testing.T) {
 
 	// Run gotcha on the test package.
 	outputFile := filepath.Join(t.TempDir(), "test-output.json")
-	cmd := exec.Command(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
+	cmd := CreateGotchaCommand(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
 	cmd.Dir = testPkg // Set working directory to the test package directory
+	// Clear GITHUB_STEP_SUMMARY to prevent test output from polluting CI summary
+	cmd.Env = append(os.Environ(), "GITHUB_STEP_SUMMARY=")
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -129,7 +133,7 @@ func TestGotchaDistinguishesFailureTypes(t *testing.T) {
 
 		// Run gotcha on the test package.
 		outputFile := filepath.Join(t.TempDir(), "test-output.json")
-		cmd := exec.Command(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
+		cmd := CreateGotchaCommand(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
 		cmd.Dir = testPkg // Set working directory to the test package directory
 
 		var stderr bytes.Buffer
@@ -153,7 +157,7 @@ func TestGotchaDistinguishesFailureTypes(t *testing.T) {
 
 		// Run gotcha on the test package.
 		outputFile := filepath.Join(t.TempDir(), "test-output.json")
-		cmd := exec.Command(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
+		cmd := CreateGotchaCommand(gotchaBinary, "stream", "--format=json", "--output="+outputFile, "./...")
 		cmd.Dir = testPkg // Set working directory to the test package directory
 
 		var stderr bytes.Buffer

@@ -37,7 +37,7 @@ func TestTUISubtestIntegration(t *testing.T) {
 	t.Run("verify_subtest_display_in_stream_mode", func(t *testing.T) {
 		// Run gotcha on the test directory in stream mode (not TUI)
 		// Stream mode should show all tests including subtests
-		cmd := exec.Command(gotchaPath, "--show=all", "./test")
+		cmd := CreateGotchaCommand(gotchaPath, "--show=all", "./test")
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -114,7 +114,7 @@ func TestTUISubtestIntegration(t *testing.T) {
 	t.Run("verify_subtest_count_in_json_output", func(t *testing.T) {
 		// Run gotcha with JSON output to get accurate counts
 		outputFile := filepath.Join(t.TempDir(), "test-output.json")
-		cmd := exec.Command(gotchaPath,
+		cmd := CreateGotchaCommand(gotchaPath,
 			"--show=all",
 			"--output", outputFile,
 			"--format", "json",
@@ -189,7 +189,7 @@ func TestTUISubtestIntegration(t *testing.T) {
 
 	t.Run("verify_tui_test_mode_behavior", func(t *testing.T) {
 		// Run gotcha in TEST_MODE to simulate TUI without TTY
-		cmd := exec.Command(gotchaPath, "--show=all", "./test")
+		cmd := CreateGotchaCommand(gotchaPath, "--show=all", "./test")
 		cmd.Env = append(os.Environ(),
 			"GOTCHA_TEST_MODE=true",
 			"GOTCHA_FORCE_TUI=true")
@@ -352,7 +352,7 @@ go 1.21
 		t.Skipf("gotcha binary not found, skipping gotcha verification")
 	}
 
-	cmd = exec.Command(gotchaPath, "--show=all", ".")
+	cmd = CreateGotchaCommand(gotchaPath, "--show=all", ".")
 	cmd.Dir = tmpDir
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout

@@ -2,6 +2,7 @@ package test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -134,4 +135,15 @@ go 1.21`
 		err := os.WriteFile(goModPath, []byte(goModContent), 0o644)
 		require.NoError(t, err, "Failed to write go.mod")
 	}
+}
+
+// CreateGotchaCommand creates an exec.Cmd for running gotcha with GITHUB_STEP_SUMMARY cleared.
+// This prevents test executions from polluting GitHub Actions step summaries.
+func CreateGotchaCommand(binary string, args ...string) *exec.Cmd {
+	cmd := exec.Command(binary, args...)
+	// Clear GITHUB_STEP_SUMMARY to prevent test output from polluting CI summary
+	// This ensures that when tests run gotcha on temporary test packages,
+	// those sub-runs don't append their summaries to the main GitHub step summary
+	cmd.Env = append(os.Environ(), "GITHUB_STEP_SUMMARY=")
+	return cmd
 }

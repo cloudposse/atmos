@@ -70,7 +70,7 @@ packages:
 	gotchaBinary := filepath.Join("..", "gotcha-bin")
 	if _, err := os.Stat(gotchaBinary); os.IsNotExist(err) {
 		t.Logf("Building gotcha binary at %s", gotchaBinary)
-		buildCmd := exec.Command("go", "build", "-o", gotchaBinary, "../cmd/gotcha")
+		buildCmd := CreateGotchaCommand("go", "build", "-o", gotchaBinary, "../cmd/gotcha")
 		buildOut, buildErr := buildCmd.CombinedOutput()
 		if buildErr != nil {
 			t.Fatalf("Failed to build gotcha binary: %v\nOutput: %s", buildErr, buildOut)
@@ -78,7 +78,7 @@ packages:
 	}
 
 	// Run gotcha in the temp directory
-	cmd := exec.Command(gotchaBinary)
+	cmd := CreateGotchaCommand(gotchaBinary)
 	cmd.Dir = tempDir
 
 	// Capture output
@@ -165,14 +165,14 @@ output: from-config.json
 	// Build gotcha binary
 	gotchaBinary := filepath.Join("..", "gotcha-bin")
 	if _, err := os.Stat(gotchaBinary); os.IsNotExist(err) {
-		buildCmd := exec.Command("go", "build", "-o", gotchaBinary, "../cmd/gotcha")
+		buildCmd := CreateGotchaCommand("go", "build", "-o", gotchaBinary, "../cmd/gotcha")
 		if out, err := buildCmd.CombinedOutput(); err != nil {
 			t.Fatalf("Failed to build: %v\n%s", err, out)
 		}
 	}
 
 	// Run with debug logging to see config loading
-	cmd := exec.Command(gotchaBinary, "--log-level=debug")
+	cmd := CreateGotchaCommand(gotchaBinary, "--log-level=debug")
 	cmd.Dir = tempDir
 
 	var output bytes.Buffer

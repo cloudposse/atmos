@@ -144,7 +144,7 @@ filter:
 	gotchaDir, err := filepath.Abs("..")
 	require.NoError(t, err)
 
-	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
+	buildCmd := CreateGotchaCommand("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
 	if buildErr != nil {
@@ -153,7 +153,7 @@ filter:
 
 	// Run gotcha WITHOUT any subcommand (just like the user is doing)
 	// This should use the root command which should respect the config
-	cmd := exec.Command(gotchaBinary, ".")
+	cmd := CreateGotchaCommand(gotchaBinary, ".")
 	cmd.Dir = tempDir
 
 	// Capture output
@@ -271,7 +271,7 @@ output: test-results.json
 	gotchaDir, err := filepath.Abs("..")
 	require.NoError(t, err)
 
-	buildCmd := exec.Command("go", "build", "-o", gotchaBinary, ".")
+	buildCmd := CreateGotchaCommand("go", "build", "-o", gotchaBinary, ".")
 	buildCmd.Dir = gotchaDir
 	buildOut, buildErr := buildCmd.CombinedOutput()
 	if buildErr != nil {
@@ -280,7 +280,7 @@ output: test-results.json
 
 	// Test 1: Run with explicit stream subcommand
 	t.Run("explicit_stream_subcommand", func(t *testing.T) {
-		cmd := exec.Command(gotchaBinary, "stream", ".")
+		cmd := CreateGotchaCommand(gotchaBinary, "stream", ".")
 		cmd.Dir = tempDir
 
 		var output bytes.Buffer
@@ -298,7 +298,7 @@ output: test-results.json
 
 	// Test 2: Run without subcommand (root command)
 	t.Run("root_command", func(t *testing.T) {
-		cmd := exec.Command(gotchaBinary, ".")
+		cmd := CreateGotchaCommand(gotchaBinary, ".")
 		cmd.Dir = tempDir
 
 		var output bytes.Buffer
