@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 // displayPackageResult outputs the buffered results for a completed package.
@@ -22,7 +21,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	}
 
 	// Display package header - ▶ icon in white, package name in cyan
-	fmt.Fprintf(os.Stderr, "\n▶ %s\n",
+	p.writer.PrintUI("\n▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
 
 	// Note: We don't call Sync() on stderr because:
@@ -33,13 +32,13 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Check for package-level failures (e.g., TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
 		// Package failed without running any tests (likely TestMain failure)
-		fmt.Fprintf(os.Stderr, "  %s Package failed to run tests\n", tui.FailStyle.Render(tui.CheckFail))
+		p.writer.PrintUI("  %s Package failed to run tests\n", tui.FailStyle.Render(tui.CheckFail))
 
 		// Display any package-level output (error messages)
 		if len(pkg.Output) > 0 {
 			for _, line := range pkg.Output {
 				if strings.TrimSpace(line) != "" {
-					fmt.Fprintf(os.Stderr, "    %s", line)
+					p.writer.PrintUI("    %s", line)
 				}
 			}
 		}
@@ -50,9 +49,9 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	if !pkg.HasTests {
 		// Show more specific message if a filter is applied
 		if p.testFilter != "" {
-			fmt.Fprintf(os.Stderr, "  %s\n", tui.DurationStyle.Render("No tests matching filter"))
+			p.writer.PrintUI("  %s\n", tui.DurationStyle.Render("No tests matching filter"))
 		} else {
-			fmt.Fprintf(os.Stderr, "  %s\n", tui.DurationStyle.Render("No tests"))
+			p.writer.PrintUI("  %s\n", tui.DurationStyle.Render("No tests"))
 		}
 		return
 	}
@@ -139,7 +138,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	if totalTests > 0 {
 		// Add spacing before summary only if tests were displayed
 		if testsDisplayed {
-			fmt.Fprintf(os.Stderr, "\n")
+			p.writer.PrintUI("\n")
 		}
 
 		var summaryLine string
@@ -170,7 +169,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		}
 
 		if summaryLine != "" {
-			fmt.Fprintf(os.Stderr, "%s", summaryLine)
+			p.writer.PrintUI("%s", summaryLine)
 		}
 	}
 
@@ -214,7 +213,7 @@ func (p *StreamProcessor) displayTestLine(test *TestResult, indent string) {
 		line.WriteString(tui.FaintStyle.Render("— " + test.SkipReason))
 	}
 
-	fmt.Fprintln(os.Stderr, line.String())
+	p.writer.PrintUI("%s\n", line.String())
 
 	// Display test output for failures (respecting show filter)
 	if test.Status == "fail" && len(test.Output) > 0 && p.showFilter != "none" {
@@ -223,15 +222,15 @@ func (p *StreamProcessor) displayTestLine(test *TestResult, indent string) {
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
-				fmt.Fprint(os.Stderr, indent+"    "+formatted)
+				p.writer.PrintUI("%s", indent+"    "+formatted)
 			}
 		} else {
 			// Default: show output as-is
 			for _, outputLine := range test.Output {
-				fmt.Fprint(os.Stderr, indent+"    "+outputLine)
+				p.writer.PrintUI("%s", indent+"    "+outputLine)
 			}
 		}
-		fmt.Fprintln(os.Stderr, "") // Add blank line after output
+		p.writer.PrintUI("\n") // Add blank line after output
 	}
 }
 
@@ -309,7 +308,7 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, line.String())
+	p.writer.PrintUI("%s\n", line.String())
 
 	// Display test output for failures (respecting show filter)
 	if test.Status == "fail" && len(test.Output) > 0 && p.showFilter != "none" {
@@ -318,12 +317,12 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
-				fmt.Fprint(os.Stderr, indent+"    "+formatted)
+				p.writer.PrintUI("%s", indent+"    "+formatted)
 			}
 		} else {
 			// Default: show output as-is
 			for _, outputLine := range test.Output {
-				fmt.Fprint(os.Stderr, indent+"    "+outputLine)
+				p.writer.PrintUI("%s", indent+"    "+outputLine)
 			}
 		}
 	}
@@ -350,30 +349,30 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 
 			total := len(passed) + len(failed) + len(skipped)
 			if total > 0 {
-				fmt.Fprintf(os.Stderr, "\n%s    Subtest Summary: %d passed, %d failed of %d total\n",
+				p.writer.PrintUI("\n%s    Subtest Summary: %d passed, %d failed of %d total\n",
 					indent, len(passed), len(failed), total)
 
 				// Show passed subtests
 				if len(passed) > 0 {
-					fmt.Fprintf(os.Stderr, "\n%s    %s Passed (%d):\n",
+					p.writer.PrintUI("\n%s    %s Passed (%d):\n",
 						indent, tui.PassStyle.Render("✔"), len(passed))
 					for _, subtest := range passed {
-						fmt.Fprintf(os.Stderr, "%s      • %s\n", indent, subtest.Name)
+						p.writer.PrintUI("%s      • %s\n", indent, subtest.Name)
 					}
 				}
 
 				// Show failed subtests
 				if len(failed) > 0 {
-					fmt.Fprintf(os.Stderr, "\n%s    %s Failed (%d):\n",
+					p.writer.PrintUI("\n%s    %s Failed (%d):\n",
 						indent, tui.FailStyle.Render("✘"), len(failed))
 					for _, subtest := range failed {
-						fmt.Fprintf(os.Stderr, "%s      • %s\n", indent, subtest.Name)
+						p.writer.PrintUI("%s      • %s\n", indent, subtest.Name)
 						// Show subtest output if verbosity level is with-output or verbose
 						if (p.verbosityLevel == "with-output" || p.verbosityLevel == "verbose") && len(subtest.Output) > 0 {
 							for _, outputLine := range subtest.Output {
 								formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 								formatted = strings.ReplaceAll(formatted, `\n`, "\n")
-								fmt.Fprint(os.Stderr, indent+"        "+formatted)
+								p.writer.PrintUI("%s", indent+"        "+formatted)
 							}
 						}
 					}
@@ -381,10 +380,10 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 
 				// Show skipped subtests
 				if len(skipped) > 0 {
-					fmt.Fprintf(os.Stderr, "\n%s    %s Skipped (%d):\n",
+					p.writer.PrintUI("\n%s    %s Skipped (%d):\n",
 						indent, tui.SkipStyle.Render("⊘"), len(skipped))
 					for _, subtest := range skipped {
-						fmt.Fprintf(os.Stderr, "%s      • %s\n", indent, subtest.Name)
+						p.writer.PrintUI("%s      • %s\n", indent, subtest.Name)
 					}
 				}
 			}

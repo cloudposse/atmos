@@ -2,18 +2,18 @@ package stream
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 )
 
-// StreamReporter implements TestReporter for direct stream output to stderr.
+// StreamReporter implements TestReporter for direct stream output.
 // This is the traditional non-TUI display mode that works perfectly.
 type StreamReporter struct {
+	writer         *output.Writer
 	showFilter     string
 	testFilter     string
 	verbosityLevel string
@@ -29,8 +29,12 @@ type StreamReporter struct {
 }
 
 // NewStreamReporter creates a new StreamReporter with the given configuration.
-func NewStreamReporter(showFilter, testFilter, verbosityLevel string) *StreamReporter {
+func NewStreamReporter(writer *output.Writer, showFilter, testFilter, verbosityLevel string) *StreamReporter {
+	if writer == nil {
+		writer = output.New()
+	}
 	return &StreamReporter{
+		writer:                    writer,
 		showFilter:                showFilter,
 		testFilter:                testFilter,
 		verbosityLevel:            verbosityLevel,
@@ -57,24 +61,19 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	r.displayedPackages[pkg.Package] = true
 
 	// Display package header - ▶ icon in white, package name in cyan
-	fmt.Fprintf(os.Stderr, "▶ %s\n",
+	r.writer.PrintUI("▶ %s\n",
 		tui.PackageHeaderStyle.Render(pkg.Package))
-
-	// Note: We don't call Sync() on stderr because:
-	// 1. stderr is typically unbuffered or line-buffered already
-	// 2. Sync() is meant for regular files, not console streams
-	// 3. Calling Sync() on pipes (like in tests) can cause hangs
 
 	// Check for package-level failures (e.g., TestMain failures)
 	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
 		// Package failed without running any tests (likely TestMain failure)
-		fmt.Fprintf(os.Stderr, "  %s Package failed to run tests\n", tui.FailStyle.Render(tui.CheckFail))
+		r.writer.PrintUI("  %s Package failed to run tests\n", tui.FailStyle.Render(tui.CheckFail))
 
 		// Display any package-level output (error messages)
 		if len(pkg.Output) > 0 {
 			for _, line := range pkg.Output {
 				if strings.TrimSpace(line) != "" {
-					fmt.Fprintf(os.Stderr, "    %s", line)
+					r.writer.PrintUI("    %s", line)
 				}
 			}
 		}
@@ -85,9 +84,9 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	if !pkg.HasTests {
 		// Show more specific message if a filter is applied
 		if r.testFilter != "" {
-			fmt.Fprintf(os.Stderr, "  %s\n", tui.DurationStyle.Render("No tests matching filter"))
+			r.writer.PrintUI("  %s\n", tui.DurationStyle.Render("No tests matching filter"))
 		} else {
-			fmt.Fprintf(os.Stderr, "  %s\n", tui.DurationStyle.Render("No tests"))
+			r.writer.PrintUI("  %s\n", tui.DurationStyle.Render("No tests"))
 		}
 		return
 	}
@@ -119,7 +118,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	}
 
 	// Add blank line before tests section
-	fmt.Fprintln(os.Stderr)
+	r.writer.PrintUI("\n")
 
 	// Display tests based on show filter
 	testsDisplayed := false
@@ -153,7 +152,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	if totalTests > 0 {
 		// Add spacing before summary only if individual tests were displayed
 		if testsDisplayed {
-			fmt.Fprintf(os.Stderr, "\n")
+			r.writer.PrintUI("\n")
 		}
 
 		var summaryLine string
@@ -210,7 +209,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 		}
 
 		if summaryLine != "" {
-			fmt.Fprintf(os.Stderr, "%s", summaryLine)
+			r.writer.PrintUI("%s", summaryLine)
 		}
 	}
 
@@ -279,7 +278,7 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, line.String())
+	r.writer.PrintUI("%s\n", line.String())
 
 	// Display test output for failures (respecting show filter)
 	if test.Status == "fail" && len(test.Output) > 0 && r.showFilter != "none" {
@@ -288,15 +287,15 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
-				fmt.Fprint(os.Stderr, indent+"    "+formatted)
+				r.writer.PrintUI(indent+"    "+formatted)
 			}
 		} else {
 			// Default: show output as-is
 			for _, outputLine := range test.Output {
-				fmt.Fprint(os.Stderr, indent+"    "+outputLine)
+				r.writer.PrintUI(indent+"    "+outputLine)
 			}
 		}
-		fmt.Fprintln(os.Stderr, "") // Add blank line after output
+		r.writer.PrintUI("\n") // Add blank line after output
 	}
 
 	// Display subtests if test failed or show filter is "all"
@@ -346,7 +345,7 @@ func (r *StreamReporter) displayTestLine(test *TestResult, indent string) {
 		line.WriteString(tui.FaintStyle.Render("— " + test.SkipReason))
 	}
 
-	fmt.Fprintln(os.Stderr, line.String())
+	r.writer.PrintUI("%s\n", line.String())
 
 	// Display test output for failures (respecting show filter)
 	if test.Status == "fail" && len(test.Output) > 0 && r.showFilter != "none" {
@@ -355,15 +354,15 @@ func (r *StreamReporter) displayTestLine(test *TestResult, indent string) {
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
 				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
-				fmt.Fprint(os.Stderr, indent+"    "+formatted)
+				r.writer.PrintUI(indent+"    "+formatted)
 			}
 		} else {
 			// Default: show output as-is
 			for _, outputLine := range test.Output {
-				fmt.Fprint(os.Stderr, indent+"    "+outputLine)
+				r.writer.PrintUI(indent+"    "+outputLine)
 			}
 		}
-		fmt.Fprintln(os.Stderr, "") // Add blank line after output
+		r.writer.PrintUI("\n") // Add blank line after output
 	}
 }
 
@@ -481,7 +480,7 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	output.WriteString(fmt.Sprintf("%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds()))
 
 	// Write to stderr and return
-	fmt.Fprint(os.Stderr, output.String())
+	r.writer.PrintUI(output.String())
 
 	// Output is already flushed automatically due to line buffering on stderr
 

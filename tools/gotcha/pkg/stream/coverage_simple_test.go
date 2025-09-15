@@ -20,7 +20,7 @@ func TestStreamReporter_ShowsCoverageInPackageSummary(t *testing.T) {
 		os.Stderr = oldStderr
 	}()
 
-	reporter := NewStreamReporter("all", "", "standard")
+	reporter := NewStreamReporter(nil, "all", "", "standard")
 
 	// Create a package with coverage
 	pkg := &PackageResult{
@@ -62,7 +62,7 @@ func TestStreamReporter_ShowFailedFilterShowsOnlyFailedAndSkippedTests(t *testin
 	}()
 
 	// Create reporter with show="failed"
-	reporter := NewStreamReporter("failed", "", "standard")
+	reporter := NewStreamReporter(nil, "failed", "", "standard")
 
 	pkg := &PackageResult{
 		Package:   "test/pkg",
@@ -115,7 +115,7 @@ func TestStreamReporter_ShowFailedFilterShowsOnlyFailedAndSkippedTests(t *testin
 
 // TestStreamReporter_ShowsTotalCoverageInFinalSummary verifies that total coverage appears in final summary.
 func TestStreamReporter_ShowsTotalCoverageInFinalSummary(t *testing.T) {
-	reporter := NewStreamReporter("all", "", "standard")
+	reporter := NewStreamReporter(nil, "all", "", "standard")
 
 	// Capture stderr output for package processing
 	oldStderr := os.Stderr
@@ -174,7 +174,7 @@ func TestStreamReporter_CoverageNotShownAsStatementBreakdown(t *testing.T) {
 		os.Stderr = oldStderr
 	}()
 
-	reporter := NewStreamReporter("all", "", "standard")
+	reporter := NewStreamReporter(nil, "all", "", "standard")
 
 	// Create a package with coverage that should show "of statements"
 	pkg := &PackageResult{

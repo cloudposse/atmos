@@ -161,7 +161,7 @@ func (r *ProgressReporter) Finalize(passed, failed, skipped int, elapsed time.Du
 	r.mu.Unlock()
 
 	// Display all package results using StreamReporter for consistent formatting
-	streamReporter := NewStreamReporter(r.showFilter, r.testFilter, r.verbosityLevel)
+	streamReporter := NewStreamReporter(nil, r.showFilter, r.testFilter, r.verbosityLevel)
 	for _, pkg := range packageResults {
 		streamReporter.OnPackageComplete(pkg)
 	}

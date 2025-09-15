@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -84,10 +84,14 @@ type StreamProcessor struct {
 
 	// TestReporter for handling display
 	reporter TestReporter
+	
+	// Writer for output management
+	writer *output.Writer
 }
 
 // NewStreamProcessor creates a new stream processor.
 func NewStreamProcessor(jsonWriter io.Writer, showFilter, testFilter, verbosityLevel string) *StreamProcessor {
+	writer := output.New()
 	return &StreamProcessor{
 		buffers:      make(map[string][]string),
 		subtestStats: make(map[string]*SubtestStats),
@@ -107,9 +111,10 @@ func NewStreamProcessor(jsonWriter io.Writer, showFilter, testFilter, verbosityL
 		testFilter:     testFilter,
 		verbosityLevel: verbosityLevel,
 		startTime:      time.Now(),
+		writer:         writer,
 
 		// Create default stream reporter for backward compatibility
-		reporter: NewStreamReporter(showFilter, testFilter, verbosityLevel),
+		reporter: NewStreamReporter(writer, showFilter, testFilter, verbosityLevel),
 	}
 }
 
@@ -132,6 +137,7 @@ func NewStreamProcessorWithReporter(jsonWriter io.Writer, reporter TestReporter)
 		jsonWriter: jsonWriter,
 		startTime:  time.Now(),
 		reporter:   reporter,
+		writer:     output.New(),
 	}
 }
 
@@ -230,6 +236,9 @@ func GetLastExitReason() string {
 
 // RunTestsWithSimpleStreaming runs tests and processes output in real-time.
 func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter string, verbosityLevel string) int {
+	// Create a writer for output management
+	writer := output.New()
+	
 	// Extract test filter from args if present
 	var testFilter string
 	for i := 0; i < len(testArgs)-1; i++ {
@@ -244,7 +253,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// Capture stderr while also displaying it
 	var stderrBuffer bytes.Buffer
-	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuffer)
+	cmd.Stderr = io.MultiWriter(writer.UI, &stderrBuffer)
 
 	// Set platform-specific command attributes for proper process group handling
 	setPlatformSpecificCmd(cmd)
@@ -273,7 +282,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		interrupted = true
 
 		// Print abort message
-		fmt.Fprintf(os.Stderr, "\n\n\033[1;31m✗ Test run aborted\033[0m\n")
+		writer.PrintUI("\n\n\033[1;31m✗ Test run aborted\033[0m\n")
 
 		// Kill the test process
 		if cmd.Process != nil {
