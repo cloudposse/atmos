@@ -7,7 +7,8 @@ import (
 	"fmt"
 
 	log "github.com/charmbracelet/log"
-	atmosErrors "github.com/cloudposse/atmos/errors"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -18,7 +19,7 @@ func (c *AtmosProAPIClient) UploadDeployments(dto *dtos.DeploymentsUploadRequest
 
 	data, err := utils.ConvertToJSON(dto)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToMarshalPayload, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	// Log safe metadata instead of full payload to prevent secret leakage
@@ -28,19 +29,19 @@ func (c *AtmosProAPIClient) UploadDeployments(dto *dtos.DeploymentsUploadRequest
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToCreateAuthRequest, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
 	}
 
 	log.Debug(fmt.Sprintf("\nUploading deployments to %s", url))
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToMakeRequest, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if err := handleAPIResponse(resp, "UploadDeployments"); err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToUploadDeployments, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadDeployments, err)
 	}
 	log.Debug(fmt.Sprintf("\nUploaded deployments to %s", url))
 

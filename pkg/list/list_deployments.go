@@ -8,6 +8,9 @@ import (
 	"strings"
 
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+	"golang.org/x/term"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -17,8 +20,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 const (

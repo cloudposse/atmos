@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	atmosErrors "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestExchangeOIDCTokenForAtmosToken_Success(t *testing.T) {
@@ -51,7 +51,7 @@ func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				w.Write([]byte(`{"error": "unauthorized"}`))
 			},
-			expectedError: atmosErrors.ErrFailedToExchangeOIDCToken,
+			expectedError: errUtils.ErrFailedToExchangeOIDCToken,
 		},
 		{
 			name: "server returns 403 forbidden",
@@ -59,7 +59,7 @@ func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
 				w.WriteHeader(http.StatusForbidden)
 				w.Write([]byte(`{"error": "forbidden"}`))
 			},
-			expectedError: atmosErrors.ErrFailedToExchangeOIDCToken,
+			expectedError: errUtils.ErrFailedToExchangeOIDCToken,
 		},
 		{
 			name: "server returns invalid JSON",
@@ -67,7 +67,7 @@ func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte(`invalid json`))
 			},
-			expectedError: atmosErrors.ErrFailedToDecodeTokenResponse,
+			expectedError: errUtils.ErrFailedToDecodeTokenResponse,
 		},
 		{
 			name: "server returns success false with error message",
@@ -78,7 +78,7 @@ func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
 					"errorMessage": "Invalid OIDC token or workspace"
 				}`))
 			},
-			expectedError: atmosErrors.ErrFailedToExchangeOIDCToken,
+			expectedError: errUtils.ErrFailedToExchangeOIDCToken,
 		},
 	}
 
@@ -100,7 +100,7 @@ func TestExchangeOIDCTokenForAtmosToken_NetworkError(t *testing.T) {
 	token, err := exchangeOIDCTokenForAtmosToken("http://invalid-host-that-does-not-exist:12345", "api", "oidc-token", "workspace-id")
 	assert.Error(t, err)
 	assert.Equal(t, "", token)
-	assert.ErrorIs(t, err, atmosErrors.ErrFailedToExchangeOIDCToken)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToExchangeOIDCToken)
 }
 
 func TestExchangeOIDCTokenForAtmosToken_RequestCreationError(t *testing.T) {
@@ -108,7 +108,7 @@ func TestExchangeOIDCTokenForAtmosToken_RequestCreationError(t *testing.T) {
 	token, err := exchangeOIDCTokenForAtmosToken("://invalid-url", "api", "oidc-token", "workspace-id")
 	assert.Error(t, err)
 	assert.Equal(t, "", token)
-	assert.ErrorIs(t, err, atmosErrors.ErrFailedToCreateRequest)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateRequest)
 }
 
 func TestExchangeOIDCTokenForAtmosToken_MarshalError(t *testing.T) {

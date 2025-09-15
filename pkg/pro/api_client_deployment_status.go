@@ -8,7 +8,8 @@ import (
 	"time"
 
 	log "github.com/charmbracelet/log"
-	atmosErrors "github.com/cloudposse/atmos/errors"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
@@ -41,22 +42,22 @@ func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUpl
 
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToMarshalRequestBody, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "PATCH", url, bytes.NewBuffer(data))
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToCreateAuthRequest, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToMakeRequest, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if err := handleAPIResponse(resp, "UploadDeploymentStatus"); err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToUploadDeploymentStatus, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadDeploymentStatus, err)
 	}
 
 	log.Debug(fmt.Sprintf("\nUploaded deployment status at %s", url))

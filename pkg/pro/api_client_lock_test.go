@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	atmosErrors "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
@@ -67,19 +67,19 @@ func TestLockStack_HTTPErrors(t *testing.T) {
 			name:          "server returns 400 bad request",
 			statusCode:    http.StatusBadRequest,
 			responseBody:  `{"success": false, "errorMessage": "Bad request"}`,
-			expectedError: atmosErrors.ErrFailedToLockStack,
+			expectedError: errUtils.ErrFailedToLockStack,
 		},
 		{
 			name:          "server returns 401 unauthorized",
 			statusCode:    http.StatusUnauthorized,
 			responseBody:  `{"success": false, "errorMessage": "Unauthorized"}`,
-			expectedError: atmosErrors.ErrFailedToLockStack,
+			expectedError: errUtils.ErrFailedToLockStack,
 		},
 		{
 			name:          "server returns 500 internal server error",
 			statusCode:    http.StatusInternalServerError,
 			responseBody:  `{"success": false, "errorMessage": "Internal Server Error"}`,
-			expectedError: atmosErrors.ErrFailedToLockStack,
+			expectedError: errUtils.ErrFailedToLockStack,
 		},
 	}
 
@@ -120,7 +120,7 @@ func TestLockStack_NetworkError(t *testing.T) {
 
 	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, atmosErrors.ErrFailedToMakeRequest)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToMakeRequest)
 	assert.False(t, response.Success)
 }
 
@@ -142,7 +142,7 @@ func TestLockStack_InvalidJSONResponse(t *testing.T) {
 
 	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, atmosErrors.ErrFailedToUnmarshalJSON)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToUnmarshalJSON)
 	assert.False(t, response.Success)
 }
 
@@ -170,7 +170,7 @@ func TestLockStack_ReadBodyError(t *testing.T) {
 
 	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, atmosErrors.ErrFailedToReadResponseBody)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToReadResponseBody)
 	assert.False(t, response.Success)
 
 	mockRoundTripper.AssertExpectations(t)
@@ -189,7 +189,7 @@ func TestLockStack_RequestCreationError(t *testing.T) {
 
 	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, atmosErrors.ErrFailedToCreateAuthRequest)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAuthRequest)
 	assert.False(t, response.Success)
 }
 
@@ -218,7 +218,7 @@ func TestLockStack_SuccessFalseWithContext(t *testing.T) {
 
 	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, atmosErrors.ErrFailedToLockStack)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToLockStack)
 	assert.Contains(t, err.Error(), "Stack is already locked")
 	assert.False(t, response.Success)
 }
