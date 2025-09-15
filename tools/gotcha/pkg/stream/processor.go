@@ -318,10 +318,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 		return 130
 	}
 
-	// Print summary regardless of errors
-	processor.PrintSummary()
-
-	// Log exit reason
+	// Determine exit code and reason first
 	var exitCode int
 	var exitReason string
 	capturedStderr := stderrBuffer.String()
@@ -354,7 +351,8 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	// Store the exit reason for retrieval by the caller
 	lastExitReason = exitReason
 
-	// Log the exit reason using the logger
+	// Log the exit reason BEFORE printing summary
+	// This ensures log messages appear before the formatted test output
 	log := logger.GetLogger()
 	if exitCode != 0 {
 		// Check if this is the specific case where tests passed but go test failed
@@ -366,11 +364,15 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 				"testsSkipped", processor.skipped,
 				"hint", "Check for panics, TestMain failures, or build errors")
 		} else {
+			// Log as error since this is a genuine test failure
 			log.Error("Test run failed", "exitCode", exitCode, "reason", exitReason)
 		}
 	} else if verbosityLevel == "verbose" || verbosityLevel == "with-output" {
-		log.Info("Test run completed successfully", "exitCode", 0, "reason", exitReason)
+		log.Debug("Test run completed successfully", "exitCode", 0, "reason", exitReason)
 	}
+
+	// Print summary after logging
+	processor.PrintSummary()
 
 	return exitCode
 }

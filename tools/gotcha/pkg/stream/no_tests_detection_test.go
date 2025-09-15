@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
@@ -128,11 +129,12 @@ func TestNoTestsDetection(t *testing.T) {
 
 // captureStreamProcessorOutput runs the StreamProcessor and captures its output.
 func captureStreamProcessorOutput(jsonStream io.Reader) string {
-	// Capture stderr
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
+	// Create a buffer to capture output
+	var outputBuf bytes.Buffer
+	
+	// Create a custom writer that writes to our buffer
+	customWriter := output.NewCustom(&outputBuf, &outputBuf)
+	
 	// Create a temp JSON file for output
 	tmpFile, err := os.CreateTemp("", "test-output-*.json")
 	if err != nil {
@@ -140,18 +142,17 @@ func captureStreamProcessorOutput(jsonStream io.Reader) string {
 	}
 	defer os.Remove(tmpFile.Name())
 
-	// Create processor
-	processor := NewStreamProcessor(tmpFile, "all", "", "standard")
+	// Create a custom reporter with our writer
+	reporter := NewStreamReporter(customWriter, "all", "", "standard")
+	
+	// Create processor with custom reporter
+	processor := NewStreamProcessorWithReporter(tmpFile, reporter)
 
 	// Process the stream
 	processor.ProcessStream(jsonStream)
 
-	// Close writer and restore stderr
-	w.Close()
-	output, _ := io.ReadAll(r)
-	os.Stderr = oldStderr
-
 	tmpFile.Close()
 
-	return string(output)
+	// Return the captured output
+	return outputBuf.String()
 }

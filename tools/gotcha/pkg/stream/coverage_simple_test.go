@@ -8,19 +8,20 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 )
 
 // TestStreamReporter_ShowsCoverageInPackageSummary verifies that coverage is shown in package summaries.
 func TestStreamReporter_ShowsCoverageInPackageSummary(t *testing.T) {
-	// Capture stderr output
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-	defer func() {
-		os.Stderr = oldStderr
-	}()
-
-	reporter := NewStreamReporter(nil, "all", "", "standard")
+	// Create a buffer to capture output
+	var outputBuf bytes.Buffer
+	
+	// Create a custom writer that writes to our buffer
+	// This ensures we capture output regardless of GitHub Actions environment
+	customWriter := output.NewCustom(&outputBuf, &outputBuf)
+	
+	reporter := NewStreamReporter(customWriter, "all", "", "standard")
 
 	// Create a package with coverage
 	pkg := &PackageResult{
@@ -41,11 +42,8 @@ func TestStreamReporter_ShowsCoverageInPackageSummary(t *testing.T) {
 	// Display the package
 	reporter.OnPackageComplete(pkg)
 
-	// Close writer and read output
-	w.Close()
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
+	// Get the output
+	output := outputBuf.String()
 
 	// The package summary should include coverage
 	assert.Contains(t, output, "75.5% coverage", "Should display coverage in package summary")
@@ -53,16 +51,14 @@ func TestStreamReporter_ShowsCoverageInPackageSummary(t *testing.T) {
 
 // TestStreamReporter_ShowFailedFilterShowsOnlyFailedAndSkippedTests verifies that when show="failed", only failed and skipped tests are shown.
 func TestStreamReporter_ShowFailedFilterShowsOnlyFailedAndSkippedTests(t *testing.T) {
-	// Capture stderr output
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-	defer func() {
-		os.Stderr = oldStderr
-	}()
-
+	// Create a buffer to capture output
+	var outputBuf bytes.Buffer
+	
+	// Create a custom writer that writes to our buffer
+	customWriter := output.NewCustom(&outputBuf, &outputBuf)
+	
 	// Create reporter with show="failed"
-	reporter := NewStreamReporter(nil, "failed", "", "standard")
+	reporter := NewStreamReporter(customWriter, "failed", "", "standard")
 
 	pkg := &PackageResult{
 		Package:   "test/pkg",
@@ -91,11 +87,8 @@ func TestStreamReporter_ShowFailedFilterShowsOnlyFailedAndSkippedTests(t *testin
 
 	reporter.OnPackageComplete(pkg)
 
-	// Close writer and read output
-	w.Close()
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
+	// Get the output
+	output := outputBuf.String()
 
 	// With show="failed", only failed and skipped tests should be shown
 
@@ -166,15 +159,13 @@ func TestStreamReporter_ShowsTotalCoverageInFinalSummary(t *testing.T) {
 
 // TestStreamReporter_CoverageNotShownAsStatementBreakdown verifies that coverage doesn't show statement/function breakdown.
 func TestStreamReporter_CoverageNotShownAsStatementBreakdown(t *testing.T) {
-	// Capture stderr output
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-	defer func() {
-		os.Stderr = oldStderr
-	}()
-
-	reporter := NewStreamReporter(nil, "all", "", "standard")
+	// Create a buffer to capture output
+	var outputBuf bytes.Buffer
+	
+	// Create a custom writer that writes to our buffer
+	customWriter := output.NewCustom(&outputBuf, &outputBuf)
+	
+	reporter := NewStreamReporter(customWriter, "all", "", "standard")
 
 	// Create a package with coverage that should show "of statements"
 	pkg := &PackageResult{
@@ -195,11 +186,8 @@ func TestStreamReporter_CoverageNotShownAsStatementBreakdown(t *testing.T) {
 	// Display the package
 	reporter.OnPackageComplete(pkg)
 
-	// Close writer and read output
-	w.Close()
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
+	// Get the output
+	output := outputBuf.String()
 
 	// The output should preserve "of statements" but currently it likely just shows "82.3% coverage"
 	assert.Contains(t, output, "82.3% of statements", "BUG: Should preserve statement coverage detail but likely shows generic 'coverage'")
