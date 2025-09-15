@@ -3,6 +3,7 @@ package stream
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -61,7 +62,8 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 		tui.PackageHeaderStyle.Render(pkg.Package))
 
 	// Flush output immediately in CI environments to prevent buffering
-	if config.IsCI() {
+	// Note: Skip on Windows as Sync() can hang on pipes/console handles
+	if config.IsCI() && runtime.GOOS != "windows" {
 		os.Stderr.Sync()
 	}
 
@@ -215,7 +217,8 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	}
 
 	// Flush output after displaying package results
-	if config.IsCI() {
+	// Note: Skip on Windows as Sync() can hang on pipes/console handles
+	if config.IsCI() && runtime.GOOS != "windows" {
 		os.Stderr.Sync()
 	}
 }
@@ -487,7 +490,8 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	fmt.Fprint(os.Stderr, output.String())
 
 	// Ensure output is flushed
-	if config.IsCI() {
+	// Note: Skip on Windows as Sync() can hang on pipes/console handles
+	if config.IsCI() && runtime.GOOS != "windows" {
 		os.Stderr.Sync()
 	}
 

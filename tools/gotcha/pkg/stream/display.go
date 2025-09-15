@@ -3,6 +3,7 @@ package stream
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
@@ -26,7 +27,8 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 		tui.PackageHeaderStyle.Render(pkg.Package))
 
 	// Flush output immediately in CI environments to prevent buffering
-	if config.IsCI() {
+	// Note: Skip on Windows as Sync() can hang on pipes/console handles
+	if config.IsCI() && runtime.GOOS != "windows" {
 		os.Stderr.Sync()
 	}
 
@@ -175,7 +177,8 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	}
 
 	// Flush output after displaying package results
-	if config.IsCI() {
+	// Note: Skip on Windows as Sync() can hang on pipes/console handles
+	if config.IsCI() && runtime.GOOS != "windows" {
 		os.Stderr.Sync()
 	}
 }

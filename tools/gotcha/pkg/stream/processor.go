@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -172,7 +173,8 @@ func (p *StreamProcessor) ProcessStream(input io.Reader) error {
 		p.processEvent(&event)
 
 		// Periodic flush in CI to ensure output appears promptly
-		if inCI && time.Since(lastFlush) > flushInterval {
+		// Note: Skip on Windows as Sync() can hang on pipes/console handles
+		if inCI && runtime.GOOS != "windows" && time.Since(lastFlush) > flushInterval {
 			os.Stderr.Sync()
 			lastFlush = time.Now()
 		}
