@@ -313,7 +313,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *outpu
 
 			// Add spacing before first file
 			if fileIdx == 0 {
-				writer.PrintData("  %s\n", treeStyle.Render("│"))
+				writer.PrintData("  %s \n", treeStyle.Render("│"))
 			}
 
 			// Determine if this is the last file in package
@@ -366,7 +366,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *outpu
 
 			// Add spacing between files (except for last file)
 			if !isLastFile {
-				writer.PrintData("  %s\n", treeStyle.Render("│"))
+				writer.PrintData("  %s \n", treeStyle.Render("│"))
 			}
 		}
 		if len(packages) > 1 && pkg != packages[len(packages)-1] {
