@@ -82,7 +82,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         id: golangci
         with:
           version: v2.4.0
