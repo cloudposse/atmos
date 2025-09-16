@@ -15,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -363,7 +364,7 @@ func (m *TestModel) View() string {
 	// Get terminal width for layout calculations
 	terminalWidth := getTerminalWidth()
 	if terminalWidth == 0 {
-		terminalWidth = 80 // Default fallback
+		terminalWidth = DefaultTerminalWidth // Default fallback
 	}
 
 	// Build the status line components
@@ -399,7 +400,8 @@ func (m *TestModel) View() string {
 	var testCount string
 
 	// Always use estimate if we have one and are still using it
-	if m.usingEstimate && m.estimatedTestCount > 0 {
+	switch {
+	case m.usingEstimate && m.estimatedTestCount > 0:
 		// Using cached estimate
 		if m.completedTests > 0 {
 			// Tests are running, show progress against estimate
@@ -412,13 +414,13 @@ func (m *TestModel) View() string {
 		}
 		// Show completed/estimated format with tilde prefix (since whole fraction is estimated)
 		testCount = fmt.Sprintf("~%d/%d %s", m.completedTests, m.estimatedTestCount, DurationStyle.Render("tests"))
-	} else if m.totalTests > 0 {
+	case m.totalTests > 0:
 		// Not using estimate, have actual count
 		percentFloat := float64(m.completedTests) / float64(m.totalTests)
 		percent := int(percentFloat * 100)
 		percentage = fmt.Sprintf("%3d%s", percent, DurationStyle.Render("%"))
 		testCount = fmt.Sprintf("%4d/%-4d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
-	} else {
+	default:
 		// No estimate and no tests discovered yet
 		percentage = fmt.Sprintf("  0%s", DurationStyle.Render("%"))
 		testCount = fmt.Sprintf("%-15s", DurationStyle.Render("discovering tests"))
@@ -484,7 +486,7 @@ func (m *TestModel) GetElapsedTime() time.Duration {
 func (m *TestModel) GetExitCode() int {
 	// If aborted, return special exit code
 	if m.aborted {
-		return 130 // Standard exit code for SIGINT
+		return ExitCodeInterrupted // Standard exit code for SIGINT
 	}
 	// Return the actual exit code from the test process
 	return m.exitCode
@@ -512,7 +514,7 @@ func (m *TestModel) GetPackageResults() map[string]*PackageResult {
 
 // DebugPackageTracking writes debug information about package tracking to a file.
 func (m *TestModel) DebugPackageTracking() {
-	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+	if debugFile := config.GetDebugFile(); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "\n=== TUI PACKAGE TRACKING SUMMARY ===\n")
 			fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))

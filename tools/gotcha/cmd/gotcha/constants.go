@@ -2,7 +2,7 @@ package cmd
 
 // Flag constants used across multiple files.
 const (
-	// Flag names
+	// Flag names.
 	FlagPostComment     = "post-comment"
 	FlagGithubToken     = "github-token"
 	FlagFormat          = "format"
@@ -16,7 +16,12 @@ const (
 	FlagCommentUUID     = "comment-uuid"
 	FlagRepo            = "repo"
 	FlagPR              = "pr"
+	FlagCount           = "count"
+	FlagPattern         = "pattern"
 
-	// Format values
+	// Format values.
 	FormatMarkdown = "markdown"
+	
+	// Common strings.
+	SpaceChar = " "
 )

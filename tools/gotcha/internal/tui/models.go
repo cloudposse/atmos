@@ -53,7 +53,6 @@ type TestModel struct {
 	testPackages []string
 	testArgs     string
 	testCmd      *os.Process // Store the process for killing on abort
-	testProc     io.ReadCloser
 	scanner      *bufio.Scanner
 
 	// Buffered output
@@ -72,11 +71,9 @@ type TestModel struct {
 	testFilter     string // Test filter applied via -run flag (if any)
 
 	// Progress tracking
-	spinner          spinner.Model
-	progress         progress.Model
-	progressMessages []string
-	estimatedTotal   int // Estimated total test count (from cache or discovery)
-	processedTests   int // Number of tests processed so far
+	spinner        spinner.Model
+	progress       progress.Model
+	estimatedTotal int // Estimated total test count (from cache or discovery)
 
 	// Test counting
 	actualTestCount    int  // Actual test count discovered during execution
@@ -95,11 +92,6 @@ type TestModel struct {
 	maxScroll    int    // Maximum scroll position
 	outputBuffer string // Buffer for gradual output display
 
-	// Statistics
-	passed  int
-	failed  int
-	skipped int
-
 	// Timing
 	startTime time.Time
 	endTime   time.Time
@@ -110,7 +102,6 @@ type TestModel struct {
 
 	// Process state
 	done       bool
-	err        error
 	aborted    bool // Track if the test was aborted
 	exitCode   int  // Store the exit code from the test process
 	alert      bool // Whether to emit terminal bell on completion

@@ -1,8 +1,6 @@
 package config
 
 import (
-	"os"
-
 	"github.com/spf13/viper"
 )
 
@@ -10,48 +8,64 @@ import (
 // This centralizes environment variable configuration to avoid os.Getenv usage.
 // GOTCHA_ prefixed variables take precedence over standard names.
 func InitEnvironment() {
-	// CI environment detection - GOTCHA_ variants take precedence
-	viper.BindEnv("ci", "GOTCHA_CI", "CI")
-	viper.BindEnv("github.actions", "GOTCHA_GITHUB_ACTIONS", "GITHUB_ACTIONS")
-	viper.BindEnv("github.run.id", "GOTCHA_GITHUB_RUN_ID", "GITHUB_RUN_ID")
-	viper.BindEnv("ci.provider", "GOTCHA_CI_PROVIDER")
+	// Runtime environment detection - These ONLY read from env vars, not config files
+	// Use "runtime.*" keys for actual environment detection
+	_ = viper.BindEnv("runtime.ci", "CI")
+	_ = viper.BindEnv("runtime.github.actions", "GITHUB_ACTIONS")
+	_ = viper.BindEnv("runtime.github.run.id", "GITHUB_RUN_ID")
+
+	// Configuration settings - These can be set in config files OR env vars
+	// Use regular keys for feature configuration
+	_ = viper.BindEnv("ci", "GOTCHA_CI")
+	_ = viper.BindEnv("github.actions", "GOTCHA_GITHUB_ACTIONS")
+	_ = viper.BindEnv("github.run.id", "GOTCHA_GITHUB_RUN_ID")
+	_ = viper.BindEnv("ci.provider", "GOTCHA_CI_PROVIDER")
 
 	// GitHub context - GOTCHA_ variants first for override capability
-	viper.BindEnv("github.repository", "GOTCHA_GITHUB_REPOSITORY", "GITHUB_REPOSITORY")
-	viper.BindEnv("github.event.name", "GOTCHA_GITHUB_EVENT_NAME", "GITHUB_EVENT_NAME")
-	viper.BindEnv("github.event.path", "GOTCHA_GITHUB_EVENT_PATH", "GITHUB_EVENT_PATH")
-	viper.BindEnv("github.step.summary", "GOTCHA_GITHUB_STEP_SUMMARY", "GITHUB_STEP_SUMMARY")
+	_ = viper.BindEnv("github.repository", "GOTCHA_GITHUB_REPOSITORY", "GITHUB_REPOSITORY")
+	_ = viper.BindEnv("github.event.name", "GOTCHA_GITHUB_EVENT_NAME", "GITHUB_EVENT_NAME")
+	_ = viper.BindEnv("github.event.path", "GOTCHA_GITHUB_EVENT_PATH", "GITHUB_EVENT_PATH")
+	_ = viper.BindEnv("github.step.summary", "GOTCHA_GITHUB_STEP_SUMMARY", "GITHUB_STEP_SUMMARY")
 
 	// Authentication - GOTCHA_ takes precedence
-	viper.BindEnv("github.token", "GOTCHA_GITHUB_TOKEN", "GITHUB_TOKEN")
+	_ = viper.BindEnv("github.token", "GOTCHA_GITHUB_TOKEN", "GITHUB_TOKEN")
 
 	// Comment configuration - GOTCHA_ takes precedence
-	viper.BindEnv("comment.uuid", "GOTCHA_COMMENT_UUID", "COMMENT_UUID")
-	viper.BindEnv("post.comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
+	_ = viper.BindEnv("comment.uuid", "GOTCHA_COMMENT_UUID", "COMMENT_UUID")
+	_ = viper.BindEnv("post.comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
 
 	// Mock configuration
-	viper.BindEnv("use.mock", "GOTCHA_USE_MOCK")
+	_ = viper.BindEnv("use.mock", "GOTCHA_USE_MOCK")
 
 	// TTY configuration
-	viper.BindEnv("force.tty", "GOTCHA_FORCE_TTY", "FORCE_TTY")
-	viper.BindEnv("force.no.tty", "GOTCHA_FORCE_NO_TTY", "FORCE_NO_TTY")
+	_ = viper.BindEnv("force.tty", "GOTCHA_FORCE_TTY", "FORCE_TTY")
+	_ = viper.BindEnv("force.no.tty", "GOTCHA_FORCE_NO_TTY", "FORCE_NO_TTY")
 
 	// Color configuration - standard names (no GOTCHA_ prefix typically)
-	viper.BindEnv("no.color", "NO_COLOR")
-	viper.BindEnv("force.color", "FORCE_COLOR")
-	viper.BindEnv("term", "TERM")
-	viper.BindEnv("colorterm", "COLORTERM")
+	_ = viper.BindEnv("no.color", "NO_COLOR")
+	_ = viper.BindEnv("force.color", "FORCE_COLOR")
+	_ = viper.BindEnv("term", "TERM")
+	_ = viper.BindEnv("colorterm", "COLORTERM")
 
 	// Output configuration
-	viper.BindEnv("output", "GOTCHA_OUTPUT")
-	viper.BindEnv("show", "GOTCHA_SHOW")
+	_ = viper.BindEnv("output", "GOTCHA_OUTPUT")
+	_ = viper.BindEnv("show", "GOTCHA_SHOW")
 
-	// Additional CI providers for detection
-	viper.BindEnv("continuous.integration", "CONTINUOUS_INTEGRATION")
-	viper.BindEnv("build.number", "BUILD_NUMBER")
-	viper.BindEnv("jenkins.url", "JENKINS_URL")
-	viper.BindEnv("travis", "TRAVIS")
-	viper.BindEnv("circleci", "CIRCLECI")
+	// Additional CI providers for runtime detection
+	_ = viper.BindEnv("runtime.continuous.integration", "CONTINUOUS_INTEGRATION")
+	_ = viper.BindEnv("runtime.build.number", "BUILD_NUMBER")
+	_ = viper.BindEnv("runtime.jenkins.url", "JENKINS_URL")
+	_ = viper.BindEnv("runtime.travis", "TRAVIS")
+	_ = viper.BindEnv("runtime.circleci", "CIRCLECI")
+
+	// Debug and test configuration
+	_ = viper.BindEnv("debug.file", "GOTCHA_DEBUG_FILE")
+	_ = viper.BindEnv("test.mode", "GOTCHA_TEST_MODE")
+	_ = viper.BindEnv("force.tui", "GOTCHA_FORCE_TUI")
+	_ = viper.BindEnv("split.streams", "GOTCHA_SPLIT_STREAMS")
+
+	// Terminal configuration
+	_ = viper.BindEnv("columns", "COLUMNS")
 
 	// Set defaults
 	viper.SetDefault("ci", false)
@@ -63,29 +77,34 @@ func InitEnvironment() {
 	viper.SetDefault("force.no.tty", false)
 }
 
-// IsCI returns true if running in a CI environment.
+// IsCI returns true if ACTUALLY running in a CI environment (runtime check).
+// This checks actual environment variables, not config settings.
 func IsCI() bool {
-	// Check for actual CI environment indicators (environment variables)
-	// We don't check config here - config enables features, doesn't force CI mode
-	return os.Getenv("CI") != "" ||
-		os.Getenv("GOTCHA_CI") != "" ||
-		os.Getenv("GITHUB_ACTIONS") != "" ||
-		os.Getenv("CONTINUOUS_INTEGRATION") != "" ||
-		os.Getenv("BUILD_NUMBER") != "" ||
-		os.Getenv("JENKINS_URL") != "" ||
-		os.Getenv("TRAVIS") != "" ||
-		os.Getenv("CIRCLECI") != ""
+	// Check runtime.* keys which are ONLY bound to env vars
+	return viper.GetString("runtime.ci") != "" ||
+		viper.GetString("runtime.github.actions") != "" ||
+		viper.GetString("runtime.continuous.integration") != "" ||
+		viper.GetString("runtime.build.number") != "" ||
+		viper.GetString("runtime.jenkins.url") != "" ||
+		viper.GetString("runtime.travis") != "" ||
+		viper.GetString("runtime.circleci") != ""
 }
 
-// IsGitHubActions returns true if running in GitHub Actions.
+// IsCIEnabled returns true if CI features are enabled in configuration.
+// This checks config settings, which can come from config files or GOTCHA_* env vars.
+func IsCIEnabled() bool {
+	return viper.GetBool("ci")
+}
+
+// IsGitHubActions returns true if ACTUALLY running in GitHub Actions (runtime check).
 func IsGitHubActions() bool {
-	// Check if we're actually in GitHub Actions environment
-	return os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("GOTCHA_GITHUB_ACTIONS") != ""
+	// Check runtime key which is ONLY bound to GITHUB_ACTIONS env var
+	return viper.GetString("runtime.github.actions") == "true"
 }
 
 // IsGitHubActionsEnabled returns true if GitHub Actions features are enabled in config.
 func IsGitHubActionsEnabled() bool {
-	// This checks the config setting, not the environment
+	// This checks the config setting, which can come from files or GOTCHA_GITHUB_ACTIONS
 	return viper.GetBool("github.actions")
 }
 
@@ -157,4 +176,19 @@ func GetShowFilter() string {
 // GetOutput returns the output configuration.
 func GetOutput() string {
 	return viper.GetString("output")
+}
+
+// GetDebugFile returns the debug file path if configured.
+func GetDebugFile() string {
+	return viper.GetString("debug.file")
+}
+
+// GetColumns returns the COLUMNS environment variable value.
+func GetColumns() string {
+	return viper.GetString("columns")
+}
+
+// IsSplitStreams returns true if streams should be split.
+func IsSplitStreams() bool {
+	return viper.GetBool("split.streams")
 }

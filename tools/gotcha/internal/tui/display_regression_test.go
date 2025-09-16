@@ -16,7 +16,7 @@ import (
 // This is the exact issue reported by the user where they see:
 // - "Total: 35" (or any count) in the summary
 // - But only see a few test names in the actual output
-// - Most packages appear blank or show only summary lines like "All 7 tests passed"
+// - Most packages appear blank or show only summary lines like "All 7 tests passed".
 func TestDisplayRegressionSubtestsNotShown(t *testing.T) {
 	// Create a model with "all" filter to show all tests
 	model := NewTestModel(

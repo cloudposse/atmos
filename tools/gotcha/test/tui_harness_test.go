@@ -22,11 +22,6 @@ func init() {
 	lipgloss.SetColorProfile(termenv.Ascii)
 }
 
-// streamOutputMsg represents a line of output from the test stream.
-type streamOutputMsg struct {
-	line string
-}
-
 // TestTUIWithTeatest tests the TUI mode using the teatest library.
 // This allows testing without a real TTY.
 func TestTUIWithTeatest(t *testing.T) {

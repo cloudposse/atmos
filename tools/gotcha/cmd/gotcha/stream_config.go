@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 )
 
@@ -196,18 +197,17 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 // detectCIMode auto-detects CI environment.
 func (c *StreamConfig) detectCIMode(logger *log.Logger) {
 	if !c.CIMode {
-		// Check if we're actually in a CI environment (environment variable set)
-		inCI := os.Getenv("CI") != "" || os.Getenv("GOTCHA_CI") != ""
-		inGitHubActions := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("GOTCHA_GITHUB_ACTIONS") != ""
+		// Use config package for proper runtime detection
+		inCI := config.IsCI()             // Checks actual runtime environment
+		ciEnabled := config.IsCIEnabled() // Checks config setting
 
-		// Check if CI features are enabled in config
-		ciEnabled := viper.GetBool("ci")
-		githubActionsEnabled := viper.GetBool("github.actions")
+		inGitHubActions := config.IsGitHubActions()             // Checks actual runtime
+		githubActionsEnabled := config.IsGitHubActionsEnabled() // Checks config
 
-		// Only enable CI mode if we're in CI AND the feature is enabled
-		// For generic CI: just being in CI is enough (no config needed)
-		// For GitHub Actions: need both environment AND config enablement
-		if inCI || (inGitHubActions && githubActionsEnabled) {
+		// Only enable CI mode if we're actually in CI
+		// For generic CI: just being in CI is enough
+		// For GitHub Actions: we check runtime, config is for features
+		if inCI || inGitHubActions {
 			c.CIMode = true
 			logger.Debug("CI mode detected",
 				"inCI", inCI,

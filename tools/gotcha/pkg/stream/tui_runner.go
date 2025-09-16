@@ -33,7 +33,6 @@ type TUIRunner struct {
 	completedTests int
 	totalTests     int
 	activePackage  string
-	finalOutput    string
 	exitCode       int
 	done           bool
 	aborted        bool
@@ -289,7 +288,7 @@ func (r *TUIRunner) GetExitCode() int {
 	return r.exitCode
 }
 
-// Message types
+// Message types.
 type testCompleteMsg struct {
 	exitCode int
 }

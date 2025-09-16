@@ -42,13 +42,6 @@ var (
 	// UI element styles.
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
 
-	// Error display style.
-	errorHeaderStyle = lipgloss.NewStyle().
-				SetString("ERROR").
-				Padding(0, 1, 0, 1).
-				Background(lipgloss.Color(colorDarkRed)).
-				Foreground(lipgloss.Color(colorWhite))
-
 	// Statistics styles.
 	StatsHeaderStyle = lipgloss.NewStyle().Bold(true)
 
@@ -62,7 +55,7 @@ var (
 func GetDivider() string {
 	width := getTerminalWidth()
 	if width <= 0 {
-		width = 80 // Default fallback
+		width = DefaultTerminalWidth // Default fallback
 	}
 
 	// Leave some margin to avoid wrapping
@@ -101,11 +94,6 @@ func InitStyles() {
 		DurationStyle = currentRenderer.NewStyle().Foreground(lipgloss.Color(colorDarkGray))
 		FaintStyle = currentRenderer.NewStyle().Foreground(lipgloss.Color(colorDarkGray)).Faint(true)
 		spinnerStyle = currentRenderer.NewStyle().Foreground(lipgloss.Color(colorBlue))
-		errorHeaderStyle = currentRenderer.NewStyle().
-			SetString("ERROR").
-			Padding(0, 1, 0, 1).
-			Background(lipgloss.Color(colorDarkRed)).
-			Foreground(lipgloss.Color(colorWhite))
 		StatsHeaderStyle = currentRenderer.NewStyle().Bold(true)
 		PackageHeaderStyle = currentRenderer.NewStyle().
 			Foreground(lipgloss.Color(colorBlue)).
@@ -119,11 +107,6 @@ func InitStyles() {
 		DurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray))
 		FaintStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDarkGray)).Faint(true)
 		spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
-		errorHeaderStyle = lipgloss.NewStyle().
-			SetString("ERROR").
-			Padding(0, 1, 0, 1).
-			Background(lipgloss.Color(colorDarkRed)).
-			Foreground(lipgloss.Color(colorWhite))
 		StatsHeaderStyle = lipgloss.NewStyle().Bold(true)
 		PackageHeaderStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(colorBlue)).

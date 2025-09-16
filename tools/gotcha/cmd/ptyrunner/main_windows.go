@@ -14,6 +14,7 @@ import (
 
 func main() {
 	// Get the gotcha binary path
+	//nolint:forbidigo // Direct env access required for binary path lookup
 	gotchaBinary := os.Getenv("GOTCHA_BINARY")
 	if gotchaBinary == "" {
 		// Try to find gotcha in the same directory as ptyrunner

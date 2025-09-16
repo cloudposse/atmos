@@ -16,7 +16,7 @@ import (
 // This test captures the regression reported where:
 // - Total shows 35+ tests
 // - But only a few test names are visible
-// - Most packages show blank or just summary lines
+// - Most packages show blank or just summary lines.
 func TestSubtestDisplayRegression(t *testing.T) {
 	t.Run("subtests_not_in_TestOrder", func(t *testing.T) {
 		// Create a test model
@@ -434,7 +434,7 @@ func TestSubtestDisplayRegression(t *testing.T) {
 	})
 }
 
-// TestTUIPackageWithNoTestsDisplay verifies packages with no tests show correctly
+// TestTUIPackageWithNoTestsDisplay verifies packages with no tests show correctly.
 func TestTUIPackageWithNoTestsDisplay(t *testing.T) {
 	model := NewTestModel(
 		[]string{"./..."},
@@ -472,7 +472,7 @@ func TestTUIPackageWithNoTestsDisplay(t *testing.T) {
 	assert.Contains(t, display, "No tests", "Should show 'No tests' for packages without test files")
 }
 
-// Helper function for maxInt (avoiding conflict with existing max function)
+// Helper function for maxInt (avoiding conflict with existing max function).
 func maxInt(a, b int) int {
 	if a > b {
 		return a

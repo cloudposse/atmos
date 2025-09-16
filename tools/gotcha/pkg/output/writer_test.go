@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
@@ -58,6 +59,9 @@ func TestNewWriter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setupEnv()
 			defer tt.cleanupEnv()
+
+			// Initialize config environment bindings for test
+			config.InitEnvironment()
 
 			w := New()
 			assert.Equal(t, tt.wantUnified, w.IsUnified(), tt.description)

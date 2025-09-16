@@ -18,12 +18,6 @@ type testFailMsg struct {
 	pkg  string
 }
 
-// Additional message types.
-type (
-	// TickMsg is sent periodically to update the UI.
-	tickMsg struct{}
-)
-
 // subprocessReadyMsg signals that the subprocess is ready to start reading output.
 type subprocessReadyMsg struct {
 	proc io.ReadCloser

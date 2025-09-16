@@ -215,11 +215,11 @@ func TestGitHubActionsDetection(t *testing.T) {
 			expectGHA: true,
 		},
 		{
-			name: "GITHUB_ACTIONS set to any value",
+			name: "GITHUB_ACTIONS set to non-true value",
 			envVars: map[string]string{
 				"GITHUB_ACTIONS": "1",
 			},
-			expectGHA: true,
+			expectGHA: false, // Only "true" is recognized as GitHub Actions
 		},
 		{
 			name:      "No GitHub Actions env var",
@@ -249,6 +249,9 @@ func TestGitHubActionsDetection(t *testing.T) {
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
+
+			// Initialize config environment bindings for test
+			config.InitEnvironment()
 
 			// Test detection
 			isGHA := IsGitHubActions()

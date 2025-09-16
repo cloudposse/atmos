@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"golang.org/x/term"
 )
 
@@ -16,14 +17,14 @@ func getTerminalWidth() int {
 	}
 
 	// Fallback to COLUMNS environment variable if set
-	if cols := os.Getenv("COLUMNS"); cols != "" {
+	if cols := config.GetColumns(); cols != "" {
 		if w, err := strconv.Atoi(cols); err == nil && w > 0 {
 			return w
 		}
 	}
 
 	// Final fallback to a reasonable default
-	return 80
+	return DefaultTerminalWidth
 }
 
 // max returns the maximum of two integers.

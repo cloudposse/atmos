@@ -350,52 +350,6 @@ func truncateToEssentials(summary *types.TestSummary, uuid string, platform stri
 	return content.String()
 }
 
-// addPassedTestsWithLimit adds passed tests section with intelligent size limiting.
-func addPassedTestsWithLimit(output io.Writer, passed []types.TestResult, maxBytes int) {
-	if len(passed) == 0 || maxBytes < 500 { // Need at least 500 bytes for a meaningful section.
-		return
-	}
-
-	// Estimate bytes needed for header and basic structure.
-	headerBytes := 200 // Rough estimate for section header.
-	if maxBytes < headerBytes {
-		return
-	}
-
-	availableBytes := maxBytes - headerBytes
-
-	// Calculate how many tests we can show based on average test entry size.
-	// Each test entry is roughly: "| `TestName` | package | 1.23s | 5.0% |\n" ~50-80 bytes.
-	avgTestEntryBytes := 70
-	maxTests := availableBytes / avgTestEntryBytes
-
-	if maxTests <= 0 {
-		return
-	}
-
-	// Sort passed tests by duration (slowest first) and take the fastest ones.
-	sortedPassed := make([]types.TestResult, len(passed))
-	copy(sortedPassed, passed)
-	sort.Slice(sortedPassed, func(i, j int) bool {
-		return sortedPassed[i].Duration < sortedPassed[j].Duration // Fastest first.
-	})
-
-	// Limit to the fastest tests that fit.
-	displayTests := sortedPassed
-	if len(displayTests) > maxTests {
-		displayTests = sortedPassed[:maxTests]
-	}
-
-	fmt.Fprintf(output, "### ✅ Passed Tests (%d, showing %d fastest)\n\n", len(passed), len(displayTests))
-	fmt.Fprintf(output, "| Test | Package | Duration |\n|------|---------|----------|\n")
-
-	for _, test := range displayTests {
-		pkg := types.ShortPackage(test.Package)
-		fmt.Fprintf(output, "| `%s` | %s | %.2fs |\n", test.Test, pkg, test.Duration)
-	}
-	fmt.Fprintf(output, "\n")
-}
-
 // addCoverageWithLimit adds coverage information if there's enough space using job summary format.
 func addCoverageWithLimit(output io.Writer, summary *types.TestSummary, maxBytes int) {
 	if maxBytes < 200 { // Need at least 200 bytes for coverage table format.

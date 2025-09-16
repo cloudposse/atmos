@@ -112,7 +112,7 @@ func IsTTY() bool {
 		stderrTTY := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
 
 		// Debug logging
-		if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if debugFile := config.GetDebugFile(); debugFile != "" {
 			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 				fmt.Fprintf(f, "[ForceTTY] stdout: %v, stdin: %v, stderr: %v\n", stdoutTTY, stdinTTY, stderrTTY)
 				f.Close()
@@ -129,7 +129,7 @@ func IsTTY() bool {
 	stderrTTY := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
 
 	// Debug logging
-	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+	if debugFile := config.GetDebugFile(); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "[IsTTY] stdout: %v, stdin: %v, stderr: %v, cwd: %s\n",
 				stdoutTTY, stdinTTY, stderrTTY, func() string {

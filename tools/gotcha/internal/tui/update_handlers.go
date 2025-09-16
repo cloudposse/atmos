@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -135,31 +136,31 @@ func (m *TestModel) handleStreamOutput(msg StreamOutputMsg) tea.Cmd {
 		for _, pkg := range m.packageOrder {
 			if result, exists := m.packageResults[pkg]; exists {
 				// Check if package is complete (not running) OR no longer active
-				isComplete := result.Status != "running" || !m.activePackages[pkg]
+				isComplete := result.Status != TestStatusRunning || !m.activePackages[pkg]
 
 				if isComplete && !m.displayedPackages[pkg] {
 					// Mark as displayed and generate output
 					m.displayedPackages[pkg] = true
 
 					// If still marked as running but not active, mark it as done
-					if result.Status == "running" && !m.activePackages[pkg] {
+					if result.Status == TestStatusRunning && !m.activePackages[pkg] {
 						// Package finished but didn't send proper completion event
 						// This can happen with packages that have no tests
 						if !result.HasTests && len(result.Tests) == 0 {
-							result.Status = "skip"
+							result.Status = TestStatusSkip
 						} else if len(result.Tests) > 0 {
 							// Has tests, check their status
 							allPassed := true
 							for _, test := range result.Tests {
-								if test.Status == "fail" {
+								if test.Status == TestStatusFail {
 									allPassed = false
 									break
 								}
 							}
 							if allPassed {
-								result.Status = "pass"
+								result.Status = TestStatusPass
 							} else {
-								result.Status = "fail"
+								result.Status = TestStatusFail
 							}
 						}
 					}
@@ -167,7 +168,7 @@ func (m *TestModel) handleStreamOutput(msg StreamOutputMsg) tea.Cmd {
 					output := m.displayPackageResult(result)
 
 					// Debug logging for package display
-					if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+					if debugFile := config.GetDebugFile(); debugFile != "" {
 						if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 							fmt.Fprintf(f, "[TUI-DEBUG] Package display: %s, status=%s, output_len=%d, has_tests=%v, active=%v\n",
 								pkg, result.Status, len(output), result.HasTests, m.activePackages[pkg])
@@ -219,11 +220,11 @@ func (m *TestModel) handleTestComplete(msg TestCompleteMsg) tea.Cmd {
 			m.displayedPackages[pkg] = true
 
 			// Fix status if still running
-			if result.Status == "running" {
+			if result.Status == TestStatusRunning {
 				if !result.HasTests && len(result.Tests) == 0 {
-					result.Status = "skip"
+					result.Status = TestStatusSkip
 				} else {
-					result.Status = "pass" // Assume pass if no failures recorded
+					result.Status = TestStatusPass // Assume pass if no failures recorded
 				}
 			}
 

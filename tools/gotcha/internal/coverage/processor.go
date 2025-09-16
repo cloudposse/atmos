@@ -21,6 +21,19 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
+// Coverage threshold constants.
+const (
+	CoverageThresholdExcellent = 80  // Coverage >= 80% is excellent (green)
+	CoverageThresholdGood      = 60  // Coverage >= 60% is good (yellow)
+	CoverageThresholdFair      = 40  // Coverage >= 40% is fair (orange)
+	
+	// Display constants.
+	MaxFunctionNameLength = 28
+	FunctionNameTruncation = 25
+	BitSize64             = 64  // For strconv.ParseFloat
+	DefaultUncoveredLimit = 5    // Default number of uncovered functions to show
+)
+
 // ProcessCoverage processes coverage data based on configuration after tests complete.
 func ProcessCoverage(coverProfile string, cfg config.CoverageConfig, writer *output.Writer, logger *log.Logger) error {
 	if !cfg.Enabled || coverProfile == "" {
@@ -128,7 +141,7 @@ func parseFunctionCoverageOutput(output string) []FunctionCoverageInfo {
 		// Extract coverage percentage
 		coverageStr := parts[2]
 		coverageStr = strings.TrimSuffix(coverageStr, "%")
-		coverage, _ := strconv.ParseFloat(coverageStr, 64)
+		coverage, _ := strconv.ParseFloat(coverageStr, BitSize64)
 
 		// Extract package from path
 		pkg := extractPackageFromPath(filePath)
@@ -163,11 +176,11 @@ func extractPackageFromPath(path string) string {
 
 // getCoverageColor returns the appropriate color for a coverage percentage.
 func getCoverageColor(coverage float64) lipgloss.Color {
-	if coverage >= 80 {
+	if coverage >= CoverageThresholdExcellent {
 		return lipgloss.Color("10") // Bright green
-	} else if coverage >= 60 {
+	} else if coverage >= CoverageThresholdGood {
 		return lipgloss.Color("11") // Yellow
-	} else if coverage >= 40 {
+	} else if coverage >= CoverageThresholdFair {
 		return lipgloss.Color("208") // Orange
 	} else if coverage > 0 {
 		return lipgloss.Color("9") // Bright red
@@ -177,9 +190,9 @@ func getCoverageColor(coverage float64) lipgloss.Color {
 
 // getCoverageSymbol returns a symbol representing the coverage level.
 func getCoverageSymbol(coverage float64) string {
-	if coverage >= 80 {
+	if coverage >= CoverageThresholdExcellent {
 		return "●"
-	} else if coverage >= 60 {
+	} else if coverage >= CoverageThresholdGood {
 		return "◐"
 	} else if coverage > 0 {
 		return "○"
@@ -338,8 +351,8 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *outpu
 
 				// Format function name with padding
 				funcName := fn.Function
-				if len(funcName) > 28 {
-					funcName = funcName[:25] + "..."
+				if len(funcName) > MaxFunctionNameLength {
+					funcName = funcName[:FunctionNameTruncation] + "..."
 				}
 
 				// Display function with line number and aligned coverage on the right
@@ -396,7 +409,7 @@ func showFunctionCoverage(data *types.CoverageData, cfg *config.CoverageConfig, 
 	case "none":
 		// Don't show anything
 	default:
-		showFunctionCoverageSummary(functions, 5, writer, logger) // Default top 5
+		showFunctionCoverageSummary(functions, DefaultUncoveredLimit, writer, logger) // Default top 5
 	}
 
 	return nil

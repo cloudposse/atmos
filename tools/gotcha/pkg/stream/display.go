@@ -6,12 +6,13 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 // displayPackageResult outputs the buffered results for a completed package.
 func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Debug: Log package display start
-	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+	if debugFile := config.GetDebugFile(); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "\n[DISPLAY-PKG] Starting display for package: %s\n", pkg.Package)
 			fmt.Fprintf(f, "  Status: %s, HasTests: %v, TestCount: %d\n",
@@ -87,7 +88,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	testsDisplayed := false
 
 	// Debug: Log all tests in TestOrder
-	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+	if debugFile := config.GetDebugFile(); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "\n[DISPLAY-DEBUG] Package %s TestOrder:\n", pkg.Package)
 			for i, name := range pkg.TestOrder {
@@ -118,7 +119,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 			// For tests with subtests:
 			// 1. Display the parent test with mini indicators
 			// Debug: Log parent test info
-			if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+			if debugFile := config.GetDebugFile(); debugFile != "" {
 				if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 					fmt.Fprintf(f, "[DISPLAY-DEBUG] Parent test %s: status=%s, subtests=%d, shouldShow=%v\n",
 						testName, test.Status, len(test.Subtests), p.shouldShowTestStatus(test.Status))
@@ -147,20 +148,21 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 			coverageStr = fmt.Sprintf(" (%s coverage)", pkg.Coverage)
 		}
 
-		if failedCount > 0 {
+		switch {
+		case failedCount > 0:
 			// Show failure summary
 			summaryLine = fmt.Sprintf("  %s %d tests failed, %d passed%s\n",
 				tui.FailStyle.Render(tui.CheckFail),
 				failedCount,
 				passedCount,
 				coverageStr)
-		} else if passedCount > 0 {
+		case passedCount > 0:
 			// All tests passed
 			summaryLine = fmt.Sprintf("  %s All %d tests passed%s\n",
 				tui.PassStyle.Render(tui.CheckPass),
 				passedCount,
 				coverageStr)
-		} else if skippedCount > 0 {
+		case skippedCount > 0:
 			// Only skipped tests
 			summaryLine = fmt.Sprintf("  %s %d tests skipped%s\n",
 				tui.SkipStyle.Render(tui.CheckSkip),

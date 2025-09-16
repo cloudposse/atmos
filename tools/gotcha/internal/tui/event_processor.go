@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -33,7 +34,7 @@ func (m *TestModel) processPackageEvent(event *types.TestEvent) {
 				m.packageResults[event.Package] = &PackageResult{
 					Package:   event.Package,
 					StartTime: time.Now(),
-					Status:    "running",
+					Status:    TestStatusRunning,
 					Tests:     make(map[string]*TestResult),
 					TestOrder: []string{},
 					HasTests:  false,
@@ -43,7 +44,7 @@ func (m *TestModel) processPackageEvent(event *types.TestEvent) {
 				if !contains(m.packageOrder, event.Package) {
 					m.packageOrder = append(m.packageOrder, event.Package)
 					// Debug: Log package addition
-					if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+					if debugFile := config.GetDebugFile(); debugFile != "" {
 						if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 							fmt.Fprintf(f, "[TUI-DEBUG] Added package to order from processPackageEvent: %s (total: %d)\n", event.Package, len(m.packageOrder))
 							f.Close()
@@ -60,7 +61,7 @@ func (m *TestModel) processPackageEvent(event *types.TestEvent) {
 		// Package skipped (no tests to run)
 		if event.Package != "" {
 			if pkg := m.packageResults[event.Package]; pkg != nil {
-				pkg.Status = "skip"
+				pkg.Status = TestStatusSkip
 				pkg.EndTime = time.Now()
 				pkg.Elapsed = event.Elapsed
 				delete(m.activePackages, event.Package)
@@ -113,8 +114,8 @@ func (m *TestModel) processPackageOutput(event *types.TestEvent) {
 		// Mark package as failed - it likely has tests that failed to run
 		if pkg := m.packageResults[event.Package]; pkg != nil {
 			// Don't override status if already set, but ensure we know tests exist
-			if pkg.Status == "running" {
-				pkg.Status = "fail"
+			if pkg.Status == TestStatusRunning {
+				pkg.Status = TestStatusFail
 			}
 			pkg.HasTests = true // It has tests, they just failed to run
 		}
@@ -128,13 +129,14 @@ func (m *TestModel) processPackageOutput(event *types.TestEvent) {
 
 // extractCoverage extracts coverage information from output.
 func (m *TestModel) extractCoverage(event *types.TestEvent) {
-	if strings.Contains(event.Output, "coverage: [no statements]") {
+	switch {
+	case strings.Contains(event.Output, "coverage: [no statements]"):
 		// No statements to cover
 		m.packageResults[event.Package].Coverage = "0.0%"
-	} else if strings.Contains(event.Output, "coverage: [no test files]") {
+	case strings.Contains(event.Output, "coverage: [no test files]"):
 		// No test files - shouldn't happen with actual tests
 		m.packageResults[event.Package].Coverage = "0.0%"
-	} else {
+	default:
 		// Extract percentage from normal coverage output
 		if matches := strings.Fields(event.Output); len(matches) >= 2 {
 			for i, field := range matches {
@@ -166,7 +168,7 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 		pkg = &PackageResult{
 			Package:   event.Package,
 			StartTime: time.Now(),
-			Status:    "running",
+			Status:    TestStatusRunning,
 			Tests:     make(map[string]*TestResult),
 			TestOrder: []string{},
 			HasTests:  false,
@@ -177,7 +179,7 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 		if !contains(m.packageOrder, event.Package) {
 			m.packageOrder = append(m.packageOrder, event.Package)
 			// Debug: Log package addition from test event
-			if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+			if debugFile := config.GetDebugFile(); debugFile != "" {
 				if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 					fmt.Fprintf(f, "[TUI-DEBUG] Added package to order from processTestEvent: %s (total: %d)\n", event.Package, len(m.packageOrder))
 					f.Close()
@@ -213,7 +215,7 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 // processTestRun handles test run events.
 func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, parentTest string, isSubtest bool) {
 	// Debug: Log all test run events
-	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+	if debugFile := config.GetDebugFile(); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "[RUN-DEBUG] Test run event for package %s: %s (isSubtest: %v)\n",
 				event.Package, event.Test, isSubtest)
@@ -240,7 +242,7 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 			parent = &TestResult{
 				Name:         parentTest,
 				FullName:     parentTest,
-				Status:       "running",
+				Status:       TestStatusRunning,
 				Subtests:     make(map[string]*TestResult),
 				SubtestOrder: []string{},
 			}
@@ -256,7 +258,7 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 		subtest := &TestResult{
 			Name:     event.Test,
 			FullName: event.Test,
-			Status:   "running",
+			Status:   TestStatusRunning,
 			Parent:   parentTest,
 		}
 		parent.Subtests[event.Test] = subtest
@@ -271,7 +273,7 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 		test := &TestResult{
 			Name:         event.Test,
 			FullName:     event.Test,
-			Status:       "running",
+			Status:       TestStatusRunning,
 			Subtests:     make(map[string]*TestResult),
 			SubtestOrder: []string{},
 		}
@@ -279,7 +281,7 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 		pkg.TestOrder = append(pkg.TestOrder, event.Test)
 
 		// Debug: Log when we add a test to TestOrder
-		if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+		if debugFile := config.GetDebugFile(); debugFile != "" {
 			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 				fmt.Fprintf(f, "[EVENT-DEBUG] Added test to TestOrder for package %s: %s (total in order: %d)\n",
 					event.Package, event.Test, len(pkg.TestOrder))

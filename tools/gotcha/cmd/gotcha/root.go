@@ -116,7 +116,9 @@ func initGlobalLogger() {
 	var profile termenv.Profile
 
 	// Check for forced color
-	if forceColor := os.Getenv("FORCE_COLOR"); forceColor != "" {
+	forceColor := viper.GetString("force.color")
+	switch {
+	case forceColor != "":
 		switch forceColor {
 		case "1":
 			profile = termenv.ANSI
@@ -127,12 +129,12 @@ func initGlobalLogger() {
 		default:
 			profile = termenv.ANSI256 // Default to 256 colors
 		}
-	} else if os.Getenv("NO_COLOR") != "" {
+	case viper.GetBool("no.color"):
 		profile = termenv.Ascii
-	} else if os.Getenv("GITHUB_ACTIONS") == "true" {
+	case viper.GetBool("github.actions"):
 		// GitHub Actions supports 256 colors
 		profile = termenv.ANSI256
-	} else {
+	default:
 		// Auto-detect
 		profile = lipgloss.ColorProfile()
 	}
@@ -239,7 +241,10 @@ experience with intuitive visual feedback and comprehensive test result analysis
 
 	// Parse flags early to get their values into viper
 	// This is needed to ensure flag values override config file values
-	rootCmd.ParseFlags(os.Args[1:])
+	if err := rootCmd.ParseFlags(os.Args[1:]); err != nil {
+		// Can't use logger yet, it's not initialized
+		fmt.Fprintf(os.Stderr, "Failed to parse flags: %v\n", err)
+	}
 
 	// NOW initialize the logger with the correct log level
 	initGlobalLogger()
@@ -270,13 +275,7 @@ experience with intuitive visual feedback and comprehensive test result analysis
 
 	// Run the command with Fang for proper error handling
 	if err := fang.Execute(ctx, rootCmd); err != nil {
-		// Check if it's a test failure error to get the correct exit code
-		var testErr *testFailureError
-		if errors.As(err, &testErr) {
-			// Don't return the error - we handle it with exit code
-			// This prevents double error output
-			return &exitError{code: testErr.ExitCode()}
-		}
+		// Return the error as-is so Fang can display it properly
 		return err
 	}
 

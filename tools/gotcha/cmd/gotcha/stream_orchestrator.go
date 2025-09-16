@@ -6,6 +6,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	coveragePkg "github.com/cloudposse/atmos/tools/gotcha/internal/coverage"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
@@ -70,7 +71,7 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger, wr
 	var testSummary *types.TestSummary // Needed to display detailed summary at the end
 
 	// Check for force-TUI mode
-	forceTUI := os.Getenv("GOTCHA_FORCE_TUI") == "true"
+	forceTUI := viper.GetBool("force.tui")
 	isTTY := utils.IsTTY()
 
 	// Log mode selection decision

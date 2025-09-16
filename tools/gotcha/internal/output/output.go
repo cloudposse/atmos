@@ -189,13 +189,14 @@ func HandleConsoleOutput(summary *types.TestSummary) error {
 	// to show parent tests with mini indicators for subtests.
 	//
 	// For now, just output basic information
-	if len(summary.Failed) > 0 {
+	switch {
+	case len(summary.Failed) > 0:
 		fmt.Print("test failed")
-	} else if len(summary.Passed) > 0 {
+	case len(summary.Passed) > 0:
 		fmt.Print("tests passed")
-	} else if len(summary.Skipped) > 0 {
+	case len(summary.Skipped) > 0:
 		fmt.Print("tests skipped")
-	} else {
+	default:
 		fmt.Print("no tests found")
 	}
 

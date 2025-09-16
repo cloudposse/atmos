@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -144,7 +145,7 @@ func NewStreamProcessorWithReporter(jsonWriter io.Writer, reporter TestReporter)
 // ProcessStream reads and processes the test output stream.
 func (p *StreamProcessor) ProcessStream(input io.Reader) error {
 	// Write to debug file if specified
-	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+	if debugFile := config.GetDebugFile(); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "\n=== STREAM MODE STARTED ===\n")
 			fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))
@@ -315,7 +316,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// If interrupted, return with exit code 130 (standard for SIGINT)
 	if interrupted {
-		return 130
+		return ExitCodeInterrupted
 	}
 
 	// Determine exit code and reason first
@@ -335,7 +336,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 				// Tests passed but go test exited with 1 - analyze stderr for root cause
 				exitReason = analyzeProcessFailure(capturedStderr, exitCode)
 			} else if processor.failed > 0 {
-				exitReason = fmt.Sprintf("%d test(s) failed, exiting with code %d", processor.failed, exitCode)
+				exitReason = fmt.Sprintf("%d tests failed, go test exited with code %d", processor.failed, exitCode)
 			} else {
 				exitReason = fmt.Sprintf("'go test' exited with code %d", exitCode)
 			}

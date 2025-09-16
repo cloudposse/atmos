@@ -29,7 +29,7 @@ type Writer struct {
 func New() *Writer {
 	// In GitHub Actions, unify streams to prevent interleaving
 	// Unless user explicitly wants split streams
-	if config.IsGitHubActions() && os.Getenv("GOTCHA_SPLIT_STREAMS") == "" {
+	if config.IsGitHubActions() && !config.IsSplitStreams() {
 		return &Writer{
 			Data:         os.Stdout,
 			UI:           os.Stdout,

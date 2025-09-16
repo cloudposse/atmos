@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	internalLogger "github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
@@ -32,8 +33,8 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 	logger.Debug("Starting interactive TUI mode")
 
 	// Write to debug file if specified
-	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+	if debugFile := viper.GetString("debug.file"); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "\n=== TUI MODE STARTED ===\n")
 			fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))
 			fmt.Fprintf(f, "Packages: %v\n", config.TestPackages)
@@ -63,7 +64,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 	var opts []tea.ProgramOption
 
 	// Check if we're in test mode (for AI or CI testing)
-	if os.Getenv("GOTCHA_TEST_MODE") == "true" {
+	if viper.GetBool("test.mode") {
 		// Use WithoutRenderer for headless testing
 		opts = append(opts, tea.WithoutRenderer())
 		// Also provide nil input to avoid TTY requirements
@@ -128,14 +129,16 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 		for _, pkg := range m.GetPackageResults() {
 			if pkg.StatementCoverage != "" && pkg.StatementCoverage != "0.0%" && pkg.StatementCoverage != "N/A" {
 				var pct float64
-				fmt.Sscanf(pkg.StatementCoverage, "%f%%", &pct)
-				totalCoverage += pct
-				packageCount++
+				if _, err := fmt.Sscanf(pkg.StatementCoverage, "%f%%", &pct); err == nil {
+					totalCoverage += pct
+					packageCount++
+				}
 			} else if pkg.Coverage != "" && pkg.Coverage != "0.0%" {
 				var pct float64
-				fmt.Sscanf(pkg.Coverage, "%f%%", &pct)
-				totalCoverage += pct
-				packageCount++
+				if _, err := fmt.Sscanf(pkg.Coverage, "%f%%", &pct); err == nil {
+					totalCoverage += pct
+					packageCount++
+				}
 			}
 		}
 		if packageCount > 0 {
@@ -191,12 +194,6 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 	return exitCode, testSummary, nil
 }
 
-// runStreamInCI runs tests in CI mode (non-interactive).
-func runStreamInCI(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, error) {
-	exitCode, _, err := runStreamInCIWithSummary(cmd, config, logger)
-	return exitCode, err
-}
-
 // runStreamInCIWithSummary runs tests in CI mode and returns the test summary.
 func runStreamInCIWithSummary(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, *types.TestSummary, error) {
 	// Set the global logger for packages that use it
@@ -222,16 +219,6 @@ func runStreamInCIWithSummary(cmd *cobra.Command, config *StreamConfig, logger *
 	}
 
 	return exitCode, summary, nil
-}
-
-// processTestOutput processes test output for non-terminal formats.
-func processTestOutput(config *StreamConfig, cmd *cobra.Command, logger *log.Logger) error {
-	summary, err := processTestOutputWithSummary(config, cmd, logger)
-	if err != nil {
-		return err
-	}
-	_ = summary // Summary is returned by the WithSummary variant
-	return nil
 }
 
 // processTestOutputWithSummary processes test output and returns the summary.

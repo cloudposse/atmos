@@ -16,12 +16,17 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
 func main() {
+	// Initialize viper for environment variables
+	_ = viper.BindEnv("gotcha.binary", "GOTCHA_BINARY")
+	viper.AutomaticEnv()
+
 	// Get the gotcha binary path
-	gotchaBinary := os.Getenv("GOTCHA_BINARY")
+	gotchaBinary := viper.GetString("gotcha.binary")
 	if gotchaBinary == "" {
 		// Try to find gotcha in the same directory as ptyrunner
 		execPath, err := os.Executable()
