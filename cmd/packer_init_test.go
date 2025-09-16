@@ -11,7 +11,7 @@ func TestPackerInitCmd(t *testing.T) {
 	workDir := "../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
-	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
 	RootCmd.SetArgs([]string{"packer", "init", "aws/bastion", "-s", "nonprod"})
