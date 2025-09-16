@@ -316,7 +316,8 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *outpu
 
 			// Display vertical connector line between file and functions (if there are functions)
 			if len(fileFuncs) > 0 {
-				writer.PrintData("  %s\n", treeStyle.Render(funcPrefix))
+				// Show continuation line from file to its functions
+				writer.PrintData("  %s│\n", treeStyle.Render(funcPrefix))
 			}
 
 			// Display functions with proper indentation
