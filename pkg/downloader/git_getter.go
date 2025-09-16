@@ -1,40 +1,43 @@
 package downloader
 
 import (
+	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 
-	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/go-getter"
+
+	"github.com/cloudposse/atmos/pkg/security"
 )
 
-// CustomGitGetter is a custom getter for git (git::) that removes symlinks.
+// CustomGitGetter is a custom getter for git (git::) that validates symlinks based on security policy.
 type CustomGitGetter struct {
 	getter.GitGetter
+	// Policy defines how symlinks should be handled. If not set, defaults to PolicyAllowSafe.
+	Policy security.SymlinkPolicy
 }
 
-// Get implements the custom getter logic removing symlinks.
+// Get implements the custom getter logic with symlink validation.
 func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
 	// Normal clone
 	if err := c.GetCustom(dst, url); err != nil {
-		return err
+		return fmt.Errorf("failed to clone %s to %s: %w", url, dst, err)
 	}
-	// Remove symlinks
-	return removeSymlinks(dst)
+
+	// Validate symlinks based on policy (default to allow_safe if not configured)
+	policy := c.Policy
+	if policy == "" {
+		policy = security.PolicyAllowSafe
+	}
+
+	if err := security.ValidateSymlinks(dst, policy); err != nil {
+		return fmt.Errorf("symlink validation failed for %s at %s: %w", url, dst, err)
+	}
+
+	return nil
 }
 
 // removeSymlinks walks the directory and removes any symlinks it encounters.
+// Deprecated: Use security.ValidateSymlinks instead.
 func removeSymlinks(root string) error {
-	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			log.Debug("Removing symlink", "path", path)
-			// Symlinks are removed for the entire repo, regardless if there are any subfolders specified
-			return os.Remove(path)
-		}
-		return nil
-	})
+	return security.ValidateSymlinks(root, security.PolicyRejectAll)
 }
