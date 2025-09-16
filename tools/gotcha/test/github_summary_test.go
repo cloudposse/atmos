@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/stretchr/testify/assert"
@@ -15,6 +16,11 @@ import (
 func TestGitHubSummaryNoDuplication(t *testing.T) {
 	// Create a temporary directory for test files
 	tempDir := t.TempDir()
+
+	// Change to temp directory to avoid pollution
+	oldDir, _ := os.Getwd()
+	os.Chdir(tempDir)
+	defer os.Chdir(oldDir)
 
 	// Set up a fake GITHUB_STEP_SUMMARY file
 	stepSummaryFile := filepath.Join(tempDir, "step_summary.md")
@@ -26,6 +32,9 @@ func TestGitHubSummaryNoDuplication(t *testing.T) {
 	// Set a unique UUID for the test
 	os.Setenv("GOTCHA_COMMENT_UUID", "test-uuid-123")
 	defer os.Unsetenv("GOTCHA_COMMENT_UUID")
+
+	// Initialize environment configuration so Viper picks up the env vars
+	config.InitEnvironment()
 
 	// Create test summary
 	summary := &types.TestSummary{
@@ -54,6 +63,9 @@ func TestGitHubSummaryNoDuplication(t *testing.T) {
 func TestGitHubSummaryLocalMode(t *testing.T) {
 	// Ensure GITHUB_STEP_SUMMARY is not set (local mode)
 	os.Unsetenv("GITHUB_STEP_SUMMARY")
+
+	// Initialize environment configuration
+	config.InitEnvironment()
 
 	// Create a temporary directory for test files
 	tempDir := t.TempDir()
