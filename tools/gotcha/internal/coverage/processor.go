@@ -99,7 +99,8 @@ func ShowFunctionCoverageReport(profilePath string, writer *output.Writer, logge
 
 	// Parse and display as tree
 	functions := parseFunctionCoverageOutput(string(output))
-	displayFunctionCoverageTree(functions, writer)
+	// Use the new lipgloss/tree based display
+	displayFunctionCoverageTreeNew(functions, writer)
 	return nil
 }
 
