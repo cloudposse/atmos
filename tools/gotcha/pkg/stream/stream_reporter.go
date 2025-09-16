@@ -217,7 +217,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 }
 
 // displayTestLine outputs a test as a simple one-line entry without subtest progress.
-// displayTest outputs a test result with mini indicators for subtests.
+// DisplayTest outputs a test result with mini indicators for subtests.
 func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 	// Skip running tests
 	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
@@ -479,12 +479,32 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	output.WriteString("\n")
 	output.WriteString(fmt.Sprintf("%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds()))
 
+	// Add exit status information
+	if failed > 0 {
+		output.WriteString(fmt.Sprintf("\n%s %d test%s failed\n", 
+			tui.FailStyle.Render("✗"), 
+			failed,
+			pluralize(failed)))
+	} else if total == 0 {
+		output.WriteString(fmt.Sprintf("\n%s No tests found\n", tui.SkipStyle.Render("⚠")))
+	} else {
+		output.WriteString(fmt.Sprintf("\n%s All tests passed\n", tui.PassStyle.Render("✓")))
+	}
+
 	// Write to stderr and return
 	r.writer.PrintUI("%s", output.String())
 
 	// Output is already flushed automatically due to line buffering on stderr
 
 	return output.String()
+}
+
+// pluralize returns "s" if count is not 1, otherwise empty string.
+func pluralize(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // generateSubtestProgress creates a visual progress indicator for subtest results.

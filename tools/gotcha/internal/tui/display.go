@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 // shouldShowTest determines if a test should be displayed based on filter.
@@ -14,13 +16,13 @@ func (m *TestModel) shouldShowTest(status string) bool {
 		return true
 	case "failed":
 		// Show both failed and skipped tests when filter is "failed"
-		return status == "fail" || status == "skip"
+		return status == TestStatusFail || status == TestStatusSkip
 	case "passed":
-		return status == "pass"
+		return status == TestStatusPass
 	case "skipped":
-		return status == "skip"
+		return status == TestStatusSkip
 	case "collapsed":
-		return status == "fail" // Only show failures in collapsed mode
+		return status == TestStatusFail // Only show failures in collapsed mode
 	case "none":
 		return false
 	default:
@@ -73,6 +75,14 @@ func (m *TestModel) generateSubtestProgress(passed, total int) string {
 	return indicator.String()
 }
 
+// pluralize returns "s" if count is not 1, otherwise empty string.
+func pluralize(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
+}
+
 // GenerateFinalSummary generates the final summary display.
 func (m *TestModel) GenerateFinalSummary() string {
 	var summary strings.Builder
@@ -96,22 +106,25 @@ func (m *TestModel) GenerateFinalSummary() string {
 		if pkg.StatementCoverage != "" && pkg.StatementCoverage != "0.0%" && pkg.StatementCoverage != "N/A" {
 			packagesWithStatementCoverage++
 			var pct float64
-			fmt.Sscanf(pkg.StatementCoverage, "%f%%", &pct)
-			totalStatementCoverage += pct
+			if _, err := fmt.Sscanf(pkg.StatementCoverage, "%f%%", &pct); err == nil {
+				totalStatementCoverage += pct
+			}
 		} else if pkg.Coverage != "" && pkg.Coverage != "0.0%" {
 			// Fallback to legacy coverage
 			packagesWithStatementCoverage++
 			var pct float64
-			fmt.Sscanf(pkg.Coverage, "%f%%", &pct)
-			totalStatementCoverage += pct
+			if _, err := fmt.Sscanf(pkg.Coverage, "%f%%", &pct); err == nil {
+				totalStatementCoverage += pct
+			}
 		}
 
 		// Check function coverage
 		if pkg.FunctionCoverage != "" && pkg.FunctionCoverage != "0.0%" && pkg.FunctionCoverage != "N/A" {
 			packagesWithFunctionCoverage++
 			var pct float64
-			fmt.Sscanf(pkg.FunctionCoverage, "%f%%", &pct)
-			totalFunctionCoverage += pct
+			if _, err := fmt.Sscanf(pkg.FunctionCoverage, "%f%%", &pct); err == nil {
+				totalFunctionCoverage += pct
+			}
 		}
 	}
 
@@ -133,6 +146,22 @@ func (m *TestModel) GenerateFinalSummary() string {
 	// Log completion time
 	elapsed := time.Since(m.startTime)
 	summary.WriteString(fmt.Sprintf("\n%s Tests completed in %.2fs\n", DurationStyle.Render("ℹ"), elapsed.Seconds()))
+
+	// Add exit status information
+	exitCode := m.GetExitCode()
+	if m.aborted {
+		summary.WriteString(fmt.Sprintf("\n%s Test run aborted (exit code %d)\n", FailStyle.Render("✗"), exitCode))
+	} else if m.failCount > 0 {
+		summary.WriteString(fmt.Sprintf("\n%s %d test%s failed (exit code %d)\n", 
+			FailStyle.Render("✗"), 
+			m.failCount,
+			pluralize(m.failCount),
+			exitCode))
+	} else if totalTests == 0 {
+		summary.WriteString(fmt.Sprintf("\n%s No tests found (exit code %d)\n", SkipStyle.Render("⚠"), exitCode))
+	} else {
+		summary.WriteString(fmt.Sprintf("\n%s All tests passed (exit code %d)\n", PassStyle.Render("✓"), exitCode))
+	}
 
 	return summary.String()
 }
@@ -193,7 +222,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 
 	// Check for "No tests"
 	// Check for package-level failures (e.g., TestMain failures)
-	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
+	if pkg.Status == TestStatusFail && len(pkg.Tests) == 0 {
 		// Package failed without running any tests (likely TestMain failure)
 		output.WriteString(fmt.Sprintf("\n  %s Package failed to run tests\n", FailStyle.Render(CheckFail)))
 
@@ -208,7 +237,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		return output.String()
 	}
 
-	if pkg.Status == "skip" || m.packagesWithNoTests[pkg.Package] || !pkg.HasTests {
+	if pkg.Status == TestStatusSkip || m.packagesWithNoTests[pkg.Package] || !pkg.HasTests {
 		// Show more specific message if a filter is applied
 		if m.testFilter != "" {
 			output.WriteString(fmt.Sprintf("\n  %s\n", DurationStyle.Render("No tests matching filter")))
@@ -223,11 +252,11 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	var passedCount, failedCount, skippedCount int
 	for _, test := range pkg.Tests {
 		switch test.Status {
-		case "pass":
+		case TestStatusPass:
 			passedCount++
-		case "fail":
+		case TestStatusFail:
 			failedCount++
-		case "skip":
+		case TestStatusSkip:
 			skippedCount++
 		}
 	}
@@ -235,7 +264,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	// Display tests in order (including subtests as individual entries)
 
 	// Debug: Log test order details
-	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+	if debugFile := config.GetDebugFile(); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "[DISPLAY-DEBUG] Package %s: TestOrder has %d tests, Tests map has %d tests, showFilter=%s\n",
 				pkg.Package, len(pkg.TestOrder), len(pkg.Tests), m.showFilter)
@@ -263,7 +292,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	}
 
 	// Debug: Log all tests in TestOrder
-	if debugFile := os.Getenv("GOTCHA_DEBUG_FILE"); debugFile != "" {
+	if debugFile := config.GetDebugFile(); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(f, "[DISPLAY-DEBUG] Package %s has %d tests in TestOrder\n", pkg.Package, len(pkg.TestOrder))
 			for i, name := range pkg.TestOrder {
@@ -325,20 +354,21 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 			coverageStr = fmt.Sprintf(" (%s coverage)", pkg.Coverage)
 		}
 
-		if failedCount > 0 {
+		switch {
+		case failedCount > 0:
 			// Show failure summary
 			summaryLine = fmt.Sprintf("  %s %d tests failed, %d passed%s",
 				FailStyle.Render(CheckFail),
 				failedCount,
 				passedCount,
 				coverageStr)
-		} else if passedCount > 0 {
+		case passedCount > 0:
 			// All tests passed
 			summaryLine = fmt.Sprintf("  %s All %d tests passed%s",
 				PassStyle.Render(CheckPass),
 				passedCount,
 				coverageStr)
-		} else if skippedCount > 0 {
+		case skippedCount > 0:
 			// Only skipped tests
 			testWord := "tests"
 			if skippedCount == 1 {
@@ -370,18 +400,18 @@ func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
 // displayTestAsLine displays a test as a simple one-line entry.
 func (m *TestModel) displayTestAsLine(output *strings.Builder, test *TestResult, indent string) {
 	// Skip running tests
-	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
+	if test.Status != TestStatusPass && test.Status != TestStatusFail && test.Status != TestStatusSkip {
 		return
 	}
 
 	// Get the status icon
 	var icon string
 	switch test.Status {
-	case "pass":
+	case TestStatusPass:
 		icon = PassStyle.Render(CheckPass)
-	case "fail":
+	case TestStatusFail:
 		icon = FailStyle.Render(CheckFail)
-	case "skip":
+	case TestStatusSkip:
 		icon = SkipStyle.Render(CheckSkip)
 	}
 
@@ -395,7 +425,7 @@ func (m *TestModel) displayTestAsLine(output *strings.Builder, test *TestResult,
 	}
 
 	// Add skip reason if applicable
-	if test.Status == "skip" && test.SkipReason != "" {
+	if test.Status == TestStatusSkip && test.SkipReason != "" {
 		reason := fmt.Sprintf("- %s", test.SkipReason)
 		fmt.Fprintf(output, " %s", DurationStyle.Render(reason))
 	}
@@ -403,7 +433,7 @@ func (m *TestModel) displayTestAsLine(output *strings.Builder, test *TestResult,
 	output.WriteString("\n")
 
 	// Show output for failed tests if not collapsed
-	if test.Status == "fail" && m.showFilter != "collapsed" && len(test.Output) > 0 {
+	if test.Status == TestStatusFail && m.showFilter != "collapsed" && len(test.Output) > 0 {
 		output.WriteString("\n")
 		formatter := func(line string) string {
 			if m.verbosityLevel == "with-output" || m.verbosityLevel == "verbose" {
@@ -430,11 +460,11 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 	// Build the test display
 	var styledIcon string
 	switch test.Status {
-	case "pass":
+	case TestStatusPass:
 		styledIcon = PassStyle.Render(CheckPass)
-	case "fail":
+	case TestStatusFail:
 		styledIcon = FailStyle.Render(CheckFail)
-	case "skip":
+	case TestStatusSkip:
 		styledIcon = SkipStyle.Render(CheckSkip)
 	default:
 		return // Don't display running tests
@@ -449,7 +479,7 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 	}
 
 	// Add skip reason if available
-	if test.Status == "skip" && test.SkipReason != "" {
+	if test.Status == TestStatusSkip && test.SkipReason != "" {
 		fmt.Fprintf(output, " %s", DurationStyle.Render(fmt.Sprintf("- %s", test.SkipReason)))
 	}
 
@@ -468,7 +498,7 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 	output.WriteString("\n")
 
 	// Show test output for failed tests if not in collapsed mode
-	if test.Status == "fail" && m.showFilter != "collapsed" && len(test.Output) > 0 {
+	if test.Status == TestStatusFail && m.showFilter != "collapsed" && len(test.Output) > 0 {
 		output.WriteString("\n")
 		if m.verbosityLevel == "with-output" || m.verbosityLevel == "verbose" {
 			// With full output, properly render tabs and maintain formatting
@@ -488,7 +518,7 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 	}
 
 	// Show detailed subtest results for failed parent tests
-	if test.Status == "fail" && hasSubtests && m.showFilter != "collapsed" {
+	if test.Status == TestStatusFail && hasSubtests && m.showFilter != "collapsed" {
 		stats := m.subtestStats[test.Name]
 		if stats != nil {
 			totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)

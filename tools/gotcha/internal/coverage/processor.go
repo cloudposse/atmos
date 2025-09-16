@@ -42,14 +42,14 @@ func ProcessCoverage(coverProfile string, cfg config.CoverageConfig, writer *out
 
 	// Show function coverage if requested
 	if cfg.Analysis.Functions {
-		if err := showFunctionCoverage(coverageData, cfg, writer, logger); err != nil {
+		if err := showFunctionCoverage(coverageData, &cfg, writer, logger); err != nil {
 			logger.Warn("Failed to show function coverage", "error", err)
 		}
 	}
 
 	// Show statement coverage if requested
 	if cfg.Analysis.Statements {
-		showStatementCoverage(coverageData, cfg, writer, logger)
+		showStatementCoverage(coverageData, &cfg, writer, logger)
 	}
 
 	// Check thresholds
@@ -210,7 +210,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *outpu
 	packageStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")) // Bright blue
 	fileStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))              // Gray
 	lineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))              // Darker gray
-	treeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("238"))              // Very dark gray for tree characters
+	treeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))                // Dark gray for tree characters
 
 	// Now we can use the extracted getCoverageColor and getCoverageSymbol functions
 
@@ -250,14 +250,15 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *outpu
 
 		// Shorten package path for display
 		displayPkg := pkg
-		if strings.HasPrefix(pkg, "cmd/") {
+		switch {
+		case strings.HasPrefix(pkg, "cmd/"):
 			displayPkg = "cmd/" + filepath.Base(strings.TrimPrefix(pkg, "cmd/"))
-		} else if strings.HasPrefix(pkg, "internal/") {
+		case strings.HasPrefix(pkg, "internal/"):
 			parts := strings.Split(pkg, "/")
 			if len(parts) > 2 {
 				displayPkg = fmt.Sprintf("internal/%s", parts[1])
 			}
-		} else if strings.HasPrefix(pkg, "pkg/") {
+		case strings.HasPrefix(pkg, "pkg/"):
 			parts := strings.Split(pkg, "/")
 			if len(parts) > 2 {
 				displayPkg = fmt.Sprintf("pkg/%s", parts[1])
@@ -317,7 +318,11 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *outpu
 			// Display vertical connector line between file and functions (if there are functions)
 			if len(fileFuncs) > 0 {
 				// Show continuation line from file to its functions
-				writer.PrintData("  %s│\n", treeStyle.Render(funcPrefix))
+				if isLastFile {
+					writer.PrintData("  %s%s\n", treeStyle.Render(funcPrefix), treeStyle.Render("│"))
+				} else {
+					writer.PrintData("  %s%s\n", treeStyle.Render(funcPrefix[:1]), treeStyle.Render(" │"))
+				}
 			}
 
 			// Display functions with proper indentation
@@ -374,7 +379,7 @@ func shouldExcludeMocks(excludePatterns []string) bool {
 }
 
 // showFunctionCoverage displays function coverage based on configuration.
-func showFunctionCoverage(data *types.CoverageData, cfg config.CoverageConfig, writer *output.Writer, logger *log.Logger) error {
+func showFunctionCoverage(data *types.CoverageData, cfg *config.CoverageConfig, writer *output.Writer, logger *log.Logger) error {
 	functions := data.FunctionCoverage
 
 	// Apply filtering based on config
@@ -510,7 +515,7 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 }
 
 // showStatementCoverage displays statement coverage information.
-func showStatementCoverage(data *types.CoverageData, cfg config.CoverageConfig, writer *output.Writer, logger *log.Logger) {
+func showStatementCoverage(data *types.CoverageData, cfg *config.CoverageConfig, writer *output.Writer, logger *log.Logger) {
 	if data.StatementCoverage == "" {
 		return
 	}
