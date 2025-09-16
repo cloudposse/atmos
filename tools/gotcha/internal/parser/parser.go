@@ -89,7 +89,7 @@ func processLineWithElapsedAndSkipReason(line string, tests map[string]types.Tes
 		// Two patterns to handle:
 		// Pattern 1: Skip reason appears BEFORE --- SKIP line (common with t.Skipf)
 		// Pattern 2: Skip reason appears AFTER --- SKIP line (common with t.Skip in subtests)
-		
+
 		if strings.Contains(output, "--- SKIP:") {
 			// Mark that we found a skip, reason might come in next output
 			if _, exists := skipReasons[key]; !exists {
@@ -122,7 +122,7 @@ func processLineWithElapsedAndSkipReason(line string, tests map[string]types.Tes
 				// This might be the skip reason after --- SKIP line
 				// Handle format: "    filename.go:line: reason"
 				reason := output
-				// Look for pattern: filename.go:linenum: 
+				// Look for pattern: filename.go:linenum:
 				if idx := strings.Index(reason, ".go:"); idx > 0 {
 					// Find the colon after the line number
 					afterFile := reason[idx+4:] // Skip past ".go:"

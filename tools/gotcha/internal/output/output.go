@@ -47,7 +47,7 @@ func WriteSummary(summary *types.TestSummary, format, outputFile string) error {
 func writeGitHubSummary(summary *types.TestSummary, outputFile string) error {
 	// Check if we're running in GitHub Actions
 	githubStepSummary := config.GetGitHubStepSummary()
-	
+
 	if githubStepSummary != "" {
 		// Running in GitHub Actions - write to GITHUB_STEP_SUMMARY only
 		githubWriter, githubPath, err := openGitHubOutput("")
@@ -59,9 +59,9 @@ func writeGitHubSummary(summary *types.TestSummary, outputFile string) error {
 				closer.Close()
 			}
 		}()
-		
+
 		markdown.WriteContent(githubWriter, summary, constants.FormatGitHub)
-		
+
 		if fileInfo, err := os.Stat(githubPath); err == nil {
 			fmt.Fprintf(os.Stderr, "%s GitHub step summary written to %s (%d bytes)\n", tui.PassStyle.Render(tui.CheckPass), githubPath, fileInfo.Size())
 		} else {
