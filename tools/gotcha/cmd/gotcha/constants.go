@@ -21,7 +21,7 @@ const (
 
 	// Format values.
 	FormatMarkdown = "markdown"
-	
+
 	// Common strings.
 	SpaceChar = " "
 )

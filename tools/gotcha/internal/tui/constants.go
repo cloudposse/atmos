@@ -34,7 +34,7 @@ const (
 	// Coverage display.
 	CoverageBarWidth     = 30
 	CoveragePercentWidth = 10
-	
+
 	// Exit codes.
 	ExitCodeInterrupted = 130 // Standard exit code for SIGINT
 )

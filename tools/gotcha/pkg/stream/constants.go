@@ -32,7 +32,7 @@ const (
 	DefaultTerminalWidth = 80
 	MinTerminalWidth     = 30
 	MaxTerminalWidth     = 200
-	
+
 	// Exit codes.
 	ExitCodeInterrupted = 130 // Standard exit code for SIGINT
 )

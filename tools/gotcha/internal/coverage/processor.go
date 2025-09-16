@@ -23,15 +23,15 @@ import (
 
 // Coverage threshold constants.
 const (
-	CoverageThresholdExcellent = 80  // Coverage >= 80% is excellent (green)
-	CoverageThresholdGood      = 60  // Coverage >= 60% is good (yellow)
-	CoverageThresholdFair      = 40  // Coverage >= 40% is fair (orange)
-	
+	CoverageThresholdExcellent = 80 // Coverage >= 80% is excellent (green)
+	CoverageThresholdGood      = 60 // Coverage >= 60% is good (yellow)
+	CoverageThresholdFair      = 40 // Coverage >= 40% is fair (orange)
+
 	// Display constants.
-	MaxFunctionNameLength = 28
+	MaxFunctionNameLength  = 28
 	FunctionNameTruncation = 25
-	BitSize64             = 64  // For strconv.ParseFloat
-	DefaultUncoveredLimit = 5    // Default number of uncovered functions to show
+	BitSize64              = 64 // For strconv.ParseFloat
+	DefaultUncoveredLimit  = 5  // Default number of uncovered functions to show
 )
 
 // ProcessCoverage processes coverage data based on configuration after tests complete.
