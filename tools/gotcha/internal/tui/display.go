@@ -152,8 +152,8 @@ func (m *TestModel) GenerateFinalSummary() string {
 	if m.aborted {
 		summary.WriteString(fmt.Sprintf("\n%s Test run aborted (exit code %d)\n", FailStyle.Render("✗"), exitCode))
 	} else if m.failCount > 0 {
-		summary.WriteString(fmt.Sprintf("\n%s %d test%s failed (exit code %d)\n", 
-			FailStyle.Render("✗"), 
+		summary.WriteString(fmt.Sprintf("\n%s %d test%s failed (exit code %d)\n",
+			FailStyle.Render("✗"),
 			m.failCount,
 			pluralize(m.failCount),
 			exitCode))

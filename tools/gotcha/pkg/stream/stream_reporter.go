@@ -481,8 +481,8 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 
 	// Add exit status information
 	if failed > 0 {
-		output.WriteString(fmt.Sprintf("\n%s %d test%s failed\n", 
-			tui.FailStyle.Render("✗"), 
+		output.WriteString(fmt.Sprintf("\n%s %d test%s failed\n",
+			tui.FailStyle.Render("✗"),
 			failed,
 			pluralize(failed)))
 	} else if total == 0 {
