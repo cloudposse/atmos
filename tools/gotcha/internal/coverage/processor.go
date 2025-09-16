@@ -334,7 +334,7 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *outpu
 				if isLastFile {
 					writer.PrintData("  %s%s\n", treeStyle.Render(funcPrefix), treeStyle.Render("│"))
 				} else {
-					writer.PrintData("  %s%s\n", treeStyle.Render("│"), treeStyle.Render(" │"))
+					writer.PrintData("  %s %s\n", treeStyle.Render("│"), treeStyle.Render("│"))
 				}
 			}
 
