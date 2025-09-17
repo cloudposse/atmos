@@ -12,7 +12,7 @@ type Store interface {
 // StoreFactory is a function type to initialize a new store.
 type StoreFactory func(options map[string]any) (Store, error)
 
-//nolint
+// nolint
 // getKey generates a key for the store. First it splits the stack by the stack delimiter (from atmos.yaml),
 // then it splits the component if it contains a "/",
 // then it appends the key to the parts,

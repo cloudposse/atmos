@@ -26,13 +26,14 @@ func (m *TestModel) processEvent(event *types.TestEvent) {
 
 // processPackageEvent handles package-level events.
 //
-//nolint:nestif,gocognit // Package event processing requires multiple conditional paths:
 // - Different event actions (start, pass, fail, skip, output)
 // - Package initialization and state management
 // - Coverage information extraction from output
 // - Build failure detection
 // - Package completion handling
 // Each condition handles a specific package lifecycle event.
+//
+//nolint:nestif,gocognit // Package event processing requires multiple conditional paths:
 func (m *TestModel) processPackageEvent(event *types.TestEvent) {
 	switch event.Action {
 	case "start":

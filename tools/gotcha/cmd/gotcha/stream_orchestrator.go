@@ -21,7 +21,6 @@ import (
 // This function orchestrates configuration extraction, test preparation,
 // and delegates to appropriate execution modes (TUI or CI).
 //
-//nolint:nestif,gocognit // Stream orchestration coordinates multiple components:
 // - Configuration extraction and validation
 // - Test package preparation and filtering
 // - Output format determination (TUI, stream, JSON, markdown)
@@ -29,6 +28,8 @@ import (
 // - Coverage report generation
 // - GitHub integration (comments, job summaries)
 // The complexity handles various execution modes and output requirements.
+//
+//nolint:nestif,gocognit // Stream orchestration coordinates multiple components:
 func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger, writer *output.Writer) error {
 	// Step 1: Extract and validate configuration
 	config, err := extractStreamConfig(cmd, args, logger)

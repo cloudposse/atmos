@@ -206,13 +206,14 @@ func (m *TestModel) handleTestFail() tea.Cmd {
 
 // handleTestComplete processes test completion messages.
 //
-//nolint:nestif,gocognit // Test completion requires multiple status checks:
 // - Exit code analysis
 // - Test failure detection
 // - Package completion verification
 // - Final summary generation
 // - Cleanup operations
 // These conditions ensure proper test run finalization.
+//
+//nolint:nestif,gocognit // Test completion requires multiple status checks:
 func (m *TestModel) handleTestComplete(msg TestCompleteMsg) tea.Cmd {
 	m.done = true
 	m.endTime = time.Now()

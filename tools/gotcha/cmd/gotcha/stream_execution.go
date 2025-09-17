@@ -28,7 +28,6 @@ import (
 
 // runStreamInteractive runs tests in interactive TUI mode.
 //
-//nolint:nestif,gocognit,gocyclo // The complexity is necessary for coordinating async operations:
 // - Test discovery must happen before TUI starts (users see accurate progress bars)
 // - Cache checks must precede discovery (to avoid redundant work)
 // - TUI model needs both discovered tests AND coverage config before initialization
@@ -36,6 +35,8 @@ import (
 // - Coverage analysis requires completed tests AND valid profile file
 // These operations have strict ordering dependencies that can't be parallelized
 // or simplified without breaking the user experience (progress tracking, caching).
+//
+//nolint:nestif,gocognit,gocyclo // The complexity is necessary for coordinating async operations:
 func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, *types.TestSummary, error) {
 	// Set the global logger for packages that use it
 	internalLogger.SetLogger(logger)

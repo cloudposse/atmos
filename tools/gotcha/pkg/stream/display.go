@@ -12,7 +12,6 @@ import (
 
 // displayPackageResult outputs the buffered results for a completed package.
 //
-//nolint:nestif,gocognit // The nested conditions are necessary because we must handle
 // mutually exclusive package states that require different user feedback:
 // - Build failures need compilation errors shown (users need to see what broke)
 // - Empty packages need "[no test files]" indicator (so users know it's intentional)
@@ -21,6 +20,8 @@ import (
 // Each state has different display requirements that can't be combined into a single path.
 // Using a strategy pattern would add indirection without reducing complexity since
 // each case needs access to different subsets of the package data.
+//
+//nolint:nestif,gocognit // The nested conditions are necessary because we must handle
 func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Debug: Log package display start
 	if debugFile := config.GetDebugFile(); debugFile != "" {

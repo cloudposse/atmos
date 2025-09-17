@@ -209,13 +209,14 @@ func getCoverageSymbol(coverage float64) string {
 
 // displayFunctionCoverageTree displays functions grouped by package in a tree format.
 //
-//nolint:nestif,gocognit // Tree display requires complex formatting logic:
 // - Package grouping and sorting
 // - Coverage status determination (covered vs uncovered)
 // - Tree structure generation with proper indentation
 // - Color-coded output based on coverage
 // - Edge case handling for empty packages
 // The nesting creates the hierarchical display structure.
+//
+//nolint:nestif,gocognit // Tree display requires complex formatting logic:
 func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *output.Writer) {
 	if len(functions) == 0 {
 		return
