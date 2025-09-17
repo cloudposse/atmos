@@ -44,9 +44,9 @@ Created `test/tui_harness_test.go` using the Charmbracelet teatest library:
 - Works completely without TTY requirements
 - Enables sending messages and capturing output
 
-### 4. PTY Wrapper Program (Completed)
+### 4. PTY Wrapper Test Utility (Completed - Unix Only)
 
-Created `cmd/ptyrunner/main.go` as an alternative testing method:
+Created `test/testutil/ptyrunner/main.go` as an alternative testing method for Unix systems:
 - Uses `github.com/creack/pty` to create pseudo-terminal
 - Wraps gotcha execution in a PTY
 - Useful for environments that support PTY creation
@@ -69,10 +69,11 @@ tm.Send(messages...)
 finalModel := tm.FinalModel(t)
 ```
 
-### Method 3: PTY Wrapper (when PTY is available)
+### Method 3: PTY Wrapper Test Utility (Unix only, when PTY is available)
 ```bash
-# Build and use the PTY wrapper
-go build -o ptyrunner ./cmd/ptyrunner
+# Build and use the PTY wrapper test utility (Unix/Linux/macOS only)
+# Note: PTYs are not supported on Windows
+go build -o ptyrunner ./test/testutil/ptyrunner
 ./ptyrunner stream ./test --show=all
 ```
 
@@ -92,7 +93,7 @@ go build -o ptyrunner ./cmd/ptyrunner
 
 ### Created Files
 - `tools/gotcha/test/tui_harness_test.go` - Teatest harness for TUI testing
-- `tools/gotcha/cmd/ptyrunner/main.go` - PTY wrapper program
+- `tools/gotcha/test/testutil/ptyrunner/main.go` - PTY wrapper test utility (Unix only)
 - `tools/gotcha/demo_tui_testing.sh` - Demo script showing all methods
 - `tools/gotcha/test_tui_modes.sh` - Comprehensive test script
 

@@ -417,7 +417,7 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 		lines := strings.Split(stderr, "\n")
 		for _, line := range lines {
 			if strings.Contains(line, "[build failed]") {
-				// Format: FAIL	github.com/cloudposse/atmos/tools/gotcha/cmd/ptyrunner [build failed]
+				// Format: FAIL	github.com/cloudposse/atmos/tools/gotcha/test/testutil/ptyrunner [build failed]
 				parts := strings.Fields(line)
 				if len(parts) >= 2 && parts[0] == "FAIL" {
 					pkg := parts[1]

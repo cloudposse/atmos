@@ -1,9 +1,11 @@
+//go:build !windows
+// +build !windows
+
 package main
 
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -78,16 +80,10 @@ func TestFindGotchaBinaryFromExecutableDir(t *testing.T) {
 
 	result := findGotchaBinary()
 
-	// On Windows, the binary should have .exe extension
-	expectedSuffix := "gotcha"
-	if runtime.GOOS == "windows" {
-		expectedSuffix = "gotcha.exe"
-	}
-
-	// Should either be a path containing the expected suffix or just the suffix itself
+	// Should either be a path containing "gotcha" or just "gotcha"
 	assert.True(t,
-		filepath.Base(result) == expectedSuffix || result == expectedSuffix,
-		"Expected %s binary path, got %s", expectedSuffix, result)
+		filepath.Base(result) == "gotcha" || result == "gotcha",
+		"Expected gotcha binary path, got %s", result)
 }
 
 func TestValidateArguments(t *testing.T) {

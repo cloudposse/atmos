@@ -1,8 +1,11 @@
 //go:build !windows
 // +build !windows
 
-// Package main provides a PTY wrapper for running gotcha with a pseudo-terminal.
-// This is useful for testing TUI mode in headless environments like CI or AI agents.
+// Package main provides a test utility that wraps gotcha in a pseudo-terminal (PTY).
+// This is ONLY for testing gotcha's TUI mode in environments without a real terminal (CI, automated tests).
+// This is NOT a general-purpose PTY wrapper - it's specifically for testing gotcha.
+//
+// Note: PTYs are not supported on Windows, so this utility is Unix-only.
 package main
 
 import (
