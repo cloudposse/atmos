@@ -2,6 +2,10 @@ module github.com/cloudposse/atmos/tools/gotcha
 
 go 1.25.0
 
+// This replace directive ensures that the module uses the local code
+// instead of trying to fetch from GitHub
+replace github.com/cloudposse/atmos/tools/gotcha => ./
+
 require (
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.5
