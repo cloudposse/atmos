@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	cmdConstants "github.com/cloudposse/atmos/tools/gotcha/cmd/gotcha/constants"
 	internalLogger "github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
@@ -264,22 +263,22 @@ func processTestOutputWithSummary(config *StreamConfig, cmd *cobra.Command, logg
 // formatAndWriteOutput formats and writes test output based on format type.
 func formatAndWriteOutput(summary *types.TestSummary, config *StreamConfig, logger *log.Logger) error {
 	switch config.Format {
-	case cmdConstants.FormatJSON:
-		if err := output.WriteSummary(summary, cmdConstants.FormatJSON, config.OutputFile); err != nil {
+	case FormatJSON:
+		if err := output.WriteSummary(summary, FormatJSON, config.OutputFile); err != nil {
 			return fmt.Errorf("failed to write JSON output: %w", err)
 		}
 		logger.Info("JSON output written", "file", config.OutputFile)
 
-	case cmdConstants.FormatMarkdown:
+	case FormatMarkdown:
 		outputPath := strings.TrimSuffix(config.OutputFile, filepath.Ext(config.OutputFile)) + ".md"
-		if err := output.WriteSummary(summary, cmdConstants.FormatMarkdown, outputPath); err != nil {
+		if err := output.WriteSummary(summary, FormatMarkdown, outputPath); err != nil {
 			return fmt.Errorf("failed to write markdown output: %w", err)
 		}
 		logger.Info("Markdown output written", "file", outputPath)
 
-	case cmdConstants.FormatGitHub:
+	case FormatGitHub:
 		outputPath := strings.TrimSuffix(config.OutputFile, filepath.Ext(config.OutputFile)) + ".md"
-		if err := output.WriteSummary(summary, cmdConstants.FormatGitHub, outputPath); err != nil {
+		if err := output.WriteSummary(summary, FormatGitHub, outputPath); err != nil {
 			return fmt.Errorf("failed to write github output: %w", err)
 		}
 		logger.Info("GitHub summary written", "file", outputPath)
