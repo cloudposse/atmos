@@ -46,11 +46,16 @@ Created `test/tui_harness_test.go` using the Charmbracelet teatest library:
 
 ### 4. PTY Wrapper Test Utility (Completed - Unix Only)
 
-Created `test/testutil/ptyrunner/main.go` as an alternative testing method for Unix systems:
+Created a generic `tools/ptyrunner` tool for wrapping any command in a PTY:
+- Generic PTY wrapper that works with any command
 - Uses `github.com/creack/pty` to create pseudo-terminal
-- Wraps gotcha execution in a PTY
-- Useful for environments that support PTY creation
-- Provides the most realistic TUI testing experience
+- Useful for testing TUI applications in CI/headless environments
+- Provides the most realistic terminal testing experience
+
+Also created `test/testutil/ptyrunner/main.go` as a gotcha-specific convenience wrapper that:
+- Automatically finds the gotcha binary
+- Delegates to the generic ptyrunner tool
+- Simplifies testing gotcha's TUI mode
 
 ## Usage Examples
 
@@ -71,10 +76,16 @@ finalModel := tm.FinalModel(t)
 
 ### Method 3: PTY Wrapper Test Utility (Unix only, when PTY is available)
 ```bash
-# Build and use the PTY wrapper test utility (Unix/Linux/macOS only)
+# Using the generic ptyrunner tool (Unix/Linux/macOS only)
 # Note: PTYs are not supported on Windows
-go build -o ptyrunner ./test/testutil/ptyrunner
-./ptyrunner stream ./test --show=all
+cd tools/ptyrunner
+go build -o ptyrunner .
+cd ../gotcha
+../ptyrunner/ptyrunner ./gotcha stream ./test --show=all
+
+# Or use the gotcha-specific wrapper for convenience:
+go build -o gotcha-ptyrunner ./test/testutil/ptyrunner
+./gotcha-ptyrunner stream ./test --show=all
 ```
 
 ## Environment Variables
@@ -93,7 +104,8 @@ go build -o ptyrunner ./test/testutil/ptyrunner
 
 ### Created Files
 - `tools/gotcha/test/tui_harness_test.go` - Teatest harness for TUI testing
-- `tools/gotcha/test/testutil/ptyrunner/main.go` - PTY wrapper test utility (Unix only)
+- `tools/ptyrunner/` - Generic PTY wrapper tool (reusable for any command)
+- `tools/gotcha/test/testutil/ptyrunner/main.go` - Gotcha-specific PTY wrapper (convenience)
 - `tools/gotcha/demo_tui_testing.sh` - Demo script showing all methods
 - `tools/gotcha/test_tui_modes.sh` - Comprehensive test script
 
