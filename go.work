@@ -1,0 +1,11 @@
+go 1.25
+
+use .
+
+// This workspace configuration ensures that:
+// 1. Only the current directory's go.mod is used
+// 2. tools/gotcha is explicitly NOT included in the workspace
+// 3. go mod operations on this directory won't affect gotcha
+//
+// Note: gotcha is a completely standalone tool with its own module
+// at github.com/cloudposse/gotcha and should remain independent
