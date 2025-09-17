@@ -51,7 +51,6 @@ const (
 	ShowFilterFailed = "failed"
 	ShowFilterAll    = "all"
 
-
 	// Test argument flags.
 	FlagRun       = "-run"
 	FlagTimeout   = "-timeout"
