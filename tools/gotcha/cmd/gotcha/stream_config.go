@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/tools/gotcha/cmd/gotcha/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 )
@@ -51,6 +52,8 @@ const (
 	ShowFilterFailed = "failed"
 	ShowFilterAll    = "all"
 
+	// Format values.
+	FormatMarkdown = "markdown"
 
 	// Test argument flags.
 	FlagRun       = "-run"
@@ -160,7 +163,7 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 		config.Format = viper.GetString(ViperKeyFormat)
 		logger.Debug("Format from viper", "format", config.Format, "configFile", viper.ConfigFileUsed())
 		if config.Format == "" {
-			config.Format = FormatTerminal
+			config.Format = constants.FormatTerminal
 			logger.Debug("Format defaulted to terminal")
 		}
 	}
@@ -247,7 +250,7 @@ func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) 
 	// Determine output file if not specified
 	if config.OutputFile == "" {
 		switch config.Format {
-		case FormatMarkdown, FormatGitHub:
+		case FormatMarkdown, constants.FormatGitHub:
 			config.OutputFile = DefaultOutputMD
 		default:
 			config.OutputFile = DefaultOutputJSON
@@ -283,7 +286,7 @@ func (c *StreamConfig) detectCIMode(logger *log.Logger) {
 
 // adjustFormatForCI adjusts output format for CI environments.
 func (c *StreamConfig) adjustFormatForCI(cmd *cobra.Command, logger *log.Logger) {
-	if c.CIMode && c.Format == FormatTerminal {
+	if c.CIMode && c.Format == constants.FormatTerminal {
 		// Don't override if user explicitly set format
 		if !cmd.Flags().Changed(ViperKeyFormat) {
 			c.Format = FormatMarkdown
