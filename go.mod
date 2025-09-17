@@ -4,6 +4,10 @@ go 1.24.6
 
 toolchain go1.24.7
 
+// Map the gotcha module to its local directory to prevent Go from trying
+// to fetch it as an external dependency
+replace github.com/cloudposse/atmos/tools/gotcha => ./tools/gotcha
+
 require (
 	cloud.google.com/go/secretmanager v1.15.0
 	dario.cat/mergo v1.0.2
