@@ -390,6 +390,18 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 		return ErrAtmosDIrConfigNotFound
 	}
 
+	// Check if we should exclude .atmos.d from this directory during testing
+	//nolint:forbidigo // TEST_EXCLUDE_ATMOS_D is specifically for test isolation
+	if excludeRoot := os.Getenv("TEST_EXCLUDE_ATMOS_D"); excludeRoot != "" {
+		absDirPath, _ := filepath.Abs(dirPath)
+		absExcludeRoot, _ := filepath.Abs(excludeRoot)
+		// Check if current directory is within or is the excluded root
+		if absDirPath == absExcludeRoot || strings.HasPrefix(absDirPath, absExcludeRoot+string(filepath.Separator)) {
+			// Silently skip without logging to avoid test output pollution
+			return nil
+		}
+	}
+
 	var atmosFoundFilePaths []string
 	// Search for `atmos.d/` configurations
 	searchDir := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
