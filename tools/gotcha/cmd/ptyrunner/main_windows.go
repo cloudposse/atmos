@@ -10,29 +10,50 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/spf13/viper"
 )
 
-func main() {
-	// Get the gotcha binary path
-	//nolint:forbidigo // Direct env access required for binary path lookup
-	gotchaBinary := os.Getenv("GOTCHA_BINARY")
-	if gotchaBinary == "" {
-		// Try to find gotcha in the same directory as ptyrunner
-		execPath, err := os.Executable()
-		if err == nil {
-			gotchaBinary = filepath.Join(filepath.Dir(execPath), "gotcha.exe")
-		} else {
-			gotchaBinary = "gotcha.exe"
-		}
+// initializeConfig sets up viper configuration for environment variables.
+func initializeConfig() {
+	_ = viper.BindEnv("gotcha.binary", "GOTCHA_BINARY")
+	viper.AutomaticEnv()
+}
+
+// findGotchaBinary determines the path to the gotcha binary.
+func findGotchaBinary() string {
+	gotchaBinary := viper.GetString("gotcha.binary")
+	if gotchaBinary != "" {
+		return gotchaBinary
 	}
 
-	// Build command with all arguments passed to ptyrunner
-	args := os.Args[1:]
+	// Try to find gotcha in the same directory as ptyrunner
+	execPath, err := os.Executable()
+	if err == nil {
+		return filepath.Join(filepath.Dir(execPath), "gotcha.exe")
+	}
+	return "gotcha.exe"
+}
+
+// validateArguments checks that command-line arguments were provided.
+func validateArguments(args []string) {
 	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <gotcha-args>\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Example: %s stream ./...\n", os.Args[0])
 		os.Exit(1)
 	}
+}
+
+func main() {
+	// Initialize configuration
+	initializeConfig()
+
+	// Find the gotcha binary
+	gotchaBinary := findGotchaBinary()
+
+	// Validate arguments
+	args := os.Args[1:]
+	validateArguments(args)
 
 	// Create and run the command directly (no PTY on Windows)
 	cmd := exec.Command(gotchaBinary, args...)
