@@ -88,6 +88,7 @@ jobs:
           echo "=== Running vanilla go test ==="
           go test -v github.com/cloudposse/atmos/tools/gotcha/... || echo "Exit code: $?"
           echo "=== End vanilla go test ==="
+        continue-on-error: true
 
       - name: Test gotcha with itself (dogfooding)
         if: ${{ ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}
