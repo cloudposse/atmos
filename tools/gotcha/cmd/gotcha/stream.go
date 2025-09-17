@@ -13,17 +13,17 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	coveragePkg "github.com/cloudposse/gotcha/internal/coverage"
-	internalOutput "github.com/cloudposse/gotcha/internal/output"
-	"github.com/cloudposse/gotcha/internal/parser"
-	"github.com/cloudposse/gotcha/internal/tui"
-	"github.com/cloudposse/gotcha/pkg/cache"
-	"github.com/cloudposse/gotcha/pkg/config"
-	"github.com/cloudposse/gotcha/pkg/constants"
-	"github.com/cloudposse/gotcha/pkg/output"
-	"github.com/cloudposse/gotcha/pkg/stream"
-	"github.com/cloudposse/gotcha/pkg/types"
-	"github.com/cloudposse/gotcha/pkg/utils"
+	coveragePkg "github.com/cloudposse/atmos/tools/gotcha/internal/coverage"
+	internalOutput "github.com/cloudposse/atmos/tools/gotcha/internal/output"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
 // Exit code constants.

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/gotcha/internal/markdown"
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 func TestWriteFailedTestsTable(t *testing.T) {

@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/gotcha/cmd/gotcha/constants"
-	"github.com/cloudposse/gotcha/pkg/config"
-	"github.com/cloudposse/gotcha/pkg/output"
+	"github.com/cloudposse/atmos/tools/gotcha/cmd/gotcha/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 )
 
 // Configuration field names.

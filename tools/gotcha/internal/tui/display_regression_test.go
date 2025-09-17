@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 // TestDisplayRegressionSubtestsNotShown verifies the critical regression where

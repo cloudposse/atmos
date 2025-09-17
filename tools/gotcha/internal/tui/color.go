@@ -2,7 +2,7 @@ package tui
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/cloudposse/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/muesli/termenv"
 	"github.com/spf13/viper"
 )

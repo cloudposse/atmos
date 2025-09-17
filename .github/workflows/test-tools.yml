@@ -86,7 +86,7 @@ jobs:
           # Run vanilla go test to see what Go is reporting directly
           # This will help us understand why gotcha exits non-zero
           echo "=== Running vanilla go test ==="
-          go test -v github.com/cloudposse/gotcha/... || echo "Exit code: $?"
+          go test -v github.com/cloudposse/atmos/tools/gotcha/... || echo "Exit code: $?"
           echo "=== End vanilla go test ==="
 
       - name: Test gotcha with itself (dogfooding)
@@ -99,7 +99,7 @@ jobs:
           # Use --format=github to automatically write to GITHUB_STEP_SUMMARY
           # Note: Temporarily disabled -race flag due to known race conditions in TUI tests with teatest
           # These are test-only issues, not affecting production code
-          ./gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} --cover --coverprofile=coverage.out --format=github --output=test-output.md github.com/cloudposse/gotcha/...
+          ./gotcha${{ matrix.os == 'windows-latest' && '.exe' || '' }} --cover --coverprofile=coverage.out --format=github --output=test-output.md github.com/cloudposse/atmos/tools/gotcha/...
 
       - name: Upload gotcha test results
         if: ${{ always() && ! ( matrix.os == 'windows-latest' && github.event.pull_request.draft ) }}

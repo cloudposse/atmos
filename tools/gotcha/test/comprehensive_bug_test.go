@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +31,7 @@ func TestShowFailedFilterBug_Comprehensive(t *testing.T) {
 	testContent1 := `package main
 
 import (
-	"github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"testing"
 	"time"
 )

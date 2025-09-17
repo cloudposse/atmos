@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/viper"

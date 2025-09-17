@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudposse/gotcha/internal/logger"
-	"github.com/cloudposse/gotcha/internal/tui"
-	"github.com/cloudposse/gotcha/pkg/config"
-	"github.com/cloudposse/gotcha/pkg/utils"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
 // RunSimpleStream runs tests with simple non-interactive streaming output.

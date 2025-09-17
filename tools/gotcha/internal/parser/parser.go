@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	coveragePkg "github.com/cloudposse/gotcha/internal/coverage"
-	"github.com/cloudposse/gotcha/pkg/types"
+	coveragePkg "github.com/cloudposse/atmos/tools/gotcha/internal/coverage"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 // parseTestJSON parses go test -json output and returns a TestSummary.

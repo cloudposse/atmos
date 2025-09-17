@@ -4,7 +4,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/cloudposse/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"golang.org/x/term"
 )
 

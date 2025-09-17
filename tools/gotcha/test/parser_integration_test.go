@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/gotcha/internal/parser"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 )
 
 // TestParser_WithRealGoTestOutput verifies the parser works with real go test JSON output.

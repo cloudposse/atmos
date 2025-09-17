@@ -7,10 +7,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
-	"github.com/cloudposse/gotcha/pkg/config"
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 
 	"github.com/mattn/go-isatty"
 )

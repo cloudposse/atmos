@@ -13,17 +13,17 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	cmdConstants "github.com/cloudposse/gotcha/cmd/gotcha/constants"
-	internalLogger "github.com/cloudposse/gotcha/internal/logger"
-	"github.com/cloudposse/gotcha/internal/output"
-	"github.com/cloudposse/gotcha/internal/parser"
-	"github.com/cloudposse/gotcha/internal/tui"
-	"github.com/cloudposse/gotcha/pkg/cache"
-	pkgConstants "github.com/cloudposse/gotcha/pkg/constants"
-	"github.com/cloudposse/gotcha/pkg/errors"
-	"github.com/cloudposse/gotcha/pkg/stream"
-	"github.com/cloudposse/gotcha/pkg/types"
-	"github.com/cloudposse/gotcha/pkg/utils"
+	cmdConstants "github.com/cloudposse/atmos/tools/gotcha/cmd/gotcha/constants"
+	internalLogger "github.com/cloudposse/atmos/tools/gotcha/internal/logger"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	pkgConstants "github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
 // runStreamInteractive runs tests in interactive TUI mode.

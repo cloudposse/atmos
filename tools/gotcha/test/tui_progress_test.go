@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +29,7 @@ func TestTUIProgressBar_FormatTerminal(t *testing.T) {
 	testContent := `package main
 
 import (
-	"github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"testing"
 	"time"
 )

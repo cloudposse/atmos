@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/gotcha/pkg/ci"
-	_ "github.com/cloudposse/gotcha/pkg/ci/github" // Register GitHub
-	_ "github.com/cloudposse/gotcha/pkg/ci/mock"   // Register Mock
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
+	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github" // Register GitHub
+	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"   // Register Mock
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 

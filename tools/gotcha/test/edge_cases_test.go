@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/gotcha/internal/markdown"
-	"github.com/cloudposse/gotcha/internal/output"
-	"github.com/cloudposse/gotcha/pkg/config"
-	"github.com/cloudposse/gotcha/pkg/constants"
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 func TestWriteSummaryErrorHandling(t *testing.T) {

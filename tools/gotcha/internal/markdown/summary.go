@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudposse/gotcha/pkg/config"
-	"github.com/cloudposse/gotcha/pkg/constants"
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 // WriteContent writes the full markdown content for test results.

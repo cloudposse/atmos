@@ -14,12 +14,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 
-	"github.com/cloudposse/gotcha/internal/tui"
-	"github.com/cloudposse/gotcha/pkg/config"
-	"github.com/cloudposse/gotcha/pkg/constants"
-	"github.com/cloudposse/gotcha/pkg/errors"
-	"github.com/cloudposse/gotcha/pkg/output"
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 // Coverage threshold constants.
@@ -166,8 +166,8 @@ func parseFunctionCoverageOutput(output string) []FunctionCoverageInfo {
 
 // extractPackageFromPath extracts the package name from a file path.
 func extractPackageFromPath(path string) string {
-	// Remove github.com/cloudposse/gotcha/ prefix
-	const prefix = "github.com/cloudposse/gotcha/"
+	// Remove github.com/cloudposse/atmos/tools/gotcha/ prefix
+	const prefix = "github.com/cloudposse/atmos/tools/gotcha/"
 	path = strings.TrimPrefix(path, prefix)
 
 	// Get directory part (package)

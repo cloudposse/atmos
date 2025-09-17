@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
-	"github.com/cloudposse/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
 // GitHubJobSummaryWriter implements ci.JobSummaryWriter for GitHub Actions.

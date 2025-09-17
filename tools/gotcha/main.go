@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	cmd "github.com/cloudposse/gotcha/cmd/gotcha"
+	cmd "github.com/cloudposse/atmos/tools/gotcha/cmd/gotcha"
 )
 
 func main() {

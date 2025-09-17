@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 func TestWritePassedTestsTableEnhanced(t *testing.T) {

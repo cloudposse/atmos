@@ -12,10 +12,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/gotcha/internal/markdown"
-	"github.com/cloudposse/gotcha/pkg/ci"
-	"github.com/cloudposse/gotcha/pkg/config"
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/markdown"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 // normalizePostingStrategy normalizes the posting strategy value.

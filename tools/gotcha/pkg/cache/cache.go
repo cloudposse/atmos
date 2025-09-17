@@ -9,13 +9,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
-	pkgErrors "github.com/cloudposse/gotcha/pkg/errors"
+	pkgErrors "github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 )
 
 const (

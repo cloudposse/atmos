@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudposse/gotcha/internal/logger"
-	"github.com/cloudposse/gotcha/pkg/config"
-	"github.com/cloudposse/gotcha/pkg/constants"
-	"github.com/cloudposse/gotcha/pkg/output"
-	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 // PackageResult stores complete information about a tested package.
@@ -417,7 +417,7 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 		lines := strings.Split(stderr, "\n")
 		for _, line := range lines {
 			if strings.Contains(line, "[build failed]") {
-				// Format: FAIL	github.com/cloudposse/gotcha/cmd/ptyrunner [build failed]
+				// Format: FAIL	github.com/cloudposse/atmos/tools/gotcha/cmd/ptyrunner [build failed]
 				parts := strings.Fields(line)
 				if len(parts) >= 2 && parts[0] == "FAIL" {
 					pkg := parts[1]

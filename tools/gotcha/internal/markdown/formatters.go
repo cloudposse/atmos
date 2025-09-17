@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cloudposse/gotcha/internal/git"
-	"github.com/cloudposse/gotcha/pkg/constants"
-	"github.com/cloudposse/gotcha/pkg/types"
-	"github.com/cloudposse/gotcha/pkg/utils"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/git"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
 // WriteBuildFailuresTable writes build failures as a Markdown table.

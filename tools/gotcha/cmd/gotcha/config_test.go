@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	constants "github.com/cloudposse/gotcha/pkg/constants"
+	constants "github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"

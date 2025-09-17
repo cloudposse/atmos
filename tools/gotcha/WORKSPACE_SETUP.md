@@ -1,36 +1,38 @@
 # Gotcha Workspace Setup
 
-## Module Independence
+## Module Structure
 
-Gotcha is a **completely standalone Go module** that is independent from Atmos. This separation is enforced through Go workspaces.
+Gotcha is a tool within the Atmos repository that maintains its own module for dependency isolation.
 
-### Module Structure
+### Module Paths
 
-- **Gotcha Module**: `github.com/cloudposse/gotcha` (in `tools/gotcha/`)
-- **Atmos Module**: Main repository module  
-- **Separation**: Enforced via `go.work` file at repository root
+- **Gotcha Module**: `github.com/cloudposse/atmos/tools/gotcha` (in `tools/gotcha/`)
+- **Atmos Module**: `github.com/cloudposse/atmos` (repository root)
+- **Workspace**: Both modules are managed via `go.work` file at repository root
 
 ## Problem Solved
 
-Atmos and gotcha are completely independent tools, but when they exist in the same directory structure, 
-Go module operations can sometimes create unwanted interactions. The go.work file prevents this.
+While gotcha lives within the Atmos repository, it needs to maintain its own dependencies and versions
+without interfering with Atmos's dependencies. The go.work file enables this separation.
 
 ## Solution: go.work File
 
-The `go.work` file explicitly defines which modules are part of the workspace:
+The `go.work` file includes both modules in the workspace:
 
 ```go
-go 1.25
+go 1.25.0
 
-use .
-// Explicitly excludes tools/gotcha from the workspace
+use (
+    .
+    ./tools/gotcha
+)
 ```
 
 This configuration ensures:
-1. ✅ Atmos go mod operations don't affect gotcha
-2. ✅ Gotcha go mod operations don't affect Atmos  
-3. ✅ No accidental cross-dependencies
-4. ✅ Clean module boundaries
+1. ✅ Both modules can be developed together
+2. ✅ Dependencies are isolated between modules  
+3. ✅ No version conflicts between Atmos and gotcha
+4. ✅ Clean module boundaries while enabling local development
 
 ## Working with the Modules
 
