@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/gotcha/pkg/config"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 )

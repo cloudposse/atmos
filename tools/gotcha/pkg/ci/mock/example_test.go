@@ -6,9 +6,9 @@ import (
 	"os"
 
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock" // Import and register integration
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/gotcha/pkg/ci"
+	"github.com/cloudposse/gotcha/pkg/ci/mock" // Import and register integration
+	"github.com/cloudposse/gotcha/pkg/config"
 )
 
 func Example_usingMockIntegration() {

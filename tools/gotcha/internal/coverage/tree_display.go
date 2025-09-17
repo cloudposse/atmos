@@ -9,8 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 
-	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
+	"github.com/cloudposse/gotcha/internal/tui"
+	"github.com/cloudposse/gotcha/pkg/output"
 )
 
 // displayFunctionCoverageTreeNew displays functions grouped by package using lipgloss/tree.

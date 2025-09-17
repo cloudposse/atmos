@@ -7,13 +7,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/constants"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/gotcha/pkg/config"
+	"github.com/cloudposse/gotcha/pkg/types"
 )
 
 // handleKeyMsg processes keyboard input messages.

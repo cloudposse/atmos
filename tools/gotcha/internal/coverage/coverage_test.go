@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/constants"
 )
 
 func TestParseCoverageLine(t *testing.T) {

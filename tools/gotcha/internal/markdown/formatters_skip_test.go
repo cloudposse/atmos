@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/gotcha/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 

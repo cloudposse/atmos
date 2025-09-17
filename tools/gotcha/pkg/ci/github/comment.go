@@ -9,7 +9,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/google/go-github/v59/github"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/constants"
 )
 
 // API constants.

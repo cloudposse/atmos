@@ -1,4 +1,4 @@
-module github.com/cloudposse/atmos/tools/gotcha
+module github.com/cloudposse/gotcha
 
 go 1.25.0
 

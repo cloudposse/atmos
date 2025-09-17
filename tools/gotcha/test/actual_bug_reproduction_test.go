@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/constants"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +30,7 @@ func TestActualShowFailedBug_AllTestsPass(t *testing.T) {
 	testContent1 := `package main
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/constants"
 	"testing"
 )
 
@@ -178,7 +178,7 @@ func TestShowFailedBug_MixedResults(t *testing.T) {
 	testContent := `package main
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/constants"
 	"testing"
 )
 

@@ -43,13 +43,13 @@ func TestGetFunctionCoverage(t *testing.T) {
 func TestParseCoverageProfileEnhanced(t *testing.T) {
 	// Create a comprehensive test coverage file with actual packages
 	testCoverageContent := `mode: set
-github.com/cloudposse/atmos/tools/gotcha/internal/coverage/coverage.go:56.13,58.2 2 1
-github.com/cloudposse/atmos/tools/gotcha/internal/coverage/coverage.go:14.98,19.16 4 1
-github.com/cloudposse/atmos/tools/gotcha/internal/coverage/coverage.go:19.16,21.3 1 0
-github.com/cloudposse/atmos/tools/gotcha/internal/coverage/processor.go:10.32,12.31 2 1
-github.com/cloudposse/atmos/tools/gotcha/utils.go:12.31,14.3 1 1
-github.com/cloudposse/atmos/tools/gotcha/utils.go:15.2,15.12 1 1
-github.com/cloudposse/atmos/tools/gotcha/mock_service.go:4.20,6.2 1 0`
+github.com/cloudposse/gotcha/internal/coverage/coverage.go:56.13,58.2 2 1
+github.com/cloudposse/gotcha/internal/coverage/coverage.go:14.98,19.16 4 1
+github.com/cloudposse/gotcha/internal/coverage/coverage.go:19.16,21.3 1 0
+github.com/cloudposse/gotcha/internal/coverage/processor.go:10.32,12.31 2 1
+github.com/cloudposse/gotcha/utils.go:12.31,14.3 1 1
+github.com/cloudposse/gotcha/utils.go:15.2,15.12 1 1
+github.com/cloudposse/gotcha/mock_service.go:4.20,6.2 1 0`
 
 	tmpfile, err := os.CreateTemp("", "coverage_enhanced_*.out")
 	if err != nil {

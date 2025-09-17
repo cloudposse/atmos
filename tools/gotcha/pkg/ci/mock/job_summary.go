@@ -4,8 +4,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
-	pkgErrors "github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
+	"github.com/cloudposse/gotcha/pkg/constants"
+	pkgErrors "github.com/cloudposse/gotcha/pkg/errors"
 )
 
 // MockJobSummaryWriter implements ci.JobSummaryWriter for testing.

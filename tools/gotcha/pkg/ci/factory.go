@@ -2,8 +2,8 @@ package ci
 
 import (
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/config"
+	"github.com/cloudposse/gotcha/pkg/constants"
 )
 
 // IntegrationFactory is a function that creates a CI integration.

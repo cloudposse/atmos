@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/gotcha/pkg/types"
 )
 
 func TestFilterTestsByPackages(t *testing.T) {

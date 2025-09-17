@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
+	"github.com/cloudposse/gotcha/internal/parser"
 )
 
 // TestShowFailedFilter_ParsesCorrectly verifies that gotcha correctly parses

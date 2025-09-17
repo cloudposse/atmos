@@ -8,13 +8,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	coveragePkg "github.com/cloudposse/atmos/tools/gotcha/internal/coverage"
-	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
-	pkgConstants "github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
+	coveragePkg "github.com/cloudposse/gotcha/internal/coverage"
+	"github.com/cloudposse/gotcha/internal/tui"
+	pkgConstants "github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/output"
+	"github.com/cloudposse/gotcha/pkg/stream"
+	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/gotcha/pkg/utils"
 )
 
 // orchestrateStream coordinates the execution of the stream command.

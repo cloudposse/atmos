@@ -3,7 +3,7 @@ package stream
 import (
 	"strings"
 
-	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/gotcha/internal/tui"
 )
 
 // generateSubtestProgress creates a visual progress indicator for subtest results.

@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
+	"github.com/cloudposse/gotcha/pkg/output"
 )
 
 // TestStreamReporter_ShowsCoverageInPackageSummary verifies that coverage is shown in package summaries.

@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
+	"github.com/cloudposse/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/types"
+	"github.com/cloudposse/gotcha/pkg/utils"
 )
 
 // CommentSizeLimit represents GitHub's comment size limit.

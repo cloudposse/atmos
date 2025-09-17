@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/gotcha/pkg/types"
 )
 
 // Status and display constants.

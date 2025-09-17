@@ -15,11 +15,11 @@ func TestParseSkipReasonComprehensive(t *testing.T) {
 	}{
 		{
 			name: "Skip reason BEFORE --- SKIP line (t.Skipf pattern)",
-			input: `{"Time":"2025-09-15T18:18:10.902176-05:00","Action":"run","Package":"github.com/cloudposse/atmos/tools/gotcha/test","Test":"TestSkipReason"}
-{"Time":"2025-09-15T18:18:10.902178-05:00","Action":"output","Package":"github.com/cloudposse/atmos/tools/gotcha/test","Test":"TestSkipReason","Output":"=== RUN   TestSkipReason\n"}
-{"Time":"2025-09-15T18:18:10.902187-05:00","Action":"output","Package":"github.com/cloudposse/atmos/tools/gotcha/test","Test":"TestSkipReason","Output":"    skip_test.go:20: Skipping test: example skip with formatted reason - test number 42\n"}
-{"Time":"2025-09-15T18:18:10.902198-05:00","Action":"output","Package":"github.com/cloudposse/atmos/tools/gotcha/test","Test":"TestSkipReason","Output":"--- SKIP: TestSkipReason (0.00s)\n"}
-{"Time":"2025-09-15T18:18:10.902199-05:00","Action":"skip","Package":"github.com/cloudposse/atmos/tools/gotcha/test","Test":"TestSkipReason","Elapsed":0}`,
+			input: `{"Time":"2025-09-15T18:18:10.902176-05:00","Action":"run","Package":"github.com/cloudposse/gotcha/test","Test":"TestSkipReason"}
+{"Time":"2025-09-15T18:18:10.902178-05:00","Action":"output","Package":"github.com/cloudposse/gotcha/test","Test":"TestSkipReason","Output":"=== RUN   TestSkipReason\n"}
+{"Time":"2025-09-15T18:18:10.902187-05:00","Action":"output","Package":"github.com/cloudposse/gotcha/test","Test":"TestSkipReason","Output":"    skip_test.go:20: Skipping test: example skip with formatted reason - test number 42\n"}
+{"Time":"2025-09-15T18:18:10.902198-05:00","Action":"output","Package":"github.com/cloudposse/gotcha/test","Test":"TestSkipReason","Output":"--- SKIP: TestSkipReason (0.00s)\n"}
+{"Time":"2025-09-15T18:18:10.902199-05:00","Action":"skip","Package":"github.com/cloudposse/gotcha/test","Test":"TestSkipReason","Elapsed":0}`,
 			expectedReason: "Skipping test: example skip with formatted reason - test number 42",
 		},
 		{

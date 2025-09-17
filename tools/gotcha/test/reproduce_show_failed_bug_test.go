@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/constants"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +31,7 @@ func TestReproduceShowFailedBug(t *testing.T) {
 	testContent1 := `package main
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/constants"
 	"testing"
 	"time"
 )
@@ -64,7 +64,7 @@ func TestSkip1(t *testing.T) {
 	testContent2 := `package main
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+	"github.com/cloudposse/gotcha/pkg/constants"
 	"testing"
 )
 

@@ -17,9 +17,9 @@ import (
 	"github.com/spf13/viper"
 
 	// Import CI integrations to register them.
-	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github"
+	_ "github.com/cloudposse/gotcha/pkg/ci/github"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/gotcha/pkg/config"
 )
 
 // Main package static errors.

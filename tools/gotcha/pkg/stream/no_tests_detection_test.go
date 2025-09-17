@@ -8,8 +8,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/gotcha/pkg/output"
+	"github.com/cloudposse/gotcha/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 

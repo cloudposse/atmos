@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+	"github.com/cloudposse/gotcha/pkg/types"
 )
 
 // ShortPackage shortens a package name for readability.

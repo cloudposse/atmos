@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
+	"github.com/cloudposse/gotcha/pkg/ci"
 )
 
 // MockCommentManager implements ci.CommentManager for testing.
