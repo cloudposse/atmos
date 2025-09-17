@@ -23,6 +23,10 @@ const (
 	colorBlue      = "#5DADE2" // Blue for spinner
 	colorDarkRed   = "#B22222" // Dark red for error background
 	colorWhite     = "#FFFFFF" // White for error text
+
+	// Terminal width constants.
+	MinDividerWidth     = 20  // Minimum width for dividers
+	MaxDividerWidth     = 100 // Maximum width for dividers
 )
 
 var (
@@ -60,11 +64,11 @@ func GetDivider() string {
 
 	// Leave some margin to avoid wrapping
 	dividerWidth := width - 2
-	if dividerWidth < 20 {
-		dividerWidth = 20 // Minimum width
+	if dividerWidth < MinDividerWidth {
+		dividerWidth = MinDividerWidth // Minimum width
 	}
-	if dividerWidth > 100 {
-		dividerWidth = 100 // Maximum width to avoid overly long lines
+	if dividerWidth > MaxDividerWidth {
+		dividerWidth = MaxDividerWidth // Maximum width to avoid overly long lines
 	}
 
 	// Create divider of appropriate length

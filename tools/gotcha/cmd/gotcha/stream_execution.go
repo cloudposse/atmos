@@ -13,11 +13,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	cmdConstants "github.com/cloudposse/atmos/tools/gotcha/cmd/gotcha/constants"
 	internalLogger "github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
+	pkgConstants "github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -34,7 +36,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 
 	// Write to debug file if specified
 	if debugFile := viper.GetString("debug.file"); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, DefaultFilePerms); err == nil {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, pkgConstants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "\n=== TUI MODE STARTED ===\n")
 			fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))
 			fmt.Fprintf(f, "Packages: %v\n", config.TestPackages)
@@ -243,9 +245,7 @@ func processTestOutputWithSummary(config *StreamConfig, cmd *cobra.Command, logg
 
 	// Handle CI comment posting if enabled
 	if config.CIMode {
-		if err := handleCICommentPosting(summary, config, cmd, logger); err != nil {
-			return summary, err
-		}
+		handleCICommentPosting(summary, config, cmd, logger)
 	}
 
 	return summary, nil
@@ -254,22 +254,22 @@ func processTestOutputWithSummary(config *StreamConfig, cmd *cobra.Command, logg
 // formatAndWriteOutput formats and writes test output based on format type.
 func formatAndWriteOutput(summary *types.TestSummary, config *StreamConfig, logger *log.Logger) error {
 	switch config.Format {
-	case "json":
-		if err := output.WriteSummary(summary, "json", config.OutputFile); err != nil {
+	case cmdConstants.FormatJSON:
+		if err := output.WriteSummary(summary, cmdConstants.FormatJSON, config.OutputFile); err != nil {
 			return fmt.Errorf("failed to write JSON output: %w", err)
 		}
 		logger.Info("JSON output written", "file", config.OutputFile)
 
-	case "markdown":
+	case cmdConstants.FormatMarkdown:
 		outputPath := strings.TrimSuffix(config.OutputFile, filepath.Ext(config.OutputFile)) + ".md"
-		if err := output.WriteSummary(summary, "markdown", outputPath); err != nil {
+		if err := output.WriteSummary(summary, cmdConstants.FormatMarkdown, outputPath); err != nil {
 			return fmt.Errorf("failed to write markdown output: %w", err)
 		}
 		logger.Info("Markdown output written", "file", outputPath)
 
-	case "github":
+	case cmdConstants.FormatGitHub:
 		outputPath := strings.TrimSuffix(config.OutputFile, filepath.Ext(config.OutputFile)) + ".md"
-		if err := output.WriteSummary(summary, "github", outputPath); err != nil {
+		if err := output.WriteSummary(summary, cmdConstants.FormatGitHub, outputPath); err != nil {
 			return fmt.Errorf("failed to write github output: %w", err)
 		}
 		logger.Info("GitHub summary written", "file", outputPath)
@@ -279,7 +279,7 @@ func formatAndWriteOutput(summary *types.TestSummary, config *StreamConfig, logg
 }
 
 // handleCICommentPosting handles posting comments to CI systems.
-func handleCICommentPosting(summary *types.TestSummary, config *StreamConfig, cmd *cobra.Command, logger *log.Logger) error {
+func handleCICommentPosting(summary *types.TestSummary, config *StreamConfig, cmd *cobra.Command, logger *log.Logger) {
 	logger.Debug("Checking if should post comment",
 		"ciMode", config.CIMode,
 		"postStrategy", config.PostStrategy,
@@ -300,8 +300,6 @@ func handleCICommentPosting(summary *types.TestSummary, config *StreamConfig, cm
 			// Just log the error and continue
 		}
 	}
-
-	return nil
 }
 
 // prepareTestPackages prepares and filters test packages.
@@ -389,7 +387,7 @@ func loadTestCountFromCache(config *StreamConfig, cmd *cobra.Command, logger *lo
 	}
 
 	// Build cache key including test filter if present
-	pattern := strings.Join(config.TestPackages, " ")
+	pattern := strings.Join(config.TestPackages, pkgConstants.SpaceString)
 
 	// Check if there's a -run filter in test args
 	testFilter := ""
@@ -407,14 +405,14 @@ func loadTestCountFromCache(config *StreamConfig, cmd *cobra.Command, logger *lo
 
 	if count, found := cacheManager.GetTestCount(pattern); found {
 		config.EstimatedTestCount = count
-		logger.Debug("Using cached test count", "count", config.EstimatedTestCount, "pattern", pattern)
+		logger.Debug("Using cached test count", "count", config.EstimatedTestCount, pkgConstants.PatternField, pattern)
 	} else {
 		if testFilter != "" {
 			logger.Info("No cached test count found for filtered pattern",
-				"pattern", strings.Join(config.TestPackages, " "), "filter", testFilter)
+				pkgConstants.PatternField, strings.Join(config.TestPackages, pkgConstants.SpaceString), "filter", testFilter)
 		} else {
 			logger.Info("No cached test count found for pattern, will cache after run",
-				"pattern", pattern, "cache_file", ".gotcha/cache.yaml")
+				pkgConstants.PatternField, pattern, "cache_file", ".gotcha/cache.yaml")
 		}
 	}
 }

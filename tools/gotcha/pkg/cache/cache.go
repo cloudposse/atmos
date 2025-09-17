@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"bytes"
 	"fmt"
 	"os"
@@ -25,6 +26,12 @@ const (
 	DefaultMaxAge = 24 * time.Hour
 	// CurrentCacheVersion is the current cache format version.
 	CurrentCacheVersion = "1.0"
+	// CacheDirPermissions is the permission for cache directories.
+	CacheDirPermissions = 0o755
+	// PercentageMultiplier for converting fractions to percentages.
+	PercentageMultiplier = 100
+	// MaxHistoryEntries is the maximum number of history entries to keep.
+	MaxHistoryEntries = 100
 )
 
 // Manager handles cache operations.
@@ -56,7 +63,7 @@ func NewManager(logger *log.Logger) (*Manager, error) {
 	}
 
 	// Ensure cache directory exists
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(cacheDir, CacheDirPermissions); err != nil {
 		logger.Warn("Failed to create cache directory", "dir", cacheDir, "error", err)
 		return m, nil // Return manager anyway, it will work without persistence
 	}
@@ -145,7 +152,7 @@ func (m *Manager) saveUnlocked() error {
 
 	// Write atomically by writing to temp file first
 	tempPath := m.path + ".tmp"
-	if err := os.WriteFile(tempPath, data, 0o644); err != nil {
+	if err := os.WriteFile(tempPath, data,constants.DefaultFilePerms); err != nil {
 		m.logger.Error("Failed to write temp cache file", "path", tempPath, "error", err)
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
@@ -205,17 +212,17 @@ func (m *Manager) GetTestCount(pattern string) (int, bool) {
 	// Check if cache entry is still valid
 	maxAge := viper.GetDuration("cache.max_age")
 	if time.Since(entry.Timestamp) > maxAge {
-		m.logger.Debug("Cache entry expired", "pattern", pattern, "age", time.Since(entry.Timestamp))
+		m.logger.Debug("Cache entry expired", constants.PatternField, pattern, "age", time.Since(entry.Timestamp))
 		return 0, false
 	}
 
 	// Check if go.mod has been modified since cache entry
 	if goModTime := getGoModTime(); !goModTime.IsZero() && goModTime.After(entry.GoModTime) {
-		m.logger.Debug("go.mod modified since cache entry", "pattern", pattern)
+		m.logger.Debug("go.mod modified since cache entry", constants.PatternField, pattern)
 		return 0, false
 	}
 
-	m.logger.Debug("Using cached test count", "pattern", pattern, "count", entry.Count)
+	m.logger.Debug("Using cached test count", constants.PatternField, pattern, "count", entry.Count)
 	return entry.Count, true
 }
 
@@ -245,7 +252,7 @@ func (m *Manager) UpdateTestCount(pattern string, count int, packagesScanned int
 	}
 	m.mu.Unlock()
 
-	m.logger.Debug("Updated test count cache", "pattern", pattern, "count", count)
+	m.logger.Debug("Updated test count cache", constants.PatternField, pattern, "count", count)
 	return nil
 }
 
@@ -289,7 +296,7 @@ func (m *Manager) UpdateTestList(pattern string, testNames []string, packagesSca
 	}
 
 	m.mu.Unlock()
-	m.logger.Debug("Updated test list cache", "pattern", pattern, "count", len(testNames))
+	m.logger.Debug("Updated test list cache", constants.PatternField, pattern, "count", len(testNames))
 	return nil
 }
 
@@ -372,7 +379,7 @@ func (m *Manager) AddRunHistory(run RunHistory) error {
 	}
 	if m.file.History == nil {
 		m.file.History = &HistoryCache{
-			MaxEntries: 100,
+			MaxEntries: MaxHistoryEntries,
 		}
 	}
 

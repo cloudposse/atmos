@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	constants "github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,7 +53,7 @@ show: failed`,
 			tmpDir := t.TempDir()
 			configPath := filepath.Join(tmpDir, ".gotcha.yaml")
 			if tt.configContent != "" {
-				err := os.WriteFile(configPath, []byte(tt.configContent), 0o644)
+				err := os.WriteFile(configPath, []byte(tt.configContent), constants.DefaultFilePerms)
 				require.NoError(t, err)
 			}
 
@@ -91,7 +92,7 @@ show: failed
 timeout: 5s
 alert: false`
 
-	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Test 1: Config file values
@@ -131,11 +132,11 @@ func TestCustomConfigFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	defaultConfig := filepath.Join(tmpDir, ".gotcha.yaml")
-	err := os.WriteFile(defaultConfig, []byte(`output: default.json`), 0o644)
+	err := os.WriteFile(defaultConfig, []byte(`output: default.json`), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	customConfig := filepath.Join(tmpDir, "custom.yaml")
-	err = os.WriteFile(customConfig, []byte(`output: custom.json`), 0o644)
+	err = os.WriteFile(customConfig, []byte(`output: custom.json`), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Test loading custom config

@@ -15,16 +15,10 @@ import (
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
-
-// SubtestStats tracks statistics for subtests of a parent test.
-type SubtestStats struct {
-	passed  []string // names of passed subtests
-	failed  []string // names of failed subtests
-	skipped []string // names of skipped subtests
-}
 
 // PackageResult stores complete information about a tested package.
 type PackageResult struct {
@@ -57,11 +51,10 @@ type TestResult struct {
 
 // StreamProcessor handles real-time test output with buffering.
 type StreamProcessor struct {
-	mu             sync.Mutex
-	buffers        map[string][]string
-	subtestStats   map[string]*SubtestStats // Track subtest statistics per parent test
-	jsonWriter     io.Writer
-	showFilter     string
+	mu         sync.Mutex
+	buffers    map[string][]string
+	jsonWriter io.Writer
+	showFilter string
 	testFilter     string // Test filter applied via -run flag (if any)
 	verbosityLevel string // Verbosity level: standard, with-output, minimal, or verbose
 	startTime      time.Time
@@ -79,9 +72,10 @@ type StreamProcessor struct {
 	packageNoTestsPrinted map[string]bool // Track if we already printed "No tests" for a package
 
 	// Statistics tracking
-	passed  int
-	failed  int
-	skipped int
+	passed      int
+	failed      int
+	skipped     int
+	buildFailed []string // Packages that failed to build
 
 	// TestReporter for handling display
 	reporter TestReporter
@@ -94,8 +88,7 @@ type StreamProcessor struct {
 func NewStreamProcessor(jsonWriter io.Writer, showFilter, testFilter, verbosityLevel string) *StreamProcessor {
 	writer := output.New()
 	return &StreamProcessor{
-		buffers:      make(map[string][]string),
-		subtestStats: make(map[string]*SubtestStats),
+		buffers: make(map[string][]string),
 
 		// New buffered output fields
 		packageResults: make(map[string]*PackageResult),
@@ -122,8 +115,7 @@ func NewStreamProcessor(jsonWriter io.Writer, showFilter, testFilter, verbosityL
 // NewStreamProcessorWithReporter creates a new stream processor with a custom reporter.
 func NewStreamProcessorWithReporter(jsonWriter io.Writer, reporter TestReporter) *StreamProcessor {
 	return &StreamProcessor{
-		buffers:      make(map[string][]string),
-		subtestStats: make(map[string]*SubtestStats),
+		buffers: make(map[string][]string),
 
 		// New buffered output fields
 		packageResults: make(map[string]*PackageResult),
@@ -146,7 +138,7 @@ func NewStreamProcessorWithReporter(jsonWriter io.Writer, reporter TestReporter)
 func (p *StreamProcessor) ProcessStream(input io.Reader) error {
 	// Write to debug file if specified
 	if debugFile := config.GetDebugFile(); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "\n=== STREAM MODE STARTED ===\n")
 			fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))
 			fmt.Fprintf(f, "Show filter: %s\n", p.showFilter)
@@ -290,7 +282,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 			// Kill the process group (platform-specific implementation)
 			killProcessGroup(cmd.Process.Pid)
 			// Also kill the main process
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 		}
 	}()
 
@@ -325,26 +317,28 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	capturedStderr := stderrBuffer.String()
 
 	// Return processing error if any
-	if processErr != nil {
+	switch {
+	case processErr != nil:
 		exitCode = 1
 		exitReason = fmt.Sprintf("Processing error: %v", processErr)
-	} else if testErr != nil {
+	case testErr != nil:
 		// Handle test command exit code - pass through unmodified
 		if exitErr, ok := testErr.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
-			if exitCode == 1 && processor.failed == 0 {
+			switch {
+			case exitCode == 1 && processor.failed == 0:
 				// Tests passed but go test exited with 1 - analyze stderr for root cause
 				exitReason = analyzeProcessFailure(capturedStderr, exitCode)
-			} else if processor.failed > 0 {
+			case processor.failed > 0:
 				exitReason = fmt.Sprintf("%d tests failed, go test exited with code %d", processor.failed, exitCode)
-			} else {
+			default:
 				exitReason = fmt.Sprintf("'go test' exited with code %d", exitCode)
 			}
 		} else {
 			exitCode = 1
 			exitReason = fmt.Sprintf("Test execution error: %v", testErr)
 		}
-	} else {
+	default:
 		exitCode = 0
 		exitReason = fmt.Sprintf("All %d tests passed successfully", processor.passed)
 	}
@@ -419,7 +413,22 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 		}
 		return fmt.Sprintf("Test process panicked with exit code %d", exitCode)
 
-	case strings.Contains(stderr, "undefined:") || strings.Contains(stderr, "cannot find"):
+	case strings.Contains(stderr, "[build failed]"):
+		// Extract package name if possible
+		lines := strings.Split(stderr, "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "[build failed]") {
+				// Format: FAIL	github.com/cloudposse/atmos/tools/gotcha/cmd/ptyrunner [build failed]
+				parts := strings.Fields(line)
+				if len(parts) >= 2 && parts[0] == "FAIL" {
+					pkg := parts[1]
+					return fmt.Sprintf("Build failed for package %s (exit code %d)", pkg, exitCode)
+				}
+			}
+		}
+		return fmt.Sprintf("Build failed with exit code %d", exitCode)
+
+	case strings.Contains(stderr, "undefined:") || strings.Contains(stderr, "cannot find") || strings.Contains(stderr, "declared and not used"):
 		return fmt.Sprintf("Build/compilation error with exit code %d (check for undefined symbols or missing dependencies)", exitCode)
 
 	case strings.Contains(stderr, "log.Fatal") || strings.Contains(stderr, "logger.Fatal"):

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,6 +19,14 @@ import (
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+)
+
+// UI constants.
+const (
+	// TickInterval is the interval for progress updates.
+	TickInterval = 10 * time.Millisecond
+	// ScrollPageSize is the number of lines to scroll for page up/down.
+	ScrollPageSize = 10
 )
 
 // NewTestModel creates a new test model for the TUI.
@@ -229,13 +239,13 @@ func (m *TestModel) UpdateOld(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "pgup":
-			m.scrollOffset -= 10
+			m.scrollOffset -= ScrollPageSize
 			if m.scrollOffset < 0 {
 				m.scrollOffset = 0
 			}
 
 		case "pgdn":
-			m.scrollOffset += 10
+			m.scrollOffset += ScrollPageSize
 			if m.scrollOffset > m.maxScroll {
 				m.scrollOffset = m.maxScroll
 			}
@@ -407,10 +417,10 @@ func (m *TestModel) View() string {
 			// Tests are running, show progress against estimate
 			percentFloat := float64(m.completedTests) / float64(m.estimatedTestCount)
 			percent := int(percentFloat * 100)
-			percentage = fmt.Sprintf("%3d%s", percent, DurationStyle.Render("%"))
+			percentage = fmt.Sprintf("%3d%s", percent, DurationStyle.Render(constants.PercentString))
 		} else {
 			// No tests completed yet
-			percentage = fmt.Sprintf("  0%s", DurationStyle.Render("%"))
+			percentage = fmt.Sprintf("  0%s", DurationStyle.Render(constants.PercentString))
 		}
 		// Show completed/estimated format with tilde prefix (since whole fraction is estimated)
 		testCount = fmt.Sprintf("~%d/%d %s", m.completedTests, m.estimatedTestCount, DurationStyle.Render("tests"))
@@ -418,11 +428,11 @@ func (m *TestModel) View() string {
 		// Not using estimate, have actual count
 		percentFloat := float64(m.completedTests) / float64(m.totalTests)
 		percent := int(percentFloat * 100)
-		percentage = fmt.Sprintf("%3d%s", percent, DurationStyle.Render("%"))
+		percentage = fmt.Sprintf("%3d%s", percent, DurationStyle.Render(constants.PercentString))
 		testCount = fmt.Sprintf("%4d/%-4d %s", m.completedTests, m.totalTests, DurationStyle.Render("tests"))
 	default:
 		// No estimate and no tests discovered yet
-		percentage = fmt.Sprintf("  0%s", DurationStyle.Render("%"))
+		percentage = fmt.Sprintf("  0%s", DurationStyle.Render(constants.PercentString))
 		testCount = fmt.Sprintf("%-15s", DurationStyle.Render("discovering tests"))
 	}
 
@@ -469,7 +479,7 @@ func (m *TestModel) View() string {
 	// Assemble the complete status line with fixed spacing
 	// All sections are now fixed-width, so no jumping should occur
 	// Add test tube emoji with 2-space indent at the beginning
-	statusLine := prefix + spin + info + "  " + prog + " " + percentage + " " + testCount + "  " + timeStr + " " + bufferStr
+	statusLine := prefix + spin + info + constants.DoubleSpaceString + prog + constants.SpaceString + percentage + constants.SpaceString + testCount + constants.DoubleSpaceString + timeStr + constants.SpaceString + bufferStr
 
 	return statusLine + "\n"
 }
@@ -515,7 +525,7 @@ func (m *TestModel) GetPackageResults() map[string]*PackageResult {
 // DebugPackageTracking writes debug information about package tracking to a file.
 func (m *TestModel) DebugPackageTracking() {
 	if debugFile := config.GetDebugFile(); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "\n=== TUI PACKAGE TRACKING SUMMARY ===\n")
 			fmt.Fprintf(f, "Time: %s\n", time.Now().Format(time.RFC3339))
 			fmt.Fprintf(f, "Total packages in packageOrder: %d\n", len(m.packageOrder))

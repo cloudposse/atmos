@@ -214,14 +214,15 @@ func TestGenerateSubtestProgress(t *testing.T) {
 			result := model.generateSubtestProgress(tt.passed, tt.total)
 
 			// For large numbers, just check it's not too long
-			if tt.total > 10 {
+			switch {
+			case tt.total > 10:
 				// Count actual dots (not ANSI code length)
 				dotCount := strings.Count(result, "●")
 				assert.LessOrEqual(t, dotCount, 10)
-			} else if tt.passed == 0 {
+			case tt.passed == 0:
 				// Check for empty string when no tests passed
 				assert.Equal(t, "", result)
-			} else {
+			default:
 				// Count the number of dots (accounting for ANSI codes)
 				greenDots := strings.Count(result, "●")
 				assert.GreaterOrEqual(t, greenDots, tt.passed)

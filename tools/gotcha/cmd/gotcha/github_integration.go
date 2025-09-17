@@ -236,59 +236,55 @@ func getDiscriminator(logger *log.Logger) string {
 }
 
 // postGitHubComment posts a comment to GitHub PR if conditions are met.
-func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *log.Logger) error {
-	// Ensure GitHub token is available via viper (for the CI provider to use)
+// setupGitHubToken ensures GitHub token is available via viper.
+func setupGitHubToken(cmd *cobra.Command) {
 	_ = viper.BindPFlag(FlagGithubToken, cmd.Flags().Lookup(FlagGithubToken))
 	_ = viper.BindEnv(FlagGithubToken, "GITHUB_TOKEN")
+}
 
-	commentUUID, err := getCommentUUID(cmd, logger)
-	if err != nil {
-		return err
-	}
-
-	discriminator := getDiscriminator(logger)
-
-	// Get the CI provider
+// detectCIProvider detects and returns the CI provider, or nil if none found.
+func detectCIProvider(logger *log.Logger) ci.Integration {
 	provider := ci.DetectIntegration(logger)
 	if provider == nil {
 		logger.Warn("No CI provider detected",
 			"CI", viper.GetString("ci"),
 			"GITHUB_ACTIONS", viper.GetString("github.actions"),
 			"GITHUB_RUN_ID", viper.GetString("github.run.id"))
-		return nil
 	}
+	return provider
+}
 
-	logger.Info("CI provider detected", "provider", provider.Provider())
-
-	// Get context
+// getCIContextAndManager gets the CI context and comment manager from the provider.
+func getCIContextAndManager(provider ci.Integration, logger *log.Logger) (ci.Context, ci.CommentManager, error) {
 	ctx, err := provider.DetectContext()
 	if err != nil {
 		logger.Error("Failed to detect CI context", "error", err)
-		return fmt.Errorf("failed to detect CI context: %w", err)
+		return nil, nil, fmt.Errorf("failed to detect CI context: %w", err)
 	}
 
 	logger.Debug("CI context detected",
-		"repo", ctx.GetRepo(),
-		"pr", ctx.GetPRNumber())
+		FlagRepo, ctx.GetRepo(),
+		FlagPR, ctx.GetPRNumber())
 
-	// Get comment manager
 	commentManager := provider.CreateCommentManager(ctx, logger)
 	if commentManager == nil {
 		logger.Warn("Comment manager not available for this CI provider",
 			"provider", provider.Provider())
-		return nil
+		return ctx, nil, nil
 	}
 
 	logger.Debug("Comment manager created successfully")
+	return ctx, commentManager, nil
+}
 
-	// Generate the comment content with discriminator
-	commentContent := markdown.GenerateAdaptiveComment(summary, commentUUID, discriminator)
-
-	// Post the comment
+// postComment posts the comment to the PR and writes job summary if supported.
+func postComment(provider ci.Integration, ctx ci.Context, commentManager ci.CommentManager, 
+	commentContent string, logger *log.Logger) error {
+	
 	logger.Info("Posting comment to GitHub PR",
 		"contentLength", len(commentContent),
-		"repo", ctx.GetRepo(),
-		"pr", ctx.GetPRNumber())
+		FlagRepo, ctx.GetRepo(),
+		FlagPR, ctx.GetPRNumber())
 
 	if err := commentManager.PostOrUpdateComment(context.Background(), ctx, commentContent); err != nil {
 		logger.Error("Failed to post comment to GitHub",
@@ -299,8 +295,8 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	}
 
 	logger.Info("Comment posted successfully",
-		"repo", ctx.GetRepo(),
-		"pr", ctx.GetPRNumber())
+		FlagRepo, ctx.GetRepo(),
+		FlagPR, ctx.GetPRNumber())
 
 	// Also write to job summary if supported
 	if writer := provider.GetJobSummaryWriter(); writer != nil {
@@ -312,7 +308,11 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 		}
 	}
 
-	// Log summary information
+	return nil
+}
+
+// logTestSummary logs the test summary information.
+func logTestSummary(summary *types.TestSummary, logger *log.Logger) {
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
 	logger.Info("Test summary",
 		"passed", len(summary.Passed),
@@ -323,6 +323,43 @@ func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *l
 	if coverage := calculateAverageCoverage(summary); coverage >= 0 {
 		logger.Info("Coverage", "percentage", fmt.Sprintf("%.1f%%", coverage))
 	}
+}
+
+func postGitHubComment(summary *types.TestSummary, cmd *cobra.Command, logger *log.Logger) error {
+	// Setup GitHub token
+	setupGitHubToken(cmd)
+
+	// Get comment UUID and discriminator
+	commentUUID, err := getCommentUUID(cmd, logger)
+	if err != nil {
+		return err
+	}
+	discriminator := getDiscriminator(logger)
+
+	// Detect CI provider
+	provider := detectCIProvider(logger)
+	if provider == nil {
+		return nil
+	}
+	logger.Info("CI provider detected", "provider", provider.Provider())
+
+	// Get CI context and comment manager
+	ctx, commentManager, err := getCIContextAndManager(provider, logger)
+	if err != nil {
+		return err
+	}
+	if commentManager == nil {
+		return nil
+	}
+
+	// Generate and post comment
+	commentContent := markdown.GenerateAdaptiveComment(summary, commentUUID, discriminator)
+	if err := postComment(provider, ctx, commentManager, commentContent, logger); err != nil {
+		return err
+	}
+
+	// Log summary
+	logTestSummary(summary, logger)
 
 	return nil
 }

@@ -7,6 +7,12 @@ import (
 	"github.com/google/go-github/v59/github"
 )
 
+// Pagination constants.
+const (
+	// DefaultPerPage is the default number of items per page.
+	DefaultPerPage = 30
+)
+
 // MockClient for testing GitHub operations.
 type MockClient struct {
 	Comments   []*github.IssueComment
@@ -39,7 +45,7 @@ func (m *MockClient) ListIssueComments(ctx context.Context, owner, repo string, 
 	}
 
 	// Default pagination behavior
-	perPage := 30
+	perPage := DefaultPerPage
 	page := 1
 
 	if opts != nil {

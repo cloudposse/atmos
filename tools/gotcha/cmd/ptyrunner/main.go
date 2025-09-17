@@ -20,44 +20,41 @@ import (
 	"golang.org/x/term"
 )
 
-func main() {
-	// Initialize viper for environment variables
+// initializeConfig sets up viper configuration for environment variables.
+func initializeConfig() {
 	_ = viper.BindEnv("gotcha.binary", "GOTCHA_BINARY")
 	viper.AutomaticEnv()
+}
 
-	// Get the gotcha binary path
+// findGotchaBinary determines the path to the gotcha binary.
+func findGotchaBinary() string {
 	gotchaBinary := viper.GetString("gotcha.binary")
-	if gotchaBinary == "" {
-		// Try to find gotcha in the same directory as ptyrunner
-		execPath, err := os.Executable()
-		if err == nil {
-			gotchaBinary = filepath.Join(filepath.Dir(execPath), "gotcha")
-		} else {
-			gotchaBinary = "gotcha"
-		}
+	if gotchaBinary != "" {
+		return gotchaBinary
 	}
 
-	// Build command with all arguments passed to ptyrunner
-	args := os.Args[1:]
+	// Try to find gotcha in the same directory as ptyrunner
+	execPath, err := os.Executable()
+	if err == nil {
+		return filepath.Join(filepath.Dir(execPath), "gotcha")
+	}
+	return "gotcha"
+}
+
+// validateArguments checks that command-line arguments were provided.
+func validateArguments(args []string) {
 	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <gotcha-args>\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Example: %s stream ./...\n", os.Args[0])
 		os.Exit(1)
 	}
+}
 
-	// Create the command
-	cmd := exec.Command(gotchaBinary, args...)
-
-	// Start the command with a PTY
-	ptmx, err := pty.Start(cmd)
-	if err != nil {
-		log.Fatalf("Failed to start command with PTY: %v", err)
-	}
-	defer func() { _ = ptmx.Close() }()
-
-	// Handle PTY size changes
+// setupPTYResize handles PTY size changes.
+func setupPTYResize(ptmx *os.File) func() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
+	
 	go func() {
 		for range ch {
 			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
@@ -65,19 +62,49 @@ func main() {
 			}
 		}
 	}()
-	ch <- syscall.SIGWINCH                        // Initial resize
-	defer func() { signal.Stop(ch); close(ch) }() // Cleanup signals when done
-
-	// Check if stdin is a terminal
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		// Set stdin in raw mode for interactive use
-		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-		if err != nil {
-			log.Printf("Warning: could not set raw mode: %v", err)
-		} else {
-			defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
-		}
+	
+	ch <- syscall.SIGWINCH // Initial resize
+	
+	// Return cleanup function
+	return func() {
+		signal.Stop(ch)
+		close(ch)
 	}
+}
+
+// setupRawMode sets up raw terminal mode if stdin is a terminal.
+func setupRawMode() func() {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return func() {} // No-op cleanup
+	}
+
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		log.Printf("Warning: could not set raw mode: %v", err)
+		return func() {} // No-op cleanup
+	}
+	
+	return func() {
+		_ = term.Restore(int(os.Stdin.Fd()), oldState)
+	}
+}
+
+// runWithPTY executes the command with PTY and handles I/O.
+func runWithPTY(cmd *exec.Cmd) error {
+	// Start the command with a PTY
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to start command with PTY: %w", err)
+	}
+	defer func() { _ = ptmx.Close() }()
+
+	// Setup PTY resize handling
+	cleanupResize := setupPTYResize(ptmx)
+	defer cleanupResize()
+
+	// Setup raw mode
+	cleanupRaw := setupRawMode()
+	defer cleanupRaw()
 
 	// Copy stdin to the PTY and the PTY to stdout
 	go func() {
@@ -86,7 +113,25 @@ func main() {
 	_, _ = io.Copy(os.Stdout, ptmx)
 
 	// Wait for the command to finish
-	if err := cmd.Wait(); err != nil {
+	return cmd.Wait()
+}
+
+func main() {
+	// Initialize configuration
+	initializeConfig()
+
+	// Find the gotcha binary
+	gotchaBinary := findGotchaBinary()
+
+	// Validate arguments
+	args := os.Args[1:]
+	validateArguments(args)
+
+	// Create the command
+	cmd := exec.Command(gotchaBinary, args...)
+
+	// Run with PTY
+	if err := runWithPTY(cmd); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			os.Exit(exitErr.ExitCode())
 		}

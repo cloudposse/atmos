@@ -13,6 +13,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Display layout constants.
+const (
+	// MaxPackageNameWidth is the maximum width for package name display.
+	MaxPackageNameWidth = 50
+	// StatusLineWidth is the width for status line formatting.
+	StatusLineWidth = 57
+)
+
 // TUIRunner runs tests with a progress bar using StreamProcessor.
 type TUIRunner struct {
 	testPackages   []string
@@ -250,13 +258,12 @@ func (r *TUIRunner) View() string {
 	var info string
 	if r.activePackage != "" {
 		pkgName := r.activePackage
-		const maxWidth = 50
-		if len(pkgName) > maxWidth {
-			pkgName = pkgName[:maxWidth-3] + "..."
+		if len(pkgName) > MaxPackageNameWidth {
+			pkgName = pkgName[:MaxPackageNameWidth-3] + "..."
 		}
-		info = fmt.Sprintf("Testing %-*s", maxWidth, pkgName)
+		info = fmt.Sprintf("Testing %-*s", MaxPackageNameWidth, pkgName)
 	} else {
-		info = fmt.Sprintf("%-*s", 57, "Starting tests...")
+		info = fmt.Sprintf("%-*s", StatusLineWidth, "Starting tests...")
 	}
 
 	// Progress bar

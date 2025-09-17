@@ -27,6 +27,30 @@ var (
 	ErrCommentUUIDRequired = errors.New("comment UUID is required")
 )
 
+// Configuration and logging constants.
+const (
+	// Log levels.
+	LogLevelDebug   = "debug"
+	LogLevelInfo    = "info"
+	LogLevelWarn    = "warn"
+	LogLevelWarning = "warning"
+	LogLevelError   = "error"
+	LogLevelFatal   = "fatal"
+
+	// Configuration.
+	ConfigFileName = ".gotcha"
+	ConfigFileType = "yaml"
+	EnvPrefix      = "GOTCHA"
+	
+	// Force color values.
+	ForceColorANSI     = "1"
+	ForceColorANSI256  = "2"
+	ForceColorTrueColor = "3"
+	
+	// Time format.
+	TimeFormatShort = "15:04:05"
+)
+
 // exitError represents an error with a specific exit code.
 type exitError struct {
 	code int
@@ -49,19 +73,19 @@ var configFile string
 // parseLogLevel parses a log level string and returns the corresponding log.Level.
 func parseLogLevel(levelStr string) log.Level {
 	if levelStr == "" {
-		levelStr = "info" // Default to info level
+		levelStr = LogLevelInfo // Default to info level
 	}
 
 	switch strings.ToLower(levelStr) {
-	case "debug":
+	case LogLevelDebug:
 		return log.DebugLevel
-	case "info":
+	case LogLevelInfo:
 		return log.InfoLevel
-	case "warn", "warning":
+	case LogLevelWarn, LogLevelWarning:
 		return log.WarnLevel
-	case "error":
+	case LogLevelError:
 		return log.ErrorLevel
-	case "fatal":
+	case LogLevelFatal:
 		return log.FatalLevel
 	default:
 		return log.InfoLevel
@@ -120,11 +144,11 @@ func initGlobalLogger() {
 	switch {
 	case forceColor != "":
 		switch forceColor {
-		case "1":
+		case ForceColorANSI:
 			profile = termenv.ANSI
-		case "2":
+		case ForceColorANSI256:
 			profile = termenv.ANSI256
-		case "3":
+		case ForceColorTrueColor:
 			profile = termenv.TrueColor
 		default:
 			profile = termenv.ANSI256 // Default to 256 colors
@@ -148,7 +172,7 @@ func initGlobalLogger() {
 
 	// Show timestamp in non-CI environments
 	if !config.IsCI() {
-		globalLogger.SetTimeFormat("15:04:05")
+		globalLogger.SetTimeFormat(TimeFormatShort)
 	} else {
 		// In CI, don't show timestamps as CI systems add their own
 		globalLogger.SetTimeFormat("")
@@ -162,36 +186,29 @@ func initConfig() {
 		viper.SetConfigFile(configFile)
 	} else {
 		// Search for config in standard locations
-		viper.SetConfigName(".gotcha")
-		viper.SetConfigType("yaml")
+		viper.SetConfigName(ConfigFileName)
+		viper.SetConfigType(ConfigFileType)
 		viper.AddConfigPath(".")
 		viper.AddConfigPath("$HOME")
 	}
 
 	// Read in environment variables that match
-	viper.SetEnvPrefix("GOTCHA")
+	viper.SetEnvPrefix(EnvPrefix)
 	viper.AutomaticEnv()
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		// Only log in debug mode to avoid noise
-		if viper.GetString("log.level") == "debug" {
+		if viper.GetString("log.level") == LogLevelDebug {
 			fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 		}
 	}
 }
 
 // Execute runs the root command.
-func Execute() error {
-	// Initialize environment configuration first to avoid os.Getenv usage
-	config.InitEnvironment()
-
-	// Initialize config BEFORE creating commands so viper values are available
-	// This allows the config file to be read before command creation
-	initConfig()
-
-	// Create root command using Cobra first to set up flags
-	rootCmd := &cobra.Command{
+// createRootCommand creates and configures the root cobra command.
+func createRootCommand() *cobra.Command {
+	return &cobra.Command{
 		Use:   "gotcha [path]",
 		Short: "A beautiful test runner for Go with real-time progress tracking",
 		Long: `Gotcha is a sophisticated Go test runner that provides real-time progress tracking,
@@ -227,11 +244,16 @@ experience with intuitive visual feedback and comprehensive test result analysis
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+}
 
-	// Global flags
+// setupGlobalFlags sets up global persistent flags.
+func setupGlobalFlags(rootCmd *cobra.Command) {
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is .gotcha.yaml)")
 	rootCmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
+}
 
+// bindAndParseFlags binds viper flags and parses command line arguments.
+func bindAndParseFlags(rootCmd *cobra.Command) error {
 	// Bind log-level flag to viper BEFORE initializing logger
 	// This ensures flag values override config file values
 	if err := viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level")); err != nil {
@@ -245,10 +267,12 @@ experience with intuitive visual feedback and comprehensive test result analysis
 		// Can't use logger yet, it's not initialized
 		fmt.Fprintf(os.Stderr, "Failed to parse flags: %v\n", err)
 	}
+	
+	return nil
+}
 
-	// NOW initialize the logger with the correct log level
-	initGlobalLogger()
-
+// setupSubcommands adds all subcommands to the root command.
+func setupSubcommands(rootCmd *cobra.Command) {
 	// Add flags from stream command to root for convenience
 	streamCmd := newStreamCmd(globalLogger)
 	rootCmd.Flags().AddFlagSet(streamCmd.Flags())
@@ -256,14 +280,13 @@ experience with intuitive visual feedback and comprehensive test result analysis
 	// Add subcommands
 	rootCmd.AddCommand(streamCmd)
 	rootCmd.AddCommand(newParseCmd(globalLogger))
-	rootCmd.AddCommand(newVersionCmd(globalLogger))
+	rootCmd.AddCommand(newVersionCmd())
+}
 
-	// Use Fang for beautiful CLI with signal handling
+// createSignalContext creates a context with signal handling.
+func createSignalContext() context.Context {
 	ctx := context.Background()
-
-	// Add signal handling
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -272,6 +295,35 @@ experience with intuitive visual feedback and comprehensive test result analysis
 		globalLogger.Debug("Received interrupt signal")
 		cancel()
 	}()
+
+	return ctx
+}
+
+func Execute() error {
+	// Initialize environment configuration first to avoid os.Getenv usage
+	config.InitEnvironment()
+
+	// Initialize config BEFORE creating commands so viper values are available
+	// This allows the config file to be read before command creation
+	initConfig()
+
+	// Create and configure root command
+	rootCmd := createRootCommand()
+	setupGlobalFlags(rootCmd)
+	
+	// Bind and parse flags
+	if err := bindAndParseFlags(rootCmd); err != nil {
+		return err
+	}
+
+	// NOW initialize the logger with the correct log level
+	initGlobalLogger()
+
+	// Setup subcommands
+	setupSubcommands(rootCmd)
+
+	// Create context with signal handling
+	ctx := createSignalContext()
 
 	// Run the command with Fang for proper error handling
 	if err := fang.Execute(ctx, rootCmd); err != nil {

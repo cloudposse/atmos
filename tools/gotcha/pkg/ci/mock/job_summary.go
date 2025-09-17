@@ -4,6 +4,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	pkgErrors "github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 )
 
@@ -30,7 +31,7 @@ func (w *MockJobSummaryWriter) WriteJobSummary(content string) (string, error) {
 
 	// Optionally write to actual file for testing
 	if w.config.JobSummaryPath != "" && w.config.JobSummaryPath != "/tmp/mock-summary.md" {
-		err := os.WriteFile(w.config.JobSummaryPath, []byte(content), 0o644)
+		err := os.WriteFile(w.config.JobSummaryPath, []byte(content), constants.DefaultFilePerms)
 		if err != nil {
 			return "", err
 		}

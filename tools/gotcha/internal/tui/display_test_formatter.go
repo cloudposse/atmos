@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 )
 
 // TestFormatter handles formatting of test output based on status.
@@ -18,7 +20,7 @@ func NewTestFormatter(model *TestModel) *TestFormatter {
 // FormatTest formats a single test result.
 func (f *TestFormatter) FormatTest(output *strings.Builder, test *TestResult) {
 	// Skip running tests
-	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
+	if test.Status != constants.PassStatus && test.Status != constants.FailStatus && test.Status != "skip" {
 		return
 	}
 
@@ -56,15 +58,15 @@ func (f *TestFormatter) formatTestHeader(output *strings.Builder, test *TestResu
 	// Add subtest progress
 	f.addSubtestProgress(output, test)
 
-	output.WriteString("\n")
+	output.WriteString(constants.NewlineString)
 }
 
 // getStatusIcon returns the styled icon for a test status.
 func (f *TestFormatter) getStatusIcon(status string) string {
 	switch status {
-	case "pass":
+	case constants.PassStatus:
 		return PassStyle.Render(CheckPass)
-	case "fail":
+	case constants.FailStatus:
 		return FailStyle.Render(CheckFail)
 	case "skip":
 		return SkipStyle.Render(CheckSkip)
@@ -90,13 +92,13 @@ func (f *TestFormatter) addSubtestProgress(output *strings.Builder, test *TestRe
 	}
 
 	progress := f.model.generateSubtestProgress(len(stats.passed), total)
-	percentage := (len(stats.passed) * 100) / total
+	percentage := (len(stats.passed) * PercentageMultiplier) / total
 	fmt.Fprintf(output, " %s %d%% passed", progress, percentage)
 }
 
 // shouldShowOutput determines if test output should be displayed.
 func (f *TestFormatter) shouldShowOutput(test *TestResult) bool {
-	if test.Status != "fail" {
+	if test.Status != constants.FailStatus {
 		return false
 	}
 	if f.model.showFilter == "collapsed" {
@@ -107,7 +109,7 @@ func (f *TestFormatter) shouldShowOutput(test *TestResult) bool {
 
 // formatTestOutput formats the output of a failed test.
 func (f *TestFormatter) formatTestOutput(output *strings.Builder, test *TestResult) {
-	output.WriteString("\n")
+	output.WriteString(constants.NewlineString)
 
 	formatter := f.getOutputFormatter()
 	for _, line := range test.Output {
@@ -115,7 +117,7 @@ func (f *TestFormatter) formatTestOutput(output *strings.Builder, test *TestResu
 		output.WriteString(formatter(line))
 	}
 
-	output.WriteString("\n")
+	output.WriteString(constants.NewlineString)
 }
 
 // getOutputFormatter returns the appropriate output formatter based on verbosity.
@@ -123,7 +125,7 @@ func (f *TestFormatter) getOutputFormatter() func(string) string {
 	if f.model.verbosityLevel == "with-output" || f.model.verbosityLevel == "verbose" {
 		return func(line string) string {
 			formatted := strings.ReplaceAll(line, `\t`, "\t")
-			return strings.ReplaceAll(formatted, `\n`, "\n")
+			return strings.ReplaceAll(formatted, `\n`, constants.NewlineString)
 		}
 	}
 	return func(line string) string {
@@ -133,7 +135,7 @@ func (f *TestFormatter) getOutputFormatter() func(string) string {
 
 // shouldShowSubtests determines if subtest details should be displayed.
 func (f *TestFormatter) shouldShowSubtests(test *TestResult) bool {
-	if test.Status != "fail" {
+	if test.Status != constants.FailStatus {
 		return false
 	}
 	if len(test.Subtests) == 0 {
@@ -261,7 +263,7 @@ func (s *SubtestSummaryFormatter) getOutputFormatter() func(string) string {
 	if s.model.verbosityLevel == "with-output" || s.model.verbosityLevel == "verbose" {
 		return func(line string) string {
 			formatted := strings.ReplaceAll(line, `\t`, "\t")
-			return strings.ReplaceAll(formatted, `\n`, "\n")
+			return strings.ReplaceAll(formatted, `\n`, constants.NewlineString)
 		}
 	}
 	return func(line string) string {

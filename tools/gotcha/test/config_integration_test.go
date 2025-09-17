@@ -6,6 +6,7 @@
 package test
 
 import (
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"bytes"
 	"os"
 	"os/exec"
@@ -28,6 +29,7 @@ func TestConfigFile_ShowFilterIsRespected(t *testing.T) {
 	testContent := `package main
 
 import (
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"testing"
 )
 
@@ -43,7 +45,7 @@ func TestSkip(t *testing.T) {
 	t.Skip("This test is skipped")
 }
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0o644)
+	err := os.WriteFile(testFile, []byte(testContent),constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create go.mod for the test package
@@ -52,7 +54,7 @@ func TestSkip(t *testing.T) {
 
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent), 0o644)
+	err = os.WriteFile(goModFile, []byte(goModContent),constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create a .gotcha.yaml config file with show: failed
@@ -63,7 +65,7 @@ show: failed
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0o644)
+	err = os.WriteFile(configFile, []byte(configContent),constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Build the gotcha binary if it doesn't exist
@@ -142,7 +144,7 @@ func TestSimple(t *testing.T) {
 	t.Fatal("fail")
 }
 `
-	err := os.WriteFile(testFile, []byte(testContent), 0o644)
+	err := os.WriteFile(testFile, []byte(testContent),constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create go.mod
@@ -150,7 +152,7 @@ func TestSimple(t *testing.T) {
 	goModContent := `module testpkg
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent), 0o644)
+	err = os.WriteFile(goModFile, []byte(goModContent),constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create a .gotcha.yaml with specific settings
@@ -159,7 +161,7 @@ go 1.21
 show: failed
 output: from-config.json
 `
-	err = os.WriteFile(configFile, []byte(configContent), 0o644)
+	err = os.WriteFile(configFile, []byte(configContent),constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Build gotcha binary

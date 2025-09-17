@@ -5,8 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
 func TestDetectProjectContext(t *testing.T) {
@@ -138,5 +143,103 @@ func TestDetectProjectContext(t *testing.T) {
 			result := detectProjectContext()
 			assert.Equal(t, tt.expected, result, "Project context mismatch for directory: %s", testDir)
 		})
+	}
+}
+
+func TestSetupGitHubToken(t *testing.T) {
+	// Reset viper before test
+	viper.Reset()
+	defer viper.Reset()
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String(FlagGithubToken, "", "GitHub token")
+
+	// Test that the function binds the flag
+	setupGitHubToken(cmd)
+
+	// Set a value via the flag
+	cmd.Flags().Set(FlagGithubToken, "test-token")
+	
+	// The binding should be set up (we can't easily test the actual binding without more complex setup)
+	// This test mainly ensures the function doesn't panic
+	assert.NotPanics(t, func() {
+		setupGitHubToken(cmd)
+	})
+}
+
+func TestLogTestSummary(t *testing.T) {
+	logger := log.New(os.Stderr)
+	logger.SetLevel(log.DebugLevel)
+
+	tests := []struct {
+		name    string
+		summary *types.TestSummary
+	}{
+		{
+			name: "empty summary",
+			summary: &types.TestSummary{
+				Passed:  []types.TestResult{},
+				Failed:  []types.TestResult{},
+				Skipped: []types.TestResult{},
+			},
+		},
+		{
+			name: "summary with tests",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{
+					{Test: "TestFoo", Package: "pkg1"},
+					{Test: "TestBar", Package: "pkg1"},
+				},
+				Failed: []types.TestResult{
+					{Test: "TestBaz", Package: "pkg2"},
+				},
+				Skipped: []types.TestResult{
+					{Test: "TestSkip", Package: "pkg3"},
+				},
+			},
+		},
+		{
+			name: "summary with coverage",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{
+					{Test: "TestFoo", Package: "pkg1"},
+				},
+				Failed:  []types.TestResult{},
+				Skipped: []types.TestResult{},
+				Coverage: "80.5%",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This test ensures the function doesn't panic and completes
+			assert.NotPanics(t, func() {
+				logTestSummary(tt.summary, logger)
+			})
+		})
+	}
+}
+
+func TestDetectCIProvider(t *testing.T) {
+	logger := log.New(os.Stderr)
+	logger.SetLevel(log.DebugLevel)
+
+	// Reset viper before test
+	viper.Reset()
+	defer viper.Reset()
+
+	// Test when no CI provider is available
+	provider := detectCIProvider(logger)
+	
+	// In a non-CI environment, this should return nil
+	// The function should not panic
+	assert.NotPanics(t, func() {
+		_ = detectCIProvider(logger)
+	})
+	
+	// Additional assertion depends on environment
+	if provider != nil {
+		assert.NotEmpty(t, provider.Provider())
 	}
 }

@@ -13,7 +13,7 @@ const (
 	StdinMarker        = "-"
 	StdoutPath         = "stdout"
 	DefaultSummaryFile = "test-summary.md"
-	FilePermissions    = 0o644
+	FilePermissions    = DefaultFilePerms
 	// Coverage threshold constants.
 	CoverageHighThreshold = 80.0
 	CoverageMedThreshold  = 40.0

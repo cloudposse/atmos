@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
@@ -45,7 +47,7 @@ func (m *TestModel) processPackageEvent(event *types.TestEvent) {
 					m.packageOrder = append(m.packageOrder, event.Package)
 					// Debug: Log package addition
 					if debugFile := config.GetDebugFile(); debugFile != "" {
-						if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+						if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 							fmt.Fprintf(f, "[TUI-DEBUG] Added package to order from processPackageEvent: %s (total: %d)\n", event.Package, len(m.packageOrder))
 							f.Close()
 						}
@@ -180,7 +182,7 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 			m.packageOrder = append(m.packageOrder, event.Package)
 			// Debug: Log package addition from test event
 			if debugFile := config.GetDebugFile(); debugFile != "" {
-				if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+				if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 					fmt.Fprintf(f, "[TUI-DEBUG] Added package to order from processTestEvent: %s (total: %d)\n", event.Package, len(m.packageOrder))
 					f.Close()
 				}
@@ -216,7 +218,7 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, parentTest string, isSubtest bool) {
 	// Debug: Log all test run events
 	if debugFile := config.GetDebugFile(); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "[RUN-DEBUG] Test run event for package %s: %s (isSubtest: %v)\n",
 				event.Package, event.Test, isSubtest)
 			f.Close()
@@ -282,7 +284,7 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 
 		// Debug: Log when we add a test to TestOrder
 		if debugFile := config.GetDebugFile(); debugFile != "" {
-			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 				fmt.Fprintf(f, "[EVENT-DEBUG] Added test to TestOrder for package %s: %s (total in order: %d)\n",
 					event.Package, event.Test, len(pkg.TestOrder))
 				f.Close()
@@ -353,7 +355,7 @@ func (m *TestModel) extractSkipReason(output string, test *TestResult) {
 		test.SkipReason = reason
 
 		// Log to file for debugging
-		if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		if f, err := os.OpenFile("/tmp/gotcha-debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "[DEBUG] Captured skip reason for %s: %q\n", test.Name, reason)
 			f.Close()
 		}
@@ -385,11 +387,11 @@ func (m *TestModel) processTestResult(event *types.TestEvent, pkg *PackageResult
 
 	// Update counts
 	switch event.Action {
-	case "pass":
+	case TestStatusPass:
 		m.passCount++
-	case "fail":
+	case TestStatusFail:
 		m.failCount++
-	case "skip":
+	case TestStatusSkip:
 		m.skipCount++
 	}
 
@@ -405,11 +407,11 @@ func (m *TestModel) processTestResult(event *types.TestEvent, pkg *PackageResult
 				m.subtestStats[parentTest] = &SubtestStats{}
 			}
 			switch event.Action {
-			case "pass":
+			case TestStatusPass:
 				m.subtestStats[parentTest].passed = append(m.subtestStats[parentTest].passed, event.Test)
-			case "fail":
+			case TestStatusFail:
 				m.subtestStats[parentTest].failed = append(m.subtestStats[parentTest].failed, event.Test)
-			case "skip":
+			case TestStatusSkip:
 				m.subtestStats[parentTest].skipped = append(m.subtestStats[parentTest].skipped, event.Test)
 			}
 		}

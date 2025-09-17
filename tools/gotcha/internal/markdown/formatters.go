@@ -12,6 +12,43 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
+// WriteBuildFailuresTable writes build failures as a Markdown table.
+func WriteBuildFailuresTable(output io.Writer, buildFailed []types.BuildFailure) {
+	if len(buildFailed) == 0 {
+		return // Hide entire section when no build failures
+	}
+
+	fmt.Fprintf(output, "### ❌ Build Failures (%d)\n\n", len(buildFailed))
+
+	fmt.Fprint(output, constants.DetailsOpenTag)
+	fmt.Fprintf(output, "<summary>Click to see packages that failed to build</summary>\n\n")
+	fmt.Fprintf(output, "| Package | Error |\n")
+	fmt.Fprintf(output, "|---------|-------|\n")
+	for _, bf := range buildFailed {
+		pkg := utils.ShortPackage(bf.Package)
+		// Extract first line of error if available
+		errorMsg := "_Build failed_"
+		if bf.Output != "" {
+			lines := strings.Split(bf.Output, "\n")
+			if len(lines) > 0 && lines[0] != "" {
+				// Truncate long error messages
+				firstLine := lines[0]
+				if len(firstLine) > 100 {
+					firstLine = firstLine[:100] + "..."
+				}
+				errorMsg = "`" + firstLine + "`"
+			}
+		}
+		fmt.Fprintf(output, "| %s | %s |\n", pkg, errorMsg)
+	}
+	fmt.Fprintf(output, "\n**Run locally to debug:**\n")
+	fmt.Fprintf(output, "```bash\n")
+	for _, bf := range buildFailed {
+		fmt.Fprintf(output, "go test %s\n", bf.Package)
+	}
+	fmt.Fprintf(output, "```"+constants.DetailsCloseTag)
+}
+
 // writeFailedTests writes the failed tests section.
 // WriteFailedTestsTable writes failed test results as a Markdown table.
 func WriteFailedTestsTable(output io.Writer, failed []types.TestResult) {

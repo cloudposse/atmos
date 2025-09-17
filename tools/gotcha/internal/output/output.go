@@ -71,7 +71,7 @@ func writeGitHubSummary(summary *types.TestSummary, outputFile string) error {
 		// Running locally - write to a regular file
 		regularFile := outputFile
 		if regularFile == "" {
-			regularFile = "test-summary.md" // Default file if none specified.
+			regularFile = constants.TestSummaryFileName // Default file if none specified.
 		}
 
 		file, err := os.Create(regularFile)
@@ -126,7 +126,7 @@ func openGitHubOutput(outputFile string) (io.Writer, string, error) {
 	}
 
 	// Running locally - use test-summary.md or specified file.
-	defaultFile := "test-summary.md"
+	defaultFile := constants.TestSummaryFileName
 	if outputFile != "" {
 		defaultFile = outputFile
 	}
@@ -148,7 +148,7 @@ func HandleOutput(summary *types.TestSummary, format, outputFile string, generat
 		if generateSummary {
 			// Use test-summary.md in current directory if no output file specified
 			if outputFile == "" {
-				outputFile = "test-summary.md"
+				outputFile = constants.TestSummaryFileName
 			}
 			return WriteSummary(summary, format, outputFile)
 		}
@@ -157,7 +157,7 @@ func HandleOutput(summary *types.TestSummary, format, outputFile string, generat
 		if generateSummary {
 			// Use test-summary.md in current directory if no output file specified
 			if outputFile == "" {
-				outputFile = "test-summary.md"
+				outputFile = constants.TestSummaryFileName
 			}
 			return WriteSummary(summary, format, outputFile)
 		}
@@ -169,7 +169,7 @@ func HandleOutput(summary *types.TestSummary, format, outputFile string, generat
 		if generateSummary {
 			// Use test-summary.md in current directory if no output file specified
 			if outputFile == "" {
-				outputFile = "test-summary.md"
+				outputFile = constants.TestSummaryFileName
 			}
 			return WriteSummary(summary, "markdown", outputFile)
 		}

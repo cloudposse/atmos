@@ -8,6 +8,14 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/google/go-github/v59/github"
+	
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+)
+
+// API constants.
+const (
+	// MaxPageLimit is the maximum number of pages to fetch when searching for comments.
+	MaxPageLimit = 1000
 )
 
 const (
@@ -19,6 +27,12 @@ const (
 	MaxRetries = 3
 	// RetryDelay is the base delay between retries.
 	RetryDelay = time.Second
+)
+
+// Log field names.
+const (
+	LogFieldRepo = "repo"
+	LogFieldPR   = "pr"
 )
 
 // CommentManager handles GitHub PR comment operations.
@@ -47,8 +61,8 @@ func (m *CommentManager) FindExistingComment(ctx context.Context, owner, repo st
 
 	m.logger.Debug("Searching for existing comment",
 		"owner", owner,
-		"repo", repo,
-		"pr", prNumber,
+		LogFieldRepo, repo,
+		LogFieldPR, prNumber,
 		"uuid", uuid)
 
 	for {
@@ -75,7 +89,7 @@ func (m *CommentManager) FindExistingComment(ctx context.Context, owner, repo st
 		for _, comment := range comments {
 			if comment.Body != nil && strings.Contains(*comment.Body, marker) {
 				m.logger.Debug("Found existing comment",
-					"comment_id", *comment.ID,
+					constants.CommentIDField, *comment.ID,
 					"page", page)
 				return comment, nil
 			}
@@ -89,7 +103,7 @@ func (m *CommentManager) FindExistingComment(ctx context.Context, owner, repo st
 		page = resp.NextPage
 
 		// Safety check to avoid infinite loops
-		if page > 1000 { // Reasonable upper limit
+		if page > MaxPageLimit { // Reasonable upper limit
 			m.logger.Warn("Reached maximum page limit while searching for comment", "page", page)
 			break
 		}
@@ -132,56 +146,56 @@ func (m *CommentManager) PostOrUpdateComment(ctx context.Context, ghCtx *Context
 	if existingComment != nil {
 		// Update existing comment
 		m.logger.Info("Updating existing GitHub comment",
-			"comment_id", *existingComment.ID,
-			"pr", ghCtx.PRNumber)
+			constants.CommentIDField, *existingComment.ID,
+			LogFieldPR, ghCtx.PRNumber)
 
 		updateComment := &github.IssueComment{
 			Body: github.String(markdown),
 		}
 
-		_, _, err := m.retryAPICall(func() (*github.IssueComment, *github.Response, error) {
+		_, err := m.retryAPICall(func() (*github.IssueComment, *github.Response, error) {
 			return m.client.UpdateComment(ctx, ghCtx.Owner, ghCtx.Repo, *existingComment.ID, updateComment)
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update comment: %w", err)
 		}
 
-		m.logger.Info("Successfully updated GitHub comment", "comment_id", *existingComment.ID)
+		m.logger.Info("Successfully updated GitHub comment", constants.CommentIDField, *existingComment.ID)
 	} else {
 		// Create new comment
-		m.logger.Info("Creating new GitHub comment", "pr", ghCtx.PRNumber)
+		m.logger.Info("Creating new GitHub comment", LogFieldPR, ghCtx.PRNumber)
 
 		newComment := &github.IssueComment{
 			Body: github.String(markdown),
 		}
 
-		createdComment, _, err := m.retryAPICall(func() (*github.IssueComment, *github.Response, error) {
+		createdComment, err := m.retryAPICall(func() (*github.IssueComment, *github.Response, error) {
 			return m.client.CreateComment(ctx, ghCtx.Owner, ghCtx.Repo, ghCtx.PRNumber, newComment)
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create comment: %w", err)
 		}
 
-		m.logger.Info("Successfully created GitHub comment", "comment_id", *createdComment.ID)
+		m.logger.Info("Successfully created GitHub comment", constants.CommentIDField, *createdComment.ID)
 	}
 
 	return nil
 }
 
 // retryAPICall performs API calls with exponential backoff retry logic.
-func (m *CommentManager) retryAPICall(apiCall func() (*github.IssueComment, *github.Response, error)) (*github.IssueComment, *github.Response, error) {
+func (m *CommentManager) retryAPICall(apiCall func() (*github.IssueComment, *github.Response, error)) (*github.IssueComment, error) {
 	var lastErr error
 
 	for attempt := 0; attempt < MaxRetries; attempt++ {
 		if attempt > 0 {
 			delay := time.Duration(attempt) * RetryDelay
-			m.logger.Debug("Retrying API call", "attempt", attempt+1, "delay", delay)
+			m.logger.Debug("Retrying API call", constants.AttemptField, attempt+1, "delay", delay)
 			time.Sleep(delay)
 		}
 
-		comment, resp, err := apiCall()
+		comment, _, err := apiCall()
 		if err == nil {
-			return comment, resp, nil
+			return comment, nil
 		}
 
 		lastErr = err
@@ -192,10 +206,10 @@ func (m *CommentManager) retryAPICall(apiCall func() (*github.IssueComment, *git
 			break
 		}
 
-		m.logger.Debug("Retryable error encountered", "attempt", attempt+1, "error", err)
+		m.logger.Debug("Retryable error encountered", constants.AttemptField, attempt+1, "error", err)
 	}
 
-	return nil, nil, fmt.Errorf("API call failed after %d attempts: %w", MaxRetries, lastErr)
+	return nil, fmt.Errorf("API call failed after %d attempts: %w", MaxRetries, lastErr)
 }
 
 // retryAPICallList performs list API calls with retry logic.
@@ -205,7 +219,7 @@ func (m *CommentManager) retryAPICallList(apiCall func() ([]*github.IssueComment
 	for attempt := 0; attempt < MaxRetries; attempt++ {
 		if attempt > 0 {
 			delay := time.Duration(attempt) * RetryDelay
-			m.logger.Debug("Retrying API call", "attempt", attempt+1, "delay", delay)
+			m.logger.Debug("Retrying API call", constants.AttemptField, attempt+1, "delay", delay)
 			time.Sleep(delay)
 		}
 
@@ -222,7 +236,7 @@ func (m *CommentManager) retryAPICallList(apiCall func() ([]*github.IssueComment
 			break
 		}
 
-		m.logger.Debug("Retryable error encountered", "attempt", attempt+1, "error", err)
+		m.logger.Debug("Retryable error encountered", constants.AttemptField, attempt+1, "error", err)
 	}
 
 	return nil, nil, fmt.Errorf("API call failed after %d attempts: %w", MaxRetries, lastErr)

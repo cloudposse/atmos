@@ -7,13 +7,15 @@ import (
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 )
+
 
 // displayPackageResult outputs the buffered results for a completed package.
 func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Debug: Log package display start
 	if debugFile := config.GetDebugFile(); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "\n[DISPLAY-PKG] Starting display for package: %s\n", pkg.Package)
 			fmt.Fprintf(f, "  Status: %s, HasTests: %v, TestCount: %d\n",
 				pkg.Status, pkg.HasTests, len(pkg.Tests))
@@ -31,7 +33,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// 3. Calling Sync() on pipes (like in tests) can cause hangs
 
 	// Check for package-level failures (e.g., build failures, TestMain failures)
-	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
+	if pkg.Status == TestStatusFail && len(pkg.Tests) == 0 {
 		// Package failed without running any tests (likely build failure or TestMain failure)
 		p.writer.PrintUI("  %s Package failed (build error or initialization failure)\n", tui.FailStyle.Render(tui.CheckFail))
 
@@ -62,22 +64,22 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	for _, test := range pkg.Tests {
 		// Count the parent test
 		switch test.Status {
-		case "pass":
+		case constants.PassStatus:
 			passedCount++
-		case "fail":
+		case TestStatusFail:
 			failedCount++
-		case "skip":
+		case TestStatusSkip:
 			skippedCount++
 		}
 
 		// Count all subtests
 		for _, subtest := range test.Subtests {
 			switch subtest.Status {
-			case "pass":
+			case constants.PassStatus:
 				passedCount++
-			case "fail":
+			case TestStatusFail:
 				failedCount++
-			case "skip":
+			case TestStatusSkip:
 				skippedCount++
 			}
 		}
@@ -89,7 +91,7 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 
 	// Debug: Log all tests in TestOrder
 	if debugFile := config.GetDebugFile(); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "\n[DISPLAY-DEBUG] Package %s TestOrder:\n", pkg.Package)
 			for i, name := range pkg.TestOrder {
 				if test := pkg.Tests[name]; test != nil {
@@ -120,13 +122,13 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 			// 1. Display the parent test with mini indicators
 			// Debug: Log parent test info
 			if debugFile := config.GetDebugFile(); debugFile != "" {
-				if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+				if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 					fmt.Fprintf(f, "[DISPLAY-DEBUG] Parent test %s: status=%s, subtests=%d, shouldShow=%v\n",
 						testName, test.Status, len(test.Subtests), p.shouldShowTestStatus(test.Status))
 					f.Close()
 				}
 			}
-			if p.shouldShowTestStatus(test.Status) || test.Status == "fail" {
+			if p.shouldShowTestStatus(test.Status) || test.Status == TestStatusFail {
 				testsDisplayed = true
 				p.displayTest(test, "")
 			}
@@ -181,16 +183,16 @@ func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 // displayTestLine outputs a test as a simple one-line entry without subtest progress.
 func (p *StreamProcessor) displayTestLine(test *TestResult, indent string) {
 	// Skip running tests
-	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
+	if test.Status != TestStatusPass && test.Status != TestStatusFail && test.Status != TestStatusSkip {
 		return
 	}
 
 	// Determine status icon
 	var statusIcon string
 	switch test.Status {
-	case "pass":
+	case constants.PassStatus:
 		statusIcon = tui.PassStyle.Render(tui.CheckPass)
-	case "fail":
+	case constants.FailStatus:
 		statusIcon = tui.FailStyle.Render(tui.CheckFail)
 	case "skip":
 		statusIcon = tui.SkipStyle.Render(tui.CheckSkip)
@@ -200,30 +202,30 @@ func (p *StreamProcessor) displayTestLine(test *TestResult, indent string) {
 	var line strings.Builder
 	line.WriteString(indent + "  ")
 	line.WriteString(statusIcon)
-	line.WriteString(" ")
+	line.WriteString(constants.SpaceString)
 	line.WriteString(tui.TestNameStyle.Render(test.Name))
 
 	// Add duration for completed tests
 	if test.Elapsed > 0 {
-		line.WriteString(" ")
+		line.WriteString(constants.SpaceString)
 		line.WriteString(tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
 	}
 
 	// Add skip reason if present
-	if test.Status == "skip" && test.SkipReason != "" {
-		line.WriteString(" ")
+	if test.Status == TestStatusSkip && test.SkipReason != "" {
+		line.WriteString(constants.SpaceString)
 		line.WriteString(tui.FaintStyle.Render("— " + test.SkipReason))
 	}
 
 	p.writer.PrintUI("%s\n", line.String())
 
 	// Display test output for failures (respecting show filter)
-	if test.Status == "fail" && len(test.Output) > 0 && p.showFilter != "none" {
+	if test.Status == TestStatusFail && len(test.Output) > 0 && p.showFilter != "none" {
 		if p.verbosityLevel == "with-output" || p.verbosityLevel == "verbose" {
 			// With full output, properly render tabs and maintain formatting
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
-				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+				formatted = strings.ReplaceAll(formatted, `\n`, constants.NewlineString)
 				p.writer.PrintUI("%s", indent+"    "+formatted)
 			}
 		} else {
@@ -242,7 +244,7 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 	hasFailedSubtests := false
 	if p.showFilter == "failed" && len(test.Subtests) > 0 {
 		for _, subtest := range test.Subtests {
-			if subtest.Status == "fail" {
+			if subtest.Status == TestStatusFail {
 				hasFailedSubtests = true
 				break
 			}
@@ -257,9 +259,9 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 	// Determine status icon
 	var statusIcon string
 	switch test.Status {
-	case "pass":
+	case constants.PassStatus:
 		statusIcon = tui.PassStyle.Render(tui.CheckPass)
-	case "fail":
+	case constants.FailStatus:
 		statusIcon = tui.FailStyle.Render(tui.CheckFail)
 	case "skip":
 		statusIcon = tui.SkipStyle.Render(tui.CheckSkip)
@@ -271,12 +273,12 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 	var line strings.Builder
 	line.WriteString(indent + "  ")
 	line.WriteString(statusIcon)
-	line.WriteString(" ")
+	line.WriteString(constants.SpaceString)
 	line.WriteString(tui.TestNameStyle.Render(test.Name))
 
 	// Add duration for completed tests
 	if test.Elapsed > 0 {
-		line.WriteString(" ")
+		line.WriteString(constants.SpaceString)
 		line.WriteString(tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
 	}
 
@@ -289,11 +291,11 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 
 		for _, subtest := range test.Subtests {
 			switch subtest.Status {
-			case "pass":
+			case constants.PassStatus:
 				passed++
-			case "fail":
+			case TestStatusFail:
 				failed++
-			case "skip":
+			case TestStatusSkip:
 				skipped++
 			}
 		}
@@ -302,9 +304,9 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 		if total > 0 {
 			// Add mini progress indicator
 			miniProgress := p.generateSubtestProgress(passed, total)
-			percentage := (passed * 100) / total
+			percentage := (passed * PercentageMultiplier) / total
 
-			line.WriteString(" ")
+			line.WriteString(constants.SpaceString)
 			line.WriteString(miniProgress)
 			line.WriteString(fmt.Sprintf(" %d%% passed", percentage))
 		}
@@ -313,12 +315,12 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 	p.writer.PrintUI("%s\n", line.String())
 
 	// Display test output for failures (respecting show filter)
-	if test.Status == "fail" && len(test.Output) > 0 && p.showFilter != "none" {
+	if test.Status == TestStatusFail && len(test.Output) > 0 && p.showFilter != "none" {
 		if p.verbosityLevel == "with-output" || p.verbosityLevel == "verbose" {
 			// With full output, properly render tabs and maintain formatting
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
-				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+				formatted = strings.ReplaceAll(formatted, `\n`, constants.NewlineString)
 				p.writer.PrintUI("%s", indent+"    "+formatted)
 			}
 		} else {
@@ -330,9 +332,9 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 	}
 
 	// Display subtests if test failed or show filter is "all"
-	if len(test.Subtests) > 0 && (test.Status == "fail" || p.showFilter == "all") {
+	if len(test.Subtests) > 0 && (test.Status == TestStatusFail || p.showFilter == "all") {
 		// Display subtest summary for failed tests
-		if test.Status == "fail" {
+		if test.Status == TestStatusFail {
 			passed := []*TestResult{}
 			failed := []*TestResult{}
 			skipped := []*TestResult{}
@@ -340,11 +342,11 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 			for _, subtestName := range test.SubtestOrder {
 				subtest := test.Subtests[subtestName]
 				switch subtest.Status {
-				case "pass":
+				case constants.PassStatus:
 					passed = append(passed, subtest)
-				case "fail":
+				case TestStatusFail:
 					failed = append(failed, subtest)
-				case "skip":
+				case TestStatusSkip:
 					skipped = append(skipped, subtest)
 				}
 			}
@@ -373,7 +375,7 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 						if (p.verbosityLevel == "with-output" || p.verbosityLevel == "verbose") && len(subtest.Output) > 0 {
 							for _, outputLine := range subtest.Output {
 								formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
-								formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+								formatted = strings.ReplaceAll(formatted, `\n`, constants.NewlineString)
 								p.writer.PrintUI("%s", indent+"        "+formatted)
 							}
 						}
@@ -389,49 +391,9 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 					}
 				}
 			}
-		} else if p.showFilter == "all" {
-			// For "all" filter, subtests are already shown in mini progress
-			// Don't display them again unless specifically requested
 		}
+		// For "all" filter, subtests are already shown in mini progress
+		// Don't display them again unless specifically requested
 	}
 }
 
-// generateSubtestProgress creates a visual progress indicator for subtest results.
-func (p *StreamProcessor) generateSubtestProgress(passed, total int) string {
-	const maxDots = 10 // Maximum number of dots to show for readability
-
-	if total == 0 {
-		return ""
-	}
-
-	// Determine how many dots to show (actual count up to maxDots)
-	dotsToShow := total
-	if dotsToShow > maxDots {
-		dotsToShow = maxDots
-	}
-
-	// Calculate how many dots for passed vs failed
-	passedDots := passed
-	failedDots := total - passed
-
-	// If we need to scale down to maxDots, do it proportionally
-	if total > maxDots {
-		passedDots = (passed * maxDots) / total
-		failedDots = maxDots - passedDots
-	}
-
-	// Build the indicator with colored dots
-	var indicator strings.Builder
-
-	// Add green dots for passed tests
-	for i := 0; i < passedDots; i++ {
-		indicator.WriteString(tui.PassStyle.Render("●"))
-	}
-
-	// Add red dots for failed tests
-	for i := 0; i < failedDots; i++ {
-		indicator.WriteString(tui.FailStyle.Render("●"))
-	}
-
-	return indicator.String()
-}

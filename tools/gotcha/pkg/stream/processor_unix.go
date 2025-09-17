@@ -23,7 +23,7 @@ func killProcessGroup(pid int) {
 	if pid > 0 {
 		// On Unix systems, kill the entire process group
 		// The negative PID means kill the process group
-		syscall.Kill(-pid, syscall.SIGTERM)
+		_ = syscall.Kill(-pid, syscall.SIGTERM)
 	}
 }
 

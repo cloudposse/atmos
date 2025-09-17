@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 )
 
 func TestParseCoverageLine(t *testing.T) {
@@ -171,7 +173,7 @@ test/file1.go:10.2,12.3 2 1
 test/file2.go:15.1,16.2 3 1
 test/mock_service.go:5.1,6.2 1 0
 `
-	err := os.WriteFile(coverageFile, []byte(coverageContent), 0o644)
+	err := os.WriteFile(coverageFile, []byte(coverageContent), constants.DefaultFilePerms)
 	if err != nil {
 		t.Fatalf("Failed to create test coverage file: %v", err)
 	}

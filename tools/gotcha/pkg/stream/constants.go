@@ -2,9 +2,6 @@ package stream
 
 // Stream processing constants.
 const (
-	// File permissions.
-	DefaultFilePerms = 0o644
-
 	// Buffer and display sizes.
 	DefaultBufferSize    = 100
 	MaxDisplayLines      = 80

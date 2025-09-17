@@ -160,11 +160,12 @@ func getFunctionCoverage(profileFile string, excludeMocks bool) ([]types.Coverag
 	// Use filepath.Clean to sanitize the path.
 	cleanPath := filepath.Clean(profileFile)
 	cmd := exec.Command("go", "tool", "cover", "-func", cleanPath)
-	output, err := cmd.Output()
-	if err != nil {
+	output, cmdErr := cmd.Output()
+	if cmdErr != nil {
 		// If go tool cover fails, return empty function coverage instead of error
 		// This allows parseCoverageProfile to still return statement coverage data
-		return []types.CoverageFunction{}, nil
+		// We explicitly ignore the error here as part of graceful degradation
+		return []types.CoverageFunction{}, nil //nolint:nilerr // Intentional graceful degradation
 	}
 
 	var functions []types.CoverageFunction

@@ -8,6 +8,11 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// Environment variable names.
+const (
+	EnvGitHubToken = "GITHUB_TOKEN"
+)
+
 // Client interface for GitHub operations to enable mocking.
 type Client interface {
 	ListIssueComments(ctx context.Context, owner, repo string, issueNumber int, opts *github.IssueListCommentsOptions) ([]*github.IssueComment, *github.Response, error)
@@ -23,8 +28,8 @@ type RealClient struct {
 // NewClient creates a new GitHub client with authentication.
 func NewClient(token string) Client {
 	if token == "" {
-		_ = viper.BindEnv("GITHUB_TOKEN")
-		token = viper.GetString("GITHUB_TOKEN")
+		_ = viper.BindEnv(EnvGitHubToken)
+		token = viper.GetString(EnvGitHubToken)
 	}
 
 	if token == "" {

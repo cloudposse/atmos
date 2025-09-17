@@ -119,12 +119,13 @@ func ProcessTestArguments(args []string) (packages []string, testFilter string) 
 
 	for _, arg := range args {
 		// First check if it's definitely a package path
-		if IsPackagePath(arg) {
+		switch {
+		case IsPackagePath(arg):
 			packages = append(packages, arg)
-		} else if IsLikelyTestName(arg) {
+		case IsLikelyTestName(arg):
 			// It looks like a test name
 			detectedTests = append(detectedTests, arg)
-		} else {
+		default:
 			// Ambiguous - could be a package name without path indicators
 			// Default to treating as package for backward compatibility
 			packages = append(packages, arg)

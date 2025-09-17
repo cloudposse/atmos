@@ -6,24 +6,50 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+)
+
+// Size constants.
+const (
+	// BytesPerKB is the number of bytes in a kilobyte.
+	BytesPerKB = 1024.0
+	// PercentageMultiplier for converting fractions to percentages.
+	PercentageMultiplier = 100
+)
+
+// Filter values for test display.
+const (
+	FilterAll       = "all"
+	FilterFailed    = "failed"
+	FilterPassed    = "passed"
+	FilterSkipped   = "skipped"
+	FilterCollapsed = "collapsed"
+	FilterNone      = "none"
+)
+
+// Display constants.
+const (
+	MaxDotsInProgress = 10 // Maximum number of dots to show in progress indicator
+	SingleItemCount   = 1  // Used for pluralization checks
 )
 
 // shouldShowTest determines if a test should be displayed based on filter.
 func (m *TestModel) shouldShowTest(status string) bool {
 	switch m.showFilter {
-	case "all":
+	case FilterAll:
 		return true
-	case "failed":
+	case FilterFailed:
 		// Show both failed and skipped tests when filter is "failed"
 		return status == TestStatusFail || status == TestStatusSkip
-	case "passed":
+	case FilterPassed:
 		return status == TestStatusPass
-	case "skipped":
+	case FilterSkipped:
 		return status == TestStatusSkip
-	case "collapsed":
+	case FilterCollapsed:
 		return status == TestStatusFail // Only show failures in collapsed mode
-	case "none":
+	case FilterNone:
 		return false
 	default:
 		return true
@@ -32,8 +58,6 @@ func (m *TestModel) shouldShowTest(status string) bool {
 
 // generateSubtestProgress creates a visual progress indicator for subtest results.
 func (m *TestModel) generateSubtestProgress(passed, total int) string {
-	const maxDots = 10 // Maximum number of dots to show for readability
-
 	if total == 0 {
 		return ""
 	}
@@ -43,20 +67,14 @@ func (m *TestModel) generateSubtestProgress(passed, total int) string {
 		return ""
 	}
 
-	// Determine how many dots to show (actual count up to maxDots)
-	dotsToShow := total
-	if dotsToShow > maxDots {
-		dotsToShow = maxDots
-	}
-
 	// Calculate how many dots for passed vs failed
 	passedDots := passed
 	failedDots := total - passed
 
-	// If we need to scale down to maxDots, do it proportionally
-	if total > maxDots {
-		passedDots = (passed * maxDots) / total
-		failedDots = maxDots - passedDots
+	// If we need to scale down to MaxDotsInProgress, do it proportionally
+	if total > MaxDotsInProgress {
+		passedDots = (passed * MaxDotsInProgress) / total
+		failedDots = MaxDotsInProgress - passedDots
 	}
 
 	// Build the indicator with colored dots
@@ -77,7 +95,7 @@ func (m *TestModel) generateSubtestProgress(passed, total int) string {
 
 // pluralize returns "s" if count is not 1, otherwise empty string.
 func pluralize(count int) string {
-	if count == 1 {
+	if count == SingleItemCount {
 		return ""
 	}
 	return "s"
@@ -149,17 +167,18 @@ func (m *TestModel) GenerateFinalSummary() string {
 
 	// Add exit status information
 	exitCode := m.GetExitCode()
-	if m.aborted {
+	switch {
+	case m.aborted:
 		summary.WriteString(fmt.Sprintf("\n%s Test run aborted (exit code %d)\n", FailStyle.Render("✗"), exitCode))
-	} else if m.failCount > 0 {
+	case m.failCount > 0:
 		summary.WriteString(fmt.Sprintf("\n%s %d test%s failed (exit code %d)\n",
 			FailStyle.Render("✗"),
 			m.failCount,
 			pluralize(m.failCount),
 			exitCode))
-	} else if totalTests == 0 {
+	case totalTests == 0:
 		summary.WriteString(fmt.Sprintf("\n%s No tests found (exit code %d)\n", SkipStyle.Render("⚠"), exitCode))
-	} else {
+	default:
 		summary.WriteString(fmt.Sprintf("\n%s All tests passed (exit code %d)\n", PassStyle.Render("✓"), exitCode))
 	}
 
@@ -202,7 +221,7 @@ func (m *TestModel) getBufferSizeKB() float64 {
 	}
 
 	// Convert to KB
-	return float64(totalSize) / 1024.0
+	return float64(totalSize) / BytesPerKB
 }
 
 // emitAlert outputs a terminal bell if alert is enabled.
@@ -265,7 +284,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 
 	// Debug: Log test order details
 	if debugFile := config.GetDebugFile(); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "[DISPLAY-DEBUG] Package %s: TestOrder has %d tests, Tests map has %d tests, showFilter=%s\n",
 				pkg.Package, len(pkg.TestOrder), len(pkg.Tests), m.showFilter)
 			for i, name := range pkg.TestOrder {
@@ -281,9 +300,9 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		test := pkg.Tests[testName]
 		if test != nil {
 			shouldShow := m.shouldShowTest(test.Status)
-			if shouldShow || m.showFilter == "collapsed" {
+			if shouldShow || m.showFilter == FilterCollapsed {
 				if !firstTestCheck {
-					output.WriteString("\n")
+					output.WriteString(constants.NewlineString)
 					firstTestCheck = true
 				}
 				break
@@ -293,7 +312,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 
 	// Debug: Log all tests in TestOrder
 	if debugFile := config.GetDebugFile(); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "[DISPLAY-DEBUG] Package %s has %d tests in TestOrder\n", pkg.Package, len(pkg.TestOrder))
 			for i, name := range pkg.TestOrder {
 				test := pkg.Tests[name]
@@ -316,7 +335,7 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 		isSubtest := test.Parent != ""
 
 		shouldShow := m.shouldShowTest(test.Status)
-		if shouldShow || m.showFilter == "collapsed" {
+		if shouldShow || m.showFilter == FilterCollapsed {
 			// For parent tests, use the full formatter to show mini indicators
 			// For subtests, use the simple line display
 			if isSubtest {
@@ -334,14 +353,14 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	if totalTests > 0 {
 		// Add spacing before summary only if tests were displayed
 		if firstTestCheck {
-			output.WriteString("\n")
+			output.WriteString(constants.NewlineString)
 		}
 
 		var summaryLine string
 		coverageStr := ""
 
 		// Build coverage string with both statement and function coverage
-		if pkg.StatementCoverage != "" && pkg.StatementCoverage != "0.0%" {
+		if pkg.StatementCoverage != "" && pkg.StatementCoverage != constants.ZeroPercentString {
 			if pkg.FunctionCoverage != "" && pkg.FunctionCoverage != "N/A" {
 				coverageStr = fmt.Sprintf(" (statements: %s, functions: %s)",
 					pkg.StatementCoverage, pkg.FunctionCoverage)
@@ -389,13 +408,6 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	return output.String()
 }
 
-// displayTest adds a test's display output to the builder.
-// This function has been refactored from 133 lines with complexity 102
-// to a simple delegation to TestFormatter, reducing complexity to ~5.
-func (m *TestModel) displayTest(output *strings.Builder, test *TestResult) {
-	formatter := NewTestFormatter(m)
-	formatter.FormatTest(output, test)
-}
 
 // displayTestAsLine displays a test as a simple one-line entry.
 func (m *TestModel) displayTestAsLine(output *strings.Builder, test *TestResult, indent string) {
@@ -421,20 +433,20 @@ func (m *TestModel) displayTestAsLine(output *strings.Builder, test *TestResult,
 	// Add duration
 	if test.Elapsed > 0 {
 		duration := fmt.Sprintf("(%.2fs)", test.Elapsed)
-		fmt.Fprintf(output, " %s", DurationStyle.Render(duration))
+		fmt.Fprintf(output, constants.SpaceFormatString, DurationStyle.Render(duration))
 	}
 
 	// Add skip reason if applicable
 	if test.Status == TestStatusSkip && test.SkipReason != "" {
 		reason := fmt.Sprintf("- %s", test.SkipReason)
-		fmt.Fprintf(output, " %s", DurationStyle.Render(reason))
+		fmt.Fprintf(output, constants.SpaceFormatString, DurationStyle.Render(reason))
 	}
 
 	output.WriteString("\n")
 
 	// Show output for failed tests if not collapsed
-	if test.Status == TestStatusFail && m.showFilter != "collapsed" && len(test.Output) > 0 {
-		output.WriteString("\n")
+	if test.Status == TestStatusFail && m.showFilter != FilterCollapsed && len(test.Output) > 0 {
+		output.WriteString(constants.NewlineString)
 		formatter := func(line string) string {
 			if m.verbosityLevel == "with-output" || m.verbosityLevel == "verbose" {
 				formatted := strings.ReplaceAll(line, `\t`, "\t")
@@ -447,7 +459,7 @@ func (m *TestModel) displayTestAsLine(output *strings.Builder, test *TestResult,
 			output.WriteString("    " + indent)
 			output.WriteString(formatter(line))
 		}
-		output.WriteString("\n")
+		output.WriteString(constants.NewlineString)
 	}
 }
 
@@ -475,12 +487,12 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 
 	// Add duration if available
 	if test.Elapsed > 0 {
-		fmt.Fprintf(output, " %s", DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
+		fmt.Fprintf(output, constants.SpaceFormatString, DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
 	}
 
 	// Add skip reason if available
 	if test.Status == TestStatusSkip && test.SkipReason != "" {
-		fmt.Fprintf(output, " %s", DurationStyle.Render(fmt.Sprintf("- %s", test.SkipReason)))
+		fmt.Fprintf(output, constants.SpaceFormatString, DurationStyle.Render(fmt.Sprintf("- %s", test.SkipReason)))
 	}
 
 	// Add subtest progress indicator if it has subtests
@@ -490,7 +502,7 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 
 		if totalSubtests > 0 {
 			miniProgress := m.generateSubtestProgress(len(stats.passed), totalSubtests)
-			percentage := (len(stats.passed) * 100) / totalSubtests
+			percentage := (len(stats.passed) * PercentageMultiplier) / totalSubtests
 			fmt.Fprintf(output, " %s %d%% passed", miniProgress, percentage)
 		}
 	}
@@ -498,14 +510,14 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 	output.WriteString("\n")
 
 	// Show test output for failed tests if not in collapsed mode
-	if test.Status == TestStatusFail && m.showFilter != "collapsed" && len(test.Output) > 0 {
-		output.WriteString("\n")
+	if test.Status == TestStatusFail && m.showFilter != FilterCollapsed && len(test.Output) > 0 {
+		output.WriteString(constants.NewlineString)
 		if m.verbosityLevel == "with-output" || m.verbosityLevel == "verbose" {
 			// With full output, properly render tabs and maintain formatting
 			for _, line := range test.Output {
 				// Replace literal \t with actual tabs and \n with newlines
 				formatted := strings.ReplaceAll(line, `\t`, "\t")
-				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+				formatted = strings.ReplaceAll(formatted, `\n`, constants.NewlineString)
 				output.WriteString("    " + formatted)
 			}
 		} else {
@@ -514,11 +526,11 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 				output.WriteString("    " + line)
 			}
 		}
-		output.WriteString("\n")
+		output.WriteString(constants.NewlineString)
 	}
 
 	// Show detailed subtest results for failed parent tests
-	if test.Status == TestStatusFail && hasSubtests && m.showFilter != "collapsed" {
+	if test.Status == TestStatusFail && hasSubtests && m.showFilter != FilterCollapsed {
 		stats := m.subtestStats[test.Name]
 		if stats != nil {
 			totalSubtests := len(stats.passed) + len(stats.failed) + len(stats.skipped)
@@ -558,7 +570,7 @@ func (m *TestModel) displayTestOld(output *strings.Builder, test *TestResult) {
 								// With full output, properly render tabs and maintain formatting
 								for _, line := range subtest.Output {
 									formatted := strings.ReplaceAll(line, `\t`, "\t")
-									formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+									formatted = strings.ReplaceAll(formatted, `\n`, constants.NewlineString)
 									output.WriteString("        " + formatted)
 								}
 							} else {

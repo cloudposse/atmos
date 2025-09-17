@@ -19,9 +19,6 @@ const (
 	FlagCount           = "count"
 	FlagPattern         = "pattern"
 
-	// Format values.
-	FormatMarkdown = "markdown"
-
 	// Common strings.
 	SpaceChar = " "
 )

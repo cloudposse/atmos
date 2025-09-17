@@ -10,6 +10,7 @@ import (
 
 	coveragePkg "github.com/cloudposse/atmos/tools/gotcha/internal/coverage"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	pkgConstants "github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -76,21 +77,21 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger, wr
 
 	// Log mode selection decision
 	logger.Debug("Mode selection",
-		"format", config.Format,
+		pkgConstants.FormatField, config.Format,
 		"isTTY", isTTY,
 		"ciMode", config.CIMode,
 		"forceTUI", forceTUI)
 
 	// Support both "terminal" and "stream" formats for TUI mode (backward compatibility)
 	// "stream" was the original format name for TUI with progress bar
-	isTUIFormat := config.Format == "terminal" || config.Format == "stream"
+	isTUIFormat := config.Format == pkgConstants.FormatTerminal || config.Format == "stream"
 
 	if (isTUIFormat && isTTY && !config.CIMode) || forceTUI {
 		// Interactive TUI mode
 		logger.Debug("Entering TUI mode",
 			"forceTUI", forceTUI,
 			"isTTY", isTTY,
-			"format", config.Format,
+			pkgConstants.FormatField, config.Format,
 			"reason", func() string {
 				if forceTUI {
 					return "GOTCHA_FORCE_TUI=true"
@@ -104,17 +105,17 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger, wr
 		// Log when terminal/stream format is downgraded due to no TTY
 		if isTUIFormat && !isTTY && !config.CIMode {
 			logger.Info("Terminal format requested but no TTY detected, using non-interactive mode",
-				"format", config.Format,
+				pkgConstants.FormatField, config.Format,
 				"tip", "Run in an interactive terminal to see progress bar")
 		} else if isTUIFormat && config.CIMode {
 			logger.Info("Terminal format requested but CI mode detected, using non-interactive mode",
-				"format", config.Format,
+				pkgConstants.FormatField, config.Format,
 				"ciMode", config.CIMode)
 		}
 
 		logger.Debug("Entering non-TUI mode",
 			"isTTY", isTTY,
-			"format", config.Format,
+			pkgConstants.FormatField, config.Format,
 			"ciMode", config.CIMode,
 			"reason", func() string {
 				if !isTTY {

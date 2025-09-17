@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/tools/gotcha/cmd/gotcha/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/output"
 	"github.com/cloudposse/atmos/tools/gotcha/internal/parser"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
@@ -46,7 +47,7 @@ func newParseCmd(logger *log.Logger) *cobra.Command {
 	}
 
 	// Output control flags
-	parseCmd.Flags().StringP("format", "f", "terminal", "Output format: terminal, json, markdown")
+	parseCmd.Flags().StringP("format", "f", constants.FormatTerminal, "Output format: terminal, json, markdown")
 	parseCmd.Flags().StringP("output", "o", "", "Output file for results")
 	parseCmd.Flags().String("coverprofile", "", "Coverage profile file for detailed analysis")
 	parseCmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
@@ -66,7 +67,7 @@ func newParseCmd(logger *log.Logger) *cobra.Command {
 // handleOutputFormat processes the output based on the specified format.
 func handleOutputFormat(format, outputFile string, jsonData []byte, summary *types.TestSummary, showFilter, verbosityLevel string, logger *log.Logger) error {
 	switch format {
-	case "terminal":
+	case constants.FormatTerminal:
 		// For terminal output, replay the JSON events through StreamProcessor
 		// to get proper display with mini indicators for subtests
 		if err := replayWithStreamProcessor(jsonData, showFilter, verbosityLevel); err != nil {
@@ -77,14 +78,14 @@ func handleOutputFormat(format, outputFile string, jsonData []byte, summary *typ
 			}
 		}
 
-	case "json":
-		if err := output.WriteSummary(summary, "json", outputFile); err != nil {
+	case constants.FormatJSON:
+		if err := output.WriteSummary(summary, constants.FormatJSON, outputFile); err != nil {
 			return fmt.Errorf("failed to write JSON output: %w", err)
 		}
 		logger.Info("JSON summary written", "file", outputFile)
 
-	case FormatMarkdown:
-		if err := output.WriteSummary(summary, FormatMarkdown, outputFile); err != nil {
+	case constants.FormatMarkdown:
+		if err := output.WriteSummary(summary, constants.FormatMarkdown, outputFile); err != nil {
 			return fmt.Errorf("failed to write markdown output: %w", err)
 		}
 		logger.Info("Markdown summary written", "file", outputFile)
@@ -163,9 +164,9 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	if outputFile == "" {
 		baseName := strings.TrimSuffix(filepath.Base(inputFile), filepath.Ext(inputFile))
 		switch format {
-		case "json":
+		case constants.FormatJSON:
 			outputFile = fmt.Sprintf("%s-summary.json", baseName)
-		case FormatMarkdown:
+		case constants.FormatMarkdown:
 			outputFile = fmt.Sprintf("%s-summary.md", baseName)
 		default:
 			// Terminal output doesn't need a file
@@ -180,7 +181,7 @@ func runParse(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Generate summary file if requested
 	if generateSummary {
 		summaryFile := "test-summary.md"
-		if err := output.WriteSummary(summary, FormatMarkdown, summaryFile); err != nil {
+		if err := output.WriteSummary(summary, constants.FormatMarkdown, summaryFile); err != nil {
 			logger.Error("Failed to write test summary", "error", err)
 		} else {
 			logger.Info("Test summary written", "file", summaryFile)

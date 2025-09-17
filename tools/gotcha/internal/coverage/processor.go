@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/errors"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -26,6 +27,11 @@ const (
 	CoverageThresholdExcellent = 80 // Coverage >= 80% is excellent (green)
 	CoverageThresholdGood      = 60 // Coverage >= 60% is good (yellow)
 	CoverageThresholdFair      = 40 // Coverage >= 40% is fair (orange)
+
+	// Display formatting constants.
+	MaxFunctionNameWidth    = 40 // Maximum width for function name display
+	MaxFunctionColumnWidth  = 30 // Maximum width for function name in columns
+	TruncateEllipsisLength  = 27 // Length before adding ellipsis (30 - 3 for "...")
 
 	// Display constants.
 	MaxFunctionNameLength  = 28
@@ -41,9 +47,10 @@ func ProcessCoverage(coverProfile string, cfg config.CoverageConfig, writer *out
 	}
 
 	// Check if the coverage profile exists
-	if _, err := os.Stat(coverProfile); err != nil {
+	if _, statErr := os.Stat(coverProfile); statErr != nil {
 		logger.Warn("Coverage profile not found", "file", coverProfile)
-		return nil
+		// Intentionally return nil - missing coverage is not a fatal error
+		return nil //nolint:nilerr // Missing coverage is not a fatal error
 	}
 
 	// Parse the coverage profile
@@ -55,14 +62,12 @@ func ProcessCoverage(coverProfile string, cfg config.CoverageConfig, writer *out
 
 	// Show function coverage if requested
 	if cfg.Analysis.Functions {
-		if err := showFunctionCoverage(coverageData, &cfg, writer, logger); err != nil {
-			logger.Warn("Failed to show function coverage", "error", err)
-		}
+		showFunctionCoverage(coverageData, &cfg, writer, logger)
 	}
 
 	// Show statement coverage if requested
 	if cfg.Analysis.Statements {
-		showStatementCoverage(coverageData, &cfg, writer, logger)
+		showStatementCoverage(coverageData, &cfg, writer)
 	}
 
 	// Check thresholds
@@ -163,9 +168,7 @@ func parseFunctionCoverageOutput(output string) []FunctionCoverageInfo {
 func extractPackageFromPath(path string) string {
 	// Remove github.com/cloudposse/atmos/tools/gotcha/ prefix
 	const prefix = "github.com/cloudposse/atmos/tools/gotcha/"
-	if strings.HasPrefix(path, prefix) {
-		path = strings.TrimPrefix(path, prefix)
-	}
+	path = strings.TrimPrefix(path, prefix)
 
 	// Get directory part (package)
 	dir := filepath.Dir(path)
@@ -177,25 +180,28 @@ func extractPackageFromPath(path string) string {
 
 // getCoverageColor returns the appropriate color for a coverage percentage.
 func getCoverageColor(coverage float64) lipgloss.Color {
-	if coverage >= CoverageThresholdExcellent {
+	switch {
+	case coverage >= CoverageThresholdExcellent:
 		return lipgloss.Color("10") // Bright green
-	} else if coverage >= CoverageThresholdGood {
+	case coverage >= CoverageThresholdGood:
 		return lipgloss.Color("11") // Yellow
-	} else if coverage >= CoverageThresholdFair {
+	case coverage >= CoverageThresholdFair:
 		return lipgloss.Color("208") // Orange
-	} else if coverage > 0 {
+	case coverage > 0:
 		return lipgloss.Color("9") // Bright red
+	default:
+		return lipgloss.Color("245") // Gray for 0%
 	}
-	return lipgloss.Color("245") // Gray for 0%
 }
 
 // getCoverageSymbol returns a symbol representing the coverage level.
 func getCoverageSymbol(coverage float64) string {
-	if coverage >= CoverageThresholdExcellent {
+	switch {
+	case coverage >= CoverageThresholdExcellent:
 		return "●"
-	} else if coverage >= CoverageThresholdGood {
+	case coverage >= CoverageThresholdGood:
 		return "◐"
-	} else if coverage > 0 {
+	case coverage > 0:
 		return "○"
 	}
 	return "◌"
@@ -333,9 +339,9 @@ func displayFunctionCoverageTree(functions []FunctionCoverageInfo, writer *outpu
 			if len(fileFuncs) > 0 {
 				// Show continuation line from file to its functions
 				if isLastFile {
-					writer.PrintData("  %s%s\n", treeStyle.Render(funcPrefix), treeStyle.Render("│"))
+					writer.PrintData("  %s%s\n", treeStyle.Render(funcPrefix), treeStyle.Render(constants.PipeString))
 				} else {
-					writer.PrintData("  %s  %s\n", treeStyle.Render("│"), treeStyle.Render("│"))
+					writer.PrintData("  %s  %s\n", treeStyle.Render(constants.PipeString), treeStyle.Render(constants.PipeString))
 				}
 			}
 
@@ -393,7 +399,7 @@ func shouldExcludeMocks(excludePatterns []string) bool {
 }
 
 // showFunctionCoverage displays function coverage based on configuration.
-func showFunctionCoverage(data *types.CoverageData, cfg *config.CoverageConfig, writer *output.Writer, logger *log.Logger) error {
+func showFunctionCoverage(data *types.CoverageData, cfg *config.CoverageConfig, writer *output.Writer, logger *log.Logger) {
 	functions := data.FunctionCoverage
 
 	// Apply filtering based on config
@@ -404,7 +410,7 @@ func showFunctionCoverage(data *types.CoverageData, cfg *config.CoverageConfig, 
 	// Format output based on terminal config
 	switch cfg.Output.Terminal.Format {
 	case "detailed":
-		showDetailedFunctionCoverage(functions, writer, logger)
+		showDetailedFunctionCoverage(functions, writer)
 	case "summary":
 		showFunctionCoverageSummary(functions, cfg.Output.Terminal.ShowUncovered, writer, logger)
 	case "none":
@@ -412,8 +418,6 @@ func showFunctionCoverage(data *types.CoverageData, cfg *config.CoverageConfig, 
 	default:
 		showFunctionCoverageSummary(functions, DefaultUncoveredLimit, writer, logger) // Default top 5
 	}
-
-	return nil
 }
 
 // filterUncoveredFunctions returns only functions with 0% coverage.
@@ -428,7 +432,7 @@ func filterUncoveredFunctions(functions []types.CoverageFunction) []types.Covera
 }
 
 // showDetailedFunctionCoverage shows all function coverage details.
-func showDetailedFunctionCoverage(functions []types.CoverageFunction, writer *output.Writer, logger *log.Logger) {
+func showDetailedFunctionCoverage(functions []types.CoverageFunction, writer *output.Writer) {
 	if len(functions) == 0 {
 		return
 	}
@@ -438,16 +442,17 @@ func showDetailedFunctionCoverage(functions []types.CoverageFunction, writer *ou
 
 	for _, fn := range functions {
 		coverageIcon := "✅"
-		if fn.Coverage < 80 {
+		if fn.Coverage < CoverageThresholdExcellent {
 			coverageIcon = "⚠️"
 		}
 		if fn.Coverage == 0 {
 			coverageIcon = "❌"
 		}
 
-		writer.PrintData("%s %-40s %6.1f%%  %s\n",
+		writer.PrintData("%s %-*s %6.1f%%  %s\n",
 			coverageIcon,
-			truncateString(fn.Function, 40),
+			MaxFunctionNameWidth,
+			truncateString(fn.Function, MaxFunctionNameWidth),
 			fn.Coverage,
 			shortenPath(fn.File))
 	}
@@ -505,15 +510,15 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 			}
 		}
 		// Cap the max length to prevent too wide columns
-		if maxFuncLen > 30 {
-			maxFuncLen = 30
+		if maxFuncLen > MaxFunctionColumnWidth {
+			maxFuncLen = MaxFunctionColumnWidth
 		}
 
 		// Display in column format with bullet points for compatibility
 		for i := 0; i < limit; i++ {
 			funcName := uncoveredFuncs[i].Function
-			if len(funcName) > 30 {
-				funcName = funcName[:27] + "..."
+			if len(funcName) > MaxFunctionColumnWidth {
+				funcName = funcName[:TruncateEllipsisLength] + "..."
 			}
 			// Use padding for alignment while keeping bullet format for tests
 			writer.PrintData("      • %-*s in %s\n",
@@ -529,7 +534,7 @@ func showFunctionCoverageSummary(functions []types.CoverageFunction, showUncover
 }
 
 // showStatementCoverage displays statement coverage information.
-func showStatementCoverage(data *types.CoverageData, cfg *config.CoverageConfig, writer *output.Writer, logger *log.Logger) {
+func showStatementCoverage(data *types.CoverageData, cfg *config.CoverageConfig, writer *output.Writer) {
 	if data.StatementCoverage == "" {
 		return
 	}
@@ -547,9 +552,10 @@ func checkCoverageThresholds(data *types.CoverageData, thresholds config.Coverag
 	// Extract percentage from statement coverage string (e.g., "85.2%" -> 85.2)
 	coverageStr := data.StatementCoverage
 	var coverage float64
-	if _, err := fmt.Sscanf(coverageStr, "%f%%", &coverage); err != nil {
+	if _, parseErr := fmt.Sscanf(coverageStr, "%f%%", &coverage); parseErr != nil {
 		logger.Debug("Could not parse coverage percentage", "coverage", coverageStr)
-		return nil
+		// Return nil - inability to parse coverage is not a threshold failure
+		return nil //nolint:nilerr // Inability to parse coverage is not a threshold failure
 	}
 
 	// Check total threshold

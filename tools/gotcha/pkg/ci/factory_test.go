@@ -8,8 +8,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci"
 	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/github" // Register GitHub integration
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"     // Import mock integration
-	_ "github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"   // Register mock integration
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/ci/mock"     // Import and register mock integration
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/stretchr/testify/assert"
 )

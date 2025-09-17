@@ -478,3 +478,129 @@ func TestPostingStrategiesIntegration(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateRootCommand(t *testing.T) {
+	cmd := createRootCommand()
+
+	// Verify command properties
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "gotcha [path]", cmd.Use)
+	assert.Contains(t, cmd.Short, "beautiful test runner for Go")
+	assert.Contains(t, cmd.Long, "real-time progress tracking")
+
+	// Verify silence usage settings
+	assert.True(t, cmd.SilenceUsage)
+	assert.True(t, cmd.SilenceErrors)
+	
+	// Verify Args is set
+	assert.NotNil(t, cmd.Args)
+}
+
+func TestSetupGlobalFlags(t *testing.T) {
+	cmd := createRootCommand()
+	setupGlobalFlags(cmd)
+
+	// Test that all expected flags are present
+	expectedFlags := []string{
+		"config", "log-level",
+	}
+
+	for _, flagName := range expectedFlags {
+		flag := cmd.PersistentFlags().Lookup(flagName)
+		assert.NotNil(t, flag, "Flag %s should exist", flagName)
+	}
+
+	// Test flag defaults
+	configFlag := cmd.PersistentFlags().Lookup("config")
+	assert.NotNil(t, configFlag)
+	assert.Equal(t, "", configFlag.DefValue)
+
+	logLevelFlag := cmd.PersistentFlags().Lookup("log-level")
+	assert.NotNil(t, logLevelFlag)
+	assert.Equal(t, "info", logLevelFlag.DefValue)
+}
+
+func TestBindAndParseFlags(t *testing.T) {
+	// This test verifies the binding logic
+	// Note: We can't easily test the actual binding without complex setup
+	cmd := createRootCommand()
+	setupGlobalFlags(cmd)
+
+	// Test with various argument combinations
+	tests := []struct {
+		name         string
+		args         []string
+		expectError  bool
+	}{
+		{
+			name:        "valid flags",
+			args:        []string{"--log-level=debug", "--config=test.yaml"},
+			expectError: false,
+		},
+		{
+			name:        "only log level",
+			args:        []string{"--log-level=warn"},
+			expectError: false,
+		},
+		{
+			name:        "unknown flag",
+			args:        []string{"--unknown-flag"},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset flags for each test
+			cmd := createRootCommand()
+			setupGlobalFlags(cmd)
+			
+			// Set args for parsing
+			cmd.SetArgs(tt.args)
+			
+			// Parse flags
+			err := cmd.ParseFlags(tt.args)
+			
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestSetupSubcommands(t *testing.T) {
+	cmd := createRootCommand()
+	setupSubcommands(cmd)
+
+	// Verify subcommands are added
+	subcommands := []string{"stream", "parse", "version"}
+	
+	for _, subName := range subcommands {
+		// Find the subcommand
+		found := false
+		for _, sub := range cmd.Commands() {
+			if sub.Name() == subName {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Subcommand %s should be added", subName)
+	}
+}
+
+func TestCreateSignalContext(t *testing.T) {
+	ctx := createSignalContext()
+
+	// Verify context is not nil
+	assert.NotNil(t, ctx)
+
+	// Verify context is not already cancelled
+	select {
+	case <-ctx.Done():
+		t.Fatal("Context should not be cancelled initially")
+	default:
+		// Context is not cancelled, as expected
+	}
+}

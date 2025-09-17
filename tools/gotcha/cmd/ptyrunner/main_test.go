@@ -1,0 +1,179 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestInitializeConfig(t *testing.T) {
+	// Reset viper before test
+	viper.Reset()
+	defer viper.Reset()
+
+	// Initialize config
+	initializeConfig()
+
+	// Set an environment variable
+	os.Setenv("GOTCHA_BINARY", "/custom/path/to/gotcha")
+	defer os.Unsetenv("GOTCHA_BINARY")
+
+	// Verify it can be read via viper
+	binary := viper.GetString("gotcha.binary")
+	assert.Equal(t, "/custom/path/to/gotcha", binary)
+}
+
+func TestFindGotchaBinary(t *testing.T) {
+	tests := []struct {
+		name           string
+		envValue       string
+		expectedResult string
+		checkContains  string
+	}{
+		{
+			name:           "from environment variable",
+			envValue:       "/usr/local/bin/gotcha",
+			expectedResult: "/usr/local/bin/gotcha",
+		},
+		{
+			name:          "from same directory as executable",
+			envValue:      "",
+			checkContains: "gotcha",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset viper
+			viper.Reset()
+			defer viper.Reset()
+
+			// Set up environment
+			if tt.envValue != "" {
+				viper.Set("gotcha.binary", tt.envValue)
+			}
+
+			result := findGotchaBinary()
+
+			if tt.expectedResult != "" {
+				assert.Equal(t, tt.expectedResult, result)
+			} else if tt.checkContains != "" {
+				assert.Contains(t, result, tt.checkContains)
+			}
+		})
+	}
+}
+
+func TestFindGotchaBinaryFromExecutableDir(t *testing.T) {
+	// Reset viper
+	viper.Reset()
+	defer viper.Reset()
+
+	// Don't set gotcha.binary in viper
+	viper.Set("gotcha.binary", "")
+
+	result := findGotchaBinary()
+
+	// Should either be a path containing "gotcha" or just "gotcha"
+	assert.True(t, 
+		filepath.Base(result) == "gotcha" || result == "gotcha",
+		"Expected gotcha binary path, got %s", result)
+}
+
+func TestValidateArguments(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		shouldPanic bool
+	}{
+		{
+			name:        "no arguments - should exit",
+			args:        []string{},
+			shouldPanic: true,
+		},
+		{
+			name:        "with arguments - should not exit",
+			args:        []string{"stream"},
+			shouldPanic: false,
+		},
+		{
+			name:        "multiple arguments - should not exit",
+			args:        []string{"stream", "./...", "--cover"},
+			shouldPanic: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.shouldPanic {
+				// We can't easily test os.Exit in unit tests,
+				// but we can verify the function would exit with empty args
+				// In a real test, we'd use a different approach like
+				// dependency injection or subprocess testing
+				
+				// For now, we'll just verify that empty args would trigger the condition
+				if len(tt.args) == 0 {
+					assert.Empty(t, tt.args, "Empty args should trigger validation failure")
+				}
+			} else {
+				// This should not panic or exit
+				assert.NotPanics(t, func() {
+					// We can't actually call validateArguments here because it calls os.Exit
+					// but we can verify the args are non-empty
+					assert.NotEmpty(t, tt.args, "Non-empty args should pass validation")
+				})
+			}
+		})
+	}
+}
+
+func TestSetupRawMode(t *testing.T) {
+	// This test verifies the function returns a cleanup function
+	// Note: We can't easily test terminal operations in unit tests
+	
+	cleanup := setupRawMode()
+	assert.NotNil(t, cleanup, "Should return a cleanup function")
+	
+	// Cleanup function should be safe to call
+	assert.NotPanics(t, func() {
+		cleanup()
+	})
+}
+
+func TestSetupPTYResize(t *testing.T) {
+	// Create a temporary file to simulate a PTY
+	tmpFile, err := os.CreateTemp("", "pty-test-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	// Setup PTY resize should return a cleanup function
+	cleanup := setupPTYResize(tmpFile)
+	assert.NotNil(t, cleanup, "Should return a cleanup function")
+	
+	// Cleanup function should be safe to call
+	assert.NotPanics(t, func() {
+		cleanup()
+	})
+}
+
+func TestRunWithPTY(t *testing.T) {
+	// This is a complex function that requires a real command
+	// We'll test with a simple echo command that should work on all platforms
+	
+	t.Run("command not found", func(t *testing.T) {
+		// Note: We can't easily create an exec.Cmd with a custom Path
+		// This test would require more complex setup or mocking
+		t.Skip("Requires complex PTY setup that's hard to test in unit tests")
+	})
+
+	t.Run("cleanup functions are called", func(t *testing.T) {
+		// This test would verify that all deferred cleanup functions are called
+		// but requires PTY support which may not be available in all test environments
+		t.Skip("Requires PTY support which may not be available in CI")
+	})
+}

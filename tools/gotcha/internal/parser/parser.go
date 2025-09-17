@@ -18,6 +18,7 @@ import (
 func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*types.TestSummary, error) {
 	tests := make(map[string]types.TestResult)
 	skipReasons := make(map[string]string) // Track skip reasons separately
+	buildFailures := make(map[string]*types.BuildFailure) // Track build failures
 	var coverage string
 	var coverageData *types.CoverageData
 	var totalElapsedTime float64
@@ -25,13 +26,17 @@ func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*ty
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
-		testCoverage, pkgElapsed := processLineWithElapsedAndSkipReason(line, tests, skipReasons)
+		testCoverage, pkgElapsed, buildFail := processLineWithElapsedSkipAndBuild(line, tests, skipReasons, buildFailures)
 		if testCoverage != "" {
 			coverage = testCoverage
 		}
 		// Track the maximum package elapsed time (overall test run time)
 		if pkgElapsed > totalElapsedTime {
 			totalElapsedTime = pkgElapsed
+		}
+		// Track build failures
+		if buildFail != nil {
+			buildFailures[buildFail.Package] = buildFail
 		}
 	}
 
@@ -52,27 +57,39 @@ func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*ty
 	failed, skipped, passed := categorizeResults(tests, skipReasons)
 	sortResults(&failed, &skipped, &passed)
 
+	// Convert build failures map to slice
+	var buildFailedList []types.BuildFailure
+	for _, bf := range buildFailures {
+		buildFailedList = append(buildFailedList, *bf)
+	}
+	// Sort build failures by package name
+	sort.Slice(buildFailedList, func(i, j int) bool {
+		return buildFailedList[i].Package < buildFailedList[j].Package
+	})
+
 	return &types.TestSummary{
 		Failed:           failed,
 		Skipped:          skipped,
 		Passed:           passed,
+		BuildFailed:      buildFailedList,
 		Coverage:         coverage,
 		CoverageData:     coverageData,
 		TotalElapsedTime: totalElapsedTime,
 	}, nil
 }
 
-// processLineWithElapsedAndSkipReason processes a single line of JSON output and returns coverage and elapsed time.
-// It also captures skip reasons from test output.
-func processLineWithElapsedAndSkipReason(line string, tests map[string]types.TestResult, skipReasons map[string]string) (string, float64) {
+// processLineWithElapsedSkipAndBuild processes a single line of JSON output and returns coverage, elapsed time, and build failures.
+// It also captures skip reasons from test output and detects build failures.
+func processLineWithElapsedSkipAndBuild(line string, tests map[string]types.TestResult, skipReasons map[string]string, buildFailures map[string]*types.BuildFailure) (string, float64, *types.BuildFailure) {
 	// Try to parse as JSON.
 	var event types.TestEvent
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
-		return "", 0 // Skip non-JSON lines.
+		return "", 0, nil // Skip non-JSON lines.
 	}
 
 	var coverage string
 	var elapsed float64
+	var buildFailure *types.BuildFailure
 
 	// Extract coverage info from output.
 	if event.Action == "output" && strings.Contains(event.Output, "coverage:") {
@@ -81,59 +98,77 @@ func processLineWithElapsedAndSkipReason(line string, tests map[string]types.Tes
 		}
 	}
 
-	// Capture skip reason from output
-	if event.Action == "output" && event.Test != "" {
-		output := strings.TrimSpace(event.Output)
-		key := event.Package + "." + event.Test
-
-		// Two patterns to handle:
-		// Pattern 1: Skip reason appears BEFORE --- SKIP line (common with t.Skipf)
-		// Pattern 2: Skip reason appears AFTER --- SKIP line (common with t.Skip in subtests)
-
-		if strings.Contains(output, "--- SKIP:") {
-			// Mark that we found a skip, reason might come in next output
-			if _, exists := skipReasons[key]; !exists {
-				skipReasons[key] = "" // Mark as pending
+	// Detect build failures: package-level fail with no test name and special output
+	if event.Test == "" && event.Action == "fail" && event.Package != "" {
+		// Check if we already have output for this package indicating build failure
+		if bf, exists := buildFailures[event.Package]; exists && bf.Output != "" {
+			// Already tracked this build failure
+		} else {
+			// New build failure detected
+			buildFailure = &types.BuildFailure{
+				Package: event.Package,
+				Output:  "", // Will be filled by subsequent output events
 			}
-		} else if output != "" && !strings.HasPrefix(output, "===") {
-			// Check if this is a skip reason
-			// Look for common skip patterns
-			if strings.Contains(output, "Skipping") || strings.Contains(output, "Skip") || strings.Contains(output, "skipping") {
-				// Extract the reason from the output
-				reason := output
-				// If it has the pattern "filename.go:linenum: message", extract the message
-				if idx := strings.Index(reason, ".go:"); idx > 0 {
-					// Find the colon after the line number
-					afterFile := reason[idx+4:] // Skip past ".go:"
-					if colonIdx := strings.Index(afterFile, ": "); colonIdx > 0 {
-						// Extract everything after "filename.go:linenum: "
-						reason = strings.TrimSpace(afterFile[colonIdx+2:])
-					}
-				} else {
-					// No file reference, try to extract after first colon
-					if idx := strings.Index(reason, ": "); idx > 0 {
-						reason = strings.TrimSpace(reason[idx+2:])
-					}
+		}
+		// Also check the current output for build failure indicators
+		if event.Output != "" && strings.Contains(event.Output, "[build failed]") {
+			if buildFailure == nil {
+				buildFailure = &types.BuildFailure{
+					Package: event.Package,
+					Output:  event.Output,
 				}
+			} else {
+				buildFailure.Output = event.Output
+			}
+		}
+	}
+
+	// Capture build error output
+	if event.Action == "output" && event.Test == "" && event.Package != "" {
+		// Check if this package has a build failure
+		if bf, exists := buildFailures[event.Package]; exists {
+			// Append output to build failure
+			bf.Output += event.Output
+		} else if strings.Contains(event.Output, "build failed") || strings.Contains(event.Output, "cannot find package") || 
+				  strings.Contains(event.Output, "undefined:") || strings.Contains(event.Output, "declared and not used") {
+			// This looks like a build error, track it
+			buildFailure = &types.BuildFailure{
+				Package: event.Package,
+				Output:  event.Output,
+			}
+		}
+	}
+
+	// Track skip reasons
+	if event.Action == "output" && event.Test != "" {
+		key := event.Package + "." + event.Test
+		output := strings.TrimSpace(event.Output)
+		
+		// Check if this is a skip reason output
+		if strings.HasPrefix(output, "--- SKIP:") {
+			// Mark that we're tracking skip reason for this test
+			if _, exists := skipReasons[key]; !exists {
+				skipReasons[key] = "" // Will be filled by next line(s)
+			}
+		} else if strings.Contains(output, ": Skipping") || strings.Contains(output, "t.Skip") {
+			// Look for skip reason in current line (before --- SKIP)
+			if idx := strings.Index(output, ": "); idx > 0 {
+				reason := strings.TrimSpace(output[idx+2:])
 				if reason != "" {
 					skipReasons[key] = reason
 				}
-			} else if _, tracking := skipReasons[key]; tracking && skipReasons[key] == "" {
-				// This might be the skip reason after --- SKIP line
-				// Handle format: "    filename.go:line: reason"
-				reason := output
-				// Look for pattern: filename.go:linenum:
-				if idx := strings.Index(reason, ".go:"); idx > 0 {
-					// Find the colon after the line number
-					afterFile := reason[idx+4:] // Skip past ".go:"
-					if colonIdx := strings.Index(afterFile, ": "); colonIdx > 0 {
-						// Extract everything after "filename.go:linenum: "
-						reason = strings.TrimSpace(afterFile[colonIdx+2:])
-					}
+			}
+		} else if _, tracking := skipReasons[key]; tracking && skipReasons[key] == "" {
+			// This might be the skip reason after --- SKIP line
+			reason := output
+			if idx := strings.Index(reason, ".go:"); idx > 0 {
+				afterFile := reason[idx+4:]
+				if colonIdx := strings.Index(afterFile, ": "); colonIdx > 0 {
+					reason = strings.TrimSpace(afterFile[colonIdx+2:])
 				}
-				if reason != "" && reason != output {
-					skipReasons[key] = reason
-				}
+			}
+			if reason != "" && reason != output {
+				skipReasons[key] = reason
 			}
 		}
 	}
@@ -148,6 +183,15 @@ func processLineWithElapsedAndSkipReason(line string, tests map[string]types.Tes
 		elapsed = event.Elapsed
 	}
 
+	return coverage, elapsed, buildFailure
+}
+
+// processLineWithElapsedAndSkipReason processes a single line of JSON output and returns coverage and elapsed time.
+// It also captures skip reasons from test output.
+func processLineWithElapsedAndSkipReason(line string, tests map[string]types.TestResult, skipReasons map[string]string) (string, float64) {
+	// Call the new function but ignore build failures for backward compatibility
+	buildFailures := make(map[string]*types.BuildFailure)
+	coverage, elapsed, _ := processLineWithElapsedSkipAndBuild(line, tests, skipReasons, buildFailures)
 	return coverage, elapsed
 }
 

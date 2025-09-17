@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -392,4 +393,201 @@ func TestCoverageTableFormat(t *testing.T) {
 	assert.Contains(t, comment, "pkg/main")
 	assert.Contains(t, comment, "pkg/utils")
 	assert.Contains(t, comment, "pkg/config")
+}
+
+// Tests for refactored functions
+
+func TestWriteUUIDComment(t *testing.T) {
+	tests := []struct {
+		name     string
+		uuid     string
+		expected string
+	}{
+		{
+			name:     "with UUID",
+			uuid:     "test-uuid-123",
+			expected: "<!-- test-summary-uuid: test-uuid-123 -->\n\n",
+		},
+		{
+			name:     "empty UUID",
+			uuid:     "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			writeUUIDComment(&buf, tt.uuid)
+			assert.Equal(t, tt.expected, buf.String())
+		})
+	}
+}
+
+func TestDetermineStatusEmoji(t *testing.T) {
+	tests := []struct {
+		name     string
+		summary  *types.TestSummary
+		expected string
+	}{
+		{
+			name: "all tests pass",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{{Test: "Test1"}},
+				Failed: []types.TestResult{},
+			},
+			expected: "✅",
+		},
+		{
+			name: "has failures",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{{Test: "Test1"}},
+				Failed: []types.TestResult{{Test: "Test2"}},
+			},
+			expected: "❌",
+		},
+		{
+			name: "no tests",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{},
+				Failed: []types.TestResult{},
+			},
+			expected: "✅",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := determineStatusEmoji(tt.summary)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestWriteTestResultsHeader(t *testing.T) {
+	tests := []struct {
+		name         string
+		statusEmoji  string
+		platform     string
+		expected     string
+	}{
+		{
+			name:        "with platform",
+			statusEmoji: "✅",
+			platform:    "linux",
+			expected:    "# ✅ Test Results (linux)\n\n",
+		},
+		{
+			name:        "without platform",
+			statusEmoji: "❌",
+			platform:    "",
+			expected:    "# ❌ Test Results\n\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			writeTestResultsHeader(&buf, tt.statusEmoji, tt.platform)
+			assert.Equal(t, tt.expected, buf.String())
+		})
+	}
+}
+
+func TestWriteTestBadges(t *testing.T) {
+	tests := []struct {
+		name     string
+		summary  *types.TestSummary
+		contains []string
+	}{
+		{
+			name: "no tests",
+			summary: &types.TestSummary{
+				Passed:  []types.TestResult{},
+				Failed:  []types.TestResult{},
+				Skipped: []types.TestResult{},
+			},
+			contains: []string{"NO_TESTS-0-inactive"},
+		},
+		{
+			name: "with tests",
+			summary: &types.TestSummary{
+				Passed:  []types.TestResult{{Test: "Test1"}, {Test: "Test2"}},
+				Failed:  []types.TestResult{{Test: "Test3"}},
+				Skipped: []types.TestResult{{Test: "Test4"}},
+			},
+			contains: []string{
+				"PASSED-2-success",
+				"FAILED-1-critical",
+				"SKIPPED-1-inactive",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			writeTestBadges(&buf, tt.summary)
+			result := buf.String()
+			
+			for _, expected := range tt.contains {
+				assert.Contains(t, result, expected)
+			}
+			assert.True(t, strings.HasSuffix(result, "\n\n"))
+		})
+	}
+}
+
+func TestAddElapsedTime(t *testing.T) {
+	tests := []struct {
+		name             string
+		totalElapsedTime float64
+		expected         string
+	}{
+		{
+			name:             "with elapsed time",
+			totalElapsedTime: 10.5,
+			expected:         "\n**Total Time:** 10.50s\n",
+		},
+		{
+			name:             "zero elapsed time",
+			totalElapsedTime: 0,
+			expected:         "",
+		},
+		{
+			name:             "negative elapsed time",
+			totalElapsedTime: -5,
+			expected:         "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			addElapsedTime(&buf, tt.totalElapsedTime)
+			assert.Equal(t, tt.expected, buf.String())
+		})
+	}
+}
+
+func TestBuildConciseHeader(t *testing.T) {
+	summary := &types.TestSummary{
+		Passed: []types.TestResult{{Test: "Test1"}},
+		Failed: []types.TestResult{{Test: "Test2"}},
+	}
+
+	var buf bytes.Buffer
+	buildConciseHeader(&buf, summary, "uuid-123", "linux")
+	
+	result := buf.String()
+	
+	// Should contain UUID comment
+	assert.Contains(t, result, "<!-- test-summary-uuid: uuid-123 -->")
+	
+	// Should contain header with failure emoji and platform
+	assert.Contains(t, result, "# ❌ Test Results (linux)")
+	
+	// Should contain badges
+	assert.Contains(t, result, "PASSED-1-success")
+	assert.Contains(t, result, "FAILED-1-critical")
 }

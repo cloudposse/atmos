@@ -9,6 +9,12 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
 
+// Default constants.
+const (
+	// DefaultMockPRNumber is the default PR number for mock provider.
+	DefaultMockPRNumber = 42
+)
+
 func init() {
 	// Register mock integration with the CI factory
 	ci.RegisterIntegration("mock", NewMockIntegration)
@@ -79,7 +85,7 @@ func DefaultMockConfig() *MockConfig {
 		ContextSupported:    true,
 		Owner:               "mock-owner",
 		Repo:                "mock-repo",
-		PRNumber:            42,
+		PRNumber:            DefaultMockPRNumber,
 		CommentUUID:         "mock-uuid-123",
 		Token:               "mock-token",
 		EventName:           "pull_request",

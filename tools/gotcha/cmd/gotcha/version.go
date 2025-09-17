@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +14,7 @@ var (
 )
 
 // newVersionCmd creates the version subcommand.
-func newVersionCmd(logger *log.Logger) *cobra.Command {
+func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print version information",

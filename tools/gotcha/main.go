@@ -1,9 +1,11 @@
 package main
 
 import (
+	"os"
+	
 	cmd "github.com/cloudposse/atmos/tools/gotcha/cmd/gotcha"
 )
 
 func main() {
-	cmd.Main()
+	os.Exit(cmd.Main())
 }

@@ -7,7 +7,16 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
+)
+
+// Parse constants.
+const (
+	// BitSize64 for strconv.ParseFloat bitsize parameter.
+	BitSize64 = 64
+	// PercentageMultiplier for converting fractions to percentages.
+	PercentageMultiplier = 100
 )
 
 // StreamReporter implements TestReporter for direct stream output.
@@ -26,6 +35,9 @@ type StreamReporter struct {
 	packageCoverages          []float64
 	packageStatementCoverages []float64
 	packageFunctionCoverages  []float64
+	
+	// Track build failures
+	buildFailedPackages []string
 }
 
 // NewStreamReporter creates a new StreamReporter with the given configuration.
@@ -43,6 +55,7 @@ func NewStreamReporter(writer *output.Writer, showFilter, testFilter, verbosityL
 		packageCoverages:          make([]float64, 0),
 		packageStatementCoverages: make([]float64, 0),
 		packageFunctionCoverages:  make([]float64, 0),
+		buildFailedPackages:       make([]string, 0),
 	}
 }
 
@@ -65,9 +78,12 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 		tui.PackageHeaderStyle.Render(pkg.Package))
 
 	// Check for package-level failures (e.g., build failures, TestMain failures)
-	if pkg.Status == "fail" && len(pkg.Tests) == 0 {
+	if pkg.Status == TestStatusFail && len(pkg.Tests) == 0 {
 		// Package failed without running any tests (likely build failure or TestMain failure)
-		r.writer.PrintUI("  %s Package failed (build error or initialization failure)\n", tui.FailStyle.Render(tui.CheckFail))
+		r.writer.PrintUI("  %s Package failed to build\n", tui.FailStyle.Render(tui.CheckFail))
+		
+		// Track this as a build failure
+		r.buildFailedPackages = append(r.buildFailedPackages, pkg.Package)
 
 		// Display any package-level output (error messages)
 		if len(pkg.Output) > 0 {
@@ -96,22 +112,22 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	for _, test := range pkg.Tests {
 		// Count the parent test
 		switch test.Status {
-		case "pass":
+		case constants.PassStatus:
 			passedCount++
-		case "fail":
+		case TestStatusFail:
 			failedCount++
-		case "skip":
+		case TestStatusSkip:
 			skippedCount++
 		}
 
 		// Count all subtests
 		for _, subtest := range test.Subtests {
 			switch subtest.Status {
-			case "pass":
+			case constants.PassStatus:
 				passedCount++
-			case "fail":
+			case TestStatusFail:
 				failedCount++
-			case "skip":
+			case TestStatusSkip:
 				skippedCount++
 			}
 		}
@@ -139,7 +155,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 		} else {
 			// For tests with subtests:
 			// 1. Display the parent test with mini indicators
-			if r.shouldShowTestStatus(test.Status) || test.Status == "fail" {
+			if r.shouldShowTestStatus(test.Status) || test.Status == TestStatusFail {
 				testsDisplayed = true
 				r.displayTest(test, "")
 			}
@@ -187,20 +203,21 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 			}
 		}
 
-		if failedCount > 0 {
+		switch {
+		case failedCount > 0:
 			// Show failure summary
 			summaryLine = fmt.Sprintf("  %s %d tests failed, %d passed%s\n",
 				tui.FailStyle.Render(tui.CheckFail),
 				failedCount,
 				passedCount,
 				coverageStr)
-		} else if passedCount > 0 {
+		case passedCount > 0:
 			// All tests passed
 			summaryLine = fmt.Sprintf("  %s All %d tests passed%s\n",
 				tui.PassStyle.Render(tui.CheckPass),
 				passedCount,
 				coverageStr)
-		} else if skippedCount > 0 {
+		case skippedCount > 0:
 			// Only skipped tests
 			summaryLine = fmt.Sprintf("  %s %d tests skipped%s\n",
 				tui.SkipStyle.Render(tui.CheckSkip),
@@ -220,16 +237,16 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 // DisplayTest outputs a test result with mini indicators for subtests.
 func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 	// Skip running tests
-	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
+	if test.Status != TestStatusPass && test.Status != TestStatusFail && test.Status != TestStatusSkip {
 		return
 	}
 
 	// Determine status icon
 	var statusIcon string
 	switch test.Status {
-	case "pass":
+	case constants.PassStatus:
 		statusIcon = tui.PassStyle.Render(tui.CheckPass)
-	case "fail":
+	case constants.FailStatus:
 		statusIcon = tui.FailStyle.Render(tui.CheckFail)
 	case "skip":
 		statusIcon = tui.SkipStyle.Render(tui.CheckSkip)
@@ -239,12 +256,12 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 	var line strings.Builder
 	line.WriteString(indent + "  ")
 	line.WriteString(statusIcon)
-	line.WriteString(" ")
+	line.WriteString(constants.SpaceString)
 	line.WriteString(tui.TestNameStyle.Render(test.Name))
 
 	// Add duration for completed tests
 	if test.Elapsed > 0 {
-		line.WriteString(" ")
+		line.WriteString(constants.SpaceString)
 		line.WriteString(tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
 	}
 
@@ -257,11 +274,11 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 
 		for _, subtest := range test.Subtests {
 			switch subtest.Status {
-			case "pass":
+			case constants.PassStatus:
 				passed++
-			case "fail":
+			case TestStatusFail:
 				failed++
-			case "skip":
+			case TestStatusSkip:
 				skipped++
 			}
 		}
@@ -270,9 +287,9 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 		if total > 0 {
 			// Add mini progress indicator
 			miniProgress := r.generateSubtestProgress(passed, total)
-			percentage := (passed * 100) / total
+			percentage := (passed * PercentageMultiplier) / total
 
-			line.WriteString(" ")
+			line.WriteString(constants.SpaceString)
 			line.WriteString(miniProgress)
 			line.WriteString(fmt.Sprintf(" %d%% passed", percentage))
 		}
@@ -281,12 +298,12 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 	r.writer.PrintUI("%s\n", line.String())
 
 	// Display test output for failures (respecting show filter)
-	if test.Status == "fail" && len(test.Output) > 0 && r.showFilter != "none" {
+	if test.Status == TestStatusFail && len(test.Output) > 0 && r.showFilter != "none" {
 		if r.verbosityLevel == "with-output" || r.verbosityLevel == "verbose" {
 			// With full output, properly render tabs and maintain formatting
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
-				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+				formatted = strings.ReplaceAll(formatted, `\n`, constants.NewlineString)
 				r.writer.PrintUI("%s", indent+"    "+formatted)
 			}
 		} else {
@@ -295,11 +312,11 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 				r.writer.PrintUI("%s", indent+"    "+outputLine)
 			}
 		}
-		r.writer.PrintUI("\n") // Add blank line after output
+		r.writer.PrintUI(constants.NewlineString) // Add blank line after output
 	}
 
 	// Display subtests if test failed or show filter is "all"
-	if len(test.Subtests) > 0 && (test.Status == "fail" || r.showFilter == "all") {
+	if len(test.Subtests) > 0 && (test.Status == TestStatusFail || r.showFilter == "all") {
 		for _, subtestName := range test.SubtestOrder {
 			subtest := test.Subtests[subtestName]
 			if r.shouldShowTestStatus(subtest.Status) {
@@ -311,16 +328,16 @@ func (r *StreamReporter) displayTest(test *TestResult, indent string) {
 
 func (r *StreamReporter) displayTestLine(test *TestResult, indent string) {
 	// Skip running tests
-	if test.Status != "pass" && test.Status != "fail" && test.Status != "skip" {
+	if test.Status != TestStatusPass && test.Status != TestStatusFail && test.Status != TestStatusSkip {
 		return
 	}
 
 	// Determine status icon
 	var statusIcon string
 	switch test.Status {
-	case "pass":
+	case constants.PassStatus:
 		statusIcon = tui.PassStyle.Render(tui.CheckPass)
-	case "fail":
+	case constants.FailStatus:
 		statusIcon = tui.FailStyle.Render(tui.CheckFail)
 	case "skip":
 		statusIcon = tui.SkipStyle.Render(tui.CheckSkip)
@@ -330,30 +347,30 @@ func (r *StreamReporter) displayTestLine(test *TestResult, indent string) {
 	var line strings.Builder
 	line.WriteString(indent + "  ")
 	line.WriteString(statusIcon)
-	line.WriteString(" ")
+	line.WriteString(constants.SpaceString)
 	line.WriteString(tui.TestNameStyle.Render(test.Name))
 
 	// Add duration for completed tests
 	if test.Elapsed > 0 {
-		line.WriteString(" ")
+		line.WriteString(constants.SpaceString)
 		line.WriteString(tui.DurationStyle.Render(fmt.Sprintf("(%.2fs)", test.Elapsed)))
 	}
 
 	// Add skip reason if present
-	if test.Status == "skip" && test.SkipReason != "" {
-		line.WriteString(" ")
+	if test.Status == TestStatusSkip && test.SkipReason != "" {
+		line.WriteString(constants.SpaceString)
 		line.WriteString(tui.FaintStyle.Render("— " + test.SkipReason))
 	}
 
 	r.writer.PrintUI("%s\n", line.String())
 
 	// Display test output for failures (respecting show filter)
-	if test.Status == "fail" && len(test.Output) > 0 && r.showFilter != "none" {
+	if test.Status == TestStatusFail && len(test.Output) > 0 && r.showFilter != "none" {
 		if r.verbosityLevel == "with-output" || r.verbosityLevel == "verbose" {
 			// With full output, properly render tabs and maintain formatting
 			for _, outputLine := range test.Output {
 				formatted := strings.ReplaceAll(outputLine, `\t`, "\t")
-				formatted = strings.ReplaceAll(formatted, `\n`, "\n")
+				formatted = strings.ReplaceAll(formatted, `\n`, constants.NewlineString)
 				r.writer.PrintUI("%s", indent+"    "+formatted)
 			}
 		} else {
@@ -362,7 +379,7 @@ func (r *StreamReporter) displayTestLine(test *TestResult, indent string) {
 				r.writer.PrintUI("%s", indent+"    "+outputLine)
 			}
 		}
-		r.writer.PrintUI("\n") // Add blank line after output
+		r.writer.PrintUI(constants.NewlineString) // Add blank line after output
 	}
 }
 
@@ -373,11 +390,11 @@ func (r *StreamReporter) shouldShowTestStatus(status string) bool {
 		return true
 	case "failed":
 		// Show both failed and skipped tests when filter is "failed"
-		return status == "fail" || status == "skip"
+		return status == TestStatusFail || status == TestStatusSkip
 	case "passed":
-		return status == "pass"
+		return status == constants.PassStatus
 	case "skipped":
-		return status == "skip"
+		return status == TestStatusSkip
 	case "collapsed", "none":
 		return false
 	default:
@@ -416,7 +433,7 @@ func parseCoverageValue(coverage string) float64 {
 	coverage = strings.TrimSpace(coverage)
 
 	// Parse the numeric value
-	value, err := strconv.ParseFloat(coverage, 64)
+	value, err := strconv.ParseFloat(coverage, BitSize64)
 	if err != nil {
 		return -1
 	}
@@ -425,8 +442,11 @@ func parseCoverageValue(coverage string) float64 {
 
 // Finalize is called at the end of all test execution and returns any final output.
 func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Duration) string {
+	buildFailed := len(r.buildFailedPackages)
 	total := passed + failed + skipped
-	if total == 0 {
+	
+	// Show summary even if only build failures occurred
+	if total == 0 && buildFailed == 0 {
 		return ""
 	}
 
@@ -438,6 +458,12 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	output.WriteString(fmt.Sprintf("  %s Passed:  %5d\n", tui.PassStyle.Render(tui.CheckPass), passed))
 	output.WriteString(fmt.Sprintf("  %s Failed:  %5d\n", tui.FailStyle.Render(tui.CheckFail), failed))
 	output.WriteString(fmt.Sprintf("  %s Skipped: %5d\n", tui.SkipStyle.Render(tui.CheckSkip), skipped))
+	
+	// Show build failures if any
+	if buildFailed > 0 {
+		output.WriteString(fmt.Sprintf("  %s Build Failed: %2d\n", tui.FailStyle.Render("✗"), buildFailed))
+	}
+	
 	output.WriteString(fmt.Sprintf("  Total:     %5d\n", total))
 
 	// Add coverage calculations for both statement and function coverage
@@ -480,14 +506,29 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	output.WriteString(fmt.Sprintf("%s Tests completed in %.2fs\n", tui.DurationStyle.Render("ℹ"), elapsed.Seconds()))
 
 	// Add exit status information
-	if failed > 0 {
+	switch {
+	case buildFailed > 0 && failed == 0:
+		// Only build failures, no test failures
+		output.WriteString(fmt.Sprintf("\n%s %d package%s failed to build (no test failures detected)\n",
+			tui.FailStyle.Render("✗"),
+			buildFailed,
+			pluralize(buildFailed)))
+	case buildFailed > 0 && failed > 0:
+		// Both build and test failures
+		output.WriteString(fmt.Sprintf("\n%s %d test%s failed and %d package%s failed to build\n",
+			tui.FailStyle.Render("✗"),
+			failed,
+			pluralize(failed),
+			buildFailed,
+			pluralize(buildFailed)))
+	case failed > 0:
 		output.WriteString(fmt.Sprintf("\n%s %d test%s failed\n",
 			tui.FailStyle.Render("✗"),
 			failed,
 			pluralize(failed)))
-	} else if total == 0 {
+	case total == 0 && buildFailed == 0:
 		output.WriteString(fmt.Sprintf("\n%s No tests found\n", tui.SkipStyle.Render("⚠")))
-	} else {
+	default:
 		output.WriteString(fmt.Sprintf("\n%s All tests passed\n", tui.PassStyle.Render("✓")))
 	}
 
@@ -513,12 +554,6 @@ func (r *StreamReporter) generateSubtestProgress(passed, total int) string {
 
 	if total == 0 {
 		return ""
-	}
-
-	// Determine how many dots to show (actual count up to maxDots)
-	dotsToShow := total
-	if dotsToShow > maxDots {
-		dotsToShow = maxDots
 	}
 
 	// Calculate how many dots for passed vs failed

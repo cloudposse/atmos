@@ -19,14 +19,22 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/cache"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/stream"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
 )
 
+// Exit code constants.
+const (
+	// ExitCodeSIGINT is the exit code when process is interrupted by SIGINT (Ctrl+C).
+	ExitCodeSIGINT = 130
+)
+
 // newStreamCmd creates the stream subcommand.
-func newStreamCmd(logger *log.Logger) *cobra.Command {
+// createStreamCommand creates and configures the stream cobra command.
+func createStreamCommand(logger *log.Logger) *cobra.Command {
 	streamCmd := &cobra.Command{
 		Use:   "stream [path]",
 		Short: "Stream test results as they execute",
@@ -58,41 +66,61 @@ This is the default command when running gotcha without arguments.`,
 			return runStream(cmd, args, logger)
 		},
 	}
+	return streamCmd
+}
 
-	// Test execution flags
-	streamCmd.Flags().StringP("run", "r", "", "Run only tests matching regular expression")
-	streamCmd.Flags().StringP("timeout", "t", "10m", "Test timeout")
-	streamCmd.Flags().BoolP("short", "s", false, "Run smaller tests")
-	streamCmd.Flags().Bool("race", false, "Enable race detector")
-	streamCmd.Flags().Int("count", 1, "Run tests this many times")
-	streamCmd.Flags().Bool("shuffle", false, "Shuffle test order")
-	streamCmd.Flags().BoolP("verbose", "v", false, "Verbose output")
+// addTestExecutionFlags adds test execution related flags to the stream command.
+func addTestExecutionFlags(cmd *cobra.Command) {
+	cmd.Flags().StringP("run", "r", "", "Run only tests matching regular expression")
+	cmd.Flags().StringP("timeout", "t", "10m", "Test timeout")
+	cmd.Flags().BoolP("short", "s", false, "Run smaller tests")
+	cmd.Flags().Bool("race", false, "Enable race detector")
+	cmd.Flags().Int(FlagCount, 1, "Run tests this many times")
+	cmd.Flags().Bool("shuffle", false, "Shuffle test order")
+	cmd.Flags().BoolP("verbose", "v", false, "Verbose output")
+}
 
-	// Coverage flags
-	streamCmd.Flags().Bool("cover", false, "Enable coverage")
-	streamCmd.Flags().String("coverprofile", "", "Coverage profile output file")
-	streamCmd.Flags().String("coverpkg", "", "Apply coverage to packages matching this pattern")
+// addCoverageFlags adds coverage related flags to the stream command.
+func addCoverageFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("cover", false, "Enable coverage")
+	cmd.Flags().String("coverprofile", "", "Coverage profile output file")
+	cmd.Flags().String("coverpkg", "", "Apply coverage to packages matching this pattern")
+}
 
-	// Package selection flags
-	streamCmd.Flags().String("include", "", "Include packages matching regex patterns (comma-separated)")
-	streamCmd.Flags().String("exclude", "", "Exclude packages matching regex patterns (comma-separated)")
+// addPackageSelectionFlags adds package filtering flags to the stream command.
+func addPackageSelectionFlags(cmd *cobra.Command) {
+	cmd.Flags().String("include", "", "Include packages matching regex patterns (comma-separated)")
+	cmd.Flags().String("exclude", "", "Exclude packages matching regex patterns (comma-separated)")
+}
 
-	// Output control flags
-	streamCmd.Flags().StringP("show", "", "all", "Filter test results: all, failed, passed, skipped, collapsed, none")
-	streamCmd.Flags().StringP("format", "f", "terminal", "Output format: terminal, json, markdown")
-	streamCmd.Flags().StringP("output", "o", "", "Output file for test results")
-	streamCmd.Flags().Bool("alert", false, "Sound alert when tests complete")
+// addOutputControlFlags adds output control flags to the stream command.
+func addOutputControlFlags(cmd *cobra.Command) {
+	cmd.Flags().StringP("show", "", "all", "Filter test results: all, failed, passed, skipped, collapsed, none")
+	cmd.Flags().StringP(FlagFormat, "f", constants.FormatTerminal, "Output format: terminal, json, markdown")
+	cmd.Flags().StringP("output", "o", "", "Output file for test results")
+	cmd.Flags().Bool("alert", false, "Sound alert when tests complete")
+	cmd.Flags().String("verbosity", "standard", "Verbosity level: minimal, standard, with-output, verbose")
+}
 
-	// Verbosity flags
-	streamCmd.Flags().String("verbosity", "standard", "Verbosity level: minimal, standard, with-output, verbose")
+// addCIIntegrationFlags adds CI integration related flags to the stream command.
+func addCIIntegrationFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("ci", false, "CI mode - automatically detect and integrate with CI systems")
+	cmd.Flags().String(FlagPostComment, "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
+	cmd.Flags().String(FlagGithubToken, "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
+	cmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
+	cmd.Flags().Bool(FlagExcludeMocks, true, "Exclude mock files from coverage calculations")
+}
 
-	// CI Integration flags
-	streamCmd.Flags().Bool("ci", false, "CI mode - automatically detect and integrate with CI systems")
-	streamCmd.Flags().String("post-comment", "", "GitHub PR comment posting strategy: always|never|adaptive|on-failure|on-skip|<os-name> (default: never)")
-	streamCmd.Flags().String("github-token", "", "GitHub token for authentication (defaults to GITHUB_TOKEN env)")
-	streamCmd.Flags().String("comment-uuid", "", "UUID for comment identification (defaults to GOTCHA_COMMENT_UUID env)")
-	streamCmd.Flags().Bool("exclude-mocks", true, "Exclude mock files from coverage calculations")
-
+func newStreamCmd(logger *log.Logger) *cobra.Command {
+	streamCmd := createStreamCommand(logger)
+	
+	// Add all flag groups
+	addTestExecutionFlags(streamCmd)
+	addCoverageFlags(streamCmd)
+	addPackageSelectionFlags(streamCmd)
+	addOutputControlFlags(streamCmd)
+	addCIIntegrationFlags(streamCmd)
+	
 	return streamCmd
 }
 
@@ -149,7 +177,7 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		if race, _ := cmd.Flags().GetBool("race"); race {
 			testArgs = append(testArgs, "-race")
 		}
-		if count, _ := cmd.Flags().GetInt("count"); count > 1 {
+		if count, _ := cmd.Flags().GetInt(FlagCount); count > 1 {
 			testArgs = append(testArgs, "-count", fmt.Sprintf("%d", count))
 		}
 		if shuffle, _ := cmd.Flags().GetBool("shuffle"); shuffle {
@@ -168,7 +196,7 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	}
 
 	// Get output settings
-	format, _ := cmd.Flags().GetString("format")
+	format, _ := cmd.Flags().GetString(FlagFormat)
 	outputFile, _ := cmd.Flags().GetString("output")
 	alert, _ := cmd.Flags().GetBool("alert")
 
@@ -194,17 +222,17 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	ciMode, _ := cmd.Flags().GetBool("ci")
 
 	// Bind flags to viper for environment variable support
-	_ = viper.BindPFlag("post-comment", cmd.Flags().Lookup("post-comment"))
-	_ = viper.BindEnv("post-comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
-	postStrategy := viper.GetString("post-comment")
+	_ = viper.BindPFlag(FlagPostComment, cmd.Flags().Lookup(FlagPostComment))
+	_ = viper.BindEnv(FlagPostComment, "GOTCHA_POST_COMMENT", "POST_COMMENT")
+	postStrategy := viper.GetString(FlagPostComment)
 
-	_ = viper.BindPFlag("github-token", cmd.Flags().Lookup("github-token"))
-	_ = viper.BindEnv("github-token", "GITHUB_TOKEN")
+	_ = viper.BindPFlag(FlagGithubToken, cmd.Flags().Lookup(FlagGithubToken))
+	_ = viper.BindEnv(FlagGithubToken, "GITHUB_TOKEN")
 
-	_ = viper.BindPFlag("exclude-mocks", cmd.Flags().Lookup("exclude-mocks"))
+	_ = viper.BindPFlag(FlagExcludeMocks, cmd.Flags().Lookup(FlagExcludeMocks))
 
 	// Check if post-comment flag was actually set by the user
-	postFlagPresent := cmd.Flags().Changed("post-comment") || viper.IsSet("post-comment")
+	postFlagPresent := cmd.Flags().Changed(FlagPostComment) || viper.IsSet(FlagPostComment)
 
 	// Normalize the posting strategy
 	postStrategy = normalizePostingStrategy(postStrategy, postFlagPresent)
@@ -218,10 +246,10 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	}
 
 	// If CI mode and format is terminal, switch to a more appropriate format
-	if ciMode && format == "terminal" {
+	if ciMode && format == constants.FormatTerminal {
 		// Don't override if user explicitly set format
-		if !cmd.Flags().Changed("format") {
-			format = "markdown"
+		if !cmd.Flags().Changed(FlagFormat) {
+			format = constants.FormatMarkdown
 			logger.Debug("Switching to markdown format for CI mode")
 		}
 	}
@@ -266,14 +294,14 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Determine output file
 	if outputFile == "" {
 		outputFile = "test-output.json"
-		if format == "markdown" {
+		if format == constants.FormatMarkdown {
 			outputFile = "test-output.md"
 		}
 	}
 
 	// Try to get an estimated test count
 	estimatedTestCount := 0
-	if !cmd.Flags().Changed("count") {
+	if !cmd.Flags().Changed(FlagCount) {
 		// Only use cache if we're not running tests multiple times
 		cacheManager, cacheErr := cache.NewManager(logger)
 		if cacheErr == nil && cacheManager != nil {
@@ -281,7 +309,7 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 			pattern := strings.Join(testPackages, " ")
 			if count, found := cacheManager.GetTestCount(pattern); found {
 				estimatedTestCount = count
-				logger.Debug("Using cached test count", "count", estimatedTestCount)
+				logger.Debug("Using cached test count", FlagCount, estimatedTestCount)
 			} else {
 				logger.Debug("No cached test count available")
 			}
@@ -305,7 +333,7 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	// Run tests based on output format and TTY availability
 	var exitCode int
 
-	if format == "terminal" && utils.IsTTY() {
+	if format == constants.FormatTerminal && utils.IsTTY() {
 		// Use interactive TUI mode
 		logger.Debug("Starting interactive TUI mode")
 
@@ -363,7 +391,7 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 		// For non-terminal formats or when not in a TTY
 		exitCode = stream.RunSimpleStream(
 			testPackages,
-			strings.Join(testArgs, " "),
+			strings.Join(testArgs, constants.SpaceString),
 			outputFile,
 			coverProfile,
 			showFilter,
@@ -373,7 +401,7 @@ func runStreamOld(cmd *cobra.Command, args []string, logger *log.Logger) error {
 	}
 
 	// Process results if needed
-	if format != "terminal" || !utils.IsTTY() {
+	if format != constants.FormatTerminal || !utils.IsTTY() {
 		// Read and parse the JSON output
 		jsonData, err := os.ReadFile(outputFile)
 		if err != nil {
@@ -476,7 +504,7 @@ func (e *testFailureError) Error() string {
 	}
 
 	// Check if user aborted (exit code 130 is SIGINT)
-	if e.code == 130 {
+	if e.code == ExitCodeSIGINT {
 		return "Test run aborted by user"
 	}
 

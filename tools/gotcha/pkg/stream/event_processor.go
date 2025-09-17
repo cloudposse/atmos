@@ -7,6 +7,16 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
+// Status and display constants.
+const (
+	StatusRunning = "running"
+	StatusPass    = "pass"
+	
+	// Display values.
+	DisplayZeroPercent = "0.0%"
+	DisplayNotAvailable = "N/A"
+)
+
 // processEvent handles individual test events from the JSON stream.
 func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	// We'll collect any package that needs to be displayed
@@ -17,13 +27,14 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	// Handle package-level events
 	if event.Test == "" {
 		// Handle package start events
-		if event.Action == "start" && event.Package != "" {
+		switch {
+		case event.Action == "start" && event.Package != "":
 			// Create new package result entry
 			if _, exists := p.packageResults[event.Package]; !exists {
 				p.packageResults[event.Package] = &PackageResult{
 					Package:   event.Package,
 					StartTime: time.Now(),
-					Status:    "running",
+					Status:    StatusRunning,
 					Tests:     make(map[string]*TestResult),
 					TestOrder: []string{},
 					HasTests:  false,
@@ -35,10 +46,10 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				p.currentPackage = event.Package
 				p.packageHasTests[event.Package] = false
 			}
-		} else if event.Action == "skip" && event.Package != "" && event.Test == "" {
+		case event.Action == TestStatusSkip && event.Package != "" && event.Test == "":
 			// Package was skipped (usually means no test files)
 			if pkg, exists := p.packageResults[event.Package]; exists {
-				pkg.Status = "skip"
+				pkg.Status = TestStatusSkip
 				pkg.Elapsed = event.Elapsed
 				pkg.EndTime = time.Now()
 				delete(p.activePackages, event.Package)
@@ -46,7 +57,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				// Mark package for display after lock release
 				packageToDisplay = pkg
 			}
-		} else if event.Action == "output" && event.Package != "" && event.Test == "" {
+		case event.Action == "output" && event.Package != "" && event.Test == "":
 			// Package-level output (coverage, build errors, etc.)
 			if pkg, exists := p.packageResults[event.Package]; exists {
 				pkg.Output = append(pkg.Output, event.Output)
@@ -54,17 +65,18 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				// Check for coverage
 				if strings.Contains(event.Output, "coverage:") {
 					// Extract coverage information properly
-					if strings.Contains(event.Output, "coverage: [no statements]") {
+					switch {
+					case strings.Contains(event.Output, "coverage: [no statements]"):
 						// No statements to cover
-						pkg.Coverage = "0.0%"
-						pkg.StatementCoverage = "0.0%"
-						pkg.FunctionCoverage = "N/A"
-					} else if strings.Contains(event.Output, "coverage: [no test files]") {
+						pkg.Coverage = DisplayZeroPercent
+						pkg.StatementCoverage = DisplayZeroPercent
+						pkg.FunctionCoverage = DisplayNotAvailable
+					case strings.Contains(event.Output, "coverage: [no test files]"):
 						// No test files - shouldn't happen with actual tests
-						pkg.Coverage = "0.0%"
-						pkg.StatementCoverage = "0.0%"
-						pkg.FunctionCoverage = "N/A"
-					} else {
+						pkg.Coverage = DisplayZeroPercent
+						pkg.StatementCoverage = DisplayZeroPercent
+						pkg.FunctionCoverage = DisplayNotAvailable
+					default:
 						// Extract percentage from normal coverage output
 						// Format: "coverage: 75.2% of statements"
 						if matches := strings.Fields(event.Output); len(matches) >= 2 {
@@ -78,13 +90,13 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 										// Function coverage will be calculated separately if available
 										// For now, we'll use the same value or N/A
 										if pkg.FunctionCoverage == "" {
-											pkg.FunctionCoverage = "N/A"
+											pkg.FunctionCoverage = DisplayNotAvailable
 										}
 									} else {
 										// Handle edge cases
 										pkg.Coverage = "0.0%"
 										pkg.StatementCoverage = "0.0%"
-										pkg.FunctionCoverage = "N/A"
+										pkg.FunctionCoverage = DisplayNotAvailable
 									}
 									break
 								}
@@ -105,8 +117,8 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 					// Mark package as failed - it likely has tests that failed to run
 					if pkg, exists := p.packageResults[event.Package]; exists {
 						// Don't override status if already set, but ensure we know tests exist
-						if pkg.Status == "running" {
-							pkg.Status = "fail"
+						if pkg.Status == StatusRunning {
+							pkg.Status = TestStatusFail
 						}
 						pkg.HasTests = true // It has tests, they just failed to run
 						// Store the output for display
@@ -114,10 +126,10 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 					}
 				}
 			}
-		} else if event.Action == "pass" && event.Package != "" && event.Test == "" {
+		case event.Action == StatusPass && event.Package != "" && event.Test == "":
 			// Package passed
 			if pkg, exists := p.packageResults[event.Package]; exists {
-				pkg.Status = "pass"
+				pkg.Status = StatusPass
 				pkg.Elapsed = event.Elapsed
 				pkg.EndTime = time.Now()
 				delete(p.activePackages, event.Package)
@@ -131,10 +143,10 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				// Mark package for display after lock release
 				packageToDisplay = pkg
 			}
-		} else if event.Action == "fail" && event.Package != "" && event.Test == "" {
+		case event.Action == TestStatusFail && event.Package != "" && event.Test == "":
 			// Package failed
 			if pkg, exists := p.packageResults[event.Package]; exists {
-				pkg.Status = "fail"
+				pkg.Status = TestStatusFail
 				pkg.Elapsed = event.Elapsed
 				pkg.EndTime = time.Now()
 				delete(p.activePackages, event.Package)
@@ -150,7 +162,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 				// Mark package for display after lock release
 				packageToDisplay = pkg
 			}
-		} else if event.Action == "output" && p.currentTest != "" {
+		case event.Action == "output" && p.currentTest != "":
 			// Package-level output might contain important command output
 			// Append package-level output to the current test's buffer
 			if p.buffers[p.currentTest] != nil {
@@ -183,7 +195,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 			test := &TestResult{
 				Name:         event.Test,
 				FullName:     event.Test,
-				Status:       "running",
+				Status:       StatusRunning,
 				Output:       []string{},
 				Subtests:     make(map[string]*TestResult),
 				SubtestOrder: []string{},
@@ -202,7 +214,7 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 					parent = &TestResult{
 						Name:         parentName,
 						FullName:     parentName,
-						Status:       "running",
+						Status:       StatusRunning,
 						Output:       []string{},
 						Subtests:     make(map[string]*TestResult),
 						SubtestOrder: []string{},
@@ -244,11 +256,11 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 		}
 		p.buffers[event.Test] = append(p.buffers[event.Test], event.Output)
 
-	case "pass":
+	case StatusPass:
 		// Update test result
 		if pkg, exists := p.packageResults[event.Package]; exists {
 			if test := p.findTest(pkg, event.Test); test != nil {
-				test.Status = "pass"
+				test.Status = StatusPass
 				test.Elapsed = event.Elapsed
 			}
 		}
@@ -259,11 +271,11 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 		// Clear buffer
 		delete(p.buffers, event.Test)
 
-	case "fail":
+	case TestStatusFail:
 		// Update test result
 		if pkg, exists := p.packageResults[event.Package]; exists {
 			if test := p.findTest(pkg, event.Test); test != nil {
-				test.Status = "fail"
+				test.Status = TestStatusFail
 				test.Elapsed = event.Elapsed
 			}
 		}
@@ -274,11 +286,11 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 		// Clear buffer
 		delete(p.buffers, event.Test)
 
-	case "skip":
+	case TestStatusSkip:
 		// Update test result
 		if pkg, exists := p.packageResults[event.Package]; exists {
 			if test := p.findTest(pkg, event.Test); test != nil {
-				test.Status = "skip"
+				test.Status = TestStatusSkip
 				test.Elapsed = event.Elapsed
 
 				// Extract skip reason from output
@@ -333,37 +345,19 @@ func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	}
 }
 
-// shouldShowTestEvent determines if a test event should be displayed based on filter.
-func (p *StreamProcessor) shouldShowTestEvent(action string) bool {
-	switch p.showFilter {
-	case "all":
-		return true
-	case "failed":
-		return action == "fail"
-	case "passed":
-		return action == "pass"
-	case "skipped":
-		return action == "skip"
-	case "collapsed", "none":
-		return false
-	default:
-		return true
-	}
-}
-
 // shouldShowTestStatus determines if a test with the given status should be displayed.
 func (p *StreamProcessor) shouldShowTestStatus(status string) bool {
 	switch p.showFilter {
 	case "all":
 		return true
 	case "failed":
-		return status == "fail"
+		return status == TestStatusFail
 	case "passed":
-		return status == "pass"
+		return status == StatusPass
 	case "skipped":
-		return status == "skip"
+		return status == TestStatusSkip
 	case "collapsed":
-		return status == "fail" // Only show failures in collapsed mode
+		return status == TestStatusFail // Only show failures in collapsed mode
 	case "none":
 		return false
 	default:

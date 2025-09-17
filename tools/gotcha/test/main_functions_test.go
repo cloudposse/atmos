@@ -73,9 +73,10 @@ func TestConstants(t *testing.T) {
 	if constants.FormatBoth != "both" {
 		t.Errorf("FormatBoth = %v, want 'both'", constants.FormatBoth)
 	}
-	// Test backward compatibility alias
-	if constants.FormatStdin != "terminal" {
-		t.Errorf("FormatStdin (backward compat) = %v, want 'terminal'", constants.FormatStdin)
+	// FormatStdin is deprecated, use FormatTerminal instead
+	// This test can be removed once FormatStdin is removed
+	if constants.FormatTerminal != "terminal" {
+		t.Errorf("FormatTerminal = %v, want 'terminal'", constants.FormatTerminal)
 	}
 	if constants.StdinMarker != "-" {
 		t.Errorf("StdinMarker = %v, want '-'", constants.StdinMarker)

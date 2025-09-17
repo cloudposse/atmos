@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
+
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -63,7 +65,7 @@ func (m *TestModel) handleScrollDown() {
 
 // handlePageUp scrolls the view up by 10 lines.
 func (m *TestModel) handlePageUp() {
-	m.scrollOffset -= 10
+	m.scrollOffset -= ScrollPageSize
 	if m.scrollOffset < 0 {
 		m.scrollOffset = 0
 	}
@@ -71,7 +73,7 @@ func (m *TestModel) handlePageUp() {
 
 // handlePageDown scrolls the view down by 10 lines.
 func (m *TestModel) handlePageDown() {
-	m.scrollOffset += 10
+	m.scrollOffset += ScrollPageSize
 	if m.scrollOffset > m.maxScroll {
 		m.scrollOffset = m.maxScroll
 	}
@@ -169,7 +171,7 @@ func (m *TestModel) handleStreamOutput(msg StreamOutputMsg) tea.Cmd {
 
 					// Debug logging for package display
 					if debugFile := config.GetDebugFile(); debugFile != "" {
-						if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+						if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 							fmt.Fprintf(f, "[TUI-DEBUG] Package display: %s, status=%s, output_len=%d, has_tests=%v, active=%v\n",
 								pkg, result.Status, len(output), result.HasTests, m.activePackages[pkg])
 							f.Close()

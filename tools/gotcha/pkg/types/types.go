@@ -24,11 +24,18 @@ type TestResult struct {
 	SkipReason string // Reason why test was skipped (if applicable)
 }
 
+// BuildFailure represents a package that failed to build.
+type BuildFailure struct {
+	Package string
+	Output  string // Build error output if available
+}
+
 // TestSummary represents the overall summary of test results.
 type TestSummary struct {
 	Failed           []TestResult
 	Skipped          []TestResult
 	Passed           []TestResult
+	BuildFailed      []BuildFailure // Build failures (packages that failed to compile)
 	Coverage         string
 	CoverageData     *CoverageData
 	TotalElapsedTime float64 // Total elapsed time in seconds

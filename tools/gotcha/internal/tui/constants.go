@@ -2,9 +2,6 @@ package tui
 
 // Display and UI constants.
 const (
-	// File permissions.
-	DefaultFilePerms = 0o644
-
 	// Terminal dimensions.
 	DefaultTerminalWidth  = 80
 	MaxProgressBarWidth   = 100

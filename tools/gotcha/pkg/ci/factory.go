@@ -3,6 +3,7 @@ package ci
 import (
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 )
 
 // IntegrationFactory is a function that creates a CI integration.
@@ -21,12 +22,12 @@ func DetectIntegration(logger *log.Logger) Integration {
 		if factory, ok := integrations[provider]; ok {
 			integration := factory(logger)
 			if integration.IsAvailable() {
-				logger.Debug("Using manually specified CI provider", "provider", provider)
+				logger.Debug("Using manually specified CI provider", constants.ProviderField, provider)
 				return integration
 			}
-			logger.Warn("Manually specified CI provider not available", "provider", provider)
+			logger.Warn("Manually specified CI provider not available", constants.ProviderField, provider)
 		} else {
-			logger.Warn("Unknown CI provider specified", "provider", provider)
+			logger.Warn("Unknown CI provider specified", constants.ProviderField, provider)
 		}
 	}
 
@@ -35,7 +36,7 @@ func DetectIntegration(logger *log.Logger) Integration {
 		if factory, ok := integrations["mock"]; ok {
 			integration := factory(logger)
 			if integration.IsAvailable() {
-				logger.Debug("Using mock CI integration", "provider", "mock")
+				logger.Debug("Using mock CI integration", constants.ProviderField, "mock")
 				return integration
 			}
 		}
