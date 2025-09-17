@@ -51,11 +51,7 @@ Created a generic `tools/ptyrunner` tool for wrapping any command in a PTY:
 - Uses `github.com/creack/pty` to create pseudo-terminal
 - Useful for testing TUI applications in CI/headless environments
 - Provides the most realistic terminal testing experience
-
-Also created `test/testutil/ptyrunner/main.go` as a gotcha-specific convenience wrapper that:
-- Automatically finds the gotcha binary
-- Delegates to the generic ptyrunner tool
-- Simplifies testing gotcha's TUI mode
+- Available but not currently used in automated testing
 
 ## Usage Examples
 
@@ -78,14 +74,11 @@ finalModel := tm.FinalModel(t)
 ```bash
 # Using the generic ptyrunner tool (Unix/Linux/macOS only)
 # Note: PTYs are not supported on Windows
+# Note: This is an experimental tool, not currently used in CI
 cd tools/ptyrunner
 go build -o ptyrunner .
 cd ../gotcha
 ../ptyrunner/ptyrunner ./gotcha stream ./test --show=all
-
-# Or use the gotcha-specific wrapper for convenience:
-go build -o gotcha-ptyrunner ./test/testutil/ptyrunner
-./gotcha-ptyrunner stream ./test --show=all
 ```
 
 ## Environment Variables
@@ -104,8 +97,7 @@ go build -o gotcha-ptyrunner ./test/testutil/ptyrunner
 
 ### Created Files
 - `tools/gotcha/test/tui_harness_test.go` - Teatest harness for TUI testing
-- `tools/ptyrunner/` - Generic PTY wrapper tool (reusable for any command)
-- `tools/gotcha/test/testutil/ptyrunner/main.go` - Gotcha-specific PTY wrapper (convenience)
+- `tools/ptyrunner/` - Generic PTY wrapper tool (experimental, available for manual testing)
 - `tools/gotcha/demo_tui_testing.sh` - Demo script showing all methods
 - `tools/gotcha/test_tui_modes.sh` - Comprehensive test script
 
