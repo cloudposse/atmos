@@ -1,7 +1,7 @@
 name: Tools Tests
 on:
   pull_request:
-    types: [ opened, synchronize, reopened ]
+    types: [opened, synchronize, reopened]
     paths:
       - "tools/**"
       - ".github/workflows/test-tools.yml"
@@ -21,14 +21,14 @@ on:
   workflow_dispatch:
     inputs:
       enable-tmate:
-        description: 'Enable tmate debugging'
+        description: "Enable tmate debugging"
         required: false
-        default: 'false'
+        default: "false"
         type: choice
         options:
-          - 'false'
-          - 'true'
-          - 'on-failure'
+          - "false"
+          - "true"
+          - "on-failure"
 
 jobs:
   # Test tools (gotcha and others)
@@ -64,7 +64,6 @@ jobs:
           go-version: "1.25"
           cache: true
           cache-dependency-path: |
-            go.sum
             tools/gotcha/go.sum
 
       - name: Install Go dependencies
