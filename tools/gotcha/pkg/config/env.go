@@ -8,66 +8,110 @@ import (
 // This centralizes environment variable configuration to avoid os.Getenv usage.
 // GOTCHA_ prefixed variables take precedence over standard names.
 func InitEnvironment() {
+	// Bind all environment variables
+	bindRuntimeEnvironment()
+	bindConfigurationSettings()
+	bindGitHubContext()
+	bindAuthenticationSettings()
+	bindCommentConfiguration()
+	bindMockConfiguration()
+	bindTTYConfiguration()
+	bindColorConfiguration()
+	bindOutputConfiguration()
+	bindCIProviders()
+	bindDebugConfiguration()
+	bindTerminalConfiguration()
+
+	// Set default values
+	setEnvironmentDefaults()
+}
+
+// bindRuntimeEnvironment binds runtime environment detection variables.
+func bindRuntimeEnvironment() {
 	// Runtime environment detection - These ONLY read from env vars, not config files
 	// Use "runtime.*" keys for actual environment detection
 	_ = viper.BindEnv("runtime.ci", "CI")
 	_ = viper.BindEnv("runtime.github.actions", "GITHUB_ACTIONS")
 	_ = viper.BindEnv("runtime.github.run.id", "GITHUB_RUN_ID")
+}
 
-	// Configuration settings - These can be set in config files OR env vars
+// bindConfigurationSettings binds configuration settings that can be set in config files OR env vars.
+func bindConfigurationSettings() {
 	// Use regular keys for feature configuration
 	_ = viper.BindEnv("ci", "GOTCHA_CI")
 	_ = viper.BindEnv("github.actions", "GOTCHA_GITHUB_ACTIONS")
 	_ = viper.BindEnv("github.run.id", "GOTCHA_GITHUB_RUN_ID")
 	_ = viper.BindEnv("ci.provider", "GOTCHA_CI_PROVIDER")
+}
 
-	// GitHub context - GOTCHA_ variants first for override capability
+// bindGitHubContext binds GitHub context variables with GOTCHA_ variants for override capability.
+func bindGitHubContext() {
 	_ = viper.BindEnv("github.repository", "GOTCHA_GITHUB_REPOSITORY", "GITHUB_REPOSITORY")
 	_ = viper.BindEnv("github.event.name", "GOTCHA_GITHUB_EVENT_NAME", "GITHUB_EVENT_NAME")
 	_ = viper.BindEnv("github.event.path", "GOTCHA_GITHUB_EVENT_PATH", "GITHUB_EVENT_PATH")
 	_ = viper.BindEnv("github.step.summary", "GOTCHA_GITHUB_STEP_SUMMARY", "GITHUB_STEP_SUMMARY")
+}
 
-	// Authentication - GOTCHA_ takes precedence
+// bindAuthenticationSettings binds authentication variables with GOTCHA_ taking precedence.
+func bindAuthenticationSettings() {
 	_ = viper.BindEnv("github.token", "GOTCHA_GITHUB_TOKEN", "GITHUB_TOKEN")
+}
 
-	// Comment configuration - GOTCHA_ takes precedence
+// bindCommentConfiguration binds comment configuration with GOTCHA_ taking precedence.
+func bindCommentConfiguration() {
 	_ = viper.BindEnv("comment.uuid", "GOTCHA_COMMENT_UUID", "COMMENT_UUID")
 	_ = viper.BindEnv("post.comment", "GOTCHA_POST_COMMENT", "POST_COMMENT")
+}
 
-	// Mock configuration
+// bindMockConfiguration binds mock configuration settings.
+func bindMockConfiguration() {
 	_ = viper.BindEnv("use.mock", "GOTCHA_USE_MOCK")
+}
 
-	// TTY configuration
+// bindTTYConfiguration binds TTY configuration settings.
+func bindTTYConfiguration() {
 	_ = viper.BindEnv("force.tty", "GOTCHA_FORCE_TTY", "FORCE_TTY")
 	_ = viper.BindEnv("force.no.tty", "GOTCHA_FORCE_NO_TTY", "FORCE_NO_TTY")
+}
 
-	// Color configuration - standard names (no GOTCHA_ prefix typically)
+// bindColorConfiguration binds color configuration with standard names.
+func bindColorConfiguration() {
 	_ = viper.BindEnv("no.color", "NO_COLOR")
 	_ = viper.BindEnv("force.color", "FORCE_COLOR")
 	_ = viper.BindEnv("term", "TERM")
 	_ = viper.BindEnv("colorterm", "COLORTERM")
+}
 
-	// Output configuration
+// bindOutputConfiguration binds output configuration settings.
+func bindOutputConfiguration() {
 	_ = viper.BindEnv("output", "GOTCHA_OUTPUT")
 	_ = viper.BindEnv("show", "GOTCHA_SHOW")
+}
 
-	// Additional CI providers for runtime detection
+// bindCIProviders binds additional CI providers for runtime detection.
+func bindCIProviders() {
 	_ = viper.BindEnv("runtime.continuous.integration", "CONTINUOUS_INTEGRATION")
 	_ = viper.BindEnv("runtime.build.number", "BUILD_NUMBER")
 	_ = viper.BindEnv("runtime.jenkins.url", "JENKINS_URL")
 	_ = viper.BindEnv("runtime.travis", "TRAVIS")
 	_ = viper.BindEnv("runtime.circleci", "CIRCLECI")
+}
 
-	// Debug and test configuration
+// bindDebugConfiguration binds debug and test configuration settings.
+func bindDebugConfiguration() {
 	_ = viper.BindEnv("debug.file", "GOTCHA_DEBUG_FILE")
 	_ = viper.BindEnv("test.mode", "GOTCHA_TEST_MODE")
 	_ = viper.BindEnv("force.tui", "GOTCHA_FORCE_TUI")
 	_ = viper.BindEnv("split.streams", "GOTCHA_SPLIT_STREAMS")
+}
 
-	// Terminal configuration
+// bindTerminalConfiguration binds terminal configuration settings.
+func bindTerminalConfiguration() {
 	_ = viper.BindEnv("columns", "COLUMNS")
+}
 
-	// Set defaults
+// setEnvironmentDefaults sets default values for environment configurations.
+func setEnvironmentDefaults() {
 	viper.SetDefault("ci", false)
 	viper.SetDefault("github.actions", false)
 	viper.SetDefault("use.mock", false)

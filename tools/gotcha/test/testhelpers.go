@@ -21,9 +21,18 @@ type TestTemplate struct {
 // GetTestTemplates returns predefined test templates for gotcha testing.
 func GetTestTemplates() map[string]TestTemplate {
 	return map[string]TestTemplate{
-		"failing": {
-			Name: "failing_test.go",
-			Content: `package testpkg
+		"failing":  getFailingTestTemplate(),
+		"passing":  getPassingTestTemplate(),
+		"skipping": getSkippingTestTemplate(),
+		"mixed":    getMixedTestTemplate(),
+	}
+}
+
+// getFailingTestTemplate returns a test template with failing tests.
+func getFailingTestTemplate() TestTemplate {
+	return TestTemplate{
+		Name: "failing_test.go",
+		Content: `package testpkg
 
 import "testing"
 
@@ -34,10 +43,14 @@ func TestFail1(t *testing.T) {
 func TestFail2(t *testing.T) {
 	t.Error("This test also fails")
 }`,
-		},
-		"passing": {
-			Name: "passing_test.go",
-			Content: `package testpkg
+	}
+}
+
+// getPassingTestTemplate returns a test template with passing tests.
+func getPassingTestTemplate() TestTemplate {
+	return TestTemplate{
+		Name: "passing_test.go",
+		Content: `package testpkg
 
 import "testing"
 
@@ -55,10 +68,14 @@ func TestPass2(t *testing.T) {
 func TestPass3(t *testing.T) {
 	// Yet another passing test
 }`,
-		},
-		"skipping": {
-			Name: "skipping_test.go",
-			Content: `package testpkg
+	}
+}
+
+// getSkippingTestTemplate returns a test template with skipped tests.
+func getSkippingTestTemplate() TestTemplate {
+	return TestTemplate{
+		Name: "skipping_test.go",
+		Content: `package testpkg
 
 import "testing"
 
@@ -69,10 +86,14 @@ func TestSkip1(t *testing.T) {
 func TestSkip2(t *testing.T) {
 	t.Skip("Another skipped test")
 }`,
-		},
-		"mixed": {
-			Name: "mixed_test.go",
-			Content: `package testpkg
+	}
+}
+
+// getMixedTestTemplate returns a test template with mixed test results.
+func getMixedTestTemplate() TestTemplate {
+	return TestTemplate{
+		Name: "mixed_test.go",
+		Content: `package testpkg
 
 import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
@@ -96,7 +117,6 @@ func TestFail1(t *testing.T) {
 func TestSkip1(t *testing.T) {
 	t.Skip("This test is skipped")
 }`,
-		},
 	}
 }
 

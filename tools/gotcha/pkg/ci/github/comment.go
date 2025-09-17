@@ -115,6 +115,29 @@ func (m *CommentManager) FindExistingComment(ctx context.Context, owner, repo st
 
 // PostOrUpdateComment creates a new comment or updates an existing one.
 func (m *CommentManager) PostOrUpdateComment(ctx context.Context, ghCtx *Context, markdown string) error {
+	// Validate inputs
+	if err := m.validateContext(ghCtx); err != nil {
+		return err
+	}
+
+	// Ensure comment size is within limits
+	markdown = m.ensureCommentSize(markdown)
+
+	// Search for existing comment
+	existingComment, err := m.FindExistingComment(ctx, ghCtx.Owner, ghCtx.Repo, ghCtx.PRNumber, ghCtx.CommentUUID)
+	if err != nil {
+		return fmt.Errorf("failed to search for existing comment: %w", err)
+	}
+
+	// Update or create comment
+	if existingComment != nil {
+		return m.updateComment(ctx, ghCtx, existingComment, markdown)
+	}
+	return m.createComment(ctx, ghCtx, markdown)
+}
+
+// validateContext validates the GitHub context for comment operations.
+func (m *CommentManager) validateContext(ghCtx *Context) error {
 	if ghCtx == nil {
 		return ErrGitHubContextIsNil
 	}
@@ -123,62 +146,63 @@ func (m *CommentManager) PostOrUpdateComment(ctx context.Context, ghCtx *Context
 		return fmt.Errorf("%w: '%s'", ErrUnsupportedEventType, ghCtx.EventName)
 	}
 
-	// Log comment size for debugging
+	return nil
+}
+
+// ensureCommentSize ensures the comment is within GitHub's size limits.
+func (m *CommentManager) ensureCommentSize(markdown string) string {
 	if len(markdown) > MaxCommentSize {
 		m.logger.Warn("Comment content exceeds GitHub limit but should be pre-sized",
 			"size", len(markdown),
 			"limit", MaxCommentSize)
 		// The generateCommentContent function should have handled sizing,
 		// but if we're still over the limit, fall back to simple truncation.
-		markdown = truncateComment(markdown, MaxCommentSize)
-	} else {
-		m.logger.Debug("Comment size within limits",
-			"size", len(markdown),
-			"limit", MaxCommentSize)
+		return truncateComment(markdown, MaxCommentSize)
 	}
 
-	// Search for existing comment
-	existingComment, err := m.FindExistingComment(ctx, ghCtx.Owner, ghCtx.Repo, ghCtx.PRNumber, ghCtx.CommentUUID)
+	m.logger.Debug("Comment size within limits",
+		"size", len(markdown),
+		"limit", MaxCommentSize)
+	return markdown
+}
+
+// updateComment updates an existing GitHub comment.
+func (m *CommentManager) updateComment(ctx context.Context, ghCtx *Context, existingComment *github.IssueComment, markdown string) error {
+	m.logger.Info("Updating existing GitHub comment",
+		constants.CommentIDField, *existingComment.ID,
+		LogFieldPR, ghCtx.PRNumber)
+
+	updateComment := &github.IssueComment{
+		Body: github.String(markdown),
+	}
+
+	_, err := m.retryAPICall(func() (*github.IssueComment, *github.Response, error) {
+		return m.client.UpdateComment(ctx, ghCtx.Owner, ghCtx.Repo, *existingComment.ID, updateComment)
+	})
 	if err != nil {
-		return fmt.Errorf("failed to search for existing comment: %w", err)
+		return fmt.Errorf("failed to update comment: %w", err)
 	}
 
-	if existingComment != nil {
-		// Update existing comment
-		m.logger.Info("Updating existing GitHub comment",
-			constants.CommentIDField, *existingComment.ID,
-			LogFieldPR, ghCtx.PRNumber)
+	m.logger.Info("Successfully updated GitHub comment", constants.CommentIDField, *existingComment.ID)
+	return nil
+}
 
-		updateComment := &github.IssueComment{
-			Body: github.String(markdown),
-		}
+// createComment creates a new GitHub comment.
+func (m *CommentManager) createComment(ctx context.Context, ghCtx *Context, markdown string) error {
+	m.logger.Info("Creating new GitHub comment", LogFieldPR, ghCtx.PRNumber)
 
-		_, err := m.retryAPICall(func() (*github.IssueComment, *github.Response, error) {
-			return m.client.UpdateComment(ctx, ghCtx.Owner, ghCtx.Repo, *existingComment.ID, updateComment)
-		})
-		if err != nil {
-			return fmt.Errorf("failed to update comment: %w", err)
-		}
-
-		m.logger.Info("Successfully updated GitHub comment", constants.CommentIDField, *existingComment.ID)
-	} else {
-		// Create new comment
-		m.logger.Info("Creating new GitHub comment", LogFieldPR, ghCtx.PRNumber)
-
-		newComment := &github.IssueComment{
-			Body: github.String(markdown),
-		}
-
-		createdComment, err := m.retryAPICall(func() (*github.IssueComment, *github.Response, error) {
-			return m.client.CreateComment(ctx, ghCtx.Owner, ghCtx.Repo, ghCtx.PRNumber, newComment)
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create comment: %w", err)
-		}
-
-		m.logger.Info("Successfully created GitHub comment", constants.CommentIDField, *createdComment.ID)
+	newComment := &github.IssueComment{
+		Body: github.String(markdown),
 	}
 
+	createdComment, err := m.retryAPICall(func() (*github.IssueComment, *github.Response, error) {
+		return m.client.CreateComment(ctx, ghCtx.Owner, ghCtx.Repo, ghCtx.PRNumber, newComment)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create comment: %w", err)
+	}
+
+	m.logger.Info("Successfully created GitHub comment", constants.CommentIDField, *createdComment.ID)
 	return nil
 }
 

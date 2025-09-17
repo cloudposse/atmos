@@ -209,7 +209,6 @@ func findAffected(
 
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
-
 				// Terraform
 				if terraformSection, ok := componentsSection[cfg.TerraformComponentType].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {

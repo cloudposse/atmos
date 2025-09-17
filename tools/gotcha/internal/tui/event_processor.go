@@ -217,6 +217,21 @@ func (m *TestModel) processTestEvent(event *types.TestEvent) {
 // processTestRun handles test run events.
 func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, parentTest string, isSubtest bool) {
 	// Debug: Log all test run events
+	m.logTestRunDebug(event, isSubtest)
+
+	m.currentTest = event.Test
+	// Count all tests including subtests for accurate progress
+	m.updateTestCount()
+
+	if isSubtest {
+		m.processSubtestRun(event, pkg, parentTest)
+	} else {
+		m.processTopLevelTestRun(event, pkg)
+	}
+}
+
+// logTestRunDebug logs debug information for test run events.
+func (m *TestModel) logTestRunDebug(event *types.TestEvent, isSubtest bool) {
 	if debugFile := config.GetDebugFile(); debugFile != "" {
 		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "[RUN-DEBUG] Test run event for package %s: %s (isSubtest: %v)\n",
@@ -224,9 +239,10 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 			f.Close()
 		}
 	}
+}
 
-	m.currentTest = event.Test
-	// Count all tests including subtests for accurate progress
+// updateTestCount updates the test count and total tests tracking.
+func (m *TestModel) updateTestCount() {
 	// Always increment the actual test count
 	m.actualTestCount++
 
@@ -235,60 +251,73 @@ func (m *TestModel) processTestRun(event *types.TestEvent, pkg *PackageResult, p
 		m.totalTests = m.actualTestCount
 	}
 	// If using estimate, keep totalTests as the estimate value
+}
 
-	if isSubtest {
-		// This is a subtest
-		parent := pkg.Tests[parentTest]
-		if parent == nil {
-			// Parent test might not exist yet due to parallel execution or table-driven tests
-			parent = &TestResult{
-				Name:         parentTest,
-				FullName:     parentTest,
-				Status:       TestStatusRunning,
-				Subtests:     make(map[string]*TestResult),
-				SubtestOrder: []string{},
-			}
-			pkg.Tests[parentTest] = parent
+// processSubtestRun processes a subtest run event.
+func (m *TestModel) processSubtestRun(event *types.TestEvent, pkg *PackageResult, parentTest string) {
+	parent := m.ensureParentTest(pkg, parentTest)
 
-			// Also add the parent to TestOrder if it's not already there
-			// This ensures parent appears before its subtests in display
-			if !contains(pkg.TestOrder, parentTest) {
-				pkg.TestOrder = append(pkg.TestOrder, parentTest)
-			}
-		}
+	subtest := &TestResult{
+		Name:     event.Test,
+		FullName: event.Test,
+		Status:   TestStatusRunning,
+		Parent:   parentTest,
+	}
+	parent.Subtests[event.Test] = subtest
+	parent.SubtestOrder = append(parent.SubtestOrder, event.Test)
 
-		subtest := &TestResult{
-			Name:     event.Test,
-			FullName: event.Test,
-			Status:   TestStatusRunning,
-			Parent:   parentTest,
-		}
-		parent.Subtests[event.Test] = subtest
-		parent.SubtestOrder = append(parent.SubtestOrder, event.Test)
+	// IMPORTANT: Add subtest to both pkg.Tests AND pkg.TestOrder for display
+	// This ensures subtests are accessible and visible in the TUI output
+	pkg.Tests[event.Test] = subtest
+	pkg.TestOrder = append(pkg.TestOrder, event.Test)
+}
 
-		// IMPORTANT: Add subtest to both pkg.Tests AND pkg.TestOrder for display
-		// This ensures subtests are accessible and visible in the TUI output
-		pkg.Tests[event.Test] = subtest
-		pkg.TestOrder = append(pkg.TestOrder, event.Test)
-	} else {
-		// Top-level test
-		test := &TestResult{
-			Name:         event.Test,
-			FullName:     event.Test,
+// ensureParentTest ensures a parent test exists, creating it if necessary.
+func (m *TestModel) ensureParentTest(pkg *PackageResult, parentTest string) *TestResult {
+	parent := pkg.Tests[parentTest]
+	if parent == nil {
+		// Parent test might not exist yet due to parallel execution or table-driven tests
+		parent = &TestResult{
+			Name:         parentTest,
+			FullName:     parentTest,
 			Status:       TestStatusRunning,
 			Subtests:     make(map[string]*TestResult),
 			SubtestOrder: []string{},
 		}
-		pkg.Tests[event.Test] = test
-		pkg.TestOrder = append(pkg.TestOrder, event.Test)
+		pkg.Tests[parentTest] = parent
 
-		// Debug: Log when we add a test to TestOrder
-		if debugFile := config.GetDebugFile(); debugFile != "" {
-			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
-				fmt.Fprintf(f, "[EVENT-DEBUG] Added test to TestOrder for package %s: %s (total in order: %d)\n",
-					event.Package, event.Test, len(pkg.TestOrder))
-				f.Close()
-			}
+		// Also add the parent to TestOrder if it's not already there
+		// This ensures parent appears before its subtests in display
+		if !contains(pkg.TestOrder, parentTest) {
+			pkg.TestOrder = append(pkg.TestOrder, parentTest)
+		}
+	}
+	return parent
+}
+
+// processTopLevelTestRun processes a top-level test run event.
+func (m *TestModel) processTopLevelTestRun(event *types.TestEvent, pkg *PackageResult) {
+	test := &TestResult{
+		Name:         event.Test,
+		FullName:     event.Test,
+		Status:       TestStatusRunning,
+		Subtests:     make(map[string]*TestResult),
+		SubtestOrder: []string{},
+	}
+	pkg.Tests[event.Test] = test
+	pkg.TestOrder = append(pkg.TestOrder, event.Test)
+
+	// Debug: Log when we add a test to TestOrder
+	m.logTestOrderDebug(event, pkg)
+}
+
+// logTestOrderDebug logs debug information about test ordering.
+func (m *TestModel) logTestOrderDebug(event *types.TestEvent, pkg *PackageResult) {
+	if debugFile := config.GetDebugFile(); debugFile != "" {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
+			fmt.Fprintf(f, "[EVENT-DEBUG] Added test to TestOrder for package %s: %s (total in order: %d)\n",
+				event.Package, event.Test, len(pkg.TestOrder))
+			f.Close()
 		}
 	}
 }
