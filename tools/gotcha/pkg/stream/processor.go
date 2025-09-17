@@ -51,10 +51,10 @@ type TestResult struct {
 
 // StreamProcessor handles real-time test output with buffering.
 type StreamProcessor struct {
-	mu         sync.Mutex
-	buffers    map[string][]string
-	jsonWriter io.Writer
-	showFilter string
+	mu             sync.Mutex
+	buffers        map[string][]string
+	jsonWriter     io.Writer
+	showFilter     string
 	testFilter     string // Test filter applied via -run flag (if any)
 	verbosityLevel string // Verbosity level: standard, with-output, minimal, or verbose
 	startTime      time.Time

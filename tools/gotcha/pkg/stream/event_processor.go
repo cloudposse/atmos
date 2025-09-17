@@ -11,9 +11,9 @@ import (
 const (
 	StatusRunning = "running"
 	StatusPass    = "pass"
-	
+
 	// Display values.
-	DisplayZeroPercent = "0.0%"
+	DisplayZeroPercent  = "0.0%"
 	DisplayNotAvailable = "N/A"
 )
 

@@ -41,12 +41,12 @@ const (
 	ConfigFileName = ".gotcha"
 	ConfigFileType = "yaml"
 	EnvPrefix      = "GOTCHA"
-	
+
 	// Force color values.
-	ForceColorANSI     = "1"
-	ForceColorANSI256  = "2"
+	ForceColorANSI      = "1"
+	ForceColorANSI256   = "2"
 	ForceColorTrueColor = "3"
-	
+
 	// Time format.
 	TimeFormatShort = "15:04:05"
 )
@@ -267,7 +267,7 @@ func bindAndParseFlags(rootCmd *cobra.Command) error {
 		// Can't use logger yet, it's not initialized
 		fmt.Fprintf(os.Stderr, "Failed to parse flags: %v\n", err)
 	}
-	
+
 	return nil
 }
 
@@ -310,7 +310,7 @@ func Execute() error {
 	// Create and configure root command
 	rootCmd := createRootCommand()
 	setupGlobalFlags(rootCmd)
-	
+
 	// Bind and parse flags
 	if err := bindAndParseFlags(rootCmd); err != nil {
 		return err

@@ -65,7 +65,7 @@ func WriteContent(output io.Writer, summary *types.TestSummary, format string) {
 		fmt.Fprintf(output, "[![Passed](https://shields.io/badge/PASSED-%d-success?style=for-the-badge)](#user-content-passed) ", len(summary.Passed))
 		fmt.Fprintf(output, "[![Failed](https://shields.io/badge/FAILED-%d-critical?style=for-the-badge)](#user-content-failed) ", len(summary.Failed))
 		fmt.Fprintf(output, "[![Skipped](https://shields.io/badge/SKIPPED-%d-inactive?style=for-the-badge)](#user-content-skipped) ", len(summary.Skipped))
-		
+
 		// Add build failed badge if any
 		if buildFailedCount > 0 {
 			fmt.Fprintf(output, "[![Build Failed](https://shields.io/badge/BUILD_FAILED-%d-critical?style=for-the-badge)](#user-content-build-failed) ", buildFailedCount)

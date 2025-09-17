@@ -25,8 +25,8 @@ const (
 	colorWhite     = "#FFFFFF" // White for error text
 
 	// Terminal width constants.
-	MinDividerWidth     = 20  // Minimum width for dividers
-	MaxDividerWidth     = 100 // Maximum width for dividers
+	MinDividerWidth = 20  // Minimum width for dividers
+	MaxDividerWidth = 100 // Maximum width for dividers
 )
 
 var (

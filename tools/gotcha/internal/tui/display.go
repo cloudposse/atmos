@@ -408,7 +408,6 @@ func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	return output.String()
 }
 
-
 // displayTestAsLine displays a test as a simple one-line entry.
 func (m *TestModel) displayTestAsLine(output *strings.Builder, test *TestResult, indent string) {
 	// Skip running tests

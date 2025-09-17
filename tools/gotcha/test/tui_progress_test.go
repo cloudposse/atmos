@@ -6,12 +6,13 @@
 package test
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,12 +46,12 @@ func TestSlow3(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 }
 `
-	err := os.WriteFile(testFile, []byte(testContent),constants.DefaultFilePerms)
+	err := os.WriteFile(testFile, []byte(testContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goModFile := filepath.Join(tempDir, "go.mod")
-	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"),constants.DefaultFilePerms)
+	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with format: terminal (for TUI with progress bar)
@@ -60,7 +61,7 @@ show: all
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent),constants.DefaultFilePerms)
+	err = os.WriteFile(configFile, []byte(configContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Build gotcha
@@ -106,12 +107,12 @@ func TestA(t *testing.T) {}
 func TestB(t *testing.T) {}
 func TestC(t *testing.T) {}
 `
-	err := os.WriteFile(testFile, []byte(testContent),constants.DefaultFilePerms)
+	err := os.WriteFile(testFile, []byte(testContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goModFile := filepath.Join(tempDir, "go.mod")
-	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"),constants.DefaultFilePerms)
+	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with format: stream (NO progress bar)
@@ -121,7 +122,7 @@ show: all
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent),constants.DefaultFilePerms)
+	err = os.WriteFile(configFile, []byte(configContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Build gotcha

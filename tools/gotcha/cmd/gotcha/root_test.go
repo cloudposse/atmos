@@ -491,7 +491,7 @@ func TestCreateRootCommand(t *testing.T) {
 	// Verify silence usage settings
 	assert.True(t, cmd.SilenceUsage)
 	assert.True(t, cmd.SilenceErrors)
-	
+
 	// Verify Args is set
 	assert.NotNil(t, cmd.Args)
 }
@@ -528,9 +528,9 @@ func TestBindAndParseFlags(t *testing.T) {
 
 	// Test with various argument combinations
 	tests := []struct {
-		name         string
-		args         []string
-		expectError  bool
+		name        string
+		args        []string
+		expectError bool
 	}{
 		{
 			name:        "valid flags",
@@ -554,13 +554,13 @@ func TestBindAndParseFlags(t *testing.T) {
 			// Reset flags for each test
 			cmd := createRootCommand()
 			setupGlobalFlags(cmd)
-			
+
 			// Set args for parsing
 			cmd.SetArgs(tt.args)
-			
+
 			// Parse flags
 			err := cmd.ParseFlags(tt.args)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -576,7 +576,7 @@ func TestSetupSubcommands(t *testing.T) {
 
 	// Verify subcommands are added
 	subcommands := []string{"stream", "parse", "version"}
-	
+
 	for _, subName := range subcommands {
 		// Find the subcommand
 		found := false

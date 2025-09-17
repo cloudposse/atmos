@@ -17,7 +17,7 @@ import (
 // ParseTestJSON parses test JSON output and returns a test summary.
 func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*types.TestSummary, error) {
 	tests := make(map[string]types.TestResult)
-	skipReasons := make(map[string]string) // Track skip reasons separately
+	skipReasons := make(map[string]string)                // Track skip reasons separately
 	buildFailures := make(map[string]*types.BuildFailure) // Track build failures
 	var coverage string
 	var coverageData *types.CoverageData
@@ -129,8 +129,8 @@ func processLineWithElapsedSkipAndBuild(line string, tests map[string]types.Test
 		if bf, exists := buildFailures[event.Package]; exists {
 			// Append output to build failure
 			bf.Output += event.Output
-		} else if strings.Contains(event.Output, "build failed") || strings.Contains(event.Output, "cannot find package") || 
-				  strings.Contains(event.Output, "undefined:") || strings.Contains(event.Output, "declared and not used") {
+		} else if strings.Contains(event.Output, "build failed") || strings.Contains(event.Output, "cannot find package") ||
+			strings.Contains(event.Output, "undefined:") || strings.Contains(event.Output, "declared and not used") {
 			// This looks like a build error, track it
 			buildFailure = &types.BuildFailure{
 				Package: event.Package,
@@ -143,7 +143,7 @@ func processLineWithElapsedSkipAndBuild(line string, tests map[string]types.Test
 	if event.Action == "output" && event.Test != "" {
 		key := event.Package + "." + event.Test
 		output := strings.TrimSpace(event.Output)
-		
+
 		// Check if this is a skip reason output
 		if strings.HasPrefix(output, "--- SKIP:") {
 			// Mark that we're tracking skip reason for this test

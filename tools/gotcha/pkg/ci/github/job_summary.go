@@ -1,9 +1,10 @@
 package github
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"fmt"
 	"os"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 )
@@ -18,7 +19,7 @@ func (w *GitHubJobSummaryWriter) WriteJobSummary(content string) (string, error)
 		return "", nil
 	}
 
-	file, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY,constants.DefaultFilePerms)
+	file, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, constants.DefaultFilePerms)
 	if err != nil {
 		return "", fmt.Errorf("failed to open GitHub step summary file: %w", err)
 	}

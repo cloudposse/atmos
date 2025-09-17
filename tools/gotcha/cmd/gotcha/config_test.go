@@ -1,10 +1,11 @@
 package cmd
 
 import (
-	constants "github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"os"
 	"path/filepath"
 	"testing"
+
+	constants "github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"

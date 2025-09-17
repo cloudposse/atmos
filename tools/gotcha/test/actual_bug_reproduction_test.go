@@ -6,13 +6,14 @@
 package test
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,7 +46,7 @@ func TestPass3(t *testing.T) {
 	// Yet another passing test
 }
 `
-	err := os.WriteFile(testFile1, []byte(testContent1),constants.DefaultFilePerms)
+	err := os.WriteFile(testFile1, []byte(testContent1), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create go.mod for the test package
@@ -54,7 +55,7 @@ func TestPass3(t *testing.T) {
 
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent),constants.DefaultFilePerms)
+	err = os.WriteFile(goModFile, []byte(goModContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create exact .gotcha.yaml config as user provided
@@ -97,7 +98,7 @@ filter:
   # Regex patterns to exclude packages
   exclude: []
 `
-	err = os.WriteFile(configFile, []byte(configContent),constants.DefaultFilePerms)
+	err = os.WriteFile(configFile, []byte(configContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Build the gotcha binary
@@ -187,7 +188,7 @@ func TestPass3(t *testing.T) {}
 func TestFail1(t *testing.T) { t.Fatal("fail") }
 func TestSkip1(t *testing.T) { t.Skip("skip") }
 `
-	err := os.WriteFile(testFile, []byte(testContent),constants.DefaultFilePerms)
+	err := os.WriteFile(testFile, []byte(testContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create go.mod
@@ -195,7 +196,7 @@ func TestSkip1(t *testing.T) { t.Skip("skip") }
 	goModContent := `module testpkg
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent),constants.DefaultFilePerms)
+	err = os.WriteFile(goModFile, []byte(goModContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with show: failed
@@ -205,7 +206,7 @@ show: failed
 packages:
   - "."
 `
-	err = os.WriteFile(configFile, []byte(configContent),constants.DefaultFilePerms)
+	err = os.WriteFile(configFile, []byte(configContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Build the gotcha binary

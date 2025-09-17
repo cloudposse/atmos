@@ -54,7 +54,7 @@ func validateArguments(args []string) {
 func setupPTYResize(ptmx *os.File) func() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
-	
+
 	go func() {
 		for range ch {
 			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
@@ -62,9 +62,9 @@ func setupPTYResize(ptmx *os.File) func() {
 			}
 		}
 	}()
-	
+
 	ch <- syscall.SIGWINCH // Initial resize
-	
+
 	// Return cleanup function
 	return func() {
 		signal.Stop(ch)
@@ -83,7 +83,7 @@ func setupRawMode() func() {
 		log.Printf("Warning: could not set raw mode: %v", err)
 		return func() {} // No-op cleanup
 	}
-	
+
 	return func() {
 		_ = term.Restore(int(os.Stdin.Fd()), oldState)
 	}

@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"bytes"
 	"fmt"
 	"os"
@@ -9,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/viper"
@@ -152,7 +153,7 @@ func (m *Manager) saveUnlocked() error {
 
 	// Write atomically by writing to temp file first
 	tempPath := m.path + ".tmp"
-	if err := os.WriteFile(tempPath, data,constants.DefaultFilePerms); err != nil {
+	if err := os.WriteFile(tempPath, data, constants.DefaultFilePerms); err != nil {
 		m.logger.Error("Failed to write temp cache file", "path", tempPath, "error", err)
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}

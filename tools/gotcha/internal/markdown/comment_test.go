@@ -466,10 +466,10 @@ func TestDetermineStatusEmoji(t *testing.T) {
 
 func TestWriteTestResultsHeader(t *testing.T) {
 	tests := []struct {
-		name         string
-		statusEmoji  string
-		platform     string
-		expected     string
+		name        string
+		statusEmoji string
+		platform    string
+		expected    string
 	}{
 		{
 			name:        "with platform",
@@ -529,7 +529,7 @@ func TestWriteTestBadges(t *testing.T) {
 			var buf bytes.Buffer
 			writeTestBadges(&buf, tt.summary)
 			result := buf.String()
-			
+
 			for _, expected := range tt.contains {
 				assert.Contains(t, result, expected)
 			}
@@ -578,15 +578,15 @@ func TestBuildConciseHeader(t *testing.T) {
 
 	var buf bytes.Buffer
 	buildConciseHeader(&buf, summary, "uuid-123", "linux")
-	
+
 	result := buf.String()
-	
+
 	// Should contain UUID comment
 	assert.Contains(t, result, "<!-- test-summary-uuid: uuid-123 -->")
-	
+
 	// Should contain header with failure emoji and platform
 	assert.Contains(t, result, "# ❌ Test Results (linux)")
-	
+
 	// Should contain badges
 	assert.Contains(t, result, "PASSED-1-success")
 	assert.Contains(t, result, "FAILED-1-critical")

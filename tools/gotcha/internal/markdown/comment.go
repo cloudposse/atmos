@@ -82,14 +82,14 @@ func writeTestResultsHeader(output io.Writer, statusEmoji, platform string) {
 func writeTestBadges(output io.Writer, summary *types.TestSummary) {
 	total := len(summary.Passed) + len(summary.Failed) + len(summary.Skipped)
 	buildFailedCount := len(summary.BuildFailed)
-	
+
 	if total == 0 && buildFailedCount == 0 {
 		fmt.Fprintf(output, "[![No Tests](https://shields.io/badge/NO_TESTS-0-inactive?style=for-the-badge)](#user-content-no-tests)")
 	} else {
 		fmt.Fprintf(output, "[![Passed](https://shields.io/badge/PASSED-%d-success?style=for-the-badge)](#user-content-passed) ", len(summary.Passed))
 		fmt.Fprintf(output, "[![Failed](https://shields.io/badge/FAILED-%d-critical?style=for-the-badge)](#user-content-failed) ", len(summary.Failed))
 		fmt.Fprintf(output, "[![Skipped](https://shields.io/badge/SKIPPED-%d-inactive?style=for-the-badge)](#user-content-skipped) ", len(summary.Skipped))
-		
+
 		// Add build failed badge if any
 		if buildFailedCount > 0 {
 			fmt.Fprintf(output, "[![Build Failed](https://shields.io/badge/BUILD_FAILED-%d-critical?style=for-the-badge)](#user-content-build-failed) ", buildFailedCount)
@@ -311,7 +311,7 @@ func generateConciseComment(summary *types.TestSummary, uuid string, platform st
 		// If there's an error, fall back to truncated essentials
 		return truncateToEssentials(summary, uuid, platform)
 	}
-	
+
 	if needsEssentialTruncation {
 		return truncateToEssentials(summary, uuid, platform)
 	}

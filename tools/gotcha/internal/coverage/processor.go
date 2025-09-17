@@ -29,9 +29,9 @@ const (
 	CoverageThresholdFair      = 40 // Coverage >= 40% is fair (orange)
 
 	// Display formatting constants.
-	MaxFunctionNameWidth    = 40 // Maximum width for function name display
-	MaxFunctionColumnWidth  = 30 // Maximum width for function name in columns
-	TruncateEllipsisLength  = 27 // Length before adding ellipsis (30 - 3 for "...")
+	MaxFunctionNameWidth   = 40 // Maximum width for function name display
+	MaxFunctionColumnWidth = 30 // Maximum width for function name in columns
+	TruncateEllipsisLength = 27 // Length before adding ellipsis (30 - 3 for "...")
 
 	// Display constants.
 	MaxFunctionNameLength  = 28

@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	
+
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
@@ -159,7 +159,7 @@ func TestSetupGitHubToken(t *testing.T) {
 
 	// Set a value via the flag
 	cmd.Flags().Set(FlagGithubToken, "test-token")
-	
+
 	// The binding should be set up (we can't easily test the actual binding without more complex setup)
 	// This test mainly ensures the function doesn't panic
 	assert.NotPanics(t, func() {
@@ -204,8 +204,8 @@ func TestLogTestSummary(t *testing.T) {
 				Passed: []types.TestResult{
 					{Test: "TestFoo", Package: "pkg1"},
 				},
-				Failed:  []types.TestResult{},
-				Skipped: []types.TestResult{},
+				Failed:   []types.TestResult{},
+				Skipped:  []types.TestResult{},
 				Coverage: "80.5%",
 			},
 		},
@@ -231,13 +231,13 @@ func TestDetectCIProvider(t *testing.T) {
 
 	// Test when no CI provider is available
 	provider := detectCIProvider(logger)
-	
+
 	// In a non-CI environment, this should return nil
 	// The function should not panic
 	assert.NotPanics(t, func() {
 		_ = detectCIProvider(logger)
 	})
-	
+
 	// Additional assertion depends on environment
 	if provider != nil {
 		assert.NotEmpty(t, provider.Provider())

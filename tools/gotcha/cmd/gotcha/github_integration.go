@@ -278,9 +278,9 @@ func getCIContextAndManager(provider ci.Integration, logger *log.Logger) (ci.Con
 }
 
 // postComment posts the comment to the PR and writes job summary if supported.
-func postComment(provider ci.Integration, ctx ci.Context, commentManager ci.CommentManager, 
-	commentContent string, logger *log.Logger) error {
-	
+func postComment(provider ci.Integration, ctx ci.Context, commentManager ci.CommentManager,
+	commentContent string, logger *log.Logger,
+) error {
 	logger.Info("Posting comment to GitHub PR",
 		"contentLength", len(commentContent),
 		FlagRepo, ctx.GetRepo(),

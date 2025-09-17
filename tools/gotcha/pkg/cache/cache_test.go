@@ -1,12 +1,13 @@
 package cache
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/viper"
@@ -59,7 +60,7 @@ func TestNewManager(t *testing.T) {
 					},
 				}
 				data, _ := yaml.Marshal(cache)
-				os.WriteFile(filepath.Join(tempDir, CacheFileName), data,constants.DefaultFilePerms)
+				os.WriteFile(filepath.Join(tempDir, CacheFileName), data, constants.DefaultFilePerms)
 			},
 			expectError: false,
 		},

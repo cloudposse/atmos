@@ -30,42 +30,42 @@ const (
 	ViperKeyPostComment     = "post-comment"
 	ViperKeyGitHubToken     = "github-token"
 	ViperKeyExcludeMocks    = "exclude-mocks"
-	
+
 	// Environment variables.
 	EnvGotchaPostComment = "GOTCHA_POST_COMMENT"
 	EnvPostComment       = "POST_COMMENT"
 	EnvGitHubToken       = "GITHUB_TOKEN"
-	
+
 	// Default values.
-	DefaultShowFilter   = "all"
-	DefaultTestPath     = "./..."
-	DefaultTimeout      = "10m"
-	DefaultOutputMD     = "test-output.md"
-	DefaultOutputJSON   = "test-output.json"
-	
+	DefaultShowFilter = "all"
+	DefaultTestPath   = "./..."
+	DefaultTimeout    = "10m"
+	DefaultOutputMD   = "test-output.md"
+	DefaultOutputJSON = "test-output.json"
+
 	// Verbosity levels.
-	VerbosityMinimal    = "minimal"
-	VerbosityVerbose    = "verbose"
-	VerbosityStandard   = "standard"
-	
+	VerbosityMinimal  = "minimal"
+	VerbosityVerbose  = "verbose"
+	VerbosityStandard = "standard"
+
 	// Show filter values.
-	ShowFilterFailed    = "failed"
-	ShowFilterAll       = "all"
-	
+	ShowFilterFailed = "failed"
+	ShowFilterAll    = "all"
+
 	// Format values.
-	FormatMarkdown      = "markdown"
-	
+	FormatMarkdown = "markdown"
+
 	// Test argument flags.
-	FlagRun     = "-run"
-	FlagTimeout = "-timeout"
-	FlagShort   = "-short"
-	FlagRace    = "-race"
+	FlagRun       = "-run"
+	FlagTimeout   = "-timeout"
+	FlagShort     = "-short"
+	FlagRace      = "-race"
 	FlagTestCount = "-count"
-	FlagShuffle = "-shuffle"
-	
+	FlagShuffle   = "-shuffle"
+
 	// Separator.
 	DashSeparator = "--"
-	
+
 	// Shuffle option.
 	ShuffleOn = "on"
 )

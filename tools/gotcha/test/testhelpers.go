@@ -1,12 +1,13 @@
 package test
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/stretchr/testify/require"
 )
@@ -108,7 +109,7 @@ func CreateTestFiles(t *testing.T, dir string, templateNames ...string) {
 		require.True(t, ok, "Unknown template: %s", name)
 
 		filePath := filepath.Join(dir, tmpl.Name)
-		err := os.WriteFile(filePath, []byte(tmpl.Content),constants.DefaultFilePerms)
+		err := os.WriteFile(filePath, []byte(tmpl.Content), constants.DefaultFilePerms)
 		require.NoError(t, err, "Failed to write test file: %s", filePath)
 	}
 
@@ -118,7 +119,7 @@ func CreateTestFiles(t *testing.T, dir string, templateNames ...string) {
 		goModContent := `module testpkg
 
 go 1.21`
-		err := os.WriteFile(goModPath, []byte(goModContent),constants.DefaultFilePerms)
+		err := os.WriteFile(goModPath, []byte(goModContent), constants.DefaultFilePerms)
 		require.NoError(t, err, "Failed to write go.mod")
 	}
 }
@@ -126,7 +127,7 @@ go 1.21`
 // CreateMixedTestFile creates a test file with custom content.
 func CreateMixedTestFile(t *testing.T, dir string, filename string, content string) {
 	filePath := filepath.Join(dir, filename)
-	err := os.WriteFile(filePath, []byte(content),constants.DefaultFilePerms)
+	err := os.WriteFile(filePath, []byte(content), constants.DefaultFilePerms)
 	require.NoError(t, err, "Failed to write test file: %s", filePath)
 
 	// Create go.mod file if it doesn't exist
@@ -135,7 +136,7 @@ func CreateMixedTestFile(t *testing.T, dir string, filename string, content stri
 		goModContent := `module testpkg
 
 go 1.21`
-		err := os.WriteFile(goModPath, []byte(goModContent),constants.DefaultFilePerms)
+		err := os.WriteFile(goModPath, []byte(goModContent), constants.DefaultFilePerms)
 		require.NoError(t, err, "Failed to write go.mod")
 	}
 }

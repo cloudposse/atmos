@@ -6,7 +6,6 @@
 package test
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"bytes"
 	"encoding/json"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +57,7 @@ func TestSuite1_Skip1(t *testing.T) {
 	t.Skip("This test is skipped")
 }
 `
-	err := os.WriteFile(testFile1, []byte(testContent1),constants.DefaultFilePerms)
+	err := os.WriteFile(testFile1, []byte(testContent1), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	testFile2 := filepath.Join(tempDir, "suite2_test.go")
@@ -73,7 +74,7 @@ func TestSuite2_Fail1(t *testing.T) { t.Error("fail") }
 func TestSuite2_Fail2(t *testing.T) { t.Fatal("fail") }
 func TestSuite2_Skip1(t *testing.T) { t.Skip("skip") }
 `
-	err = os.WriteFile(testFile2, []byte(testContent2),constants.DefaultFilePerms)
+	err = os.WriteFile(testFile2, []byte(testContent2), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create go.mod
@@ -81,7 +82,7 @@ func TestSuite2_Skip1(t *testing.T) { t.Skip("skip") }
 	goModContent := `module testpkg
 go 1.21
 `
-	err = os.WriteFile(goModFile, []byte(goModContent),constants.DefaultFilePerms)
+	err = os.WriteFile(goModFile, []byte(goModContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with exact user configuration
@@ -101,7 +102,7 @@ filter:
     - ".*"
   exclude: []
 `
-	err = os.WriteFile(configFile, []byte(configContent),constants.DefaultFilePerms)
+	err = os.WriteFile(configFile, []byte(configContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Build the gotcha binary
@@ -270,12 +271,12 @@ func TestC(t *testing.T) {}
 func TestD(t *testing.T) {}
 func TestE(t *testing.T) {}
 `
-	err := os.WriteFile(testFile, []byte(testContent),constants.DefaultFilePerms)
+	err := os.WriteFile(testFile, []byte(testContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goModFile := filepath.Join(tempDir, "go.mod")
-	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"),constants.DefaultFilePerms)
+	err = os.WriteFile(goModFile, []byte("module testpkg\ngo 1.21\n"), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create .gotcha.yaml with show: failed
@@ -284,7 +285,7 @@ func TestE(t *testing.T) {}
 show: failed
 packages: ["."]
 `
-	err = os.WriteFile(configFile, []byte(configContent),constants.DefaultFilePerms)
+	err = os.WriteFile(configFile, []byte(configContent), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Build and run gotcha

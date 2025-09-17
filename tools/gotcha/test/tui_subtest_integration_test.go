@@ -6,7 +6,6 @@
 package test
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -295,14 +296,14 @@ func TestTableDriven(t *testing.T) {
 }
 `
 
-	err := os.WriteFile(testFile, []byte(testCode),constants.DefaultFilePerms)
+	err := os.WriteFile(testFile, []byte(testCode), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Create go.mod
 	goMod := `module example
 go 1.21
 `
-	err = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod),constants.DefaultFilePerms)
+	err = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), constants.DefaultFilePerms)
 	require.NoError(t, err)
 
 	// Run go test with JSON output to get ground truth

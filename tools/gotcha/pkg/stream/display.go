@@ -10,7 +10,6 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 )
 
-
 // displayPackageResult outputs the buffered results for a completed package.
 func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Debug: Log package display start
@@ -396,4 +395,3 @@ func (p *StreamProcessor) displayTest(test *TestResult, indent string) {
 		// Don't display them again unless specifically requested
 	}
 }
-

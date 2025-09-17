@@ -1,12 +1,13 @@
 package utils
 
 import (
-	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 	"fmt"
 	"os"
 	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
@@ -114,7 +115,7 @@ func IsTTY() bool {
 
 		// Debug logging
 		if debugFile := config.GetDebugFile(); debugFile != "" {
-			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY,constants.DefaultFilePerms); err == nil {
+			if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 				fmt.Fprintf(f, "[ForceTTY] stdout: %v, stdin: %v, stderr: %v\n", stdoutTTY, stdinTTY, stderrTTY)
 				f.Close()
 			}
@@ -131,7 +132,7 @@ func IsTTY() bool {
 
 	// Debug logging
 	if debugFile := config.GetDebugFile(); debugFile != "" {
-		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY,constants.DefaultFilePerms); err == nil {
+		if f, err := os.OpenFile(debugFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, constants.DefaultFilePerms); err == nil {
 			fmt.Fprintf(f, "[IsTTY] stdout: %v, stdin: %v, stderr: %v, cwd: %s\n",
 				stdoutTTY, stdinTTY, stderrTTY, func() string {
 					if cwd, err := os.Getwd(); err == nil {

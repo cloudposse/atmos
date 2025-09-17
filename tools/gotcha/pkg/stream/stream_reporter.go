@@ -35,7 +35,7 @@ type StreamReporter struct {
 	packageCoverages          []float64
 	packageStatementCoverages []float64
 	packageFunctionCoverages  []float64
-	
+
 	// Track build failures
 	buildFailedPackages []string
 }
@@ -81,7 +81,7 @@ func (r *StreamReporter) OnPackageComplete(pkg *PackageResult) {
 	if pkg.Status == TestStatusFail && len(pkg.Tests) == 0 {
 		// Package failed without running any tests (likely build failure or TestMain failure)
 		r.writer.PrintUI("  %s Package failed to build\n", tui.FailStyle.Render(tui.CheckFail))
-		
+
 		// Track this as a build failure
 		r.buildFailedPackages = append(r.buildFailedPackages, pkg.Package)
 
@@ -444,7 +444,7 @@ func parseCoverageValue(coverage string) float64 {
 func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Duration) string {
 	buildFailed := len(r.buildFailedPackages)
 	total := passed + failed + skipped
-	
+
 	// Show summary even if only build failures occurred
 	if total == 0 && buildFailed == 0 {
 		return ""
@@ -458,12 +458,12 @@ func (r *StreamReporter) Finalize(passed, failed, skipped int, elapsed time.Dura
 	output.WriteString(fmt.Sprintf("  %s Passed:  %5d\n", tui.PassStyle.Render(tui.CheckPass), passed))
 	output.WriteString(fmt.Sprintf("  %s Failed:  %5d\n", tui.FailStyle.Render(tui.CheckFail), failed))
 	output.WriteString(fmt.Sprintf("  %s Skipped: %5d\n", tui.SkipStyle.Render(tui.CheckSkip), skipped))
-	
+
 	// Show build failures if any
 	if buildFailed > 0 {
 		output.WriteString(fmt.Sprintf("  %s Build Failed: %2d\n", tui.FailStyle.Render("✗"), buildFailed))
 	}
-	
+
 	output.WriteString(fmt.Sprintf("  Total:     %5d\n", total))
 
 	// Add coverage calculations for both statement and function coverage

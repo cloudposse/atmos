@@ -113,14 +113,14 @@ func addCIIntegrationFlags(cmd *cobra.Command) {
 
 func newStreamCmd(logger *log.Logger) *cobra.Command {
 	streamCmd := createStreamCommand(logger)
-	
+
 	// Add all flag groups
 	addTestExecutionFlags(streamCmd)
 	addCoverageFlags(streamCmd)
 	addPackageSelectionFlags(streamCmd)
 	addOutputControlFlags(streamCmd)
 	addCIIntegrationFlags(streamCmd)
-	
+
 	return streamCmd
 }
 

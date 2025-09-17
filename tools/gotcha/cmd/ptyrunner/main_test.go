@@ -79,7 +79,7 @@ func TestFindGotchaBinaryFromExecutableDir(t *testing.T) {
 	result := findGotchaBinary()
 
 	// Should either be a path containing "gotcha" or just "gotcha"
-	assert.True(t, 
+	assert.True(t,
 		filepath.Base(result) == "gotcha" || result == "gotcha",
 		"Expected gotcha binary path, got %s", result)
 }
@@ -114,7 +114,7 @@ func TestValidateArguments(t *testing.T) {
 				// but we can verify the function would exit with empty args
 				// In a real test, we'd use a different approach like
 				// dependency injection or subprocess testing
-				
+
 				// For now, we'll just verify that empty args would trigger the condition
 				if len(tt.args) == 0 {
 					assert.Empty(t, tt.args, "Empty args should trigger validation failure")
@@ -134,10 +134,10 @@ func TestValidateArguments(t *testing.T) {
 func TestSetupRawMode(t *testing.T) {
 	// This test verifies the function returns a cleanup function
 	// Note: We can't easily test terminal operations in unit tests
-	
+
 	cleanup := setupRawMode()
 	assert.NotNil(t, cleanup, "Should return a cleanup function")
-	
+
 	// Cleanup function should be safe to call
 	assert.NotPanics(t, func() {
 		cleanup()
@@ -154,7 +154,7 @@ func TestSetupPTYResize(t *testing.T) {
 	// Setup PTY resize should return a cleanup function
 	cleanup := setupPTYResize(tmpFile)
 	assert.NotNil(t, cleanup, "Should return a cleanup function")
-	
+
 	// Cleanup function should be safe to call
 	assert.NotPanics(t, func() {
 		cleanup()
@@ -164,7 +164,7 @@ func TestSetupPTYResize(t *testing.T) {
 func TestRunWithPTY(t *testing.T) {
 	// This is a complex function that requires a real command
 	// We'll test with a simple echo command that should work on all platforms
-	
+
 	t.Run("command not found", func(t *testing.T) {
 		// Note: We can't easily create an exec.Cmd with a custom Path
 		// This test would require more complex setup or mocking

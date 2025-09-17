@@ -25,7 +25,7 @@ func TestGitHubSummaryNoDuplication(t *testing.T) {
 	// Set up a fake GITHUB_STEP_SUMMARY file
 	stepSummaryFile := filepath.Join(tempDir, "step_summary.md")
 	// Create the file first (GitHub Actions creates this file)
-	os.WriteFile(stepSummaryFile, []byte(""),constants.DefaultFilePerms)
+	os.WriteFile(stepSummaryFile, []byte(""), constants.DefaultFilePerms)
 	os.Setenv("GITHUB_STEP_SUMMARY", stepSummaryFile)
 	defer os.Unsetenv("GITHUB_STEP_SUMMARY")
 
@@ -102,7 +102,7 @@ func TestGitHubSummaryTruncatesFile(t *testing.T) {
 	// Set up a fake GITHUB_STEP_SUMMARY file with existing content
 	stepSummaryFile := filepath.Join(tempDir, "step_summary.md")
 	// Create the file with old content
-	os.WriteFile(stepSummaryFile, []byte("OLD CONTENT THAT SHOULD BE REPLACED\n"),constants.DefaultFilePerms)
+	os.WriteFile(stepSummaryFile, []byte("OLD CONTENT THAT SHOULD BE REPLACED\n"), constants.DefaultFilePerms)
 
 	os.Setenv("GITHUB_STEP_SUMMARY", stepSummaryFile)
 	defer os.Unsetenv("GITHUB_STEP_SUMMARY")
