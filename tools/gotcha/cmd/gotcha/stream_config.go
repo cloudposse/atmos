@@ -109,6 +109,15 @@ type StreamConfig struct {
 }
 
 // extractStreamConfig extracts all configuration from the command.
+//
+//nolint:nestif,gocognit // Configuration extraction involves many conditional checks:
+// - Command-line flag processing
+// - Environment variable fallbacks
+// - Default value assignments
+// - CI mode detection and adaptation
+// - Format validation and normalization
+// - Coverage configuration handling
+// Each condition handles a specific configuration aspect.
 func extractStreamConfig(cmd *cobra.Command, args []string, logger *log.Logger) (*StreamConfig, error) {
 	config := &StreamConfig{}
 

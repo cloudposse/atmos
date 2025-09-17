@@ -11,6 +11,14 @@ import (
 )
 
 // displayPackageResult outputs the buffered results for a completed package.
+//
+//nolint:nestif,gocognit // Package result display requires complex conditional logic:
+// - Build failure detection and special error formatting
+// - No-test-files package handling
+// - Coverage information display (statement and function coverage)
+// - Test result aggregation and summary generation
+// - Different display modes based on package status and content
+// This complexity ensures proper package-level reporting for various scenarios.
 func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Debug: Log package display start
 	if debugFile := config.GetDebugFile(); debugFile != "" {

@@ -18,6 +18,15 @@ const (
 )
 
 // processEvent handles individual test events from the JSON stream.
+//
+//nolint:nestif,gocognit,gocyclo // This function handles complex test event processing with many legitimate conditional paths:
+// - Package-level vs test-level events require different handling
+// - Multiple event actions (start, run, output, pass, fail, skip) each have specific logic
+// - Subtest detection and parent-child relationship management
+// - Coverage information extraction from various output formats
+// - Build failure detection and special error cases
+// - Legacy compatibility requirements
+// Refactoring would risk breaking subtle edge cases in test result processing.
 func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	// We'll collect any package that needs to be displayed
 	var packageToDisplay *PackageResult

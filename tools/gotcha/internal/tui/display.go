@@ -232,6 +232,15 @@ func emitAlert(enabled bool) {
 }
 
 // displayPackageResult generates the display string for a package result.
+//
+//nolint:nestif,gocognit // Complex package display logic with multiple decision points:
+// - Build failure vs test failure differentiation
+// - No-test-files handling
+// - Filter-based test visibility (all, failed, passed, skipped, collapsed)
+// - Test hierarchy display with proper indentation
+// - Coverage information formatting
+// - Package status determination from test results
+// The nesting is essential for proper test result visualization.
 func (m *TestModel) displayPackageResult(pkg *PackageResult) string {
 	var output strings.Builder
 
