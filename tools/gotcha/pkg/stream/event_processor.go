@@ -19,14 +19,16 @@ const (
 
 // processEvent handles individual test events from the JSON stream.
 //
-//nolint:nestif,gocognit,gocyclo // This function handles complex test event processing with many legitimate conditional paths:
-// - Package-level vs test-level events require different handling
-// - Multiple event actions (start, run, output, pass, fail, skip) each have specific logic
-// - Subtest detection and parent-child relationship management
-// - Coverage information extraction from various output formats
-// - Build failure detection and special error cases
-// - Legacy compatibility requirements
-// Refactoring would risk breaking subtle edge cases in test result processing.
+//nolint:nestif,gocognit,gocyclo // The complexity here is necessary because Go's test2json output
+// interleaves events from multiple packages and tests running in parallel. We must:
+// - Track state for each package independently (they run concurrently)
+// - Distinguish package events from test events (same JSON structure, different semantics)
+// - Handle output events that may arrive before/after their associated test events
+// - Parse coverage from stdout text mixed with JSON events (Go doesn't emit coverage as JSON)
+// - Detect build failures from text output since Go doesn't emit them as structured events
+// - Maintain parent-child relationships for subtests that may start/end in any order
+// Breaking this into smaller functions would require passing extensive state between them,
+// making the code harder to understand and maintain.
 func (p *StreamProcessor) processEvent(event *types.TestEvent) {
 	// We'll collect any package that needs to be displayed
 	var packageToDisplay *PackageResult

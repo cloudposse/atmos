@@ -28,15 +28,14 @@ import (
 
 // runStreamInteractive runs tests in interactive TUI mode.
 //
-//nolint:nestif,gocognit,gocyclo // TUI orchestration involves extensive conditional logic:
-// - Debug file setup and logging
-// - Test discovery and caching
-// - Coverage profile handling
-// - Test execution with real-time monitoring
-// - Result aggregation from multiple sources
-// - Cache updates based on test outcomes
-// - Summary generation and output routing
-// This complexity manages the entire interactive test execution lifecycle.
+//nolint:nestif,gocognit,gocyclo // The complexity is necessary for coordinating async operations:
+// - Test discovery must happen before TUI starts (users see accurate progress bars)
+// - Cache checks must precede discovery (to avoid redundant work)
+// - TUI model needs both discovered tests AND coverage config before initialization
+// - Post-test cache updates depend on test results (can't be done earlier)
+// - Coverage analysis requires completed tests AND valid profile file
+// These operations have strict ordering dependencies that can't be parallelized
+// or simplified without breaking the user experience (progress tracking, caching).
 func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.Logger) (int, *types.TestSummary, error) {
 	// Set the global logger for packages that use it
 	internalLogger.SetLogger(logger)

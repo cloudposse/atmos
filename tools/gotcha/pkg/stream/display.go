@@ -12,13 +12,15 @@ import (
 
 // displayPackageResult outputs the buffered results for a completed package.
 //
-//nolint:nestif,gocognit // Package result display requires complex conditional logic:
-// - Build failure detection and special error formatting
-// - No-test-files package handling
-// - Coverage information display (statement and function coverage)
-// - Test result aggregation and summary generation
-// - Different display modes based on package status and content
-// This complexity ensures proper package-level reporting for various scenarios.
+//nolint:nestif,gocognit // The nested conditions are necessary because we must handle
+// mutually exclusive package states that require different user feedback:
+// - Build failures need compilation errors shown (users need to see what broke)
+// - Empty packages need "[no test files]" indicator (so users know it's intentional)
+// - Test failures need failed test details (for debugging)
+// - Coverage data may be statement-only or include function coverage (depends on Go version)
+// Each state has different display requirements that can't be combined into a single path.
+// Using a strategy pattern would add indirection without reducing complexity since
+// each case needs access to different subsets of the package data.
 func (p *StreamProcessor) displayPackageResult(pkg *PackageResult) {
 	// Debug: Log package display start
 	if debugFile := config.GetDebugFile(); debugFile != "" {

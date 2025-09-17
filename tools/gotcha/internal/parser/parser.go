@@ -81,14 +81,14 @@ func ParseTestJSON(input io.Reader, coverProfile string, excludeMocks bool) (*ty
 // processLineWithElapsedSkipAndBuild processes a single line of JSON output and returns coverage, elapsed time, and build failures.
 // It also captures skip reasons from test output and detects build failures.
 //
-//nolint:nestif,gocognit // JSON event parsing with extensive conditional processing:
-// - Event type differentiation (run, output, pass, fail, skip)
-// - Test vs package event handling
-// - Coverage extraction from various formats
-// - Skip reason detection from output patterns
-// - Build failure identification
-// - Subtest relationship tracking
-// The complexity reflects Go test's JSON output complexity.
+//nolint:nestif,gocognit // Go's test2json format requires complex parsing because:
+// - Skip reasons are in unstructured text output, not JSON fields (we must regex match)
+// - Build failures appear as text before JSON starts (requires special detection)
+// - Coverage appears in multiple formats: "75.2%", "[no statements]", "[no test files]"
+// - Test names can be hierarchical (TestFoo/SubTest/SubSubTest) requiring recursive lookups
+// - Events arrive out of order - output may come before the test it belongs to
+// We can't simplify this without losing information that users expect to see
+// (skip reasons, accurate coverage, build errors).
 func processLineWithElapsedSkipAndBuild(line string, tests map[string]types.TestResult, skipReasons map[string]string, buildFailures map[string]*types.BuildFailure) (string, float64, *types.BuildFailure) {
 	// Try to parse as JSON.
 	var event types.TestEvent
