@@ -72,10 +72,9 @@ type StreamProcessor struct {
 	packageNoTestsPrinted map[string]bool // Track if we already printed "No tests" for a package
 
 	// Statistics tracking
-	passed      int
-	failed      int
-	skipped     int
-	buildFailed []string // Packages that failed to build
+	passed  int
+	failed  int
+	skipped int
 
 	// TestReporter for handling display
 	reporter TestReporter

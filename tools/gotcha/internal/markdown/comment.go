@@ -245,7 +245,7 @@ func buildConciseHeader(output io.Writer, summary *types.TestSummary, uuid, plat
 }
 
 // addConciseTestSections adds test sections with size awareness.
-func addConciseTestSections(content *bytes.Buffer, summary *types.TestSummary, uuid, platform string) (bool, error) {
+func addConciseTestSections(content *bytes.Buffer, summary *types.TestSummary, platform string) (bool, error) {
 	// Always show build failures, failed and skipped tests (these are most important) - but use compact format.
 	writeCompactBuildFailures(content, summary.BuildFailed)
 	writeCompactFailedTests(content, summary.Failed)
@@ -306,7 +306,7 @@ func generateConciseComment(summary *types.TestSummary, uuid string, platform st
 	buildConciseHeader(&content, summary, uuid, platform)
 
 	// Add test sections and check if we need essential truncation
-	needsEssentialTruncation, err := addConciseTestSections(&content, summary, uuid, platform)
+	needsEssentialTruncation, err := addConciseTestSections(&content, summary, platform)
 	if err != nil {
 		// If there's an error, fall back to truncated essentials
 		return truncateToEssentials(summary, uuid, platform)
