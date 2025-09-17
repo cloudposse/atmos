@@ -1,3 +1,3 @@
-module skipping_tests
+module testdata/skipping_tests
 
-go 1.21
+go 1.25.0

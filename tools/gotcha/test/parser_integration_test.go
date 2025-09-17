@@ -2,6 +2,7 @@ package test
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -61,6 +62,7 @@ func TestParser_WithRealGoTestOutput(t *testing.T) {
 			// Run go test with JSON output
 			cmd := exec.Command("go", "test", "-json", "./...")
 			cmd.Dir = tt.testDir
+			cmd.Env = append(os.Environ(), "GOWORK=off") // Disable workspace to avoid module conflicts
 			output, err := cmd.CombinedOutput()
 
 			// Check if command failed as expected
@@ -94,6 +96,7 @@ func TestParser_HandlesEmptyCoverage(t *testing.T) {
 	testDir := filepath.Join("testdata", "passing_tests")
 	cmd := exec.Command("go", "test", "-json", "./...")
 	cmd.Dir = testDir
+	cmd.Env = append(os.Environ(), "GOWORK=off") // Disable workspace to avoid module conflicts
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err)
 

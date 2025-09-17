@@ -1,3 +1,3 @@
-module mixed_tests
+module testdata/mixed_tests
 
-go 1.21
+go 1.25.0

@@ -2,6 +2,7 @@ package test
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -20,6 +21,7 @@ func TestShowFailedFilter_ParsesCorrectly(t *testing.T) {
 
 	cmd := exec.Command("go", "test", "-json", "./...")
 	cmd.Dir = testDir
+	cmd.Env = append(os.Environ(), "GOWORK=off") // Disable workspace to avoid module conflicts
 	output, _ := cmd.CombinedOutput()
 
 	// We expect the command to fail because there are failing tests
@@ -64,6 +66,7 @@ func TestFilteredOutput_ShowsOnlyFailures(t *testing.T) {
 
 	cmd := exec.Command("go", "test", "-json", "./...")
 	cmd.Dir = testDir
+	cmd.Env = append(os.Environ(), "GOWORK=off") // Disable workspace to avoid module conflicts
 	output, _ := cmd.CombinedOutput()
 
 	// Parse the JSON output
@@ -83,6 +86,7 @@ func TestAllTestsPass_ShowFilter(t *testing.T) {
 
 	cmd := exec.Command("go", "test", "-json", "./...")
 	cmd.Dir = testDir
+	cmd.Env = append(os.Environ(), "GOWORK=off") // Disable workspace to avoid module conflicts
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "All tests should pass")
 
@@ -103,6 +107,7 @@ func TestAllTestsFail_ShowFilter(t *testing.T) {
 
 	cmd := exec.Command("go", "test", "-json", "./...")
 	cmd.Dir = testDir
+	cmd.Env = append(os.Environ(), "GOWORK=off") // Disable workspace to avoid module conflicts
 	output, _ := cmd.CombinedOutput()
 	// Command will fail but we'll have output
 
