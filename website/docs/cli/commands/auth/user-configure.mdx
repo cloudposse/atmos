@@ -7,6 +7,7 @@ slug: /cli/commands/auth/user-configure
 description: Configure static AWS user credentials and store them securely in your system keychain.
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Note from '@site/src/components/Note'
 
 :::note Purpose
 Use this command whenever an identity is backed by a **user** credential source and you need to configure those credentials interactively. The values are stored securely in your OS keychain and can be referenced by other `atmos auth` commands (`login`, `env`, `exec`).  
@@ -35,14 +36,7 @@ atmos auth user configure
 atmos auth user configure
 ```
 
-## Flags
-
-<dl>
-  <dt>n/a</dt>
-  <dd>No flags.</dd>
-</dl>
-
 ## Notes
 
-- Learn how to [configure an `aws/user` identity](/cli/commands/auth#authentication-concepts) in `atmos.yaml` before running this.
+- Learn how to [configure an `aws/user` identity](/cli/commands/auth/usage#aws-user-break-glass) in `atmos.yaml` before running this.
 
