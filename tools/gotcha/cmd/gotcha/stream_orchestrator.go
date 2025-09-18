@@ -146,6 +146,14 @@ func orchestrateStream(cmd *cobra.Command, args []string, logger *log.Logger, wr
 		return err
 	}
 
+	// Add exit diagnostic to summary if needed
+	if exitCode != 0 && testSummary != nil && len(testSummary.Failed) == 0 && len(testSummary.Passed) > 0 {
+		exitReason := stream.GetLastExitReason()
+		if exitReason != "" {
+			testSummary.ExitCodeDiagnostic = exitReason
+		}
+	}
+
 	// Step 7: Display coverage and then comprehensive test summary at the very end
 	// Process coverage first
 	if config.CoverProfile != "" {

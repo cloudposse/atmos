@@ -39,6 +39,7 @@ type TestSummary struct {
 	Coverage         string
 	CoverageData     *CoverageData
 	TotalElapsedTime float64 // Total elapsed time in seconds
+	ExitCodeDiagnostic string // Diagnostic message when exit code != 0 but tests passed
 }
 
 // CoverageFunction represents a function's coverage information.

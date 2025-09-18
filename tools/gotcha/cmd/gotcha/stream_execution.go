@@ -231,10 +231,18 @@ func runStreamInCIWithSummary(cmd *cobra.Command, config *StreamConfig, logger *
 		config.VerbosityLevel,
 	)
 
+	// Get the exit reason if available
+	exitReason := stream.GetLastExitReason()
+
 	// Process and format output
 	summary, err := processTestOutputWithSummary(config, cmd, logger)
 	if err != nil {
 		return exitCode, nil, err
+	}
+
+	// Add exit code diagnostic to summary if needed
+	if exitCode != 0 && len(summary.Failed) == 0 && len(summary.Passed) > 0 && exitReason != "" {
+		summary.ExitCodeDiagnostic = exitReason
 	}
 
 	return exitCode, summary, nil

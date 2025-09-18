@@ -40,6 +40,8 @@ func WriteContent(output io.Writer, summary *types.TestSummary, format string) {
 	statusEmoji := "✅" // Default to pass
 	if len(summary.Failed) > 0 || len(summary.BuildFailed) > 0 {
 		statusEmoji = "❌"
+	} else if summary.ExitCodeDiagnostic != "" {
+		statusEmoji = "⚠️" // Warning if tests passed but exit code was non-zero
 	}
 
 	// Test Results section (h1) with optional discriminator and emoji.
@@ -52,6 +54,16 @@ func WriteContent(output io.Writer, summary *types.TestSummary, format string) {
 	// Display total elapsed time if available
 	if summary.TotalElapsedTime > 0 {
 		fmt.Fprintf(output, "_Total Time: %.2fs_\n\n", summary.TotalElapsedTime)
+	}
+
+	// Display exit code diagnostic if present (only when tests actually passed)
+	if summary.ExitCodeDiagnostic != "" && len(summary.Failed) == 0 && len(summary.BuildFailed) == 0 {
+		fmt.Fprintf(output, "## ⚠️ Process Exit Issue\n\n")
+		fmt.Fprintf(output, "All tests passed but the test process exited with a non-zero code.\n\n")
+		fmt.Fprintf(output, "<details>\n")
+		fmt.Fprintf(output, "<summary>Click for diagnostic details</summary>\n\n")
+		fmt.Fprintf(output, "```\n%s\n```\n\n", summary.ExitCodeDiagnostic)
+		fmt.Fprintf(output, "</details>\n\n")
 	}
 
 	// Get test counts.
