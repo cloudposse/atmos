@@ -382,6 +382,14 @@ AWS_SESSION_TOKEN=...
 
 ## Default Identity Handling
 
+A **default identity** is the one Atmos Auth will use automatically when no specific identity is requested.  
+
+- If you configure a single identity and mark it as `default: true`, Atmos will always use it without requiring you to pass `--identity`.  
+- If multiple identities are defined, you can still mark one as default, but you’ll need to explicitly choose another when you don’t want the default.  
+- If no default is set and multiple identities exist, Atmos will require you to specify which identity to use.  
+
+This makes workflows simpler because you can avoid passing extra flags for the identity you use most often.
+
 ### Single Default
 
 When you have one default identity, it's used automatically:
@@ -435,7 +443,19 @@ Atmos securely stores credentials using your operating system's keyring:
 
 ## AWS File Management
 
-Atmos manages AWS credential files separately from your personal AWS configuration:
+Atmos manages AWS credential files separately from your personal AWS configuration.  
+
+This design avoids common problems: 
+
+1. **No risk of overwriting personal config**: Atmos never modifies `~/.aws/credentials` or `~/.aws/config`. This prevents accidental overrides of credentials you manage yourself and keeps your personal AWS setup intact.  
+
+2. **Provider isolation**: Each provider’s credentials live under `~/.aws/atmos/<provider>/`, making it safe and easy to switch between SSO, SAML, OIDC, or static identities without conflicts.  
+
+3. **Seamless SDK integration**: Under the hood, Atmos sets the standard AWS SDK environment variables (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`) so tools that already rely on the AWS SDK (like Terraform, AWS CLI, CDK) just work without extra setup.  
+
+4. **Project convenience**: Since all configuration lives under Atmos, every project is self-contained. You don’t have to share custom AWS config steps with teammates, and you can cleanly delete all credentials or config associated with a profile at any time.  
+
+This makes authentication more secure, more portable across projects, and less error-prone in day-to-day development.  
 
 ### File Locations
 
