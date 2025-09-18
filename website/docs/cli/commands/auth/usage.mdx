@@ -142,17 +142,6 @@ atmos terraform plan mycomponent -s dev
 
 ### Identity Chaining
 
-You can chain identities to create complex authentication flows:
-
-```yaml
-identities:
-  # Base permission set from SSO
-  base-admin:
-    kind: aws/permission-set
-    via:
-      provider: my-sso
-```
-
 Identity chaining (often called *role chaining*) is when one identity is used to obtain another, forming a sequence of temporary credentials.  
 
 For example, you might:  
