@@ -351,12 +351,19 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	if exitCode != 0 {
 		// Check if this is the specific case where tests passed but go test failed
 		if processor.failed == 0 && processor.passed > 0 {
-			// This is likely a parsing issue or test setup problem, not a test failure
+			// This is a special case that needs detailed diagnostics
+			// Print detailed diagnostic message directly to stderr for visibility
+			fmt.Fprintf(os.Stderr, "\n%s\n", strings.Repeat("─", 80))
+			fmt.Fprintf(os.Stderr, "\033[1;33m⚠ DIAGNOSTIC: Test Process Exit Issue Detected\033[0m\n")
+			fmt.Fprintf(os.Stderr, "%s\n", strings.Repeat("─", 80))
+			fmt.Fprintf(os.Stderr, "\n%s\n\n", exitReason)
+			fmt.Fprintf(os.Stderr, "%s\n", strings.Repeat("─", 80))
+			
+			// Also log it for record keeping
 			log.Warn("Test process exited with non-zero code but no tests failed",
 				"exitCode", exitCode,
 				"testsRun", processor.passed,
-				"testsSkipped", processor.skipped,
-				"hint", "Check for panics, TestMain failures, or build errors")
+				"testsSkipped", processor.skipped)
 		} else {
 			// Log as error since this is a genuine test failure
 			log.Error("Test run failed", "exitCode", exitCode, "reason", exitReason)
@@ -391,53 +398,178 @@ func (p *StreamProcessor) findTest(pkg *PackageResult, testName string) *TestRes
 }
 
 // analyzeProcessFailure analyzes stderr output to determine the root cause of process failure.
+// This function provides detailed, actionable diagnostics about why tests might exit with non-zero
+// codes even when no tests fail.
 func analyzeProcessFailure(stderr string, exitCode int) string {
-	// Check for common failure patterns in stderr
+	// Check for specific logging patterns that indicate TestMain issues
+	// These are common when using logging libraries that don't call os.Exit
+	logPatterns := []struct {
+		pattern string
+		message string
+	}{
+		{"Failed to locate git repository", "Failed to locate git repository"},
+		{"Failed to get current working directory", "Failed to get current working directory"},
+		{"failed to get the current working directory", "Failed to get current working directory"},
+		{"failed to locate git repository", "Failed to locate git repository"},
+		{"Failed to initialize", "Failed to initialize test environment"},
+		{"Fatal error:", "Fatal error encountered"},
+	}
+	
+	// Check if this looks like a TestMain initialization issue
+	var detectedIssues []string
+	hasInfoLogs := strings.Contains(stderr, "INFO") || strings.Contains(stderr, "\u001b[1;38;5;86mINFO\u001b[0m")
+	hasErrorLogs := strings.Contains(stderr, "ERROR") || strings.Contains(stderr, "FATAL")
+	
+	for _, pattern := range logPatterns {
+		if strings.Contains(stderr, pattern.pattern) {
+			detectedIssues = append(detectedIssues, pattern.message)
+		}
+	}
+	
+	// If we found log messages indicating initialization failure but tests passed
+	if len(detectedIssues) > 0 && (hasInfoLogs || hasErrorLogs) {
+		var sb strings.Builder
+		sb.WriteString("TestMain initialization failed but continued execution.\n\n")
+		sb.WriteString("Found log messages indicating early failure:\n")
+		for _, issue := range detectedIssues {
+			sb.WriteString(fmt.Sprintf("  - '%s'\n", issue))
+		}
+		sb.WriteString("\nThis suggests TestMain encountered an error but didn't properly exit. ")
+		sb.WriteString("Check that TestMain:\n")
+		sb.WriteString("  1. Properly handles initialization errors\n")
+		sb.WriteString("  2. Calls os.Exit(m.Run()) even when early errors occur\n")
+		sb.WriteString("  3. Doesn't use logger.Fatal() from charmbracelet/log (which doesn't exit)\n\n")
+		sb.WriteString("Example fix:\n")
+		sb.WriteString("```go\n")
+		sb.WriteString("func TestMain(m *testing.M) {\n")
+		sb.WriteString("    if err := setup(); err != nil {\n")
+		sb.WriteString("        // Set skip reason for tests\n")
+		sb.WriteString("        skipReason = err.Error()\n")
+		sb.WriteString("        // Still run tests (they'll skip)\n")
+		sb.WriteString("        exitCode := m.Run()\n")
+		sb.WriteString("        os.Exit(exitCode)\n")
+		sb.WriteString("    }\n")
+		sb.WriteString("    // Normal flow\n")
+		sb.WriteString("    exitCode := m.Run()\n")
+		sb.WriteString("    os.Exit(exitCode)\n")
+		sb.WriteString("}\n")
+		sb.WriteString("```")
+		return sb.String()
+	}
+	
+	// Check for other common failure patterns
 	switch {
 	case strings.Contains(stderr, "[setup failed]"):
 		// TestMain or init failure
 		if strings.Contains(stderr, "TestMain") || strings.Contains(stderr, "func TestMain") {
-			return fmt.Sprintf("TestMain failed with exit code %d (check TestMain implementation - ensure it calls os.Exit(m.Run()))", exitCode)
+			return fmt.Sprintf("TestMain failed with exit code %d\n\n"+
+				"Ensure TestMain properly calls os.Exit(m.Run()) at all exit points.", exitCode)
 		}
-		return fmt.Sprintf("Test setup failed with exit code %d (possible TestMain or init() issue)", exitCode)
+		return fmt.Sprintf("Test setup failed with exit code %d\n\n"+
+			"Possible causes:\n"+
+			"  - TestMain not properly handling errors\n"+
+			"  - init() function panicking\n"+
+			"  - Missing test fixtures or dependencies", exitCode)
 
 	case strings.Contains(stderr, "panic:"):
 		// Extract panic message if possible
 		lines := strings.Split(stderr, "\n")
-		for _, line := range lines {
+		panicMsg := ""
+		stackStart := -1
+		for i, line := range lines {
 			if strings.Contains(line, "panic:") {
-				panicMsg := strings.TrimSpace(strings.TrimPrefix(line, "panic:"))
-				return fmt.Sprintf("Test process panicked: %s (exit code %d)", panicMsg, exitCode)
+				panicMsg = strings.TrimSpace(strings.TrimPrefix(line, "panic:"))
+				stackStart = i
+				break
 			}
 		}
-		return fmt.Sprintf("Test process panicked with exit code %d", exitCode)
+		
+		result := fmt.Sprintf("Test process panicked with exit code %d\n\n", exitCode)
+		if panicMsg != "" {
+			result += fmt.Sprintf("Panic message: %s\n\n", panicMsg)
+		}
+		
+		// Try to identify where the panic occurred
+		if stackStart >= 0 && stackStart < len(lines)-1 {
+			if strings.Contains(lines[stackStart+1], "init()") || strings.Contains(lines[stackStart+2], "init()") {
+				result += "The panic occurred in an init() function.\n"
+				result += "Check package initialization code for:\n"
+				result += "  - Nil pointer dereferences\n"
+				result += "  - Invalid array/slice access\n"
+				result += "  - Missing required environment variables\n"
+			} else if strings.Contains(stderr, "TestMain") {
+				result += "The panic occurred in TestMain.\n"
+				result += "Check TestMain for proper error handling.\n"
+			}
+		}
+		return result
 
 	case strings.Contains(stderr, "[build failed]"):
-		// Extract package name if possible
+		// Extract build error details
 		lines := strings.Split(stderr, "\n")
+		var buildErrors []string
+		pkg := ""
+		
 		for _, line := range lines {
 			if strings.Contains(line, "[build failed]") {
 				// Format: FAIL	github.com/cloudposse/atmos/tools/gotcha/pkg/example [build failed]
 				parts := strings.Fields(line)
 				if len(parts) >= 2 && parts[0] == "FAIL" {
-					pkg := parts[1]
-					return fmt.Sprintf("Build failed for package %s (exit code %d)", pkg, exitCode)
+					pkg = parts[1]
 				}
+			} else if strings.Contains(line, "undefined:") || strings.Contains(line, "cannot find") {
+				buildErrors = append(buildErrors, strings.TrimSpace(line))
 			}
 		}
-		return fmt.Sprintf("Build failed with exit code %d", exitCode)
+		
+		result := fmt.Sprintf("Build failed with exit code %d\n\n", exitCode)
+		if pkg != "" {
+			result += fmt.Sprintf("Package: %s\n\n", pkg)
+		}
+		if len(buildErrors) > 0 {
+			result += "Build errors:\n"
+			for _, err := range buildErrors {
+				result += fmt.Sprintf("  - %s\n", err)
+			}
+			result += "\n"
+		}
+		result += "Check for:\n"
+		result += "  - Missing imports\n"
+		result += "  - Typos in function/variable names\n"
+		result += "  - Incompatible dependency versions\n"
+		return result
 
 	case strings.Contains(stderr, "undefined:") || strings.Contains(stderr, "cannot find") || strings.Contains(stderr, "declared and not used"):
-		return fmt.Sprintf("Build/compilation error with exit code %d (check for undefined symbols or missing dependencies)", exitCode)
+		return fmt.Sprintf("Build/compilation error with exit code %d\n\n"+
+			"Check for:\n"+
+			"  - Undefined symbols or functions\n"+
+			"  - Missing dependencies\n"+
+			"  - Incorrect import paths\n"+
+			"  - Variables declared but not used", exitCode)
 
 	case strings.Contains(stderr, "log.Fatal") || strings.Contains(stderr, "logger.Fatal"):
-		return fmt.Sprintf("Test called log.Fatal or logger.Fatal (exit code %d)", exitCode)
+		return fmt.Sprintf("Test called log.Fatal or logger.Fatal (exit code %d)\n\n"+
+			"Note: Some logging libraries (like charmbracelet/log) have Fatal methods\n"+
+			"that don't call os.Exit. If using such libraries in TestMain, replace with:\n"+
+			"  logger.Error(msg)\n"+
+			"  os.Exit(1)", exitCode)
 
 	case strings.Contains(stderr, "os.Exit"):
-		return fmt.Sprintf("Test called os.Exit(%d) directly", exitCode)
+		return fmt.Sprintf("Test called os.Exit(%d) directly\n\n"+
+			"Tests should not call os.Exit directly. Use t.Fatal() or t.Skip() instead.", exitCode)
 
 	default:
-		// Generic process failure
-		return fmt.Sprintf("Test process failed with exit code %d (no test failures detected - possible process-level issue)", exitCode)
+		// Generic process failure with helpful suggestions
+		return fmt.Sprintf("Test process exited with code %d but all tests passed.\n\n"+
+			"Possible causes:\n"+
+			"  1. TestMain function not calling os.Exit(m.Run())\n"+
+			"  2. Code calling os.Exit(%d) after tests complete\n"+
+			"  3. Deferred function calling log.Fatal() or panic()\n"+
+			"  4. Signal received (SIGTERM, SIGKILL, etc.)\n\n"+
+			"Debug steps:\n"+
+			"  1. Check if you have a TestMain function\n"+
+			"  2. Ensure TestMain ends with os.Exit(m.Run())\n"+
+			"  3. Look for defer statements that might call Fatal or panic\n"+
+			"  4. Check for goroutines that might call os.Exit", exitCode, exitCode)
 	}
 }
