@@ -211,10 +211,10 @@ FAIL	github.com/example/pkg [build failed]`,
 		t.Run(tc.name, func(t *testing.T) {
 			// Create a buffer to capture JSON output
 			var jsonBuf bytes.Buffer
-			
+
 			// Create the processor
 			processor := NewStreamProcessor(&jsonBuf, "all", "", "standard")
-			
+
 			// Create a reader with the JSON events
 			var eventBuf bytes.Buffer
 			for _, event := range tc.jsonEvents {
@@ -223,20 +223,20 @@ FAIL	github.com/example/pkg [build failed]`,
 				eventBuf.Write(eventJSON)
 				eventBuf.WriteByte('\n')
 			}
-			
+
 			// Process the events
 			err := processor.ProcessStream(&eventBuf)
 			require.NoError(t, err)
-			
+
 			// Now analyze the failure
 			diagnostic := analyzeTestFailure(tc.stderr, tc.exitCode, processor.passed, processor.failed, processor.skipped)
-			
+
 			// Check that the diagnostic contains expected phrases
 			for _, phrase := range tc.shouldContain {
-				assert.Contains(t, diagnostic, phrase, 
+				assert.Contains(t, diagnostic, phrase,
 					"Diagnostic should contain '%s' for scenario %s", phrase, tc.name)
 			}
-			
+
 			// Log the diagnostic for manual review
 			t.Logf("Diagnostic for %s:\n%s", tc.name, diagnostic)
 		})
@@ -293,7 +293,7 @@ ok  	github.com/example/pkg	1.234s`,
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			reason := analyzeTestFailure(tc.stderr, tc.exitCode, tc.passed, tc.failed, tc.skipped)
-			
+
 			// For these tests, we want exact matches to ensure our diagnostics are precise
 			if tc.name == "atmos_specific_testmain_issue" {
 				// For the Atmos-specific case, check key components are present
@@ -314,11 +314,11 @@ ok  	github.com/example/pkg	1.234s`,
 func analyzeTestFailure(stderr string, exitCode, passed, failed, skipped int) string {
 	// This is a placeholder - the actual implementation will be in processor.go
 	// For testing, we'll use a simple version
-	
+
 	if exitCode != 0 && failed == 0 && passed > 0 {
 		// Check for specific patterns in stderr
 		if strings.Contains(stderr, "Failed to locate git repository") ||
-		   strings.Contains(stderr, "Failed to get current working directory") {
+			strings.Contains(stderr, "Failed to get current working directory") {
 			return "TestMain initialization failed but continued execution. Found log messages indicating early failure:\n" +
 				"  - 'Failed to locate git repository'\n\n" +
 				"This suggests TestMain encountered an error but didn't properly exit. " +
@@ -327,7 +327,7 @@ func analyzeTestFailure(stderr string, exitCode, passed, failed, skipped int) st
 				"  2. Calls os.Exit(m.Run()) even when early errors occur\n" +
 				"  3. Doesn't use logger.Fatal() from charmbracelet/log (which doesn't exit)"
 		}
-		
+
 		return "Test process exited with code 1 but all tests passed.\n\n" +
 			"Possible causes:\n" +
 			"  1. TestMain function not calling os.Exit(m.Run())\n" +
@@ -335,18 +335,18 @@ func analyzeTestFailure(stderr string, exitCode, passed, failed, skipped int) st
 			"  3. Deferred function calling log.Fatal() or panic()\n\n" +
 			"Check your TestMain implementation and ensure it properly calls os.Exit(m.Run())"
 	}
-	
+
 	if strings.Contains(stderr, "panic:") {
 		return "panic during initialization:\n" +
 			"  - Check the package initialization code\n" +
 			"  - Look for nil pointer dereferences in init() functions"
 	}
-	
+
 	if strings.Contains(stderr, "[build failed]") {
 		return "Build failed:\n" +
 			"  - Check for compilation errors\n" +
 			"  - Check for missing imports or typos"
 	}
-	
+
 	return "Unknown failure reason"
 }

@@ -358,7 +358,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 			fmt.Fprintf(os.Stderr, "%s\n", strings.Repeat("─", 80))
 			fmt.Fprintf(os.Stderr, "\n%s\n\n", exitReason)
 			fmt.Fprintf(os.Stderr, "%s\n", strings.Repeat("─", 80))
-			
+
 			// Also log it for record keeping
 			log.Warn("Test process exited with non-zero code but no tests failed",
 				"exitCode", exitCode,
@@ -414,18 +414,18 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 		{"Failed to initialize", "Failed to initialize test environment"},
 		{"Fatal error:", "Fatal error encountered"},
 	}
-	
+
 	// Check if this looks like a TestMain initialization issue
 	var detectedIssues []string
 	hasInfoLogs := strings.Contains(stderr, "INFO") || strings.Contains(stderr, "\u001b[1;38;5;86mINFO\u001b[0m")
 	hasErrorLogs := strings.Contains(stderr, "ERROR") || strings.Contains(stderr, "FATAL")
-	
+
 	for _, pattern := range logPatterns {
 		if strings.Contains(stderr, pattern.pattern) {
 			detectedIssues = append(detectedIssues, pattern.message)
 		}
 	}
-	
+
 	// If we found log messages indicating initialization failure but tests passed
 	if len(detectedIssues) > 0 && (hasInfoLogs || hasErrorLogs) {
 		var sb strings.Builder
@@ -456,7 +456,7 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 		sb.WriteString("```")
 		return sb.String()
 	}
-	
+
 	// Check for other common failure patterns
 	switch {
 	case strings.Contains(stderr, "[setup failed]"):
@@ -483,12 +483,12 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 				break
 			}
 		}
-		
+
 		result := fmt.Sprintf("Test process panicked with exit code %d\n\n", exitCode)
 		if panicMsg != "" {
 			result += fmt.Sprintf("Panic message: %s\n\n", panicMsg)
 		}
-		
+
 		// Try to identify where the panic occurred
 		if stackStart >= 0 && stackStart < len(lines)-1 {
 			if strings.Contains(lines[stackStart+1], "init()") || strings.Contains(lines[stackStart+2], "init()") {
@@ -509,7 +509,7 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 		lines := strings.Split(stderr, "\n")
 		var buildErrors []string
 		pkg := ""
-		
+
 		for _, line := range lines {
 			if strings.Contains(line, "[build failed]") {
 				// Format: FAIL	github.com/cloudposse/atmos/tools/gotcha/pkg/example [build failed]
@@ -521,7 +521,7 @@ func analyzeProcessFailure(stderr string, exitCode int) string {
 				buildErrors = append(buildErrors, strings.TrimSpace(line))
 			}
 		}
-		
+
 		result := fmt.Sprintf("Build failed with exit code %d\n\n", exitCode)
 		if pkg != "" {
 			result += fmt.Sprintf("Package: %s\n\n", pkg)
