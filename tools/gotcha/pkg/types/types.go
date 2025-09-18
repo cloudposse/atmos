@@ -32,14 +32,14 @@ type BuildFailure struct {
 
 // TestSummary represents the overall summary of test results.
 type TestSummary struct {
-	Failed           []TestResult
-	Skipped          []TestResult
-	Passed           []TestResult
-	BuildFailed      []BuildFailure // Build failures (packages that failed to compile)
-	Coverage         string
-	CoverageData     *CoverageData
-	TotalElapsedTime float64 // Total elapsed time in seconds
-	ExitCodeDiagnostic string // Diagnostic message when exit code != 0 but tests passed
+	Failed             []TestResult
+	Skipped            []TestResult
+	Passed             []TestResult
+	BuildFailed        []BuildFailure // Build failures (packages that failed to compile)
+	Coverage           string
+	CoverageData       *CoverageData
+	TotalElapsedTime   float64 // Total elapsed time in seconds
+	ExitCodeDiagnostic string  // Diagnostic message when exit code != 0 but tests passed
 }
 
 // CoverageFunction represents a function's coverage information.
