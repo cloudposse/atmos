@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
@@ -12,6 +13,12 @@ import (
 
 // RunSimpleStream runs tests with simple non-interactive streaming output.
 func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, verbosityLevel string) int {
+	// Check if we're in test mode to prevent recursive test execution
+	if os.Getenv("GOTCHA_TEST_MODE") == "1" {
+		logger.GetLogger().Debug("Skipping test execution in test mode")
+		return 0
+	}
+	
 	// Configure colors and initialize styles for stream mode
 	profile := tui.ConfigureColors()
 

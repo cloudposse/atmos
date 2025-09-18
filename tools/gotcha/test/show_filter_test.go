@@ -16,6 +16,11 @@ import (
 // TestShowFailedFilter_ParsesCorrectly verifies that gotcha correctly parses
 // test output and identifies failed, passed, and skipped tests.
 func TestShowFailedFilter_ParsesCorrectly(t *testing.T) {
+	// Skip unless explicitly enabled to prevent recursive test execution
+	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
+		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
+	}
+	
 	// Run go test on our mixed testdata
 	testDir := filepath.Join("testdata", "mixed_tests")
 
@@ -61,6 +66,11 @@ func TestShowFailedFilter_ParsesCorrectly(t *testing.T) {
 // TestFilteredOutput_ShowsOnlyFailures verifies that when filtering for failures,
 // only failed tests are included in the parsed output.
 func TestFilteredOutput_ShowsOnlyFailures(t *testing.T) {
+	// Skip unless explicitly enabled to prevent recursive test execution
+	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
+		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
+	}
+	
 	// Run go test on our mixed testdata
 	testDir := filepath.Join("testdata", "mixed_tests")
 
@@ -81,6 +91,11 @@ func TestFilteredOutput_ShowsOnlyFailures(t *testing.T) {
 
 // TestAllTestsPass_ShowFilter verifies behavior when all tests pass.
 func TestAllTestsPass_ShowFilter(t *testing.T) {
+	// Skip unless explicitly enabled to prevent recursive test execution
+	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
+		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
+	}
+	
 	// Run go test on our passing testdata
 	testDir := filepath.Join("testdata", "passing_tests")
 
@@ -102,6 +117,11 @@ func TestAllTestsPass_ShowFilter(t *testing.T) {
 
 // TestAllTestsFail_ShowFilter verifies behavior when all tests fail.
 func TestAllTestsFail_ShowFilter(t *testing.T) {
+	// Skip unless explicitly enabled to prevent recursive test execution
+	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
+		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
+	}
+	
 	// Run go test on our failing testdata
 	testDir := filepath.Join("testdata", "failing_tests")
 

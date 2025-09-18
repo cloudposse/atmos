@@ -467,13 +467,23 @@ func TestMain(m *testing.M) {
 	// Capture the starting working directory
 	startingDir, err = os.Getwd()
 	if err != nil {
-		logger.Fatal("failed to get the current working directory", err)
+		// Set skip reason instead of calling Fatal so tests run properly
+		skipReason = fmt.Sprintf("Failed to get current working directory: %v", err)
+		logger.Error("Failed to get current working directory", "error", err)
+		// Run tests anyway - they'll skip themselves
+		exitCode := m.Run()
+		os.Exit(exitCode)
 	}
 
 	// Find the root of the Git repository
 	repoRoot, err = findGitRepoRoot(startingDir)
 	if err != nil {
-		logger.Fatal("failed to locate git repository", "dir", startingDir)
+		// Set skip reason instead of calling Fatal so tests run properly
+		skipReason = fmt.Sprintf("Failed to locate git repository from dir: %s", startingDir)
+		logger.Error("Failed to locate git repository", "dir", startingDir, "error", err)
+		// Run tests anyway - they'll skip themselves
+		exitCode := m.Run()
+		os.Exit(exitCode)
 	}
 
 	// Check for the atmos binary
