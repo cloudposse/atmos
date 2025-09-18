@@ -431,7 +431,7 @@ func TestReplayWithStreamProcessor(t *testing.T) {
 			jsonData:       []byte("not json"),
 			showFilter:     "all",
 			verbosityLevel: "normal",
-			wantErr:        true,
+			wantErr:        false, // Invalid JSON lines are skipped, not an error
 		},
 	}
 
@@ -476,8 +476,10 @@ func TestParseCommandIntegration(t *testing.T) {
 		assert.NoError(t, err)
 
 		output := buf.String()
-		assert.Contains(t, output, "Parse existing go test JSON output")
-		assert.Contains(t, output, "gotcha parse <json-file>")
+		// Check for the Long description which is actually shown in help
+		assert.Contains(t, output, "Parse and analyze previously generated go test -json output files")
+		// Check for the Usage format
+		assert.Contains(t, output, "parse <json-file>")
 		assert.Contains(t, output, "Examples:")
 	})
 

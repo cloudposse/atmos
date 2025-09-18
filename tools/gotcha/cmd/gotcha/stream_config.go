@@ -310,7 +310,8 @@ func (c *StreamConfig) adjustShowFilterForVerbosity(cmd *cobra.Command) {
 
 // extractTestArguments builds the test arguments from command flags.
 func extractTestArguments(cmd *cobra.Command) []string {
-	var testArgs []string
+	// Initialize as empty slice instead of nil
+	testArgs := []string{}
 
 	// Check for -- separator to allow raw go test args
 	dashIndex := -1
