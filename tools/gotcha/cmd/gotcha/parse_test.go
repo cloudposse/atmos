@@ -210,14 +210,14 @@ func TestBindParseFlags(t *testing.T) {
 // TestRunParse tests the runParse function
 func TestRunParse(t *testing.T) {
 	tests := []struct {
-		name          string
-		setupFile     func(t *testing.T) string
-		setupFlags    func(cmd *cobra.Command)
-		setupEnv      func()
-		cleanupEnv    func()
-		wantErr       bool
-		wantFailure   bool // Test failure error expected
-		checkOutput   func(t *testing.T, outputFile string)
+		name        string
+		setupFile   func(t *testing.T) string
+		setupFlags  func(cmd *cobra.Command)
+		setupEnv    func()
+		cleanupEnv  func()
+		wantErr     bool
+		wantFailure bool // Test failure error expected
+		checkOutput func(t *testing.T, outputFile string)
 	}{
 		{
 			name: "parse valid JSON file",
@@ -227,7 +227,7 @@ func TestRunParse(t *testing.T) {
 {"Time":"2025-09-17T10:00:01Z","Action":"pass","Package":"pkg1","Test":"Test2","Elapsed":0.5}
 {"Time":"2025-09-17T10:00:02Z","Action":"pass","Package":"pkg1"}
 `
-				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0644))
+				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0o644))
 				return file
 			},
 			setupFlags: func(cmd *cobra.Command) {
@@ -244,7 +244,7 @@ func TestRunParse(t *testing.T) {
 {"Time":"2025-09-17T10:00:01Z","Action":"pass","Package":"pkg1","Test":"Test2","Elapsed":0.5}
 {"Time":"2025-09-17T10:00:02Z","Action":"fail","Package":"pkg1"}
 `
-				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0644))
+				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0o644))
 				return file
 			},
 			setupFlags: func(cmd *cobra.Command) {
@@ -261,7 +261,7 @@ func TestRunParse(t *testing.T) {
 {"Time":"2025-09-17T10:00:01Z","Action":"skip","Package":"pkg1","Test":"Test2","Elapsed":0.0}
 {"Time":"2025-09-17T10:00:02Z","Action":"pass","Package":"pkg1"}
 `
-				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0644))
+				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0o644))
 				return file
 			},
 			setupFlags: func(cmd *cobra.Command) {
@@ -273,7 +273,7 @@ func TestRunParse(t *testing.T) {
 			checkOutput: func(t *testing.T, outputFile string) {
 				content, err := os.ReadFile(outputFile)
 				require.NoError(t, err)
-				assert.Contains(t, string(content), "#")  // Markdown header
+				assert.Contains(t, string(content), "#") // Markdown header
 			},
 		},
 		{
@@ -284,7 +284,7 @@ func TestRunParse(t *testing.T) {
 {"Time":"2025-09-17T10:00:01Z","Action":"pass","Package":"pkg1","Test":"Test2","Elapsed":0.5}
 {"Time":"2025-09-17T10:00:02Z","Action":"pass","Package":"pkg1"}
 `
-				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0644))
+				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0o644))
 				return file
 			},
 			setupFlags: func(cmd *cobra.Command) {
@@ -307,7 +307,7 @@ func TestRunParse(t *testing.T) {
 				jsonData := `{"Time":"2025-09-17T10:00:00Z","Action":"pass","Package":"pkg1","Test":"Test1","Elapsed":1.0}
 {"Time":"2025-09-17T10:00:01Z","Action":"pass","Package":"pkg1"}
 `
-				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0644))
+				require.NoError(t, os.WriteFile(file, []byte(jsonData), 0o644))
 				return file
 			},
 			setupFlags: func(cmd *cobra.Command) {

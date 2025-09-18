@@ -19,7 +19,7 @@ func TestParser_WithRealGoTestOutput(t *testing.T) {
 	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
 		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
 	}
-	
+
 	tests := []struct {
 		name          string
 		testDir       string
@@ -101,13 +101,13 @@ func TestParser_HandlesEmptyCoverage(t *testing.T) {
 	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
 		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
 	}
-	
+
 	// Run go test without coverage
 	testDir := filepath.Join("testdata", "passing_tests")
 	cmd := exec.Command("go", "test", "-json", "./...")
 	cmd.Dir = testDir
-	cmd.Env = append(os.Environ(), 
-		"GOWORK=off", // Disable workspace to avoid module conflicts
+	cmd.Env = append(os.Environ(),
+		"GOWORK=off",              // Disable workspace to avoid module conflicts
 		"GOTCHA_TEST_RECURSIVE=1") // Prevent recursive execution
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err)

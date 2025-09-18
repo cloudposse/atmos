@@ -20,7 +20,7 @@ func TestShowFailedFilter_ParsesCorrectly(t *testing.T) {
 	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
 		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
 	}
-	
+
 	// Run go test on our mixed testdata
 	testDir := filepath.Join("testdata", "mixed_tests")
 
@@ -70,7 +70,7 @@ func TestFilteredOutput_ShowsOnlyFailures(t *testing.T) {
 	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
 		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
 	}
-	
+
 	// Run go test on our mixed testdata
 	testDir := filepath.Join("testdata", "mixed_tests")
 
@@ -95,7 +95,7 @@ func TestAllTestsPass_ShowFilter(t *testing.T) {
 	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
 		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
 	}
-	
+
 	// Run go test on our passing testdata
 	testDir := filepath.Join("testdata", "passing_tests")
 
@@ -121,7 +121,7 @@ func TestAllTestsFail_ShowFilter(t *testing.T) {
 	if os.Getenv("GOTCHA_ENABLE_INTEGRATION_TESTS") != "1" {
 		t.Skipf("Skipping integration test: set GOTCHA_ENABLE_INTEGRATION_TESTS=1 to run")
 	}
-	
+
 	// Run go test on our failing testdata
 	testDir := filepath.Join("testdata", "failing_tests")
 

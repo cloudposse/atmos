@@ -82,7 +82,7 @@ func runStreamInteractive(cmd *cobra.Command, config *StreamConfig, logger *log.
 		// Also provide nil input to avoid TTY requirements
 		opts = append(opts, tea.WithInput(nil))
 		logger.Debug("Running in test mode with WithoutRenderer and no input")
-		
+
 		// In test mode, don't actually run the TUI - just return a mock result
 		return 0, &types.TestSummary{
 			Passed:  []types.TestResult{},

@@ -16,14 +16,14 @@ import (
 // TestExtractStreamConfig tests the extractStreamConfig function
 func TestExtractStreamConfig(t *testing.T) {
 	tests := []struct {
-		name        string
-		args        []string
-		setup       func(cmd *cobra.Command)
-		setupViper  func()
-		setupEnv    func()
-		cleanupEnv  func()
-		want        func(t *testing.T, config *StreamConfig)
-		wantErr     bool
+		name       string
+		args       []string
+		setup      func(cmd *cobra.Command)
+		setupViper func()
+		setupEnv   func()
+		cleanupEnv func()
+		want       func(t *testing.T, config *StreamConfig)
+		wantErr    bool
 	}{
 		{
 			name: "default configuration",
@@ -550,10 +550,10 @@ func TestDetectCIMode(t *testing.T) {
 // TestAdjustFormatForCI tests the adjustFormatForCI method
 func TestAdjustFormatForCI(t *testing.T) {
 	tests := []struct {
-		name         string
-		config       *StreamConfig
-		flagChanged  bool
-		wantFormat   string
+		name        string
+		config      *StreamConfig
+		flagChanged bool
+		wantFormat  string
 	}{
 		{
 			name: "format changed to markdown in CI when terminal",

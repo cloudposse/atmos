@@ -18,7 +18,7 @@ func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, 
 		logger.GetLogger().Debug("Skipping test execution in test mode")
 		return 0
 	}
-	
+
 	// Configure colors and initialize styles for stream mode
 	profile := tui.ConfigureColors()
 
