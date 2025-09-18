@@ -8,7 +8,7 @@ description: Export temporary cloud credentials as environment variables for the
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
-Use this command to print environment variables (AWS-style) for the selected identity in a chosen format.
+Quickly generate temporary cloud credentials as environment variables so you can run tools like Terraform, AWS CLI, or SDKs without manually copying and pasting access keys. This makes it seamless to switch between identities, integrate with scripts, and keep your sessions secure and short-lived.
 :::
 
 <Screengrab title="atmos auth env --help" slug="atmos-auth-env--help" />
@@ -19,17 +19,26 @@ Use this command to print environment variables (AWS-style) for the selected ide
 atmos auth env [--identity <name>] [--format bash|json|dotenv]
 ```
 
-Formats:
-- `bash` (default): prints `export KEY='value'` lines
-- `json`: prints a JSON object of environment variables
-- `dotenv`: prints `KEY='value'` lines
 
-## Arguments
+### Formats
 
 <dl>
-  <dt>n/a</dt>
-  <dd>No positional arguments.</dd>
+  <dt>`bash` (default)</dt>
+  <dd>
+    Prints `export KEY='value'` lines.
+  </dd>
+
+  <dt>`json`</dt>
+  <dd>
+    Prints a JSON object of environment variables.
+  </dd>
+
+  <dt>`dotenv`</dt>
+  <dd>
+    Prints `KEY='value'` lines.
+  </dd>
 </dl>
+
 
 ## Examples
 
@@ -52,7 +61,6 @@ atmos auth env --format dotenv
 
   <dt>`--format` <em>(alias `-f`)</em></dt>
   <dd>Output format. Supported: `bash`, `json`, `dotenv`. Default: `bash`.</dd>
-</dl>
 
 ## Environment variables
 
@@ -61,5 +69,5 @@ atmos auth env --format dotenv
   <dd>Default identity when `--identity` is not provided.</dd>
 
   <dt>`ATMOS_AUTH_ENV_FORMAT`</dt>
-  <dd>Default output format (`bash`, `json`, or `dotenv`).</dd>
+  <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`.</dd>
 </dl>

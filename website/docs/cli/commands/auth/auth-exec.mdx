@@ -8,7 +8,7 @@ description: Execute a command with authentication environment variables set for
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
-Use this command to run another program with the authenticated identity's environment variables set. Use `--` to separate Atmos flags from the command.
+Run any tool (Terraform, AWS CLI, kubectl, etc.) with the right cloud identity injected automatically into the environment. Use `exec` when you want a one-off command to inherit secure, temporary credentials without polluting your shell session.
 :::
 
 <Screengrab title="atmos auth exec --help" slug="atmos-auth-exec--help" />

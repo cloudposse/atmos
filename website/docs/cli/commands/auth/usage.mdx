@@ -10,7 +10,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos Auth provides a unified authentication system for cloud providers, supporting identity chaining and credential management. Use this section to get started and to understand the architecture.
+Atmos Auth gives you a single, consistent way to authenticate with multiple cloud providers. It supports SAML, SSO, OIDC, GitHub Actions, and static user identities. By consolidating these flows into one system, you no longer need to juggle separate tools or browser plugins, just to try to login. And because it’s built into Atmos, it works seamlessly with stacks, components, workflows, shells, and even custom commands.
 </Intro>
 
 ## Usage
@@ -38,14 +38,6 @@ atmos auth exec -- terraform plan
 # Show current authentication status
 atmos auth whoami
 ```
-
-## Arguments
-
-<dl>
-  <dt>n/a</dt>
-  <dd>No positional arguments. Use subcommands.</dd>
-  
-</dl>
 
 ## Flags
 
@@ -134,7 +126,7 @@ atmos terraform plan mycomponent -s dev
 
 ### Providers
 
-**Providers** are the root authentication sources that obtain initial credentials:
+**Providers** are the upstream systems that Atmos Auth uses to obtain initial credentials:  
 
 - **AWS SSO**: `aws/iam-identity-center`
 - **AWS SAML**: `aws/saml`
@@ -142,7 +134,7 @@ atmos terraform plan mycomponent -s dev
 
 ### Identities
 
-**Identities** use provider credentials to assume specific roles or permissions:
+**Identities** represent the user accounts or roles available from provider credentials, such as:  
 
 - **AWS Permission Set**: `aws/permission-set`
 - **AWS Assume Role**: `aws/assume-role`
@@ -151,6 +143,30 @@ atmos terraform plan mycomponent -s dev
 ### Identity Chaining
 
 You can chain identities to create complex authentication flows:
+
+```yaml
+identities:
+  # Base permission set from SSO
+  base-admin:
+    kind: aws/permission-set
+    via:
+      provider: my-sso
+```
+
+Identity chaining (often called *role chaining*) is when one identity is used to obtain another, forming a sequence of temporary credentials.  
+
+For example, you might:  
+1. Start with an SSO login to obtain base credentials.  
+2. Use those credentials to assume a cross-account role.  
+3. Optionally, chain again into another role with more limited or specialized permissions.  
+
+This allows you to:  
+- Access multiple accounts or environments without long-lived keys.  
+- Follow least-privilege practices by escalating only as needed.  
+- Automate complex authentication flows while still relying on short-lived credentials.  
+
+
+You can chain identities to create complex authentication flows like this:
 
 ```yaml
 identities:
