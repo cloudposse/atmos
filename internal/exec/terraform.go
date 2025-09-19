@@ -8,12 +8,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	auth "github.com/cloudposse/atmos/pkg/auth"
+
 	log "github.com/charmbracelet/log"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+const logFieldComponent = "component"
 
 const (
 	autoApproveFlag           = "-auto-approve"
@@ -82,7 +86,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if !info.ComponentIsEnabled && info.SubCommand != "clean" {
-		log.Info("Component is not enabled and skipped", "component", info.ComponentFromArg)
+		log.Info("Component is not enabled and skipped", logFieldComponent, info.ComponentFromArg)
 		return nil
 	}
 
@@ -132,7 +136,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if info.SubCommand == "clean" {
 		err = handleCleanSubCommand(info, componentPath, &atmosConfig)
 		if err != nil {
-			log.Debug("Error executing 'terraform clean'", "component", componentPath, "error", err)
+			log.Debug("Error executing 'terraform clean'", logFieldComponent, componentPath, "error", err)
 			return err
 		}
 		return nil
@@ -144,7 +148,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands.
 	if info.SubCommand != "workspace" {
-		log.Debug("Variables for the component in the stack", "component", info.ComponentFromArg, "stack", info.Stack)
+		log.Debug("Variables for the component in the stack", logFieldComponent, info.ComponentFromArg, "stack", info.Stack)
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
 			if err != nil {
@@ -226,6 +230,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			ErrComponentNotValid,
 			info.ComponentFromArg,
 		)
+	}
+
+	err = auth.TerraformPreHook(&atmosConfig, &info)
+	if err != nil {
+		log.Error("Error executing 'atmos auth terraform pre-hook'", logFieldComponent, info.ComponentFromArg, "error", err)
 	}
 
 	// Component working directory
@@ -375,7 +384,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	log.Debug("Terraform context",
 		"executable", info.Command,
 		"command", command,
-		"component", info.ComponentFromArg,
+		logFieldComponent, info.ComponentFromArg,
 		"stack", info.StackFromArg,
 		"arguments and flags", info.AdditionalArgsAndFlags,
 		"terraform component", info.BaseComponentPath,

@@ -1,7 +1,7 @@
 name: Tests
 on:
   pull_request:
-    types: [ opened, synchronize, reopened ]
+    types: [opened, synchronize, reopened]
     paths-ignore:
       - "README.md"
 
@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}        
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.target }}
           path: |
@@ -572,9 +572,8 @@ jobs:
               ]
             }
 
-
   release:
-    needs: [ test, lint, mock, k3s, localstack, docker, validate ]
+    needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:

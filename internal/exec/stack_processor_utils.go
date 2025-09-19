@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -930,7 +931,13 @@ func ProcessStackConfig(
 						return nil, fmt.Errorf("invalid 'components.terraform.%s.hooks' section in the file '%s'", component, stackName)
 					}
 				}
-
+				componentAuth := map[string]any{}
+				if i, ok := componentMap[cfg.AuthSectionName]; ok {
+					componentAuth, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("%w: invalid 'components.terraform.%s.auth' section in the file '%s'", errUtils.ErrInvalidStackConfig, component, stackName)
+					}
+				}
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[string]any{}
@@ -1149,6 +1156,7 @@ func ProcessStackConfig(
 						baseComponentEnv = baseComponentConfig.BaseComponentEnv
 						baseComponentProviders = baseComponentConfig.BaseComponentProviders
 						baseComponentHooks = baseComponentConfig.BaseComponentHooks
+						baseComponentName = baseComponentConfig.FinalBaseComponentName
 						baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 						baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 						baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
@@ -1397,6 +1405,11 @@ func ProcessStackConfig(
 					return nil, err
 				}
 
+				mergedAuth, err := processAuthConfig(atmosConfig, componentAuth)
+				if err != nil {
+					return nil, err
+				}
+
 				comp := map[string]any{}
 				comp[cfg.VarsSectionName] = finalComponentVars
 				comp[cfg.SettingsSectionName] = finalSettings
@@ -1408,6 +1421,7 @@ func ProcessStackConfig(
 				comp[cfg.CommandSectionName] = finalComponentTerraformCommand
 				comp[cfg.InheritanceSectionName] = componentInheritanceChain
 				comp[cfg.MetadataSectionName] = componentMetadata
+				comp[cfg.AuthSectionName] = mergedAuth
 				comp[cfg.OverridesSectionName] = componentOverrides
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
 				comp[cfg.HooksSectionName] = finalComponentHooks
@@ -2043,6 +2057,28 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 	}
 
 	return settings, nil
+}
+
+// processAuthConfig merges the component `auth` section with global `auth` from atmos.yaml.
+// Component-level config takes precedence over global config.
+func processAuthConfig(atmosConfig *schema.AtmosConfiguration, authConfig map[string]any) (map[string]any, error) {
+	// Convert the global auth config struct to map[string]any for merging.
+	var globalAuthConfig map[string]any
+	if err := mapstructure.Decode(atmosConfig.Auth, &globalAuthConfig); err != nil {
+		return nil, fmt.Errorf("%w: failed to convert global auth config to map: %w", errUtils.ErrInvalidAuthConfig, err)
+	}
+
+	mergedAuthConfig, err := m.Merge(
+		atmosConfig,
+		[]map[string]any{
+			globalAuthConfig,
+			authConfig,
+		})
+	if err != nil {
+		return nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)
+	}
+
+	return mergedAuthConfig, nil
 }
 
 // FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined.
