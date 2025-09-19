@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -84,8 +85,9 @@ func TestRunExecCommand_Success(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if calledExecPath != ".tools/bin/hashicorp/terraform/1.13.1/terraform" {
-		t.Errorf("expected exec path '.tools/bin/hashicorp/terraform/1.13.1/terraform', got %s", calledExecPath)
+	expected := filepath.FromSlash(".tools/bin/hashicorp/terraform/1.13.1/terraform")
+	if calledExecPath != expected {
+		t.Errorf("expected exec path %q, got %q", expected, calledExecPath)
 	}
 
 	if calledExecArgs[1] != "--version" {

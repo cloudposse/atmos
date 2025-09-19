@@ -584,8 +584,12 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
-
-	cmd := exec.Command("unzip", "-o", zipPath, "-d", tempDir)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("tar", "-xf", zipPath, "-C", tempDir)
+	} else {
+		cmd = exec.Command("unzip", "-o", zipPath, "-d", tempDir)
+	}
 	if output, err := cmd.CombinedOutput(); err != nil {
 		var exitCode int
 		// Case 1: Command ran but failed (non-zero exit)
