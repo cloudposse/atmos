@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -139,7 +140,7 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-
+	toolchain.SetAtmosConfig(&atmosConfig)
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
 
@@ -209,6 +210,8 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+
+	RootCmd.AddCommand(ToolChainCmd)
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
