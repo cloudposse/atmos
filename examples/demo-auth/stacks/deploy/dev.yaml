@@ -6,6 +6,4 @@ vars:
 components:
   terraform:
     whoami:
-      metadata:
-        type: real
-        component: whoami
+      component: whoami

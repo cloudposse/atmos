@@ -30,13 +30,13 @@ var authExecCmd = &cobra.Command{
 		// Load atmos configuration
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		if err != nil {
-			return fmt.Errorf("failed to load atmos config: %w", err)
+			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 		}
 
 		// Create auth manager
 		authManager, err := createAuthManager(&atmosConfig.Auth)
 		if err != nil {
-			return fmt.Errorf("failed to create auth manager: %w", err)
+			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 		}
 
 		// Get identity from flag or use default
@@ -44,7 +44,7 @@ var authExecCmd = &cobra.Command{
 		if identityName == "" {
 			defaultIdentity, err := authManager.GetDefaultIdentity()
 			if err != nil {
-				return fmt.Errorf("no default identity configured and no identity specified: %w", err)
+				return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrNoDefaultIdentity, err)
 			}
 			identityName = defaultIdentity
 		}
@@ -53,7 +53,7 @@ var authExecCmd = &cobra.Command{
 		ctx := context.Background()
 		whoami, err := authManager.Authenticate(ctx, identityName)
 		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
+			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
 		}
 
 		// Get environment variables from authentication result
@@ -70,7 +70,7 @@ var authExecCmd = &cobra.Command{
 // executeCommandWithEnv executes a command with additional environment variables.
 func executeCommandWithEnv(args []string, envVars map[string]string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: no command specified", errUtils.ErrInvalidSubcommand)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
 	// Prepare the command
@@ -80,7 +80,7 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 	// Look for the command in PATH
 	cmdPath, err := exec.LookPath(cmdName)
 	if err != nil {
-		return fmt.Errorf("%w: command not found: %s", errUtils.ErrInvalidSubcommand, cmdName)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrCommandNotFound, err)
 	}
 
 	// Prepare environment variables
@@ -102,10 +102,10 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 		// If it's an exit error, propagate as an error with exit status
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				return fmt.Errorf("%w: command exited with status %d", errUtils.ErrSubcommandFailed, status.ExitStatus())
+				return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrSubcommandFailed, status.ExitStatus())
 			}
 		}
-		return fmt.Errorf("%w: command execution failed: %v", errUtils.ErrSubcommandFailed, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrSubcommandFailed, err)
 	}
 
 	return nil

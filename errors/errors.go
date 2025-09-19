@@ -76,9 +76,10 @@ var (
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
 
-	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
-	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
-	ErrMerge                    = errors.New("merge error")
+	ErrAtmosConfigIsNil              = errors.New("atmos config is nil")
+	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
+	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
+	ErrMerge                         = errors.New("merge error")
 
 	ErrInvalidAuthConfig            = errors.New("invalid auth config")
 	ErrInvalidIdentityKind          = errors.New("invalid identity kind")
@@ -95,6 +96,7 @@ var (
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
+	ErrFailedToInitializeAuthManager  = errors.New("failed to initialize auth manager")
 	ErrNoCredentialsFound             = errors.New("no credentials found for identity")
 	ErrExpiredCredentials             = errors.New("credentials for identity are expired or invalid")
 	ErrNilParam                       = errors.New("parameter cannot be nil")
@@ -109,6 +111,8 @@ var (
 	ErrNoIdentitiesAvailable          = errors.New("no identities available")
 	ErrFailedBuildAuthenticationChain = errors.New("failed to build authentication chain for identity")
 	ErrInvalidStackConfig             = errors.New("invalid stack config")
+	ErrNoCommandSpecified             = errors.New("no command specified")
+	ErrCommandNotFound                = errors.New("command not found")
 
 	ErrInvalidSubcommand = errors.New("invalid subcommand")
 	ErrSubcommandFailed  = errors.New("subcommand failed")
