@@ -2,6 +2,7 @@ package testdata
 
 import (
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -10,7 +11,7 @@ import (
 func TestWithAssertionFailure(t *testing.T) {
 	// This is similar to what happens in vendor_utils_test.go:124
 	err := simulateVendorPull()
-	
+
 	// This assertion will fail, just like in the actual test
 	assert.NoError(t, err, "Expected no error from vendor pull")
 }
