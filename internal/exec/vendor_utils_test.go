@@ -73,6 +73,11 @@ func TestReadAndProcessVendorConfigFile(t *testing.T) {
 // and that the vendor components are correctly pulled.
 // The function also verifies that the state files are existing and deleted after the vendor pull command is executed.
 func TestExecuteVendorPull(t *testing.T) {
+	// Skip test if GITHUB_TOKEN is not available (required for OCI authentication).
+	if os.Getenv("GITHUB_TOKEN") == "" {
+		t.Skipf("Skipping TestExecuteVendorPull: GITHUB_TOKEN not available for OCI registry authentication")
+	}
+
 	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
 		err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 		if err != nil {
