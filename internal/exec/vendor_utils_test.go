@@ -121,10 +121,7 @@ func TestExecuteVendorPull(t *testing.T) {
 	require.NoError(t, err)
 
 	err = ExecuteVendorPullCommand(&cmd, []string{})
-	require.NoError(t, err)
-	if err != nil {
-		t.Errorf("Failed to execute vendor pull command: %v", err)
-	}
+	require.NoError(t, err, "Failed to execute vendor pull command")
 
 	files := []string{
 		"./components/terraform/github/stargazers/main/main.tf",
@@ -155,25 +152,13 @@ func TestExecuteVendorPull(t *testing.T) {
 
 	// test dry run
 	err = flags.Set("dry-run", "true")
-	require.NoError(t, err)
-	if err != nil {
-		t.Errorf("set dry-run failed: %v", err)
-	}
+	require.NoError(t, err, "Failed to set dry-run flag")
 	err = ExecuteVendorPullCommand(&cmd, []string{})
-	require.NoError(t, err)
-	if err != nil {
-		t.Errorf("Dry run failed: %v", err)
-	}
+	require.NoError(t, err, "Dry run vendor pull command failed")
 	err = flags.Set("tags", "demo")
-	require.NoError(t, err)
-	if err != nil {
-		t.Errorf("set tags failed: %v", err)
-	}
+	require.NoError(t, err, "Failed to set tags flag")
 	err = ExecuteVendorPullCommand(&cmd, []string{})
-	require.NoError(t, err)
-	if err != nil {
-		t.Errorf("pull tag demo failed: %v", err)
-	}
+	require.NoError(t, err, "Failed to pull vendor components with tag 'demo'")
 }
 
 func verifyFileExists(t *testing.T, files []string) (bool, string) {
