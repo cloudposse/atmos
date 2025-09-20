@@ -426,6 +426,211 @@ func TestMergeDefaultImports_EmptyAndInvalidPaths(t *testing.T) {
 	}
 }
 
+func TestShouldExcludePathForTesting(t *testing.T) {
+	tests := []struct {
+		name        string
+		dirPath     string
+		envValue    string
+		expected    bool
+		description string
+	}{
+		{
+			name:        "no_env_variable_set",
+			dirPath:     "/some/path",
+			envValue:    "",
+			expected:    false,
+			description: "Should not exclude when TEST_EXCLUDE_ATMOS_D is not set",
+		},
+		{
+			name:        "exact_match_single_path",
+			dirPath:     "/excluded/path",
+			envValue:    "/excluded/path",
+			expected:    true,
+			description: "Should exclude when path exactly matches single excluded path",
+		},
+		{
+			name:        "no_match_single_path",
+			dirPath:     "/other/path",
+			envValue:    "/excluded/path",
+			expected:    false,
+			description: "Should not exclude when path doesn't match",
+		},
+		{
+			name:        "exact_match_in_multiple_paths",
+			dirPath:     "/excluded/path2",
+			envValue:    "/excluded/path1" + string(os.PathListSeparator) + "/excluded/path2" + string(os.PathListSeparator) + "/excluded/path3",
+			expected:    true,
+			description: "Should exclude when path matches one of multiple excluded paths",
+		},
+		{
+			name:        "no_match_in_multiple_paths",
+			dirPath:     "/other/path",
+			envValue:    "/excluded/path1" + string(os.PathListSeparator) + "/excluded/path2",
+			expected:    false,
+			description: "Should not exclude when path doesn't match any of multiple paths",
+		},
+		{
+			name:        "empty_entries_in_path_list",
+			dirPath:     "/excluded/path",
+			envValue:    string(os.PathListSeparator) + "/excluded/path" + string(os.PathListSeparator) + string(os.PathListSeparator),
+			expected:    true,
+			description: "Should handle empty entries in path list correctly",
+		},
+		{
+			name:        "relative_paths_converted_to_absolute",
+			dirPath:     ".",
+			envValue:    ".",
+			expected:    true,
+			description: "Should match relative paths after converting to absolute",
+		},
+		{
+			name:        "malformed_path_in_list",
+			dirPath:     "/valid/path",
+			envValue:    "not-absolute-path" + string(os.PathListSeparator) + "/valid/path",
+			expected:    true,
+			description: "Should handle mix of absolute and relative paths in list",
+		},
+		{
+			name:        "subdirectory_not_matched",
+			dirPath:     "/excluded/path/subdir",
+			envValue:    "/excluded/path",
+			expected:    false,
+			description: "Should not match subdirectories (exact match only)",
+		},
+		{
+			name:        "parent_directory_not_matched",
+			dirPath:     "/excluded",
+			envValue:    "/excluded/path",
+			expected:    false,
+			description: "Should not match parent directories (exact match only)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save current directory for relative path tests
+			origDir, err := os.Getwd()
+			assert.NoError(t, err)
+			defer os.Chdir(origDir)
+
+			// For relative path tests, create and change to a temp directory
+			if tt.dirPath == "." || tt.envValue == "." {
+				tempDir := t.TempDir()
+				err = os.Chdir(tempDir)
+				assert.NoError(t, err)
+			}
+
+			// Set the environment variable
+			if tt.envValue != "" {
+				os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
+			}
+			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
+
+			// Call the function
+			result := shouldExcludePathForTesting(tt.dirPath)
+
+			// Assert the result
+			assert.Equal(t, tt.expected, result, tt.description)
+		})
+	}
+}
+
+func TestShouldExcludePathForTesting_WindowsCaseInsensitive(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skipf("skipping Windows-specific test on %s", runtime.GOOS)
+	}
+
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name     string
+		dirPath  string
+		envValue string
+		expected bool
+	}{
+		{
+			name:     "lowercase_env_uppercase_path",
+			dirPath:  strings.ToUpper(tempDir),
+			envValue: strings.ToLower(tempDir),
+			expected: true,
+		},
+		{
+			name:     "uppercase_env_lowercase_path",
+			dirPath:  strings.ToLower(tempDir),
+			envValue: strings.ToUpper(tempDir),
+			expected: true,
+		},
+		{
+			name:     "mixed_case_match",
+			dirPath:  tempDir,
+			envValue: strings.ToUpper(tempDir),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
+			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
+
+			result := shouldExcludePathForTesting(tt.dirPath)
+			assert.Equal(t, tt.expected, result, "Windows should match paths case-insensitively")
+		})
+	}
+}
+
+func TestShouldExcludePathForTesting_PathCanonicalization(t *testing.T) {
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name     string
+		dirPath  string
+		envValue string
+		expected bool
+		setup    func()
+	}{
+		{
+			name:     "paths_with_trailing_slashes",
+			dirPath:  tempDir + string(filepath.Separator),
+			envValue: tempDir,
+			expected: true,
+			setup:    nil,
+		},
+		{
+			name:     "paths_with_double_slashes",
+			dirPath:  filepath.Join(tempDir, ".", "subdir"),
+			envValue: filepath.Join(tempDir, "subdir"),
+			expected: true,
+			setup: func() {
+				os.MkdirAll(filepath.Join(tempDir, "subdir"), 0o755)
+			},
+		},
+		{
+			name:     "paths_with_dot_segments",
+			dirPath:  filepath.Join(tempDir, "subdir", "..", "subdir"),
+			envValue: filepath.Join(tempDir, "subdir"),
+			expected: true,
+			setup: func() {
+				os.MkdirAll(filepath.Join(tempDir, "subdir"), 0o755)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				tt.setup()
+			}
+
+			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
+			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
+
+			result := shouldExcludePathForTesting(tt.dirPath)
+			assert.Equal(t, tt.expected, result, "Paths should be canonicalized before comparison")
+		})
+	}
+}
+
 func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skipf("skipping Windows-specific test on %s", runtime.GOOS)
