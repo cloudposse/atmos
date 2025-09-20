@@ -390,26 +390,53 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 		return ErrAtmosDIrConfigNotFound
 	}
 
-	// Check if we should exclude .atmos.d from this directory during testing
-	//nolint:forbidigo // TEST_EXCLUDE_ATMOS_D is specifically for test isolation
-	if excludeRoot := os.Getenv("TEST_EXCLUDE_ATMOS_D"); excludeRoot != "" {
-		absDirPath, _ := filepath.Abs(dirPath)
-		absExcludeRoot, _ := filepath.Abs(excludeRoot)
-		// Only exclude the .atmos.d directly at the repository root, not in test fixtures
-		if absDirPath == absExcludeRoot {
-			// Silently skip without logging to avoid test output pollution
-			return nil
+	// Check if we should exclude .atmos.d from this directory during testing.
+	//nolint:forbidigo,nestif // TEST_EXCLUDE_ATMOS_D is specifically for test isolation, not application configuration.
+	if excludePaths := os.Getenv("TEST_EXCLUDE_ATMOS_D"); excludePaths != "" {
+		// Canonicalize the directory path we're checking.
+		absDirPath, err := filepath.Abs(filepath.Clean(dirPath))
+		if err != nil {
+			absDirPath = dirPath
+		}
+
+		// Split paths using the OS-specific path list separator.
+		for _, excludePath := range strings.Split(excludePaths, string(os.PathListSeparator)) {
+			if excludePath == "" {
+				continue
+			}
+
+			// Canonicalize the exclude path.
+			absExcludePath, err := filepath.Abs(filepath.Clean(excludePath))
+			if err != nil {
+				continue
+			}
+
+			// Check if the current directory is within or equals the excluded path.
+			// We currently only check for exact matches, but this could be extended
+			// to check for containment using filepath.Rel if needed.
+			pathsMatch := false
+			if runtime.GOOS == "windows" {
+				// Case-insensitive comparison on Windows.
+				pathsMatch = strings.EqualFold(absDirPath, absExcludePath)
+			} else {
+				pathsMatch = absDirPath == absExcludePath
+			}
+
+			if pathsMatch {
+				// Silently skip without logging to avoid test output pollution.
+				return nil
+			}
 		}
 	}
 
 	var atmosFoundFilePaths []string
-	// Search for `atmos.d/` configurations
+	// Search for `atmos.d/` configurations.
 	searchDir := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
 	foundPaths1, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths1) > 0 {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths1...)
 	}
-	// Search for `.atmos.d` configurations
+	// Search for `.atmos.d` configurations.
 	searchDir = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
 	foundPaths2, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths2) > 0 {
