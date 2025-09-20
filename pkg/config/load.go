@@ -395,8 +395,8 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	if excludeRoot := os.Getenv("TEST_EXCLUDE_ATMOS_D"); excludeRoot != "" {
 		absDirPath, _ := filepath.Abs(dirPath)
 		absExcludeRoot, _ := filepath.Abs(excludeRoot)
-		// Check if current directory is within or is the excluded root
-		if absDirPath == absExcludeRoot || strings.HasPrefix(absDirPath, absExcludeRoot+string(filepath.Separator)) {
+		// Only exclude the .atmos.d directly at the repository root, not in test fixtures
+		if absDirPath == absExcludeRoot {
 			// Silently skip without logging to avoid test output pollution
 			return nil
 		}
