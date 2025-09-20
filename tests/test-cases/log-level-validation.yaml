@@ -62,7 +62,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test validation of valid log level in ATMOS_LOGS_LEVEL env var"
-    workdir: "../"
+    workdir: "fixtures/scenarios/priority-log-check"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_LEVEL: Debug
@@ -83,7 +83,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test validation of valid log level in --logs-level flag"
-    workdir: "../"
+    workdir: "fixtures/scenarios/priority-log-check"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       CI: "true"
@@ -104,7 +104,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test validation of env priority over config"
-    workdir: "../"
+    workdir: "fixtures/scenarios/priority-log-check"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_LEVEL: "Debug"
@@ -123,7 +123,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test validation of env priority over config"
-    workdir: "../"
+    workdir: "fixtures/scenarios/priority-log-check"
     command: "atmos"
     args:
       - version
@@ -144,7 +144,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test validation of env priority over config"
-    workdir: "../"
+    workdir: "fixtures/scenarios/priority-log-check"
     command: "atmos"
     args:
       - version
@@ -165,7 +165,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test validation of env priority over config"
-    workdir: "../"
+    workdir: "fixtures/scenarios/priority-log-check"
     command: "atmos"
     args:
       - version
