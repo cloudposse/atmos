@@ -279,7 +279,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 			// Check if the 'components' filter is provided
 			if len(components) == 0 ||
 				u.SliceContainsString(components, componentName) {
-
 				// Component vars
 				if varsSection, ok = componentSection["vars"].(map[string]any); !ok {
 					continue

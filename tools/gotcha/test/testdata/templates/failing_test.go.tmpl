@@ -1,0 +1,11 @@
+package testpkg
+
+import "testing"
+
+func TestFail1(t *testing.T) {
+	t.Fatal("This test fails intentionally")
+}
+
+func TestFail2(t *testing.T) {
+	t.Error("This test also fails")
+}

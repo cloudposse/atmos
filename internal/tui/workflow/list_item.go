@@ -29,7 +29,7 @@ func (d listItemDelegate) Spacing() int { return 0 }
 
 func (d listItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
-func (i listItem) FilterValue() string { return string(i.item) }
+func (i listItem) FilterValue() string { return i.item }
 
 func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	i, ok := item.(listItem)

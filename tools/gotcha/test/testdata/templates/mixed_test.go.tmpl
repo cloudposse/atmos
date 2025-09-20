@@ -1,0 +1,23 @@
+package testpkg
+
+import (
+	"testing"
+	"time"
+)
+
+func TestPass1(t *testing.T) {
+	// This passes
+}
+
+func TestPass2(t *testing.T) {
+	// Another passing test
+	time.Sleep(10 * time.Millisecond)
+}
+
+func TestFail1(t *testing.T) {
+	t.Fatal("This test fails intentionally")
+}
+
+func TestSkip1(t *testing.T) {
+	t.Skip("This test is skipped")
+}

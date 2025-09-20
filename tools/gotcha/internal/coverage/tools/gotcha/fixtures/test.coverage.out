@@ -1,0 +1,12 @@
+mode: atomic
+github.com/cloudposse/atmos/tools/gotcha/pkg/types/types.go:67.35,69.20 2 5
+github.com/cloudposse/atmos/tools/gotcha/pkg/types/types.go:69.20,71.3 1 5
+github.com/cloudposse/atmos/tools/gotcha/pkg/types/types.go:72.2,72.12 1 0
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/mock_coverage.go:10.20,12.2 1 0
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/processor.go:45.100,47.16 2 3
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/processor.go:47.16,49.3 1 0
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/processor.go:51.2,53.16 3 3
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/processor.go:53.16,55.3 1 0
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/processor.go:57.2,60.29 3 3
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/processor.go:60.29,72.3 4 8
+github.com/cloudposse/atmos/tools/gotcha/internal/coverage/processor.go:74.2,74.35 1 3

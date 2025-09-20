@@ -25,7 +25,7 @@ var vendorPullCmd = &cobra.Command{
 
 func init() {
 	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
-	vendorPullCmd.RegisterFlagCompletionFunc("component", ComponentsArgCompletion)
+	_ = vendorPullCmd.RegisterFlagCompletionFunc("component", ComponentsArgCompletion)
 	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
 	AddStackCompletion(vendorPullCmd)
 	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "The type of the vendor (terraform or helmfile).")

@@ -1,0 +1,11 @@
+package testpkg
+
+import "testing"
+
+func TestSkip1(t *testing.T) {
+	t.Skip("This test is skipped")
+}
+
+func TestSkip2(t *testing.T) {
+	t.Skip("Another skipped test")
+}

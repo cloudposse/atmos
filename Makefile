@@ -15,7 +15,7 @@ readme:
 	@exit 0
 
 get:
-	go get
+	@go get
 
 build: build-default
 
@@ -25,6 +25,8 @@ version: version-default
 # but it's still including files not in git.
 lint: get
 	golangci-lint run --new-from-rev=origin/main
+	@echo "Linting tools/gotcha..."
+	@cd tools/gotcha && golangci-lint run --new-from-rev=origin/main
 
 build-linux: GOOS=linux
 build-linux: build-default
@@ -61,11 +63,53 @@ testacc: get
 
 testacc-cover: get
 	@echo "Running tests with coverage"
-	go test $(TEST) -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp
-	cat coverage.out.tmp | grep -v "mock_" > coverage.out
+	go test $(TEST) -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out
 
 # Run acceptance tests with coverage report
 testacc-coverage: testacc-cover
 	go tool cover -html=coverage.out -o coverage.html
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage
+# The actual gotcha binary path (cross-platform)
+ifeq ($(OS),Windows_NT)
+GOTCHA_BIN := $(shell go env GOPATH)\bin\gotcha.exe
+else
+GOTCHA_BIN := $(shell go env GOPATH)/bin/gotcha
+endif
+
+# Build and install gotcha tool - depends on actual binary file
+$(GOTCHA_BIN):
+	@$(MAKE) -C tools/gotcha install
+
+# Test target for CI with gotcha (single command with integrated comment posting)
+testacc-ci: get $(GOTCHA_BIN)
+	$(GOTCHA_BIN) stream ./... \
+		--show=all \
+		--timeout=40m \
+		--coverprofile=coverage.out \
+		--output=test-results.json \
+		--post-comment=adaptive \
+		-- -coverpkg=github.com/cloudposse/atmos/... $(TESTARGS)
+
+# Test tools
+test-tools: test-gotcha
+
+# Test gotcha tool
+test-gotcha:
+	@echo "Testing gotcha tool..."
+	@cd tools/gotcha && go test -v -race -coverprofile=coverage.out ./...
+	@cd tools/gotcha && go build -o gotcha . && ./gotcha --format=markdown --output=test-output.md ./...
+
+# Build tools
+build-tools: build-gotcha
+
+# Build gotcha tool
+build-gotcha:
+	@echo "Building gotcha tool..."
+	@cd tools/gotcha && go build -v -o gotcha .
+
+# Clean test artifacts
+clean-test:
+	rm -f test-results.json test-summary.md coverage.out coverage.html
+	rm -f tools/gotcha/coverage.out tools/gotcha/test-output.md tools/gotcha/gotcha
+
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage testacc-ci clean-test test-tools test-gotcha build-tools build-gotcha

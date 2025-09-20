@@ -138,6 +138,40 @@ You can **opt-out** of telemetry collection in either of the following ways:
 
 To learn more about what is collected and how it works, see the [Telemetry Documentation](https://atmos.tools/cli/telemetry).
 
+## Development
+
+### Running Tests
+
+To run tests, we use `gotcha` which calls `go test` under the hood and filters the output so you can focus on what's important.
+
+```bash
+# Install gotcha
+go install github.com/cloudposse/atmos/tools/gotcha@latest
+
+# Run all tests
+gotcha
+
+# Run tests showing only failures
+gotcha --show=failed
+
+# Run specific packages
+gotcha ./pkg/utils ./internal/...
+
+# Run specific test by name
+gotcha -- -run TestConfigLoad
+
+# Run with coverage
+gotcha --coverprofile=coverage.out
+```
+
+For traditional Go testing without gotcha:
+```bash
+# Run acceptance tests
+make testacc
+```
+
+See the [gotcha documentation](tools/gotcha/README.md) for more details.
+
 ## Documentation
 
 Find all documentation at: [atmos.tools](https://atmos.tools)
