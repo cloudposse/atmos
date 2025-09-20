@@ -116,8 +116,8 @@ func TestTUIWithTeatest(t *testing.T) {
 		// Send test complete message to properly terminate the TUI
 		tm.Send(tui.TestCompleteMsg{ExitCode: 0})
 
-		// Get final model
-		finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(2*time.Second))
+		// Get final model (allow extra time for auto-quit delay on slower systems)
+		finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second))
 		tuiModel, ok := finalModel.(*tui.TestModel)
 		require.True(t, ok)
 
@@ -157,8 +157,8 @@ func TestTUIWithTeatest(t *testing.T) {
 		// Send test complete message to properly terminate the TUI
 		tm.Send(tui.TestCompleteMsg{ExitCode: 0})
 
-		// Get the final output (needs 2.5s timeout as model auto-quits after 2s)
-		output, err := io.ReadAll(tm.FinalOutput(t, teatest.WithFinalTimeout(3*time.Second)))
+		// Get the final output (allow extra time for auto-quit delay on slower systems)
+		output, err := io.ReadAll(tm.FinalOutput(t, teatest.WithFinalTimeout(5*time.Second)))
 		require.NoError(t, err)
 
 		// Output should contain some TUI rendering
@@ -214,8 +214,8 @@ func TestTUIPackageTracking(t *testing.T) {
 	// Send test complete message to properly terminate the TUI
 	tm.Send(tui.TestCompleteMsg{ExitCode: 0})
 
-	// Get final model (needs 2.5s timeout as model auto-quits after 2s)
-	finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
+	// Get final model (allow extra time for auto-quit delay on slower systems)
+	finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second))
 	tuiModel, ok := finalModel.(*tui.TestModel)
 	require.True(t, ok)
 
