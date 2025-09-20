@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"archive/zip"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"text/template"
 	"time"
 
@@ -584,25 +584,10 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("tar", "-xf", zipPath, "-C", tempDir)
-	} else {
-		cmd = exec.Command("unzip", "-o", zipPath, "-d", tempDir)
-	}
-	if output, err := cmd.CombinedOutput(); err != nil {
-		var exitCode int
-		// Case 1: Command ran but failed (non-zero exit)
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
-				exitCode = status.ExitStatus()
-			}
-			log.Debug("Command failed.", "exit_code", exitCode)
-		} else {
-			// Case 2: Command did NOT run at all (e.g., not found)
-			log.Debug("Command execution failed.", "error", err)
-		}
-		return fmt.Errorf("failed to extract ZIP: %w, output: %s", err, string(output))
+
+	err = Unzip(zipPath, tempDir)
+	if err != nil {
+		return fmt.Errorf("failed to extract ZIP: %w", err)
 	}
 
 	binaryName := tool.Name
@@ -640,6 +625,64 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 		return fmt.Errorf("failed to move extracted binary: %w", err)
 	}
 
+	return nil
+}
+
+// Unzip extracts a zip archive to a destination directory.
+// Works on Windows, macOS, and Linux.
+func Unzip(src, dest string) error {
+	r, err := zip.OpenReader(src)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		// Ensure correct path handling across OS
+		fpath := filepath.Join(dest, f.Name)
+
+		// Prevent ZipSlip (directory traversal)
+		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return fmt.Errorf("illegal file path: %s", fpath)
+		}
+
+		if f.FileInfo().IsDir() {
+			// Create folder
+			if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Create parent directories if needed
+		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return err
+		}
+
+		// Open file inside zip
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+
+		// Create destination file
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			rc.Close()
+			return err
+		}
+
+		// Copy contents
+		_, err = io.Copy(outFile, rc)
+
+		// Close files
+		outFile.Close()
+		rc.Close()
+
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
