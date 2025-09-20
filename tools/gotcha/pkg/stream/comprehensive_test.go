@@ -107,7 +107,7 @@ func TestProcessStreamWithInvalidJSON(t *testing.T) {
 	proc := NewStreamProcessor(&jsonBuf, "all", "", "normal")
 
 	input := strings.NewReader("not json\n{invalid json\n")
-	
+
 	// Should not error on invalid JSON (just skips the lines)
 	err := proc.ProcessStream(input)
 	assert.NoError(t, err)
@@ -119,7 +119,7 @@ func TestProcessStreamEmptyInput(t *testing.T) {
 	proc := NewStreamProcessor(&jsonBuf, "all", "", "normal")
 
 	input := strings.NewReader("")
-	
+
 	err := proc.ProcessStream(input)
 	assert.NoError(t, err)
 }
@@ -128,12 +128,12 @@ func TestProcessStreamEmptyInput(t *testing.T) {
 func TestGetLastExitReasonFunction(t *testing.T) {
 	// Reset the global variable
 	lastExitReason = ""
-	
+
 	assert.Equal(t, "", GetLastExitReason())
-	
+
 	lastExitReason = "test failure reason"
 	assert.Equal(t, "test failure reason", GetLastExitReason())
-	
+
 	lastExitReason = "another reason"
 	assert.Equal(t, "another reason", GetLastExitReason())
 }
@@ -147,7 +147,7 @@ func TestFindTestFunction(t *testing.T) {
 			"Test2": {Name: "Test2", Status: "fail"},
 		},
 	}
-	
+
 	proc := &StreamProcessor{
 		packageResults: map[string]*PackageResult{
 			"pkg1": pkg1,
@@ -199,10 +199,10 @@ func TestStreamProcessorShowFilter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			proc := NewStreamProcessor(&buf, tt.showFilter, "", "normal")
-			
+
 			// Test that the processor was created with the right filter
 			assert.Equal(t, tt.showFilter, proc.showFilter)
-			
+
 			// The actual filtering is done by the reporter, so we just verify
 			// that the processor has the right configuration
 			expected := tt.shouldShow || tt.showFilter == "all"
@@ -216,7 +216,7 @@ func TestProcessorWithCustomReporter(t *testing.T) {
 	var buf bytes.Buffer
 	reporter := NewStreamReporter(nil, "all", "", "normal")
 	proc := NewStreamProcessorWithReporter(&buf, reporter)
-	
+
 	assert.NotNil(t, proc)
 	assert.Equal(t, reporter, proc.reporter)
 	assert.NotNil(t, proc.packageResults)
@@ -261,7 +261,7 @@ func TestProcessStreamIncompletePackages(t *testing.T) {
 // TestPackageResultDefaults tests default values for PackageResult.
 func TestPackageResultDefaults(t *testing.T) {
 	pkg := &PackageResult{}
-	
+
 	assert.Empty(t, pkg.Package)
 	assert.Zero(t, pkg.StartTime)
 	assert.Zero(t, pkg.EndTime)
@@ -322,20 +322,20 @@ func TestStreamProcessorConcurrency(t *testing.T) {
 
 	// Concurrent reads should be safe (with proper locking in real code)
 	done := make(chan bool, 2)
-	
+
 	go func() {
 		_ = proc.findTest(pkg1, "Test1")
 		done <- true
 	}()
-	
+
 	go func() {
 		_ = proc.findTest(pkg1, "Test2")
 		done <- true
 	}()
-	
+
 	<-done
 	<-done
-	
+
 	// No assertions needed - just verifying no panic/race
 }
 

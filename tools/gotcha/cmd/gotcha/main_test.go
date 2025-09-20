@@ -107,10 +107,10 @@ func TestMain_ErrorTypes(t *testing.T) {
 func TestExitError(t *testing.T) {
 	// Test exitError struct
 	e := &exitError{code: 42}
-	
+
 	// Test Error method
 	assert.Equal(t, "exit with code 42", e.Error(), "Error message should include exit code")
-	
+
 	// Test ExitCode method
 	assert.Equal(t, 42, e.ExitCode(), "ExitCode should return the code")
 }

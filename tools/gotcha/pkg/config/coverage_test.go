@@ -279,7 +279,7 @@ thresholds:
 	assert.Len(t, config.Packages, 2)
 	assert.Equal(t, "github.com/example/pkg1", config.Packages[0])
 	assert.Equal(t, "github.com/example/pkg2", config.Packages[1])
-	
+
 	// Check analysis settings
 	assert.True(t, config.Analysis.Functions)
 	assert.True(t, config.Analysis.Statements)
@@ -287,11 +287,11 @@ thresholds:
 	assert.Len(t, config.Analysis.Exclude, 2)
 	assert.Contains(t, config.Analysis.Exclude, "mock_*.go")
 	assert.Contains(t, config.Analysis.Exclude, "vendor/*")
-	
+
 	// Check output settings
 	assert.Equal(t, "detailed", config.Output.Terminal.Format)
 	assert.Equal(t, 15, config.Output.Terminal.ShowUncovered)
-	
+
 	// Check thresholds
 	assert.Equal(t, 85.0, config.Thresholds.Total)
 	assert.Len(t, config.Thresholds.Packages, 2)
@@ -305,7 +305,7 @@ thresholds:
 func TestCoverageConfigDefaults(t *testing.T) {
 	// Test that empty config has sensible zero values
 	var config CoverageConfig
-	
+
 	assert.False(t, config.Enabled)
 	assert.Empty(t, config.Profile)
 	assert.Empty(t, config.Packages)

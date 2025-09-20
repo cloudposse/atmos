@@ -11,10 +11,10 @@ import (
 func TestInitEnvironment(t *testing.T) {
 	// Reset viper to ensure clean state
 	viper.Reset()
-	
+
 	// Test that InitEnvironment sets up all bindings and defaults
 	InitEnvironment()
-	
+
 	// Check that defaults are set
 	assert.False(t, viper.GetBool("ci"))
 	assert.False(t, viper.GetBool("github.actions"))
@@ -92,16 +92,16 @@ func TestIsCI(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test IsCI
 			result := IsCI()
 			assert.Equal(t, tt.expected, result)
@@ -141,16 +141,16 @@ func TestIsCIEnabled(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test IsCIEnabled
 			result := IsCIEnabled()
 			assert.Equal(t, tt.expected, result)
@@ -190,16 +190,16 @@ func TestIsGitHubActions(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test IsGitHubActions
 			result := IsGitHubActions()
 			assert.Equal(t, tt.expected, result)
@@ -232,16 +232,16 @@ func TestIsGitHubActionsEnabled(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test IsGitHubActionsEnabled
 			result := IsGitHubActionsEnabled()
 			assert.Equal(t, tt.expected, result)
@@ -282,16 +282,16 @@ func TestGetGitHubToken(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test GetGitHubToken
 			result := GetGitHubToken()
 			assert.Equal(t, tt.expected, result)
@@ -332,16 +332,16 @@ func TestGetCommentUUID(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test GetCommentUUID
 			result := GetCommentUUID()
 			assert.Equal(t, tt.expected, result)
@@ -381,16 +381,16 @@ func TestUseMock(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test UseMock
 			result := UseMock()
 			assert.Equal(t, tt.expected, result)
@@ -400,16 +400,16 @@ func TestUseMock(t *testing.T) {
 
 func TestColorSettings(t *testing.T) {
 	tests := []struct {
-		name        string
-		envVars     map[string]string
-		noColor     bool
-		forceColor  bool
+		name       string
+		envVars    map[string]string
+		noColor    bool
+		forceColor bool
 	}{
 		{
-			name:        "default settings",
-			envVars:     map[string]string{},
-			noColor:     false,
-			forceColor:  false,
+			name:       "default settings",
+			envVars:    map[string]string{},
+			noColor:    false,
+			forceColor: false,
 		},
 		{
 			name: "NO_COLOR set",
@@ -443,16 +443,16 @@ func TestColorSettings(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test color settings
 			assert.Equal(t, tt.noColor, NoColor())
 			assert.Equal(t, tt.forceColor, ForceColor())
@@ -512,16 +512,16 @@ func TestTTYSettings(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test TTY settings
 			assert.Equal(t, tt.forceTTY, ForceTTY())
 			assert.Equal(t, tt.forceNoTTY, ForceNoTTY())
@@ -549,10 +549,10 @@ func TestGitHubEnvironmentVariables(t *testing.T) {
 		{
 			name: "GitHub environment set",
 			envVars: map[string]string{
-				"GITHUB_REPOSITORY":     "owner/repo",
-				"GITHUB_EVENT_NAME":     "push",
-				"GITHUB_EVENT_PATH":     "/tmp/event.json",
-				"GITHUB_STEP_SUMMARY":   "/tmp/summary.md",
+				"GITHUB_REPOSITORY":   "owner/repo",
+				"GITHUB_EVENT_NAME":   "push",
+				"GITHUB_EVENT_PATH":   "/tmp/event.json",
+				"GITHUB_STEP_SUMMARY": "/tmp/summary.md",
 			},
 			repository: "owner/repo",
 			eventName:  "push",
@@ -579,16 +579,16 @@ func TestGitHubEnvironmentVariables(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test GitHub environment variables
 			assert.Equal(t, tt.repository, GetGitHubRepository())
 			assert.Equal(t, tt.eventName, GetGitHubEventName())
@@ -631,16 +631,16 @@ func TestOutputConfiguration(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test output configuration
 			assert.Equal(t, tt.output, GetOutput())
 			assert.Equal(t, tt.showFilter, GetShowFilter())
@@ -667,8 +667,8 @@ func TestDebugConfiguration(t *testing.T) {
 		{
 			name: "debug configuration set",
 			envVars: map[string]string{
-				"GOTCHA_DEBUG_FILE":   "/tmp/debug.log",
-				"COLUMNS":             "120",
+				"GOTCHA_DEBUG_FILE":    "/tmp/debug.log",
+				"COLUMNS":              "120",
 				"GOTCHA_SPLIT_STREAMS": "true",
 			},
 			debugFile:    "/tmp/debug.log",
@@ -682,16 +682,16 @@ func TestDebugConfiguration(t *testing.T) {
 			// Reset viper and environment
 			viper.Reset()
 			clearTestEnv()
-			
+
 			// Set test environment variables
 			for key, value := range tt.envVars {
 				os.Setenv(key, value)
 			}
 			defer clearTestEnv()
-			
+
 			// Initialize environment bindings
 			InitEnvironment()
-			
+
 			// Test debug configuration
 			assert.Equal(t, tt.debugFile, GetDebugFile())
 			assert.Equal(t, tt.columns, GetColumns())
@@ -704,16 +704,16 @@ func TestEnvironmentPrecedence(t *testing.T) {
 	// Test that GOTCHA_ prefixed variables take precedence
 	viper.Reset()
 	clearTestEnv()
-	
+
 	// Set both versions
 	os.Setenv("GITHUB_TOKEN", "token1")
 	os.Setenv("GOTCHA_GITHUB_TOKEN", "token2")
 	os.Setenv("COMMENT_UUID", "uuid1")
 	os.Setenv("GOTCHA_COMMENT_UUID", "uuid2")
 	defer clearTestEnv()
-	
+
 	InitEnvironment()
-	
+
 	// GOTCHA_ should take precedence
 	assert.Equal(t, "token2", GetGitHubToken())
 	assert.Equal(t, "uuid2", GetCommentUUID())
@@ -723,12 +723,12 @@ func TestConfigFileBinding(t *testing.T) {
 	// Test that configuration can be set via Viper's config file mechanism
 	viper.Reset()
 	clearTestEnv()
-	
+
 	// Simulate setting values as if they came from a config file
 	viper.Set("ci", true)
 	viper.Set("github.actions", true)
 	viper.Set("use.mock", true)
-	
+
 	// These should be accessible via the getter functions
 	assert.True(t, IsCIEnabled())
 	assert.True(t, IsGitHubActionsEnabled())
@@ -739,30 +739,30 @@ func TestRuntimeVsConfiguration(t *testing.T) {
 	// Test the distinction between runtime detection and configuration
 	viper.Reset()
 	clearTestEnv()
-	
+
 	// Set runtime environment (actual CI)
 	os.Setenv("CI", "true")
 	os.Setenv("GITHUB_ACTIONS", "true")
 	defer clearTestEnv()
-	
+
 	InitEnvironment()
-	
+
 	// Runtime detection should be true
 	assert.True(t, IsCI())
 	assert.True(t, IsGitHubActions())
-	
+
 	// But configuration should still be false (defaults)
 	assert.False(t, IsCIEnabled())
 	assert.False(t, IsGitHubActionsEnabled())
-	
+
 	// Now enable via configuration
 	os.Setenv("GOTCHA_CI", "true")
 	os.Setenv("GOTCHA_GITHUB_ACTIONS", "true")
-	
+
 	// Re-initialize to pick up new env vars
 	viper.Reset()
 	InitEnvironment()
-	
+
 	// Both runtime and configuration should be true
 	assert.True(t, IsCI())
 	assert.True(t, IsGitHubActions())
@@ -775,7 +775,7 @@ func clearTestEnv() {
 	envVars := []string{
 		"CI", "GITHUB_ACTIONS", "GITHUB_RUN_ID", "GOTCHA_CI",
 		"GOTCHA_GITHUB_ACTIONS", "GOTCHA_GITHUB_RUN_ID", "GOTCHA_CI_PROVIDER",
-		"GITHUB_REPOSITORY", "GOTCHA_GITHUB_REPOSITORY", 
+		"GITHUB_REPOSITORY", "GOTCHA_GITHUB_REPOSITORY",
 		"GITHUB_EVENT_NAME", "GOTCHA_GITHUB_EVENT_NAME",
 		"GITHUB_EVENT_PATH", "GOTCHA_GITHUB_EVENT_PATH",
 		"GITHUB_STEP_SUMMARY", "GOTCHA_GITHUB_STEP_SUMMARY",
@@ -792,7 +792,7 @@ func clearTestEnv() {
 		"GOTCHA_DEBUG_FILE", "GOTCHA_TEST_MODE", "GOTCHA_FORCE_TUI",
 		"GOTCHA_SPLIT_STREAMS", "COLUMNS",
 	}
-	
+
 	for _, env := range envVars {
 		os.Unsetenv(env)
 	}
