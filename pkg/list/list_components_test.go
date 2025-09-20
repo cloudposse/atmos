@@ -53,6 +53,7 @@ func TestListComponentsWithStack(t *testing.T) {
 	assert.NotNil(t, output)
 	assert.Greater(t, len(output), 0)
 	assert.ElementsMatch(t, []string{
+		"aws/bastion", "echo-server", "infra/infra-server", "infra/infra-server-override",
 		"infra/vpc", "mixin/test-1", "mixin/test-2", "test/test-component",
 		"test/test-component-override", "test/test-component-override-2", "test/test-component-override-3",
 		"top-level-component1", "vpc", "vpc/new",
@@ -89,16 +90,6 @@ func TestGetStackComponents(t *testing.T) {
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, ErrParseComponents))
 	})
-
-	t.Run("missing terraform components", func(t *testing.T) {
-		_, err := getStackComponents(map[string]any{
-			"components": map[string]any{
-				"not-terraform": map[string]any{},
-			},
-		})
-		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrParseTerraformComponents))
-	})
 }
 
 // TestGetComponentsForSpecificStack tests the getComponentsForSpecificStack function.
@@ -120,6 +111,13 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 				},
 			},
 		},
+		"stack3": map[string]any{
+			"components": map[string]any{
+				"packer": map[string]any{
+					"ami": map[string]any{},
+				},
+			},
+		},
 	}
 
 	// Test successful case
@@ -127,6 +125,12 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 		components, err := getComponentsForSpecificStack("stack1", stacksMap)
 		require.NoError(t, err)
 		assert.ElementsMatch(t, []string{"vpc", "infra/vpc"}, components)
+	})
+
+	t.Run("packer stack", func(t *testing.T) {
+		components, err := getComponentsForSpecificStack("stack3", stacksMap)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"ami"}, components)
 	})
 
 	// Test error cases

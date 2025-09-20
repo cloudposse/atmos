@@ -497,7 +497,7 @@ func TestNewGSMStore(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.skipMessage != "" && os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
-				t.Skip(tt.skipMessage)
+				t.Skipf("%s", tt.skipMessage)
 			}
 			store, err := NewGSMStore(tt.options)
 			if tt.expectError {

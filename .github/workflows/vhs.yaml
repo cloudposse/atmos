@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: false
 
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +61,7 @@ jobs:
         file: ${{fromJson(needs.prepare.outputs.matrix)}}
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.file }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4  
 

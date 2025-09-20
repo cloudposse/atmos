@@ -1,0 +1,82 @@
+name: 'Remove Dependabot Semver Labels'
+description: |
+  Removes auto-added semver labels (major/minor/patch) from Dependabot PRs.
+
+  Dependabot automatically adds semver labels based on dependency version changes,
+  but these don't determine Atmos releases. Atmos follows its own versioning based
+  on features and functionality changes, not dependency versions.
+
+  This is a workaround for a known GitHub limitation:
+  - https://github.com/dependabot/dependabot-core/issues/3465 (Opt-out feature request)
+  - https://github.com/dependabot/dependabot-core/issues/11783 (labels: [] regression)
+  - https://github.com/dependabot/dependabot-core/issues/1871 (Why labels are auto-applied)
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Remove auto-added semver labels
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Check if this is a pull request event
+          if (!context.payload.pull_request) {
+            console.log('Not a pull request event, skipping label cleanup');
+            return;
+          }
+          
+          // Check if the PR author is Dependabot
+          const prAuthor = context.payload.pull_request.user.login;
+          if (prAuthor !== 'dependabot[bot]') {
+            console.log(`PR author is ${prAuthor}, not Dependabot - skipping label cleanup`);
+            return;
+          }
+
+          console.log('Processing Dependabot PR labels...');
+          console.log('Removing auto-added semver labels (dependency updates do not determine Atmos releases)');
+
+          // Get current labels on the PR
+          const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number
+          });
+
+          console.log(`Current labels: ${labels.map(l => l.name).join(', ')}`);
+
+          // Dependabot auto-adds semver labels based on dependency version changes,
+          // but these don't determine Atmos releases, so we remove them
+          const semverLabels = ['major', 'minor', 'patch'];
+          const autoAddedLabels = labels
+            .filter(label => semverLabels.includes(label.name))
+            .map(label => label.name);
+
+          if (autoAddedLabels.length > 0) {
+            console.log(`Removing Dependabot's auto-added semver labels: ${autoAddedLabels.join(', ')}`);
+            console.log('Dependency updates are bundled with feature releases');
+
+            for (const labelName of autoAddedLabels) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  name: labelName
+                });
+                console.log(`✓ Removed: ${labelName}`);
+              } catch (error) {
+                console.warn(`Could not remove label ${labelName}: ${error.message}`);
+              }
+            }
+
+            console.log('Dependabot PRs should only have the no-release label');
+          } else {
+            console.log('No auto-added semver labels to remove');
+          }
+
+          // Verify no-release label is present
+          const hasNoRelease = labels.some(l => l.name === 'no-release');
+          if (!hasNoRelease) {
+            console.log('⚠️  Warning: no-release label is missing from this Dependabot PR');
+            console.log('    This label should be added via .github/dependabot.yml configuration');
+          }
+

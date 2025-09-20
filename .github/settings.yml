@@ -11,7 +11,17 @@ environments:
       custom_branches:
         - name: "**/*"
           type: branch
-          
+
+  - name: screengrabs
+    deployment_branch_policy:
+      custom_branches:
+        - name: "main"
+          type: branch
+        - name: "**/*"
+          type: branch
+        - name: "*"
+          type: branch
+
   - name: demo
     deployment_branch_policy:
       custom_branches:
