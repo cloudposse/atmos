@@ -37,8 +37,8 @@ repos:
       - id: end-of-file-fixer
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
       - id: check-yaml
-        exclude: ^(examples/|tests/test-cases/|vendor/)
-        args: [--allow-multiple-documents]
+        exclude: ^(vendor/)
+        args: [--allow-multiple-documents, --unsafe]
       - id: check-added-large-files
         args: [--maxkb=500]
         exclude: ^(docs/demo.gif|website/)
