@@ -91,7 +91,4 @@ jobs:
           body: |
             This PR updates the screengrabs for Atmos version ${{ needs.prepare.outputs.version }}.
           base: main
-          labels: "no-release"          
-
-
-
+          labels: "no-release"

@@ -13,7 +13,7 @@ builds:
     goos:
       - 'linux'
       - 'darwin'
-    goarch: 
+    goarch:
       - 'amd64'
       - 'arm64'
     binary: atmos
@@ -40,7 +40,7 @@ release:
   make_latest: false
   name_template: '{{.Tag}}'
   target_commitish: "{{ .Branch }}"
-  prerelease: auto 
+  prerelease: auto
 ## ----- DO NOT CHANGE ----- ##
 
 changelog:

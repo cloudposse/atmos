@@ -1,6 +1,6 @@
 ---
 # The workflow name **must** be "autofix.ci" for Autofix CI to function correctly.
-# Any deviation from this name will cause Autofix CI to fail, as it relies on this 
+# Any deviation from this name will cause Autofix CI to fail, as it relies on this
 # specific identifier for execution. This is a strict requirement of Autofix CI.
 name: autofix.ci
 on: pull_request
@@ -41,6 +41,6 @@ jobs:
         run: |
           # shellcheck disable=SC2086
           gofumpt -l -w $ALL_CHANGED_FILES
-        
+
 
       - uses: autofix-ci/action@2891949f3779a1cafafae1523058501de3d4e944 # v1.3.1

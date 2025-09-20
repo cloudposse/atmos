@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -255,6 +256,26 @@ func TestMergeDefaultImports_ExclusionLogic(t *testing.T) {
 			err := os.MkdirAll(testDir, 0o755)
 			assert.NoError(t, err)
 
+			// Create sentinel file in .atmos.d to verify if import happens
+			atmosDDir := filepath.Join(tempDir, ".atmos.d")
+			err = os.MkdirAll(atmosDDir, 0o755)
+			assert.NoError(t, err)
+
+			sentinelContent := `sentinel_key: sentinel_value`
+			sentinelPath := filepath.Join(atmosDDir, "sentinel.yaml")
+			err = os.WriteFile(sentinelPath, []byte(sentinelContent), 0o644)
+			assert.NoError(t, err)
+
+			// Also create one in the test subdirectory
+			testAtmosDDir := filepath.Join(testDir, ".atmos.d")
+			err = os.MkdirAll(testAtmosDDir, 0o755)
+			assert.NoError(t, err)
+
+			testSentinelContent := `test_sentinel_key: test_sentinel_value`
+			testSentinelPath := filepath.Join(testAtmosDDir, "sentinel.yaml")
+			err = os.WriteFile(testSentinelPath, []byte(testSentinelContent), 0o644)
+			assert.NoError(t, err)
+
 			// Set up the exclude environment variable
 			if tt.excludePaths != "" {
 				// Convert relative paths to absolute for the test
@@ -266,6 +287,10 @@ func TestMergeDefaultImports_ExclusionLogic(t *testing.T) {
 							p = tempDir // Use temp dir as mock repo root
 						case "/repo/root/tests":
 							p = testDir
+						case "/other/path":
+							// Keep as is - it won't match anything
+						default:
+							// Keep p as is for any other path
 						}
 						absoluteExcludePaths = append(absoluteExcludePaths, p)
 					}
@@ -283,20 +308,31 @@ func TestMergeDefaultImports_ExclusionLogic(t *testing.T) {
 
 			// Adjust dirPath for the test
 			actualDirPath := tt.dirPath
+			expectedSentinelKey := ""
 			switch tt.dirPath {
 			case "/repo/root":
 				actualDirPath = tempDir
+				expectedSentinelKey = "sentinel_key"
 			case "/repo/root/tests":
 				actualDirPath = testDir
+				expectedSentinelKey = "test_sentinel_key"
 			}
 
 			// Call the function
 			v := viper.New()
+			v.SetConfigType("yaml") // Set config type as done in production code
 			err = mergeDefaultImports(actualDirPath, v)
-
-			// Check the result - mergeDefaultImports returns nil regardless
-			// When skipped, it returns early; when not skipped, it searches but doesn't fail if not found
 			assert.NoError(t, err, tt.description)
+
+			// Assert the behavior based on shouldSkip
+			if tt.shouldSkip {
+				// When skipped, viper should not contain the sentinel key
+				assert.False(t, v.IsSet(expectedSentinelKey), "Viper should not contain sentinel key when import is skipped")
+			} else if expectedSentinelKey != "" {
+				// When not skipped, viper should contain the sentinel key if .atmos.d exists
+				// Note: mergeDefaultImports will load the config if .atmos.d exists in the path
+				assert.True(t, v.IsSet(expectedSentinelKey), "Viper should contain sentinel key when import runs")
+			}
 		})
 	}
 }
@@ -330,18 +366,17 @@ func TestMergeDefaultImports_PathCanonicalization(t *testing.T) {
 			err = os.Chdir(tempDir)
 			assert.NoError(t, err)
 
-			// Set the exclude environment variable using current directory
-			os.Setenv("TEST_EXCLUDE_ATMOS_D", tempDir)
+			// Set the exclude environment variable using table input directly
+			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePath)
 			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
-			// Call the function with current directory
+			// Call the function with table input directly
 			v := viper.New()
-			err = mergeDefaultImports(tempDir, v)
+			v.SetConfigType("yaml") // Set config type as done in production code
+			err = mergeDefaultImports(tt.dirPath, v)
 
-			// Check the result - should skip and return nil
-			if tt.shouldSkip {
-				assert.NoError(t, err, tt.description)
-			}
+			// Check the result - should skip and return nil when shouldSkip is true
+			assert.NoError(t, err, tt.description)
 		})
 	}
 }
@@ -382,6 +417,7 @@ func TestMergeDefaultImports_EmptyAndInvalidPaths(t *testing.T) {
 
 			// Call the function - should not panic or error on empty/invalid paths
 			v := viper.New()
+			v.SetConfigType("yaml") // Set config type as done in production code
 			err := mergeDefaultImports(tempDir, v)
 
 			// mergeDefaultImports returns nil even if no atmos.d exists - it just doesn't merge anything
@@ -392,22 +428,23 @@ func TestMergeDefaultImports_EmptyAndInvalidPaths(t *testing.T) {
 
 func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
 	if runtime.GOOS != "windows" {
-		t.Skip("Windows-specific test")
+		t.Skipf("skipping Windows-specific test on %s", runtime.GOOS)
 	}
 
 	// Create temp directory
 	tempDir := t.TempDir()
 
 	// Test case-insensitive matching by setting exclude with different case
-	upperCasePath := tempDir
-	lowerCasePath := tempDir
+	upperCasePath := strings.ToUpper(tempDir)
+	lowerCasePath := strings.ToLower(tempDir)
 
-	// Note: On Windows, the actual path case may vary, but comparison should be case-insensitive
+	// Set the environment variable with lowercase path
 	os.Setenv("TEST_EXCLUDE_ATMOS_D", lowerCasePath)
 	defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
-	// Call the function with the path in different case
+	// Call the function with the path in uppercase
 	v := viper.New()
+	v.SetConfigType("yaml") // Set config type as done in production code
 	err := mergeDefaultImports(upperCasePath, v)
 
 	// Should skip and return nil since paths match case-insensitively on Windows

@@ -26,5 +26,3 @@ The [`weather`](weather/) example component requests weather data from `wttr.in`
 ### IP Info
 
 The [`ipinfo`](ipinfo/) example component returns information about your current IP.
-
-
