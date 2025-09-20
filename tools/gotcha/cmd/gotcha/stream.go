@@ -95,7 +95,7 @@ func addPackageSelectionFlags(cmd *cobra.Command) {
 
 // addOutputControlFlags adds output control flags to the stream command.
 func addOutputControlFlags(cmd *cobra.Command) {
-	cmd.Flags().StringP("show", "", "all", "Filter test results: all, failed, passed, skipped, collapsed, none")
+	cmd.Flags().String("show", "all", "Filter test results: all, failed, passed, skipped, collapsed, none")
 	cmd.Flags().StringP(FlagFormat, "f", constants.FormatTerminal, "Output format: terminal, json, markdown")
 	cmd.Flags().StringP("output", "o", "", "Output file for test results")
 	cmd.Flags().Bool("alert", false, "Sound alert when tests complete")

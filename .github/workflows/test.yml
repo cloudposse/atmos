@@ -215,6 +215,16 @@ jobs:
           detached: true
         timeout-minutes: 15
 
+      - name: Run vanilla go test (debug baseline)
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        run: |
+          # Run vanilla go test to see what Go is reporting directly
+          # This will help us understand why gotcha exits non-zero
+          echo "=== Running vanilla go test ==="
+          go test -v -timeout 30m ./... || echo "Exit code: $?"
+          echo "=== End vanilla go test ==="
+        continue-on-error: true
+
       - name: Acceptance tests
         timeout-minutes: 30
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}

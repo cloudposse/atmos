@@ -266,6 +266,7 @@ func bindAndParseFlags(rootCmd *cobra.Command) error {
 	if err := rootCmd.ParseFlags(os.Args[1:]); err != nil {
 		// Can't use logger yet, it's not initialized
 		fmt.Fprintf(os.Stderr, "Failed to parse flags: %v\n", err)
+		return err
 	}
 
 	return nil
@@ -307,20 +308,24 @@ func Execute() error {
 	// This allows the config file to be read before command creation
 	initConfig()
 
+	// Initialize a basic logger early so commands can use it
+	// This will be reconfigured after parsing flags
+	initGlobalLogger()
+
 	// Create and configure root command
 	rootCmd := createRootCommand()
 	setupGlobalFlags(rootCmd)
+
+	// Setup subcommands BEFORE parsing flags so all flags are registered
+	setupSubcommands(rootCmd)
 
 	// Bind and parse flags
 	if err := bindAndParseFlags(rootCmd); err != nil {
 		return err
 	}
 
-	// NOW initialize the logger with the correct log level
+	// Reinitialize the logger with the correct log level from flags
 	initGlobalLogger()
-
-	// Setup subcommands
-	setupSubcommands(rootCmd)
 
 	// Create context with signal handling
 	ctx := createSignalContext()
