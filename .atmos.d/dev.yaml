@@ -146,10 +146,10 @@ commands:
 
         echo "🔍 Linting..."
         if command -v golangci-lint >/dev/null 2>&1; then
-          golangci-lint run --config=.golangci.yml || { echo "⚠️ Linting issues found"; }
+          golangci-lint run --config=.golangci.yml || { echo "❌ Linting failed"; exit 1; }
         else
           echo "⚠️ golangci-lint not found, falling back to go vet..."
-          go vet ./... || { echo "⚠️ go vet found issues"; }
+          go vet ./... || { echo "❌ go vet failed"; exit 1; }
         fi
 
         echo "🧪 Testing..."
