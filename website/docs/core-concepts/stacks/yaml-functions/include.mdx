@@ -132,15 +132,15 @@ To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/
 The `!include` directive enables modular, reusable configuration patterns across all Atmos YAML files.
 This has several important implications:
 
-- **Modularization & Reuse**  
+- **Modularization & Reuse**
   `!include` supports a [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) approach by allowing shared configuration fragments to be stored in local or remote
    files and reused across multiple stacks or components. You can use it in place of YAML anchors, which don't work across files.
 
-- **Preprocessing for Inheritance**  
+- **Preprocessing for Inheritance**
   Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-merging
   behaviors using fully expanded configuration data.
 
-- **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**  
+- **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**
   If you're already managing your root modules using `.tfvars` files — for example, separate files for `dev`, `staging`,
   and `prod` — you can reference them directly in Atmos using `!include`. This makes it easy to adopt Atmos without
   having to translate all variables into Atmos stacks.

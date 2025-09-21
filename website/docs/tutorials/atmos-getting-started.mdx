@@ -237,7 +237,7 @@ workflows:
 ```
 
 Above, we updated a couple of variables to change the behavior of our terraform code for this particular stack. Since we mounted our local `stacks/`
-folder to our Atmos container via `--volume` argument, when you save the above stack file, Docker will update your container's 
+folder to our Atmos container via `--volume` argument, when you save the above stack file, Docker will update your container's
 `/stacks/example.yaml` file as well.
 
 Now to execute this again... we simply invoke our `deploy-all` workflow command.

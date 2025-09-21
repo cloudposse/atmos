@@ -30,7 +30,7 @@ We use Atmos custom commands for development (dogfooding our own tool). This ens
 ```bash
 # Checking Commands (Read-only, no modifications)
 atmos dev check        # Check staged files for issues
-atmos dev check-pr     # Check PR changes for issues  
+atmos dev check-pr     # Check PR changes for issues
 atmos dev check-all    # Check all files for issues
 atmos dev lint         # Run golangci-lint
 
