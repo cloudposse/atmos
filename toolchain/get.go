@@ -77,12 +77,7 @@ func ListToolVersions(showAll bool, limit int, toolName string) error {
 	versions = uniqueVersions
 
 	// Sort versions in semver order
-	sortedVersions, err := sortVersionsSemver(versions)
-	if err != nil {
-		// Fall back to string sorting
-		sort.Strings(versions)
-		sortedVersions = versions
-	}
+	sortedVersions := sortVersionsSemver(versions)
 
 	// Check which versions are actually installed
 	installedVersions := make(map[string]bool)
@@ -129,7 +124,7 @@ func ListToolVersions(showAll bool, limit int, toolName string) error {
 }
 
 // sortVersionsSemver sorts versions in semantic version order.
-func sortVersionsSemver(versions []string) ([]string, error) {
+func sortVersionsSemver(versions []string) []string {
 	// Create a slice of semver versions
 	var semverVersions []*semver.Version
 	var nonSemverVersions []string
@@ -164,7 +159,7 @@ func sortVersionsSemver(versions []string) ([]string, error) {
 	sort.Strings(nonSemverVersions)
 	result = append(result, nonSemverVersions...)
 
-	return result, nil
+	return result
 }
 
 // isSpecialVersion checks if a version string is a special version (not semver).

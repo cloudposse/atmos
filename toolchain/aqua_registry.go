@@ -183,10 +183,12 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*T
 	return tool, nil
 }
 
+const defaultMkdirPermissions = 0o755
+
 // fetchFromRegistry fetches tool metadata from a specific registry.
 func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Tool, error) {
 	// Create cache directory
-	if err := os.MkdirAll(ar.cache.baseDir, 0o755); err != nil {
+	if err := os.MkdirAll(ar.cache.baseDir, defaultMkdirPermissions); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 

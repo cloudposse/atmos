@@ -128,8 +128,7 @@ func TestSortVersionsSemver(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := sortVersionsSemver(tt.input)
-			assert.NoError(t, err)
+			result := sortVersionsSemver(tt.input)
 
 			// Handle the case where we might get nil instead of empty slice
 			if len(tt.expected) == 0 {
