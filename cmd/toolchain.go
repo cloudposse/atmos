@@ -9,7 +9,6 @@ import (
 )
 
 var (
-	logLevel         string
 	githubToken      string
 	toolVersionsFile string
 	toolsDir         string
