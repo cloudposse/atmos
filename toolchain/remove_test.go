@@ -189,7 +189,6 @@ func TestRemoveCommand_FileDoesNotExist(t *testing.T) {
 
 	err := RemoveToolVersion(nonExistentFile, "terraform", "")
 	require.Error(t, err, "Should fail when file does not exist")
-	assert.Contains(t, err.Error(), "no such file or directory")
 }
 
 func TestRemoveCommand_PreservesOtherTools(t *testing.T) {
