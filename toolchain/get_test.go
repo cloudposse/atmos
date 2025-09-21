@@ -9,11 +9,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Define toolVersions struct based on assumed structure.
-type toolVersions struct {
-	Tools map[string][]string
-}
-
 // Setup temporary .tool-versions file for testing.
 func createTempToolVersionsFile(t *testing.T, content string) string {
 	t.Helper()
@@ -31,7 +26,7 @@ func createTempBinary(t *testing.T, owner, repo, version string) string {
 	t.Helper()
 	dir := t.TempDir()
 	binaryPath := filepath.Join(dir, owner, repo, version, "bin", "tool")
-	err := os.MkdirAll(filepath.Dir(binaryPath), 0o755)
+	err := os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
 	if err != nil {
 		t.Fatalf("failed to create temp binary path: %v", err)
 	}
