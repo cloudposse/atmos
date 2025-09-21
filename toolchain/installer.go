@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -580,7 +579,7 @@ func (i *Installer) simpleExtract(assetPath, binaryPath string, tool *Tool) erro
 func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 	log.Debug("Extracting ZIP archive", "filename", filepath.Base(zipPath))
 
-	tempDir, err := ioutil.TempDir("", "installer-extract-")
+	tempDir, err := os.MkdirTemp("", "installer-extract-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
@@ -691,7 +690,7 @@ func Unzip(src, dest string) error {
 func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 	log.Debug("Extracting tar.gz archive", "filename", filepath.Base(tarPath))
 
-	tempDir, err := ioutil.TempDir("", "installer-extract-")
+	tempDir, err := os.MkdirTemp("", "installer-extract-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
