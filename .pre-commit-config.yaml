@@ -33,9 +33,9 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.md)
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.md|.*\.svg)
       - id: end-of-file-fixer
-        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg)
       - id: check-yaml
         exclude: ^(vendor/)
         args: [--allow-multiple-documents, --unsafe]
