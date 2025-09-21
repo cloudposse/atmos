@@ -158,6 +158,19 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+
+severity:
+  default: error
+  case-sensitive: false
+  rules:
+    - linters:
+        - revive
+      text: "cognitive-complexity|cyclomatic|function-length|function-result-limit|comment-spacings"
+      severity: warning
+    - linters:
+        - nestif
+        - nolintlint
+      severity: warning
 formatters:
   enable:
     - gofumpt
