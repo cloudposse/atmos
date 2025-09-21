@@ -27,5 +27,5 @@ var toolchainVersionsCmd = &cobra.Command{
 func init() {
 	toolchainVersionsCmd.Flags().String("file", "", "Path to tool-versions file (defaults to global --tool-versions-file)")
 	toolchainVersionsCmd.Flags().Bool("all", false, "Fetch all available versions from GitHub API")
-	toolchainVersionsCmd.Flags().Int("limit", 50, "Maximum number of versions to fetch when using --all")
+	toolchainVersionsCmd.Flags().Int("limit", defaultVersionsLimit, "Maximum number of versions to fetch when using --all")
 }

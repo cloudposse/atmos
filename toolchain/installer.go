@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -732,11 +733,59 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 	}
 
 	// Move the binary into place
-	if err := os.Rename(found, binaryPath); err != nil {
+	if err := MoveFile(found, binaryPath); err != nil {
 		return fmt.Errorf("failed to move extracted binary: %w", err)
 	}
 
 	return nil
+}
+
+func isCrossDeviceError(errno syscall.Errno) bool {
+	if runtime.GOOS == "windows" {
+		return errno == 0x11 // ERROR_NOT_SAME_DEVICE
+	}
+	return errno == syscall.EXDEV
+}
+
+// MoveFile tries os.Rename, but if that fails due to cross-device link,
+// it falls back to a copy+remove.
+func MoveFile(src, dst string) error {
+	// Ensure target dir exists
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("failed to create target dir: %w", err)
+	}
+
+	if err := os.Rename(src, dst); err != nil {
+		if err := copyFile(src, dst); err != nil {
+			return fmt.Errorf("failed to copy during move fallback: %w", err)
+		}
+		if err := os.Remove(src); err != nil {
+			return fmt.Errorf("failed to remove source after copy: %w", err)
+		}
+		return nil
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = out.Close()
+	}()
+
+	if _, err = io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
 }
 
 // extractGzip decompresses a single gzip-compressed binary.
