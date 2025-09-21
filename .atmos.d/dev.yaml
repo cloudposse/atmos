@@ -315,24 +315,62 @@ commands:
 
             echo "🗑️  Deleting cache entries..."
 
+            # Track success/failure
+            FAILED_COUNT=0
+            SUCCESS_COUNT=0
+            FAILED_KEYS=""
+
             # Extract cache keys and delete them
-            echo "$CACHE_ENTRIES" | while read -r line; do
+            while read -r line; do
               # Extract just the cache key (first field before any whitespace or tab)
               cache_key=$(echo "$line" | awk '{print $1}')
 
               if [ -n "$cache_key" ]; then
-                echo "  Deleting: $cache_key"
-                # Use echo to auto-confirm the deletion
-                if echo "y" | gh actions-cache delete "$cache_key" -R cloudposse/atmos 2>/dev/null; then
+                echo "  Attempting to delete: $cache_key"
+
+                # Try with --confirm flag first (newer gh versions)
+                if gh actions-cache delete "$cache_key" -R cloudposse/atmos --confirm 2>/dev/null; then
                   echo "  ✅ Deleted: $cache_key"
+                  SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
                 else
-                  echo "  ❌ Failed to delete: $cache_key"
+                  # Fallback: try piping yes for older gh versions or different prompting behavior
+                  if yes | gh actions-cache delete "$cache_key" -R cloudposse/atmos 2>&1 | grep -q "Deleted"; then
+                    echo "  ✅ Deleted: $cache_key"
+                    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+                  else
+                    echo "  ❌ Failed to delete: $cache_key"
+                    FAILED_COUNT=$((FAILED_COUNT + 1))
+                    FAILED_KEYS="${FAILED_KEYS}    $cache_key\n"
+                  fi
                 fi
               fi
-            done
+            done <<< "$CACHE_ENTRIES"
 
             echo ""
-            echo "✅ Cache cleanup complete!"
+            if [ "$FAILED_COUNT" -eq 0 ] && [ "$SUCCESS_COUNT" -gt 0 ]; then
+              echo "✅ Cache cleanup complete! Deleted $SUCCESS_COUNT entries."
+            elif [ "$SUCCESS_COUNT" -eq 0 ] && [ "$FAILED_COUNT" -gt 0 ]; then
+              echo "❌ Cache cleanup failed! Could not delete any entries."
+              echo ""
+              echo "Failed entries:"
+              printf "$FAILED_KEYS"
+              echo ""
+              echo "💡 Try:"
+              echo "   1. Update gh CLI: brew upgrade gh"
+              echo "   2. Re-authenticate: gh auth refresh"
+              echo "   3. Delete manually: gh actions-cache delete <key> -R cloudposse/atmos --confirm"
+            else
+              echo "⚠️  Cache cleanup finished with mixed results."
+              echo "   Deleted: $SUCCESS_COUNT entries"
+              echo "   Failed: $FAILED_COUNT entries"
+              if [ -n "$FAILED_KEYS" ]; then
+                echo ""
+                echo "Failed entries:"
+                printf "$FAILED_KEYS"
+              fi
+              echo ""
+              echo "💡 For failed entries, try updating gh CLI: brew upgrade gh"
+            fi
 
       - name: quick
         description: Quick build and test
