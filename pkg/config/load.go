@@ -288,11 +288,6 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	configFilePath := tempViper.ConfigFileUsed()
 
-	tempViper.SetConfigFile(configFilePath)
-	err := tempViper.MergeInConfig()
-	if err != nil {
-		return err
-	}
 	content, err := os.ReadFile(configFilePath)
 	if err != nil {
 		return err
