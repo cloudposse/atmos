@@ -161,7 +161,6 @@ issues:
 
 severity:
   default: error
-  case-sensitive: false
   rules:
     - linters:
         - revive
