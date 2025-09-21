@@ -54,29 +54,34 @@ commands:
             echo "Run 'atmos dev format-pr' to auto-format PR changes"
 
       - name: check
-        description: Check staged files for issues (read-only, no modifications)
+        description: Run pre-commit hooks against staged files
         steps:
           - |
-            echo "🔍 Checking staged files (read-only)..."
-            # Run checks without modifying files
-            STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.go' | grep -v -E '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)' || true)
-            ISSUES_FOUND=false
-            if [ -n "$STAGED_GO_FILES" ]; then
-              echo "Checking Go formatting..."
-              FORMAT_ISSUES=$(echo "$STAGED_GO_FILES" | xargs -I {} gofumpt -d {} 2>/dev/null | head -20)
-              if [ -n "$FORMAT_ISSUES" ]; then
-                echo "$FORMAT_ISSUES"
-                ISSUES_FOUND=true
-              fi
-              echo "Running golangci-lint..."
-              if ! golangci-lint run --new-from-rev=origin/main --config=.golangci.yml $STAGED_GO_FILES; then
-                ISSUES_FOUND=true
-              fi
+            echo "🔍 Running pre-commit checks on staged files..."
+
+            # Get list of staged files
+            STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+            if [ -z "$STAGED_FILES" ]; then
+              echo "✅ No staged files to check"
+              exit 0
             fi
-            if [ "$ISSUES_FOUND" = true ]; then
-              echo "💡 To auto-fix issues, run: atmos dev format"
+
+            echo "📊 Checking $(echo "$STAGED_FILES" | wc -l | xargs) staged files"
+            echo ""
+
+            # Run pre-commit on staged files only
+            echo "Running pre-commit hooks..."
+            if pre-commit run; then
+              echo ""
+              echo "✅ All pre-commit checks passed!"
             else
-              echo "✅ No issues found in staged files"
+              EXIT_CODE=$?
+              echo ""
+              echo "❌ Some pre-commit checks failed (exit code: $EXIT_CODE)"
+              echo ""
+              echo "💡 To auto-fix issues, run: atmos dev format"
+              exit $EXIT_CODE
             fi
 
       - name: check-pr
@@ -127,27 +132,31 @@ commands:
             fi
 
       - name: check-all
-        description: Check all files for issues (read-only, no modifications)
+        description: Run pre-commit hooks against all files
         steps:
           - |
-            echo "🔍 Checking all files (read-only)..."
+            echo "🔍 Running pre-commit checks on all files..."
             echo "⚠️  This may take a while..."
-            ISSUES_FOUND=false
-            # Check formatting without modifying
-            echo "Checking Go formatting..."
-            FORMAT_ISSUES=$(find . -name '*.go' -not -path './vendor/*' -not -path './tests/test-cases/*' -not -path './tests/testdata/*' -not -path './tests/snapshots/*' | xargs gofumpt -d 2>/dev/null | head -50)
-            if [ -n "$FORMAT_ISSUES" ]; then
-              echo "$FORMAT_ISSUES"
-              ISSUES_FOUND=true
-            fi
-            echo "Running comprehensive linting..."
-            if ! golangci-lint run --config=.golangci.yml; then
-              ISSUES_FOUND=true
-            fi
-            if [ "$ISSUES_FOUND" = true ]; then
-              echo "💡 To auto-fix issues, run: atmos dev format-all (⚠️  DANGEROUS)"
+            echo ""
+
+            # Count total files that will be checked
+            FILE_COUNT=$(git ls-files | wc -l | xargs)
+            echo "📊 Checking $FILE_COUNT files in the repository"
+            echo ""
+
+            # Run pre-commit on all files
+            echo "Running pre-commit hooks..."
+            if pre-commit run --all-files; then
+              echo ""
+              echo "✅ All pre-commit checks passed!"
             else
-              echo "✅ No issues found in the codebase"
+              EXIT_CODE=$?
+              echo ""
+              echo "❌ Some pre-commit checks failed (exit code: $EXIT_CODE)"
+              echo ""
+              echo "💡 To auto-fix issues, run: atmos dev format-all"
+              echo "⚠️  WARNING: format-all will modify many files!"
+              exit $EXIT_CODE
             fi
 
       - name: format
