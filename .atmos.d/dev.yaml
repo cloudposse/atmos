@@ -197,6 +197,113 @@ commands:
         steps:
           - make build
 
+      - name: cache-list
+        description: List GitHub Actions cache entries over 1GB
+        steps:
+          - |
+            echo "🔍 Checking GitHub Actions cache for entries over 1GB..."
+
+            # Check if gh CLI is installed
+            if ! command -v gh &> /dev/null; then
+              echo "❌ GitHub CLI (gh) is not installed. Please install it first."
+              echo "   Visit: https://cli.github.com/"
+              exit 1
+            fi
+
+            # Check if authenticated
+            if ! gh auth status &> /dev/null; then
+              echo "❌ Not authenticated with GitHub. Please run: gh auth login"
+              exit 1
+            fi
+
+            # Get cache entries over 1GB
+            CACHE_ENTRIES=$(gh actions-cache list -R cloudposse/atmos | grep GB)
+
+            if [ -z "$CACHE_ENTRIES" ]; then
+              echo "✅ No cache entries over 1GB found."
+              exit 0
+            fi
+
+            echo "Found cache entries over 1GB:"
+            echo ""
+            echo "$CACHE_ENTRIES" | column -t -s$'\t'
+            echo ""
+
+            # Calculate total size
+            TOTAL_SIZE=$(echo "$CACHE_ENTRIES" | awk '{print $2}' | grep -o '[0-9.]*' | awk '{s+=$1} END {printf "%.2f", s}')
+            ENTRY_COUNT=$(echo "$CACHE_ENTRIES" | wc -l | xargs)
+
+            echo "📊 Summary:"
+            echo "   Total entries: $ENTRY_COUNT"
+            echo "   Total size: ${TOTAL_SIZE} GB"
+            echo ""
+            echo "💡 To delete these caches, run: atmos dev cache-clear"
+
+      - name: cache-clear
+        description: Clear GitHub Actions cache entries over 1GB
+        steps:
+          - |
+            echo "🔍 Checking GitHub Actions cache for entries over 1GB..."
+
+            # Check if gh CLI is installed
+            if ! command -v gh &> /dev/null; then
+              echo "❌ GitHub CLI (gh) is not installed. Please install it first."
+              echo "   Visit: https://cli.github.com/"
+              exit 1
+            fi
+
+            # Check if authenticated
+            if ! gh auth status &> /dev/null; then
+              echo "❌ Not authenticated with GitHub. Please run: gh auth login"
+              exit 1
+            fi
+
+            # Get cache entries over 1GB
+            CACHE_ENTRIES=$(gh actions-cache list -R cloudposse/atmos | grep GB)
+
+            if [ -z "$CACHE_ENTRIES" ]; then
+              echo "✅ No cache entries over 1GB found."
+              exit 0
+            fi
+
+            echo "Found cache entries over 1GB:"
+            echo "$CACHE_ENTRIES"
+            echo ""
+
+            # Count entries
+            ENTRY_COUNT=$(echo "$CACHE_ENTRIES" | wc -l | xargs)
+            echo "📊 Total entries to delete: $ENTRY_COUNT"
+            echo ""
+
+            # Ask for confirmation
+            read -p "⚠️  Do you want to delete these cache entries? (y/N): " -n 1 -r
+            echo ""
+
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+              echo "❌ Cancelled."
+              exit 0
+            fi
+
+            echo "🗑️  Deleting cache entries..."
+
+            # Extract cache keys and delete them
+            echo "$CACHE_ENTRIES" | while IFS=$'\t' read -r key rest; do
+              # Extract just the cache key (first field)
+              cache_key=$(echo "$key" | awk '{print $1}')
+
+              if [ -n "$cache_key" ]; then
+                echo "  Deleting: $cache_key"
+                if gh actions-cache delete "$cache_key" -R cloudposse/atmos --confirm; then
+                  echo "  ✅ Deleted: $cache_key"
+                else
+                  echo "  ❌ Failed to delete: $cache_key"
+                fi
+              fi
+            done
+
+            echo ""
+            echo "✅ Cache cleanup complete!"
+
       - name: quick
         description: Quick build and test
         steps:
