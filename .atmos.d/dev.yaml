@@ -258,14 +258,17 @@ commands:
             echo "$CACHE_ENTRIES" | column -t -s$'\t'
             echo ""
 
-            # Calculate total size
+            # Calculate total size and unique keys
             TOTAL_SIZE=$(echo "$CACHE_ENTRIES" | awk '{print $2}' | grep -o '[0-9.]*' | awk '{s+=$1} END {printf "%.2f", s}')
             ENTRY_COUNT=$(echo "$CACHE_ENTRIES" | wc -l | xargs)
+            UNIQUE_KEY_COUNT=$(echo "$CACHE_ENTRIES" | awk '{print $1}' | sort -u | wc -l | xargs)
 
             echo "📊 Summary:"
             echo "   Total entries: $ENTRY_COUNT"
+            echo "   Unique keys: $UNIQUE_KEY_COUNT"
             echo "   Total size: ${TOTAL_SIZE} GB"
             echo ""
+            echo "💡 Note: Each key may have multiple entries across different branches"
             echo "💡 To delete these caches, run: atmos dev cache-clear"
 
       - name: cache-clear
@@ -314,46 +317,55 @@ commands:
             fi
 
             echo "🗑️  Deleting cache entries..."
+            echo "   Note: Each key may match multiple cache entries across different branches"
+            echo ""
 
             # Track success/failure
-            FAILED_COUNT=0
-            SUCCESS_COUNT=0
-            FAILED_KEYS=""
+            FAILED_KEYS=0
+            SUCCESS_KEYS=0
+            TOTAL_DELETED=0
+            FAILED_LIST=""
 
-            # Extract cache keys and delete them
-            while read -r line; do
-              # Extract just the cache key (first field before any whitespace or tab)
-              cache_key=$(echo "$line" | awk '{print $1}')
+            # Extract unique cache keys and delete them
+            UNIQUE_KEYS=$(echo "$CACHE_ENTRIES" | awk '{print $1}' | sort -u)
+            UNIQUE_KEY_COUNT=$(echo "$UNIQUE_KEYS" | wc -l | xargs)
 
+            echo "   Found $UNIQUE_KEY_COUNT unique cache key(s) to process"
+            echo ""
+
+            while read -r cache_key; do
               if [ -n "$cache_key" ]; then
-                echo "  Attempting to delete: $cache_key"
+                echo "  Processing key: ${cache_key:0:50}..."
 
-                # Try with --confirm flag first (newer gh versions)
-                if gh actions-cache delete "$cache_key" -R cloudposse/atmos --confirm 2>/dev/null; then
-                  echo "  ✅ Deleted: $cache_key"
-                  SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+                # Try deletion and capture output
+                DELETE_OUTPUT=$(gh actions-cache delete "$cache_key" -R cloudposse/atmos --confirm 2>&1)
+                DELETE_EXIT=$?
+
+                if [ $DELETE_EXIT -eq 0 ]; then
+                  # Extract the number of deleted entries from output
+                  DELETED_COUNT=$(echo "$DELETE_OUTPUT" | grep -oE "Deleted [0-9]+ cache" | grep -oE "[0-9]+" || echo "1")
+                  echo "$DELETE_OUTPUT" | head -1
+                  echo "  ✅ Successfully processed key"
+                  SUCCESS_KEYS=$((SUCCESS_KEYS + 1))
+                  TOTAL_DELETED=$((TOTAL_DELETED + DELETED_COUNT))
                 else
-                  # Fallback: try piping yes for older gh versions or different prompting behavior
-                  if yes | gh actions-cache delete "$cache_key" -R cloudposse/atmos 2>&1 | grep -q "Deleted"; then
-                    echo "  ✅ Deleted: $cache_key"
-                    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-                  else
-                    echo "  ❌ Failed to delete: $cache_key"
-                    FAILED_COUNT=$((FAILED_COUNT + 1))
-                    FAILED_KEYS="${FAILED_KEYS}    $cache_key\n"
-                  fi
+                  echo "  ❌ Failed to delete key"
+                  FAILED_KEYS=$((FAILED_KEYS + 1))
+                  FAILED_LIST="${FAILED_LIST}    ${cache_key:0:50}...\n"
                 fi
               fi
-            done <<< "$CACHE_ENTRIES"
+            done <<< "$UNIQUE_KEYS"
 
             echo ""
-            if [ "$FAILED_COUNT" -eq 0 ] && [ "$SUCCESS_COUNT" -gt 0 ]; then
-              echo "✅ Cache cleanup complete! Deleted $SUCCESS_COUNT entries."
-            elif [ "$SUCCESS_COUNT" -eq 0 ] && [ "$FAILED_COUNT" -gt 0 ]; then
-              echo "❌ Cache cleanup failed! Could not delete any entries."
+            if [ "$FAILED_KEYS" -eq 0 ] && [ "$SUCCESS_KEYS" -gt 0 ]; then
+              echo "✅ Cache cleanup complete!"
+              echo "   Processed $SUCCESS_KEYS unique key(s)"
+              echo "   Total cache entries deleted: $TOTAL_DELETED"
+            elif [ "$SUCCESS_KEYS" -eq 0 ] && [ "$FAILED_KEYS" -gt 0 ]; then
+              echo "❌ Cache cleanup failed! Could not delete any keys."
               echo ""
-              echo "Failed entries:"
-              printf "$FAILED_KEYS"
+              echo "Failed keys:"
+              printf "$FAILED_LIST"
               echo ""
               echo "💡 Try:"
               echo "   1. Update gh CLI: brew upgrade gh"
@@ -361,15 +373,16 @@ commands:
               echo "   3. Delete manually: gh actions-cache delete <key> -R cloudposse/atmos --confirm"
             else
               echo "⚠️  Cache cleanup finished with mixed results."
-              echo "   Deleted: $SUCCESS_COUNT entries"
-              echo "   Failed: $FAILED_COUNT entries"
-              if [ -n "$FAILED_KEYS" ]; then
+              echo "   Successful keys: $SUCCESS_KEYS"
+              echo "   Failed keys: $FAILED_KEYS"
+              echo "   Total cache entries deleted: $TOTAL_DELETED"
+              if [ -n "$FAILED_LIST" ]; then
                 echo ""
-                echo "Failed entries:"
-                printf "$FAILED_KEYS"
+                echo "Failed keys:"
+                printf "$FAILED_LIST"
               fi
               echo ""
-              echo "💡 For failed entries, try updating gh CLI: brew upgrade gh"
+              echo "💡 For failed keys, try updating gh CLI: brew upgrade gh"
             fi
 
       - name: quick
