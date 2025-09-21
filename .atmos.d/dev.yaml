@@ -60,13 +60,24 @@ commands:
             echo "🔍 Checking staged files (read-only)..."
             # Run checks without modifying files
             STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.go' | grep -v -E '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)' || true)
+            ISSUES_FOUND=false
             if [ -n "$STAGED_GO_FILES" ]; then
               echo "Checking Go formatting..."
-              echo "$STAGED_GO_FILES" | xargs -I {} gofumpt -d {} 2>/dev/null | head -20 || true
+              FORMAT_ISSUES=$(echo "$STAGED_GO_FILES" | xargs -I {} gofumpt -d {} 2>/dev/null | head -20)
+              if [ -n "$FORMAT_ISSUES" ]; then
+                echo "$FORMAT_ISSUES"
+                ISSUES_FOUND=true
+              fi
               echo "Running golangci-lint..."
-              golangci-lint run --new-from-rev=origin/main --config=.golangci.yml $STAGED_GO_FILES || true
+              if ! golangci-lint run --new-from-rev=origin/main --config=.golangci.yml $STAGED_GO_FILES; then
+                ISSUES_FOUND=true
+              fi
             fi
-            echo "💡 To auto-fix issues, run: atmos dev format"
+            if [ "$ISSUES_FOUND" = true ]; then
+              echo "💡 To auto-fix issues, run: atmos dev format"
+            else
+              echo "✅ No issues found in staged files"
+            fi
 
       - name: check-pr
         description: Check PR changes for issues (read-only, no modifications)
@@ -76,13 +87,24 @@ commands:
             BASE_REF="${GITHUB_BASE_REF:-main}"
             # Get changed Go files
             CHANGED_GO_FILES=$(git diff origin/$BASE_REF...HEAD --name-only -- '*.go' | grep -v -E '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)' || true)
+            ISSUES_FOUND=false
             if [ -n "$CHANGED_GO_FILES" ]; then
               echo "Checking Go formatting..."
-              echo "$CHANGED_GO_FILES" | xargs -I {} gofumpt -d {} 2>/dev/null | head -20 || true
+              FORMAT_ISSUES=$(echo "$CHANGED_GO_FILES" | xargs -I {} gofumpt -d {} 2>/dev/null | head -20)
+              if [ -n "$FORMAT_ISSUES" ]; then
+                echo "$FORMAT_ISSUES"
+                ISSUES_FOUND=true
+              fi
               echo "Running golangci-lint..."
-              golangci-lint run --new-from-rev=origin/$BASE_REF --config=.golangci.yml || true
+              if ! golangci-lint run --new-from-rev=origin/$BASE_REF --config=.golangci.yml; then
+                ISSUES_FOUND=true
+              fi
             fi
-            echo "💡 To auto-fix issues, run: atmos dev format-pr"
+            if [ "$ISSUES_FOUND" = true ]; then
+              echo "💡 To auto-fix issues, run: atmos dev format-pr"
+            else
+              echo "✅ No issues found in PR changes"
+            fi
 
       - name: check-all
         description: Check all files for issues (read-only, no modifications)
@@ -90,12 +112,23 @@ commands:
           - |
             echo "🔍 Checking all files (read-only)..."
             echo "⚠️  This may take a while..."
+            ISSUES_FOUND=false
             # Check formatting without modifying
             echo "Checking Go formatting..."
-            find . -name '*.go' -not -path './vendor/*' -not -path './tests/test-cases/*' -not -path './tests/testdata/*' -not -path './tests/snapshots/*' | xargs gofumpt -d 2>/dev/null | head -50 || true
+            FORMAT_ISSUES=$(find . -name '*.go' -not -path './vendor/*' -not -path './tests/test-cases/*' -not -path './tests/testdata/*' -not -path './tests/snapshots/*' | xargs gofumpt -d 2>/dev/null | head -50)
+            if [ -n "$FORMAT_ISSUES" ]; then
+              echo "$FORMAT_ISSUES"
+              ISSUES_FOUND=true
+            fi
             echo "Running comprehensive linting..."
-            golangci-lint run --config=.golangci.yml || true
-            echo "💡 To auto-fix issues, run: atmos dev format-all (⚠️  DANGEROUS)"
+            if ! golangci-lint run --config=.golangci.yml; then
+              ISSUES_FOUND=true
+            fi
+            if [ "$ISSUES_FOUND" = true ]; then
+              echo "💡 To auto-fix issues, run: atmos dev format-all (⚠️  DANGEROUS)"
+            else
+              echo "✅ No issues found in the codebase"
+            fi
 
       - name: format
         description: Auto-format staged files
