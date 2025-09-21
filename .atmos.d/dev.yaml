@@ -80,30 +80,50 @@ commands:
             fi
 
       - name: check-pr
-        description: Check PR changes for issues (read-only, no modifications)
+        description: Run pre-commit hooks against PR modified files
         steps:
           - |
-            echo "🔍 Checking PR changes (read-only)..."
-            BASE_REF="${GITHUB_BASE_REF:-main}"
-            # Get changed Go files
-            CHANGED_GO_FILES=$(git diff origin/$BASE_REF...HEAD --name-only -- '*.go' | grep -v -E '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)' || true)
-            ISSUES_FOUND=false
-            if [ -n "$CHANGED_GO_FILES" ]; then
-              echo "Checking Go formatting..."
-              FORMAT_ISSUES=$(echo "$CHANGED_GO_FILES" | xargs -I {} gofumpt -d {} 2>/dev/null | head -20)
-              if [ -n "$FORMAT_ISSUES" ]; then
-                echo "$FORMAT_ISSUES"
-                ISSUES_FOUND=true
-              fi
-              echo "Running golangci-lint..."
-              if ! golangci-lint run --new-from-rev=origin/$BASE_REF --config=.golangci.yml; then
-                ISSUES_FOUND=true
+            echo "🔍 Running pre-commit checks on PR files..."
+
+            # Determine the base branch
+            BASE_REF="${GITHUB_BASE_REF:-origin/main}"
+
+            # Check if we have the base ref
+            if ! git rev-parse --verify "$BASE_REF" > /dev/null 2>&1; then
+              # Try without origin/ prefix
+              BASE_REF="${BASE_REF#origin/}"
+              if ! git rev-parse --verify "$BASE_REF" > /dev/null 2>&1; then
+                echo "⚠️  Base ref '$BASE_REF' not found. Fetching from origin..."
+                git fetch origin main:main || true
+                BASE_REF="main"
               fi
             fi
-            if [ "$ISSUES_FOUND" = true ]; then
-              echo "💡 To auto-fix issues, run: atmos dev format-pr"
+
+            echo "📊 Checking files changed from $BASE_REF..."
+
+            # Get list of changed files
+            CHANGED_FILES=$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null || git diff --name-only origin/main...HEAD)
+
+            if [ -z "$CHANGED_FILES" ]; then
+              echo "✅ No files changed in PR"
+              exit 0
+            fi
+
+            echo "Found $(echo "$CHANGED_FILES" | wc -l | xargs) changed files"
+            echo ""
+
+            # Run pre-commit on changed files only
+            echo "Running pre-commit hooks..."
+            if pre-commit run --from-ref "$BASE_REF" --to-ref HEAD; then
+              echo ""
+              echo "✅ All pre-commit checks passed!"
             else
-              echo "✅ No issues found in PR changes"
+              EXIT_CODE=$?
+              echo ""
+              echo "❌ Some pre-commit checks failed (exit code: $EXIT_CODE)"
+              echo ""
+              echo "💡 To auto-fix issues, run: atmos dev format-pr"
+              exit $EXIT_CODE
             fi
 
       - name: check-all
