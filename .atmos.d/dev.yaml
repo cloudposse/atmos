@@ -304,9 +304,9 @@ commands:
             echo "📊 Total entries to delete: $ENTRY_COUNT"
             echo ""
 
-            # Ask for confirmation
-            read -p "⚠️  Do you want to delete these cache entries? (y/N): " -n 1 -r
-            echo ""
+            # Ask for confirmation (portable version for macOS)
+            printf "⚠️  Do you want to delete these cache entries? (y/N): "
+            read -r REPLY
 
             if [[ ! $REPLY =~ ^[Yy]$ ]]; then
               echo "❌ Cancelled."
@@ -316,13 +316,14 @@ commands:
             echo "🗑️  Deleting cache entries..."
 
             # Extract cache keys and delete them
-            echo "$CACHE_ENTRIES" | while IFS=$'\t' read -r key rest; do
-              # Extract just the cache key (first field)
-              cache_key=$(echo "$key" | awk '{print $1}')
+            echo "$CACHE_ENTRIES" | while read -r line; do
+              # Extract just the cache key (first field before any whitespace or tab)
+              cache_key=$(echo "$line" | awk '{print $1}')
 
               if [ -n "$cache_key" ]; then
                 echo "  Deleting: $cache_key"
-                if gh actions-cache delete "$cache_key" -R cloudposse/atmos --confirm; then
+                # Use echo to auto-confirm the deletion
+                if echo "y" | gh actions-cache delete "$cache_key" -R cloudposse/atmos 2>/dev/null; then
                   echo "  ✅ Deleted: $cache_key"
                 else
                   echo "  ❌ Failed to delete: $cache_key"
