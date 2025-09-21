@@ -622,7 +622,7 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *Tool) error {
 	}
 
 	// Move the binary into place
-	if err := os.Rename(found, binaryPath); err != nil {
+	if err := MoveFile(found, binaryPath); err != nil {
 		return fmt.Errorf("failed to move extracted binary: %w", err)
 	}
 
