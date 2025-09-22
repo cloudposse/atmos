@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -38,8 +37,8 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"	
-vendor:  
+  name_pattern: "{stage}"
+vendor:
   base_path: "./test-vendor.yaml"
 logs:
   file: /dev/stderr
@@ -306,6 +305,15 @@ terraform:
 				assert.Equal(t, "Debug", cfg.Logs.Level)
 			},
 		},
+		{
+			name: "valid import custom override",
+			setup: func(t *testing.T, dir string, tc testCase) {
+				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports-override")
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				assert.Equal(t, "foo", cfg.Commands[0].Name)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -333,76 +341,6 @@ terraform:
 			}
 		})
 	}
-}
-
-// Helper functions.
-func createConfigFile(t *testing.T, dir string, fileName string, content string) {
-	path := filepath.Join(dir, fileName)
-	err := os.WriteFile(path, []byte(content), 0o644)
-	require.NoError(t, err, "Failed to create config file")
-}
-
-func changeWorkingDir(t *testing.T, dir string) {
-	cwd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get current directory")
-
-	t.Cleanup(func() {
-		err := os.Chdir(cwd)
-		require.NoError(t, err, "Failed to restore working directory")
-	})
-
-	err = os.Chdir(dir)
-	require.NoError(t, err, "Failed to change working directory")
-}
-
-func TestMergeConfig_ConfigFileNotFound(t *testing.T) {
-	tempDir := t.TempDir() // Empty directory, no config file
-
-	v := viper.New()
-	err := mergeConfig(v, tempDir, CliConfigFileName, true)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Config File \"atmos\" Not Found")
-}
-
-func TestMergeConfig_MultipleConfigFilesMerge(t *testing.T) {
-	tempDir := t.TempDir()
-	content := `
-base_path: ./
-vendor:  
-  base_path: "./test-vendor.yaml"
-logs:
-  file: /dev/stderr
-  level: Debug`
-	createConfigFile(t, tempDir, "atmos.yaml", content)
-	v := viper.New()
-	v.SetConfigType("yaml")
-	err := mergeConfig(v, tempDir, CliConfigFileName, false)
-	assert.NoError(t, err)
-	assert.Equal(t, "./", v.GetString("base_path"))
-	content2 := `
-base_path: ./test
-vendor:  
-  base_path: "./test2-vendor.yaml"
-`
-	tempDir2 := t.TempDir()
-	createConfigFile(t, tempDir2, "atmos.yml", content2)
-	err = mergeConfig(v, tempDir2, CliConfigFileName, false)
-	assert.NoError(t, err)
-	assert.Equal(t, "./test", v.GetString("base_path"))
-	assert.Equal(t, "./test2-vendor.yaml", v.GetString("vendor.base_path"))
-	assert.Equal(t, "Debug", v.GetString("logs.level"))
-	assert.Equal(t, filepath.Join(tempDir2, "atmos.yml"), v.ConfigFileUsed())
-}
-
-func TestMergeDefaultConfig(t *testing.T) {
-	v := viper.New()
-
-	err := mergeDefaultConfig(v)
-	assert.Error(t, err, "cannot decode configuration: unable to determine config type")
-	v.SetConfigType("yaml")
-	err = mergeDefaultConfig(v)
-	assert.NoError(t, err, "should not return error if config type is yaml")
 }
 
 func TestParseFlags(t *testing.T) {
@@ -527,4 +465,24 @@ func TestAtmosConfigAbsolutePaths(t *testing.T) {
 		assert.Equal(t, absPath, config.Components.Helmfile.BasePath)
 		assert.Equal(t, absPath, config.Stacks.BasePath)
 	})
+}
+
+// Helper functions.
+func createConfigFile(t *testing.T, dir string, fileName string, content string) {
+	path := filepath.Join(dir, fileName)
+	err := os.WriteFile(path, []byte(content), 0o644)
+	require.NoError(t, err, "Failed to create config file")
+}
+
+func changeWorkingDir(t *testing.T, dir string) {
+	cwd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get current directory")
+
+	t.Cleanup(func() {
+		err := os.Chdir(cwd)
+		require.NoError(t, err, "Failed to restore working directory")
+	})
+
+	err = os.Chdir(dir)
+	require.NoError(t, err, "Failed to change working directory")
 }

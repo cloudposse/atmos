@@ -2,10 +2,11 @@ package merge
 
 import (
 	"fmt"
-	"os"
 
 	"dario.cat/mergo"
+	"github.com/fatih/color"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -18,7 +19,7 @@ const (
 )
 
 // MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
-// and returns a single map with the merged contents
+// and returns a single map with the merged contents.
 func MergeWithOptions(
 	inputs []map[string]any,
 	appendSlice bool,
@@ -40,16 +41,14 @@ func MergeWithOptions(
 		// so `mergo` does not have access to the original pointers
 		yamlCurrent, err := u.ConvertToYAML(current)
 		if err != nil {
-			errorStyle := theme.GetErrorStyle()
-			fmt.Fprintln(os.Stderr, errorStyle.Render(err.Error()))
-			return nil, err
+			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
+			return nil, fmt.Errorf("%w: failed to convert to YAML: %v", errUtils.ErrMerge, err)
 		}
 
 		dataCurrent, err := u.UnmarshalYAML[any](yamlCurrent)
 		if err != nil {
-			errorStyle := theme.GetErrorStyle()
-			fmt.Fprintln(os.Stderr, errorStyle.Render(err.Error()))
-			return nil, err
+			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
+			return nil, fmt.Errorf("%w: failed to unmarshal YAML: %v", errUtils.ErrMerge, err)
 		}
 
 		var opts []func(*mergo.Config)
@@ -67,39 +66,47 @@ func MergeWithOptions(
 		}
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			errorStyle := theme.GetErrorStyle()
-			fmt.Fprintln(os.Stderr, errorStyle.Render(err.Error()))
-			return nil, err
+			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
+			return nil, fmt.Errorf("%w: mergo merge failed: %v", errUtils.ErrMerge, err)
 		}
 	}
 
 	return merged, nil
 }
 
-// Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents
+// Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents.
 func Merge(
 	atmosConfig *schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
-	if atmosConfig.Settings.ListMergeStrategy == "" {
-		atmosConfig.Settings.ListMergeStrategy = ListMergeStrategyReplace
+	// Check for nil config to prevent panic
+	if atmosConfig == nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
 	}
 
-	if atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyReplace &&
-		atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyAppend &&
-		atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyMerge {
-		return nil, fmt.Errorf("invalid Atmos manifests list merge strategy '%s'.\n"+
-			"Supported list merge strategies are: %s.",
-			atmosConfig.Settings.ListMergeStrategy,
+	// Default to replace strategy if strategy is empty
+	strategy := ListMergeStrategyReplace
+	if atmosConfig.Settings.ListMergeStrategy != "" {
+		strategy = atmosConfig.Settings.ListMergeStrategy
+	}
+
+	if strategy != ListMergeStrategyReplace &&
+		strategy != ListMergeStrategyAppend &&
+		strategy != ListMergeStrategyMerge {
+		return nil, fmt.Errorf("%w: %w: '%s'. Supported list merge strategies are: %s",
+			errUtils.ErrMerge,
+			errUtils.ErrInvalidListMergeStrategy,
+			strategy,
 			fmt.Sprintf("%s, %s, %s", ListMergeStrategyReplace, ListMergeStrategyAppend, ListMergeStrategyMerge))
 	}
 
 	sliceDeepCopy := false
 	appendSlice := false
 
-	if atmosConfig.Settings.ListMergeStrategy == ListMergeStrategyMerge {
+	switch strategy {
+	case ListMergeStrategyMerge:
 		sliceDeepCopy = true
-	} else if atmosConfig.Settings.ListMergeStrategy == ListMergeStrategyAppend {
+	case ListMergeStrategyAppend:
 		appendSlice = true
 	}
 

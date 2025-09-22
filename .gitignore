@@ -55,3 +55,4 @@ coverage.html
 # Test output files
 tests/test_output.log
 test-atmos.yaml
+tests.test
