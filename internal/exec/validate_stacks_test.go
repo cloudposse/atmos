@@ -198,19 +198,24 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 			// Assert error is returned when expected parts are defined
 			if len(tt.expectedParts) > 0 {
 				assert.NotNil(t, err, "Expected an error but got none")
-				if err != nil {
-					errStr := err.Error()
-					t.Logf("Formatted error:\n%s", errStr)
+				if err == nil {
+					return
+				}
+				
+				errStr := err.Error()
+				t.Logf("Formatted error:\n%s", errStr)
 
-					// Assert all expected parts are present
-					for _, part := range tt.expectedParts {
-						if part != "" {
-							assert.Contains(t, errStr, part, "Error should contain token: %s", part)
-						}
+				// Assert all expected parts are present
+				for _, part := range tt.expectedParts {
+					if part != "" {
+						assert.Contains(t, errStr, part, "Error should contain token: %s", part)
 					}
 				}
-			} else if err != nil {
-				// If no expected parts, just log the error
+				return
+			}
+			
+			// If no expected parts, just log the error if it exists
+			if err != nil {
 				t.Logf("Error occurred: %v", err)
 			}
 		})

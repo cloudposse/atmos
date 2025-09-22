@@ -186,7 +186,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	// Second pass: only process top-level files (not imported by others)
 	for _, filePath := range stackConfigFilesAbsolutePaths {
 		relativeFilePath := u.TrimBasePathFromPath(atmosConfig.StacksBaseAbsolutePath+"/", filePath)
-		
+
 		// Normalize the path to match how imports are stored (without extension)
 		relativeFilePathNoExt := relativeFilePath
 		ext := filepath.Ext(relativeFilePath)

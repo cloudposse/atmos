@@ -121,7 +121,7 @@ func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 
 	// Wrap the original error to preserve the error chain
 	// This allows errors.Is() to work with sentinel errors
-	return fmt.Errorf("%w%s", err, sb.String()) //nolint:err113
+	return fmt.Errorf("%w%s", err, sb.String())
 }
 
 // GetImportChainString returns a formatted string of the import chain.
