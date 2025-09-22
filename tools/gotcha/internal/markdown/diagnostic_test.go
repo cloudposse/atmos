@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestWriteContentWithExitDiagnostic tests that exit code diagnostics are included in output
+// TestWriteContentWithExitDiagnostic tests that exit code diagnostics are included in output.
 func TestWriteContentWithExitDiagnostic(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -104,7 +104,7 @@ This suggests TestMain encountered an error but didn't properly exit. Check that
 	}
 }
 
-// TestDiagnosticInGitHubFormat tests that diagnostics appear in GitHub format output
+// TestDiagnosticInGitHubFormat tests that diagnostics appear in GitHub format output.
 func TestDiagnosticInGitHubFormat(t *testing.T) {
 	summary := &types.TestSummary{
 		Passed: []types.TestResult{

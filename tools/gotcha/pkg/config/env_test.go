@@ -770,7 +770,7 @@ func TestRuntimeVsConfiguration(t *testing.T) {
 	assert.True(t, IsGitHubActionsEnabled())
 }
 
-// Helper function to clear test environment variables
+// Helper function to clear test environment variables.
 func clearTestEnv() {
 	envVars := []string{
 		"CI", "GITHUB_ACTIONS", "GITHUB_RUN_ID", "GOTCHA_CI",

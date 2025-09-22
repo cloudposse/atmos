@@ -10,9 +10,9 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/constants"
 )
 
-// displayPackageResult outputs the buffered results for a completed package.
+// DisplayPackageResult outputs the buffered results for a completed package.
 //
-// mutually exclusive package states that require different user feedback:
+// Mutually exclusive package states that require different user feedback:
 // - Build failures need compilation errors shown (users need to see what broke)
 // - Empty packages need "[no test files]" indicator (so users know it's intentional)
 // - Test failures need failed test details (for debugging)

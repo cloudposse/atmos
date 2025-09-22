@@ -235,8 +235,7 @@ func getDiscriminator(logger *log.Logger) string {
 	return discriminator
 }
 
-// postGitHubComment posts a comment to GitHub PR if conditions are met.
-// setupGitHubToken ensures GitHub token is available via viper.
+// SetupGitHubToken ensures GitHub token is available via viper.
 func setupGitHubToken(cmd *cobra.Command) {
 	_ = viper.BindPFlag(FlagGithubToken, cmd.Flags().Lookup(FlagGithubToken))
 	_ = viper.BindEnv(FlagGithubToken, "GITHUB_TOKEN")

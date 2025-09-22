@@ -13,7 +13,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/cmd/gotcha/constants"
 )
 
-// TestExtractStreamConfig tests the extractStreamConfig function
+// TestExtractStreamConfig tests the extractStreamConfig function.
 func TestExtractStreamConfig(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -298,7 +298,7 @@ func TestExtractStreamConfig(t *testing.T) {
 	}
 }
 
-// TestExtractTestArguments tests the extractTestArguments function
+// TestExtractTestArguments tests the extractTestArguments function.
 func TestExtractTestArguments(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -411,7 +411,7 @@ func TestExtractTestArguments(t *testing.T) {
 	}
 }
 
-// TestParseTestPackages tests the parseTestPackages method
+// TestParseTestPackages tests the parseTestPackages method.
 func TestParseTestPackages(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -470,7 +470,7 @@ func TestParseTestPackages(t *testing.T) {
 	}
 }
 
-// TestDetectCIMode tests the detectCIMode method
+// TestDetectCIMode tests the detectCIMode method.
 func TestDetectCIMode(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -547,7 +547,7 @@ func TestDetectCIMode(t *testing.T) {
 	}
 }
 
-// TestAdjustFormatForCI tests the adjustFormatForCI method
+// TestAdjustFormatForCI tests the adjustFormatForCI method.
 func TestAdjustFormatForCI(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -610,7 +610,7 @@ func TestAdjustFormatForCI(t *testing.T) {
 	}
 }
 
-// TestAdjustShowFilterForVerbosity tests the adjustShowFilterForVerbosity method
+// TestAdjustShowFilterForVerbosity tests the adjustShowFilterForVerbosity method.
 func TestAdjustShowFilterForVerbosity(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -670,7 +670,7 @@ func TestAdjustShowFilterForVerbosity(t *testing.T) {
 	}
 }
 
-// TestNormalizePostingStrategyConfig tests the normalizePostingStrategy function in config context
+// TestNormalizePostingStrategyConfig tests the normalizePostingStrategy function in config context.
 func TestNormalizePostingStrategyConfig(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -730,7 +730,7 @@ func TestNormalizePostingStrategyConfig(t *testing.T) {
 	}
 }
 
-// TestViperBindings tests that viper bindings work correctly
+// TestViperBindings tests that viper bindings work correctly.
 func TestViperBindings(t *testing.T) {
 	t.Run("environment variable binding", func(t *testing.T) {
 		// Reset viper

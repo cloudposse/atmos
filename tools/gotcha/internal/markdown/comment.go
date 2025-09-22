@@ -53,8 +53,7 @@ func GenerateAdaptiveComment(summary *types.TestSummary, uuid string, platform s
 	return generateConciseComment(summary, uuid, platform)
 }
 
-// generateFullComment creates the full rich markdown content (same as job summaries).
-// writeUUIDComment writes the UUID magic comment to prevent duplicate GitHub comments.
+// WriteUUIDComment writes the UUID magic comment to prevent duplicate GitHub comments.
 func writeUUIDComment(output io.Writer, uuid string) {
 	if uuid != "" {
 		fmt.Fprintf(output, "<!-- test-summary-uuid: %s -->\n\n", uuid)

@@ -66,7 +66,7 @@ func TestMain_ErrorHandling(t *testing.T) {
 	}
 }
 
-// Helper function to test Main's error handling logic
+// Helper function to test Main's error handling logic.
 func processMainError(err error) int {
 	if err != nil {
 		// Check if it's a testFailureError

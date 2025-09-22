@@ -17,7 +17,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
-// TestFormatAndWriteOutput tests the formatAndWriteOutput function
+// TestFormatAndWriteOutput tests the formatAndWriteOutput function.
 func TestFormatAndWriteOutput(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -144,7 +144,7 @@ func TestFormatAndWriteOutput(t *testing.T) {
 	}
 }
 
-// TestPrepareTestPackages tests the prepareTestPackages function
+// TestPrepareTestPackages tests the prepareTestPackages function.
 func TestPrepareTestPackages(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -204,7 +204,7 @@ func TestPrepareTestPackages(t *testing.T) {
 	}
 }
 
-// TestLoadTestCountFromCache tests the loadTestCountFromCache function
+// TestLoadTestCountFromCache tests the loadTestCountFromCache function.
 func TestLoadTestCountFromCache(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -285,7 +285,7 @@ func TestLoadTestCountFromCache(t *testing.T) {
 	}
 }
 
-// TestHandleCICommentPosting tests the handleCICommentPosting function
+// TestHandleCICommentPosting tests the handleCICommentPosting function.
 func TestHandleCICommentPosting(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -387,8 +387,8 @@ func TestHandleCICommentPosting(t *testing.T) {
 	}
 }
 
-// TestRunStreamInteractive tests key aspects of runStreamInteractive
-// Note: Full testing of interactive mode requires mocking the TUI, which is complex
+// TestRunStreamInteractive tests key aspects of runStreamInteractive.
+// Note: Full testing of interactive mode requires mocking the TUI, which is complex.
 func TestRunStreamInteractive(t *testing.T) {
 	t.Run("sets global logger", func(t *testing.T) {
 		// Create a test logger
@@ -451,7 +451,7 @@ func TestRunStreamInteractive(t *testing.T) {
 	})
 }
 
-// TestRunStreamInCIWithSummary tests the CI mode execution
+// TestRunStreamInCIWithSummary tests the CI mode execution.
 func TestRunStreamInCIWithSummary(t *testing.T) {
 	t.Run("runs in CI mode", func(t *testing.T) {
 		// Create a test logger
@@ -488,7 +488,7 @@ func TestRunStreamInCIWithSummary(t *testing.T) {
 	})
 }
 
-// TestProcessTestOutputWithSummary tests processing test output
+// TestProcessTestOutputWithSummary tests processing test output.
 func TestProcessTestOutputWithSummary(t *testing.T) {
 	tests := []struct {
 		name    string

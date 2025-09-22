@@ -16,7 +16,7 @@ import (
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 )
 
-// TestNewParseCmd tests the newParseCmd function
+// TestNewParseCmd tests the newParseCmd function.
 func TestNewParseCmd(t *testing.T) {
 	logger := log.New(os.Stderr)
 	cmd := newParseCmd(logger)
@@ -38,7 +38,7 @@ func TestNewParseCmd(t *testing.T) {
 	}
 }
 
-// TestHandleOutputFormat tests the handleOutputFormat function
+// TestHandleOutputFormat tests the handleOutputFormat function.
 func TestHandleOutputFormat(t *testing.T) {
 	// Create test summary
 	testSummary := &types.TestSummary{
@@ -168,7 +168,7 @@ func TestHandleOutputFormat(t *testing.T) {
 	}
 }
 
-// TestBindParseFlags tests the bindParseFlags function
+// TestBindParseFlags tests the bindParseFlags function.
 func TestBindParseFlags(t *testing.T) {
 	// Reset viper before test
 	viper.Reset()
@@ -207,7 +207,7 @@ func TestBindParseFlags(t *testing.T) {
 	assert.Equal(t, "always", viper.GetString("post-comment"))
 }
 
-// TestRunParse tests the runParse function
+// TestRunParse tests the runParse function.
 func TestRunParse(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -380,7 +380,7 @@ func TestRunParse(t *testing.T) {
 	}
 }
 
-// TestReplayWithStreamProcessor tests the replayWithStreamProcessor function
+// TestReplayWithStreamProcessor tests the replayWithStreamProcessor function.
 func TestReplayWithStreamProcessor(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -461,7 +461,7 @@ func TestReplayWithStreamProcessor(t *testing.T) {
 	}
 }
 
-// TestParseCommandIntegration tests the parse command as a whole
+// TestParseCommandIntegration tests the parse command as a whole.
 func TestParseCommandIntegration(t *testing.T) {
 	t.Run("parse command help", func(t *testing.T) {
 		logger := log.New(os.Stderr)

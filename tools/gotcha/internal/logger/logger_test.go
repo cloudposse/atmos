@@ -248,13 +248,13 @@ func TestMultipleSetLogger(t *testing.T) {
 	assert.NotSame(t, logger1, GetLogger())
 }
 
-// Helper function to reset the global logger state for testing
+// Helper function to reset the global logger state for testing.
 func resetGlobalLogger() {
 	globalLogger = nil
 	once = sync.Once{}
 }
 
-// TestMain ensures clean test environment
+// TestMain ensures clean test environment.
 func TestMain(m *testing.M) {
 	// Reset before running tests
 	resetGlobalLogger()

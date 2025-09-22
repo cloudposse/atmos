@@ -13,7 +13,8 @@ import (
 
 // RunSimpleStream runs tests with simple non-interactive streaming output.
 func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, verbosityLevel string) int {
-	// Check if we're in test mode to prevent recursive test execution
+	// Check if we're in test mode to prevent recursive test execution.
+	//nolint:forbidigo // GOTCHA_TEST_MODE is internal for preventing test recursion, not a user-configurable env var
 	if os.Getenv("GOTCHA_TEST_MODE") == "1" {
 		logger.GetLogger().Debug("Skipping test execution in test mode")
 		return 0

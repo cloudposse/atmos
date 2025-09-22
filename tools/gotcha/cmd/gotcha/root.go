@@ -205,7 +205,6 @@ func initConfig() {
 	}
 }
 
-// Execute runs the root command.
 // createRootCommand creates and configures the root cobra command.
 func createRootCommand() *cobra.Command {
 	return &cobra.Command{
@@ -300,6 +299,7 @@ func createSignalContext() context.Context {
 	return ctx
 }
 
+// Execute runs the root command.
 func Execute() error {
 	// Initialize environment configuration first to avoid os.Getenv usage
 	config.InitEnvironment()

@@ -17,9 +17,9 @@ const (
 	DisplayNotAvailable = "N/A"
 )
 
-// processEvent handles individual test events from the JSON stream.
+// ProcessEvent handles individual test events from the JSON stream.
 //
-// interleaves events from multiple packages and tests running in parallel. We must:
+// Interleaves events from multiple packages and tests running in parallel. We must:
 // - Track state for each package independently (they run concurrently)
 // - Distinguish package events from test events (same JSON structure, different semantics)
 // - Handle output events that may arrive before/after their associated test events

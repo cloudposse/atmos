@@ -32,7 +32,6 @@ const (
 	ExitCodeSIGINT = 130
 )
 
-// newStreamCmd creates the stream subcommand.
 // createStreamCommand creates and configures the stream cobra command.
 func createStreamCommand(logger *log.Logger) *cobra.Command {
 	streamCmd := &cobra.Command{
@@ -111,6 +110,7 @@ func addCIIntegrationFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool(FlagExcludeMocks, true, "Exclude mock files from coverage calculations")
 }
 
+// NewStreamCmd creates the stream subcommand.
 func newStreamCmd(logger *log.Logger) *cobra.Command {
 	streamCmd := createStreamCommand(logger)
 
