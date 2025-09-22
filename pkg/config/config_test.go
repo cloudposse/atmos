@@ -405,10 +405,10 @@ vendor:
 }
 
 func TestMergeConfig_ImportOverrideBehavior(t *testing.T) {
-	// Test that the main config file's settings override imported settings
+	// Test that the main config file's settings override imported settings.
 	tempDir := t.TempDir()
 
-	// Create an import file with a command
+	// Create an import file with a command.
 	importDir := filepath.Join(tempDir, "imports")
 	err := os.Mkdir(importDir, 0o755)
 	require.NoError(t, err)
@@ -423,7 +423,7 @@ settings:
 `
 	createConfigFile(t, importDir, "commands.yaml", importContent)
 
-	// Create main config that imports the above file and overrides the command
+	// Create main config that imports the above file and overrides the command.
 	mainContent := `
 base_path: ./
 import:
@@ -442,22 +442,35 @@ settings:
 	err = mergeConfig(v, tempDir, CliConfigFileName, true)
 	assert.NoError(t, err)
 
-	// Verify that main config overrides imports
+	// Verify that main config overrides imports.
 	commands := v.Get("commands")
 	assert.NotNil(t, commands)
 
-	// The main config's settings should override imported settings
+	// Verify that commands were replaced, not appended.
+	commandsList, ok := commands.([]interface{})
+	assert.True(t, ok, "commands should be a slice")
+	assert.Equal(t, 1, len(commandsList), "should have exactly one command (imported commands replaced)")
+
+	// Verify the single command is from the main config.
+	if len(commandsList) > 0 {
+		cmd, ok := commandsList[0].(map[string]interface{})
+		assert.True(t, ok, "command should be a map")
+		assert.Equal(t, "main-command", cmd["name"], "command should be from main config")
+		assert.Equal(t, "This is from main", cmd["description"])
+	}
+
+	// The main config's settings should override imported settings.
 	assert.Equal(t, "from-main", v.GetString("settings.shared"))
 	assert.True(t, v.GetBool("settings.main"))
 	// Note: settings.imported is NOT present because the entire settings section
-	// from the main config replaces the imported settings section
+	// from the main config replaces the imported settings section.
 }
 
 func TestMergeConfig_ImportDeepMerge(t *testing.T) {
-	// Test that imports are deep merged at the top level, but sections are replaced
+	// Test that imports are deep merged at the top level, but sections are replaced.
 	tempDir := t.TempDir()
 
-	// Create an import file with various settings
+	// Create an import file with various settings.
 	importDir := filepath.Join(tempDir, "imports")
 	err := os.Mkdir(importDir, 0o755)
 	require.NoError(t, err)
@@ -473,7 +486,7 @@ logs:
 `
 	createConfigFile(t, importDir, "base.yaml", importContent)
 
-	// Create main config that imports and partially overrides
+	// Create main config that imports and partially overrides.
 	mainContent := `
 base_path: ./
 import:
@@ -491,34 +504,34 @@ logs:
 	err = mergeConfig(v, tempDir, CliConfigFileName, true)
 	assert.NoError(t, err)
 
-	// base_path from main config should override import
+	// base_path from main config should override import.
 	assert.Equal(t, "./", v.GetString("base_path"))
 
-	// vendor section is completely replaced by main config
+	// vendor section is completely replaced by main config.
 	assert.Equal(t, "/main/vendor", v.GetString("vendor.base_path"))
 	assert.Equal(t, "main", v.GetString("vendor.setting2"))
-	assert.Equal(t, "", v.GetString("vendor.setting1")) // should be empty, not "imported"
+	assert.False(t, v.IsSet("vendor.setting1"), "vendor.setting1 should not exist (section replaced)")
 
-	// logs section is completely replaced by main config
+	// logs section is completely replaced by main config.
 	assert.Equal(t, "Info", v.GetString("logs.level"))
-	assert.Equal(t, "", v.GetString("logs.file")) // should be empty, not "/imported.log"
+	assert.False(t, v.IsSet("logs.file"), "logs.file should not exist (section replaced)")
 }
 
 func TestMergeConfig_ProcessImportsWithInvalidYAML(t *testing.T) {
-	// Test error handling when import file contains invalid YAML
+	// Test error handling when import file contains invalid YAML.
 	tempDir := t.TempDir()
 
-	// Create an import file with invalid YAML
+	// Create an import file with invalid YAML.
 	importDir := filepath.Join(tempDir, "imports")
 	err := os.Mkdir(importDir, 0o755)
 	require.NoError(t, err)
 
-	// Write invalid YAML content directly
+	// Write invalid YAML content directly.
 	invalidYAMLPath := filepath.Join(importDir, "invalid.yaml")
 	err = os.WriteFile(invalidYAMLPath, []byte("invalid: yaml: content:\n  - with bad indentation\n    and broken structure"), 0o644)
 	require.NoError(t, err)
 
-	// Create main config that tries to import the invalid file
+	// Create main config that tries to import the invalid file.
 	mainContent := `
 base_path: ./
 import:
@@ -528,7 +541,7 @@ import:
 
 	v := viper.New()
 	v.SetConfigType("yaml")
-	// This should still succeed as invalid imports are logged but not fatal
+	// This should still succeed as invalid imports are logged but not fatal.
 	err = mergeConfig(v, tempDir, CliConfigFileName, true)
 	assert.NoError(t, err)
 }
