@@ -208,8 +208,8 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// uploadInstanceStatus uploads the terraform results to the pro API.
-func uploadInstanceStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+// uploadDeploymentStatus uploads the terraform results to the pro API.
+func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
 	// Only upload if exit code is 0 (no changes) or 2 (changes)
 	if exitCode != 0 && exitCode != 2 {
 		return nil
@@ -248,7 +248,7 @@ func uploadInstanceStatus(info *schema.ConfigAndStacksInfo, exitCode int, client
 		HasDrift:      exitCode == 2,
 	}
 
-	// Upload the instance status
+	// Upload the deployment status
 	if err := client.UploadInstanceStatus(&dto); err != nil {
 		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToUploadInstanceStatus, err)
 	}
@@ -256,8 +256,8 @@ func uploadInstanceStatus(info *schema.ConfigAndStacksInfo, exitCode int, client
 	return nil
 }
 
-// shouldUploadInstanceStatus determines if instance status should be uploaded.
-func shouldUploadInstanceStatus(info *schema.ConfigAndStacksInfo) bool {
+// shouldUploadDeploymentStatus determines if deployment status should be uploaded.
+func shouldUploadDeploymentStatus(info *schema.ConfigAndStacksInfo) bool {
 	// Only upload for plan command
 	if info.SubCommand != "plan" {
 		return false

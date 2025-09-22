@@ -73,7 +73,7 @@ func createTestInfo(proEnabled bool) schema.ConfigAndStacksInfo {
 	return info
 }
 
-func TestShouldUploadInstanceStatus(t *testing.T) {
+func TestShouldUploadDeploymentStatus(t *testing.T) {
 	testCases := []struct {
 		name     string
 		info     *schema.ConfigAndStacksInfo
@@ -127,13 +127,13 @@ func TestShouldUploadInstanceStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := shouldUploadInstanceStatus(tc.info)
+			result := shouldUploadDeploymentStatus(tc.info)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
 }
 
-func TestUploadInstanceStatus(t *testing.T) {
+func TestUploadDeploymentStatus(t *testing.T) {
 	// Create test repo info
 	testRepoInfo := &atmosgit.RepoInfo{
 		RepoUrl:   "https://github.com/test/repo",
@@ -201,7 +201,7 @@ func TestUploadInstanceStatus(t *testing.T) {
 			}
 
 			// Call the function
-			err := uploadInstanceStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
+			err := uploadDeploymentStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
 
 			// Check results
 			if tc.expectedError {

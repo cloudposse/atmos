@@ -108,7 +108,7 @@ const (
 	AtmosProRunIDEnvVarName       = "ATMOS_PRO_RUN_ID"
 	AtmosProDefaultBaseUrl        = "https://atmos-pro.com"
 	AtmosProDefaultEndpoint       = "api/v1"
-	UploadInstanceStatusFlag      = "upload-instance-status"
+	UploadDeploymentStatusFlag    = "upload-deployment-status"
 
 	TerraformDefaultWorkspace = "default"
 
