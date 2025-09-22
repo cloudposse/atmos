@@ -277,6 +277,14 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 		return err
 	}
 
+	configFilePath := tempViper.ConfigFileUsed()
+
+	// Read the original config file content before processing imports
+	content, err := os.ReadFile(configFilePath)
+	if err != nil {
+		return err
+	}
+
 	if processImports {
 		if err := mergeDefaultImports(path, tempViper); err != nil {
 			log.Debug("error process imports", "path", path, "error", err)
@@ -284,13 +292,13 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 		if err := mergeImports(tempViper); err != nil {
 			log.Debug("error process imports", "file", tempViper.ConfigFileUsed(), "error", err)
 		}
-	}
 
-	configFilePath := tempViper.ConfigFileUsed()
-
-	content, err := os.ReadFile(configFilePath)
-	if err != nil {
-		return err
+		// Re-merge the original config content to ensure it takes precedence over imports
+		// This is necessary because imports should not override the main config
+		err = tempViper.MergeConfig(bytes.NewReader(content))
+		if err != nil {
+			return err
+		}
 	}
 
 	err = preprocessAtmosYamlFunc(content, tempViper)
