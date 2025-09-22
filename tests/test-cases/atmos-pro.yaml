@@ -1,17 +1,17 @@
 tests:
-  - name: atmos list deployments
+  - name: atmos list instances
     snapshot: true
     enabled: true
     tty: true
     skip:
       # PTY not supported on windows
       os: !not windows
-    description: "Ensure Atmos processes deployments"
+    description: "Ensure Atmos processes instances"
     workdir: "fixtures/scenarios/atmos-pro"
     command: "atmos"
     args:
       - "list"
-      - "deployments"
+      - "instances"
     expect:
       exit_code: 0
       stdout:
@@ -22,16 +22,16 @@ tests:
         - "mock/drift.*prod"
         - "mock/nodrift.*prod"
 
-  - name: atmos list deployments no tty
+  - name: atmos list instances no tty
     snapshot: true
     enabled: true
     tty: false
-    description: "Ensure Atmos processes deployments without TTY"
+    description: "Ensure Atmos processes instances without TTY"
     workdir: "fixtures/scenarios/atmos-pro"
     command: "atmos"
     args:
       - "list"
-      - "deployments"
+      - "instances"
     expect:
       exit_code: 0
       stdout:

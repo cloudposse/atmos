@@ -9,17 +9,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// listDeploymentsCmd lists atmos deployments.
-var listDeploymentsCmd = &cobra.Command{
-	Use:                "deployments",
-	Short:              "List all Atmos deployments",
-	Long:               "This command lists all Atmos deployments or is used to upload deployments to the pro API.",
+// listInstancesCmd lists atmos instances.
+var listInstancesCmd = &cobra.Command{
+	Use:                "instances",
+	Short:              "List all Atmos instances",
+	Long:               "This command lists all Atmos instances or is used to upload instances to the pro API.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
-		err := ExecuteListDeploymentsCmd(cmd, args)
+		err := ExecuteListInstancesCmd(cmd, args)
 		if err != nil {
 			return err
 		}
@@ -29,19 +29,19 @@ var listDeploymentsCmd = &cobra.Command{
 
 func init() {
 	// Add common list flags
-	fl.AddCommonListFlags(listDeploymentsCmd)
+	fl.AddCommonListFlags(listInstancesCmd)
 
-	// Add deployment-specific flags
-	listDeploymentsCmd.Flags().Bool("upload", false, "Upload deployments to pro API")
+	// Add instance-specific flags
+	listInstancesCmd.Flags().Bool("upload", false, "Upload instances to pro API")
 
 	// Add the command to the list command
-	listCmd.AddCommand(listDeploymentsCmd)
+	listCmd.AddCommand(listInstancesCmd)
 }
 
-func ExecuteListDeploymentsCmd(cmd *cobra.Command, args []string) error {
+func ExecuteListInstancesCmd(cmd *cobra.Command, args []string) error {
 	info := &schema.ConfigAndStacksInfo{}
 	info.Command = "list"
-	info.SubCommand = "deployments"
+	info.SubCommand = "instances"
 
 	// Process and validate command line arguments
 	_, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
@@ -49,5 +49,5 @@ func ExecuteListDeploymentsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return list.ExecuteListDeploymentsCmd(info, cmd, args)
+	return list.ExecuteListInstancesCmd(info, cmd, args)
 }

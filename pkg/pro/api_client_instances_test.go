@@ -15,7 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestUploadDeployments(t *testing.T) {
+func TestUploadInstances(t *testing.T) {
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -25,12 +25,12 @@ func TestUploadDeployments(t *testing.T) {
 		HTTPClient:      httpClient,
 	}
 
-	dto := dtos.DeploymentsUploadRequest{
+	dto := dtos.InstancesUploadRequest{
 		RepoURL:   "https://github.com/org/repo",
 		RepoName:  "repo",
 		RepoOwner: "org",
 		RepoHost:  "github.com",
-		Deployments: []schema.Deployment{
+		Instances: []schema.Instance{
 			{
 				Component:     "vpc",
 				Stack:         "tenant1-ue2-dev",
@@ -78,13 +78,13 @@ func TestUploadDeployments(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err := apiClient.UploadDeployments(&dto)
+	err := apiClient.UploadInstances(&dto)
 	assert.NoError(t, err)
 
 	mockRoundTripper.AssertExpectations(t)
 }
 
-func TestUploadDeployments_Error(t *testing.T) {
+func TestUploadInstances_Error(t *testing.T) {
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -94,12 +94,12 @@ func TestUploadDeployments_Error(t *testing.T) {
 		HTTPClient:      httpClient,
 	}
 
-	dto := dtos.DeploymentsUploadRequest{
+	dto := dtos.InstancesUploadRequest{
 		RepoURL:   "https://github.com/org/repo",
 		RepoName:  "repo",
 		RepoOwner: "org",
 		RepoHost:  "github.com",
-		Deployments: []schema.Deployment{
+		Instances: []schema.Instance{
 			{
 				Component:     "vpc",
 				Stack:         "tenant1-ue2-dev",
@@ -147,9 +147,9 @@ func TestUploadDeployments_Error(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err := apiClient.UploadDeployments(&dto)
+	err := apiClient.UploadInstances(&dto)
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrFailedToUploadDeployments))
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToUploadInstances))
 
 	mockRoundTripper.AssertExpectations(t)
 }

@@ -1,7 +1,7 @@
 package schema
 
-// Deployment represents a deployment of a component for a specific stack.
-type Deployment struct {
+// Instance represents an instance of a component for a specific stack.
+type Instance struct {
 	Component     string              `yaml:"component" json:"component" mapstructure:"component"`
 	Stack         string              `yaml:"stack" json:"stack" mapstructure:"stack"`
 	ComponentType string              `yaml:"component_type" json:"component_type" mapstructure:"component_type"`

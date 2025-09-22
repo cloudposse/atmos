@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDeploymentStatusUploadRequest(t *testing.T) {
+func TestInstanceStatusUploadRequest(t *testing.T) {
 	t.Run("valid request with all fields", func(t *testing.T) {
-		req := DeploymentStatusUploadRequest{
+		req := InstanceStatusUploadRequest{
 			AtmosProRunID: "run-123",
 			GitSHA:        "abc123def456",
 			RepoURL:       "https://github.com/test-owner/test-repo",
@@ -33,7 +33,7 @@ func TestDeploymentStatusUploadRequest(t *testing.T) {
 	})
 
 	t.Run("valid request with minimal fields", func(t *testing.T) {
-		req := DeploymentStatusUploadRequest{
+		req := InstanceStatusUploadRequest{
 			RepoName:  "test-repo",
 			RepoOwner: "test-owner",
 			Component: "test-component",
@@ -53,9 +53,9 @@ func TestDeploymentStatusUploadRequest(t *testing.T) {
 	})
 }
 
-func TestDeploymentsUploadRequest(t *testing.T) {
-	t.Run("valid request with deployments", func(t *testing.T) {
-		deployments := []schema.Deployment{
+func TestInstancesUploadRequest(t *testing.T) {
+	t.Run("valid request with instances", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component:     "web-app",
 				Stack:         "prod",
@@ -78,54 +78,54 @@ func TestDeploymentsUploadRequest(t *testing.T) {
 			},
 		}
 
-		req := DeploymentsUploadRequest{
-			RepoURL:     "https://github.com/test-owner/test-repo",
-			RepoName:    "test-repo",
-			RepoOwner:   "test-owner",
-			RepoHost:    "github.com",
-			Deployments: deployments,
+		req := InstancesUploadRequest{
+			RepoURL:   "https://github.com/test-owner/test-repo",
+			RepoName:  "test-repo",
+			RepoOwner: "test-owner",
+			RepoHost:  "github.com",
+			Instances: instances,
 		}
 
 		assert.Equal(t, "https://github.com/test-owner/test-repo", req.RepoURL)
 		assert.Equal(t, "test-repo", req.RepoName)
 		assert.Equal(t, "test-owner", req.RepoOwner)
 		assert.Equal(t, "github.com", req.RepoHost)
-		assert.Len(t, req.Deployments, 2)
+		assert.Len(t, req.Instances, 2)
 
-		// Test first deployment
-		assert.Equal(t, "web-app", req.Deployments[0].Component)
-		assert.Equal(t, "prod", req.Deployments[0].Stack)
-		assert.Equal(t, "terraform", req.Deployments[0].ComponentType)
-		assert.Equal(t, map[string]interface{}{"drift_detection_enabled": true}, req.Deployments[0].Settings)
-		assert.Equal(t, map[string]interface{}{"environment": "prod"}, req.Deployments[0].Vars)
-		assert.Equal(t, map[string]interface{}{"TF_VAR_region": "us-west-2"}, req.Deployments[0].Env)
-		assert.Equal(t, map[string]interface{}{"type": "s3"}, req.Deployments[0].Backend)
-		assert.Equal(t, map[string]interface{}{"description": "Web application"}, req.Deployments[0].Metadata)
+		// Test first instance
+		assert.Equal(t, "web-app", req.Instances[0].Component)
+		assert.Equal(t, "prod", req.Instances[0].Stack)
+		assert.Equal(t, "terraform", req.Instances[0].ComponentType)
+		assert.Equal(t, map[string]interface{}{"drift_detection_enabled": true}, req.Instances[0].Settings)
+		assert.Equal(t, map[string]interface{}{"environment": "prod"}, req.Instances[0].Vars)
+		assert.Equal(t, map[string]interface{}{"TF_VAR_region": "us-west-2"}, req.Instances[0].Env)
+		assert.Equal(t, map[string]interface{}{"type": "s3"}, req.Instances[0].Backend)
+		assert.Equal(t, map[string]interface{}{"description": "Web application"}, req.Instances[0].Metadata)
 
-		// Test second deployment
-		assert.Equal(t, "api", req.Deployments[1].Component)
-		assert.Equal(t, "staging", req.Deployments[1].Stack)
-		assert.Equal(t, "helm", req.Deployments[1].ComponentType)
-		assert.Equal(t, map[string]interface{}{"drift_detection_enabled": false}, req.Deployments[1].Settings)
-		assert.Equal(t, map[string]interface{}{"environment": "staging"}, req.Deployments[1].Vars)
-		assert.Equal(t, map[string]interface{}{"HELM_NAMESPACE": "staging"}, req.Deployments[1].Env)
-		assert.Equal(t, map[string]interface{}{"type": "local"}, req.Deployments[1].Backend)
-		assert.Equal(t, map[string]interface{}{"description": "API service"}, req.Deployments[1].Metadata)
+		// Test second instance
+		assert.Equal(t, "api", req.Instances[1].Component)
+		assert.Equal(t, "staging", req.Instances[1].Stack)
+		assert.Equal(t, "helm", req.Instances[1].ComponentType)
+		assert.Equal(t, map[string]interface{}{"drift_detection_enabled": false}, req.Instances[1].Settings)
+		assert.Equal(t, map[string]interface{}{"environment": "staging"}, req.Instances[1].Vars)
+		assert.Equal(t, map[string]interface{}{"HELM_NAMESPACE": "staging"}, req.Instances[1].Env)
+		assert.Equal(t, map[string]interface{}{"type": "local"}, req.Instances[1].Backend)
+		assert.Equal(t, map[string]interface{}{"description": "API service"}, req.Instances[1].Metadata)
 	})
 
-	t.Run("valid request with empty deployments", func(t *testing.T) {
-		req := DeploymentsUploadRequest{
-			RepoURL:     "https://github.com/test-owner/test-repo",
-			RepoName:    "test-repo",
-			RepoOwner:   "test-owner",
-			RepoHost:    "github.com",
-			Deployments: []schema.Deployment{},
+	t.Run("valid request with empty instances", func(t *testing.T) {
+		req := InstancesUploadRequest{
+			RepoURL:   "https://github.com/test-owner/test-repo",
+			RepoName:  "test-repo",
+			RepoOwner: "test-owner",
+			RepoHost:  "github.com",
+			Instances: []schema.Instance{},
 		}
 
 		assert.Equal(t, "https://github.com/test-owner/test-repo", req.RepoURL)
 		assert.Equal(t, "test-repo", req.RepoName)
 		assert.Equal(t, "test-owner", req.RepoOwner)
 		assert.Equal(t, "github.com", req.RepoHost)
-		assert.Len(t, req.Deployments, 0)
+		assert.Len(t, req.Instances, 0)
 	})
 }

@@ -388,7 +388,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Prepare the terraform command
 	allArgsAndFlags := strings.Fields(info.SubCommand)
-	uploadDeploymentStatusFlag := false
+	uploadInstanceStatusFlag := false
 
 	switch info.SubCommand {
 	case "plan":
@@ -401,13 +401,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
 		// Check if the upload-drift-results flag is set in the command line arguments
-		uploadDeploymentStatusFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag)
-		if uploadDeploymentStatusFlag {
+		uploadInstanceStatusFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadInstanceStatusFlag)
+		if uploadInstanceStatusFlag {
 			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
 				allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
 			}
 			// Remove the upload-drift-results flag from the command line arguments
-			info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag)
+			info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadInstanceStatusFlag)
 		}
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
@@ -556,7 +556,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		)
 		if err != nil {
 			// For Terraform Plan, we need to return the result to the pro API if upload flag is set
-			if uploadDeploymentStatusFlag && shouldUploadDeploymentStatus(&info) {
+			if uploadInstanceStatusFlag && shouldUploadInstanceStatus(&info) {
 				var exitCode int
 				var osErr *osexec.ExitError
 				if errors.As(err, &osErr) {
@@ -574,7 +574,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				// Use the default git repo implementation
 				gitRepo := &git.DefaultGitRepo{}
 
-				if err := uploadDeploymentStatus(&info, exitCode, client, gitRepo); err != nil {
+				if err := uploadInstanceStatus(&info, exitCode, client, gitRepo); err != nil {
 					return err
 				}
 

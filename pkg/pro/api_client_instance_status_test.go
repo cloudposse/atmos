@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestUploadDeploymentStatus(t *testing.T) {
+func TestUploadInstanceStatus(t *testing.T) {
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -21,7 +21,7 @@ func TestUploadDeploymentStatus(t *testing.T) {
 		HTTPClient:      httpClient,
 	}
 
-	dto := dtos.DeploymentStatusUploadRequest{}
+	dto := dtos.InstanceStatusUploadRequest{}
 
 	mockResponse := &http.Response{
 		StatusCode: http.StatusOK,
@@ -30,13 +30,13 @@ func TestUploadDeploymentStatus(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err := apiClient.UploadDeploymentStatus(&dto)
+	err := apiClient.UploadInstanceStatus(&dto)
 	assert.NoError(t, err)
 
 	mockRoundTripper.AssertExpectations(t)
 }
 
-func TestUploadDeploymentStatus_Error(t *testing.T) {
+func TestUploadInstanceStatus_Error(t *testing.T) {
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -46,7 +46,7 @@ func TestUploadDeploymentStatus_Error(t *testing.T) {
 		HTTPClient:      httpClient,
 	}
 
-	dto := dtos.DeploymentStatusUploadRequest{}
+	dto := dtos.InstanceStatusUploadRequest{}
 
 	mockResponse := &http.Response{
 		StatusCode: http.StatusInternalServerError,
@@ -55,9 +55,9 @@ func TestUploadDeploymentStatus_Error(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err := apiClient.UploadDeploymentStatus(&dto)
+	err := apiClient.UploadInstanceStatus(&dto)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to upload deployment status")
+	assert.Contains(t, err.Error(), "failed to upload instance status")
 
 	mockRoundTripper.AssertExpectations(t)
 }

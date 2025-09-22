@@ -71,8 +71,8 @@ func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse
 
 // AtmosProAPIClientInterface defines the interface for the AtmosProAPIClient.
 type AtmosProAPIClientInterface interface {
-	UploadDeployments(req *dtos.DeploymentsUploadRequest) error
-	UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error
+	UploadInstances(req *dtos.InstancesUploadRequest) error
+	UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error
 }
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API.

@@ -208,8 +208,8 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// uploadDeploymentStatus uploads the terraform results to the pro API.
-func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+// uploadInstanceStatus uploads the terraform results to the pro API.
+func uploadInstanceStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
 	// Only upload if exit code is 0 (no changes) or 2 (changes)
 	if exitCode != 0 && exitCode != 2 {
 		return nil
@@ -236,7 +236,7 @@ func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, clie
 	atmosProRunID := os.Getenv("ATMOS_PRO_RUN_ID")
 
 	// Create the DTO
-	dto := dtos.DeploymentStatusUploadRequest{
+	dto := dtos.InstanceStatusUploadRequest{
 		AtmosProRunID: atmosProRunID,
 		GitSHA:        gitSHA,
 		RepoURL:       repoInfo.RepoUrl,
@@ -248,16 +248,16 @@ func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, clie
 		HasDrift:      exitCode == 2,
 	}
 
-	// Upload the deployment status
-	if err := client.UploadDeploymentStatus(&dto); err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToUploadDeploymentStatus, err)
+	// Upload the instance status
+	if err := client.UploadInstanceStatus(&dto); err != nil {
+		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToUploadInstanceStatus, err)
 	}
 
 	return nil
 }
 
-// shouldUploadDeploymentStatus determines if deployment status should be uploaded.
-func shouldUploadDeploymentStatus(info *schema.ConfigAndStacksInfo) bool {
+// shouldUploadInstanceStatus determines if instance status should be uploaded.
+func shouldUploadInstanceStatus(info *schema.ConfigAndStacksInfo) bool {
 	// Only upload for plan command
 	if info.SubCommand != "plan" {
 		return false

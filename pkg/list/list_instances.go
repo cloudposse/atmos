@@ -27,33 +27,33 @@ const (
 	stackHeader     = "Stack"
 )
 
-// processComponentConfig processes a single component configuration and returns a deployment if valid.
-func processComponentConfig(stackName, componentName, componentType string, componentConfig interface{}) *schema.Deployment {
+// processComponentConfig processes a single component configuration and returns an instance if valid.
+func processComponentConfig(stackName, componentName, componentType string, componentConfig interface{}) *schema.Instance {
 	componentConfigMap, ok := componentConfig.(map[string]any)
 	if !ok {
 		return nil
 	}
-	return createDeployment(stackName, componentName, componentType, componentConfigMap)
+	return createInstance(stackName, componentName, componentType, componentConfigMap)
 }
 
 // processComponentType processes all components of a specific type in a stack.
-func processComponentType(stackName, componentType string, typeComponents interface{}) []schema.Deployment {
+func processComponentType(stackName, componentType string, typeComponents interface{}) []schema.Instance {
 	typeComponentsMap, ok := typeComponents.(map[string]any)
 	if !ok {
 		return nil
 	}
 
-	var deployments []schema.Deployment
+	var instances []schema.Instance
 	for componentName, componentConfig := range typeComponentsMap {
-		if deployment := processComponentConfig(stackName, componentName, componentType, componentConfig); deployment != nil {
-			deployments = append(deployments, *deployment)
+		if instance := processComponentConfig(stackName, componentName, componentType, componentConfig); instance != nil {
+			instances = append(instances, *instance)
 		}
 	}
-	return deployments
+	return instances
 }
 
 // processStackComponents processes all components in a stack.
-func processStackComponents(stackName string, stackConfig interface{}) []schema.Deployment {
+func processStackComponents(stackName string, stackConfig interface{}) []schema.Instance {
 	stackConfigMap, ok := stackConfig.(map[string]any)
 	if !ok {
 		return nil
@@ -64,29 +64,29 @@ func processStackComponents(stackName string, stackConfig interface{}) []schema.
 		return nil
 	}
 
-	var deployments []schema.Deployment
+	var instances []schema.Instance
 	for componentType, typeComponents := range components {
-		if typeDeployments := processComponentType(stackName, componentType, typeComponents); typeDeployments != nil {
-			deployments = append(deployments, typeDeployments...)
+		if typeInstances := processComponentType(stackName, componentType, typeComponents); typeInstances != nil {
+			instances = append(instances, typeInstances...)
 		}
 	}
-	return deployments
+	return instances
 }
 
-// collectDeployments collects all deployments from the stacks map.
-func collectDeployments(stacksMap map[string]interface{}) []schema.Deployment {
-	var deployments []schema.Deployment
+// collectInstances collects all instances from the stacks map.
+func collectInstances(stacksMap map[string]interface{}) []schema.Instance {
+	var instances []schema.Instance
 	for stackName, stackConfig := range stacksMap {
-		if stackDeployments := processStackComponents(stackName, stackConfig); stackDeployments != nil {
-			deployments = append(deployments, stackDeployments...)
+		if stackInstances := processStackComponents(stackName, stackConfig); stackInstances != nil {
+			instances = append(instances, stackInstances...)
 		}
 	}
-	return deployments
+	return instances
 }
 
-// createDeployment creates a deployment from the component configuration.
-func createDeployment(stackName, componentName, componentType string, componentConfigMap map[string]any) *schema.Deployment {
-	deployment := &schema.Deployment{
+// createInstance creates an instance from the component configuration.
+func createInstance(stackName, componentName, componentType string, componentConfigMap map[string]any) *schema.Instance {
+	instance := &schema.Instance{
 		Component:     componentName,
 		Stack:         stackName,
 		ComponentType: componentType,
@@ -98,33 +98,33 @@ func createDeployment(stackName, componentName, componentType string, componentC
 	}
 
 	if settings, ok := componentConfigMap["settings"].(map[string]any); ok {
-		deployment.Settings = settings
+		instance.Settings = settings
 	}
 	if vars, ok := componentConfigMap["vars"].(map[string]any); ok {
-		deployment.Vars = vars
+		instance.Vars = vars
 	}
 	if env, ok := componentConfigMap["env"].(map[string]any); ok {
-		deployment.Env = env
+		instance.Env = env
 	}
 	if backend, ok := componentConfigMap["backend"].(map[string]any); ok {
-		deployment.Backend = backend
+		instance.Backend = backend
 	}
 	if metadata, ok := componentConfigMap["metadata"].(map[string]any); ok {
-		deployment.Metadata = metadata
+		instance.Metadata = metadata
 	}
 
 	// Skip abstract components.
-	if metadataType, ok := deployment.Metadata["type"].(string); ok && metadataType == "abstract" {
+	if metadataType, ok := instance.Metadata["type"].(string); ok && metadataType == "abstract" {
 		return nil
 	}
 
-	return deployment
+	return instance
 }
 
-// isProDriftDetectionEnabled checks if a deployment has Atmos Pro drift detection enabled.
+// isProDriftDetectionEnabled checks if an instance has Atmos Pro drift detection enabled.
 // Returns true if settings.pro.drift_detection.enabled == true and settings.pro.enabled != false.
-func isProDriftDetectionEnabled(deployment *schema.Deployment) bool {
-	proSettings, ok := deployment.Settings["pro"].(map[string]any)
+func isProDriftDetectionEnabled(instance *schema.Instance) bool {
+	proSettings, ok := instance.Settings["pro"].(map[string]any)
 	if !ok {
 		return false
 	}
@@ -143,31 +143,31 @@ func isProDriftDetectionEnabled(deployment *schema.Deployment) bool {
 	return ok && enabled
 }
 
-// filterProEnabledDeployments returns only deployments that have Atmos Pro drift detection explicitly enabled
-// via settings.pro.drift_detection.enabled == true, but excludes deployments where settings.pro.enabled == false.
-func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deployment {
-	filtered := make([]schema.Deployment, 0, len(deployments))
-	for i := range deployments {
-		if isProDriftDetectionEnabled(&deployments[i]) {
-			filtered = append(filtered, deployments[i])
+// filterProEnabledInstances returns only instances that have Atmos Pro drift detection explicitly enabled
+// via settings.pro.drift_detection.enabled == true, but excludes instances where settings.pro.enabled == false.
+func filterProEnabledInstances(instances []schema.Instance) []schema.Instance {
+	filtered := make([]schema.Instance, 0, len(instances))
+	for i := range instances {
+		if isProDriftDetectionEnabled(&instances[i]) {
+			filtered = append(filtered, instances[i])
 		}
 	}
 	return filtered
 }
 
-// sortDeployments sorts deployments by stack and component.
-func sortDeployments(deployments []schema.Deployment) []schema.Deployment {
-	sort.SliceStable(deployments, func(i, j int) bool {
-		if deployments[i].Stack != deployments[j].Stack {
-			return deployments[i].Stack < deployments[j].Stack
+// sortInstances sorts instances by stack and component.
+func sortInstances(instances []schema.Instance) []schema.Instance {
+	sort.SliceStable(instances, func(i, j int) bool {
+		if instances[i].Stack != instances[j].Stack {
+			return instances[i].Stack < instances[j].Stack
 		}
-		return deployments[i].Component < deployments[j].Component
+		return instances[i].Component < instances[j].Component
 	})
-	return deployments
+	return instances
 }
 
-// formatDeployments formats the deployments for output.
-func formatDeployments(deployments []schema.Deployment) string {
+// formatInstances formats the instances for output.
+func formatInstances(instances []schema.Instance) string {
 	formatOpts := format.FormatOptions{
 		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
 		CustomHeaders: []string{componentHeader, stackHeader},
@@ -180,8 +180,8 @@ func formatDeployments(deployments []schema.Deployment) string {
 		if err := csvWriter.Write([]string{componentHeader, stackHeader}); err != nil {
 			return ""
 		}
-		for _, d := range deployments {
-			if err := csvWriter.Write([]string{d.Component, d.Stack}); err != nil {
+		for _, i := range instances {
+			if err := csvWriter.Write([]string{i.Component, i.Stack}); err != nil {
 				return ""
 			}
 		}
@@ -194,17 +194,17 @@ func formatDeployments(deployments []schema.Deployment) string {
 	}
 
 	// For TTY mode, create a styled table with only Component and Stack columns.
-	tableRows := make([][]string, 0, len(deployments))
-	for _, d := range deployments {
-		row := []string{d.Component, d.Stack}
+	tableRows := make([][]string, 0, len(instances))
+	for _, i := range instances {
+		row := []string{i.Component, i.Stack}
 		tableRows = append(tableRows, row)
 	}
 
 	return format.CreateStyledTable(formatOpts.CustomHeaders, tableRows)
 }
 
-// uploadDeployments uploads deployments to Atmos Pro API.
-func uploadDeployments(deployments []schema.Deployment) error {
+// uploadInstances uploads instances to Atmos Pro API.
+func uploadInstances(instances []schema.Instance) error {
 	repo, err := git.GetLocalRepo()
 	if err != nil {
 		log.Error(errUtils.ErrFailedToGetLocalRepo.Error(), "error", err)
@@ -232,26 +232,26 @@ func uploadDeployments(deployments []schema.Deployment) error {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
-	req := dtos.DeploymentsUploadRequest{
-		RepoURL:     repoInfo.RepoUrl,
-		RepoName:    repoInfo.RepoName,
-		RepoOwner:   repoInfo.RepoOwner,
-		RepoHost:    repoInfo.RepoHost,
-		Deployments: deployments,
+	req := dtos.InstancesUploadRequest{
+		RepoURL:   repoInfo.RepoUrl,
+		RepoName:  repoInfo.RepoName,
+		RepoOwner: repoInfo.RepoOwner,
+		RepoHost:  repoInfo.RepoHost,
+		Instances: instances,
 	}
 
-	err = apiClient.UploadDeployments(&req)
+	err = apiClient.UploadInstances(&req)
 	if err != nil {
-		log.Error(errUtils.ErrFailedToUploadDeployments.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadDeployments, err)
+		log.Error(errUtils.ErrFailedToUploadInstances.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadInstances, err)
 	}
 
-	u.PrintfMessageToTUI("Successfully uploaded deployments to Atmos Pro API.")
+	u.PrintfMessageToTUI("Successfully uploaded instances to Atmos Pro API.")
 	return nil
 }
 
-// processDeployments collects, filters, and sorts deployments.
-func processDeployments(atmosConfig *schema.AtmosConfiguration) ([]schema.Deployment, error) {
+// processInstances collects, filters, and sorts instances.
+func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance, error) {
 	// Get all stacks with template processing enabled to render template variables.
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
@@ -259,17 +259,17 @@ func processDeployments(atmosConfig *schema.AtmosConfiguration) ([]schema.Deploy
 		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	// Collect deployments.
-	deployments := collectDeployments(stacksMap)
+	// Collect instances.
+	instances := collectInstances(stacksMap)
 
-	// Sort deployments.
-	deployments = sortDeployments(deployments)
+	// Sort instances.
+	instances = sortInstances(instances)
 
-	return deployments, nil
+	return instances, nil
 }
 
-// ExecuteListDeploymentsCmd executes the list deployments command.
-func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
+// ExecuteListInstancesCmd executes the list instances command.
+func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	// Inline initializeConfig.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -284,25 +284,25 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrParseFlag, err)
 	}
 
-	// Process deployments.
-	deployments, err := processDeployments(&atmosConfig)
+	// Process instances.
+	instances, err := processInstances(&atmosConfig)
 	if err != nil {
-		log.Error(errUtils.ErrProcessDeployments.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrProcessDeployments, err)
+		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrProcessInstances, err)
 	}
 
 	// Inline handleOutput.
-	output := formatDeployments(deployments)
+	output := formatInstances(instances)
 	fmt.Fprint(os.Stdout, output)
 
 	// Handle upload if requested.
 	if upload {
-		proDeployments := filterProEnabledDeployments(deployments)
-		if len(proDeployments) == 0 {
-			u.PrintfMessageToTUI("No Atmos Pro-enabled deployments found; nothing to upload.")
+		proInstances := filterProEnabledInstances(instances)
+		if len(proInstances) == 0 {
+			u.PrintfMessageToTUI("No Atmos Pro-enabled instances found; nothing to upload.")
 			return nil
 		}
-		return uploadDeployments(proDeployments)
+		return uploadInstances(proInstances)
 	}
 
 	return nil

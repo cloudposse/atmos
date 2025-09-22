@@ -20,28 +20,28 @@ type MockAtmosProAPIClientInterface struct {
 	mock.Mock
 }
 
-func (m *MockAtmosProAPIClientInterface) UploadDeployments(req *dtos.DeploymentsUploadRequest) error {
+func (m *MockAtmosProAPIClientInterface) UploadInstances(req *dtos.InstancesUploadRequest) error {
 	args := m.Called(req)
 	return args.Error(0)
 }
 
-func (m *MockAtmosProAPIClientInterface) UploadDeploymentStatus(req *dtos.DeploymentStatusUploadRequest) error {
+func (m *MockAtmosProAPIClientInterface) UploadInstanceStatus(req *dtos.InstanceStatusUploadRequest) error {
 	args := m.Called(req)
 	return args.Error(0)
 }
 
-// Test formatDeployments function.
-func TestFormatDeployments(t *testing.T) {
-	deployments := []schema.Deployment{
+// Test formatInstances function.
+func TestFormatInstances(t *testing.T) {
+	instances := []schema.Instance{
 		{Component: "vpc", Stack: "stack1"},
 		{Component: "app", Stack: "stack2"},
 		{Component: "db", Stack: "stack1"},
 	}
 
 	t.Run("TTY mode", func(t *testing.T) {
-		// Test TTY mode by directly calling formatDeployments.
+		// Test TTY mode by directly calling formatInstances.
 		// In a real TTY environment, this would return styled table format.
-		output := formatDeployments(deployments)
+		output := formatInstances(instances)
 
 		// Should return styled table format with headers and data.
 		assert.Contains(t, output, "Component")
@@ -64,7 +64,7 @@ func TestFormatDeployments(t *testing.T) {
 
 		os.Stdout = w
 
-		output := formatDeployments(deployments)
+		output := formatInstances(instances)
 
 		err = w.Close()
 		require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestFormatDeployments(t *testing.T) {
 		assert.Equal(t, "", csvOutput)
 	})
 
-	t.Run("empty deployments", func(t *testing.T) {
+	t.Run("empty instances", func(t *testing.T) {
 		originalStdout := os.Stdout
 		defer func() { os.Stdout = originalStdout }()
 
@@ -94,7 +94,7 @@ func TestFormatDeployments(t *testing.T) {
 
 		os.Stdout = w
 
-		output := formatDeployments([]schema.Deployment{})
+		output := formatInstances([]schema.Instance{})
 
 		err = w.Close()
 		require.NoError(t, err)
@@ -165,13 +165,13 @@ func TestProcessStackComponents(t *testing.T) {
 	})
 }
 
-// Test createDeployment edge cases.
-func TestCreateDeployment(t *testing.T) {
+// Test createInstance edge cases.
+func TestCreateInstance(t *testing.T) {
 	t.Run("abstract component should be filtered", func(t *testing.T) {
 		config := map[string]any{
 			"metadata": map[string]any{"type": "abstract"},
 		}
-		result := createDeployment("stack1", "comp1", "terraform", config)
+		result := createInstance("stack1", "comp1", "terraform", config)
 		assert.Nil(t, result)
 	})
 
@@ -183,7 +183,7 @@ func TestCreateDeployment(t *testing.T) {
 			"backend":  map[string]any{"backend": "value"},
 			"metadata": map[string]any{"meta": "value"},
 		}
-		result := createDeployment("stack1", "comp1", "terraform", config)
+		result := createInstance("stack1", "comp1", "terraform", config)
 		assert.NotNil(t, result)
 		assert.Equal(t, "comp1", result.Component)
 		assert.Equal(t, "stack1", result.Stack)
@@ -203,7 +203,7 @@ func TestCreateDeployment(t *testing.T) {
 			"backend":  "invalid",
 			"metadata": "invalid",
 		}
-		result := createDeployment("stack1", "comp1", "terraform", config)
+		result := createInstance("stack1", "comp1", "terraform", config)
 		assert.NotNil(t, result)
 		// Should have empty maps for invalid sections.
 		assert.Empty(t, result.Settings)
@@ -214,29 +214,29 @@ func TestCreateDeployment(t *testing.T) {
 	})
 }
 
-// Test sortDeployments.
-func TestSortDeployments(t *testing.T) {
-	t.Run("empty deployments", func(t *testing.T) {
-		result := sortDeployments([]schema.Deployment{})
+// Test sortInstances.
+func TestSortInstances(t *testing.T) {
+	t.Run("empty instances", func(t *testing.T) {
+		result := sortInstances([]schema.Instance{})
 		assert.Empty(t, result)
 	})
 
-	t.Run("single deployment", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("single instance", func(t *testing.T) {
+		instances := []schema.Instance{
 			{Component: "vpc", Stack: "stack1"},
 		}
-		result := sortDeployments(deployments)
+		result := sortInstances(instances)
 		assert.Len(t, result, 1)
 		assert.Equal(t, "vpc", result[0].Component)
 	})
 
-	t.Run("multiple deployments with same stack", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("multiple instances with same stack", func(t *testing.T) {
+		instances := []schema.Instance{
 			{Component: "db", Stack: "stack1"},
 			{Component: "vpc", Stack: "stack1"},
 			{Component: "app", Stack: "stack1"},
 		}
-		result := sortDeployments(deployments)
+		result := sortInstances(instances)
 		assert.Len(t, result, 3)
 		// Should be sorted by component name.
 		assert.Equal(t, "app", result[0].Component)
@@ -244,13 +244,13 @@ func TestSortDeployments(t *testing.T) {
 		assert.Equal(t, "vpc", result[2].Component)
 	})
 
-	t.Run("multiple deployments with different stacks", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("multiple instances with different stacks", func(t *testing.T) {
+		instances := []schema.Instance{
 			{Component: "vpc", Stack: "stack2"},
 			{Component: "app", Stack: "stack1"},
 			{Component: "db", Stack: "stack1"},
 		}
-		result := sortDeployments(deployments)
+		result := sortInstances(instances)
 		assert.Len(t, result, 3)
 		// Should be sorted by stack first, then component.
 		assert.Equal(t, "app", result[0].Component)
@@ -262,10 +262,10 @@ func TestSortDeployments(t *testing.T) {
 	})
 }
 
-// Test filterProEnabledDeployments edge cases.
-func TestFilterProEnabledDeploymentsEdgeCases(t *testing.T) {
-	t.Run("deployments with invalid pro settings", func(t *testing.T) {
-		deployments := []schema.Deployment{
+// Test filterProEnabledInstances edge cases.
+func TestFilterProEnabledInstancesEdgeCases(t *testing.T) {
+	t.Run("instances with invalid pro settings", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -295,12 +295,12 @@ func TestFilterProEnabledDeploymentsEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("deployments with missing pro settings", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("instances with missing pro settings", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -315,12 +315,12 @@ func TestFilterProEnabledDeploymentsEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("deployments with pro settings but missing drift_detection", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("instances with pro settings but missing drift_detection", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -332,12 +332,12 @@ func TestFilterProEnabledDeploymentsEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("deployments with pro settings and drift_detection.enabled is true", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("instances with pro settings and drift_detection.enabled is true", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -351,17 +351,17 @@ func TestFilterProEnabledDeploymentsEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Len(t, filtered, 1)
 		assert.Equal(t, "vpc", filtered[0].Component)
 		assert.Equal(t, "stack1", filtered[0].Stack)
 	})
 }
 
-// Test collectDeployments edge cases.
-func TestCollectDeployments(t *testing.T) {
+// Test collectInstances edge cases.
+func TestCollectInstances(t *testing.T) {
 	t.Run("empty stacks map", func(t *testing.T) {
-		result := collectDeployments(map[string]interface{}{})
+		result := collectInstances(map[string]interface{}{})
 		assert.Empty(t, result)
 	})
 
@@ -372,7 +372,7 @@ func TestCollectDeployments(t *testing.T) {
 				"components": "invalid",
 			},
 		}
-		result := collectDeployments(stacks)
+		result := collectInstances(stacks)
 		assert.Empty(t, result)
 	})
 }

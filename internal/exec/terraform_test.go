@@ -592,64 +592,64 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
 
 	testCases := []struct {
-		name                   string
-		stack                  string
-		component              string
-		uploadDeploymentStatus bool
-		proEnabled             bool
-		checkProWarning        bool
-		checkDetailedExit      bool
-		exitCode               int
+		name                 string
+		stack                string
+		component            string
+		uploadInstanceStatus bool
+		proEnabled           bool
+		checkProWarning      bool
+		checkDetailedExit    bool
+		exitCode             int
 	}{
 		{
-			name:                   "drift results enabled and pro disabled",
-			stack:                  "nonprod",
-			component:              "mock/disabled",
-			uploadDeploymentStatus: true,
-			proEnabled:             false,
-			checkProWarning:        true,
-			checkDetailedExit:      true,
-			exitCode:               0,
+			name:                 "drift results enabled and pro disabled",
+			stack:                "nonprod",
+			component:            "mock/disabled",
+			uploadInstanceStatus: true,
+			proEnabled:           false,
+			checkProWarning:      true,
+			checkDetailedExit:    true,
+			exitCode:             0,
 		},
 		{
-			name:                   "drift results enabled and pro enabled with drift",
-			stack:                  "nonprod",
-			component:              "mock/drift",
-			uploadDeploymentStatus: true,
-			proEnabled:             true,
-			checkProWarning:        false,
-			checkDetailedExit:      true,
-			exitCode:               2, // Simulate drift detected
+			name:                 "drift results enabled and pro enabled with drift",
+			stack:                "nonprod",
+			component:            "mock/drift",
+			uploadInstanceStatus: true,
+			proEnabled:           true,
+			checkProWarning:      false,
+			checkDetailedExit:    true,
+			exitCode:             2, // Simulate drift detected
 		},
 		{
-			name:                   "drift results enabled and pro enabled without drift",
-			stack:                  "nonprod",
-			component:              "mock/nodrift",
-			uploadDeploymentStatus: true,
-			proEnabled:             true,
-			checkProWarning:        false,
-			checkDetailedExit:      true,
-			exitCode:               0, // Simulate no drift
+			name:                 "drift results enabled and pro enabled without drift",
+			stack:                "nonprod",
+			component:            "mock/nodrift",
+			uploadInstanceStatus: true,
+			proEnabled:           true,
+			checkProWarning:      false,
+			checkDetailedExit:    true,
+			exitCode:             0, // Simulate no drift
 		},
 		{
-			name:                   "drift results enabled and pro enabled with drift in prod",
-			stack:                  "prod",
-			component:              "mock/drift",
-			uploadDeploymentStatus: true,
-			proEnabled:             true,
-			checkProWarning:        false,
-			checkDetailedExit:      true,
-			exitCode:               2, // Simulate drift detected
+			name:                 "drift results enabled and pro enabled with drift in prod",
+			stack:                "prod",
+			component:            "mock/drift",
+			uploadInstanceStatus: true,
+			proEnabled:           true,
+			checkProWarning:      false,
+			checkDetailedExit:    true,
+			exitCode:             2, // Simulate drift detected
 		},
 		{
-			name:                   "drift results enabled and pro enabled without drift in prod",
-			stack:                  "prod",
-			component:              "mock/nodrift",
-			uploadDeploymentStatus: true,
-			proEnabled:             true,
-			checkProWarning:        false,
-			checkDetailedExit:      true,
-			exitCode:               0, // Simulate no drift
+			name:                 "drift results enabled and pro enabled without drift in prod",
+			stack:                "prod",
+			component:            "mock/nodrift",
+			uploadInstanceStatus: true,
+			proEnabled:           true,
+			checkProWarning:      false,
+			checkDetailedExit:    true,
+			exitCode:             0, // Simulate no drift
 		},
 	}
 
@@ -692,8 +692,8 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 				ProcessTemplates: true,
 				ProcessFunctions: true,
 			}
-			if tc.uploadDeploymentStatus {
-				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-deployment-status")
+			if tc.uploadInstanceStatus {
+				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-instance-status")
 			}
 
 			// Create a pipe to capture stdout and stderr

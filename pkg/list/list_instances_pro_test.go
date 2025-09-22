@@ -8,9 +8,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestFilterProEnabledDeployments ensures only deployments with settings.pro.drift_detection.enabled == true are returned.
-func TestFilterProEnabledDeployments(t *testing.T) {
-	deployments := []schema.Deployment{
+// TestFilterProEnabledInstances ensures only instances with settings.pro.drift_detection.enabled == true are returned.
+func TestFilterProEnabledInstances(t *testing.T) {
+	instances := []schema.Instance{
 		{
 			Component: "vpc",
 			Stack:     "stack1",
@@ -46,7 +46,7 @@ func TestFilterProEnabledDeployments(t *testing.T) {
 		},
 	}
 
-	filtered := filterProEnabledDeployments(deployments)
+	filtered := filterProEnabledInstances(instances)
 
 	assert.Len(t, filtered, 1)
 	assert.Equal(t, "vpc", filtered[0].Component)

@@ -13,10 +13,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
-// UploadDeploymentStatus uploads the drift detection result status to the pro API.
-func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error {
-	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/deployments/{stack}/{component}
-	targetUrl := fmt.Sprintf("%s/%s/repos/%s/%s/deployments/%s/%s",
+// UploadInstanceStatus uploads the drift detection result status to the pro API.
+func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error {
+	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/instances/{stack}/{component}
+	targetUrl := fmt.Sprintf("%s/%s/repos/%s/%s/instances/%s/%s",
 		c.BaseURL, c.BaseAPIEndpoint,
 		url.PathEscape(dto.RepoOwner),
 		url.PathEscape(dto.RepoName),
@@ -56,11 +56,11 @@ func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUpl
 	}
 	defer resp.Body.Close()
 
-	if err := handleAPIResponse(resp, "UploadDeploymentStatus"); err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadDeploymentStatus, err)
+	if err := handleAPIResponse(resp, "UploadInstanceStatus"); err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadInstanceStatus, err)
 	}
 
-	log.Debug("Uploaded deployment status.", "url", targetUrl)
+	log.Debug("Uploaded instance status.", "url", targetUrl)
 
 	return nil
 }

@@ -8,30 +8,30 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Test uploadDeployments function.
-func TestUploadDeployments(t *testing.T) {
+// Test uploadInstances function.
+func TestUploadInstances(t *testing.T) {
 	t.Run("successful upload", func(t *testing.T) {
-		t.Skip("placeholder: requires git/config/API mocking - uploadDeployments function calls external git operations, config loading, and API clients that would need extensive mocking to test properly in CI")
+		t.Skip("placeholder: requires git/config/API mocking - uploadInstances function calls external git operations, config loading, and API clients that would need extensive mocking to test properly in CI")
 	})
 
-	t.Run("empty deployments", func(t *testing.T) {
-		t.Skip("placeholder: requires git/config/API mocking - uploadDeployments function calls external git operations, config loading, and API clients that would need extensive mocking to test properly in CI")
+	t.Run("empty instances", func(t *testing.T) {
+		t.Skip("placeholder: requires git/config/API mocking - uploadInstances function calls external git operations, config loading, and API clients that would need extensive mocking to test properly in CI")
 	})
 }
 
-// Test processDeployments function.
-func TestProcessDeployments(t *testing.T) {
+// Test processInstances function.
+func TestProcessInstances(t *testing.T) {
 	t.Run("successful processing", func(t *testing.T) {
-		t.Skip("placeholder: requires ExecuteDescribeStacks mocking - processDeployments function calls ExecuteDescribeStacks which would need interface injection and mocking to test properly in CI")
+		t.Skip("placeholder: requires ExecuteDescribeStacks mocking - processInstances function calls ExecuteDescribeStacks which would need interface injection and mocking to test properly in CI")
 	})
 
 	t.Run("empty config", func(t *testing.T) {
-		t.Skip("placeholder: requires ExecuteDescribeStacks mocking - processDeployments function calls ExecuteDescribeStacks which would need interface injection and mocking to test properly in CI")
+		t.Skip("placeholder: requires ExecuteDescribeStacks mocking - processInstances function calls ExecuteDescribeStacks which would need interface injection and mocking to test properly in CI")
 	})
 }
 
-// Test ExecuteListDeploymentsCmd function.
-func TestExecuteListDeploymentsCmd(t *testing.T) {
+// Test ExecuteListInstancesCmd function.
+func TestExecuteListInstancesCmd(t *testing.T) {
 	t.Run("basic command execution", func(t *testing.T) {
 		t.Skip("end-to-end command test requires stdio capture and viper flag setup — skipping until helper implemented")
 	})
@@ -88,10 +88,10 @@ func TestProcessStackComponentsEdgeCases(t *testing.T) {
 	})
 }
 
-func TestCreateDeploymentEdgeCases(t *testing.T) {
+func TestCreateInstanceEdgeCases(t *testing.T) {
 	t.Run("nil component config map", func(t *testing.T) {
-		result := createDeployment("stack1", "comp1", "terraform", nil)
-		// createDeployment doesn't check for nil, it creates a deployment with empty maps.
+		result := createInstance("stack1", "comp1", "terraform", nil)
+		// createInstance doesn't check for nil, it creates a instance with empty maps.
 		assert.NotNil(t, result)
 		assert.Equal(t, "comp1", result.Component)
 		assert.Equal(t, "stack1", result.Stack)
@@ -105,7 +105,7 @@ func TestCreateDeploymentEdgeCases(t *testing.T) {
 			"backend":  []string{"invalid"},             // Invalid.
 			"metadata": map[string]any{"meta": "value"}, // Valid.
 		}
-		result := createDeployment("stack1", "comp1", "terraform", config)
+		result := createInstance("stack1", "comp1", "terraform", config)
 		assert.NotNil(t, result)
 		assert.Equal(t, map[string]any{"key": "value"}, result.Settings)
 		assert.Empty(t, result.Vars) // Should be empty due to invalid type.
@@ -118,7 +118,7 @@ func TestCreateDeploymentEdgeCases(t *testing.T) {
 		config := map[string]any{
 			"metadata": map[string]any{"type": "abstract"},
 		}
-		result := createDeployment("stack1", "comp1", "terraform", config)
+		result := createInstance("stack1", "comp1", "terraform", config)
 		assert.Nil(t, result)
 	})
 
@@ -126,19 +126,19 @@ func TestCreateDeploymentEdgeCases(t *testing.T) {
 		config := map[string]any{
 			"metadata": map[string]any{"type": 123}, // Non-string type.
 		}
-		result := createDeployment("stack1", "comp1", "terraform", config)
+		result := createInstance("stack1", "comp1", "terraform", config)
 		assert.NotNil(t, result) // Should not be filtered out.
 	})
 }
 
-func TestSortDeploymentsEdgeCases(t *testing.T) {
-	t.Run("deployments with empty component names", func(t *testing.T) {
-		deployments := []schema.Deployment{
+func TestSortInstancesEdgeCases(t *testing.T) {
+	t.Run("instances with empty component names", func(t *testing.T) {
+		instances := []schema.Instance{
 			{Component: "", Stack: "stack1"},
 			{Component: "vpc", Stack: "stack1"},
 			{Component: "", Stack: "stack2"},
 		}
-		result := sortDeployments(deployments)
+		result := sortInstances(instances)
 		assert.Len(t, result, 3)
 		// The sorting is by stack first, then component.
 		// So we should get: stack1 with "", stack1 with "vpc", stack2 with "".
@@ -150,13 +150,13 @@ func TestSortDeploymentsEdgeCases(t *testing.T) {
 		assert.Equal(t, "stack2", result[2].Stack)
 	})
 
-	t.Run("deployments with empty stack names", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("instances with empty stack names", func(t *testing.T) {
+		instances := []schema.Instance{
 			{Component: "vpc", Stack: ""},
 			{Component: "app", Stack: "stack1"},
 			{Component: "db", Stack: ""},
 		}
-		result := sortDeployments(deployments)
+		result := sortInstances(instances)
 		assert.Len(t, result, 3)
 		// Empty strings should sort first.
 		assert.Equal(t, "", result[0].Stack)
@@ -165,9 +165,9 @@ func TestSortDeploymentsEdgeCases(t *testing.T) {
 	})
 }
 
-func TestFilterProEnabledDeploymentsAdditionalEdgeCases(t *testing.T) {
-	t.Run("deployments with nil settings", func(t *testing.T) {
-		deployments := []schema.Deployment{
+func TestFilterProEnabledInstancesAdditionalEdgeCases(t *testing.T) {
+	t.Run("instances with nil settings", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -175,12 +175,12 @@ func TestFilterProEnabledDeploymentsAdditionalEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("deployments with pro settings but missing drift_detection", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("instances with pro settings but missing drift_detection", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -192,12 +192,12 @@ func TestFilterProEnabledDeploymentsAdditionalEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("deployments with pro settings but missing enabled key in drift_detection", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("instances with pro settings but missing enabled key in drift_detection", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -211,12 +211,12 @@ func TestFilterProEnabledDeploymentsAdditionalEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("deployments with pro settings but drift_detection.enabled is false", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("instances with pro settings but drift_detection.enabled is false", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -230,12 +230,12 @@ func TestFilterProEnabledDeploymentsAdditionalEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("deployments with pro settings and drift_detection.enabled is true", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("instances with pro settings and drift_detection.enabled is true", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -249,14 +249,14 @@ func TestFilterProEnabledDeploymentsAdditionalEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Len(t, filtered, 1)
 		assert.Equal(t, "vpc", filtered[0].Component)
 		assert.Equal(t, "stack1", filtered[0].Stack)
 	})
 
-	t.Run("deployments with invalid pro settings structure", func(t *testing.T) {
-		deployments := []schema.Deployment{
+	t.Run("instances with invalid pro settings structure", func(t *testing.T) {
+		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
@@ -286,12 +286,12 @@ func TestFilterProEnabledDeploymentsAdditionalEdgeCases(t *testing.T) {
 			},
 		}
 
-		filtered := filterProEnabledDeployments(deployments)
+		filtered := filterProEnabledInstances(instances)
 		assert.Empty(t, filtered)
 	})
 }
 
-func TestCollectDeploymentsEdgeCases(t *testing.T) {
+func TestCollectInstancesEdgeCases(t *testing.T) {
 	t.Run("stacks with mixed valid and invalid configs", func(t *testing.T) {
 		stacks := map[string]interface{}{
 			"stack1": map[string]interface{}{
@@ -308,7 +308,7 @@ func TestCollectDeploymentsEdgeCases(t *testing.T) {
 				"components": "invalid", // Invalid components.
 			},
 		}
-		result := collectDeployments(stacks)
+		result := collectInstances(stacks)
 		// Should only process stack1.
 		assert.Len(t, result, 1)
 		assert.Equal(t, "vpc", result[0].Component)
@@ -321,7 +321,7 @@ func TestCollectDeploymentsEdgeCases(t *testing.T) {
 				"components": map[string]interface{}{},
 			},
 		}
-		result := collectDeployments(stacks)
+		result := collectInstances(stacks)
 		assert.Empty(t, result)
 	})
 }

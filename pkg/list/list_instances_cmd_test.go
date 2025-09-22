@@ -13,11 +13,11 @@ import (
 // --- Mocks
 
 type mockAPI struct {
-	captured *dtos.DeploymentsUploadRequest
+	captured *dtos.InstancesUploadRequest
 	err      error
 }
 
-func (m *mockAPI) UploadDeployments(req *dtos.DeploymentsUploadRequest) error {
+func (m *mockAPI) UploadInstances(req *dtos.InstancesUploadRequest) error {
 	m.captured = req
 	return m.err
 }
@@ -31,7 +31,7 @@ func (m *mockDescribe) Execute() (map[string]interface{}, error) { return m.stac
 
 // --- Tests
 
-func TestListDeploymentsCommandLogic(t *testing.T) {
+func TestListInstancesCommandLogic(t *testing.T) {
 	mockStacks := map[string]interface{}{
 		"stack1": map[string]interface{}{
 			"components": map[string]interface{}{
@@ -115,15 +115,15 @@ func TestListDeploymentsCommandLogic(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			list := collectDeployments(stacks)
-			list = sortDeployments(list)
+			list := collectInstances(stacks)
+			list = sortInstances(list)
 			assert.Equal(t, tc.expectedListSize, len(list))
 
 			if tc.upload {
 				api := &mockAPI{err: tc.uploadErr}
-				proDeps := filterProEnabledDeployments(list)
-				dto := dtos.DeploymentsUploadRequest{Deployments: proDeps}
-				err = api.UploadDeployments(&dto)
+				proDeps := filterProEnabledInstances(list)
+				dto := dtos.InstancesUploadRequest{Instances: proDeps}
+				err = api.UploadInstances(&dto)
 				if tc.expectError {
 					assert.Error(t, err)
 					return
@@ -133,14 +133,14 @@ func TestListDeploymentsCommandLogic(t *testing.T) {
 
 				// Verify API received correct payload
 				assert.NotNil(t, api.captured)
-				assert.Equal(t, len(proDeps), len(api.captured.Deployments))
+				assert.Equal(t, len(proDeps), len(api.captured.Instances))
 			}
 		})
 	}
 }
 
-func TestCreateDeploymentWithTemplateRendering(t *testing.T) {
-	// Test that createDeployment properly handles pre-rendered template data
+func TestCreateInstanceWithTemplateRendering(t *testing.T) {
+	// Test that createInstance properly handles pre-rendered template data
 	componentConfigMap := map[string]any{
 		"settings": map[string]any{
 			"pro": map[string]any{
@@ -172,14 +172,14 @@ func TestCreateDeploymentWithTemplateRendering(t *testing.T) {
 		},
 	}
 
-	deployment := createDeployment("tenant1-ue2-dev", "vpc", "terraform", componentConfigMap)
-	assert.NotNil(t, deployment)
-	assert.Equal(t, "vpc", deployment.Component)
-	assert.Equal(t, "tenant1-ue2-dev", deployment.Stack)
-	assert.Equal(t, "terraform", deployment.ComponentType)
+	instance := createInstance("tenant1-ue2-dev", "vpc", "terraform", componentConfigMap)
+	assert.NotNil(t, instance)
+	assert.Equal(t, "vpc", instance.Component)
+	assert.Equal(t, "tenant1-ue2-dev", instance.Stack)
+	assert.Equal(t, "terraform", instance.ComponentType)
 
 	// Verify that the template variables in settings are properly rendered
-	proSettings := deployment.Settings["pro"].(map[string]any)
+	proSettings := instance.Settings["pro"].(map[string]any)
 	pullRequest := proSettings["pull_request"].(map[string]any)
 	merged := pullRequest["merged"].(map[string]any)
 	workflows := merged["workflows"].(map[string]any)
@@ -191,8 +191,8 @@ func TestCreateDeploymentWithTemplateRendering(t *testing.T) {
 	assert.Equal(t, "tenant1-dev", inputs["github_environment"])
 	assert.Equal(t, "tenant1-ue2-dev", inputs["stack"])
 
-	// Verify that the deployment would be included in pro-enabled deployments
-	proDeployments := filterProEnabledDeployments([]schema.Deployment{*deployment})
-	assert.Len(t, proDeployments, 1)
-	assert.Equal(t, "vpc", proDeployments[0].Component)
+	// Verify that the instance would be included in pro-enabled instances
+	proInstances := filterProEnabledInstances([]schema.Instance{*instance})
+	assert.Len(t, proInstances, 1)
+	assert.Equal(t, "vpc", proInstances[0].Component)
 }
