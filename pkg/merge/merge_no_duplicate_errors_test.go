@@ -208,7 +208,7 @@ func TestMultipleMergeCallsNoDuplicates(t *testing.T) {
 
 // TestOriginalBehaviorWouldPrint documents what the original code was doing wrong
 func TestOriginalBehaviorWouldPrint(t *testing.T) {
-	t.Skip("This test documents the original problematic behavior - skip in normal runs")
+	t.Skipf("This test documents the original problematic behavior - skip in normal runs")
 
 	// The original code had lines like:
 	// _, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")

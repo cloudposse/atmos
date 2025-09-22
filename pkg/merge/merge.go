@@ -156,11 +156,7 @@ func MergeWithContext(
 		appendSlice = true
 	}
 
-	result, err := MergeWithOptionsAndContext(inputs, appendSlice, sliceDeepCopy, context)
-	if err != nil && context != nil {
-		return nil, context.FormatError(err)
-	}
-	return result, err
+	return MergeWithOptionsAndContext(inputs, appendSlice, sliceDeepCopy, context)
 }
 
 // MergeWithOptionsAndContext performs merge with options and context tracking.
