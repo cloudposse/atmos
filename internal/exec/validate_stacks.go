@@ -16,6 +16,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -200,7 +201,10 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			continue
 		}
 
-		stackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(
+		// Create a new merge context to track import chain for better error messages
+		mergeContext := m.NewMergeContext()
+
+		stackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -215,6 +219,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			map[string]any{},
 			map[string]any{},
 			atmosManifestJsonSchemaFilePath,
+			mergeContext,
 		)
 		if err != nil {
 			// Collect the error from ProcessYAMLConfigFile
