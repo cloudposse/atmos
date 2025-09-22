@@ -68,29 +68,33 @@ func TestMergeWithContext_TypeMismatchError(t *testing.T) {
 			// Attempt to merge
 			result, err := MergeWithContext(atmosConfig, []map[string]any{tc.map1, tc.map2}, mergeContext)
 
-			if err != nil {
-				// We got an error - verify it contains our enhanced context
-				errStr := err.Error()
-				t.Logf("Enhanced error message for %s:\n%s", tc.name, errStr)
-
-				// Check for file context in error
-				if strings.Contains(errStr, "File being processed:") {
-					assert.Contains(t, errStr, "stacks/override.yaml", "Error should mention the current file")
-					assert.Contains(t, errStr, "Import chain:", "Error should show import chain")
-					assert.Contains(t, errStr, "stacks/base.yaml", "Error should show base file in chain")
-
-					// If it's a type override error, check for helpful hints
-					if strings.Contains(errStr, "cannot override") {
-						assert.Contains(t, errStr, "Likely cause:", "Error should contain likely cause")
-						assert.Contains(t, errStr, "Debug hint:", "Error should contain debug hints")
-					}
-				} else {
-					t.Logf("Note: Error doesn't contain file context - might not be a merge error: %s", errStr)
-				}
-			} else {
+			// Handle success case
+			if err == nil {
 				// No error - the merge succeeded (which is also valid for some strategies)
 				t.Logf("Merge succeeded for %s (strategy: %s)", tc.name, tc.strategy)
 				assert.NotNil(t, result)
+				return
+			}
+
+			// We got an error - verify it contains our enhanced context
+			errStr := err.Error()
+			t.Logf("Enhanced error message for %s:\n%s", tc.name, errStr)
+
+			// Check if error contains file context
+			if !strings.Contains(errStr, "File being processed:") {
+				t.Logf("Note: Error doesn't contain file context - might not be a merge error: %s", errStr)
+				return
+			}
+
+			// Verify file context details
+			assert.Contains(t, errStr, "stacks/override.yaml", "Error should mention the current file")
+			assert.Contains(t, errStr, "Import chain:", "Error should show import chain")
+			assert.Contains(t, errStr, "stacks/base.yaml", "Error should show base file in chain")
+
+			// For type override errors, check for helpful hints
+			if strings.Contains(errStr, "cannot override") {
+				assert.Contains(t, errStr, "Likely cause:", "Error should contain likely cause")
+				assert.Contains(t, errStr, "Debug hint:", "Error should contain debug hints")
 			}
 		})
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -204,6 +205,8 @@ func ProcessYAMLConfigFile(
 // ProcessYAMLConfigFileWithContext takes a path to a YAML stack manifest,
 // recursively processes and deep-merges all the imports with context tracking,
 // and returns the final stack config.
+//
+//nolint:gocognit,revive,cyclop,funlen
 func ProcessYAMLConfigFileWithContext(
 	atmosConfig *schema.AtmosConfiguration,
 	basePath string,
@@ -285,7 +288,7 @@ func ProcessYAMLConfigFileWithContext(
 				e := mergeContext.FormatError(err, fmt.Sprintf("invalid stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 				return nil, nil, nil, nil, nil, nil, nil, e
 			} else {
-				e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+				e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 				return nil, nil, nil, nil, nil, nil, nil, e
 			}
 		}
@@ -302,7 +305,7 @@ func ProcessYAMLConfigFileWithContext(
 			e := mergeContext.FormatError(err, fmt.Sprintf("invalid stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, nil, nil, nil, nil, nil, e
 		} else {
-			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, nil, nil, nil, nil, nil, e
 		}
 	}

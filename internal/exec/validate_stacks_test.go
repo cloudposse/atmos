@@ -40,9 +40,9 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 	}
 
 	// Set up the stacks base path
-	atmosConfig.TerraformDirAbsolutePath = filepath.Join(absPath, "components/terraform")
-	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(absPath, "components/helmfile")
-	atmosConfig.PackerDirAbsolutePath = filepath.Join(absPath, "components/packer")
+	atmosConfig.TerraformDirAbsolutePath = filepath.Join(absPath, "components", "terraform")
+	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(absPath, "components", "helmfile")
+	atmosConfig.PackerDirAbsolutePath = filepath.Join(absPath, "components", "packer")
 
 	// Test 1: Validate stacks with type mismatch - should get enhanced error message
 	t.Run("type mismatch with context", func(t *testing.T) {
@@ -99,7 +99,7 @@ func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	importsConfig := make(map[string]map[string]any)
 
 	// Process the YAML config file that imports conflicting configurations
-	_, _, _, _, _, _, _, err = ProcessYAMLConfigFile(
+	_, _, _, _, _, _, _, err = ProcessYAMLConfigFile( //nolint:dogsled
 		atmosConfig,
 		basePath,
 		filePath,

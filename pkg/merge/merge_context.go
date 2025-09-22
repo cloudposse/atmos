@@ -55,6 +55,8 @@ func (mc *MergeContext) Clone() *MergeContext {
 }
 
 // FormatError formats an error with merge context information.
+//
+//nolint:revive
 func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 	if err == nil {
 		return nil
@@ -122,7 +124,7 @@ func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 	}
 
 	// Return the formatted error (not wrapped)
-	return fmt.Errorf("%s", sb.String())
+	return fmt.Errorf("%s", sb.String()) //nolint:err113
 }
 
 // GetImportChainString returns a formatted string of the import chain.

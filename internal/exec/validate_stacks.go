@@ -165,7 +165,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			filePath,
 			map[string]map[string]any{},
 			nil,
-			true,  // ignoreMissingFiles for first pass
+			true, // ignoreMissingFiles for first pass
 			false,
 			false,
 			false,
@@ -175,7 +175,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			map[string]any{},
 			atmosManifestJsonSchemaFilePath,
 		)
-		
+
 		// Track all imported files
 		for importPath := range importsConfig {
 			importedFiles[importPath] = true
@@ -186,7 +186,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	// Second pass: only process top-level files (not imported by others)
 	for _, filePath := range stackConfigFilesAbsolutePaths {
 		relativeFilePath := u.TrimBasePathFromPath(atmosConfig.StacksBaseAbsolutePath+"/", filePath)
-		
+
 		// Skip if this file is imported by another file
 		if importedFiles[relativeFilePath] {
 			log.Debug("Skipping imported file (will be processed via parent)", "file", relativeFilePath)

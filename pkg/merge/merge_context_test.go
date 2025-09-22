@@ -87,10 +87,8 @@ func TestMergeContext_FormatError(t *testing.T) {
 			expectedParts: []string{"original error"},
 		},
 		{
-			name: "empty context returns original error",
-			setupContext: func() *MergeContext {
-				return NewMergeContext()
-			},
+			name:          "empty context returns original error",
+			setupContext:  NewMergeContext,
 			inputError:    errors.New("original error"),
 			expectedParts: []string{"original error"},
 		},
@@ -135,12 +133,12 @@ func TestMergeContext_FormatError(t *testing.T) {
 			expectedParts: []string{
 				"cannot override two slices with different type",
 				"File being processed: stacks/conflict.yaml",
-				"Likely cause: A key is defined as an array in one file and as a string in another",
-				"Debug hint: Check the files above for keys that have different types",
-				"Common issues:",
-				"vars defined as both array and string",
-				"settings with inconsistent types",
-				"overrides attempting to change field types",
+				"**Likely cause:** A key is defined as an array in one file and as a string in another",
+				"**Debug hint:** Check the files above for keys that have different types",
+				"**Common issues:**",
+				"`vars` defined as both array and string",
+				"`settings` with inconsistent types",
+				"`overrides` attempting to change field types",
 			},
 		},
 		{

@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TestMergeContextErrorDemo demonstrates the enhanced error formatting
-// This simulates what users will see when a merge error occurs
+// TestMergeContextErrorDemo demonstrates the enhanced error formatting.
+// This simulates what users will see when a merge error occurs..
 func TestMergeContextErrorDemo(t *testing.T) {
 	// Simulate the kind of error that mergo would return
 	mergoError := errors.New("cannot override two slices with different type ([]interface {}, string)")
@@ -30,7 +30,7 @@ func TestMergeContextErrorDemo(t *testing.T) {
 	}
 }
 
-// TestMergeContextRealWorldScenario demonstrates a more complex scenario
+// TestMergeContextRealWorldScenario demonstrates a more complex scenario..
 func TestMergeContextRealWorldScenario(t *testing.T) {
 	// Simulate a deeply nested import chain
 	ctx := NewMergeContext()

@@ -11,8 +11,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestNoDuplicateErrorPrinting verifies that errors are not printed directly to stderr
-// This was the issue where merge.go was printing errors before returning them
+// TestNoDuplicateErrorPrinting verifies that errors are not printed directly to stderr.
+// This was the issue where merge.go was printing errors before returning them..
 func TestNoDuplicateErrorPrinting(t *testing.T) {
 	// Capture stderr to detect any direct printing
 	oldStderr := os.Stderr
@@ -57,7 +57,7 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 }
 
 // TestMergeErrorsAreWrappedNotPrinted ensures that when mergo returns an error,
-// we wrap it and return it rather than printing it
+// we wrap it and return it rather than printing it..
 func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 	// This test verifies that our code properly wraps errors
 	// without printing them directly
@@ -109,7 +109,7 @@ func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 }
 
 // TestErrorContextWithoutDuplicatePrinting verifies that MergeContext
-// enhances errors without causing duplicate printing
+// enhances errors without causing duplicate printing..
 func TestErrorContextWithoutDuplicatePrinting(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
@@ -151,7 +151,7 @@ func TestErrorContextWithoutDuplicatePrinting(t *testing.T) {
 }
 
 // TestMultipleMergeCallsNoDuplicates simulates what was happening in validate stacks
-// where multiple merge errors would print multiple times
+// where multiple merge errors would print multiple times..
 func TestMultipleMergeCallsNoDuplicates(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
@@ -206,7 +206,7 @@ func TestMultipleMergeCallsNoDuplicates(t *testing.T) {
 	}
 }
 
-// TestOriginalBehaviorWouldPrint documents what the original code was doing wrong
+// TestOriginalBehaviorWouldPrint documents what the original code was doing wrong..
 func TestOriginalBehaviorWouldPrint(t *testing.T) {
 	t.Skipf("This test documents the original problematic behavior - skip in normal runs")
 
