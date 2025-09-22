@@ -546,6 +546,62 @@ import:
 	assert.NoError(t, err)
 }
 
+func TestMergeConfig_ReadFileError(t *testing.T) {
+	// Test error handling when config file cannot be read after initial load.
+	tempDir := t.TempDir()
+
+	// Create a config file.
+	content := `
+base_path: ./
+import:
+  - "./nonexistent/import.yaml"
+`
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(content), 0o644)
+	require.NoError(t, err)
+
+	// Make the file unreadable after it's been found (simulating permission issues).
+	// This tests the ReadFile error path at line 285-287.
+	err = os.Chmod(configPath, 0o000)
+	require.NoError(t, err)
+
+	// Ensure we restore permissions for cleanup.
+	defer os.Chmod(configPath, 0o644)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err = mergeConfig(v, tempDir, CliConfigFileName, true)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "permission denied")
+}
+
+func TestMergeConfig_WithoutImports(t *testing.T) {
+	// Test mergeConfig with processImports=false to ensure that code path is covered.
+	tempDir := t.TempDir()
+
+	// Create a simple config file without imports.
+	content := `
+base_path: ./test
+vendor:
+  base_path: ./vendor
+logs:
+  level: Debug
+`
+	createConfigFile(t, tempDir, "atmos.yaml", content)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call with processImports=false to cover that branch.
+	err := mergeConfig(v, tempDir, CliConfigFileName, false)
+	assert.NoError(t, err)
+
+	// Verify the config was loaded correctly.
+	assert.Equal(t, "./test", v.GetString("base_path"))
+	assert.Equal(t, "./vendor", v.GetString("vendor.base_path"))
+	assert.Equal(t, "Debug", v.GetString("logs.level"))
+}
+
 func TestMergeDefaultConfig(t *testing.T) {
 	v := viper.New()
 
