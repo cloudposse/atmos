@@ -14,7 +14,7 @@ import (
 func TestMergeWithContext_TypeMismatchError(t *testing.T) {
 	// This test demonstrates the enhanced error messages when a type mismatch occurs
 	// Note: mergo's behavior with type mismatches can vary based on the merge strategy
-	
+
 	// Try different scenarios that might trigger a merge error
 	testCases := []struct {
 		name     string
@@ -37,7 +37,7 @@ func TestMergeWithContext_TypeMismatchError(t *testing.T) {
 			},
 		},
 		{
-			name:     "map_to_string", 
+			name:     "map_to_string",
 			strategy: "replace",
 			map1: map[string]any{
 				"config": map[string]any{
@@ -78,7 +78,7 @@ func TestMergeWithContext_TypeMismatchError(t *testing.T) {
 					assert.Contains(t, errStr, "stacks/override.yaml", "Error should mention the current file")
 					assert.Contains(t, errStr, "Import chain:", "Error should show import chain")
 					assert.Contains(t, errStr, "stacks/base.yaml", "Error should show base file in chain")
-					
+
 					// If it's a type override error, check for helpful hints
 					if strings.Contains(errStr, "cannot override") {
 						assert.Contains(t, errStr, "Likely cause:", "Error should contain likely cause")
@@ -121,7 +121,7 @@ func TestMergeWithContext_ErrorIsLogged(t *testing.T) {
 	// Capture log output to verify errors are logged
 	var logBuffer bytes.Buffer
 	oldLogger := log.Default()
-	
+
 	// Create a logger that writes to our buffer
 	testLogger := log.New(&logBuffer)
 	testLogger.SetLevel(log.DebugLevel)

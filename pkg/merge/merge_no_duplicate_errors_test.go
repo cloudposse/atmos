@@ -61,7 +61,7 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 	// This test verifies that our code properly wraps errors
 	// without printing them directly
-	
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",
@@ -103,7 +103,7 @@ func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 	// With replace strategy, this should succeed (no error)
 	assert.Nil(t, err)
 	assert.NotNil(t, result)
-	
+
 	// Verify nothing was printed to stderr
 	assert.Empty(t, stderrOutput, "Merge should not print to stderr")
 }
@@ -141,11 +141,11 @@ func TestErrorContextWithoutDuplicatePrinting(t *testing.T) {
 
 	// We should get an error
 	assert.NotNil(t, err)
-	
+
 	// The error should be enhanced with context
 	errStr := err.Error()
 	assert.Contains(t, errStr, "File being processed: test.yaml")
-	
+
 	// But nothing should be printed to stderr
 	assert.Empty(t, stderrOutput, "MergeWithContext should not print to stderr")
 }
@@ -180,7 +180,7 @@ func TestMultipleMergeCallsNoDuplicates(t *testing.T) {
 		map2 := map[string]any{
 			"key": "different",
 		}
-		
+
 		// Each merge call should not print
 		result, err := Merge(atmosConfig, []map[string]any{map1, map2})
 		if err != nil {
@@ -197,7 +197,7 @@ func TestMultipleMergeCallsNoDuplicates(t *testing.T) {
 
 	// Even after multiple merge operations, nothing should be printed
 	assert.Empty(t, stderrOutput, "Multiple merges should not print to stderr")
-	
+
 	// If we want to report errors, we should do it at the application level
 	// not in the merge function itself
 	if len(errors) > 0 {
@@ -209,10 +209,10 @@ func TestMultipleMergeCallsNoDuplicates(t *testing.T) {
 // TestOriginalBehaviorWouldPrint documents what the original code was doing wrong
 func TestOriginalBehaviorWouldPrint(t *testing.T) {
 	t.Skip("This test documents the original problematic behavior - skip in normal runs")
-	
+
 	// The original code had lines like:
 	// _, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
-	// 
+	//
 	// This would print the error directly to stderr BEFORE returning it,
 	// causing duplicate error messages like:
 	//

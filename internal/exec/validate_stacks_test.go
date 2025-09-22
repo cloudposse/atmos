@@ -21,11 +21,11 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 
 	// Create a test configuration
 	atmosConfig := &schema.AtmosConfiguration{
-		BasePath:                absPath,
-		StacksBaseAbsolutePath:  filepath.Join(absPath, "stacks"),
+		BasePath:               absPath,
+		StacksBaseAbsolutePath: filepath.Join(absPath, "stacks"),
 		Stacks: schema.StacksConfiguration{
-			BasePath: "stacks",
-			NamePattern: "{stage}-{environment}",
+			BasePath:      "stacks",
+			NamePattern:   "{stage}-{environment}",
 			IncludedPaths: []string{"**/*"},
 			ExcludedPaths: []string{"**/*.tmpl"},
 		},
@@ -48,21 +48,21 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 	t.Run("type mismatch with context", func(t *testing.T) {
 		// This should fail due to type mismatch between array and string for subnets
 		err := ValidateStacks(atmosConfig)
-		
+
 		if err != nil {
 			errStr := err.Error()
-			
+
 			// Check that the error contains merge context information
 			// The error should mention the files involved
 			assert.Contains(t, errStr, "cannot override two slices with different type", "Should contain the original merge error")
-			
+
 			// Since we're using MergeContext, we should see file information
 			// Note: The exact format depends on how the error propagates through the system
-			if strings.Contains(errStr, "File being processed:") || 
-			   strings.Contains(errStr, "Import chain:") ||
-			   strings.Contains(errStr, "base.yaml") || 
-			   strings.Contains(errStr, "override.yaml") ||
-			   strings.Contains(errStr, "test-environment.yaml") {
+			if strings.Contains(errStr, "File being processed:") ||
+				strings.Contains(errStr, "Import chain:") ||
+				strings.Contains(errStr, "base.yaml") ||
+				strings.Contains(errStr, "override.yaml") ||
+				strings.Contains(errStr, "test-environment.yaml") {
 				// Good - we have context information
 				t.Logf("Error contains context information: %s", errStr)
 			} else {
@@ -84,7 +84,7 @@ func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	}
 
 	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: absPath,
+		BasePath:               absPath,
 		StacksBaseAbsolutePath: filepath.Join(absPath, "stacks"),
 		Logs: schema.Logs{
 			Level: u.LogLevelDebug,
@@ -119,12 +119,12 @@ func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	if err != nil {
 		errStr := err.Error()
 		t.Logf("Processing error (expected): %s", errStr)
-		
+
 		// Check if error contains context about the import chain
 		// The actual error format will depend on where the merge fails
-		if strings.Contains(errStr, "base") || 
-		   strings.Contains(errStr, "override") ||
-		   strings.Contains(errStr, "test-environment") {
+		if strings.Contains(errStr, "base") ||
+			strings.Contains(errStr, "override") ||
+			strings.Contains(errStr, "test-environment") {
 			t.Log("Error contains file references - context tracking is working")
 		}
 	} else {
@@ -134,7 +134,7 @@ func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 
 func TestMergeContextErrorFormatting(t *testing.T) {
 	// This is a focused unit test for error formatting in the context of validate stacks
-	
+
 	tests := []struct {
 		name          string
 		setupFunc     func() error
@@ -146,15 +146,15 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 				// Simulate what happens during validate stacks
 				testCasesPath := "../../tests/test-cases/validate-type-mismatch"
 				absPath, _ := filepath.Abs(testCasesPath)
-				
+
 				atmosConfig := &schema.AtmosConfiguration{
-					BasePath: absPath,
+					BasePath:               absPath,
 					StacksBaseAbsolutePath: filepath.Join(absPath, "stacks"),
 					Settings: schema.AtmosSettings{
 						ListMergeStrategy: "replace",
 					},
 				}
-				
+
 				// This should trigger our enhanced error formatting
 				return ValidateStacks(atmosConfig)
 			},
@@ -164,14 +164,14 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.setupFunc()
 			if err != nil {
 				errStr := err.Error()
 				t.Logf("Formatted error:\n%s", errStr)
-				
+
 				for _, part := range tt.expectedParts {
 					if part != "" && !strings.Contains(errStr, part) {
 						t.Logf("Warning: Expected part not found: %s", part)

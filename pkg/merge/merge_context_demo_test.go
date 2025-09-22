@@ -15,7 +15,7 @@ func TestMergeContextErrorDemo(t *testing.T) {
 	// Create a merge context that simulates a real import chain
 	ctx := NewMergeContext()
 	ctx = ctx.WithFile("stacks/catalog/base.yaml")
-	ctx = ctx.WithFile("stacks/mixins/region/us-east-1.yaml") 
+	ctx = ctx.WithFile("stacks/mixins/region/us-east-1.yaml")
 	ctx = ctx.WithFile("stacks/dev/environment.yaml")
 
 	// Format the error with context
@@ -45,7 +45,7 @@ func TestMergeContextRealWorldScenario(t *testing.T) {
 	mergoError := errors.New("cannot override two slices with different type ([]interface {}, string)")
 
 	// Format with context
-	enhancedError := ctx.FormatError(mergoError, 
+	enhancedError := ctx.FormatError(mergoError,
 		"This error occurred while processing VPC configuration",
 		"The 'subnets' field appears to have conflicting types")
 

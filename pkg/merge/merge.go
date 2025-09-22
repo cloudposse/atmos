@@ -3,8 +3,8 @@ package merge
 import (
 	"fmt"
 
-	log "github.com/charmbracelet/log"
 	"dario.cat/mergo"
+	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -174,23 +174,23 @@ func MergeWithOptionsAndContext(
 	if context != nil && context.CurrentFile != "" {
 		log.Debug("Performing merge operation", "file", context.CurrentFile, "depth", context.GetDepth())
 	}
-	
+
 	result, err := MergeWithOptions(inputs, appendSlice, sliceDeepCopy)
 	if err != nil {
 		// Log the error with context for debugging
 		if context != nil {
-			log.Debug("Merge failed with context", 
+			log.Debug("Merge failed with context",
 				"file", context.CurrentFile,
 				"import_chain", context.GetImportChainString(),
 				"error", err.Error())
 		}
-		
+
 		// Add context information to the error
 		if context != nil {
 			return nil, context.FormatError(err)
 		}
 		return nil, err
 	}
-	
+
 	return result, nil
 }

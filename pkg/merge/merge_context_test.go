@@ -18,19 +18,19 @@ func TestNewMergeContext(t *testing.T) {
 
 func TestMergeContext_WithFile(t *testing.T) {
 	ctx := NewMergeContext()
-	
+
 	// Test adding first file
 	ctx1 := ctx.WithFile("stacks/base.yaml")
 	assert.Equal(t, "stacks/base.yaml", ctx1.CurrentFile)
 	assert.Equal(t, []string{"stacks/base.yaml"}, ctx1.ImportChain)
 	assert.Equal(t, ctx, ctx1.ParentContext)
-	
+
 	// Test adding second file (import chain)
 	ctx2 := ctx1.WithFile("stacks/import.yaml")
 	assert.Equal(t, "stacks/import.yaml", ctx2.CurrentFile)
 	assert.Equal(t, []string{"stacks/base.yaml", "stacks/import.yaml"}, ctx2.ImportChain)
 	assert.Equal(t, ctx1, ctx2.ParentContext)
-	
+
 	// Test nil context
 	var nilCtx *MergeContext
 	ctx3 := nilCtx.WithFile("stacks/file.yaml")
@@ -44,16 +44,16 @@ func TestMergeContext_Clone(t *testing.T) {
 	ctx := NewMergeContext()
 	ctx = ctx.WithFile("file1.yaml")
 	ctx = ctx.WithFile("file2.yaml")
-	
+
 	clone := ctx.Clone()
 	assert.Equal(t, ctx.CurrentFile, clone.CurrentFile)
 	assert.Equal(t, ctx.ImportChain, clone.ImportChain)
 	assert.Equal(t, ctx.ParentContext, clone.ParentContext)
-	
+
 	// Ensure it's a deep copy - modifying clone shouldn't affect original
 	clone.ImportChain = append(clone.ImportChain, "file3.yaml")
 	assert.NotEqual(t, ctx.ImportChain, clone.ImportChain)
-	
+
 	// Test cloning nil context
 	var nilCtx *MergeContext
 	clone2 := nilCtx.Clone()
@@ -158,12 +158,12 @@ func TestMergeContext_FormatError(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := tt.setupContext()
 			formattedErr := ctx.FormatError(tt.inputError, tt.additionalInfo...)
-			
+
 			if tt.inputError == nil {
 				assert.Nil(t, formattedErr)
 			} else if tt.expectedParts != nil {
@@ -181,15 +181,15 @@ func TestMergeContext_GetImportChainString(t *testing.T) {
 	// Test nil context
 	var nilCtx *MergeContext
 	assert.Empty(t, nilCtx.GetImportChainString())
-	
+
 	// Test empty context
 	ctx := NewMergeContext()
 	assert.Empty(t, ctx.GetImportChainString())
-	
+
 	// Test single file
 	ctx = ctx.WithFile("file1.yaml")
 	assert.Equal(t, "file1.yaml", ctx.GetImportChainString())
-	
+
 	// Test multiple files
 	ctx = ctx.WithFile("file2.yaml")
 	ctx = ctx.WithFile("file3.yaml")
@@ -200,18 +200,18 @@ func TestMergeContext_GetDepth(t *testing.T) {
 	// Test nil context
 	var nilCtx *MergeContext
 	assert.Equal(t, 0, nilCtx.GetDepth())
-	
+
 	// Test empty context
 	ctx := NewMergeContext()
 	assert.Equal(t, 0, ctx.GetDepth())
-	
+
 	// Test with files
 	ctx = ctx.WithFile("file1.yaml")
 	assert.Equal(t, 1, ctx.GetDepth())
-	
+
 	ctx = ctx.WithFile("file2.yaml")
 	assert.Equal(t, 2, ctx.GetDepth())
-	
+
 	ctx = ctx.WithFile("file3.yaml")
 	assert.Equal(t, 3, ctx.GetDepth())
 }
@@ -220,16 +220,16 @@ func TestMergeContext_HasFile(t *testing.T) {
 	// Test nil context
 	var nilCtx *MergeContext
 	assert.False(t, nilCtx.HasFile("any.yaml"))
-	
+
 	// Test empty context
 	ctx := NewMergeContext()
 	assert.False(t, ctx.HasFile("test.yaml"))
-	
+
 	// Add files and test
 	ctx = ctx.WithFile("file1.yaml")
 	ctx = ctx.WithFile("file2.yaml")
 	ctx = ctx.WithFile("file3.yaml")
-	
+
 	assert.True(t, ctx.HasFile("file1.yaml"))
 	assert.True(t, ctx.HasFile("file2.yaml"))
 	assert.True(t, ctx.HasFile("file3.yaml"))
@@ -239,14 +239,14 @@ func TestMergeContext_HasFile(t *testing.T) {
 
 func TestMergeContext_CircularImportDetection(t *testing.T) {
 	ctx := NewMergeContext()
-	
+
 	// Build an import chain
 	ctx = ctx.WithFile("stacks/base.yaml")
 	assert.False(t, ctx.HasFile("stacks/import.yaml"))
-	
+
 	ctx = ctx.WithFile("stacks/import.yaml")
 	assert.True(t, ctx.HasFile("stacks/import.yaml"))
-	
+
 	// This would indicate a circular import
 	assert.True(t, ctx.HasFile("stacks/base.yaml"))
 }
@@ -257,15 +257,15 @@ func TestMergeContext_RealWorldErrorScenario(t *testing.T) {
 	ctx = ctx.WithFile("stacks/catalog/base.yaml")
 	ctx = ctx.WithFile("stacks/mixins/region/us-east-1.yaml")
 	ctx = ctx.WithFile("stacks/dev/environment.yaml")
-	
+
 	// Simulate the actual mergo error
 	mergoError := errors.New("cannot override two slices with different type ([]interface {}, string)")
-	
+
 	formattedErr := ctx.FormatError(mergoError)
 	assert.NotNil(t, formattedErr)
-	
+
 	errStr := formattedErr.Error()
-	
+
 	// Verify the error message contains all the helpful information
 	assert.Contains(t, errStr, "cannot override two slices with different type")
 	assert.Contains(t, errStr, "File being processed: stacks/dev/environment.yaml")
@@ -275,7 +275,7 @@ func TestMergeContext_RealWorldErrorScenario(t *testing.T) {
 	assert.Contains(t, errStr, "stacks/dev/environment.yaml")
 	assert.Contains(t, errStr, "Likely cause:")
 	assert.Contains(t, errStr, "Debug hint:")
-	
+
 	// The error should be actionable
 	assert.True(t, strings.Contains(errStr, "array") && strings.Contains(errStr, "string"))
 }
