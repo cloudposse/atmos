@@ -15,6 +15,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// DefaultHTTPClientTimeout is the default timeout for HTTP client requests
+	DefaultHTTPClientTimeout = 10 * time.Second
+)
+
 // UploadInstances uploads drift detection data to the API.
 func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) error {
 	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
@@ -22,7 +27,7 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 	// Guard against nil HTTPClient by ensuring a default client with a sane timeout
 	client := c.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = &http.Client{Timeout: DefaultHTTPClientTimeout}
 	}
 
 	data, err := utils.ConvertToJSON(dto)
