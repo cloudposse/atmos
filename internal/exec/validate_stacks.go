@@ -152,7 +152,47 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	log.Debug("Validating all YAML files in the folder and all subfolders (excluding template files)",
 		"folder", filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
 
+	// Track imported files to avoid processing them at the top level
+	// This ensures we see the full import chain in error messages
+	importedFiles := make(map[string]bool)
+	allImportsConfig := make(map[string]map[string]any)
+
+	// First pass: identify all imported files
 	for _, filePath := range stackConfigFilesAbsolutePaths {
+		_, importsConfig, _, _, _, _, _, _ := ProcessYAMLConfigFile(
+			atmosConfig,
+			atmosConfig.StacksBaseAbsolutePath,
+			filePath,
+			map[string]map[string]any{},
+			nil,
+			true,  // ignoreMissingFiles for first pass
+			false,
+			false,
+			false,
+			map[string]any{},
+			map[string]any{},
+			map[string]any{},
+			map[string]any{},
+			atmosManifestJsonSchemaFilePath,
+		)
+		
+		// Track all imported files
+		for importPath := range importsConfig {
+			importedFiles[importPath] = true
+			allImportsConfig[importPath] = importsConfig[importPath]
+		}
+	}
+
+	// Second pass: only process top-level files (not imported by others)
+	for _, filePath := range stackConfigFilesAbsolutePaths {
+		relativeFilePath := u.TrimBasePathFromPath(atmosConfig.StacksBaseAbsolutePath+"/", filePath)
+		
+		// Skip if this file is imported by another file
+		if importedFiles[relativeFilePath] {
+			log.Debug("Skipping imported file (will be processed via parent)", "file", relativeFilePath)
+			continue
+		}
+
 		stackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
@@ -170,27 +210,29 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			atmosManifestJsonSchemaFilePath,
 		)
 		if err != nil {
+			// Collect the error from ProcessYAMLConfigFile
 			validationErrorMessages = append(validationErrorMessages, err.Error())
-		}
-
-		// Process and validate the stack manifest
-		_, err = ProcessStackConfig(
-			atmosConfig,
-			atmosConfig.StacksBaseAbsolutePath,
-			atmosConfig.TerraformDirAbsolutePath,
-			atmosConfig.HelmfileDirAbsolutePath,
-			atmosConfig.PackerDirAbsolutePath,
-			filePath,
-			stackConfig,
-			false,
-			true,
-			"",
-			map[string]map[string][]string{},
-			importsConfig,
-			false,
-		)
-		if err != nil {
-			validationErrorMessages = append(validationErrorMessages, err.Error())
+		} else {
+			// Only process stack config if YAML processing succeeded
+			// This avoids duplicate error reporting for the same issue
+			_, err = ProcessStackConfig(
+				atmosConfig,
+				atmosConfig.StacksBaseAbsolutePath,
+				atmosConfig.TerraformDirAbsolutePath,
+				atmosConfig.HelmfileDirAbsolutePath,
+				atmosConfig.PackerDirAbsolutePath,
+				filePath,
+				stackConfig,
+				false,
+				true,
+				"",
+				map[string]map[string][]string{},
+				importsConfig,
+				false,
+			)
+			if err != nil {
+				validationErrorMessages = append(validationErrorMessages, err.Error())
+			}
 		}
 	}
 

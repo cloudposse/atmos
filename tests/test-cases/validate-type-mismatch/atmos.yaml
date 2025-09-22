@@ -8,6 +8,9 @@ stacks:
   excluded_paths:
     - "**/*.tmpl"
 
+settings:
+  list_merge_strategy: "replace"
+
 components:
   terraform:
     base_path: "components/terraform"

@@ -67,7 +67,13 @@ func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 
 	var sb strings.Builder
 
-	// Build context message (without the original error text)
+	// Start with the original error
+	sb.WriteString(err.Error())
+	sb.WriteString("\n\n")
+
+	// Use a code fence to preserve formatting of the context information
+	sb.WriteString("```\n")
+
 	// Add current file being processed
 	if mc.CurrentFile != "" {
 		sb.WriteString(fmt.Sprintf("File being processed: %s", mc.CurrentFile))
@@ -75,18 +81,16 @@ func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 
 	// Add import chain if available
 	if len(mc.ImportChain) > 0 {
-		if sb.Len() > 0 {
-			sb.WriteString("\n")
-		}
-		sb.WriteString("Import chain:")
+		sb.WriteString("\nImport chain:")
 		for i, file := range mc.ImportChain {
-			prefix := "  "
+			var indent string
 			if i == 0 {
-				prefix = "\n  → "
+				indent = "\n  → "
 			} else {
-				prefix = "\n    → "
+				// Add proper indentation for nested imports
+				indent = "\n    → "
 			}
-			sb.WriteString(fmt.Sprintf("%s%s", prefix, file))
+			sb.WriteString(fmt.Sprintf("%s%s", indent, file))
 		}
 	}
 
@@ -94,41 +98,31 @@ func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 	if len(additionalInfo) > 0 {
 		for _, info := range additionalInfo {
 			if info != "" {
-				if sb.Len() > 0 {
-					sb.WriteString("\n")
-				}
+				sb.WriteString("\n")
 				sb.WriteString(info)
 			}
 		}
 	}
 
+	// Close the code fence
+	sb.WriteString("\n```")
+
 	// Add helpful hints for common merge errors
 	errStr := err.Error()
 	if strings.Contains(errStr, "cannot override two slices with different type") {
-		if sb.Len() > 0 {
-			sb.WriteString("\n")
-		}
-		sb.WriteString("Likely cause: A key is defined as an array in one file and as a string in another.")
-		sb.WriteString("\nDebug hint: Check the files above for keys that have different types.")
-		sb.WriteString("\nCommon issues:")
-		sb.WriteString("\n  - vars defined as both array and string")
-		sb.WriteString("\n  - settings with inconsistent types across imports")
-		sb.WriteString("\n  - overrides attempting to change field types")
+		sb.WriteString("\n\n**Likely cause:** A key is defined as an array in one file and as a string in another.")
+		sb.WriteString("\n\n**Debug hint:** Check the files above for keys that have different types.")
+		sb.WriteString("\n\n**Common issues:**")
+		sb.WriteString("\n- `vars` defined as both array and string")
+		sb.WriteString("\n- `settings` with inconsistent types across imports")
+		sb.WriteString("\n- `overrides` attempting to change field types")
 	} else if strings.Contains(errStr, "cannot override") {
-		if sb.Len() > 0 {
-			sb.WriteString("\n")
-		}
-		sb.WriteString("Likely cause: Type mismatch when merging configurations.")
-		sb.WriteString("\nDebug hint: Ensure consistent types for the same keys across all files.")
+		sb.WriteString("\n\n**Likely cause:** Type mismatch when merging configurations.")
+		sb.WriteString("\n\n**Debug hint:** Ensure consistent types for the same keys across all files.")
 	}
 
-	// If we have context to add, wrap the error with the context message
-	if sb.Len() > 0 {
-		return fmt.Errorf("%s: %w", sb.String(), err)
-	}
-
-	// No context was added, return original error
-	return err
+	// Return the formatted error (not wrapped)
+	return fmt.Errorf("%s", sb.String())
 }
 
 // GetImportChainString returns a formatted string of the import chain.

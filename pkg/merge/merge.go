@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"dario.cat/mergo"
-	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -63,8 +62,7 @@ func MergeWithOptions(
 		}
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			// Log the merge error for debugging
-			log.Debug("Merge operation failed", "error", err.Error())
+			// Return the error without debug logging
 			return nil, fmt.Errorf("%w: mergo merge failed: %v", errUtils.ErrMerge, err)
 		}
 	}
@@ -166,20 +164,13 @@ func MergeWithOptionsAndContext(
 	sliceDeepCopy bool,
 	context *MergeContext,
 ) (map[string]any, error) {
-	// Log merge context if available (only in trace/debug mode to avoid noise)
-	if context != nil && context.CurrentFile != "" {
-		log.Debug("Performing merge operation", "file", context.CurrentFile, "depth", context.GetDepth())
-	}
+	// Remove verbose merge operation logging - it creates too much noise
+	// Users can use ATMOS_LOGS_LEVEL=Trace if they need detailed merge debugging
 
 	result, err := MergeWithOptions(inputs, appendSlice, sliceDeepCopy)
 	if err != nil {
-		// Log the error with context for debugging
-		if context != nil {
-			log.Debug("Merge failed with context",
-				"file", context.CurrentFile,
-				"import_chain", context.GetImportChainString(),
-				"error", err.Error())
-		}
+		// Remove verbose merge failure logging
+		// The error context will be shown in the formatted error message
 
 		// Add context information to the error
 		if context != nil {

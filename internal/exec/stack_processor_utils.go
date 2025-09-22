@@ -73,7 +73,7 @@ func ProcessYAMLConfigFiles(
 				".yml",
 			)
 
-			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, err := ProcessYAMLConfigFile(
+			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				stackBasePath,
 				p,
@@ -88,6 +88,7 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				map[string]any{},
 				"",
+				m.NewMergeContext(), // Add merge context for enhanced error reporting
 			)
 			if err != nil {
 				errorResult = err
@@ -278,8 +279,15 @@ func ProcessYAMLConfigFileWithContext(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
-			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
-			return nil, nil, nil, nil, nil, nil, nil, e
+			// Check if we have merge context to provide enhanced error formatting
+			if mergeContext != nil {
+				// Use merge context to format the error with import chain information
+				e := mergeContext.FormatError(err, fmt.Sprintf("invalid stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+				return nil, nil, nil, nil, nil, nil, nil, e
+			} else {
+				e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+				return nil, nil, nil, nil, nil, nil, nil, e
+			}
 		}
 	}
 
@@ -288,8 +296,15 @@ func ProcessYAMLConfigFileWithContext(
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 		}
-		e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
-		return nil, nil, nil, nil, nil, nil, nil, e
+		// Check if we have merge context to provide enhanced error formatting
+		if mergeContext != nil {
+			// Use merge context to format the error with import chain information
+			e := mergeContext.FormatError(err, fmt.Sprintf("invalid stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+			return nil, nil, nil, nil, nil, nil, nil, e
+		} else {
+			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			return nil, nil, nil, nil, nil, nil, nil, e
+		}
 	}
 
 	// If the path to the Atmos manifest JSON Schema is provided, validate the stack manifest against it
