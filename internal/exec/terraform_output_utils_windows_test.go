@@ -77,19 +77,19 @@ func TestRetryOnWindows_AllFailures(t *testing.T) {
 func TestRetryOnWindows_DifferentErrors(t *testing.T) {
 	// Test that the last error is returned when different errors occur.
 	callCount := 0
-	errors := []error{
+	errList := []error{
 		errors.New("first error"),
 		errors.New("second error"),
 		errors.New("final error"),
 	}
 
 	err := retryOnWindows(func() error {
-		err := errors[callCount]
+		err := errList[callCount]
 		callCount++
 		return err
 	})
 
 	assert.Error(t, err)
-	assert.Equal(t, errors[2], err, "Should return the last error")
+	assert.Equal(t, errList[2], err, "Should return the last error")
 	assert.Equal(t, 3, callCount, "Function should be called 3 times")
 }

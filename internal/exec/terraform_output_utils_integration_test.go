@@ -36,7 +36,7 @@ func TestRetryOnWindows_FileOperations(t *testing.T) {
 
 func TestRetryOnWindows_SimulatedLockingScenario(t *testing.T) {
 	if runtime.GOOS != "windows" {
-		t.Skip("This test simulates Windows-specific file locking behavior")
+		t.Skipf("This test simulates Windows-specific file locking behavior")
 	}
 
 	tmpDir, err := os.MkdirTemp("", "terraform_lock_test")
