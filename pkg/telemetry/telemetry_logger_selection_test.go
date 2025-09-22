@@ -28,7 +28,7 @@ func TestTelemetryLoggerSelectionBasedOnFlag(t *testing.T) {
 		}
 
 		// Create telemetry with logging enabled
-		telemetry := NewTelemetry(true, "test-token", "https://test.com", "test-id", true, mockProvider)
+		telemetry := NewTelemetry(true, "test-token", Options{Endpoint: "https://test.com", DistinctID: "test-id", Logging: true}, mockProvider)
 		success := telemetry.Capture("test", map[string]interface{}{})
 
 		assert.True(t, success)
@@ -55,7 +55,7 @@ func TestTelemetryLoggerSelectionBasedOnFlag(t *testing.T) {
 		}
 
 		// Create telemetry with logging disabled
-		telemetry := NewTelemetry(true, "test-token", "https://test.com", "test-id", false, mockProvider)
+		telemetry := NewTelemetry(true, "test-token", Options{Endpoint: "https://test.com", DistinctID: "test-id", Logging: false}, mockProvider)
 		success := telemetry.Capture("test", map[string]interface{}{})
 
 		assert.True(t, success)
@@ -77,21 +77,21 @@ func TestTelemetryConstructorWithLogging(t *testing.T) {
 
 	// Test with logging enabled
 	t.Run("LoggingEnabled", func(t *testing.T) {
-		telemetry := NewTelemetry(true, "token", "endpoint", "id", true, mockClientProvider.NewMockClient)
+		telemetry := NewTelemetry(true, "token", Options{Endpoint: "endpoint", DistinctID: "id", Logging: true}, mockClientProvider.NewMockClient)
 		assert.True(t, telemetry.logging)
 		assert.True(t, telemetry.isEnabled)
 	})
 
 	// Test with logging disabled
 	t.Run("LoggingDisabled", func(t *testing.T) {
-		telemetry := NewTelemetry(true, "token", "endpoint", "id", false, mockClientProvider.NewMockClient)
+		telemetry := NewTelemetry(true, "token", Options{Endpoint: "endpoint", DistinctID: "id", Logging: false}, mockClientProvider.NewMockClient)
 		assert.False(t, telemetry.logging)
 		assert.True(t, telemetry.isEnabled)
 	})
 
 	// Test that logging flag is independent of enabled flag
 	t.Run("TelemetryDisabledLoggingEnabled", func(t *testing.T) {
-		telemetry := NewTelemetry(false, "token", "endpoint", "id", true, mockClientProvider.NewMockClient)
+		telemetry := NewTelemetry(false, "token", Options{Endpoint: "endpoint", DistinctID: "id", Logging: true}, mockClientProvider.NewMockClient)
 		assert.True(t, telemetry.logging)
 		assert.False(t, telemetry.isEnabled)
 	})

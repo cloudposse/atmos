@@ -55,6 +55,25 @@ func (p *PosthogLogger) Errorf(format string, args ...interface{}) {
 	p.logger.Debug(msg, "posthog_level", "error")
 }
 
+// Infof logs info messages from PostHog using Atmos's logger.
+// PostHog uses Infof for INFO level messages, but we log them at DEBUG
+// to reduce noise in production.
+func (p *PosthogLogger) Infof(format string, args ...interface{}) {
+	// Convert printf-style to structured logging at debug level
+	// to avoid cluttering user output with telemetry info
+	msg := fmt.Sprintf(format, args...)
+	p.logger.Debug(msg)
+}
+
+// Printf logs messages from PostHog using Atmos's logger.
+// This is a generic print method that PostHog may call.
+// We log at DEBUG level to avoid cluttering user output.
+func (p *PosthogLogger) Printf(format string, args ...interface{}) {
+	// Convert printf-style to structured logging at debug level
+	msg := fmt.Sprintf(format, args...)
+	p.logger.Debug(msg)
+}
+
 // SilentLogger is a no-op logger that discards all PostHog messages.
 // This can be used when we want to completely suppress PostHog output.
 type SilentLogger struct{}
@@ -78,6 +97,14 @@ func (s *SilentLogger) Warnf(format string, args ...interface{}) {
 
 // Errorf discards error messages.
 func (s *SilentLogger) Errorf(format string, args ...interface{}) {
+}
+
+// Infof discards info messages.
+func (s *SilentLogger) Infof(format string, args ...interface{}) {
+}
+
+// Printf discards messages.
+func (s *SilentLogger) Printf(format string, args ...interface{}) {
 }
 
 // DiscardLogger is a logger that writes all output to io.Discard.
@@ -105,4 +132,12 @@ func (d *DiscardLogger) Warnf(format string, args ...interface{}) {
 
 // Errorf discards error messages.
 func (d *DiscardLogger) Errorf(format string, args ...interface{}) {
+}
+
+// Infof discards info messages.
+func (d *DiscardLogger) Infof(format string, args ...interface{}) {
+}
+
+// Printf discards messages.
+func (d *DiscardLogger) Printf(format string, args ...interface{}) {
 }

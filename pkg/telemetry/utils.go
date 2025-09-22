@@ -90,7 +90,11 @@ func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 		clientProvider = provider[0]
 	}
 
-	return NewTelemetry(enabled, token, endpoint, distinctId, logging, clientProvider)
+	return NewTelemetry(enabled, token, Options{
+		Endpoint:   endpoint,
+		DistinctID: distinctId,
+		Logging:    logging,
+	}, clientProvider)
 }
 
 // atmosProWorkspaceID retrieves the Atmos Pro workspace ID from the configuration.

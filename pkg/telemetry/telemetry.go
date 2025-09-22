@@ -13,6 +13,13 @@ import (
 // avoid copying large structs and to allow tests to modify it.
 type TelemetryClientProvider func(string, *posthog.Config) (posthog.Client, error)
 
+// Options contains optional configuration for telemetry.
+type Options struct {
+	Endpoint   string // PostHog endpoint URL
+	DistinctID string // Unique identifier for the user/instance
+	Logging    bool   // Whether PostHog internal logging is enabled
+}
+
 // PosthogClientProvider is the default implementation of TelemetryClientProvider
 // that creates a real PostHog client using the provided token and configuration.
 // PosthogClientProvider is the default implementation of TelemetryClientProvider
@@ -36,13 +43,13 @@ type Telemetry struct {
 // NewTelemetry creates a new Telemetry instance with the specified configuration.
 // The clientProvider parameter allows for dependency injection, making it easier
 // to test the telemetry system with mock clients.
-func NewTelemetry(isEnabled bool, token string, endpoint string, distinctId string, logging bool, clientProvider TelemetryClientProvider) *Telemetry {
+func NewTelemetry(isEnabled bool, token string, opts Options, clientProvider TelemetryClientProvider) *Telemetry {
 	return &Telemetry{
 		isEnabled:      isEnabled,
 		token:          token,
-		endpoint:       endpoint,
-		distinctId:     distinctId,
-		logging:        logging,
+		endpoint:       opts.Endpoint,
+		distinctId:     opts.DistinctID,
+		logging:        opts.Logging,
 		clientProvider: clientProvider,
 	}
 }
