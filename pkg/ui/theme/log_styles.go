@@ -2,7 +2,7 @@ package theme
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
 // GetLogStyles returns charm/log styles configured with the current theme colors.

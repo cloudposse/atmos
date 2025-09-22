@@ -9,6 +9,9 @@ import (
 // ErrThemeNotFound is returned when a requested theme is not found.
 var ErrThemeNotFound = errors.New("theme not found")
 
+// ErrInvalidTheme is returned when an invalid theme is specified.
+var ErrInvalidTheme = errors.New("invalid theme")
+
 // Registry manages the collection of available themes.
 type Registry struct {
 	themes map[string]*Theme
@@ -120,8 +123,8 @@ func ValidateTheme(themeName string) error {
 		for _, t := range registry.sorted {
 			availableThemes = append(availableThemes, t.Name)
 		}
-		return fmt.Errorf("invalid theme '%s'. Available themes: %s",
-			themeName, strings.Join(availableThemes, ", "))
+		return fmt.Errorf("%w: '%s'. Available themes: %s",
+			ErrInvalidTheme, themeName, strings.Join(availableThemes, ", "))
 	}
 
 	return nil

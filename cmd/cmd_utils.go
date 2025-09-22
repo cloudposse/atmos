@@ -497,7 +497,8 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	// Validate theme configuration if specified
 	if atmosConfig.Settings.Terminal.Theme != "" {
 		if err := theme.ValidateTheme(atmosConfig.Settings.Terminal.Theme); err != nil {
-			log.Fatal("Theme validation failed", "error", err)
+			log.Error("Theme validation failed", "error", err)
+			os.Exit(1)
 		}
 	}
 

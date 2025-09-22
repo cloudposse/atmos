@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,6 +25,7 @@ const (
 	hexBase              = 16
 	intBitSize           = 64
 	luminanceRedWeight   = 0.299
+	providerCount        = 5 // Number of Terraform providers in demo
 	luminanceGreenWeight = 0.587
 	luminanceBlueWeight  = 0.114
 	luminanceThreshold   = 0.5
@@ -222,7 +223,7 @@ func generateLogDemo(scheme *theme.ColorScheme) string {
 
 	// Generate sample log messages with key-value pairs
 	demoLogger.Debug("Processing component", "component", "vpc", "stack", "dev")
-	demoLogger.Info("Terraform init completed", "duration", "3.2s", "providers", 5)
+	demoLogger.Info("Terraform init completed", "duration", "3.2s", "providers", providerCount)
 	demoLogger.Warn("Resource already exists", "resource", "aws_vpc.main", "action", "skip")
 	demoLogger.Error("Failed to connect", "endpoint", "api.example.com", "retry", 3)
 
