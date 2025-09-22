@@ -513,10 +513,21 @@ func ProcessStacks(
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
 		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
 		componentInfo["terraform_config"] = terraformConfiguration
+		componentInfo["generated"] = map[string]any{
+			"planfile":    constructTerraformComponentPlanfileName(&configAndStacksInfo),
+			"varfile":     constructTerraformComponentVarfileName(&configAndStacksInfo),
+			"backendfile": "backend.tf.json",
+		}
 	case cfg.HelmfileComponentType:
 		componentInfo[cfg.ComponentPathSectionName] = constructHelmfileComponentWorkingDir(atmosConfig, &configAndStacksInfo)
+		componentInfo["generated"] = map[string]any{
+			"varfile": constructHelmfileComponentVarfileName(&configAndStacksInfo),
+		}
 	case cfg.PackerComponentType:
 		componentInfo[cfg.ComponentPathSectionName] = constructPackerComponentWorkingDir(atmosConfig, &configAndStacksInfo)
+		componentInfo["generated"] = map[string]any{
+			"varfile": constructPackerComponentVarfileName(&configAndStacksInfo),
+		}
 	}
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo

@@ -186,6 +186,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "c: c-team1")
 	assert.Contains(t, y, "d: d")
 
+	assert.Contains(t, y, "generated:")
+	assert.Contains(t, y, "planfile: dev-c1.planfile")
+	assert.Contains(t, y, "varfile: dev-c1.terraform.tfvars.json")
+	assert.Contains(t, y, "backendfile: backend.tf.json")
+
 	// `staging`
 	res, err = ExecuteDescribeComponent(
 		component,
@@ -202,6 +207,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "b: b-team2")
 	assert.Contains(t, y, "c: c-team1")
 	assert.Contains(t, y, "d: d")
+
+	assert.Contains(t, y, "generated:")
+	assert.Contains(t, y, "planfile: staging-c1.planfile")
+	assert.Contains(t, y, "varfile: staging-c1.terraform.tfvars.json")
+	assert.Contains(t, y, "backendfile: backend.tf.json")
 
 	// `prod`
 	res, err = ExecuteDescribeComponent(
@@ -220,6 +230,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "c: c-prod")
 	assert.Contains(t, y, "d: d")
 
+	assert.Contains(t, y, "generated:")
+	assert.Contains(t, y, "planfile: prod-c1.planfile")
+	assert.Contains(t, y, "varfile: prod-c1.terraform.tfvars.json")
+	assert.Contains(t, y, "backendfile: backend.tf.json")
+
 	// `sandbox`
 	res, err = ExecuteDescribeComponent(
 		component,
@@ -236,6 +251,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "b: b-team2")
 	assert.Contains(t, y, "c: c-team1")
 	assert.Contains(t, y, "d: d")
+
+	assert.Contains(t, y, "generated:")
+	assert.Contains(t, y, "planfile: sandbox-c1.planfile")
+	assert.Contains(t, y, "varfile: sandbox-c1.terraform.tfvars.json")
+	assert.Contains(t, y, "backendfile: backend.tf.json")
 
 	// `test`
 	res, err = ExecuteDescribeComponent(
@@ -254,6 +274,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "c: c-team1")
 	assert.Contains(t, y, "d: d")
 
+	assert.Contains(t, y, "generated:")
+	assert.Contains(t, y, "planfile: test-c1.planfile")
+	assert.Contains(t, y, "varfile: test-c1.terraform.tfvars.json")
+	assert.Contains(t, y, "backendfile: backend.tf.json")
+
 	// `test2`
 	res, err = ExecuteDescribeComponent(
 		component,
@@ -271,6 +296,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "c: c")
 	assert.Contains(t, y, "d: d")
 
+	assert.Contains(t, y, "generated:")
+	assert.Contains(t, y, "planfile: test2-c1.planfile")
+	assert.Contains(t, y, "varfile: test2-c1.terraform.tfvars.json")
+	assert.Contains(t, y, "backendfile: backend.tf.json")
+
 	// `test3`
 	res, err = ExecuteDescribeComponent(
 		component,
@@ -287,6 +317,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "b: b-overridden")
 	assert.Contains(t, y, "c: c")
 	assert.Contains(t, y, "d: d")
+
+	assert.Contains(t, y, "generated:")
+	assert.Contains(t, y, "planfile: test3-c1.planfile")
+	assert.Contains(t, y, "varfile: test3-c1.terraform.tfvars.json")
+	assert.Contains(t, y, "backendfile: backend.tf.json")
 }
 
 func TestDescribeComponent_Packer(t *testing.T) {
