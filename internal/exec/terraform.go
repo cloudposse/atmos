@@ -401,9 +401,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
 		// Check if the upload flag is present (supports --flag and --flag=true forms).
-		uploadDeploymentStatusFlag =
-			u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag) ||
-				u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag+"=")
+		uploadDeploymentStatusFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag) ||
+			u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag+"=")
 		if uploadDeploymentStatusFlag {
 			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
 				allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
