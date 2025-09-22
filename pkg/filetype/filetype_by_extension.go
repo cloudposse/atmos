@@ -91,7 +91,7 @@ func GetFileExtension(filename string) string {
 	// If the extension is the whole filename (e.g., ".env"), check if it looks like a known extension.
 	if ext == filename {
 		// Check if it's actually an extension (has letters after the dot).
-		if len(ext) > 1 && strings.Contains(ext[1:], ".") == false {
+		if len(ext) > 1 && !strings.Contains(ext[1:], ".") {
 			// It looks like an extension file (e.g., ".json", ".yaml").
 			// Check if it's a known extension.
 			lowerExt := strings.ToLower(ext)

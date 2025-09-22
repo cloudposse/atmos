@@ -56,12 +56,13 @@ func processIncludeTagInternal(
 
 	partsLen := len(parts)
 
-	if partsLen == 2 {
+	switch partsLen {
+	case 2:
 		includeFile = strings.TrimSpace(parts[0])
 		includeQuery = strings.TrimSpace(parts[1])
-	} else if partsLen == 1 {
+	case 1:
 		includeFile = strings.TrimSpace(parts[0])
-	} else {
+	default:
 		return fmt.Errorf("%w: %s, stack manifest: %s", ErrIncludeYamlFunctionInvalidArguments, val, file)
 	}
 
@@ -95,44 +96,50 @@ func processIncludeTagInternal(
 	return updateYamlNode(node, res, val, file)
 }
 
+// isRemoteURL checks if the path is a remote URL.
+func isRemoteURL(path string) bool {
+	remoteProtocols := []string{"http://", "https://", "s3://", "gcs://", "git://", "oci://", "scp://", "sftp://"}
+	for _, protocol := range remoteProtocols {
+		if strings.HasPrefix(path, protocol) {
+			return true
+		}
+	}
+	return strings.Contains(path, "::")
+}
+
+// resolveAbsolutePath checks if a file exists and returns its absolute path.
+func resolveAbsolutePath(path string) string {
+	if !FileExists(path) {
+		return ""
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return ""
+	}
+	return absPath
+}
+
 // findLocalFile attempts to find a local file from various possible paths.
 func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosConfiguration) string {
 	// Check if it's a URL - if so, it's not a local file
-	if strings.HasPrefix(includeFile, "http://") || strings.HasPrefix(includeFile, "https://") ||
-		strings.HasPrefix(includeFile, "s3://") || strings.HasPrefix(includeFile, "gcs://") ||
-		strings.HasPrefix(includeFile, "git://") || strings.HasPrefix(includeFile, "oci://") ||
-		strings.HasPrefix(includeFile, "scp://") || strings.HasPrefix(includeFile, "sftp://") ||
-		strings.Contains(includeFile, "::") {
+	if isRemoteURL(includeFile) {
 		return ""
 	}
 
 	// If absolute path is provided, check if the file exists
 	if filepath.IsAbs(includeFile) {
-		if FileExists(includeFile) {
-			return includeFile
-		}
-		return ""
+		return resolveAbsolutePath(includeFile)
 	}
 
 	// Try relative to the manifest file
 	resolved := ResolveRelativePath(includeFile, manifestFile)
-	if FileExists(resolved) {
-		resolvedAbsolutePath, err := filepath.Abs(resolved)
-		if err == nil {
-			return resolvedAbsolutePath
-		}
+	if absPath := resolveAbsolutePath(resolved); absPath != "" {
+		return absPath
 	}
 
 	// Try relative to the base_path from atmos.yaml
 	atmosManifestPath := filepath.Join(atmosConfig.BasePath, includeFile)
-	if FileExists(atmosManifestPath) {
-		atmosManifestAbsolutePath, err := filepath.Abs(atmosManifestPath)
-		if err == nil {
-			return atmosManifestAbsolutePath
-		}
-	}
-
-	return ""
+	return resolveAbsolutePath(atmosManifestPath)
 }
 
 // processLocalFile reads and parses a local file.
@@ -157,38 +164,53 @@ func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile strin
 	return dl.FetchAndParseByExtension(includeFile)
 }
 
+// handleCommentString updates the node for string values that start with '#'.
+func handleCommentString(node *yaml.Node, strVal string) {
+	node.Kind = yaml.ScalarNode
+	node.Tag = "!!str"
+	node.Value = strVal
+	node.Style = yaml.SingleQuotedStyle
+}
+
+// unmarshalYamlContent unmarshals YAML content and extracts the document content.
+func unmarshalYamlContent(y string, val string, file string) (*yaml.Node, error) {
+	var includedNode yaml.Node
+	err := yaml.Unmarshal([]byte(y), &includedNode)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s, stack manifest: %s, error: %v",
+			ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+	}
+
+	// yaml.Unmarshal creates a DocumentNode, we need to use its content
+	if includedNode.Kind == yaml.DocumentNode {
+		if len(includedNode.Content) == 0 {
+			return nil, fmt.Errorf("%w: %s, stack manifest: %s, error: empty document",
+				ErrIncludeYamlFunctionFailedStackManifest, val, file)
+		}
+		return includedNode.Content[0], nil
+	}
+	return &includedNode, nil
+}
+
 // updateYamlNode updates the YAML node with the processed result.
 func updateYamlNode(node *yaml.Node, res any, val string, file string) error {
 	// Handle string values that start with '#' (YAML comments)
 	if strVal, ok := res.(string); ok && strings.HasPrefix(strVal, "#") {
-		node.Kind = yaml.ScalarNode
-		node.Tag = "!!str"
-		node.Value = strVal
-		node.Style = yaml.SingleQuotedStyle
-	} else {
-		// Convert result to YAML and update the node
-		y, err := ConvertToYAML(res)
-		if err != nil {
-			return err
-		}
-
-		var includedNode yaml.Node
-		err = yaml.Unmarshal([]byte(y), &includedNode)
-		if err != nil {
-			return fmt.Errorf("%w: %s, stack manifest: %s, error: %v",
-				ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
-		}
-
-		// yaml.Unmarshal creates a DocumentNode, we need to use its content
-		if includedNode.Kind == yaml.DocumentNode {
-			if len(includedNode.Content) == 0 {
-				return fmt.Errorf("%w: %s, stack manifest: %s, error: empty document",
-					ErrIncludeYamlFunctionFailedStackManifest, val, file)
-			}
-			*node = *includedNode.Content[0]
-		} else {
-			*node = includedNode
-		}
+		handleCommentString(node, strVal)
+		return nil
 	}
+
+	// Convert result to YAML and update the node
+	y, err := ConvertToYAML(res)
+	if err != nil {
+		return err
+	}
+
+	contentNode, err := unmarshalYamlContent(y, val, file)
+	if err != nil {
+		return err
+	}
+
+	*node = *contentNode
 	return nil
 }
