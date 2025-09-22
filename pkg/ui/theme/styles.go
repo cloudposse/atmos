@@ -305,16 +305,25 @@ func InitializeStylesFromTheme(themeName string) error {
 
 // getActiveThemeName determines the active theme name from configuration or environment.
 func getActiveThemeName() string {
-	// Check Viper configuration which includes environment variables via BindEnv
-	// Viper should be configured to bind both ATMOS_THEME and THEME during initialization
+	// Bind environment variables on demand to ensure they're available
+	// This handles both ATMOS_THEME and THEME as fallbacks
+	_ = viper.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME")
+
+	// Check Viper configuration which now includes bound environment variables
 	if viper.IsSet("settings.terminal.theme") {
-		return viper.GetString("settings.terminal.theme")
+		theme := viper.GetString("settings.terminal.theme")
+		if theme != "" {
+			return theme
+		}
 	}
 
-	// Check for ATMOS_THEME environment variable through Viper
-	// Note: This assumes proper BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME")
-	// was called during initialization
+	// Check for ATMOS_THEME environment variable directly as fallback
 	if theme := viper.GetString("ATMOS_THEME"); theme != "" {
+		return theme
+	}
+
+	// Check for THEME environment variable directly as second fallback
+	if theme := viper.GetString("THEME"); theme != "" {
 		return theme
 	}
 

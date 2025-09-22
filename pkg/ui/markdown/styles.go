@@ -84,14 +84,14 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	}
 
 	if atmosConfig.Settings.Markdown.CodeBlock.Color != "" {
-		if style.CodeBlock.StyleBlock.Color != nil {
-			*style.CodeBlock.StyleBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
+		if style.CodeBlock.Color != nil {
+			*style.CodeBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
 		} else {
-			style.CodeBlock.StyleBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
+			style.CodeBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
-		if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
-			style.CodeBlock.StyleBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
-		}
+	}
+	if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
+		style.CodeBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 	}
 
 	if atmosConfig.Settings.Markdown.Link.Color != "" {
@@ -419,14 +419,14 @@ func applyCustomStylesToTheme(themeStyleBytes []byte, atmosConfig *schema.AtmosC
 	}
 
 	if atmosConfig.Settings.Markdown.CodeBlock.Color != "" {
-		if style.CodeBlock.StyleBlock.Color != nil {
-			*style.CodeBlock.StyleBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
+		if style.CodeBlock.Color != nil {
+			*style.CodeBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
 		} else {
-			style.CodeBlock.StyleBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
+			style.CodeBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
-		if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
-			style.CodeBlock.StyleBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
-		}
+	}
+	if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
+		style.CodeBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 	}
 
 	if atmosConfig.Settings.Markdown.Link.Color != "" {

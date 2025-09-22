@@ -242,15 +242,15 @@ Use the correct stream based on the type of content:
 fmt.Println(componentData)
 
 // For UI/status messages (stderr):
-fmt.Fprintf(os.Stderr, styles.Processing.Render("Processing component...\n"))
+fmt.Fprintf(os.Stderr, styles.Info.Render("Processing component...\n"))
 
 // Avoid mixing output methods unnecessarily:
 // GOOD: Consistent approach
-fmt.Fprintf(os.Stderr, labelStyle.Render("Component:"))
+fmt.Fprintf(os.Stderr, styles.Label.Render("Component:"))
 fmt.Fprintf(os.Stderr, " vpc\n")
 
 // AVOID: Mixed output methods
-fmt.Fprintln(os.Stdout, labelStyle.Render("Component:"))
+fmt.Fprintln(os.Stdout, styles.Label.Render("Component:"))
 u.PrintMessage("vpc")
 ```
 ## Code Examples
