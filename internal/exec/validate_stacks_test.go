@@ -201,7 +201,7 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 				if err == nil {
 					return
 				}
-				
+
 				errStr := err.Error()
 				t.Logf("Formatted error:\n%s", errStr)
 
@@ -213,7 +213,7 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 				}
 				return
 			}
-			
+
 			// If no expected parts, just log the error if it exists
 			if err != nil {
 				t.Logf("Error occurred: %v", err)
