@@ -56,7 +56,7 @@ func (mc *MergeContext) Clone() *MergeContext {
 
 // FormatError formats an error with merge context information.
 //
-//nolint:revive
+//nolint:revive // cognitive-complexity: detailed error formatting requires multiple conditions
 func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 	if err == nil {
 		return nil
