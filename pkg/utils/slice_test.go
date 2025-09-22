@@ -150,3 +150,105 @@ func TestSliceRemoveFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestSliceRemoveFlagAndValue(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    []string
+		flagName string
+		expected []string
+	}{
+		{
+			name:     "remove flag without value",
+			input:    []string{"--flag1", "value1", "--flag2", "value2"},
+			flagName: "flag1",
+			expected: []string{"--flag2", "value2"},
+		},
+		{
+			name:     "remove flag with spaced value",
+			input:    []string{"--flag1", "value1", "--flag2", "value2"},
+			flagName: "flag1",
+			expected: []string{"--flag2", "value2"},
+		},
+		{
+			name:     "remove flag with equals value",
+			input:    []string{"--flag1=value1", "--flag2", "value2"},
+			flagName: "flag1",
+			expected: []string{"--flag2", "value2"},
+		},
+		{
+			name:     "remove flag with spaced value followed by another flag",
+			input:    []string{"--flag1", "value1", "--flag2", "value2"},
+			flagName: "flag1",
+			expected: []string{"--flag2", "value2"},
+		},
+		{
+			name:     "remove flag with spaced value followed by non-flag",
+			input:    []string{"--flag1", "value1", "other", "args"},
+			flagName: "flag1",
+			expected: []string{"other", "args"},
+		},
+		{
+			name:     "remove flag with spaced value followed by another flag",
+			input:    []string{"--flag1", "value1", "--flag2", "value2"},
+			flagName: "flag1",
+			expected: []string{"--flag2", "value2"},
+		},
+		{
+			name:     "remove multiple occurrences",
+			input:    []string{"--flag1", "value1", "--flag1", "value2", "other"},
+			flagName: "flag1",
+			expected: []string{"other"},
+		},
+		{
+			name:     "flag not present",
+			input:    []string{"--flag1", "value1", "--flag2", "value2"},
+			flagName: "flag3",
+			expected: []string{"--flag1", "value1", "--flag2", "value2"},
+		},
+		{
+			name:     "empty slice",
+			input:    []string{},
+			flagName: "flag1",
+			expected: []string{},
+		},
+		{
+			name:     "nil slice",
+			input:    nil,
+			flagName: "flag1",
+			expected: nil,
+		},
+		{
+			name:     "empty flag name",
+			input:    []string{"--flag1", "value1"},
+			flagName: "",
+			expected: []string{"--flag1", "value1"},
+		},
+		{
+			name:     "flag at end without value",
+			input:    []string{"other", "--flag1"},
+			flagName: "flag1",
+			expected: []string{"other"},
+		},
+		{
+			name:     "flag at end with value",
+			input:    []string{"other", "--flag1", "value1"},
+			flagName: "flag1",
+			expected: []string{"other"},
+		},
+		{
+			name:     "mixed flag forms",
+			input:    []string{"--flag1", "value1", "--flag1=value2", "other"},
+			flagName: "flag1",
+			expected: []string{"other"},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc // rebind to avoid range-variable capture
+		t.Run(tc.name, func(t *testing.T) {
+			result := SliceRemoveFlagAndValue(tc.input, tc.flagName)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}

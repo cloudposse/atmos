@@ -6,13 +6,13 @@ import (
 	"strings"
 )
 
-// Package-level sentinel errors for slice operations
+// Package-level sentinel errors for slice operations.
 var (
 	ErrNilInput         = errors.New("input must not be nil")
 	ErrNonStringElement = errors.New("element is not a string")
 )
 
-// SliceContainsString checks if a string is present in a slice
+// SliceContainsString checks if a string is present in a slice.
 func SliceContainsString(s []string, str string) bool {
 	for _, v := range s {
 		if v == str {
@@ -22,7 +22,7 @@ func SliceContainsString(s []string, str string) bool {
 	return false
 }
 
-// SliceContainsInt checks if an int is present in a slice
+// SliceContainsInt checks if an int is present in a slice.
 func SliceContainsInt(s []int, i int) bool {
 	for _, v := range s {
 		if v == i {
@@ -32,7 +32,7 @@ func SliceContainsInt(s []int, i int) bool {
 	return false
 }
 
-// SliceContainsStringStartsWith checks if a slice contains a string that the given string begins with
+// SliceContainsStringStartsWith checks if a slice contains a string that the given string begins with.
 func SliceContainsStringStartsWith(s []string, str string) bool {
 	for _, v := range s {
 		if strings.HasPrefix(str, v) {
@@ -42,7 +42,7 @@ func SliceContainsStringStartsWith(s []string, str string) bool {
 	return false
 }
 
-// SliceContainsStringHasPrefix checks if a slice contains a string that begins with the given prefix
+// SliceContainsStringHasPrefix checks if a slice contains a string that begins with the given prefix.
 func SliceContainsStringHasPrefix(s []string, prefix string) bool {
 	for _, v := range s {
 		if strings.HasPrefix(v, prefix) {
@@ -95,7 +95,10 @@ func SliceOfInterfacesToSliceOfStringsWithTypeAssertion(input []any) ([]string, 
 func SliceRemoveString(slice []string, str string) []string {
 	for i, v := range slice {
 		if v == str {
-			return append(slice[:i], slice[i+1:]...)
+			// Avoid retaining reference to the removed element.
+			copy(slice[i:], slice[i+1:])
+			slice[len(slice)-1] = ""
+			return slice[:len(slice)-1]
 		}
 	}
 	return slice
@@ -108,16 +111,20 @@ func SliceRemoveFlag(slice []string, flagName string) []string {
 	if slice == nil {
 		return nil
 	}
+	if flagName == "" {
+		// No-op for empty flag names.
+		return append([]string(nil), slice...)
+	}
 
 	result := make([]string, 0, len(slice))
 	flagPrefix := "--" + flagName + "="
 
 	for _, item := range slice {
-		// Skip exact flag matches (--flag)
+		// Skip exact flag matches (--flag).
 		if item == "--"+flagName {
 			continue
 		}
-		// Skip flag with value matches (--flag=value)
+		// Skip flag with value matches (--flag=value).
 		if strings.HasPrefix(item, flagPrefix) {
 			continue
 		}
@@ -125,4 +132,28 @@ func SliceRemoveFlag(slice []string, flagName string) []string {
 	}
 
 	return result
+}
+
+// SliceRemoveFlagAndValue removes --flag and an optional following value (if the next arg
+// does not start with "-"). It preserves order of remaining args.
+func SliceRemoveFlagAndValue(args []string, flagName string) []string {
+	if args == nil || flagName == "" {
+		return append([]string(nil), args...)
+	}
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--"+flagName {
+			// Skip the flag and (optionally) its value.
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "--"+flagName+"=") {
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
 }
