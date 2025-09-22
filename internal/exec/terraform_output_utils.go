@@ -252,6 +252,9 @@ func execTerraformOutput(
 					cfg.StackStr, stack,
 				)
 			}
+
+			// Add delay on Windows after workspace operations to prevent file locking
+			windowsFileDelay()
 		}
 
 		// Terraform output
@@ -260,10 +263,21 @@ func execTerraformOutput(
 			cfg.ComponentStr, component,
 			cfg.StackStr, stack,
 		)
-		outputMeta, err := tf.Output(ctx)
+
+		// Add small delay on Windows to prevent file locking issues
+		windowsFileDelay()
+
+		// Wrap the output call with retry logic for Windows
+		var outputMeta map[string]tfexec.OutputMeta
+		err = retryOnWindows(func() error {
+			var outputErr error
+			outputMeta, outputErr = tf.Output(ctx)
+			return outputErr
+		})
 		if err != nil {
 			return nil, err
 		}
+
 		log.Debug("Executed terraform output command",
 			"command", fmt.Sprintf("terraform output %s -s %s", component, stack),
 			cfg.ComponentStr, component,
