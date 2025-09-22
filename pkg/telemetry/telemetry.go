@@ -58,15 +58,23 @@ func (t *Telemetry) Capture(eventName string, properties map[string]interface{})
 		return false
 	}
 
-	// Create PostHog client using the provided client provider
+	// Create PostHog client using the provided client provider with custom logger
+	// This ensures PostHog errors don't leak to stdout/stderr
 	client, err := t.clientProvider(t.token, &posthog.Config{
 		Endpoint: t.endpoint,
+		Logger:   NewPosthogLogger(), // Use our custom logger adapter
 	})
 	if err != nil {
-		log.Error("Could not create PostHog client", "error", err)
+		// Log at debug level to avoid polluting user output with telemetry errors
+		log.Debug("Could not create PostHog client", "error", err)
 		return false
 	}
-	defer client.Close()
+	defer func() {
+		// Ensure client close doesn't panic or output errors
+		if client != nil {
+			client.Close()
+		}
+	}()
 
 	// TODO: PostHog Enqueue always returns nil, but we still check errors
 	// to handle them if posthog go lib will return them in the future
@@ -76,7 +84,8 @@ func (t *Telemetry) Capture(eventName string, properties map[string]interface{})
 		Properties: properties,
 	})
 	if err != nil {
-		log.Error("Could not enqueue event", "error", err)
+		// Log at debug level to avoid polluting user output with telemetry errors
+		log.Debug("Could not enqueue event", "error", err)
 		return false
 	}
 	log.Debug("Telemetry event captured")

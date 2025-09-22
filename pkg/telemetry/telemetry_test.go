@@ -36,9 +36,7 @@ func TestTelemetryConstructor(t *testing.T) {
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
 	// Set up mock expectations - these should not be called during constructor test.
-	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
-		Endpoint: endpoint,
-	}).Return(mockClient, nil).Times(0)
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Return(mockClient, nil).Times(0)
 
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: distinctId,
@@ -81,9 +79,7 @@ func TestTelemetryCaptureMethod(t *testing.T) {
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
 	// Set up mock expectations for successful capture.
-	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
-		Endpoint: endpoint,
-	}).Return(mockClient, nil).Times(1)
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Return(mockClient, nil).Times(1)
 
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: distinctId,
@@ -129,9 +125,7 @@ func TestTelemetryDisabledCaptureMethod(t *testing.T) {
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
 	// Set up mock expectations - these should not be called when disabled.
-	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
-		Endpoint: endpoint,
-	}).Return(mockClient, nil).Times(0)
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Return(mockClient, nil).Times(0)
 
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: distinctId,
@@ -181,9 +175,7 @@ func TestTelemetryEmptyTokenCaptureMethod(t *testing.T) {
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
 	// Set up mock expectations - these should not be called with empty token.
-	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
-		Endpoint: endpoint,
-	}).Return(mockClient, nil).Times(0)
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Return(mockClient, nil).Times(0)
 
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: distinctId,
@@ -234,9 +226,7 @@ func TestTelemetryProviderErrorCaptureMethod(t *testing.T) {
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
 	// Expect client provider to be called once and return an error.
-	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
-		Endpoint: endpoint,
-	}).Return(mockClient, errors.New("provider error")).Times(1)
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Return(mockClient, errors.New("provider error")).Times(1)
 
 	// These methods should not be called when provider returns an error.
 	mockClient.EXPECT().Enqueue(posthog.Capture{
@@ -288,9 +278,7 @@ func TestTelemetryEnqueueErrorCaptureMethod(t *testing.T) {
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
 	// Expect client provider to succeed in creating client.
-	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
-		Endpoint: endpoint,
-	}).Return(mockClient, nil).Times(1)
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Return(mockClient, nil).Times(1)
 
 	// Expect Enqueue to be called once and return an error.
 	mockClient.EXPECT().Enqueue(posthog.Capture{
@@ -342,9 +330,7 @@ func TestTelemetryPosthogIntegrationCaptureMethod(t *testing.T) {
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
 	// Expect client provider to create a real PostHog client during the call.
-	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
-		Endpoint: endpoint,
-	}).Do(func(token string, config *posthog.Config) {
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Do(func(token string, config *posthog.Config) {
 		var err error
 		realPosthogClient, err = posthog.NewWithConfig(token, *config)
 		if err != nil {
@@ -410,9 +396,7 @@ func TestTelemetryPosthogIntegrationWrongEndpointCaptureMethod(t *testing.T) {
 	mockClient := mock_telemetry.NewMockClient(ctrl)
 
 	// Expect client provider to create a real PostHog client during the call
-	mockClientProvider.EXPECT().NewMockClient(token, &posthog.Config{
-		Endpoint: endpoint,
-	}).Do(func(token string, config *posthog.Config) {
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Do(func(token string, config *posthog.Config) {
 		var err error
 		realPosthogClient, err = posthog.NewWithConfig(token, *config)
 		if err != nil {
