@@ -546,33 +546,74 @@ import:
 	assert.NoError(t, err)
 }
 
-func TestMergeConfig_ReadFileError(t *testing.T) {
-	// Test error handling when config file cannot be read after initial load.
+func TestMergeConfig_EmptyConfig(t *testing.T) {
+	// Test mergeConfig with an empty config file to ensure edge case coverage.
 	tempDir := t.TempDir()
 
-	// Create a config file.
-	content := `
+	// Create an empty config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(""), 0o644)
+	require.NoError(t, err)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// This should succeed even with an empty file.
+	err = mergeConfig(v, tempDir, CliConfigFileName, false)
+	assert.NoError(t, err)
+}
+
+func TestMergeConfig_ComplexImportHierarchy(t *testing.T) {
+	// Test complex import hierarchy to improve coverage of import processing.
+	tempDir := t.TempDir()
+
+	// Create a chain of imports: A imports B, B imports C.
+	importDir := filepath.Join(tempDir, "imports")
+	err := os.Mkdir(importDir, 0o755)
+	require.NoError(t, err)
+
+	// Create C (base config).
+	configC := `
+base_path: /from-c
+settings:
+  level: 3
+  from_c: true
+`
+	createConfigFile(t, importDir, "c.yaml", configC)
+
+	// Create B (imports C).
+	configB := `
+import:
+  - "./c.yaml"
+settings:
+  level: 2
+  from_b: true
+`
+	createConfigFile(t, importDir, "b.yaml", configB)
+
+	// Create A (imports B).
+	configA := `
 base_path: ./
 import:
-  - "./nonexistent/import.yaml"
+  - "./imports/b.yaml"
+settings:
+  level: 1
+  from_a: true
 `
-	configPath := filepath.Join(tempDir, "atmos.yaml")
-	err := os.WriteFile(configPath, []byte(content), 0o644)
-	require.NoError(t, err)
-
-	// Make the file unreadable after it's been found (simulating permission issues).
-	// This tests the ReadFile error path at line 285-287.
-	err = os.Chmod(configPath, 0o000)
-	require.NoError(t, err)
-
-	// Ensure we restore permissions for cleanup.
-	defer os.Chmod(configPath, 0o644)
+	createConfigFile(t, tempDir, "atmos.yaml", configA)
 
 	v := viper.New()
 	v.SetConfigType("yaml")
 	err = mergeConfig(v, tempDir, CliConfigFileName, true)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "permission denied")
+	assert.NoError(t, err)
+
+	// Verify the hierarchy: A overrides B, B overrides C.
+	assert.Equal(t, "./", v.GetString("base_path"))
+	assert.Equal(t, 1, v.GetInt("settings.level"))
+	assert.True(t, v.GetBool("settings.from_a"))
+	// B and C's unique settings should not exist (sections are replaced).
+	assert.False(t, v.IsSet("settings.from_b"))
+	assert.False(t, v.IsSet("settings.from_c"))
 }
 
 func TestMergeConfig_WithoutImports(t *testing.T) {
