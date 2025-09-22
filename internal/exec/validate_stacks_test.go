@@ -182,11 +182,11 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 				return ValidateStacks(atmosConfig)
 			},
 			expectedParts: []string{
-				"merge",            // Core error operation
-				"override",         // Specific merge issue
-				"type",             // Type mismatch indicator  
+				"merge",                // Core error operation
+				"override",             // Specific merge issue
+				"type",                 // Type mismatch indicator
 				"File being processed", // Context information
-				"Import chain",     // Import tracking
+				"Import chain",         // Import tracking
 			},
 		},
 	}
@@ -194,7 +194,7 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.setupFunc()
-			
+
 			// Assert error is returned when expected parts are defined
 			if len(tt.expectedParts) > 0 {
 				assert.NotNil(t, err, "Expected an error but got none")
