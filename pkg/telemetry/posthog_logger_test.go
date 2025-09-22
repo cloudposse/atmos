@@ -23,28 +23,28 @@ func TestPosthogLogger_LogMethods(t *testing.T) {
 	logger.Debugf("debug message: %s", "test")
 	output := buf.String()
 	assert.Contains(t, output, "debug message: test")
-	assert.Contains(t, output, "posthog")  // Check for prefix in output
+	assert.Contains(t, output, "posthog") // Check for prefix in output
 	buf.Reset()
 
 	// Test Logf (should use Debug level)
 	logger.Logf("info message: %s", "test")
 	output = buf.String()
 	assert.Contains(t, output, "info message: test")
-	assert.Contains(t, output, "posthog")  // Check for prefix in output
+	assert.Contains(t, output, "posthog") // Check for prefix in output
 	buf.Reset()
 
 	// Test Warnf
 	logger.Warnf("warning message: %s", "test")
 	output = buf.String()
 	assert.Contains(t, output, "warning message: test")
-	assert.Contains(t, output, "posthog")  // Check for prefix in output
+	assert.Contains(t, output, "posthog") // Check for prefix in output
 	buf.Reset()
 
 	// Test Errorf (should use Debug level to avoid polluting user output)
 	logger.Errorf("error message: %s", "test")
 	output = buf.String()
 	assert.Contains(t, output, "error message: test")
-	assert.Contains(t, output, "posthog")  // Check for prefix in output
+	assert.Contains(t, output, "posthog") // Check for prefix in output
 	assert.Contains(t, output, "posthog_level=error")
 }
 
@@ -77,7 +77,7 @@ func TestPosthogLogger_ErrorsAtDebugLevel(t *testing.T) {
 	// Should appear in output when log level is DEBUG
 	output := buf.String()
 	assert.Contains(t, output, "502 Bad Gateway")
-	assert.Contains(t, output, "posthog")  // Check for prefix in output
+	assert.Contains(t, output, "posthog") // Check for prefix in output
 	assert.Contains(t, output, "posthog_level=error")
 }
 
