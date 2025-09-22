@@ -265,7 +265,9 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	return nil
 }
 
-// mergeConfig merge config from a specified path directory and process imports. Return error if config file does not exist.
+// mergeConfig merges a config file and its imports with proper precedence.
+// Each config file's settings override the settings from files it imports.
+// This creates a hierarchy where the importing file always takes precedence over imported files.
 func mergeConfig(v *viper.Viper, path string, fileName string, processImports bool) error {
 	// Create a temporary Viper instance to isolate this configuration load
 	tempViper := viper.New()
@@ -279,7 +281,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	configFilePath := tempViper.ConfigFileUsed()
 
-	// Read the current config file's content (the file being processed, which may contain imports)
+	// Read this config file's content before processing its imports
 	content, err := os.ReadFile(configFilePath)
 	if err != nil {
 		return err
@@ -293,8 +295,12 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 			log.Debug("error process imports", "file", tempViper.ConfigFileUsed(), "error", err)
 		}
 
-		// Re-apply the current config file's content on top of the imported configs
-		// This ensures that settings in the current file override any imported settings
+		// Re-apply this config file's content after processing its imports
+		// This ensures proper precedence: each config file's own settings override
+		// the settings from any files it imports (directly or transitively).
+		// For example: if A imports B, and B imports C, then:
+		// - B's settings override C's settings
+		// - A's settings override both B's and C's settings
 		err = tempViper.MergeConfig(bytes.NewReader(content))
 		if err != nil {
 			return err
