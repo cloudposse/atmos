@@ -494,6 +494,13 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
+	// Validate theme configuration if specified
+	if atmosConfig.Settings.Terminal.Theme != "" {
+		if err := theme.ValidateTheme(atmosConfig.Settings.Terminal.Theme); err != nil {
+			log.Fatal("Theme validation failed", "error", err)
+		}
+	}
+
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {

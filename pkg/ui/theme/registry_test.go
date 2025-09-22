@@ -169,3 +169,81 @@ func TestRegistryCountRecommended(t *testing.T) {
 	}
 	assert.Equal(t, actualCount, count)
 }
+
+func TestValidateTheme(t *testing.T) {
+	tests := []struct {
+		name      string
+		themeName string
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:      "valid theme - default",
+			themeName: "default",
+			wantErr:   false,
+		},
+		{
+			name:      "valid theme - dracula",
+			themeName: "dracula",
+			wantErr:   false,
+		},
+		{
+			name:      "valid theme - case insensitive",
+			themeName: "DRACULA",
+			wantErr:   false,
+		},
+		{
+			name:      "valid theme - gruvboxdark",
+			themeName: "gruvboxdark",
+			wantErr:   false,
+		},
+		{
+			name:      "empty theme (should use default)",
+			themeName: "",
+			wantErr:   false,
+		},
+		{
+			name:      "invalid theme",
+			themeName: "non-existent-theme",
+			wantErr:   true,
+			errMsg:    "invalid theme 'non-existent-theme'",
+		},
+		{
+			name:      "invalid theme with special chars",
+			themeName: "theme!@#$%",
+			wantErr:   true,
+			errMsg:    "invalid theme 'theme!@#$%'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTheme(tt.themeName)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+				// Verify error message contains "Available themes:"
+				assert.Contains(t, err.Error(), "Available themes:")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Test that error message lists available themes.
+func TestValidateTheme_ErrorListsAvailableThemes(t *testing.T) {
+	err := ValidateTheme("invalid-theme")
+	assert.Error(t, err)
+
+	// Check that error lists some known themes
+	assert.Contains(t, err.Error(), "default")
+	assert.Contains(t, err.Error(), "Dracula")
+	assert.Contains(t, err.Error(), "GruvboxDark")
+
+	// Verify the format
+	assert.Regexp(t, `Available themes: .+`, err.Error())
+}

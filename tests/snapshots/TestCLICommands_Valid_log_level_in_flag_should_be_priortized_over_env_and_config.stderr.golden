@@ -1,5 +1,5 @@
-DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Telemetry event captured
+   Set logs-level=debug logs-file=/dev/stderr
+   Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+   Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+   Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+   Telemetry event captured

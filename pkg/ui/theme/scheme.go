@@ -41,6 +41,12 @@ type ColorScheme struct {
 
 	// Syntax highlighting
 	ChromaTheme string // Chroma theme name for syntax highlighting
+
+	// Log level colors (backgrounds)
+	LogDebug   string // Debug log level background
+	LogInfo    string // Info log level background
+	LogWarning string // Warning log level background
+	LogError   string // Error log level background
 }
 
 // GenerateColorScheme creates a semantic color scheme from a Theme.
@@ -93,6 +99,12 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 
 		// Syntax highlighting - map themes to appropriate Chroma themes
 		ChromaTheme: getChromaThemeForAtmosTheme(t),
+
+		// Log level colors - use standard colors as backgrounds
+		LogDebug:   t.Cyan,   // Cyan for debug
+		LogInfo:    t.Blue,   // Blue for info
+		LogWarning: t.Yellow, // Yellow for warning
+		LogError:   t.Red,    // Red for error
 	}
 }
 

@@ -100,3 +100,29 @@ func (r *Registry) CountRecommended() int {
 	}
 	return count
 }
+
+// ValidateTheme checks if a theme name is valid.
+// Returns nil if the theme is valid or empty (will use default).
+// Returns an error with available themes if the theme is invalid.
+func ValidateTheme(themeName string) error {
+	if themeName == "" {
+		return nil // Empty is valid, will use default
+	}
+
+	registry, err := NewRegistry()
+	if err != nil {
+		return fmt.Errorf("failed to load theme registry: %w", err)
+	}
+
+	_, exists := registry.Get(themeName)
+	if !exists {
+		availableThemes := make([]string, 0, len(registry.sorted))
+		for _, t := range registry.sorted {
+			availableThemes = append(availableThemes, t.Name)
+		}
+		return fmt.Errorf("invalid theme '%s'. Available themes: %s",
+			themeName, strings.Join(availableThemes, ", "))
+	}
+
+	return nil
+}

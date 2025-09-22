@@ -1,8 +1,8 @@
-DEBU Set logs-level=debug logs-file=/dev/stdout
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+   Set logs-level=debug logs-file=/dev/stdout
+   Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 
 👽 Atmos test on darwin/arm64
 
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Telemetry event captured
+   Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+   Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+   Telemetry event captured

@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -206,6 +208,27 @@ func main() {
 	return rendered
 }
 
+// generateLogDemo creates a demonstration of log output with styled levels and key-value pairs.
+func generateLogDemo(scheme *theme.ColorScheme) string {
+	// Create a buffer to capture log output
+	var buf bytes.Buffer
+
+	// Create a new logger instance with our theme styles
+	demoLogger := log.New(&buf)
+	demoLogger.SetStyles(theme.GetLogStyles(scheme))
+
+	// Temporarily set the log level to show all messages
+	demoLogger.SetLevel(log.DebugLevel)
+
+	// Generate sample log messages with key-value pairs
+	demoLogger.Debug("Processing component", "component", "vpc", "stack", "dev")
+	demoLogger.Info("Terraform init completed", "duration", "3.2s", "providers", 5)
+	demoLogger.Warn("Resource already exists", "resource", "aws_vpc.main", "action", "skip")
+	demoLogger.Error("Failed to connect", "endpoint", "api.example.com", "retry", 3)
+
+	return buf.String()
+}
+
 // formatUsageInstructions generates the usage instructions section.
 func formatUsageInstructions(t *theme.Theme, styles *theme.StyleSet) string {
 	footer := fmt.Sprintf("\nTo use this theme, set ATMOS_THEME=%s or add to atmos.yaml:\n", t.Name)
@@ -216,7 +239,7 @@ func formatUsageInstructions(t *theme.Theme, styles *theme.StyleSet) string {
 }
 
 // formatThemeDetails creates a detailed preview of the theme.
-func formatThemeDetails(t *theme.Theme, _ *theme.ColorScheme, styles *theme.StyleSet) string {
+func formatThemeDetails(t *theme.Theme, scheme *theme.ColorScheme, styles *theme.StyleSet) string {
 	var output strings.Builder
 
 	// Theme header
@@ -230,6 +253,12 @@ func formatThemeDetails(t *theme.Theme, _ *theme.ColorScheme, styles *theme.Styl
 	output.WriteString(styles.Heading.Render("COLOR PALETTE"))
 	output.WriteString(sectionSeparator)
 	output.WriteString(formatColorPalette(t))
+	output.WriteString(lineBreak)
+
+	// Log Output Preview Section
+	output.WriteString(styles.Heading.Render("LOG OUTPUT PREVIEW"))
+	output.WriteString(sectionSeparator)
+	output.WriteString(generateLogDemo(scheme))
 	output.WriteString(lineBreak)
 
 	// Markdown Preview Section

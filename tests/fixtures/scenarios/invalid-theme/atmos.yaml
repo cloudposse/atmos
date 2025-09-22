@@ -1,0 +1,19 @@
+# Test configuration with invalid theme
+settings:
+  terminal:
+    theme: "non-existent-theme"
+
+logs:
+  level: Info
+  file: /dev/stderr
+
+stacks:
+  base_path: "../../../stacks"
+
+components:
+  terraform:
+    base_path: "../../../components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false

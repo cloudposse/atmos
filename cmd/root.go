@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
@@ -25,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -98,15 +98,20 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.InfoLevel)
 	}
 
+	// Configure log styles based on theme and no-color settings
 	if atmosConfig.Settings.Terminal.NoColor {
-		stylesDefault := log.DefaultStyles()
-		// Clear colors for levels
-		styles := &log.Styles{}
-		styles.Levels = make(map[log.Level]lipgloss.Style)
-		for k := range stylesDefault.Levels {
-			styles.Levels[k] = stylesDefault.Levels[k].UnsetForeground().Bold(false)
+		// Use no-color styles
+		log.SetStyles(theme.GetLogStylesNoColor())
+	} else {
+		// Get theme-aware log styles
+		themeName := atmosConfig.Settings.Terminal.Theme
+		if themeName == "" {
+			themeName = "default"
 		}
-		log.SetStyles(styles)
+		colorScheme, err := theme.GetColorSchemeForTheme(themeName)
+		if err == nil && colorScheme != nil {
+			log.SetStyles(theme.GetLogStyles(colorScheme))
+		}
 	}
 	var output io.Writer
 
@@ -139,6 +144,13 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+
+	// Validate theme configuration if specified and config was loaded successfully
+	if initErr == nil && atmosConfig.Settings.Terminal.Theme != "" {
+		if err := theme.ValidateTheme(atmosConfig.Settings.Terminal.Theme); err != nil {
+			log.Fatal("Theme validation failed", "error", err)
+		}
+	}
 
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
