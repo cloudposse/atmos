@@ -15,21 +15,26 @@ func TestPackerInspectCmd(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
-	log.SetLevel(log.InfoLevel)
+	log.SetLevel(log.WarnLevel)
 
 	oldStd := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	log.SetOutput(w)
 
+	// Ensure cleanup happens before any reads
+	defer func() {
+		os.Stdout = oldStd
+		log.SetOutput(os.Stderr)
+	}()
+
 	RootCmd.SetArgs([]string{"packer", "inspect", "aws/bastion", "-s", "nonprod"})
 	err := Execute()
 	assert.NoError(t, err, "'TestPackerInspectCmd' should execute without error")
 
-	// Restore std
+	// Close write end after Execute
 	err = w.Close()
 	assert.NoError(t, err)
-	os.Stdout = oldStd
 
 	// Read the captured output
 	var buf bytes.Buffer

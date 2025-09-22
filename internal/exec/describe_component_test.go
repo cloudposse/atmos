@@ -113,7 +113,7 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			printOrWriteToFileCalled := false
-			
+
 			// Set up mock pager based on test expectation
 			if test.expectPager {
 				mockPager := pager.NewMockPageCreator(ctrl)
@@ -127,7 +127,7 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				// For non-pager tests, we don't need to mock the pager as it won't be called
 				mockedExec.pageCreator = nil
 			}
-			
+
 			// Mock the initCliConfig to return a config with the test's pager setting
 			mockedExec.initCliConfig = func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 				return schema.AtmosConfiguration{
@@ -156,7 +156,7 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 
 			// Execute the command
 			err := mockedExec.ExecuteDescribeComponentCmd(test.params)
-			
+
 			// Assert expectations
 			if test.expectedError {
 				assert.Error(t, err)
@@ -168,7 +168,7 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 			// When pager is disabled, printOrWriteToFile SHOULD be called
 			// When pager is enabled but fails with DescribeConfigFormatError, printOrWriteToFile should NOT be called (error path returns early)
 			expectedPrintCall := !test.expectPager && !test.expectedError
-			assert.Equal(t, expectedPrintCall, printOrWriteToFileCalled, 
+			assert.Equal(t, expectedPrintCall, printOrWriteToFileCalled,
 				"printOrWriteToFile call expectation mismatch for pager setting: %s", test.pagerSetting)
 		})
 	}

@@ -12,7 +12,7 @@ func TestPackerInitCmd(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
-	log.SetLevel(log.InfoLevel)
+	log.SetLevel(log.WarnLevel)
 
 	RootCmd.SetArgs([]string{"packer", "init", "aws/bastion", "-s", "nonprod"})
 	err := Execute()

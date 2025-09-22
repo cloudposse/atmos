@@ -279,7 +279,7 @@ atmos terraform apply --auto-approve
 ```bash
 # These environment variables work across many tools, not just Atmos
 export NO_COLOR=1        # Disables color in Atmos and other NO_COLOR-compliant tools
-export PAGER=cat        # Disables paging in Atmos and other tools that respect PAGER
+export ATMOS_PAGER=off  # Properly disables paging in Atmos
 
 # Run various CLI tools - all respect the same env vars
 atmos describe config
