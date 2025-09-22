@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
@@ -94,9 +93,10 @@ func RequireGitRepository(t *testing.T) *git.Repository {
 	}
 
 	// Use PlainOpenWithOptions with DetectDotGit to find the repository
-	// even when tests are run from subdirectories or in worktrees
+	// and EnableDotGitCommonDir to properly handle worktrees
 	repo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
-		DetectDotGit: true,
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: true,  // Critical for worktree support
 	})
 	if err != nil {
 		t.Skipf("Not in a Git repository: %v. Initialize a Git repo or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true", err)
@@ -132,24 +132,6 @@ func RequireGitRemoteWithValidURL(t *testing.T) string {
 			_, err := giturl.NewGitURL(repoUrl)
 			if err == nil {
 				return repoUrl
-			}
-		}
-	}
-
-	// If no remotes found and we're in a worktree, this might be a go-git limitation
-	// Try using git command as a fallback
-	if len(config.Remotes) == 0 {
-		cmd := exec.Command("git", "remote", "get-url", "origin")
-		output, cmdErr := cmd.Output()
-		if cmdErr == nil {
-			repoUrl = strings.TrimSpace(string(output))
-			if repoUrl != "" {
-				// Try to parse it
-				_, parseErr := giturl.NewGitURL(repoUrl)
-				if parseErr == nil {
-					t.Logf("Note: Using git command fallback for worktree remote URL")
-					return repoUrl
-				}
 			}
 		}
 	}
