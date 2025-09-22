@@ -400,14 +400,22 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			!atmosConfig.Components.Terraform.Plan.SkipPlanfile {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
-		// Check if the upload-drift-results flag is set in the command line arguments
-		uploadDeploymentStatusFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag)
+		// Check if the upload flag is present (supports --flag and --flag=true forms).
+		uploadDeploymentStatusFlag =
+			u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag) ||
+				u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag+"=")
 		if uploadDeploymentStatusFlag {
 			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
 				allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
 			}
-			// Remove the upload-drift-results flag from the command line arguments
+			// Remove both exact and key=value forms of the flag from AdditionalArgsAndFlags.
 			info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag)
+			for i := 0; i < len(info.AdditionalArgsAndFlags); i++ {
+				if strings.HasPrefix(info.AdditionalArgsAndFlags[i], "--"+cfg.UploadDeploymentStatusFlag+"=") {
+					info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags[:i], info.AdditionalArgsAndFlags[i+1:]...)
+					i--
+				}
+			}
 		}
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)

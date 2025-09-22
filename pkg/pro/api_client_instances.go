@@ -1,10 +1,12 @@
 package pro
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
 
 	log "github.com/charmbracelet/log"
 
@@ -15,7 +17,13 @@ import (
 
 // UploadInstances uploads drift detection data to the API.
 func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) error {
-	url := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
+	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
+
+	// Guard against nil HTTPClient by ensuring a default client with a sane timeout
+	client := c.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
 
 	data, err := utils.ConvertToJSON(dto)
 	if err != nil {
@@ -26,14 +34,14 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 	hash := sha256.Sum256([]byte(data))
 	log.Debug("Uploading instances DTO.", "repo_owner", dto.RepoOwner, "repo_name", dto.RepoName, "instances_count", len(dto.Instances), "payload_hash", hex.EncodeToString(hash[:]))
 
-	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
+	req, err := getAuthenticatedRequest(c, "POST", endpoint, strings.NewReader(data))
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
 	}
 
-	log.Debug("Uploading instances.", "url", url)
+	log.Debug("Uploading instances.", "endpoint", endpoint)
 
-	resp, err := c.HTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMakeRequest, err)
 	}
@@ -42,7 +50,7 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 	if err := handleAPIResponse(resp, "UploadInstances"); err != nil {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadInstances, err)
 	}
-	log.Debug("Uploaded instances.", "url", url)
+	log.Debug("Uploaded instances.", "endpoint", endpoint)
 
 	return nil
 }

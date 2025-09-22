@@ -6,7 +6,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/list"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // listInstancesCmd lists atmos instances.
@@ -39,15 +38,13 @@ func init() {
 }
 
 func ExecuteListInstancesCmd(cmd *cobra.Command, args []string) error {
-	info := &schema.ConfigAndStacksInfo{}
-	info.Command = "list"
-	info.SubCommand = "instances"
-
-	// Process and validate command line arguments
-	_, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	// Process and validate command line arguments.
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {
 		return err
 	}
+	configAndStacksInfo.Command = "list"
+	configAndStacksInfo.SubCommand = "instances"
 
-	return list.ExecuteListInstancesCmd(info, cmd, args)
+	return list.ExecuteListInstancesCmd(&configAndStacksInfo, cmd, args)
 }

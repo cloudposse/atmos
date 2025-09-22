@@ -3,6 +3,7 @@ package pro
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -15,14 +16,17 @@ import (
 
 // UploadInstanceStatus uploads the drift detection result status to the pro API.
 func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error {
+	if dto == nil {
+		return fmt.Errorf("%w: %v", errUtils.ErrFailedToUploadInstanceStatus, errors.New("nil request DTO"))
+	}
 	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/instances/{stack}/{component}
-	targetUrl := fmt.Sprintf("%s/%s/repos/%s/%s/instances/%s/%s",
+	targetURL := fmt.Sprintf("%s/%s/repos/%s/%s/instances/%s/%s",
 		c.BaseURL, c.BaseAPIEndpoint,
 		url.PathEscape(dto.RepoOwner),
 		url.PathEscape(dto.RepoName),
 		url.PathEscape(dto.Stack),
 		url.PathEscape(dto.Component))
-	log.Debug("Uploading drift status.", "url", targetUrl)
+	log.Debug("Uploading drift status.", "url", targetURL)
 
 	// Map HasDrift to the correct status format
 	status := "in_sync"
@@ -45,7 +49,7 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalRequestBody, err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "PATCH", targetUrl, bytes.NewBuffer(data))
+	req, err := getAuthenticatedRequest(c, "PATCH", targetURL, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
 	}
@@ -60,7 +64,7 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadInstanceStatus, err)
 	}
 
-	log.Debug("Uploaded instance status.", "url", targetUrl)
+	log.Debug("Uploaded instance status.", "url", targetURL)
 
 	return nil
 }
