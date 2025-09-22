@@ -21,26 +21,31 @@ func TestPosthogLogger_LogMethods(t *testing.T) {
 
 	// Test Debugf
 	logger.Debugf("debug message: %s", "test")
-	assert.Contains(t, buf.String(), "PostHog debug message")
-	assert.Contains(t, buf.String(), "debug message: test")
+	output := buf.String()
+	assert.Contains(t, output, "debug message: test")
+	assert.Contains(t, output, "component=posthog")
 	buf.Reset()
 
 	// Test Logf (should use Debug level)
 	logger.Logf("info message: %s", "test")
-	assert.Contains(t, buf.String(), "PostHog info message")
-	assert.Contains(t, buf.String(), "info message: test")
+	output = buf.String()
+	assert.Contains(t, output, "info message: test")
+	assert.Contains(t, output, "component=posthog")
 	buf.Reset()
 
 	// Test Warnf
 	logger.Warnf("warning message: %s", "test")
-	assert.Contains(t, buf.String(), "PostHog warning")
-	assert.Contains(t, buf.String(), "warning message: test")
+	output = buf.String()
+	assert.Contains(t, output, "warning message: test")
+	assert.Contains(t, output, "component=posthog")
 	buf.Reset()
 
 	// Test Errorf (should use Debug level to avoid polluting user output)
 	logger.Errorf("error message: %s", "test")
-	assert.Contains(t, buf.String(), "PostHog telemetry error")
-	assert.Contains(t, buf.String(), "error message: test")
+	output = buf.String()
+	assert.Contains(t, output, "error message: test")
+	assert.Contains(t, output, "component=posthog")
+	assert.Contains(t, output, "posthog_level=error")
 }
 
 // TestPosthogLogger_ErrorsAtDebugLevel tests that errors are logged at debug level.
@@ -56,22 +61,24 @@ func TestPosthogLogger_ErrorsAtDebugLevel(t *testing.T) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
 
-	logger := NewPosthogLogger()
-
 	// Test that errors are not visible at INFO level
 	log.SetLevel(log.InfoLevel)
+	infoLogger := NewPosthogLogger()
 	buf.Reset()
-	logger.Errorf("502 Bad Gateway")
+	infoLogger.Errorf("502 Bad Gateway")
 	// Should not appear in output when log level is INFO
 	assert.Empty(t, buf.String())
 
 	// Test that errors are visible at DEBUG level
 	log.SetLevel(log.DebugLevel)
+	debugLogger := NewPosthogLogger()
 	buf.Reset()
-	logger.Errorf("502 Bad Gateway")
+	debugLogger.Errorf("502 Bad Gateway")
 	// Should appear in output when log level is DEBUG
-	assert.Contains(t, buf.String(), "PostHog telemetry error")
-	assert.Contains(t, buf.String(), "502 Bad Gateway")
+	output := buf.String()
+	assert.Contains(t, output, "502 Bad Gateway")
+	assert.Contains(t, output, "component=posthog")
+	assert.Contains(t, output, "posthog_level=error")
 }
 
 // TestSilentLogger tests that SilentLogger discards all messages.
@@ -149,13 +156,16 @@ func TestPosthogLogger_PreventStderrPollution(t *testing.T) {
 	// Now test at DEBUG level
 	log.SetLevel(log.DebugLevel)
 	buf.Reset()
+	
+	// Create a new logger instance after changing log level
+	debugLogger := NewPosthogLogger()
+	debugLogger.Errorf("response 502 502 Bad Gateway")
+	debugLogger.Errorf("1 messages dropped")
 
-	logger.Errorf("response 502 502 Bad Gateway")
-	logger.Errorf("1 messages dropped")
-
-	// At DEBUG level, errors should appear with our prefix
+	// At DEBUG level, errors should appear with component context
 	output := buf.String()
-	assert.Contains(t, output, "PostHog telemetry error", "Errors should be prefixed at DEBUG level")
+	assert.Contains(t, output, "component=posthog", "Errors should have component context at DEBUG level")
 	assert.Contains(t, output, "502 Bad Gateway", "Error content should be present at DEBUG level")
 	assert.Contains(t, output, "messages dropped", "Error content should be present at DEBUG level")
+	assert.Contains(t, output, "posthog_level=error", "PostHog error level should be indicated")
 }

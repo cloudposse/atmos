@@ -11,32 +11,39 @@ import (
 // using Atmos's charmbracelet/log. This ensures PostHog messages are properly
 // integrated with Atmos logging and respect log levels. It also prevents
 // PostHog errors from being printed directly to stdout/stderr.
-type PosthogLogger struct{}
+type PosthogLogger struct {
+	logger *log.Logger
+}
 
 // NewPosthogLogger creates a new PosthogLogger instance.
 func NewPosthogLogger() *PosthogLogger {
-	return &PosthogLogger{}
+	// Create a logger with PostHog context
+	// Use the default logger instance which respects global log level
+	return &PosthogLogger{logger: log.Default().With("component", "posthog")}
 }
 
 // Debugf logs debug messages from PostHog using Atmos's logger.
 func (p *PosthogLogger) Debugf(format string, args ...interface{}) {
 	// Convert printf-style to structured logging
 	msg := fmt.Sprintf(format, args...)
-	log.Debug("PostHog debug message", "message", msg)
+	p.logger.Debug(msg)
 }
 
 // Logf logs info messages from PostHog using Atmos's logger.
+// PostHog uses Logf for INFO level messages, but we log them at DEBUG
+// to reduce noise in production.
 func (p *PosthogLogger) Logf(format string, args ...interface{}) {
 	// Convert printf-style to structured logging at debug level
+	// to avoid cluttering user output with telemetry info
 	msg := fmt.Sprintf(format, args...)
-	log.Debug("PostHog info message", "message", msg)
+	p.logger.Debug(msg)
 }
 
 // Warnf logs warning messages from PostHog using Atmos's logger.
 func (p *PosthogLogger) Warnf(format string, args ...interface{}) {
 	// Convert printf-style to structured logging
 	msg := fmt.Sprintf(format, args...)
-	log.Warn("PostHog warning", "message", msg)
+	p.logger.Warn(msg)
 }
 
 // Errorf logs error messages from PostHog using Atmos's logger.
@@ -45,7 +52,7 @@ func (p *PosthogLogger) Errorf(format string, args ...interface{}) {
 	// Only log PostHog errors at debug level to avoid polluting user output.
 	// Telemetry failures should not impact the user experience.
 	msg := fmt.Sprintf(format, args...)
-	log.Debug("PostHog telemetry error", "error", msg)
+	p.logger.Debug(msg, "posthog_level", "error")
 }
 
 // SilentLogger is a no-op logger that discards all PostHog messages.
