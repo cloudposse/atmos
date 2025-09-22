@@ -3,12 +3,11 @@ package merge
 import (
 	"fmt"
 
+	log "github.com/charmbracelet/log"
 	"dario.cat/mergo"
-	"github.com/fatih/color"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -41,13 +40,11 @@ func MergeWithOptions(
 		// so `mergo` does not have access to the original pointers
 		yamlCurrent, err := u.ConvertToYAML(current)
 		if err != nil {
-			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 			return nil, fmt.Errorf("%w: failed to convert to YAML: %v", errUtils.ErrMerge, err)
 		}
 
 		dataCurrent, err := u.UnmarshalYAML[any](yamlCurrent)
 		if err != nil {
-			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 			return nil, fmt.Errorf("%w: failed to unmarshal YAML: %v", errUtils.ErrMerge, err)
 		}
 
@@ -66,7 +63,8 @@ func MergeWithOptions(
 		}
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
+			// Log the merge error for debugging
+			log.Debug("Merge operation failed", "error", err.Error())
 			return nil, fmt.Errorf("%w: mergo merge failed: %v", errUtils.ErrMerge, err)
 		}
 	}
@@ -111,4 +109,88 @@ func Merge(
 	}
 
 	return MergeWithOptions(inputs, appendSlice, sliceDeepCopy)
+}
+
+// MergeWithContext performs a merge operation with file context tracking for better error messages.
+func MergeWithContext(
+	atmosConfig *schema.AtmosConfiguration,
+	inputs []map[string]any,
+	context *MergeContext,
+) (map[string]any, error) {
+	// Check for nil config to prevent panic
+	if atmosConfig == nil {
+		err := fmt.Errorf("%w: %w", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
+		if context != nil {
+			return nil, context.FormatError(err)
+		}
+		return nil, err
+	}
+
+	// Default to replace strategy if strategy is empty
+	strategy := ListMergeStrategyReplace
+	if atmosConfig.Settings.ListMergeStrategy != "" {
+		strategy = atmosConfig.Settings.ListMergeStrategy
+	}
+
+	if strategy != ListMergeStrategyReplace &&
+		strategy != ListMergeStrategyAppend &&
+		strategy != ListMergeStrategyMerge {
+		err := fmt.Errorf("%w: %w: '%s'. Supported list merge strategies are: %s",
+			errUtils.ErrMerge,
+			errUtils.ErrInvalidListMergeStrategy,
+			strategy,
+			fmt.Sprintf("%s, %s, %s", ListMergeStrategyReplace, ListMergeStrategyAppend, ListMergeStrategyMerge))
+		if context != nil {
+			return nil, context.FormatError(err)
+		}
+		return nil, err
+	}
+
+	sliceDeepCopy := false
+	appendSlice := false
+
+	switch strategy {
+	case ListMergeStrategyMerge:
+		sliceDeepCopy = true
+	case ListMergeStrategyAppend:
+		appendSlice = true
+	}
+
+	result, err := MergeWithOptionsAndContext(inputs, appendSlice, sliceDeepCopy, context)
+	if err != nil && context != nil {
+		return nil, context.FormatError(err)
+	}
+	return result, err
+}
+
+// MergeWithOptionsAndContext performs merge with options and context tracking.
+func MergeWithOptionsAndContext(
+	inputs []map[string]any,
+	appendSlice bool,
+	sliceDeepCopy bool,
+	context *MergeContext,
+) (map[string]any, error) {
+	// Log merge context if available (only in trace/debug mode to avoid noise)
+	if context != nil && context.CurrentFile != "" {
+		log.Debug("Performing merge operation", "file", context.CurrentFile, "depth", context.GetDepth())
+	}
+	
+	result, err := MergeWithOptions(inputs, appendSlice, sliceDeepCopy)
+	if err != nil {
+		// Log the error with context for debugging
+		if context != nil {
+			log.Debug("Merge failed with context", 
+				"file", context.CurrentFile,
+				"import_chain", context.GetImportChainString(),
+				"error", err.Error())
+		}
+		
+		// Add context information to the error
+		if context != nil {
+			return nil, context.FormatError(err)
+		}
+		return nil, err
+	}
+	
+	return result, nil
 }
