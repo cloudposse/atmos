@@ -345,6 +345,11 @@ func sanitizeOutput(output string) (string, error) {
 	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
 
+	// 8. Mask PostHog tokens to prevent real tokens from appearing in snapshots
+	// Match any token starting with phc_ followed by alphanumeric characters and underscores
+	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
+	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
+
 	return result, nil
 }
 
