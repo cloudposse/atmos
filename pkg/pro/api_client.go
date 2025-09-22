@@ -204,7 +204,7 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 	}
 
 	if err := json.Unmarshal(b, params.Out); err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUnmarshalAPIResponse, err)
 	}
 
 	// Log the structured response for debugging and check success
@@ -284,7 +284,7 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		// If we can't parse the response as JSON, handle based on status code
 		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-			return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToMarshalPayload, resp.Status)
+			return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToUnmarshalAPIResponse, resp.Status)
 		}
 		// For successful responses that can't be parsed, just return nil
 		return nil

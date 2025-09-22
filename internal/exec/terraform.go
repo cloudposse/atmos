@@ -561,37 +561,36 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.DryRun,
 			info.RedirectStdErr,
 		)
+		// Compute exitCode for upload, whether or not err is set.
+		var exitCode int
 		if err != nil {
-			// For Terraform Plan, we need to return the result to the pro API if upload flag is set
-			if uploadStatusFlag && shouldUploadStatus(&info) {
-				var exitCode int
-				var osErr *osexec.ExitError
-				if errors.As(err, &osErr) {
-					exitCode = osErr.ExitCode()
-				} else {
-					exitCode = 1
-				}
-
-				// Initialize the API client
-				client, err := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
-				if err != nil {
-					return err
-				}
-
-				// Use the default git repo implementation
-				gitRepo := &git.DefaultGitRepo{}
-
-				if err := uploadStatus(&info, exitCode, client, gitRepo); err != nil {
-					return err
-				}
-
-				// For terraform plan with upload flag, don't return error for expected exit codes
-				// Exit code 0 = no changes, Exit code 2 = changes detected (both are normal)
-				if exitCode == 0 || exitCode == 2 {
-					return nil
-				}
+			var osErr *osexec.ExitError
+			if errors.As(err, &osErr) {
+				exitCode = osErr.ExitCode()
+			} else {
+				exitCode = 1
 			}
-			// For other commands or failure, return the error as is
+		} else {
+			exitCode = 0
+		}
+
+		// Upload plan status if requested.
+		if uploadStatusFlag && shouldUploadStatus(&info) {
+			client, cerr := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
+			if cerr != nil {
+				return cerr
+			}
+			gitRepo := &git.DefaultGitRepo{}
+			if uerr := uploadStatus(&info, exitCode, client, gitRepo); uerr != nil {
+				return uerr
+			}
+			// Treat 0 and 2 as success for plan uploads.
+			if exitCode == 0 || exitCode == 2 {
+				return nil
+			}
+		}
+		// For other commands or failure, return the original error.
+		if err != nil {
 			return err
 		}
 	}

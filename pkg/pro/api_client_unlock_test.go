@@ -152,7 +152,7 @@ func TestUnlockStack_InvalidJSONResponse(t *testing.T) {
 
 	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrFailedToMarshalPayload)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToUnmarshalAPIResponse)
 	assert.False(t, response.Success)
 }
 

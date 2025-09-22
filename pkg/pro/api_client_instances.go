@@ -22,6 +22,9 @@ const (
 
 // UploadInstances uploads drift detection data to the API.
 func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) error {
+	if dto == nil {
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNilRequestDTO, "UploadInstances")
+	}
 	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
 
 	// Guard against nil HTTPClient by ensuring a default client with a sane timeout
