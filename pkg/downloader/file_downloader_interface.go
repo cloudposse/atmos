@@ -16,6 +16,12 @@ type FileDownloader interface {
 	// FetchAndAutoParse downloads a remote file, detects its format, and parses it
 	FetchAndAutoParse(src string) (any, error)
 
+	// FetchAndParseByExtension downloads a remote file and parses it based on its extension
+	FetchAndParseByExtension(src string) (any, error)
+
+	// FetchAndParseRaw downloads a remote file and always returns it as a raw string
+	FetchAndParseRaw(src string) (any, error)
+
 	// FetchData fetches content from a given source and returns it as a byte slice
 	FetchData(src string) ([]byte, error)
 }
