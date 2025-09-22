@@ -279,7 +279,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 			// Nil signal, ignore
 			return
 		}
-		
+
 		interrupted = true
 
 		// Print abort message
@@ -325,7 +325,6 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	var exitCode int
 	var exitReason string
 	capturedStderr := stderrBuffer.String()
-
 
 	// Return processing error if any
 	switch {

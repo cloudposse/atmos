@@ -429,7 +429,7 @@ func (r *StreamReporter) SetEstimatedTotal(total int) {
 func parseCoverageValue(coverage string) float64 {
 	// Trim spaces first
 	coverage = strings.TrimSpace(coverage)
-	
+
 	// Remove "% of statements" or just "%" suffix
 	coverage = strings.TrimSuffix(coverage, " of statements")
 	coverage = strings.TrimSuffix(coverage, "%")

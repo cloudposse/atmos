@@ -57,10 +57,10 @@ func TestNewStreamReporter(t *testing.T) {
 func TestStreamReporter_OnPackageStart(t *testing.T) {
 	reporter := NewStreamReporter(nil, "all", "", "standard")
 	pkg := &PackageResult{Package: "test/package"}
-	
+
 	// Should not panic and do nothing
 	reporter.OnPackageStart(pkg)
-	
+
 	// Verify no packages were marked as displayed
 	assert.Empty(t, reporter.displayedPackages)
 }
@@ -239,14 +239,14 @@ func TestStreamReporter_OnPackageComplete(t *testing.T) {
 				packageFunctionCoverages:  make([]float64, 0),
 				buildFailedPackages:       make([]string, 0),
 			}
-			
+
 			// Special case for filtered test
 			if tt.name == "package with no tests but filter applied" {
 				reporter.testFilter = "TestFilter"
 			}
-			
+
 			reporter.OnPackageComplete(tt.pkg)
-			
+
 			result := outputUI.String()
 			if tt.expectOutput {
 				assert.NotEmpty(t, result)
@@ -254,10 +254,10 @@ func TestStreamReporter_OnPackageComplete(t *testing.T) {
 					assert.Contains(t, result, fragment)
 				}
 			}
-			
+
 			// Verify package is marked as displayed
 			assert.True(t, reporter.displayedPackages[tt.pkg.Package])
-			
+
 			// Test duplicate display prevention
 			outputUI.Reset()
 			reporter.OnPackageComplete(tt.pkg)
@@ -640,7 +640,7 @@ func TestStreamReporter_displayTest(t *testing.T) {
 				Elapsed: 1.0,
 				Subtests: map[string]*TestResult{
 					"TestParent/sub1": {
-						Name:   "sub1", 
+						Name:   "sub1",
 						Status: constants.PassStatus,
 					},
 					"TestParent/sub2": {
@@ -743,4 +743,3 @@ func TestStreamReporter_displayTest(t *testing.T) {
 		})
 	}
 }
-

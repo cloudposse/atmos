@@ -43,7 +43,7 @@ func TestNewStreamProcessor(t *testing.T) {
 			assert.Equal(t, tt.testFilter, processor.testFilter)
 			assert.Equal(t, tt.verbosityLevel, processor.verbosityLevel)
 			assert.NotNil(t, processor.buffers)
-			
+
 			// Reporter should always be created
 			assert.NotNil(t, processor.reporter)
 			assert.IsType(t, &StreamReporter{}, processor.reporter)

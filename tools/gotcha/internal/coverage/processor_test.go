@@ -385,7 +385,7 @@ func TestCheckCoverageThresholds(t *testing.T) {
 				StatementCoverage: tt.coverageStr,
 				FunctionCoverage:  make([]types.CoverageFunction, tt.functionCount),
 			}
-			
+
 			// Set up function coverage
 			for i := 0; i < tt.coveredCount; i++ {
 				data.FunctionCoverage[i].Coverage = 100.0
@@ -404,7 +404,7 @@ func TestCheckCoverageThresholds(t *testing.T) {
 
 			logger := log.New(io.Discard)
 			err := checkCoverageThresholds(data, thresholds, logger)
-			
+
 			if tt.expectedError {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "below threshold")
@@ -447,10 +447,10 @@ func TestOpenBrowser(t *testing.T) {
 	}
 
 	logger := log.New(io.Discard)
-	
+
 	// Test with invalid path (won't actually open)
 	err := OpenBrowser("/nonexistent/path.html", logger)
-	
+
 	// We expect no error even with invalid path, as cmd.Start() doesn't validate the file
 	// The error would come from the browser, not from our code
 	assert.NoError(t, err)

@@ -157,9 +157,9 @@ func TestDisplayFunctionCoverageTreeNew(t *testing.T) {
 				},
 			},
 			expectedFragments: []string{
-				"cmd/subcmd",     // Should shorten cmd paths
-				"internal/deep",  // Should shorten internal paths
-				"pkg/very",       // Should shorten pkg paths
+				"cmd/subcmd",    // Should shorten cmd paths
+				"internal/deep", // Should shorten internal paths
+				"pkg/very",      // Should shorten pkg paths
 			},
 		},
 	}
@@ -199,7 +199,7 @@ func TestGetCoverageColor(t *testing.T) {
 		{coverage: 50.0, shouldWork: true},
 		{coverage: 25.0, shouldWork: true},
 		{coverage: 0.0, shouldWork: true},
-		{coverage: -1.0, shouldWork: true}, // Edge case
+		{coverage: -1.0, shouldWork: true},  // Edge case
 		{coverage: 101.0, shouldWork: true}, // Edge case
 	}
 

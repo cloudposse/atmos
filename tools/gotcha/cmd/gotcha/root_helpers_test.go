@@ -47,32 +47,32 @@ func TestGetLoggerStyles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			styles := getLoggerStyles()
-			
+
 			// Check that styles are not nil
 			assert.NotNil(t, styles)
-			
+
 			// Verify structure of returned styles
 			assert.NotNil(t, styles.Levels)
 			assert.NotNil(t, styles.Key)
 			assert.NotNil(t, styles.Value)
-			
+
 			// Check that level styles are properly set
 			debugStyle, ok := styles.Levels[log.DebugLevel]
 			assert.True(t, ok)
 			assert.IsType(t, lipgloss.Style{}, debugStyle)
-			
+
 			infoStyle, ok := styles.Levels[log.InfoLevel]
 			assert.True(t, ok)
 			assert.IsType(t, lipgloss.Style{}, infoStyle)
-			
+
 			warnStyle, ok := styles.Levels[log.WarnLevel]
 			assert.True(t, ok)
 			assert.IsType(t, lipgloss.Style{}, warnStyle)
-			
+
 			errorStyle, ok := styles.Levels[log.ErrorLevel]
 			assert.True(t, ok)
 			assert.IsType(t, lipgloss.Style{}, errorStyle)
-			
+
 			fatalStyle, ok := styles.Levels[log.FatalLevel]
 			assert.True(t, ok)
 			assert.IsType(t, lipgloss.Style{}, fatalStyle)
@@ -93,7 +93,7 @@ func TestInitGlobalLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// This should not panic
 			initGlobalLogger()
-			
+
 			// Verify logger is initialized
 			logger := log.Default()
 			assert.NotNil(t, logger)
@@ -116,9 +116,9 @@ func TestBindAndParseFlagsHelper(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := createRootCommand()
 			setupGlobalFlags(cmd)
-			
+
 			err := bindAndParseFlags(cmd)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
