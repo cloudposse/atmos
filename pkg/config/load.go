@@ -279,7 +279,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	configFilePath := tempViper.ConfigFileUsed()
 
-	// Read the original config file content before processing imports
+	// Read the current config file's content (the file being processed, which may contain imports)
 	content, err := os.ReadFile(configFilePath)
 	if err != nil {
 		return err
@@ -293,8 +293,8 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 			log.Debug("error process imports", "file", tempViper.ConfigFileUsed(), "error", err)
 		}
 
-		// Re-merge the original config content to ensure it takes precedence over imports
-		// This is necessary because imports should not override the main config
+		// Re-apply the current config file's content on top of the imported configs
+		// This ensures that settings in the current file override any imported settings
 		err = tempViper.MergeConfig(bytes.NewReader(content))
 		if err != nil {
 			return err
