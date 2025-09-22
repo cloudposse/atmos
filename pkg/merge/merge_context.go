@@ -69,12 +69,8 @@ func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 
 	var sb strings.Builder
 
-	// Start with the original error
-	sb.WriteString(err.Error())
-	sb.WriteString("\n\n")
-
-	// Use a code fence to preserve formatting of the context information
-	sb.WriteString("```\n")
+	// Build the context information (without including the error message itself)
+	sb.WriteString("\n\n```\n")
 
 	// Add current file being processed
 	if mc.CurrentFile != "" {
@@ -123,8 +119,9 @@ func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 		sb.WriteString("\n\n**Debug hint:** Ensure consistent types for the same keys across all files.")
 	}
 
-	// Return the formatted error (not wrapped)
-	return fmt.Errorf("%s", sb.String()) //nolint:err113
+	// Wrap the original error to preserve the error chain
+	// This allows errors.Is() to work with sentinel errors
+	return fmt.Errorf("%w%s", err, sb.String()) //nolint:err113
 }
 
 // GetImportChainString returns a formatted string of the import chain.

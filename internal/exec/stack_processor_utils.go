@@ -284,8 +284,10 @@ func ProcessYAMLConfigFileWithContext(
 			}
 			// Check if we have merge context to provide enhanced error formatting
 			if mergeContext != nil {
-				// Use merge context to format the error with import chain information
-				e := mergeContext.FormatError(err, fmt.Sprintf("invalid stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+				// Wrap the error with the sentinel first to preserve it
+				wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
+				// Then format it with context information
+				e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 				return nil, nil, nil, nil, nil, nil, nil, e
 			} else {
 				e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
@@ -301,8 +303,10 @@ func ProcessYAMLConfigFileWithContext(
 		}
 		// Check if we have merge context to provide enhanced error formatting
 		if mergeContext != nil {
-			// Use merge context to format the error with import chain information
-			e := mergeContext.FormatError(err, fmt.Sprintf("invalid stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+			// Wrap the error with the sentinel first to preserve it
+			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
+			// Then format it with context information
+			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, nil, nil, nil, nil, nil, e
 		} else {
 			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
