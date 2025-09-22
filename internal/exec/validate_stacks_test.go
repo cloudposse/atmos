@@ -23,7 +23,7 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath:               absPath,
 		StacksBaseAbsolutePath: filepath.Join(absPath, "stacks"),
-		Stacks: schema.StacksConfiguration{
+		Stacks: schema.Stacks{
 			BasePath:      "stacks",
 			NamePattern:   "{stage}-{environment}",
 			IncludedPaths: []string{"**/*"},
@@ -33,7 +33,7 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 			Level: u.LogLevelDebug,
 		},
 		Components: schema.Components{
-			Terraform: schema.ComponentsTerraform{
+			Terraform: schema.Terraform{
 				BasePath: "components/terraform",
 			},
 		},
