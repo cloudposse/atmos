@@ -58,6 +58,7 @@ settings:
     enabled: true
     endpoint: https://us.i.posthog.com
     token: phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS
+    logging: false
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks
 includeStackAbsolutePaths:
