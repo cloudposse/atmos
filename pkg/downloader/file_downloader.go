@@ -44,6 +44,7 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 // FetchAutoParse downloads a remote file, detects its format, and parses it.
 func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 	filePath := fd.tempPathGenerator()
+	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
 		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
@@ -55,6 +56,7 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 // FetchAndParseByExtension downloads a remote file and parses it based on its extension.
 func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
 	filePath := fd.tempPathGenerator()
+	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
 		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
@@ -73,6 +75,7 @@ func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
 // FetchAndParseRaw downloads a remote file and always returns it as a raw string.
 func (fd *fileDownloader) FetchAndParseRaw(src string) (any, error) {
 	filePath := fd.tempPathGenerator()
+	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
 		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
@@ -84,6 +87,7 @@ func (fd *fileDownloader) FetchAndParseRaw(src string) (any, error) {
 // FetchData fetches content from a given source and returns it as a byte slice.
 func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
 	filePath := fd.tempPathGenerator()
+	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
 		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)

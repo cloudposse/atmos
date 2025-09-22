@@ -179,7 +179,16 @@ func updateYamlNode(node *yaml.Node, res any, val string, file string) error {
 				ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
 		}
 
-		*node = includedNode
+		// yaml.Unmarshal creates a DocumentNode, we need to use its content
+		if includedNode.Kind == yaml.DocumentNode {
+			if len(includedNode.Content) == 0 {
+				return fmt.Errorf("%w: %s, stack manifest: %s, error: empty document",
+					ErrIncludeYamlFunctionFailedStackManifest, val, file)
+			}
+			*node = *includedNode.Content[0]
+		} else {
+			*node = includedNode
+		}
 	}
 	return nil
 }

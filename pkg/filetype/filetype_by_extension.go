@@ -8,22 +8,22 @@ import (
 // ParseFileByExtension parses a file based on its file extension.
 // It determines the format from the extension, not the content.
 // Supported extensions:
-// - .json → JSON parsing
-// - .yaml, .yml → YAML parsing
-// - .hcl, .tf, .tfvars → HCL parsing
+// - .json → JSON parsing.
+// - .yaml, .yml → YAML parsing.
+// - .hcl, .tf, .tfvars → HCL parsing.
 // - All others (including .txt or no extension) → raw string.
 func ParseFileByExtension(readFileFunc func(string) ([]byte, error), filename string) (any, error) {
-	// Extract clean filename from potential URL
+	// Extract clean filename from potential URL.
 	cleanFilename := ExtractFilenameFromPath(filename)
 	ext := GetFileExtension(cleanFilename)
 
-	// Read the file content
+	// Read the file content.
 	data, err := readFileFunc(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse based on extension
+	// Parse based on extension.
 	return ParseByExtension(data, ext, filename)
 }
 
@@ -47,7 +47,7 @@ func ParseByExtension(data []byte, ext string, filename string) (any, error) {
 	case ".hcl", ".tf", ".tfvars":
 		return parseHCL(data, filename)
 	default:
-		// Return as raw string for unknown extensions
+		// Return as raw string for unknown extensions.
 		return string(data), nil
 	}
 }
@@ -55,45 +55,45 @@ func ParseByExtension(data []byte, ext string, filename string) (any, error) {
 // ExtractFilenameFromPath extracts the actual filename from a path or URL.
 // It removes query strings and fragments from URLs.
 // Examples:
-//   - "https://example.com/file.json?v=1#section" → "file.json"
-//   - "/path/to/file.yaml" → "file.yaml"
-//   - "file.txt" → "file.txt"
+//   - "https://example.com/file.json?v=1#section" → "file.json".
+//   - "/path/to/file.yaml" → "file.yaml".
+//   - "file.txt" → "file.txt".
 func ExtractFilenameFromPath(path string) string {
-	// Remove fragment (everything after #)
+	// Remove fragment (everything after #).
 	if idx := strings.Index(path, "#"); idx != -1 {
 		path = path[:idx]
 	}
 
-	// Remove query string (everything after ?)
+	// Remove query string (everything after ?).
 	if idx := strings.Index(path, "?"); idx != -1 {
 		path = path[:idx]
 	}
 
-	// Extract the base filename
+	// Extract the base filename.
 	return filepath.Base(path)
 }
 
 // GetFileExtension returns the lowercase file extension including the dot.
 // Examples:
-//   - "file.json" → ".json"
-//   - "FILE.JSON" → ".json"
-//   - "file.backup.json" → ".json"
-//   - "file" → ""
-//   - ".hidden" → ""
+//   - "file.json" → ".json".
+//   - "FILE.JSON" → ".json".
+//   - "file.backup.json" → ".json".
+//   - "file" → "".
+//   - ".hidden" → "".
 func GetFileExtension(filename string) string {
-	// Handle special cases
+	// Handle special cases.
 	if filename == "" || filename == "." {
 		return ""
 	}
 
 	ext := filepath.Ext(filename)
 
-	// If the extension is the whole filename (e.g., ".env"), check if it looks like a known extension
+	// If the extension is the whole filename (e.g., ".env"), check if it looks like a known extension.
 	if ext == filename {
-		// Check if it's actually an extension (has letters after the dot)
+		// Check if it's actually an extension (has letters after the dot).
 		if len(ext) > 1 && strings.Contains(ext[1:], ".") == false {
-			// It looks like an extension file (e.g., ".json", ".yaml")
-			// Check if it's a known extension
+			// It looks like an extension file (e.g., ".json", ".yaml").
+			// Check if it's a known extension.
 			lowerExt := strings.ToLower(ext)
 			knownExts := []string{".json", ".yaml", ".yml", ".hcl", ".tf", ".tfvars", ".txt", ".md"}
 			for _, known := range knownExts {
@@ -102,11 +102,11 @@ func GetFileExtension(filename string) string {
 				}
 			}
 		}
-		// Otherwise it's a hidden file without an extension (e.g., ".env", ".gitignore")
+		// Otherwise it's a hidden file without an extension (e.g., ".env", ".gitignore").
 		return ""
 	}
 
-	// If filename ends with a dot, there's no extension
+	// If filename ends with a dot, there's no extension.
 	if ext == "." {
 		return ""
 	}

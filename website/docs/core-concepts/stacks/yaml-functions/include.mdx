@@ -53,6 +53,10 @@ With `!include` it's possible to import multiple different file formats into Atm
     File type detection is based on the file extension, not the content. For example, a `.txt` file containing JSON 
     will be returned as a raw string. To force any file to be included as raw text regardless of extension, 
     use the [`!include.raw`](./include-raw) function.
+    
+    **Important for URLs:** URLs that lack a file extension (like `https://api.github.com/meta`) will be treated as 
+    plain text. If you need to parse such URLs as JSON or YAML, ensure the URL ends with the appropriate extension 
+    (e.g., `.json`) or save the content to a local file with the correct extension first.
 </Note>
 
 ### URL Query Strings and Fragments
@@ -66,7 +70,7 @@ vars: !include https://api.example.com/config.json?version=2&format=raw
 # Extension is detected as .yaml (fragment ignored)
 settings: !include https://example.com/settings.yaml#section1
 
-# Extension is detected as .json (both ignored)
+# Extension is detected from the path (query/fragment ignored)
 config: !include https://example.com/data.json?v=1#field
 ```
 
@@ -285,8 +289,9 @@ components:
         tests: !include '"~/My Documents/dev/tests.yaml" .config.tests'
         # Download and include a remote YAML file using HTTPS protocol, and query the `vars` section from the file
         region_values: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
-        # Download and include a remote JSON file and query the `api` section from the file
-        allowed_ips: !include https://api.github.com/meta .api
+        # Download and include a remote JSON file from a URL with .json extension
+        # Note: For URLs without extensions, save locally first or use a URL with .json extension
+        github_config: !include ./github-meta.json .api
 ```
 </File>
 
