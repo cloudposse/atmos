@@ -273,7 +273,13 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 	tempViper.SetConfigType("yaml")
 
 	if err := tempViper.ReadInConfig(); err != nil {
-		return nil, err
+		// Return sentinel error unwrapped for type checking
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
+			return nil, err
+		}
+		// Wrap any other error with context
+		return nil, fmt.Errorf("failed to read config %s/%s: %w", path, fileName, err)
 	}
 
 	return tempViper, nil
@@ -283,7 +289,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 func readConfigFileContent(configFilePath string) ([]byte, error) {
 	content, err := os.ReadFile(configFilePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read config file %s: %w", configFilePath, err)
 	}
 	return content, nil
 }
@@ -307,7 +313,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// - B's settings override C's settings
 	// - A's settings override both B's and C's settings
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return err
+		return fmt.Errorf("merge temp config: %w", err)
 	}
 
 	return nil
@@ -359,7 +365,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	// Process YAML functions
 	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return err
+		return fmt.Errorf("preprocess YAML functions: %w", err)
 	}
 
 	// Marshal to YAML
