@@ -738,6 +738,56 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			expectedNoColor: true,
 			expectedColor:   false,
 		},
+		{
+			name: "NO_PAGER environment variable disables pager",
+			envVars: map[string]string{
+				"NO_PAGER": "1",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "NO_PAGER=true disables pager",
+			envVars: map[string]string{
+				"NO_PAGER": "true",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "NO_PAGER=any_value disables pager",
+			envVars: map[string]string{
+				"NO_PAGER": "yes",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "--pager flag overrides NO_PAGER env var",
+			envVars: map[string]string{
+				"NO_PAGER": "1",
+			},
+			args:          []string{"atmos", "--pager=less", "describe", "config"},
+			expectedPager: "less",
+		},
+		{
+			name: "NO_PAGER takes precedence over PAGER env var",
+			envVars: map[string]string{
+				"PAGER":    "more",
+				"NO_PAGER": "1",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "NO_PAGER takes precedence over ATMOS_PAGER env var",
+			envVars: map[string]string{
+				"ATMOS_PAGER": "less",
+				"NO_PAGER":    "1",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
 	}
 
 	for _, tt := range tests {
@@ -747,7 +797,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			originalEnvVars := make(map[string]string)
 
 			// Clear and save relevant environment variables
-			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR"}
+			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR"}
 			for _, envVar := range envVarsToCheck {
 				if val, exists := os.LookupEnv(envVar); exists {
 					originalEnvVars[envVar] = val

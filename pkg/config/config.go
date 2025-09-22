@@ -93,6 +93,17 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if v, ok := flagKeyValue["pager"]; ok {
 		atmosConfig.Settings.Terminal.Pager = v
 	}
+
+	// Handle NO_PAGER environment variable (standard CLI convention)
+	// Check this after --pager flag so CLI flag takes precedence
+	//nolint:forbidigo // NO_PAGER is a standard CLI convention that requires direct env access
+	if os.Getenv("NO_PAGER") != "" {
+		// Check if --pager flag was explicitly provided
+		if _, hasPagerFlag := flagKeyValue["pager"]; !hasPagerFlag {
+			// NO_PAGER is set and no explicit --pager flag was provided, disable the pager
+			atmosConfig.Settings.Terminal.Pager = "false"
+		}
+	}
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,

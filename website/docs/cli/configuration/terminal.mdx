@@ -29,19 +29,28 @@ settings:
     max_width: 120        # Maximum width for terminal output
     pager: false          # Pager disabled by default (set to true, or pager name like 'less' to enable)
     color: true           # Enable colored output (default: true)
-    # no_color: false     # DEPRECATED in config: Use 'color' instead (kept for backward compatibility)
     unicode: true         # Use Unicode characters in output
     tab_width: 2          # Number of spaces for YAML indentation (default: 2)
 ```
 
-:::warning Deprecation Notice
-The `no_color` field in the terminal configuration is deprecated. Please use `color: false` instead.
-The `NO_COLOR` and `ATMOS_NO_COLOR` environment variables are **NOT** deprecated and continue to be fully supported for portability.
-:::
+## Configuration Precedence
 
-:::info Portability
-While `no_color` in the configuration file is deprecated in favor of `color`, the `NO_COLOR` and `ATMOS_NO_COLOR` environment variables remain fully supported for portability. This ensures your CI/CD pipelines and scripts continue to work across different environments without modification.
-:::
+Atmos follows a clear precedence order for terminal settings, with command-line flags having the highest priority:
+
+### Pager Configuration Precedence
+1. **CLI Flags** (highest priority): `--pager=false`, `--pager=less`
+2. **NO_PAGER Environment Variable**: `NO_PAGER=1` (standard CLI convention)
+3. **ATMOS_PAGER Environment Variable**: `ATMOS_PAGER=less`
+4. **PAGER Environment Variable**: `PAGER=more` (system default)
+5. **Configuration File** (lowest priority): `settings.terminal.pager: true`
+
+### Color Configuration Precedence
+1. **CLI Flags** (highest priority): `--no-color`
+2. **NO_COLOR Environment Variable**: `NO_COLOR=1` (standard CLI convention)
+3. **ATMOS_NO_COLOR Environment Variable**: `ATMOS_NO_COLOR=true`
+4. **ATMOS_COLOR Environment Variable**: `ATMOS_COLOR=false`
+5. **COLOR Environment Variable**: `COLOR=false`
+6. **Configuration File** (lowest priority): `settings.terminal.color: false`
 
 ## Syntax Highlighting
 
@@ -70,16 +79,15 @@ settings:
     - `false` or empty: Pager disabled (default)
     - `true` or `on`: Enable pager with system default
     - Pager command (e.g., `less`, `more`): Use specific pager program
-    - Can also be set using `ATMOS_PAGER` or `PAGER` environment variables
-    - Can be enabled per command with `--pager` global flag
+    - Environment variables: `NO_PAGER` (disable), `ATMOS_PAGER`, `PAGER` (system default)
+    - CLI control: `--pager` global flag
   </dd>
   
   <dt>`color`</dt>
   <dd>
     Enable colored terminal output (default: `true`).
-    - Can also be set using:
-      - `ATMOS_COLOR` or `COLOR` environment variables
-      - `--no-color` global flag (sets color to false)
+    - Environment variables: `NO_COLOR` (standard), `ATMOS_NO_COLOR`, `ATMOS_COLOR`, `COLOR`
+    - CLI control: `--no-color` global flag
   </dd>
   
   <dt>`unicode`</dt>
