@@ -152,6 +152,7 @@ settings:
     enabled: true
     endpoint: https://us.i.posthog.com
     token: phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS
+    logging: false
 vendor:
   base_path: ./vendor.yaml
 initialized: true
