@@ -52,7 +52,7 @@ func TestTelemetryConstructor(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	// Create telemetry instance.
-	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, mockClientProvider.NewMockClient)
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, false, mockClientProvider.NewMockClient)
 
 	// Verify all fields are properly set.
 	assert.Equal(t, telemetry.isEnabled, enabled)
@@ -91,7 +91,7 @@ func TestTelemetryCaptureMethod(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
 	// Create telemetry instance.
-	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, mockClientProvider.NewMockClient)
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, false, mockClientProvider.NewMockClient)
 
 	// Verify constructor worked correctly.
 	assert.Equal(t, telemetry.isEnabled, enabled)
@@ -141,7 +141,7 @@ func TestTelemetryDisabledCaptureMethod(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	// Create telemetry instance.
-	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, mockClientProvider.NewMockClient)
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, false, mockClientProvider.NewMockClient)
 
 	// Verify constructor worked correctly.
 	assert.Equal(t, telemetry.isEnabled, enabled)
@@ -191,7 +191,7 @@ func TestTelemetryEmptyTokenCaptureMethod(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	// Create telemetry instance.
-	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, mockClientProvider.NewMockClient)
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, false, mockClientProvider.NewMockClient)
 
 	// Verify constructor worked correctly.
 	assert.Equal(t, telemetry.isEnabled, enabled)
@@ -243,7 +243,7 @@ func TestTelemetryProviderErrorCaptureMethod(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	// Create telemetry instance with mock client provider.
-	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, mockClientProvider.NewMockClient)
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, false, mockClientProvider.NewMockClient)
 
 	// Verify telemetry instance was created correctly.
 	assert.Equal(t, telemetry.isEnabled, enabled)
@@ -292,7 +292,7 @@ func TestTelemetryEnqueueErrorCaptureMethod(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 
 	// Create telemetry instance with mock client provider.
-	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, mockClientProvider.NewMockClient)
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, false, mockClientProvider.NewMockClient)
 
 	// Verify telemetry instance was created correctly.
 	assert.Equal(t, telemetry.isEnabled, enabled)
@@ -354,7 +354,7 @@ func TestTelemetryPosthogIntegrationCaptureMethod(t *testing.T) {
 	}).Return(nil).Times(1)
 
 	// Create telemetry instance with mock client provider.
-	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, mockClientProvider.NewMockClient)
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, false, mockClientProvider.NewMockClient)
 
 	// Verify telemetry instance was created correctly.
 	assert.Equal(t, telemetry.isEnabled, enabled)
@@ -417,7 +417,7 @@ func TestTelemetryPosthogIntegrationWrongEndpointCaptureMethod(t *testing.T) {
 		realPosthogClient.Close()
 	}).Return(nil).Times(1)
 
-	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, mockClientProvider.NewMockClient)
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, false, mockClientProvider.NewMockClient)
 
 	assert.Equal(t, telemetry.isEnabled, enabled)
 	assert.Equal(t, telemetry.token, token)
@@ -434,4 +434,84 @@ func TestTelemetryPosthogIntegrationWrongEndpointCaptureMethod(t *testing.T) {
 	// TODO: PostHog Enqueue always returns nil, but we still check errors
 	// to handle them if posthog go lib will return them in the future.
 	assert.True(t, captured)
+}
+
+// TestTelemetryWithLoggingEnabled tests that when logging is enabled,
+// the PosthogLogger is used for routing PostHog messages.
+func TestTelemetryWithLoggingEnabled(t *testing.T) {
+	// Arrange
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create mock client provider and client.
+	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
+	mockClient := mock_telemetry.NewMockClient(ctrl)
+
+	// Define test input values.
+	enabled := true
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := "https://test.posthog.com"
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
+	logging := true // Enable PostHog logging
+
+	// Set up expectations for successful flow.
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Return(mockClient, nil).Times(1)
+	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(1)
+	mockClient.EXPECT().Close().Return(nil).Times(1)
+
+	// Create telemetry instance with logging enabled.
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, logging, mockClientProvider.NewMockClient)
+
+	// Verify telemetry instance was created correctly.
+	assert.Equal(t, telemetry.isEnabled, enabled)
+	assert.Equal(t, telemetry.token, token)
+	assert.Equal(t, telemetry.endpoint, endpoint)
+	assert.Equal(t, telemetry.distinctId, distinctId)
+	assert.Equal(t, telemetry.logging, logging)
+
+	// Act: Capture an event.
+	success := telemetry.Capture("test_event", map[string]interface{}{"key": "value"})
+
+	// Assert: Verify event was captured successfully.
+	assert.True(t, success)
+}
+
+// TestTelemetryWithLoggingDisabled tests that when logging is disabled,
+// the SilentLogger is used to suppress PostHog messages.
+func TestTelemetryWithLoggingDisabled(t *testing.T) {
+	// Arrange
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create mock client provider and client.
+	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
+	mockClient := mock_telemetry.NewMockClient(ctrl)
+
+	// Define test input values.
+	enabled := true
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := "https://test.posthog.com"
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
+	logging := false // Disable PostHog logging
+
+	// Set up expectations for successful flow.
+	mockClientProvider.EXPECT().NewMockClient(token, gomock.Any()).Return(mockClient, nil).Times(1)
+	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(1)
+	mockClient.EXPECT().Close().Return(nil).Times(1)
+
+	// Create telemetry instance with logging disabled.
+	telemetry := NewTelemetry(enabled, token, endpoint, distinctId, logging, mockClientProvider.NewMockClient)
+
+	// Verify telemetry instance was created correctly.
+	assert.Equal(t, telemetry.isEnabled, enabled)
+	assert.Equal(t, telemetry.token, token)
+	assert.Equal(t, telemetry.endpoint, endpoint)
+	assert.Equal(t, telemetry.distinctId, distinctId)
+	assert.Equal(t, telemetry.logging, logging)
+
+	// Act: Capture an event.
+	success := telemetry.Capture("test_event", map[string]interface{}{"key": "value"})
+
+	// Assert: Verify event was captured successfully.
+	assert.True(t, success)
 }

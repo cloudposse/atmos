@@ -120,6 +120,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.telemetry.enabled", "ATMOS_TELEMETRY_ENABLED")
 	bindEnv(v, "settings.telemetry.token", "ATMOS_TELEMETRY_TOKEN")
 	bindEnv(v, "settings.telemetry.endpoint", "ATMOS_TELEMETRY_ENDPOINT")
+	bindEnv(v, "settings.telemetry.logging", "ATMOS_TELEMETRY_LOGGING")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
