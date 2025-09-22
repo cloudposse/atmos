@@ -126,7 +126,7 @@ func (mc *MergeContext) FormatError(err error, additionalInfo ...string) error {
 	if sb.Len() > 0 {
 		return fmt.Errorf("%s: %w", sb.String(), err)
 	}
-	
+
 	// No context was added, return original error
 	return err
 }
