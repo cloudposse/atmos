@@ -95,3 +95,29 @@ func SliceRemoveString(slice []string, str string) []string {
 	}
 	return slice
 }
+
+// SliceRemoveFlag removes all occurrences of a flag from a slice, handling both "--flag" and "--flag=value" forms.
+// This function safely handles multiple occurrences and returns a new slice with all flag instances removed.
+// The function preserves the original slice and returns a new slice with the flags removed.
+func SliceRemoveFlag(slice []string, flagName string) []string {
+	if slice == nil {
+		return nil
+	}
+
+	result := make([]string, 0, len(slice))
+	flagPrefix := "--" + flagName + "="
+
+	for _, item := range slice {
+		// Skip exact flag matches (--flag)
+		if item == "--"+flagName {
+			continue
+		}
+		// Skip flag with value matches (--flag=value)
+		if strings.HasPrefix(item, flagPrefix) {
+			continue
+		}
+		result = append(result, item)
+	}
+
+	return result
+}

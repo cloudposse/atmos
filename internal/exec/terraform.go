@@ -427,13 +427,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		uploadStatusFlag = parseUploadStatusFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 
 		// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by atmos
-		info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadStatusFlag)
-		for i := 0; i < len(info.AdditionalArgsAndFlags); i++ {
-			if strings.HasPrefix(info.AdditionalArgsAndFlags[i], "--"+cfg.UploadStatusFlag+"=") {
-				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags[:i], info.AdditionalArgsAndFlags[i+1:]...)
-				i--
-			}
-		}
+		info.AdditionalArgsAndFlags = u.SliceRemoveFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 
 		if uploadStatusFlag {
 			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
