@@ -156,7 +156,7 @@ func TestPosthogLogger_PreventStderrPollution(t *testing.T) {
 	// Now test at DEBUG level
 	log.SetLevel(log.DebugLevel)
 	buf.Reset()
-	
+
 	// Create a new logger instance after changing log level
 	debugLogger := NewPosthogLogger()
 	debugLogger.Errorf("response 502 502 Bad Gateway")
