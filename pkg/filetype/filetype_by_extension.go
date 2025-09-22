@@ -85,9 +85,9 @@ func GetFileExtension(filename string) string {
 	if filename == "" || filename == "." {
 		return ""
 	}
-	
+
 	ext := filepath.Ext(filename)
-	
+
 	// If the extension is the whole filename (e.g., ".env"), check if it looks like a known extension
 	if ext == filename {
 		// Check if it's actually an extension (has letters after the dot)
@@ -105,11 +105,11 @@ func GetFileExtension(filename string) string {
 		// Otherwise it's a hidden file without an extension (e.g., ".env", ".gitignore")
 		return ""
 	}
-	
+
 	// If filename ends with a dot, there's no extension
 	if ext == "." {
 		return ""
 	}
-	
+
 	return strings.ToLower(ext)
 }

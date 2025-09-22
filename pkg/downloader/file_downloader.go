@@ -65,7 +65,7 @@ func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
 		// Read the actual downloaded file, not the URL
 		return fd.fileReader(filePath)
 	}
-	
+
 	// Pass the original source URL for extension detection
 	return filetype.ParseFileByExtension(readFunc, src)
 }

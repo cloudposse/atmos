@@ -148,7 +148,7 @@ func processLocalFile(localFile string, forceRaw bool) (any, error) {
 // processRemoteFile downloads and parses a remote file.
 func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
 	dl := downloader.NewGoGetterDownloader(atmosConfig)
-	
+
 	if forceRaw {
 		// Always return raw content for !include.raw
 		return dl.FetchAndParseRaw(includeFile)
@@ -175,7 +175,7 @@ func updateYamlNode(node *yaml.Node, res any, val string, file string) error {
 		var includedNode yaml.Node
 		err = yaml.Unmarshal([]byte(y), &includedNode)
 		if err != nil {
-			return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", 
+			return fmt.Errorf("%w: %s, stack manifest: %s, error: %v",
 				ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
 		}
 

@@ -92,7 +92,7 @@ func TestGetFileExtension(t *testing.T) {
 		// No extension
 		{"No extension", "README", ""},
 		{"No extension with path", "/path/to/README", ""},
-		
+
 		// Hidden files
 		{"Hidden file no ext", ".env", ""},
 		{"Hidden file with ext", ".hidden.json", ".json"},

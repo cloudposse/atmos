@@ -18,7 +18,7 @@ func TestIncludeExtensionBased(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	// Create test files with different extensions
-	
+
 	// JSON file - should be parsed
 	jsonFile := filepath.Join(tempDir, "config.json")
 	jsonContent := `{"database": {"host": "localhost", "port": 5432}}`
@@ -158,7 +158,7 @@ func TestIncludeRawFunction(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	// Create test files with different extensions
-	
+
 	// JSON file
 	jsonFile := filepath.Join(tempDir, "config.json")
 	jsonContent := `{"type": "json", "parsed": false}`
