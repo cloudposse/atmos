@@ -12,21 +12,21 @@ import (
 func TestGitHubTokenEnvBinding(t *testing.T) {
 	// The TestMain function in main_test.go should have already bound the environment variables.
 	// This test verifies that the binding is working correctly.
-	
+
 	t.Run("GITHUB_TOKEN from CI is accessible", func(t *testing.T) {
 		// Save original value.
 		originalToken := os.Getenv("GITHUB_TOKEN")
 		defer os.Setenv("GITHUB_TOKEN", originalToken)
-		
+
 		// Simulate CI environment setting GITHUB_TOKEN.
 		testToken := "test-ci-github-token"
 		os.Setenv("GITHUB_TOKEN", testToken)
-		
+
 		// Since TestMain already bound the env vars, we need to create a new Viper instance
 		// or reset the bound value to test properly.
 		v := viper.New()
 		v.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
-		
+
 		// Verify it's available through the new Viper instance.
 		token := v.GetString("github-token")
 		assert.Equal(t, testToken, token, "GITHUB_TOKEN should be accessible through viper")
@@ -40,15 +40,15 @@ func TestGitHubTokenEnvBinding(t *testing.T) {
 			os.Setenv("GITHUB_TOKEN", originalGitHub)
 			os.Setenv("ATMOS_GITHUB_TOKEN", originalAtmos)
 		}()
-		
+
 		// Set both tokens.
 		os.Setenv("GITHUB_TOKEN", "github-token")
 		os.Setenv("ATMOS_GITHUB_TOKEN", "atmos-github-token")
-		
+
 		// Create a new Viper instance to test binding.
 		v := viper.New()
 		v.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
-		
+
 		// Verify ATMOS_GITHUB_TOKEN takes precedence.
 		token := v.GetString("github-token")
 		assert.Equal(t, "atmos-github-token", token, "ATMOS_GITHUB_TOKEN should take precedence over GITHUB_TOKEN")
@@ -62,7 +62,7 @@ func TestGitHubTokenEnvBinding(t *testing.T) {
 			// The token should be accessible (either the env token or empty if not set).
 			assert.NotNil(t, token, "GetGitHubToken should not return nil")
 		}
-		
+
 		// Test that a new GitHub API client can be created.
 		client := NewGitHubAPIClient()
 		assert.NotNil(t, client, "NewGitHubAPIClient should return a valid client")
