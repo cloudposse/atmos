@@ -651,6 +651,16 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			checkDetailedExit: true,
 			exitCode:          0, // Simulate no drift
 		},
+		{
+			name:              "upload status explicitly disabled",
+			stack:             "nonprod",
+			component:         "mock/nodrift",
+			uploadStatus:      false,
+			proEnabled:        true,
+			checkProWarning:   false,
+			checkDetailedExit: false,
+			exitCode:          0,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -694,6 +704,8 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			}
 			if tc.uploadStatus {
 				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-status")
+			} else {
+				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-status=false")
 			}
 
 			// Create a pipe to capture stdout and stderr

@@ -26,6 +26,29 @@ const (
 	detailedExitCodeFlag      = "--detailed-exitcode"
 )
 
+// parseUploadStatusFlag parses the upload status flag from the arguments.
+// It supports --flag, --flag=true, and --flag=false forms.
+// Returns true if the flag is present and not explicitly set to false.
+func parseUploadStatusFlag(args []string, flagName string) bool {
+	flagPrefix := "--" + flagName + "="
+
+	// Check for --flag (without value, defaults to true)
+	if u.SliceContainsString(args, "--"+flagName) {
+		return true
+	}
+
+	// Check for --flag=value forms
+	for _, arg := range args {
+		if strings.HasPrefix(arg, flagPrefix) {
+			value := strings.TrimPrefix(arg, flagPrefix)
+			// Parse boolean value, default to true if not a valid boolean
+			return value != "false"
+		}
+	}
+
+	return false
+}
+
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
 var (
 	ErrHTTPBackendWorkspaces     = errors.New("workspaces are not supported for the HTTP backend")
@@ -400,20 +423,21 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			!atmosConfig.Components.Terraform.Plan.SkipPlanfile {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
-		// Check if the upload flag is present (supports --flag and --flag=true forms).
-		uploadStatusFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadStatusFlag) ||
-			u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, "--"+cfg.UploadStatusFlag+"=")
+		// Check if the upload flag is present and parse its value (supports --flag, --flag=true, --flag=false forms).
+		uploadStatusFlag = parseUploadStatusFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
+
+		// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by atmos
+		info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadStatusFlag)
+		for i := 0; i < len(info.AdditionalArgsAndFlags); i++ {
+			if strings.HasPrefix(info.AdditionalArgsAndFlags[i], "--"+cfg.UploadStatusFlag+"=") {
+				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags[:i], info.AdditionalArgsAndFlags[i+1:]...)
+				i--
+			}
+		}
+
 		if uploadStatusFlag {
 			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
 				allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
-			}
-			// Remove both exact and key=value forms of the flag from AdditionalArgsAndFlags.
-			info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadStatusFlag)
-			for i := 0; i < len(info.AdditionalArgsAndFlags); i++ {
-				if strings.HasPrefix(info.AdditionalArgsAndFlags[i], "--"+cfg.UploadStatusFlag+"=") {
-					info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags[:i], info.AdditionalArgsAndFlags[i+1:]...)
-					i--
-				}
 			}
 		}
 	case "destroy":
