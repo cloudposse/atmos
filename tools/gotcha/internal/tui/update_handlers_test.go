@@ -15,11 +15,11 @@ import (
 // TestHandleTestComplete tests the handleTestComplete function.
 func TestHandleTestComplete(t *testing.T) {
 	tests := []struct {
-		name           string
-		setupModel     func() *TestModel
-		msg            TestCompleteMsg
-		expectedExit   int
-		checkModel     func(t *testing.T, m *TestModel)
+		name         string
+		setupModel   func() *TestModel
+		msg          TestCompleteMsg
+		expectedExit int
+		checkModel   func(t *testing.T, m *TestModel)
 	}{
 		{
 			name: "sets exit code from message",
@@ -84,7 +84,7 @@ func TestHandleTestComplete(t *testing.T) {
 			name: "marks undisplayed packages as displayed",
 			setupModel: func() *TestModel {
 				return &TestModel{
-					startTime: time.Now(),
+					startTime:    time.Now(),
 					packageOrder: []string{"pkg1", "pkg2"},
 					packageResults: map[string]*PackageResult{
 						"pkg1": {
@@ -94,9 +94,9 @@ func TestHandleTestComplete(t *testing.T) {
 							TestOrder: []string{},
 						},
 						"pkg2": {
-							Package:   "pkg2",
-							Status:    TestStatusRunning,
-							HasTests:  true,  // Has tests so it will be marked as pass
+							Package:  "pkg2",
+							Status:   TestStatusRunning,
+							HasTests: true, // Has tests so it will be marked as pass
 							Tests: map[string]*TestResult{
 								"TestSomething": {Name: "TestSomething", Status: "pass"},
 							},
@@ -155,11 +155,11 @@ func TestHandleTestComplete(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			model := tt.setupModel()
 			cmd := model.handleTestComplete(tt.msg)
-			
+
 			// Check the model state
 			tt.checkModel(t, model)
 			assert.Equal(t, tt.expectedExit, model.GetExitCode())
-			
+
 			// The command should batch multiple commands
 			if cmd != nil {
 				// Execute the command to ensure it doesn't panic
@@ -251,7 +251,7 @@ func TestHandleKeyMsg(t *testing.T) {
 			},
 			keyMsg: tea.KeyMsg{Type: tea.KeyPgDown},
 			checkScroll: func(t *testing.T, before, after int) {
-				assert.GreaterOrEqual(t, after, before)  // May hit max
+				assert.GreaterOrEqual(t, after, before) // May hit max
 			},
 		},
 		{
@@ -286,19 +286,19 @@ func TestHandleKeyMsg(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			model := tt.setupModel()
 			beforeScroll := model.scrollOffset
-			
+
 			result, cmd := model.handleKeyMsg(tt.keyMsg)
 			resultModel := result.(*TestModel)
-			
+
 			if tt.expectQuit {
 				assert.NotNil(t, cmd)
 				assert.True(t, resultModel.aborted)
 			}
-			
+
 			if tt.expectAborted {
 				assert.True(t, resultModel.aborted)
 			}
-			
+
 			if tt.checkScroll != nil {
 				tt.checkScroll(t, beforeScroll, resultModel.scrollOffset)
 			}
@@ -319,7 +319,7 @@ func TestHandleStreamOutput(t *testing.T) {
 			setupModel: func() *TestModel {
 				tmpFile, err := os.CreateTemp("", "test-output-*.json")
 				require.NoError(t, err)
-				
+
 				return &TestModel{
 					jsonFile:          tmpFile,
 					jsonWriter:        &sync.Mutex{},
