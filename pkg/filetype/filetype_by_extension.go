@@ -1,6 +1,7 @@
 package filetype
 
 import (
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 )
@@ -69,7 +70,14 @@ func ExtractFilenameFromPath(path string) string {
 		path = path[:idx]
 	}
 
-	// Extract the base filename.
+	// For URLs, use path package instead of filepath to ensure forward slashes.
+	// This handles URLs correctly on Windows where filepath.Base expects backslashes.
+	if strings.Contains(path, "://") {
+		// Use path package for URLs (always uses forward slashes).
+		return pathpkg.Base(path)
+	}
+
+	// For local files, use filepath package (handles OS-specific separators).
 	return filepath.Base(path)
 }
 
