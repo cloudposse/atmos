@@ -99,4 +99,3 @@ func (d *DiscardLogger) Warnf(format string, args ...interface{}) {
 // Errorf discards error messages.
 func (d *DiscardLogger) Errorf(format string, args ...interface{}) {
 }
-
