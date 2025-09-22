@@ -12,59 +12,61 @@ import (
 // TestTelemetryLoggerSelectionBasedOnFlag tests that the correct logger is selected
 // based on the logging flag during client creation.
 func TestTelemetryLoggerSelectionBasedOnFlag(t *testing.T) {
-	// Test with logging enabled - should use PosthogLogger
-	t.Run("LoggingEnabled", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
+	tests := []struct {
+		name           string
+		logging        bool
+		expectedLogger string
+	}{
+		{
+			name:           "LoggingEnabled",
+			logging:        true,
+			expectedLogger: "PosthogLogger",
+		},
+		{
+			name:           "LoggingDisabled",
+			logging:        false,
+			expectedLogger: "SilentLogger",
+		},
+	}
 
-		// Create a custom mock provider to inspect the config
-		var capturedConfig *posthog.Config
-		mockProvider := func(token string, config *posthog.Config) (posthog.Client, error) {
-			capturedConfig = config
-			mockClient := mock_telemetry.NewMockClient(ctrl)
-			mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(1)
-			mockClient.EXPECT().Close().Return(nil).Times(1)
-			return mockClient, nil
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-		// Create telemetry with logging enabled
-		telemetry := NewTelemetry(true, "test-token", Options{Endpoint: "https://test.com", DistinctID: "test-id", Logging: true}, mockProvider)
-		success := telemetry.Capture("test", map[string]interface{}{})
+			// Create a custom mock provider to inspect the config
+			var capturedConfig *posthog.Config
+			mockProvider := func(token string, config *posthog.Config) (posthog.Client, error) {
+				capturedConfig = config
+				mockClient := mock_telemetry.NewMockClient(ctrl)
+				mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(1)
+				mockClient.EXPECT().Close().Return(nil).Times(1)
+				return mockClient, nil
+			}
 
-		assert.True(t, success)
-		assert.NotNil(t, capturedConfig)
-		assert.NotNil(t, capturedConfig.Logger)
-		// Verify it's a PosthogLogger by checking type
-		_, isPosthogLogger := capturedConfig.Logger.(*PosthogLogger)
-		assert.True(t, isPosthogLogger, "Should use PosthogLogger when logging is enabled")
-	})
+			// Create telemetry with specified logging setting
+			telemetry := NewTelemetry(true, "test-token", Options{
+				Endpoint:   "https://test.com",
+				DistinctID: "test-id",
+				Logging:    tt.logging,
+			}, mockProvider)
+			success := telemetry.Capture("test", map[string]interface{}{})
 
-	// Test with logging disabled - should use SilentLogger
-	t.Run("LoggingDisabled", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
+			assert.True(t, success)
+			assert.NotNil(t, capturedConfig)
+			assert.NotNil(t, capturedConfig.Logger)
 
-		// Create a custom mock provider to inspect the config
-		var capturedConfig *posthog.Config
-		mockProvider := func(token string, config *posthog.Config) (posthog.Client, error) {
-			capturedConfig = config
-			mockClient := mock_telemetry.NewMockClient(ctrl)
-			mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(1)
-			mockClient.EXPECT().Close().Return(nil).Times(1)
-			return mockClient, nil
-		}
-
-		// Create telemetry with logging disabled
-		telemetry := NewTelemetry(true, "test-token", Options{Endpoint: "https://test.com", DistinctID: "test-id", Logging: false}, mockProvider)
-		success := telemetry.Capture("test", map[string]interface{}{})
-
-		assert.True(t, success)
-		assert.NotNil(t, capturedConfig)
-		assert.NotNil(t, capturedConfig.Logger)
-		// Verify it's a SilentLogger by checking type
-		_, isSilentLogger := capturedConfig.Logger.(*SilentLogger)
-		assert.True(t, isSilentLogger, "Should use SilentLogger when logging is disabled")
-	})
+			// Verify the correct logger type is used
+			switch tt.expectedLogger {
+			case "PosthogLogger":
+				_, isPosthogLogger := capturedConfig.Logger.(*PosthogLogger)
+				assert.True(t, isPosthogLogger, "Should use PosthogLogger when logging is enabled")
+			case "SilentLogger":
+				_, isSilentLogger := capturedConfig.Logger.(*SilentLogger)
+				assert.True(t, isSilentLogger, "Should use SilentLogger when logging is disabled")
+			}
+		})
+	}
 }
 
 // TestTelemetryConstructorWithLogging tests that the telemetry constructor correctly
