@@ -218,13 +218,8 @@ func (m *TestModel) handleTestComplete(msg TestCompleteMsg) tea.Cmd {
 	m.done = true
 	m.endTime = time.Now()
 
-	// Set exit code based on test results
-	// If we have any failures, override exit code to 1
-	if m.failCount > 0 {
-		m.exitCode = 1
-	} else {
-		m.exitCode = msg.ExitCode
-	}
+	// Always use the exact exit code from go test
+	m.exitCode = msg.ExitCode
 
 	// Close JSON file
 	if m.jsonFile != nil {
