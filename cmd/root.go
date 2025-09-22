@@ -148,8 +148,7 @@ func Execute() error {
 	// Validate theme configuration if specified and config was loaded successfully
 	if initErr == nil && atmosConfig.Settings.Terminal.Theme != "" {
 		if err := theme.ValidateTheme(atmosConfig.Settings.Terminal.Theme); err != nil {
-			log.Error("Theme validation failed", "error", err)
-			os.Exit(1)
+			return fmt.Errorf("theme validation failed: %w", err)
 		}
 	}
 
