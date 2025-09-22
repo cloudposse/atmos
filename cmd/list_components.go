@@ -10,8 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // listComponentsCmd lists atmos components
@@ -29,7 +27,8 @@ var listComponentsCmd = &cobra.Command{
 			return err
 		}
 
-		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
+		// Print the output directly without color since it's a simple list
+		fmt.Println(strings.Join(output, "\n"))
 		return nil
 	},
 }

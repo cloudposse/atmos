@@ -58,8 +58,8 @@ var listVendorCmd = &cobra.Command{
 			return err
 		}
 
-		// Print output
-		fmt.Println(output)
+		// Print the formatted output directly (table/json/yaml/csv already formatted)
+		fmt.Print(output)
 
 		return nil
 	},
