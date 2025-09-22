@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -249,6 +250,135 @@ func TestSliceRemoveFlagAndValue(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := SliceRemoveFlagAndValue(tc.input, tc.flagName)
 			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestSliceOfInterfacesToSliceOfStringsWithTypeAssertion(t *testing.T) {
+	testCases := []struct {
+		name        string
+		input       []any
+		expected    []string
+		expectError bool
+		errorType   error
+	}{
+		{
+			name:        "nil input",
+			input:       nil,
+			expected:    nil,
+			expectError: true,
+			errorType:   ErrNilInput,
+		},
+		{
+			name:        "empty slice",
+			input:       []any{},
+			expected:    []string{},
+			expectError: false,
+		},
+		{
+			name:        "all strings",
+			input:       []any{"hello", "world", "test"},
+			expected:    []string{"hello", "world", "test"},
+			expectError: false,
+		},
+		{
+			name:        "single string",
+			input:       []any{"single"},
+			expected:    []string{"single"},
+			expectError: false,
+		},
+		{
+			name:        "non-string element at index 0",
+			input:       []any{42, "hello"},
+			expected:    nil,
+			expectError: true,
+			errorType:   ErrNonStringElement,
+		},
+		{
+			name:        "non-string element at index 1",
+			input:       []any{"hello", 42, "world"},
+			expected:    nil,
+			expectError: true,
+			errorType:   ErrNonStringElement,
+		},
+		{
+			name:        "non-string element at end",
+			input:       []any{"hello", "world", 3.14},
+			expected:    nil,
+			expectError: true,
+			errorType:   ErrNonStringElement,
+		},
+		{
+			name:        "multiple non-string elements",
+			input:       []any{42, 3.14, true},
+			expected:    nil,
+			expectError: true,
+			errorType:   ErrNonStringElement,
+		},
+		{
+			name:        "mixed types with non-string first",
+			input:       []any{true, "hello", "world"},
+			expected:    nil,
+			expectError: true,
+			errorType:   ErrNonStringElement,
+		},
+		{
+			name:        "nil element",
+			input:       []any{"hello", nil, "world"},
+			expected:    nil,
+			expectError: true,
+			errorType:   ErrNonStringElement,
+		},
+		{
+			name:        "slice element",
+			input:       []any{"hello", []string{"nested"}, "world"},
+			expected:    nil,
+			expectError: true,
+			errorType:   ErrNonStringElement,
+		},
+		{
+			name:        "map element",
+			input:       []any{"hello", map[string]string{"key": "value"}, "world"},
+			expected:    nil,
+			expectError: true,
+			errorType:   ErrNonStringElement,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc // rebind to avoid range-variable capture
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := SliceOfInterfacesToSliceOfStringsWithTypeAssertion(tc.input)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+
+				// Check error type
+				if tc.errorType == ErrNilInput {
+					assert.Equal(t, ErrNilInput, err)
+				} else if tc.errorType == ErrNonStringElement {
+					// Verify the error wraps ErrNonStringElement
+					assert.ErrorIs(t, err, ErrNonStringElement)
+
+					// For non-string element errors, verify the error message contains index and type info
+					errorMsg := err.Error()
+					assert.Contains(t, errorMsg, "index=")
+					assert.Contains(t, errorMsg, "got=")
+
+					// Find the actual index and type for verification
+					for i, item := range tc.input {
+						if _, ok := item.(string); !ok {
+							assert.Contains(t, errorMsg, fmt.Sprintf("index=%d", i))
+							assert.Contains(t, errorMsg, fmt.Sprintf("got=%T", item))
+							break
+						}
+					}
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expected, result)
+			}
 		})
 	}
 }
