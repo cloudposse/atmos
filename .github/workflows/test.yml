@@ -217,6 +217,10 @@ jobs:
 
       - name: Run vanilla go test (debug baseline)
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use the GitHub token for downloading the Packer plugins
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Run vanilla go test to see what Go is reporting directly
           # This will help us understand why gotcha exits non-zero
