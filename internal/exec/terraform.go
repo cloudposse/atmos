@@ -388,7 +388,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Prepare the terraform command
 	allArgsAndFlags := strings.Fields(info.SubCommand)
-	uploadDeploymentStatusFlag := false
+	uploadStatusFlag := false
 
 	switch info.SubCommand {
 	case "plan":
@@ -401,16 +401,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
 		// Check if the upload flag is present (supports --flag and --flag=true forms).
-		uploadDeploymentStatusFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag) ||
-			u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag+"=")
-		if uploadDeploymentStatusFlag {
+		uploadStatusFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadStatusFlag) ||
+			u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, "--"+cfg.UploadStatusFlag+"=")
+		if uploadStatusFlag {
 			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
 				allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
 			}
 			// Remove both exact and key=value forms of the flag from AdditionalArgsAndFlags.
-			info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDeploymentStatusFlag)
+			info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadStatusFlag)
 			for i := 0; i < len(info.AdditionalArgsAndFlags); i++ {
-				if strings.HasPrefix(info.AdditionalArgsAndFlags[i], "--"+cfg.UploadDeploymentStatusFlag+"=") {
+				if strings.HasPrefix(info.AdditionalArgsAndFlags[i], "--"+cfg.UploadStatusFlag+"=") {
 					info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags[:i], info.AdditionalArgsAndFlags[i+1:]...)
 					i--
 				}
@@ -563,7 +563,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		)
 		if err != nil {
 			// For Terraform Plan, we need to return the result to the pro API if upload flag is set
-			if uploadDeploymentStatusFlag && shouldUploadDeploymentStatus(&info) {
+			if uploadStatusFlag && shouldUploadStatus(&info) {
 				var exitCode int
 				var osErr *osexec.ExitError
 				if errors.As(err, &osErr) {
@@ -581,7 +581,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				// Use the default git repo implementation
 				gitRepo := &git.DefaultGitRepo{}
 
-				if err := uploadDeploymentStatus(&info, exitCode, client, gitRepo); err != nil {
+				if err := uploadStatus(&info, exitCode, client, gitRepo); err != nil {
 					return err
 				}
 

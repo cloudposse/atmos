@@ -84,13 +84,11 @@ var (
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
-	ErrFailedToMarshalPayload       = errors.New("failed to marshal payload")
+	ErrFailedToMarshalPayload       = errors.New("failed to marshal request body")
 	ErrFailedToCreateAuthRequest    = errors.New("failed to create authenticated request")
 	ErrFailedToMakeRequest          = errors.New("failed to make request")
 	ErrFailedToUploadStacks         = errors.New("failed to upload stacks")
-	ErrFailedToMarshalRequestBody   = errors.New("failed to marshal request body")
 	ErrFailedToReadResponseBody     = errors.New("failed to read response body")
-	ErrFailedToUnmarshalJSON        = errors.New("failed to unmarshal JSON")
 	ErrFailedToLockStack            = errors.New("failed to lock stack")
 	ErrFailedToUnlockStack          = errors.New("failed to unlock stack")
 	ErrOIDCWorkspaceIDRequired      = errors.New("workspace ID environment variable is required for OIDC authentication")

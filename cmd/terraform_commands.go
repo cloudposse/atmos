@@ -321,7 +321,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 var commandMaps = map[string]func(cmd *cobra.Command){
 	"plan": func(cmd *cobra.Command) {
-		cmd.PersistentFlags().Bool(cfg.UploadDeploymentStatusFlag, false, "If set atmos will upload the plan result to the pro API")
+		cmd.PersistentFlags().Bool(cfg.UploadStatusFlag, false, "If set atmos will upload the plan result to the pro API")
 		cmd.PersistentFlags().Bool("affected", false, "Plan the affected components in dependency order")
 		cmd.PersistentFlags().Bool("all", false, "Plan all components in all stacks")
 		cmd.PersistentFlags().Bool("skip-planfile", false, "Skip writing the plan to a file by not passing the `-out` flag to Terraform when executing the command. Set it to `true` when using Terraform Cloud since the `-out` flag is not supported. Terraform Cloud automatically stores plans in its backend")

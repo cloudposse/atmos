@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	// DefaultHTTPClientTimeout is the default timeout for HTTP client requests
+	// DefaultHTTPClientTimeout is the default timeout for HTTP client requests.
 	DefaultHTTPClientTimeout = 10 * time.Second
 )
 

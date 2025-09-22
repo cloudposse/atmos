@@ -184,7 +184,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionParams) error {
 	data, err := json.Marshal(params.Body)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalRequestBody, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, params.Method, params.URL, bytes.NewBuffer(data))
@@ -204,7 +204,7 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 	}
 
 	if err := json.Unmarshal(b, params.Out); err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUnmarshalJSON, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	// Log the structured response for debugging and check success
@@ -284,7 +284,7 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		// If we can't parse the response as JSON, handle based on status code
 		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-			return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToUnmarshalJSON, resp.Status)
+			return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToMarshalPayload, resp.Status)
 		}
 		// For successful responses that can't be parsed, just return nil
 		return nil
@@ -376,7 +376,7 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalRequestBody, err)
+		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
