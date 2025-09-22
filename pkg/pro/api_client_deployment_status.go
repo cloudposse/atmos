@@ -22,7 +22,7 @@ func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUpl
 		url.PathEscape(dto.RepoName),
 		url.PathEscape(dto.Stack),
 		url.PathEscape(dto.Component))
-	log.Debug(fmt.Sprintf("\nUploading drift status at %s", targetUrl))
+	log.Debug("Uploading drift status.", "url", targetUrl)
 
 	// Map HasDrift to the correct status format
 	status := "in_sync"
@@ -60,7 +60,7 @@ func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUpl
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadDeploymentStatus, err)
 	}
 
-	log.Debug(fmt.Sprintf("\nUploaded deployment status at %s", targetUrl))
+	log.Debug("Uploaded deployment status.", "url", targetUrl)
 
 	return nil
 }

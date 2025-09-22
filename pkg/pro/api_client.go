@@ -30,6 +30,7 @@ const (
 	logKeySuccess                    = "success"
 	logKeyTraceID                    = "trace_id"
 	logKeyContext                    = "context"
+	logKeyErrorMessage               = "error_message"
 )
 
 func logProAPIResponse(operation string, apiResponse dtos.AtmosApiResponse) {
@@ -53,7 +54,7 @@ func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse
 		logKeyStatus, apiResponse.Status,
 		logKeySuccess, apiResponse.Success,
 		logKeyTraceID, traceID,
-		"error_message", errorMsg,
+		logKeyErrorMessage, errorMsg,
 		logKeyContext, apiResponse.Context,
 	)
 
@@ -152,7 +153,7 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error {
 	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
-	data, err := utils.ConvertToJSON(*dto)
+	data, err := utils.ConvertToJSON(dto)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
 	}
@@ -162,7 +163,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
 	}
 
-	log.Debug(fmt.Sprintf("\nUploading the affected components and stacks to %s", url))
+	log.Debug("Uploading affected components and stacks.", "url", url)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -174,7 +175,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadStacks, err)
 	}
 
-	log.Debug(fmt.Sprintf("\nUploaded the affected components and stacks to %s", url))
+	log.Debug("Uploaded affected components and stacks.", "url", url)
 
 	return nil
 }
@@ -229,7 +230,7 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 // LockStack locks a specific stack.
 func (c *AtmosProAPIClient) LockStack(dto *dtos.LockStackRequest) (dtos.LockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
-	log.Debug(fmt.Sprintf("\nLocking stack at %s", url))
+	log.Debug("Locking stack.", "url", url)
 
 	var responseData dtos.LockStackResponse
 	err := c.doStackLockAction(&schema.StackLockActionParams{
@@ -250,7 +251,7 @@ func (c *AtmosProAPIClient) LockStack(dto *dtos.LockStackRequest) (dtos.LockStac
 // UnlockStack unlocks a specific stack.
 func (c *AtmosProAPIClient) UnlockStack(dto *dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
-	log.Debug(fmt.Sprintf("\nUnlocking stack at %s", url))
+	log.Debug("Unlocking stack.", "url", url)
 
 	var responseData dtos.UnlockStackResponse
 	err := c.doStackLockAction(&schema.StackLockActionParams{
