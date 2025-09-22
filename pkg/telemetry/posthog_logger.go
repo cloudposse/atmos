@@ -2,7 +2,6 @@ package telemetry
 
 import (
 	"fmt"
-	"io"
 
 	log "github.com/charmbracelet/log"
 )
@@ -75,7 +74,9 @@ func (p *PosthogLogger) Printf(format string, args ...interface{}) {
 }
 
 // SilentLogger is a no-op logger that discards all PostHog messages.
-// This can be used when we want to completely suppress PostHog output.
+// It satisfies the posthog.Logger interface but doesn't output anything.
+// This is used when telemetry.posthog_logging is disabled to completely
+// suppress PostHog internal messages.
 type SilentLogger struct{}
 
 // NewSilentLogger creates a new SilentLogger instance.
@@ -83,61 +84,26 @@ func NewSilentLogger() *SilentLogger {
 	return &SilentLogger{}
 }
 
-// Debugf discards debug messages.
+// Debugf implements posthog.Logger but does nothing.
 func (s *SilentLogger) Debugf(format string, args ...interface{}) {
 }
 
-// Logf discards info messages.
+// Logf implements posthog.Logger but does nothing.
 func (s *SilentLogger) Logf(format string, args ...interface{}) {
 }
 
-// Warnf discards warning messages.
+// Warnf implements posthog.Logger but does nothing.
 func (s *SilentLogger) Warnf(format string, args ...interface{}) {
 }
 
-// Errorf discards error messages.
+// Errorf implements posthog.Logger but does nothing.
 func (s *SilentLogger) Errorf(format string, args ...interface{}) {
 }
 
-// Infof discards info messages.
+// Infof implements posthog.Logger but does nothing.
 func (s *SilentLogger) Infof(format string, args ...interface{}) {
 }
 
-// Printf discards messages.
+// Printf implements posthog.Logger but does nothing.
 func (s *SilentLogger) Printf(format string, args ...interface{}) {
-}
-
-// DiscardLogger is a logger that writes all output to io.Discard.
-// This ensures PostHog doesn't write directly to stdout/stderr.
-type DiscardLogger struct {
-	writer io.Writer
-}
-
-// NewDiscardLogger creates a new DiscardLogger instance.
-func NewDiscardLogger() *DiscardLogger {
-	return &DiscardLogger{writer: io.Discard}
-}
-
-// Debugf discards debug messages.
-func (d *DiscardLogger) Debugf(format string, args ...interface{}) {
-}
-
-// Logf discards info messages.
-func (d *DiscardLogger) Logf(format string, args ...interface{}) {
-}
-
-// Warnf discards warning messages.
-func (d *DiscardLogger) Warnf(format string, args ...interface{}) {
-}
-
-// Errorf discards error messages.
-func (d *DiscardLogger) Errorf(format string, args ...interface{}) {
-}
-
-// Infof discards info messages.
-func (d *DiscardLogger) Infof(format string, args ...interface{}) {
-}
-
-// Printf discards messages.
-func (d *DiscardLogger) Printf(format string, args ...interface{}) {
 }

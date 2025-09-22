@@ -97,30 +97,8 @@ func TestSilentLogger(t *testing.T) {
 	logger.Logf("info message")
 	logger.Warnf("warning message")
 	logger.Errorf("error message")
-
-	// Buffer should remain empty
-	assert.Empty(t, buf.String())
-}
-
-// TestDiscardLogger tests that DiscardLogger discards all messages.
-func TestDiscardLogger(t *testing.T) {
-	defer log.SetOutput(io.Discard) // Reset output after test
-
-	// Create a buffer to capture log output
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	log.SetLevel(log.DebugLevel)
-
-	logger := NewDiscardLogger()
-
-	// Verify writer is set to io.Discard
-	assert.Equal(t, io.Discard, logger.writer)
-
-	// All methods should produce no output
-	logger.Debugf("debug message")
-	logger.Logf("info message")
-	logger.Warnf("warning message")
-	logger.Errorf("error message")
+	logger.Infof("info message")
+	logger.Printf("generic message")
 
 	// Buffer should remain empty
 	assert.Empty(t, buf.String())
