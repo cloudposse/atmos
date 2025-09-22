@@ -88,6 +88,7 @@ func (t *Telemetry) Capture(eventName string, properties map[string]interface{})
 		log.Debug("Could not enqueue event", "error", err)
 		return false
 	}
-	log.Debug("Telemetry event captured")
+	// Note: Event is only sent when client.Close() is called in the deferred function
+	log.Debug("Telemetry event enqueued")
 	return true
 }

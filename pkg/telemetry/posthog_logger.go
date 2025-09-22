@@ -17,9 +17,9 @@ type PosthogLogger struct {
 
 // NewPosthogLogger creates a new PosthogLogger instance.
 func NewPosthogLogger() *PosthogLogger {
-	// Create a logger with PostHog context
+	// Create a logger with PostHog prefix
 	// Use the default logger instance which respects global log level
-	return &PosthogLogger{logger: log.Default().With("component", "posthog")}
+	return &PosthogLogger{logger: log.Default().WithPrefix("posthog")}
 }
 
 // Debugf logs debug messages from PostHog using Atmos's logger.
