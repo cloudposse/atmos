@@ -85,11 +85,11 @@ By default, PostHog internal logging messages are suppressed to prevent clutteri
 ```yaml
 settings:
   telemetry:
-    posthog_logging: true  # Enable PostHog internal debug messages (default: false)
+    logging: true  # Enable PostHog internal debug messages (default: false)
 ```
 </File>
 
-or set environment variable `ATMOS_TELEMETRY_POSTHOG_LOGGING` to `true`
+or set environment variable `ATMOS_TELEMETRY_LOGGING` to `true`
 
 :::tip
 PostHog logging is useful for debugging telemetry connection issues or when configuring your own PostHog instance. When enabled, PostHog internal messages will be routed through Atmos logging at the DEBUG level.
