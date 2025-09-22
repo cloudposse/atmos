@@ -427,6 +427,9 @@ func (r *StreamReporter) SetEstimatedTotal(total int) {
 // parseCoverageValue extracts the numeric coverage percentage from a coverage string.
 // Returns -1 if the coverage value cannot be parsed.
 func parseCoverageValue(coverage string) float64 {
+	// Trim spaces first
+	coverage = strings.TrimSpace(coverage)
+	
 	// Remove "% of statements" or just "%" suffix
 	coverage = strings.TrimSuffix(coverage, " of statements")
 	coverage = strings.TrimSuffix(coverage, "%")

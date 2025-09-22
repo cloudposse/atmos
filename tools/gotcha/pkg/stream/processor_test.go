@@ -1,13 +1,89 @@
 package stream
 
 import (
+	"io"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestNewStreamProcessor(t *testing.T) {
+	tests := []struct {
+		name           string
+		jsonWriter     io.Writer
+		showFilter     string
+		testFilter     string
+		verbosityLevel string
+	}{
+		{
+			name:           "with nil writer",
+			jsonWriter:     nil,
+			showFilter:     "all",
+			testFilter:     "",
+			verbosityLevel: "standard",
+		},
+		{
+			name:           "with custom writer",
+			jsonWriter:     &strings.Builder{},
+			showFilter:     "failed",
+			testFilter:     "TestPattern",
+			verbosityLevel: "verbose",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processor := NewStreamProcessor(tt.jsonWriter, tt.showFilter, tt.testFilter, tt.verbosityLevel)
+			assert.NotNil(t, processor)
+			assert.Equal(t, tt.showFilter, processor.showFilter)
+			assert.Equal(t, tt.testFilter, processor.testFilter)
+			assert.Equal(t, tt.verbosityLevel, processor.verbosityLevel)
+			assert.NotNil(t, processor.buffers)
+			
+			// Reporter should always be created
+			assert.NotNil(t, processor.reporter)
+			assert.IsType(t, &StreamReporter{}, processor.reporter)
+		})
+	}
+}
+
+// mockReporter implements TestReporter for testing.
+type mockReporter struct {
+	onPackageStartCalled    bool
+	onPackageCompleteCalled bool
+	onTestStartCalled       bool
+	onTestCompleteCalled    bool
+}
+
+func (m *mockReporter) OnPackageStart(pkg *PackageResult) {
+	m.onPackageStartCalled = true
+}
+
+func (m *mockReporter) OnPackageComplete(pkg *PackageResult) {
+	m.onPackageCompleteCalled = true
+}
+
+func (m *mockReporter) OnTestStart(pkg *PackageResult, test *TestResult) {
+	m.onTestStartCalled = true
+}
+
+func (m *mockReporter) OnTestComplete(pkg *PackageResult, test *TestResult) {
+	m.onTestCompleteCalled = true
+}
+
+func (m *mockReporter) UpdateProgress(completed, total int, elapsed time.Duration) {
+}
+
+func (m *mockReporter) SetEstimatedTotal(total int) {
+}
+
+func (m *mockReporter) Finalize(passed, failed, skipped int, elapsed time.Duration) string {
+	return ""
+}
 
 func TestStreamProcessorBuffering(t *testing.T) {
 	tests := []struct {

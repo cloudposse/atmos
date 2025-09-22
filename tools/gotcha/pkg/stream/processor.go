@@ -270,7 +270,16 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// Handle signals in a goroutine
 	go func() {
-		<-sigChan
+		sig, ok := <-sigChan
+		if !ok {
+			// Channel was closed, not a real signal
+			return
+		}
+		if sig == nil {
+			// Nil signal, ignore
+			return
+		}
+		
 		interrupted = true
 
 		// Print abort message
@@ -301,9 +310,11 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	// Wait for command to complete
 	testErr := cmd.Wait()
 
-	// Stop listening for signals
+	// Stop listening for signals - this prevents new signals from being delivered
 	signal.Stop(sigChan)
-	close(sigChan)
+	// Note: We don't close the channel because the goroutine might still be reading from it
+	// The goroutine will simply block forever on the closed channel, but that's fine
+	// since the function will return soon anyway
 
 	// If interrupted, return with exit code 130 (standard for SIGINT)
 	if interrupted {
@@ -314,6 +325,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	var exitCode int
 	var exitReason string
 	capturedStderr := stderrBuffer.String()
+
 
 	// Return processing error if any
 	switch {
