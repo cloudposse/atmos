@@ -79,10 +79,11 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	}
 	if val, ok := flagKeyValue["no-color"]; ok {
 		valLower := strings.ToLower(val)
-		if valLower == "true" {
+		switch valLower {
+		case "true":
 			atmosConfig.Settings.Terminal.NoColor = true
 			atmosConfig.Settings.Terminal.Color = false
-		} else if valLower == "false" {
+		case "false":
 			atmosConfig.Settings.Terminal.NoColor = false
 			atmosConfig.Settings.Terminal.Color = true
 		}
