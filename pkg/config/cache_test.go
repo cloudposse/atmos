@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	homedir "github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +37,8 @@ func TestGetCacheFilePathWithoutXDGCacheHome(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Should use $HOME/.cache/atmos/cache.yaml by default
-	homeDir, _ := os.UserHomeDir()
+	// Use the same homedir package as the implementation for consistency
+	homeDir, _ := homedir.Dir()
 	expectedPath := filepath.Join(homeDir, ".cache", "atmos", "cache.yaml")
 	assert.Equal(t, expectedPath, path)
 }

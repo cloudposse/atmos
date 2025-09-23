@@ -9,6 +9,7 @@ import (
 	"time"
 
 	log "github.com/charmbracelet/log"
+	homedir "github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -25,7 +26,8 @@ func GetCacheFilePath() (string, error) {
 	var cacheDir string
 	if xdgCacheHome == "" {
 		// Follow XDG Base Directory specification: default to $HOME/.cache
-		homeDir, err := os.UserHomeDir()
+		// Use our advanced homedir package which handles edge cases across platforms
+		homeDir, err := homedir.Dir()
 		if err != nil {
 			// Fallback to current directory if home directory cannot be determined
 			cacheDir = filepath.Join(".", ".atmos")
