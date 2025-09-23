@@ -59,10 +59,17 @@ You can customize the syntax highlighting behavior for terminal output using the
 ```yaml
 settings:
   terminal:
+    # Main terminal settings
+    pager: true                     # Enable pager for all terminal output
+    max_width: 120                  # Maximum width for terminal output
+    color: true                     # Enable colored output
+
+    # Syntax highlighting specific settings
     syntax_highlighting:
       enabled: true                 # Enable/disable syntax highlighting
       formatter: terminal           # Output formatter
       theme: dracula                # Color scheme to use
+      pager: false                  # Separate pager setting for highlighted content
       line_numbers: false           # Show line numbers
       wrap: false                   # Wrap long lines
 ```
@@ -120,7 +127,7 @@ settings:
   </dd>
 
   <dt>`pager`</dt>
-  <dd>Whether to use a pager specifically for syntax-highlighted output. This setting is independent of the main pager setting (default: `false`)</dd>
+  <dd>Whether to use a pager specifically for syntax-highlighted output (default: `false`). This controls paging only for syntax-highlighted content and is separate from the main terminal pager setting above.</dd>
   <dt>`line_numbers`</dt>
   <dd>Show line numbers in output (default: `false`)</dd>
 
