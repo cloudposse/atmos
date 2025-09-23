@@ -211,14 +211,17 @@ type Terminal struct {
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 }
 
+// IsPagerEnabled reports whether a pager should be used based on Terminal.Pager.
+// It returns true if the pager is explicitly enabled or set to a specific pager command,
+// and false if disabled or not configured.
 func (t *Terminal) IsPagerEnabled() bool {
-	// Changed: pager is DISABLED by default
-	// Only enabled if explicitly set to true/on/yes/1 or a pager command
+	// Pager is disabled by default.
+	// Only enabled if explicitly set to true/on/yes/1 or a pager command.
 	p := strings.ToLower(strings.TrimSpace(t.Pager))
 	if p == "" || p == "false" || p == "off" || p == "no" || p == "n" || p == "0" {
 		return false
 	}
-	// Enable for true/on/yes/1 or specific pager commands like "less", "more"
+	// Enable for true/on/yes/1 or specific pager commands like "less", "more".
 	return true
 }
 
