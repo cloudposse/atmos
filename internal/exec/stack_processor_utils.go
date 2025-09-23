@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -21,10 +22,6 @@ import (
 )
 
 var (
-	// Error constants.
-	ErrInvalidHooksSection          = errors.New("invalid 'hooks' section in the file")
-	ErrInvalidTerraformHooksSection = errors.New("invalid 'terraform.hooks' section in the file")
-
 	// File content sync map.
 	getFileContentSyncMap = sync.Map{}
 
@@ -223,7 +220,7 @@ func ProcessYAMLConfigFile(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
-			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			e := fmt.Errorf("%w: %s\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, nil, nil, nil, nil, nil, e
 		}
 	}
@@ -233,7 +230,7 @@ func ProcessYAMLConfigFile(
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 		}
-		e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+		e := fmt.Errorf("%w: %s\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 		return nil, nil, nil, nil, nil, nil, nil, e
 	}
 
@@ -548,7 +545,7 @@ func ProcessYAMLConfigFile(
 	// Deep-merge the stack manifest and all the imports
 	stackConfigsDeepMerged, err := m.Merge(atmosConfig, stackConfigs)
 	if err != nil {
-		err2 := fmt.Errorf("ProcessYAMLConfigFile: Merge: Deep-merge the stack manifest and all the imports: Error: %v", err)
+		err2 := fmt.Errorf("%w: ProcessYAMLConfigFile: Merge: %v", errUtils.ErrDeepMergeStackConfigs, err)
 		return nil, nil, nil, nil, nil, nil, nil, err2
 	}
 
@@ -627,7 +624,7 @@ func ProcessStackConfig(
 	if i, ok := config["hooks"]; ok {
 		globalHooksSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, errors.Wrapf(ErrInvalidHooksSection, " '%s'", stackName)
+			return nil, errors.Wrapf(errUtils.ErrInvalidHooksSection, " '%s'", stackName)
 		}
 	}
 
@@ -691,7 +688,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection["hooks"]; ok {
 		terraformHooks, ok = i.(map[string]any)
 		if !ok {
-			return nil, errors.Wrapf(ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
+			return nil, errors.Wrapf(errUtils.ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
 		}
 	}
 

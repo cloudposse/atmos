@@ -95,16 +95,20 @@ func SaveCache(cfg CacheConfig) error {
 	})
 }
 
-func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
-	now := time.Now().Unix()
-
+// shouldCheckForUpdatesAt is a helper for testing that checks if an update is due
+// based on the provided timestamps and frequency.
+func shouldCheckForUpdatesAt(lastChecked int64, frequency string, now int64) bool {
 	interval, err := parseFrequency(frequency)
 	if err != nil {
-		// Log warning and default to daily if we can’t parse
+		// Log warning and default to daily if we can't parse
 		log.Warn("Unsupported check for update frequency encountered. Defaulting to daily", "frequency", frequency)
 		interval = 86400 // daily
 	}
 	return now-lastChecked >= interval
+}
+
+func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
+	return shouldCheckForUpdatesAt(lastChecked, frequency, time.Now().Unix())
 }
 
 // parseFrequency attempts to parse the frequency string in three ways:

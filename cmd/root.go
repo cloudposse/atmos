@@ -169,6 +169,7 @@ func Execute() error {
 	}
 
 	// Print telemetry disclosure if needed (skip for completion commands)
+	// We need to show this before command execution
 	if !isCompletionCommand() {
 		telemetry.PrintTelemetryDisclosure()
 	}
@@ -186,7 +187,7 @@ func Execute() error {
 	return err
 }
 
-// isCompletionCommand checks if the current command is a shell completion command.
+// isCompletionCommand checks if the current invocation is for shell completion.
 // This includes both user-visible completion commands and Cobra's internal
 // hidden completion commands (__complete, __completeNoDesc).
 func isCompletionCommand() bool {
@@ -203,6 +204,14 @@ func isCompletionCommand() bool {
 			return true
 		}
 	}
+
+	// Also check for shell completion environment variables
+	// Cobra sets these when generating completions
+	//nolint:forbidigo // These are external shell variables, not Atmos config
+	if os.Getenv("COMP_LINE") != "" || os.Getenv("_ARGCOMPLETE") != "" {
+		return true
+	}
+
 	return false
 }
 

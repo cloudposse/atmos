@@ -244,12 +244,12 @@ func TestShouldCheckForUpdates(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Mock time.Now() would be better, but for simplicity we adjust lastChecked
-			result := ShouldCheckForUpdates(tc.lastChecked, tc.frequency)
-			// Since we can't mock time.Now(), we skip the assertion
-			// This test documents the expected behavior
-			_ = result
-			_ = tc.expected
+			// Use the test helper with a fixed "now" time
+			result := shouldCheckForUpdatesAt(tc.lastChecked, tc.frequency, now)
+			if result != tc.expected {
+				t.Errorf("shouldCheckForUpdatesAt(%d, %q, %d) = %v; want %v",
+					tc.lastChecked, tc.frequency, now, result, tc.expected)
+			}
 		})
 	}
 }

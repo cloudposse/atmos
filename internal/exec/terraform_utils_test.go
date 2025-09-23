@@ -2,7 +2,6 @@ package exec
 
 import (
 	"os"
-	osexec "os/exec"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -93,10 +92,8 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	// Check for valid Git remote URL before running test
 	tests.RequireGitRemoteWithValidURL(t)
 
-	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	// Check if terraform is installed
+	tests.RequireExecutable(t, "terraform", "running Terraform affected tests")
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
@@ -155,10 +152,8 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 }
 
 func TestExecuteTerraformQuery(t *testing.T) {
-	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skip("Skipping test: terraform is not installed or not in PATH")
-	}
+	// Check if terraform is installed
+	tests.RequireExecutable(t, "terraform", "running Terraform query tests")
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 

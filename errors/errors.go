@@ -79,4 +79,10 @@ var (
 	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
 	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
 	ErrMerge                    = errors.New("merge error")
+
+	// Stack processing errors.
+	ErrInvalidStackManifest         = errors.New("invalid stack manifest")
+	ErrDeepMergeStackConfigs        = errors.New("failed to deep-merge stack configs")
+	ErrInvalidHooksSection          = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidTerraformHooksSection = errors.New("invalid 'terraform.hooks' section in the file")
 )
