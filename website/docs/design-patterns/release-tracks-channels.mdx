@@ -1,0 +1,597 @@
+---
+title: Release Tracks/Channels
+sidebar_position: 22
+sidebar_label: Release Tracks/Channels
+description: Release Tracks/Channels Atmos Design Pattern
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+The **Release Tracks/Channels** Design Pattern allows environments to subscribe to moving version tracks (e.g., `alpha`, `beta`, `prod`) instead of pinning individual versions. This approach dramatically reduces operational overhead while maintaining strong convergence and feedback loops across environments.
+</Intro>
+
+Release Tracks provide a middle ground between strict version pinning and bleeding-edge updates. By grouping environments into tracks and promoting versions through tracks rather than individual environments, teams can maintain control while reducing the burden of version management. This pattern scales well and provides early warning of issues through strong cross-environment feedback.
+
+<KeyPoints>
+- How tracks reduce version management overhead across many environments
+- Why promoting tracks instead of environments improves convergence
+- The operational semantics of track-based promotion
+- Implementation strategies using folders, variables, or vendoring
+</KeyPoints>
+
+## Use Cases
+
+Use the **Release Tracks/Channels** pattern when:
+
+- You have **many environments** that would be burdensome to pin individually
+- You want **fast convergence** and early detection of breaking changes
+- Your team prefers to **roll forward** but needs the ability to roll back tracks
+- You need **clear promotion semantics** without per-environment overhead
+- You want **strong feedback** during planning across environment tiers
+- You can group environments into **logical promotion stages**
+
+## Problem
+
+Managing individual version pins across many environments creates several challenges:
+
+- **Pin Management Overhead**: Updating dozens or hundreds of individual pins
+- **Delayed Feedback**: Issues only surface when promoting to specific environments
+- **Convergence Drift**: Environments naturally diverge without constant updates
+- **Promotion Complexity**: Coordinating updates across many environments
+
+Release Tracks solve these problems by introducing an abstraction layer between versions and environments.
+
+## Solution
+
+Instead of each environment pinning versions directly, define tracks that represent promotion stages. Environments subscribe to tracks, and you promote versions by updating the track definition.
+
+### Track Design Principles
+
+1. **Tracks are Moving Targets**: Unlike static versions, tracks point to the "current" version for their stage
+2. **Environments Follow Tracks**: Multiple environments can subscribe to the same track
+3. **Promote the Track**: Update the track's version reference to promote all subscribers
+4. **Gradual Rollout**: Versions flow through tracks (alpha → beta → prod)
+
+## Implementation Approaches
+
+Atmos supports multiple ways to implement release tracks:
+
+### Approach 1: Track Folders
+
+Create separate folders for each track, with environments referencing the appropriate folder:
+
+<File title="Directory Structure">
+```
+components/
+  terraform/
+    vpc/
+      alpha/     # Alpha track
+        main.tf
+        variables.tf
+        versions.tf
+      beta/      # Beta track
+        main.tf
+        variables.tf
+        versions.tf
+      prod/      # Production track
+        main.tf
+        variables.tf
+        versions.tf
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      settings:
+        # Stable workspace key (no track/version info)
+        workspace_key_prefix: "prod/vpc"
+      # Subscribe to production track
+      source:
+        uri: "./components/terraform/vpc/prod"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+Promote by updating the track folder's content (via vendor updates, git submodules, or symlinks).
+
+### Approach 2: Variable-Based Tracks
+
+Use variables to define track versions, with environments referencing the variable:
+
+<File title="stacks/catalog/tracks.yaml">
+```yaml
+vars:
+  component_tracks:
+    vpc:
+      alpha: "v1.14.0"
+      beta: "v1.13.2"
+      prod: "v1.12.8"
+    rds:
+      alpha: "v2.3.0"
+      beta: "v2.2.1"
+      prod: "v2.1.5"
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/tracks
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      source:
+        # Reference track via variable
+        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.component_tracks.vpc.prod }}"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+### Approach 3: Vendor-Based Tracks
+
+Use Atmos vendoring with track-specific configurations:
+
+<File title="vendor.yaml">
+```yaml
+spec:
+  sources:
+    - component: vpc
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{.Version}}"
+      targets:
+        - "components/terraform/vpc/{{.Track}}"
+      tracks:
+        alpha:
+          version: "v1.14.0"
+        beta:
+          version: "v1.13.2"
+        prod:
+          version: "v1.12.8"
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        # Specify which track this environment follows
+        track: prod
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      source:
+        uri: "./components/terraform/vpc/prod"
+```
+</File>
+
+### Approach 4: Branch-Based Tracks
+
+Use Git branches as tracks, with environments referencing specific branches:
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      source:
+        # Reference the prod track branch
+        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=track/prod"
+```
+</File>
+
+## Track Promotion Workflow
+
+Here's a typical workflow for promoting versions through tracks:
+
+### 1. Development Testing
+New versions land in the `alpha` track for initial testing:
+
+```bash
+# Update alpha track to latest version
+atmos vendor pull --component vpc --track alpha --version v1.14.1
+
+# Test in alpha environments
+atmos terraform plan vpc --stack dev-us-east-1
+atmos terraform apply vpc --stack dev-us-east-1
+```
+
+### 2. Staging Validation
+After validation, promote to `beta` track:
+
+```bash
+# Promote version from alpha to beta
+atmos vendor pull --component vpc --track beta --version v1.14.1
+
+# Validate in staging environments
+atmos terraform plan vpc --stack staging-us-east-1
+atmos terraform apply vpc --stack staging-us-east-1
+```
+
+### 3. Production Deployment
+Finally, promote to production track:
+
+```bash
+# Promote version from beta to prod
+atmos vendor pull --component vpc --track prod --version v1.14.1
+
+# Deploy to production environments
+atmos terraform plan vpc --stack prod-us-east-1
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+## Example Implementation
+
+Here's a complete example using variable-based tracks:
+
+### Directory Structure
+```
+.
+├── stacks/
+│   ├── catalog/
+│   │   ├── tracks.yaml
+│   │   └── vpc/
+│   │       └── defaults.yaml
+│   ├── dev/
+│   │   ├── us-east-1.yaml
+│   │   └── us-west-2.yaml
+│   ├── staging/
+│   │   ├── us-east-1.yaml
+│   │   └── us-west-2.yaml
+│   └── prod/
+│       ├── us-east-1.yaml
+│       └── us-west-2.yaml
+└── components/
+    └── terraform/
+        └── vpc/
+```
+
+### Configuration Files
+
+<File title="stacks/catalog/tracks.yaml">
+```yaml
+# Centralized track definitions
+vars:
+  tracks:
+    # Map environments to tracks
+    environment_tracks:
+      dev: alpha
+      staging: beta
+      prod: prod
+
+    # Track version definitions
+    component_versions:
+      vpc:
+        alpha: "v1.14.0"
+        beta: "v1.13.2"
+        prod: "v1.12.8"
+      rds:
+        alpha: "v2.3.0"
+        beta: "v2.2.1"
+        prod: "v2.1.5"
+      eks:
+        alpha: "v3.1.0"
+        beta: "v3.0.5"
+        prod: "v3.0.2"
+```
+</File>
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+      vars:
+        nat_gateway_enabled: true
+        nat_instance_enabled: false
+        max_subnet_count: 3
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        enable_nat_gateway: true
+        enable_vpn_gateway: false
+      settings:
+        workspace_enabled: true
+```
+</File>
+
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+import:
+  - catalog/tracks
+  - catalog/vpc/defaults
+
+terraform:
+  vars:
+    region: us-east-1
+    environment: dev
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      settings:
+        workspace_key_prefix: "dev/vpc"
+      source:
+        # Use alpha track for dev
+        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.tracks.component_versions.vpc.alpha }}"
+      vars:
+        name: "dev-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+        region: "{{ .vars.region }}"
+        environment: "{{ .vars.environment }}"
+```
+</File>
+
+<File title="stacks/staging/us-east-1.yaml">
+```yaml
+import:
+  - catalog/tracks
+  - catalog/vpc/defaults
+
+terraform:
+  vars:
+    region: us-east-1
+    environment: staging
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      settings:
+        workspace_key_prefix: "staging/vpc"
+      source:
+        # Use beta track for staging
+        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.tracks.component_versions.vpc.beta }}"
+      vars:
+        name: "staging-use1-vpc"
+        cidr_block: "10.1.0.0/16"
+        region: "{{ .vars.region }}"
+        environment: "{{ .vars.environment }}"
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/tracks
+  - catalog/vpc/defaults
+
+terraform:
+  vars:
+    region: us-east-1
+    environment: prod
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      source:
+        # Use prod track for production
+        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.tracks.component_versions.vpc.prod }}"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.2.0.0/16"
+        region: "{{ .vars.region }}"
+        environment: "{{ .vars.environment }}"
+```
+</File>
+
+### Promotion Script
+
+<File title="scripts/promote-track.sh">
+```bash
+#!/bin/bash
+# Script to promote versions between tracks
+
+set -e
+
+COMPONENT=$1
+FROM_TRACK=$2
+TO_TRACK=$3
+
+if [ -z "$COMPONENT" ] || [ -z "$FROM_TRACK" ] || [ -z "$TO_TRACK" ]; then
+  echo "Usage: $0 <component> <from-track> <to-track>"
+  echo "Example: $0 vpc alpha beta"
+  exit 1
+fi
+
+# Get current version from source track
+CURRENT_VERSION=$(yq eval ".vars.tracks.component_versions.$COMPONENT.$FROM_TRACK" stacks/catalog/tracks.yaml)
+
+echo "Promoting $COMPONENT from $FROM_TRACK ($CURRENT_VERSION) to $TO_TRACK"
+
+# Update target track
+yq eval -i ".vars.tracks.component_versions.$COMPONENT.$TO_TRACK = \"$CURRENT_VERSION\"" stacks/catalog/tracks.yaml
+
+# Create PR for the promotion
+git add stacks/catalog/tracks.yaml
+git commit -m "Promote $COMPONENT from $FROM_TRACK to $TO_TRACK ($CURRENT_VERSION)"
+git push origin "promote-$COMPONENT-$TO_TRACK-$(date +%Y%m%d)"
+
+echo "Promotion complete. Please review and merge the PR."
+```
+</File>
+
+## Benefits
+
+The **Release Tracks/Channels** pattern provides:
+
+- **Reduced Overhead**: Update tracks instead of individual environments
+- **Strong Convergence**: Environments on the same track stay in sync
+- **Early Feedback**: Issues surface quickly as changes flow through tracks
+- **Clear Semantics**: Simple promotion model (advance the track)
+- **Flexible Rollback**: Roll back entire tracks when needed
+- **Scalability**: Works well with many environments
+
+## Drawbacks
+
+The pattern also has some limitations:
+
+- **Track Discipline Required**: Must maintain clear track lifecycle and promotion rules
+- **Coarser Rollback**: Rolling back affects all environments on a track
+- **Initial Setup Complexity**: Requires upfront design of track structure
+- **Potential for Track Drift**: Tracks can diverge if not managed carefully
+
+## Best Practices
+
+When using release tracks:
+
+### 1. Design Clear Track Hierarchy
+Define tracks that match your promotion flow:
+- `alpha` or `dev`: Latest changes, highest risk
+- `beta` or `staging`: Pre-production validation
+- `prod` or `stable`: Production-ready versions
+- `lts`: Long-term support for critical systems
+
+### 2. Automate Track Promotion
+Use CI/CD to automate version promotion through tracks:
+
+```yaml
+# GitHub Actions example
+name: Promote Track
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to promote'
+        required: true
+      from_track:
+        description: 'Source track'
+        required: true
+        type: choice
+        options:
+          - alpha
+          - beta
+      to_track:
+        description: 'Target track'
+        required: true
+        type: choice
+        options:
+          - beta
+          - prod
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Promote Version
+        run: |
+          ./scripts/promote-track.sh \
+            ${{ inputs.component }} \
+            ${{ inputs.from_track }} \
+            ${{ inputs.to_track }}
+```
+
+### 3. Monitor Track Health
+Set up monitoring for track divergence:
+
+```bash
+# Check version consistency within tracks
+for track in alpha beta prod; do
+  echo "Checking $track track..."
+  atmos describe stacks --format=json | \
+    jq ".[] | select(.track==\"$track\") | .components.terraform.vpc.source"
+done
+```
+
+### 4. Document Track Policy
+Maintain clear documentation about track policies:
+
+<File title="docs/track-policy.md">
+```markdown
+# Release Track Policy
+
+## Track Definitions
+- **Alpha**: Latest development versions, updated daily
+- **Beta**: Release candidates, updated weekly
+- **Prod**: Stable versions, updated bi-weekly
+
+## Promotion Criteria
+- Alpha → Beta: Passing all automated tests
+- Beta → Prod: 7 days in staging without issues
+
+## Emergency Procedures
+- Hotfixes can skip alpha and go directly to beta
+- Critical security updates can be applied to all tracks simultaneously
+```
+</File>
+
+### 5. Plan Across Tracks
+Regularly run plans across all environments in a track:
+
+```bash
+# Plan all environments in a track
+TRACK="beta"
+for stack in $(atmos list stacks | grep $TRACK); do
+  atmos terraform plan vpc --stack $stack
+done
+```
+
+## Migration Strategies
+
+### From Strict Pinning to Tracks
+
+1. **Analyze Current Versions**: Identify version clusters across environments
+2. **Define Initial Tracks**: Create tracks based on current version distribution
+3. **Update Stack Configurations**: Replace direct version pins with track references
+4. **Test Thoroughly**: Validate that track-based configs produce identical plans
+5. **Switch Over**: Deploy the track-based configuration
+
+### From Tracks to Other Patterns
+
+If you need to migrate away from tracks:
+
+- **To Strict Pinning**: Replace track variables with explicit version pins
+- **To Folder Versioning**: Convert track folders to versioned component folders
+- **To Vendoring**: Use tracks as the basis for vendor manifest organization
+
+## Summary
+
+Release Tracks/Channels provide an excellent balance between control and operational efficiency. By grouping environments into tracks and promoting versions through tracks rather than individual environments, teams can maintain strong convergence and feedback loops while reducing management overhead. This pattern scales well and is particularly effective for organizations with many environments that need to stay relatively synchronized.
+
+:::tip Key Takeaway
+Release tracks reduce the operational burden of version management while maintaining strong feedback loops. They're ideal for teams that want convergence without sacrificing control over the promotion process.
+:::
+
+## Related Patterns
+
+- [Strict Version Pinning](./strict-version-pinning) - Individual version control per environment
+- [Folder-Based Versioning](./folder-based-versioning) - Version through repository structure
+- [Vendoring Components](./vendoring-components) - Local control with bulk updates
+- [Git Flow: Branches as Channels](./git-flow-branches-as-channels) - Branch-based track management

@@ -1,0 +1,645 @@
+---
+title: Folder-Based Versioning
+sidebar_position: 23
+sidebar_label: Folder-Based Versioning
+description: Folder-Based Versioning Atmos Design Pattern
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+The **Folder-Based Versioning** Design Pattern uses the repository's directory structure to manage component versions. By creating separate folders for different versions (e.g., `vpc`, `vpc-v2`), teams can safely iterate on new versions while maintaining stability for existing deployments.
+</Intro>
+
+Folder-Based Versioning makes version boundaries explicit and visible in the repository structure. This approach allows for long-lived divergence between versions, gradual migration paths, and clear separation of concerns. It's particularly useful for major version changes that require extended development and testing periods.
+
+<KeyPoints>
+- How folder structure provides explicit version boundaries
+- Why this pattern excels for long-lived, breaking changes
+- The importance of stable workspace keys when switching versions
+- Strategies for managing multiple versions in parallel
+</KeyPoints>
+
+## Use Cases
+
+Use the **Folder-Based Versioning** pattern when:
+
+- You need **significant component rework** that will take time to stabilize
+- You want **explicit version boundaries** visible in the repository
+- You need to **run multiple versions side-by-side** for extended periods
+- You're making **breaking changes** that require careful migration
+- You want **clear separation** between stable and experimental code
+- You need **gradual migration paths** for complex components
+
+## Problem
+
+Major component changes often require extended development periods and careful migration strategies. Traditional versioning approaches can create challenges:
+
+- **In-place changes** destabilize existing deployments
+- **Feature flags** add complexity and technical debt
+- **Branch-based development** delays integration and feedback
+- **Hidden versioning** makes it hard to understand what's deployed where
+
+Folder-Based Versioning addresses these issues by making versions first-class citizens in the repository structure.
+
+## Solution
+
+Create separate folders for each major version of a component. Environments explicitly reference the folder containing their desired version, making version selection transparent and reversible.
+
+### Core Principles
+
+1. **Versions as Folders**: Each major version gets its own directory
+2. **Explicit References**: Stacks explicitly choose which folder/version to use
+3. **Parallel Development**: Multiple versions can evolve independently
+4. **Stable State Keys**: Workspace keys remain constant across version switches
+5. **Clear Deprecation**: Old versions are clearly marked and eventually removed
+
+## Implementation
+
+### Directory Structure
+
+Organize components with version-specific folders:
+
+<File title="Directory Structure">
+```
+components/
+  terraform/
+    vpc/                    # Original/v1 implementation
+      main.tf
+      variables.tf
+      outputs.tf
+      README.md
+    vpc-v2/                 # New v2 implementation
+      main.tf
+      variables.tf
+      outputs.tf
+      README.md
+      MIGRATION.md          # Migration guide from v1
+    vpc-v3-preview/         # Future v3 in development
+      main.tf
+      variables.tf
+      outputs.tf
+      README.md
+    rds/                    # Current stable version
+      main.tf
+    rds-aurora/             # Alternative implementation
+      main.tf
+    rds-v2-deprecated/      # Deprecated, pending removal
+      main.tf
+      DEPRECATED.md
+```
+</File>
+
+### Stack Configuration
+
+Environments reference specific version folders:
+
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      settings:
+        # CRITICAL: Don't include version in workspace key
+        workspace_key_prefix: "dev/vpc"
+      source:
+        # Reference v2 folder for development
+        uri: "./components/terraform/vpc-v2"
+      vars:
+        name: "dev-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      settings:
+        # Same workspace key as dev - enables migration
+        workspace_key_prefix: "prod/vpc"
+      source:
+        # Production still on stable v1
+        uri: "./components/terraform/vpc"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.2.0.0/16"
+```
+</File>
+
+### Version Naming Conventions
+
+Choose clear, consistent naming patterns:
+
+```
+# Semantic versioning
+vpc-v1/
+vpc-v2/
+vpc-v3/
+
+# Feature-based versioning
+rds/
+rds-aurora/
+rds-serverless/
+
+# Status-based versioning
+eks/
+eks-beta/
+eks-deprecated/
+
+# Date-based versioning
+lambda-2023/
+lambda-2024/
+lambda-2025/
+```
+
+## Workspace Key Management
+
+:::warning Critical Configuration
+The `workspace_key_prefix` must remain stable across version changes to avoid state migration issues:
+
+```yaml
+# WRONG - Version in workspace key causes state problems
+settings:
+  workspace_key_prefix: "prod/vpc-v2"  # Don't do this!
+
+# CORRECT - Stable workspace key across versions
+settings:
+  workspace_key_prefix: "prod/vpc"     # Version-agnostic key
+```
+
+When the workspace key includes version information, switching versions requires complex state migrations. Keep it stable!
+:::
+
+## Migration Strategies
+
+### Gradual Migration
+
+Roll out new versions progressively through environments:
+
+<File title="migration-plan.yaml">
+```yaml
+# Week 1: Development environments
+dev:
+  vpc:
+    source: "./components/terraform/vpc-v2"
+
+# Week 2: Staging environments
+staging:
+  vpc:
+    source: "./components/terraform/vpc-v2"
+
+# Week 3: Production canary
+prod-canary:
+  vpc:
+    source: "./components/terraform/vpc-v2"
+
+# Week 4: All production
+prod:
+  vpc:
+    source: "./components/terraform/vpc-v2"
+```
+</File>
+
+### Blue-Green Migration
+
+Run both versions in parallel, then switch:
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    # Original VPC (blue)
+    vpc:
+      metadata:
+        component: vpc
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      source:
+        uri: "./components/terraform/vpc"
+
+    # New VPC (green) - different workspace key for parallel run
+    vpc-next:
+      metadata:
+        component: vpc
+      settings:
+        workspace_key_prefix: "prod/vpc-next"
+      source:
+        uri: "./components/terraform/vpc-v2"
+```
+</File>
+
+After validation, update references and destroy the old version.
+
+### In-Place Upgrade
+
+For backwards-compatible changes, switch the folder reference:
+
+```bash
+# Before upgrade - verify current state
+atmos terraform plan vpc --stack prod-us-east-1
+
+# Update stack configuration to point to new version
+# Edit: source.uri from "./components/terraform/vpc" to "./components/terraform/vpc-v2"
+
+# Plan with new version - should show intended changes
+atmos terraform plan vpc --stack prod-us-east-1
+
+# Apply the upgrade
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+## Example Implementation
+
+Here's a complete example showing folder-based versioning for a VPC component evolution:
+
+### Component Versions
+
+<File title="components/terraform/vpc/README.md">
+```markdown
+# VPC Component (v1)
+
+Original VPC implementation. Stable and widely deployed.
+
+## Features
+- Basic VPC with public/private subnets
+- NAT Gateways for private subnet egress
+- Internet Gateway for public subnet access
+
+## Status: Stable (Maintenance Mode)
+New deployments should consider vpc-v2 for additional features.
+```
+</File>
+
+<File title="components/terraform/vpc-v2/README.md">
+```markdown
+# VPC Component (v2)
+
+Enhanced VPC with additional features and better defaults.
+
+## New Features
+- IPv6 support
+- VPC Flow Logs enabled by default
+- Transit Gateway attachments
+- VPC Endpoints for AWS services
+- Improved tagging strategy
+
+## Migration from v1
+See MIGRATION.md for upgrade instructions.
+
+## Status: Stable (Recommended)
+```
+</File>
+
+<File title="components/terraform/vpc-v2/MIGRATION.md">
+```markdown
+# Migration Guide: VPC v1 to v2
+
+## Breaking Changes
+1. Subnet CIDR calculation changed - review allocations
+2. NAT Gateway configuration restructured
+3. New required variables: `enable_flow_logs`, `flow_logs_bucket`
+
+## Migration Steps
+
+### 1. Pre-Migration Validation
+```bash
+# Capture current state
+atmos terraform output vpc --stack $STACK > vpc-v1-outputs.json
+```
+
+### 2. Update Configuration
+```yaml
+# Add new required variables
+vars:
+  enable_flow_logs: true
+  flow_logs_bucket: "org-vpc-flow-logs"
+
+# Update source reference
+source:
+  uri: "./components/terraform/vpc-v2"  # was: vpc
+```
+
+### 3. Review Changes
+```bash
+atmos terraform plan vpc --stack $STACK
+```
+
+### 4. Apply with Caution
+The following resources will be recreated:
+- NAT Gateways (brief connectivity interruption)
+- Route table associations (automatic)
+
+## Rollback Procedure
+Change source.uri back to "./components/terraform/vpc"
+```
+</File>
+
+<File title="components/terraform/vpc-v3-preview/README.md">
+```markdown
+# VPC Component (v3-preview)
+
+Next generation VPC with cloud-native networking.
+
+## Experimental Features
+- AWS Cloud WAN integration
+- PrivateLink mesh networking
+- Multi-region peering automation
+- ML-based capacity planning
+
+## Status: Preview (Not for Production)
+This version is under active development. APIs will change.
+
+## Testing
+Use in development environments only:
+```yaml
+source:
+  uri: "./components/terraform/vpc-v3-preview"
+```
+```
+</File>
+
+### Stack Configurations
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+```yaml
+# Base configuration for all VPC versions
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+      vars:
+        # Common variables across all versions
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        instance_tenancy: default
+        tags:
+          Component: "vpc"
+          ManagedBy: "terraform"
+```
+</File>
+
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    # Testing v3 preview in dev
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      settings:
+        workspace_key_prefix: "dev/vpc"
+      source:
+        uri: "./components/terraform/vpc-v3-preview"
+      vars:
+        name: "dev-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+        # v3-specific features
+        enable_cloud_wan: true
+        ml_capacity_planning: true
+```
+</File>
+
+<File title="stacks/staging/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    # Staging on stable v2
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      settings:
+        workspace_key_prefix: "staging/vpc"
+      source:
+        uri: "./components/terraform/vpc-v2"
+      vars:
+        name: "staging-use1-vpc"
+        cidr_block: "10.1.0.0/16"
+        # v2-specific features
+        enable_flow_logs: true
+        flow_logs_bucket: "org-vpc-flow-logs-staging"
+        enable_ipv6: true
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    # Production on stable v1 (conservative approach)
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      source:
+        uri: "./components/terraform/vpc"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.2.0.0/16"
+        # v1 configuration
+        nat_gateway_enabled: true
+        single_nat_gateway: false
+```
+</File>
+
+## Benefits
+
+The **Folder-Based Versioning** pattern provides:
+
+- **Explicit Boundaries**: Version differences are clear in the repository structure
+- **Safe Experimentation**: New versions can be developed without affecting stable code
+- **Gradual Migration**: Environments can migrate at their own pace
+- **Parallel Development**: Multiple versions can evolve independently
+- **Easy Rollback**: Simply change the folder reference to revert
+- **Clear Deprecation Path**: Old versions are visibly marked for removal
+
+## Drawbacks
+
+The pattern also has limitations:
+
+- **Repository Growth**: Multiple versions increase repository size
+- **Maintenance Overhead**: Bug fixes may need to be applied to multiple versions
+- **Potential Confusion**: Developers must understand which version to modify
+- **Code Duplication**: Similar code exists in multiple folders
+- **Cleanup Discipline**: Deprecated versions must be actively removed
+
+## Best Practices
+
+### 1. Version Lifecycle Management
+
+Define clear lifecycle stages:
+
+<File title="docs/version-lifecycle.md">
+```markdown
+# Component Version Lifecycle
+
+## Stages
+1. **Preview** (-preview suffix): Experimental, API unstable
+2. **Beta** (-beta suffix): Feature complete, testing in progress
+3. **Stable** (no suffix or -v2): Production ready
+4. **Deprecated** (-deprecated suffix): Marked for removal
+5. **Archived** (moved to archive/): No longer maintained
+
+## Transitions
+- Preview → Beta: After API stabilization
+- Beta → Stable: After production validation
+- Stable → Deprecated: When newer version is stable
+- Deprecated → Archived: After all migrations complete
+
+## Timeline
+- Minimum 30 days in Beta before Stable
+- Minimum 90 days Deprecated before removal
+- Document migration path before deprecation
+```
+</File>
+
+### 2. Version Documentation
+
+Maintain clear documentation for each version:
+
+```markdown
+# Component Version Matrix
+
+| Component | v1 | v2 | v3 |
+|-----------|----|----|-----|
+| vpc | Stable (Deprecated) | Stable (Current) | Preview |
+| rds | Stable | Beta | - |
+| eks | Stable | - | - |
+
+## Version Notes
+- **vpc-v1**: Deprecated as of 2024-01-01, removal planned 2024-04-01
+- **vpc-v2**: Current recommended version
+- **vpc-v3**: Preview features, not for production
+```
+
+### 3. Shared Code Management
+
+Minimize duplication using shared modules:
+
+```
+components/
+  terraform/
+    vpc/
+      main.tf                   # Imports from shared
+    vpc-v2/
+      main.tf                   # Imports from shared
+    vpc-shared/                 # Shared code
+      modules/
+        subnets/
+        security-groups/
+        flow-logs/
+```
+
+### 4. Testing Strategy
+
+Test all active versions:
+
+```bash
+#!/bin/bash
+# test-all-versions.sh
+
+COMPONENTS="vpc rds eks"
+VERSIONS="v1 v2 v3"
+
+for component in $COMPONENTS; do
+  for version in $VERSIONS; do
+    if [ -d "components/terraform/${component}-${version}" ]; then
+      echo "Testing ${component}-${version}..."
+      cd "components/terraform/${component}-${version}"
+      terraform init
+      terraform validate
+      tflint
+      cd -
+    fi
+  done
+done
+```
+
+### 5. Migration Automation
+
+Automate common migration tasks:
+
+<File title="scripts/migrate-component.sh">
+```bash
+#!/bin/bash
+# Migrate a component to a new version
+
+STACK=$1
+COMPONENT=$2
+FROM_VERSION=$3
+TO_VERSION=$4
+
+echo "Migrating $COMPONENT from $FROM_VERSION to $TO_VERSION in $STACK"
+
+# Backup current state
+atmos terraform state pull $COMPONENT --stack $STACK > "backup-$STACK-$COMPONENT-$(date +%s).tfstate"
+
+# Update configuration
+yq eval -i ".components.terraform.$COMPONENT.source.uri = \"./components/terraform/$COMPONENT-$TO_VERSION\"" "stacks/$STACK.yaml"
+
+# Plan changes
+atmos terraform plan $COMPONENT --stack $STACK
+
+# Prompt for confirmation
+read -p "Apply migration? (y/n) " -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  atmos terraform apply $COMPONENT --stack $STACK
+fi
+```
+</File>
+
+## Migration from Other Patterns
+
+### From Strict Pinning
+
+1. Create versioned folders for each unique version in use
+2. Update stack configurations to reference folders instead of Git refs
+3. Consolidate common versions into single folders
+4. Gradually converge to fewer versions
+
+### From Release Tracks
+
+1. Convert track folders to version folders
+2. Update stack configurations to explicitly choose versions
+3. Remove track abstraction layer
+4. Implement direct folder references
+
+## Summary
+
+Folder-Based Versioning provides explicit, visible version management through repository structure. It excels when you need to maintain multiple versions in parallel, make breaking changes safely, or provide clear migration paths. While it can increase repository size and maintenance overhead, the clarity and safety it provides often outweigh these costs, especially for critical infrastructure components.
+
+:::tip Key Takeaway
+Folder-based versioning makes version boundaries explicit and migrations reversible. It's ideal for major version changes that require extended development and careful rollout strategies.
+:::
+
+## Related Patterns
+
+- [Release Tracks/Channels](./release-tracks-channels) - Abstract version management through tracks
+- [Vendoring Components](./vendoring-components) - Local copies with origin tracking
+- [Strict Version Pinning](./strict-version-pinning) - Explicit version control per environment
+- [Component Catalog](/design-patterns/component-catalog) - Organizing reusable components

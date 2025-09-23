@@ -1,0 +1,146 @@
+---
+title: Version Management Patterns
+sidebar_position: 20
+sidebar_label: Version Management
+description: Version Management Patterns in Atmos - Strategies for Managing Component Versions
+id: version-management
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+The **Version Management Patterns** are a collection of strategies for managing component versions in Atmos. These patterns address one of the most challenging problems in infrastructure-as-code: balancing **stability** (reproducibility, rollback) with **velocity** (fast iterations, safety via feedback loops).
+</Intro>
+
+Managing versions of infrastructure components requires careful consideration of trade-offs between convergence speed, operational overhead, and safety. Atmos supports multiple design patterns for managing component versions, each with distinct benefits and considerations. There's no silver bullet—choose patterns based on your organization's culture, team size, and operational maturity.
+
+<KeyPoints>
+- Understanding the fundamental tension between deployment (declaring target state) and release (applying changes)
+- How different versioning strategies optimize for different goals: reproducibility, convergence, or feedback
+- Why "just pin everything" often creates more problems than it solves at scale
+- Practical patterns for managing versions across environments with minimal operational overhead
+</KeyPoints>
+
+## The Version Management Challenge
+
+Traditional Terraform/IaC wisdom advocates pinning every version per environment for reproducibility. While this improves predictability, it often creates significant challenges:
+
+### Problems with Universal Pinning
+
+1. **Optimizes for Divergence**: Each environment drifts unless you constantly update pins
+2. **Weakens Cross-Environment Feedback**: Lower environments stay pinned to old versions, so `terraform plan` doesn't reveal cross-environment impact
+3. **Requires Lockstep Promotion**: If dev received 10 incremental releases, production must receive those same 10 in order
+4. **Creates Operational Overhead**: At scale, you'll face PR storms from automated dependency updates
+5. **Complicates Third-Party Usage**: You don't control upstream cadence; forks and patches accumulate
+
+### The Atmos Philosophy
+
+Atmos's default philosophy differs from strict pinning: allow **transient divergence** but drive **convergence** to common versions across environments within a reasonable window. This approach improves feedback loops and reduces fragility while maintaining the ability to pin versions when truly necessary.
+
+## Core Concepts
+
+Before exploring the patterns, it's important to understand the distinction between:
+
+- **Deployment**: Declaring that an environment should converge to a specific version of a component (the target state)
+- **Release**: Actually updating the environment to that version (the change is applied)
+
+Some teams use Git for both deployment and release (Git-as-source-of-truth _and_ rollout trigger), while others separate these concerns (e.g., Git for deployment, CI/CD for release).
+
+## Available Patterns
+
+Atmos supports five primary version management patterns, each optimizing for different goals:
+
+### 1. [Strict Version Pinning](#strict-version-pinning)
+Pin component versions per environment. Optimizes for reproducibility and rollback capability at the cost of high operational overhead and weak feedback loops. Requires lockstep promotions.
+
+### 2. [Release Tracks/Channels](#release-trackschannels)
+Environments subscribe to moving tracks (e.g., `alpha`, `beta`, `prod`). You promote tracks, not individual environment pins. Provides strong convergence and feedback with medium overhead.
+
+### 3. [Folder-Based Versioning](#folder-based-versioning)
+Create new component folders for deliberate, long-lived divergence (e.g., `vpc-v2`). Makes versioning explicit in the repository structure and allows gradual convergence by switching folders.
+
+### 4. [Vendoring Components](#vendoring-components)
+Copy upstream code locally with a manifest tracking origin and lineage. Update locally in bulk; diverge intentionally when needed. Provides strong local control with predictable update windows.
+
+### 5. [Git Flow: Branches as Channels](#git-flow-branches-as-channels)
+Long-lived branches map to release channels. Environments track branches; promotions happen via merges. Leverages familiar Git workflows with standard branch divergence trade-offs.
+
+## Quick Comparison
+
+| Strategy                 | Convergence | Feedback During Plan | Rollback Ease | Overhead @ Scale | Version Skipping Risk |
+|--------------------------|-------------|---------------------|---------------|------------------|----------------------|
+| Strict Pinning           | Low         | Weak (late)         | Strong        | High             | **High Risk**        |
+| Release Tracks/Channels  | High        | Strong              | Medium        | Medium           | Lower Risk           |
+| Folder-Based Versioning  | Medium      | Strong (explicit)   | Medium        | Medium           | Lower Risk           |
+| Vendoring                | Medium–High | Strong (local)      | Medium        | Medium           | Lower Risk           |
+| Git Flow (per channel)   | Medium      | Medium              | Medium        | Medium–High      | High if skipped      |
+
+## Choosing a Pattern
+
+The right pattern depends on your organization's needs and culture. Consider these guiding questions:
+
+1. **Roll Forward vs. Rollback**: Does your organization truly need to optimize for rollback, or do you have a culture of rolling forward quickly with strong testing and convergence?
+
+2. **Team Size and Scale**: How many environments do you manage? Strict pinning becomes increasingly painful as environment count grows.
+
+3. **Release Cadence**: How frequently do you update components? High-frequency updates favor patterns with strong convergence.
+
+4. **Third-Party Dependencies**: How much of your infrastructure relies on external modules? Heavy third-party usage may benefit from vendoring.
+
+5. **Operational Maturity**: Do you have strong CI/CD and testing practices? Mature practices enable safer use of convergent patterns.
+
+## Best Practices
+
+Regardless of the pattern you choose:
+
+### 1. Keep `workspace_key_prefix` Stable
+Never include version information in the `workspace_key_prefix` setting. This ensures Terraform state remains stable when switching versions or patterns.
+
+```yaml
+# WRONG: Version in workspace key
+settings:
+  workspace_key_prefix: "prod/vpc/v2"
+
+# CORRECT: Stable workspace key
+settings:
+  workspace_key_prefix: "prod/vpc"
+```
+
+### 2. Document Version Decisions
+Maintain clear documentation about which patterns you're using for which components and why. This helps new team members understand the versioning strategy.
+
+### 3. Test Promotion Paths
+Whatever pattern you choose, regularly test the full promotion path from development to production. Don't let environments diverge for extended periods.
+
+### 4. Monitor Divergence
+Set up monitoring to track version divergence across environments. Alert when environments drift beyond acceptable thresholds.
+
+### 5. Plan for Migration
+Choose patterns that allow migration to other patterns if your needs change. Avoid decisions that lock you into a specific approach permanently.
+
+## Combining Patterns
+
+You don't need to use a single pattern exclusively. Common combinations include:
+
+- **Tracks for Applications, Pinning for Platform**: Use release tracks for frequently-updated application components while strictly pinning critical platform components
+- **Vendoring + Tracks**: Vendor third-party code while using release tracks for internal components
+- **Folder Versioning for Major Changes**: Use folder-based versioning for breaking changes while using tracks for routine updates
+
+## Summary
+
+Version management in infrastructure-as-code requires careful consideration of trade-offs. While strict version pinning provides reproducibility, it often creates more problems than it solves at scale. Atmos supports multiple patterns that allow you to optimize for your specific needs—whether that's rapid convergence, strong rollback capabilities, or predictable promotion paths.
+
+The key is to choose patterns deliberately based on your organization's culture, scale, and operational maturity. Start with simpler patterns and evolve as your needs grow. Remember that the goal isn't perfect reproducibility—it's delivering reliable infrastructure changes with appropriate safety controls and feedback loops.
+
+:::tip Next Steps
+Review each pattern in detail to understand its implementation, trade-offs, and best practices. Start with the pattern that best matches your current workflow, then iterate based on experience.
+:::
+
+## Related Patterns
+
+- [Component Inheritance](/design-patterns/component-inheritance) - Base components that serve as blueprints
+- [Component Catalog](/design-patterns/component-catalog) - Centralized component library
+- [Multiple Component Instances](/design-patterns/multiple-component-instances) - Deploying multiple instances of the same component

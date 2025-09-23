@@ -1,0 +1,351 @@
+---
+title: Strict Version Pinning
+sidebar_position: 21
+sidebar_label: Strict Version Pinning
+description: Strict Version Pinning Atmos Design Pattern
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+The **Strict Version Pinning** Design Pattern involves pinning every environment to specific component versions. While this traditional approach optimizes for reproducibility and rollback capabilities, it often creates divergence between environments and weakens the feedback loop during planning.
+</Intro>
+
+Strict Version Pinning is the most traditional approach to version management in infrastructure-as-code. Each environment explicitly declares which version of each component it uses, providing maximum control and reproducibility. However, this pattern requires careful management to avoid environment drift and must be applied with discipline to prevent state migration issues.
+
+<KeyPoints>
+- How strict pinning provides reproducibility but encourages environment divergence
+- Why lockstep promotion is critical when using strict version pinning
+- The operational overhead of managing individual pins across many environments
+- When strict pinning is appropriate despite its limitations
+</KeyPoints>
+
+## Use Cases
+
+Use the **Strict Version Pinning** pattern when:
+
+- **Reproducibility and auditability** are paramount requirements
+- Your **environment count is small** and carefully curated
+- You can enforce **lockstep promotion** across the SDLC without skipping versions
+- Your organization truly needs to **optimize for rollback** over roll-forward
+- You have **regulatory requirements** that mandate exact version tracking
+- You need a **clear audit trail** of what ran where and when
+
+## Problem
+
+While strict version pinning seems like the safest approach, it creates several challenges at scale:
+
+### 1. Optimizes for Divergence
+Each environment maintains its own version pins, causing environments to drift apart unless you continuously update them. This divergence makes it harder to reason about the overall system state.
+
+### 2. Weak Feedback Loop
+Lower environments stay pinned to older versions, so running `terraform plan` doesn't reveal cross-environment impacts. Problems like:
+- Destructive operations
+- Resource incompatibilities
+- Dependency cycles
+- State migration issues
+
+These often surface only during promotion—sometimes first appearing in production.
+
+### 3. Lockstep Promotion Required
+If development or staging received 10 incremental releases, production must receive those same 10 releases in order. Skipping versions causes:
+- Hidden assumptions to break
+- Terraform dependency cycles to appear
+- State inconsistencies
+- "Worked incrementally, fails when batched" problems
+
+### 4. Operational Overhead
+At scale, maintaining individual pins creates significant overhead:
+- Manual pin updates across dozens or hundreds of environments
+- PR storms from automated dependency update tools
+- Complex promotion orchestration
+- Version tracking and coordination burden
+
+## Solution
+
+When implementing strict version pinning in Atmos:
+
+### 1. Place Version Pins in Stack Configuration
+
+Each stack explicitly declares component versions:
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        name: "prod-vpc"
+        cidr_block: "10.0.0.0/16"
+      settings:
+        # CRITICAL: Don't include version in workspace_key_prefix
+        workspace_key_prefix: "prod/vpc"
+      source:
+        # Pin to specific version
+        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.3"
+```
+</File>
+
+### 2. Maintain Stable Workspace Keys
+
+:::warning Critical Configuration
+Never include version information in `workspace_key_prefix`. This ensures state remains stable when versions change:
+
+```yaml
+# WRONG - Will cause state migration issues
+settings:
+  workspace_key_prefix: "prod/vpc/v1.12.3"
+
+# CORRECT - Stable across version changes
+settings:
+  workspace_key_prefix: "prod/vpc"
+```
+:::
+
+### 3. Implement Lockstep CI/CD
+
+Build pipelines that enforce sequential promotion:
+
+```yaml
+# Example GitHub Actions workflow
+name: Promote Component Version
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to promote'
+        required: true
+      from_env:
+        description: 'Source environment'
+        required: true
+      to_env:
+        description: 'Target environment'
+        required: true
+
+jobs:
+  validate-promotion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Version Sequence
+        run: |
+          # Ensure no versions are skipped
+          # This script would verify that all intermediate
+          # versions have been applied in sequence
+          ./scripts/validate-promotion-sequence.sh \
+            --component ${{ inputs.component }} \
+            --from ${{ inputs.from_env }} \
+            --to ${{ inputs.to_env }}
+```
+
+### 4. Regular Cross-Environment Planning
+
+Periodically run plans across all environments to detect issues early:
+
+```bash
+# Script to plan across all environments
+for env in dev staging prod; do
+  echo "Planning $env..."
+  atmos terraform plan vpc --stack $env-us-east-1
+done
+```
+
+### 5. Document Version History
+
+Maintain clear documentation of version promotions:
+
+<File title="docs/version-history.md">
+```markdown
+# VPC Component Version History
+
+## Production
+- v1.12.3 - 2024-01-15 - Added IPv6 support
+- v1.12.2 - 2024-01-10 - Fixed NAT gateway issue
+- v1.12.1 - 2024-01-05 - Initial production deployment
+
+## Staging
+- v1.12.4 - 2024-01-18 - Testing flow logs
+- v1.12.3 - 2024-01-12 - IPv6 validation
+- v1.12.2 - 2024-01-08 - NAT gateway fix validation
+
+## Development
+- v1.13.0 - 2024-01-20 - Next release candidate
+- v1.12.4 - 2024-01-16 - Flow logs development
+```
+</File>
+
+## Example Implementation
+
+Here's a complete example showing strict version pinning across environments:
+
+### Directory Structure
+```
+.
+├── stacks/
+│   ├── catalog/
+│   │   └── vpc/
+│   │       └── defaults.yaml
+│   ├── dev/
+│   │   └── us-east-1.yaml
+│   ├── staging/
+│   │   └── us-east-1.yaml
+│   └── prod/
+│       └── us-east-1.yaml
+└── components/
+    └── terraform/
+        └── vpc/
+```
+
+### Stack Configurations
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+```yaml
+# Base configuration without version pinning
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+      vars:
+        nat_gateway_enabled: true
+        nat_instance_enabled: false
+        max_subnet_count: 3
+      settings:
+        workspace_enabled: true
+```
+</File>
+
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      vars:
+        name: "dev-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+      settings:
+        workspace_key_prefix: "dev/vpc"
+      source:
+        # Development on latest version
+        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.13.0"
+```
+</File>
+
+<File title="stacks/staging/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      vars:
+        name: "staging-use1-vpc"
+        cidr_block: "10.1.0.0/16"
+      settings:
+        workspace_key_prefix: "staging/vpc"
+      source:
+        # Staging on previous version
+        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.4"
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.2.0.0/16"
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      source:
+        # Production on stable version
+        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.3"
+```
+</File>
+
+## Benefits
+
+The **Strict Version Pinning** pattern provides:
+
+- **Clear Audit Trail**: Exact tracking of what version ran where and when
+- **Simplified Rollback**: Easy to revert to previous versions by changing pins
+- **Git as Source of Truth**: Version history stored directly in Git
+- **Explicit Control**: No surprises from automatic version updates
+- **Regulatory Compliance**: Meets strict auditability requirements
+
+## Drawbacks
+
+The pattern also has significant limitations:
+
+- **Environment Drift**: Environments naturally diverge without constant updates
+- **Weak Early Warning**: Problems surface late in the promotion cycle
+- **Lockstep Requirement**: Cannot safely skip versions during promotion
+- **High Overhead**: Manual pin management becomes burdensome at scale
+- **PR Storms**: Automated update tools create many pull requests
+
+## Best Practices
+
+When using strict version pinning:
+
+1. **Automate Where Possible**: Use tools like Renovate or Dependabot, but batch updates intelligently
+2. **Monitor Divergence**: Set alerts when environments drift beyond acceptable thresholds
+3. **Test Incrementally**: Never skip versions; apply all updates in sequence
+4. **Plan Broadly**: Regularly run plans across all environments, not just the one being updated
+5. **Document Everything**: Maintain clear records of version histories and promotion decisions
+6. **Consider Escape Routes**: Design your workspace keys to allow migration to other patterns if needed
+
+## Migration Strategies
+
+If you need to migrate away from strict pinning:
+
+### To Release Tracks
+1. Group environments by track (alpha, beta, prod)
+2. Create track-based configurations
+3. Update environments to reference tracks instead of versions
+4. Update tracks instead of individual environments
+
+### To Folder-Based Versioning
+1. Ensure workspace keys don't include versions
+2. Create versioned component folders
+3. Update stack references to point to folders
+4. Manage versions through folder selection
+
+## Summary
+
+Strict Version Pinning provides maximum control and reproducibility at the cost of operational overhead and environment divergence. It's best suited for small, carefully managed environment sets with strong regulatory requirements. For larger scales or teams preferring rapid iteration, consider patterns that promote convergence like [Release Tracks/Channels](./release-tracks-channels) or [Folder-Based Versioning](./folder-based-versioning).
+
+:::tip Key Takeaway
+Many teams successfully operate by optimizing for roll-forward with strong convergence rather than rollback capabilities. Choose strict pinning only when its benefits clearly outweigh the operational costs.
+:::
+
+## Related Patterns
+
+- [Release Tracks/Channels](./release-tracks-channels) - Environments subscribe to moving version tracks
+- [Folder-Based Versioning](./folder-based-versioning) - Version through repository structure
+- [Vendoring Components](./vendoring-components) - Local control through vendoring
+- [Component Inheritance](/design-patterns/component-inheritance) - Base configurations for pinned components

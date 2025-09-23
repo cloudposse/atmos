@@ -1,0 +1,722 @@
+---
+title: Git Flow - Branches as Channels
+sidebar_position: 25
+sidebar_label: Git Flow - Branches as Channels
+description: Git Flow Branches as Channels Atmos Design Pattern
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+The **Git Flow: Branches as Channels** Design Pattern uses long-lived Git branches to represent release channels. Environments track specific branches, and version promotion happens through merges between branches. This approach leverages familiar Git workflows and provides centralized promotion control through pull requests and merge reviews.
+</Intro>
+
+Git Flow for infrastructure brings the well-understood branching model to infrastructure-as-code. Each long-lived branch represents a release channel (e.g., `develop`, `staging`, `production`), and environments subscribe to branches rather than specific versions. This pattern works well for teams already familiar with Git Flow and provides strong integration with existing CI/CD pipelines.
+
+<KeyPoints>
+- How Git branches can serve as release channels for infrastructure
+- Why merge-based promotion provides clear audit trails
+- The trade-offs of long-lived branches for infrastructure code
+- Strategies for managing branch divergence and merge conflicts
+</KeyPoints>
+
+## Use Cases
+
+Use the **Git Flow: Branches as Channels** pattern when:
+
+- Your team is **already familiar with Git Flow** workflows
+- You want **centralized promotion control** through pull requests
+- You need **clear audit trails** of what was promoted when
+- Your organization requires **approval gates** for promotions
+- You prefer **merge-based deployment** workflows
+- You have strong **CI/CD integration** with Git events
+- You want to **decouple promotion velocity** between environments
+
+## Problem
+
+Traditional Git Flow works well for application development but needs adaptation for infrastructure:
+
+- **State Management**: Infrastructure has persistent state that doesn't reset between branches
+- **Testing Challenges**: Can't easily test infrastructure changes in isolation
+- **Merge Conflicts**: Infrastructure code often has more structural conflicts
+- **Drift Potential**: Long-lived branches can diverge significantly
+- **Rollback Complexity**: Reverting merges affects all environments on that branch
+
+Despite these challenges, many teams prefer Git Flow because it provides familiar workflows and strong tooling support.
+
+## Solution
+
+Adapt Git Flow for infrastructure by using branches as release channels that environments subscribe to. Each branch represents a promotion stage, and changes flow through branches via merges.
+
+### Branch Structure
+
+```
+main (or master)
+  │
+  ├── channels/prod        # Production channel
+  │     │
+  │     ├── channels/staging   # Staging channel
+  │           │
+  │           └── channels/dev     # Development channel
+  │                 │
+  │                 └── feature/*  # Feature branches
+```
+
+### Channel Branch Strategy
+
+1. **Long-lived Channel Branches**: Create persistent branches for each environment tier
+2. **Feature Branches**: Short-lived branches for individual changes
+3. **Promotion via Merges**: Advance versions by merging between channel branches
+4. **Environment Subscription**: Environments reference channel branches, not tags
+
+## Implementation
+
+### Basic Git Flow Setup
+
+<File title="Branch Structure">
+```
+Repository Structure:
+├── channels/
+│   ├── dev         # Development channel (latest changes)
+│   ├── staging     # Staging channel (pre-production)
+│   └── prod        # Production channel (stable)
+├── feature/        # Feature development
+├── hotfix/         # Emergency fixes
+└── main           # Source of truth / archive
+```
+</File>
+
+### Stack Configuration
+
+Environments reference channel branches:
+
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        # Track development channel
+        channel: dev
+      settings:
+        workspace_key_prefix: "dev/vpc"
+      source:
+        # Reference the dev channel branch
+        uri: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/dev"
+      vars:
+        name: "dev-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+<File title="stacks/staging/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        # Track staging channel
+        channel: staging
+      settings:
+        workspace_key_prefix: "staging/vpc"
+      source:
+        # Reference the staging channel branch
+        uri: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/staging"
+      vars:
+        name: "staging-use1-vpc"
+        cidr_block: "10.1.0.0/16"
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        # Track production channel
+        channel: prod
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      source:
+        # Reference the prod channel branch
+        uri: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/prod"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.2.0.0/16"
+```
+</File>
+
+### Workflow Examples
+
+#### 1. Feature Development
+
+<File title=".github/workflows/feature-development.yml">
+```yaml
+name: Feature Development
+on:
+  pull_request:
+    branches:
+      - channels/dev
+    paths:
+      - 'components/**'
+      - 'stacks/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Atmos
+        uses: cloudposse/github-action-atmos@v2
+
+      - name: Validate Components
+        run: |
+          # Validate all changed components
+          for component in $(git diff --name-only origin/channels/dev...HEAD | grep "^components/" | cut -d/ -f3 | sort -u); do
+            echo "Validating $component..."
+            atmos validate component $component --stack dev-us-east-1
+          done
+
+      - name: Plan Changes
+        run: |
+          # Plan all affected stacks
+          for stack in $(atmos list stacks | grep dev); do
+            echo "Planning $stack..."
+            atmos terraform plan vpc --stack $stack
+          done
+
+      - name: Security Scan
+        run: |
+          tfsec components/terraform/
+          checkov -d components/terraform/
+```
+</File>
+
+#### 2. Promotion Workflow
+
+<File title=".github/workflows/promote-channel.yml">
+```yaml
+name: Promote Channel
+on:
+  workflow_dispatch:
+    inputs:
+      from_channel:
+        description: 'Source channel'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+      to_channel:
+        description: 'Target channel'
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Validate Promotion Path
+        run: |
+          # Ensure valid promotion path
+          if [[ "${{ inputs.from_channel }}" == "dev" && "${{ inputs.to_channel }}" != "staging" ]]; then
+            echo "Error: Can only promote dev to staging"
+            exit 1
+          fi
+          if [[ "${{ inputs.from_channel }}" == "staging" && "${{ inputs.to_channel }}" != "prod" ]]; then
+            echo "Error: Can only promote staging to prod"
+            exit 1
+          fi
+
+      - name: Check for Conflicts
+        run: |
+          git checkout channels/${{ inputs.to_channel }}
+          git merge --no-commit --no-ff channels/${{ inputs.from_channel }} || true
+
+          if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+            echo "Merge conflicts detected:"
+            git diff --name-only --diff-filter=U
+            git merge --abort
+            exit 1
+          fi
+          git merge --abort
+
+      - name: Create Promotion PR
+        run: |
+          BRANCH="promote-${{ inputs.from_channel }}-to-${{ inputs.to_channel }}-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b $BRANCH channels/${{ inputs.to_channel }}
+          git merge channels/${{ inputs.from_channel }} -m "Promote ${{ inputs.from_channel }} to ${{ inputs.to_channel }}"
+          git push origin $BRANCH
+
+          gh pr create \
+            --base channels/${{ inputs.to_channel }} \
+            --head $BRANCH \
+            --title "Promote: ${{ inputs.from_channel }} → ${{ inputs.to_channel }}" \
+            --body "Promoting changes from ${{ inputs.from_channel }} to ${{ inputs.to_channel }}" \
+            --label "promotion"
+```
+</File>
+
+#### 3. Hotfix Process
+
+<File title=".github/workflows/hotfix.yml">
+```yaml
+name: Hotfix
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to hotfix'
+        required: true
+      description:
+        description: 'Hotfix description'
+        required: true
+
+jobs:
+  create-hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: channels/prod
+
+      - name: Create Hotfix Branch
+        run: |
+          BRANCH="hotfix/${{ inputs.component }}-$(date +%Y%m%d)"
+          git checkout -b $BRANCH
+          git push origin $BRANCH
+
+          echo "Hotfix branch created: $BRANCH"
+          echo "Make your changes and create a PR to channels/prod"
+
+      - name: Create Draft PR
+        run: |
+          gh pr create \
+            --base channels/prod \
+            --head $BRANCH \
+            --title "HOTFIX: ${{ inputs.description }}" \
+            --body "Hotfix for ${{ inputs.component }}: ${{ inputs.description }}" \
+            --label "hotfix" \
+            --draft
+```
+</File>
+
+### Branch Protection Rules
+
+Configure branch protection for channel branches:
+
+<File title=".github/branch-protection.yml">
+```yaml
+# GitHub branch protection configuration
+channels/prod:
+  required_reviews: 2
+  dismiss_stale_reviews: true
+  require_code_owner_reviews: true
+  required_status_checks:
+    - "validate"
+    - "security-scan"
+    - "plan-production"
+  enforce_admins: true
+  restrictions:
+    users: ["release-manager"]
+    teams: ["infrastructure-team"]
+
+channels/staging:
+  required_reviews: 1
+  required_status_checks:
+    - "validate"
+    - "security-scan"
+    - "plan-staging"
+
+channels/dev:
+  required_reviews: 1
+  required_status_checks:
+    - "validate"
+    - "lint"
+```
+</File>
+
+## Advanced Implementation
+
+### Multi-Region Support
+
+Handle multi-region deployments with channel branches:
+
+<File title="stacks/prod/multi-region.yaml">
+```yaml
+# Base configuration for all regions
+terraform:
+  vars:
+    channel: prod
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      source:
+        # All regions use prod channel
+        uri: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/prod"
+      settings:
+        workspace_key_prefix: "{{ .vars.region }}/vpc"
+      vars:
+        name: "prod-{{ .vars.region_short }}-vpc"
+
+# Region-specific overrides
+regions:
+  us-east-1:
+    vars:
+      region: us-east-1
+      region_short: use1
+      cidr_block: "10.0.0.0/16"
+
+  us-west-2:
+    vars:
+      region: us-west-2
+      region_short: usw2
+      cidr_block: "10.1.0.0/16"
+
+  eu-west-1:
+    vars:
+      region: eu-west-1
+      region_short: euw1
+      cidr_block: "10.2.0.0/16"
+```
+</File>
+
+### Automated Sync Between Channels
+
+Keep channels synchronized with automated merges:
+
+<File title=".github/workflows/auto-sync.yml">
+```yaml
+name: Auto Sync Channels
+on:
+  push:
+    branches:
+      - channels/dev
+  schedule:
+    # Daily sync check
+    - cron: '0 0 * * *'
+
+jobs:
+  sync-to-staging:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/channels/dev'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check Auto-Sync Eligibility
+        id: check
+        run: |
+          # Check if all tests passed in dev
+          gh run list \
+            --branch channels/dev \
+            --workflow test.yml \
+            --limit 1 \
+            --json status,conclusion \
+            --jq '.[0].conclusion == "success"' \
+          > /tmp/tests-passed
+
+          # Check if there are changes to sync
+          git diff --quiet channels/staging...channels/dev || echo "changes=true" >> $GITHUB_OUTPUT
+
+      - name: Auto-Merge to Staging
+        if: steps.check.outputs.changes == 'true'
+        run: |
+          # Configure git
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Create sync branch
+          BRANCH="auto-sync-dev-to-staging-$(date +%Y%m%d)"
+          git checkout -b $BRANCH channels/staging
+
+          # Attempt merge
+          if git merge channels/dev -m "Auto-sync: dev → staging"; then
+            git push origin $BRANCH
+
+            # Create auto-merge PR
+            gh pr create \
+              --base channels/staging \
+              --head $BRANCH \
+              --title "Auto-sync: dev → staging" \
+              --body "Automated sync from dev to staging channel" \
+              --label "auto-sync" \
+              --auto
+          else
+            echo "Merge conflicts detected, manual intervention required"
+
+            # Create issue for manual resolution
+            gh issue create \
+              --title "Manual sync required: dev → staging" \
+              --body "Automatic sync failed due to merge conflicts" \
+              --label "requires-attention"
+          fi
+```
+</File>
+
+### Channel Divergence Monitoring
+
+Monitor and alert on channel divergence:
+
+<File title="scripts/monitor-divergence.sh">
+```bash
+#!/bin/bash
+# Monitor divergence between channel branches
+
+CHANNELS=("channels/dev" "channels/staging" "channels/prod")
+
+echo "Channel Divergence Report"
+echo "========================="
+echo ""
+
+for i in "${!CHANNELS[@]}"; do
+  if [ $i -eq $((${#CHANNELS[@]} - 1)) ]; then
+    break
+  fi
+
+  FROM="${CHANNELS[$i]}"
+  TO="${CHANNELS[$((i + 1))]}"
+
+  echo "## $FROM → $TO"
+
+  # Count commits ahead/behind
+  AHEAD=$(git rev-list --count $TO..$FROM)
+  BEHIND=$(git rev-list --count $FROM..$TO)
+
+  echo "- $FROM is $AHEAD commits ahead of $TO"
+  echo "- $FROM is $BEHIND commits behind $TO"
+
+  if [ $AHEAD -gt 10 ]; then
+    echo "  ⚠️  Warning: Significant divergence detected"
+  fi
+
+  # Show changed files
+  if [ $AHEAD -gt 0 ]; then
+    echo "- Files changed in $FROM not in $TO:"
+    git diff --name-only $TO..$FROM | head -5 | sed 's/^/    - /'
+
+    TOTAL_CHANGES=$(git diff --name-only $TO..$FROM | wc -l)
+    if [ $TOTAL_CHANGES -gt 5 ]; then
+      echo "    ... and $((TOTAL_CHANGES - 5)) more files"
+    fi
+  fi
+
+  echo ""
+done
+
+# Check for unique commits (cherry-picks or divergence)
+echo "## Divergence Analysis"
+for channel in "${CHANNELS[@]}"; do
+  echo "- $channel unique commits:"
+
+  # Find commits unique to this branch
+  OTHER_CHANNELS=("${CHANNELS[@]}")
+  unset OTHER_CHANNELS[$channel]
+
+  git log --oneline $channel --not ${OTHER_CHANNELS[@]} | head -3
+done
+```
+</File>
+
+## Benefits
+
+The **Git Flow: Branches as Channels** pattern provides:
+
+- **Familiar Workflow**: Leverages well-understood Git Flow concepts
+- **Centralized Control**: Promotions happen through reviewed pull requests
+- **Clear Audit Trail**: Git history shows what was promoted when
+- **Flexible Velocity**: Different channels can move at different speeds
+- **Strong Tooling**: Excellent CI/CD and GitHub/GitLab integration
+- **Approval Gates**: Native support for review requirements
+
+## Drawbacks
+
+The pattern also has challenges:
+
+- **Branch Divergence**: Long-lived branches naturally drift apart
+- **Merge Conflicts**: Infrastructure code often has structural conflicts
+- **Complex Rollbacks**: Reverting merges affects all environments on the branch
+- **Testing Limitations**: Can't fully test infrastructure in isolated branches
+- **State Confusion**: Branch switches don't affect Terraform state
+
+## Best Practices
+
+### 1. Keep Branches Synchronized
+
+Minimize divergence between channels:
+
+```yaml
+# Daily sync workflow
+- cron: '0 0 * * *'
+  run: |
+    # Check divergence
+    ./scripts/monitor-divergence.sh
+
+    # Auto-sync if within threshold
+    if [ $AHEAD -lt 5 ]; then
+      git merge --ff-only channels/dev
+    fi
+```
+
+### 2. Use Feature Flags for Long-Running Changes
+
+Combine branches with feature flags:
+
+<File title="components/terraform/vpc/variables.tf">
+```hcl
+variable "enable_experimental_features" {
+  description = "Enable experimental VPC features"
+  type        = bool
+  default     = false
+}
+
+variable "channel" {
+  description = "Deployment channel (dev/staging/prod)"
+  type        = string
+}
+
+locals {
+  # Enable features based on channel
+  enable_flow_logs = var.channel != "dev" ? true : var.enable_experimental_features
+  enable_ipv6      = var.channel == "dev" ? true : false
+}
+```
+</File>
+
+### 3. Implement Break-Glass Procedures
+
+Handle emergency situations:
+
+<File title="scripts/emergency-deploy.sh">
+```bash
+#!/bin/bash
+# Emergency deployment bypassing normal channels
+
+COMPONENT=$1
+TARGET_ENV=$2
+COMMIT=$3
+
+echo "⚠️  EMERGENCY DEPLOYMENT"
+echo "Component: $COMPONENT"
+echo "Target: $TARGET_ENV"
+echo "Commit: $COMMIT"
+
+# Create emergency branch
+git checkout -b emergency/$COMPONENT-$TARGET_ENV-$(date +%s) $COMMIT
+
+# Apply directly to environment
+atmos terraform apply $COMPONENT --stack $TARGET_ENV
+
+# Create tracking issue
+gh issue create \
+  --title "EMERGENCY: Direct deployment to $TARGET_ENV" \
+  --body "Component: $COMPONENT, Commit: $COMMIT" \
+  --label "emergency,requires-followup"
+```
+</File>
+
+### 4. Monitor Channel Health
+
+Set up monitoring for channel health:
+
+```yaml
+# Prometheus alerts
+groups:
+  - name: channel_health
+    rules:
+      - alert: ChannelDivergenceHigh
+        expr: git_channel_divergence_commits > 20
+        for: 1h
+        annotations:
+          summary: "High divergence between {{ $labels.from }} and {{ $labels.to }}"
+
+      - alert: ChannelMergeConflicts
+        expr: git_channel_conflicts_total > 0
+        for: 30m
+        annotations:
+          summary: "Merge conflicts in channel {{ $labels.channel }}"
+```
+
+### 5. Document Channel Policies
+
+Maintain clear channel policies:
+
+<File title="docs/channel-policy.md">
+```markdown
+# Channel Branch Policy
+
+## Channel Definitions
+- **channels/dev**: Latest development, updated continuously
+- **channels/staging**: Pre-production validation, updated daily
+- **channels/prod**: Production stable, updated weekly
+
+## Promotion Rules
+1. All changes must enter through channels/dev
+2. Automated tests must pass before promotion
+3. Staging requires 24h soak time before prod promotion
+4. Production promotions require 2 approvals
+
+## Emergency Procedures
+1. Hotfixes can go directly to channels/prod
+2. Must be backported to all channels within 24h
+3. Requires emergency approval from on-call
+
+## Rollback Procedures
+1. Revert the merge commit
+2. Force-push requires 2 approvals
+3. Update all affected environments
+4. Document in incident report
+```
+</File>
+
+## Migration Strategies
+
+### From Other Patterns to Git Flow
+
+1. **Create Channel Branches**: Establish long-lived branches for each environment tier
+2. **Update Stack Configurations**: Point sources to channel branches
+3. **Initial Synchronization**: Ensure all channels start from same state
+4. **Establish Workflows**: Set up CI/CD for promotion between channels
+5. **Train Team**: Ensure everyone understands the Git Flow model
+
+### From Git Flow to Other Patterns
+
+If moving away from Git Flow:
+
+- **To Strict Pinning**: Tag each promotion and reference tags instead of branches
+- **To Release Tracks**: Convert branches to track definitions in configuration
+- **To Folder Versioning**: Extract branch content into versioned folders
+
+## Summary
+
+Git Flow: Branches as Channels adapts the familiar Git Flow model for infrastructure management. It provides strong control through pull requests, clear audit trails, and excellent tooling integration. While it requires discipline to manage branch divergence and handle merge conflicts, teams already comfortable with Git Flow often find this pattern intuitive and powerful. The key to success is maintaining synchronization between channels and having clear policies for promotion and rollback.
+
+:::tip Key Takeaway
+Git Flow for infrastructure works best when you have strong CI/CD practices and can manage branch divergence effectively. It's ideal for teams that want centralized control with familiar Git workflows.
+:::
+
+## Related Patterns
+
+- [Release Tracks/Channels](./release-tracks-channels) - Configuration-based channel management
+- [Strict Version Pinning](./strict-version-pinning) - Tag-based version control
+- [Folder-Based Versioning](./folder-based-versioning) - File system-based versioning
+- [Component Inheritance](/design-patterns/component-inheritance) - Extending components across branches

@@ -1,0 +1,732 @@
+---
+title: Vendoring Components
+sidebar_position: 24
+sidebar_label: Vendoring Components
+description: Vendoring Components Atmos Design Pattern
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+The **Vendoring Components** Design Pattern involves copying external component code into your repository while maintaining metadata about its origin and lineage. This approach provides local control over third-party dependencies, predictable update cycles, and the ability to apply custom modifications when necessary.
+</Intro>
+
+Vendoring gives teams full control over their infrastructure dependencies by bringing external code in-house. Unlike direct references to external repositories, vendored components can be audited, modified, and updated on your schedule. This pattern is particularly valuable when dealing with critical third-party modules, compliance requirements, or when you need to maintain patches against upstream code.
+
+<KeyPoints>
+- How vendoring provides control over external dependencies and update timing
+- Why maintaining origin metadata is crucial for lineage tracking
+- Strategies for bulk updates and intentional divergence
+- The trade-offs between local control and maintenance burden
+</KeyPoints>
+
+## Use Cases
+
+Use the **Vendoring Components** pattern when:
+
+- You need **predictable update windows** for third-party components
+- **Compliance requirements** mandate code auditing and approval
+- You need to **apply custom patches** to upstream components
+- **Network restrictions** limit access to external repositories
+- You want **resilience against upstream availability** issues
+- You need **consistent versioning** across all environments without external dependencies
+- **Upstream cadence** doesn't match your release schedule
+
+## Problem
+
+Direct dependencies on external repositories create several challenges:
+
+- **Upstream Breaking Changes**: Unexpected changes can break deployments
+- **Availability Risks**: External sources may become unavailable
+- **Audit Challenges**: Difficult to review all code changes in external dependencies
+- **Timing Mismatches**: Upstream release schedules may not align with your needs
+- **Patching Limitations**: Cannot modify external code without forking
+- **Network Dependencies**: Requires internet access during deployment
+
+Vendoring addresses these issues by bringing code under local control while maintaining traceability.
+
+## Solution
+
+Copy external component code into your repository with clear metadata about its origin, version, and any local modifications. Use Atmos's vendor command to manage the process systematically.
+
+### Core Principles
+
+1. **Local Copies**: All external code is copied into your repository
+2. **Origin Tracking**: Maintain metadata about where code came from
+3. **Bulk Updates**: Update multiple components together in controlled windows
+4. **Intentional Divergence**: Clearly mark and track local modifications
+5. **Audit Trail**: Document all vendor updates and changes
+
+## Implementation with Atmos
+
+Atmos provides built-in vendoring support through the `vendor.yaml` manifest and `atmos vendor` command.
+
+### Basic Vendor Configuration
+
+<File title="vendor.yaml">
+```yaml
+# Vendor manifest for component management
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: component-vendoring
+  description: Vendor configuration for infrastructure components
+
+spec:
+  # Source specifications
+  sources:
+    # Vendor a specific component version
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
+      version: "2.1.0"
+      targets:
+        - "components/terraform/vpc"
+      included_paths:
+        - "**/*.tf"
+        - "**/*.tfvars"
+        - "README.md"
+        - "LICENSE"
+      excluded_paths:
+        - "examples/**"
+        - "test/**"
+        - ".github/**"
+
+    # Vendor with custom branch
+    - component: eks
+      source: "github.com/cloudposse/terraform-aws-eks-cluster.git///?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "components/terraform/eks"
+
+    # Vendor from private repository
+    - component: rds
+      source: "git::ssh://git@github.com/acme/terraform-modules.git//modules/rds?ref={{.Version}}"
+      version: "v3.5.0"
+      targets:
+        - "components/terraform/rds"
+      auth:
+        type: ssh
+        key_path: "~/.ssh/id_rsa"
+```
+</File>
+
+### Advanced Vendor Configuration
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: component-vendoring
+
+spec:
+  # Global settings
+  settings:
+    # Base path for all vendored components
+    base_path: "components/terraform"
+    # Enable parallel vendoring
+    parallel: true
+    # Maximum parallel operations
+    max_parallel: 5
+
+  # Component sources with mixins
+  sources:
+    # Vendor multiple versions of the same component
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
+      targets:
+        - path: "vpc/{{.Version}}"
+          version: "2.1.0"
+        - path: "vpc/latest"
+          version: "2.2.0"
+
+    # Use mixins for configuration
+    - component: rds
+      source: "github.com/cloudposse/terraform-aws-rds.git///?ref={{.Version}}"
+      version: "1.2.0"
+      targets:
+        - "rds"
+      mixins:
+        - "mixins/rds-defaults.yaml"
+        - "mixins/rds-security.yaml"
+
+    # Vendor with transformations
+    - component: s3-bucket
+      source: "github.com/cloudposse/terraform-aws-s3-bucket.git///?ref={{.Version}}"
+      version: "3.0.0"
+      targets:
+        - "s3"
+      transforms:
+        # Rename files during vendoring
+        - from: "main.tf"
+          to: "s3-main.tf"
+        - from: "variables.tf"
+          to: "s3-variables.tf"
+
+    # Conditional vendoring based on tags
+    - component: lambda
+      source: "github.com/acme/lambda-functions.git///?ref={{.Version}}"
+      version: "v1.0.0"
+      targets:
+        - "lambda"
+      tags:
+        - production
+        - critical
+      # Only vendor if tags match
+      condition: "production"
+```
+</File>
+
+### Vendor Manifest with Origin Tracking
+
+<File title="vendor-manifest.yaml">
+```yaml
+# Manifest tracking vendored component origins
+apiVersion: atmos/v1
+kind: VendorManifest
+metadata:
+  generated: "2024-01-20T10:00:00Z"
+  generator: "atmos vendor"
+
+components:
+  vpc:
+    origin:
+      repository: "github.com/cloudposse/terraform-aws-vpc"
+      ref: "2.1.0"
+      commit: "a1b2c3d4e5f6"
+      vendor_date: "2024-01-20"
+    license: "Apache-2.0"
+    upstream_version: "2.1.0"
+    local_modifications:
+      - file: "main.tf"
+        description: "Added custom tags for compliance"
+        date: "2024-01-21"
+        author: "john.doe@example.com"
+
+  eks:
+    origin:
+      repository: "github.com/cloudposse/terraform-aws-eks-cluster"
+      ref: "4.0.0"
+      commit: "f6e5d4c3b2a1"
+      vendor_date: "2024-01-15"
+    license: "Apache-2.0"
+    upstream_version: "4.0.0"
+    local_modifications: []
+
+  rds:
+    origin:
+      repository: "github.com/acme/terraform-modules"
+      ref: "v3.5.0"
+      commit: "9z8y7x6w5v4u"
+      vendor_date: "2024-01-10"
+    license: "MIT"
+    upstream_version: "3.5.0"
+    local_modifications:
+      - file: "outputs.tf"
+        description: "Added connection string output"
+        date: "2024-01-12"
+        author: "jane.smith@example.com"
+    divergence_notes: |
+      This component has diverged from upstream to support our
+      custom monitoring requirements. Do not auto-update without
+      reviewing monitoring integration changes.
+```
+</File>
+
+## Vendoring Workflow
+
+### 1. Initial Vendoring
+
+```bash
+# Pull all configured components
+atmos vendor pull
+
+# Pull specific component
+atmos vendor pull --component vpc
+
+# Pull with specific version override
+atmos vendor pull --component vpc --version 2.2.0
+
+# Dry run to see what would be vendored
+atmos vendor pull --dry-run
+```
+
+### 2. Tracking Local Modifications
+
+When making local changes to vendored components:
+
+<File title="components/terraform/vpc/LOCAL_MODIFICATIONS.md">
+```markdown
+# Local Modifications
+
+This component has been vendored from github.com/cloudposse/terraform-aws-vpc
+
+## Modifications
+
+### 2024-01-21: Compliance Tags
+- **File**: main.tf
+- **Author**: john.doe@example.com
+- **Reason**: Added required compliance tags per security policy
+- **Changes**:
+  ```hcl
+  # Added to locals
+  compliance_tags = {
+    DataClassification = var.data_classification
+    ComplianceLevel    = var.compliance_level
+    LastReviewed       = timestamp()
+  }
+  ```
+
+### 2024-01-25: Custom Security Groups
+- **File**: security-groups.tf (new file)
+- **Author**: jane.smith@example.com
+- **Reason**: Added organization-specific security group rules
+- **Note**: This file is not present in upstream
+
+## Update Instructions
+
+When updating from upstream:
+1. Save local modifications: `git stash`
+2. Vendor update: `atmos vendor pull --component vpc`
+3. Reapply modifications: `git stash pop`
+4. Resolve any conflicts
+5. Test thoroughly
+6. Update this document
+```
+</File>
+
+### 3. Bulk Updates
+
+Perform controlled bulk updates:
+
+<File title="scripts/vendor-update.sh">
+```bash
+#!/bin/bash
+# Bulk vendor update script
+
+set -e
+
+echo "Starting bulk vendor update..."
+DATE=$(date +%Y%m%d)
+BRANCH="vendor-update-$DATE"
+
+# Create update branch
+git checkout -b $BRANCH
+
+# Update all components
+atmos vendor pull
+
+# Check for changes
+if [ -z "$(git status --porcelain)" ]; then
+  echo "No vendor updates available"
+  exit 0
+fi
+
+# Generate update report
+echo "# Vendor Update Report - $DATE" > VENDOR_UPDATE.md
+echo "" >> VENDOR_UPDATE.md
+
+for component in $(ls components/terraform); do
+  if [ -n "$(git diff --name-only HEAD -- components/terraform/$component)" ]; then
+    echo "## $component" >> VENDOR_UPDATE.md
+
+    # Extract version info from vendor-manifest.yaml
+    OLD_VERSION=$(git show HEAD:vendor-manifest.yaml | yq eval ".components.$component.upstream_version" -)
+    NEW_VERSION=$(yq eval ".components.$component.upstream_version" vendor-manifest.yaml)
+
+    echo "- Previous: $OLD_VERSION" >> VENDOR_UPDATE.md
+    echo "- Updated: $NEW_VERSION" >> VENDOR_UPDATE.md
+    echo "- Changes: $(git diff --stat HEAD -- components/terraform/$component | tail -1)" >> VENDOR_UPDATE.md
+    echo "" >> VENDOR_UPDATE.md
+  fi
+done
+
+# Commit changes
+git add -A
+git commit -m "Vendor update: $DATE
+
+See VENDOR_UPDATE.md for details"
+
+# Push and create PR
+git push origin $BRANCH
+gh pr create \
+  --title "Vendor Update: $DATE" \
+  --body "$(cat VENDOR_UPDATE.md)" \
+  --label "vendor-update"
+
+echo "Vendor update complete. PR created."
+```
+</File>
+
+### 4. Handling Divergence
+
+When intentionally diverging from upstream:
+
+<File title="vendor.yaml">
+```yaml
+spec:
+  sources:
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-vpc.git"
+      version: "2.1.0"
+      targets:
+        - "vpc"
+      # Mark as diverged to prevent auto-updates
+      diverged: true
+      divergence_reason: |
+        Custom modifications for multi-region support.
+        See LOCAL_MODIFICATIONS.md for details.
+        Manual review required for any updates.
+```
+</File>
+
+## Example Implementation
+
+Here's a complete example of vendoring components for a production infrastructure:
+
+### Directory Structure
+
+```
+.
+├── vendor.yaml                 # Vendor configuration
+├── vendor-manifest.yaml        # Origin tracking
+├── components/
+│   └── terraform/
+│       ├── vpc/               # Vendored from CloudPosse
+│       │   ├── main.tf
+│       │   ├── variables.tf
+│       │   ├── outputs.tf
+│       │   ├── versions.tf
+│       │   ├── README.md
+│       │   └── LOCAL_MODIFICATIONS.md
+│       ├── eks/               # Vendored from CloudPosse
+│       │   └── ...
+│       └── rds/               # Vendored from internal
+│           └── ...
+├── stacks/
+│   └── prod/
+│       └── us-east-1.yaml
+└── scripts/
+    ├── vendor-update.sh
+    └── vendor-audit.sh
+```
+
+### Vendor Configuration
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: production-components
+  description: Vendored components for production infrastructure
+
+spec:
+  settings:
+    base_path: "components/terraform"
+    parallel: true
+    max_parallel: 3
+
+  sources:
+    # VPC with specific version and patches
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
+      version: "2.1.0"
+      targets:
+        - "vpc"
+      included_paths:
+        - "*.tf"
+        - "*.tfvars"
+        - "README.md"
+        - "LICENSE"
+      excluded_paths:
+        - "examples/**"
+        - "test/**"
+      # Post-vendor patches
+      patches:
+        - "patches/vpc-compliance-tags.patch"
+
+    # EKS with latest stable
+    - component: eks
+      source: "github.com/cloudposse/terraform-aws-eks-cluster.git///?ref={{.Version}}"
+      version: "4.0.0"
+      targets:
+        - "eks"
+      mixins:
+        - "mixins/eks-defaults.yaml"
+
+    # RDS from internal repository
+    - component: rds
+      source: "git@github.com:acme/terraform-modules.git//modules/rds?ref={{.Version}}"
+      version: "v3.5.0"
+      targets:
+        - "rds"
+      auth:
+        type: ssh
+
+    # S3 with multiple versions
+    - component: s3
+      source: "github.com/cloudposse/terraform-aws-s3-bucket.git///?ref={{.Version}}"
+      targets:
+        - path: "s3/v3"
+          version: "3.0.0"
+        - path: "s3/v4"
+          version: "4.0.0"
+```
+</File>
+
+### Stack Configuration
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        # Reference vendored component
+        vendored: true
+        vendor_version: "2.1.0"
+        last_updated: "2024-01-20"
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      source:
+        # Local path to vendored component
+        uri: "./components/terraform/vpc"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+        # Custom variables for local modifications
+        data_classification: "sensitive"
+        compliance_level: "high"
+```
+</File>
+
+### Audit Script
+
+<File title="scripts/vendor-audit.sh">
+```bash
+#!/bin/bash
+# Audit vendored components for updates and security issues
+
+echo "Vendored Component Audit Report"
+echo "================================"
+echo ""
+
+# Check each vendored component
+for component in $(yq eval '.spec.sources[].component' vendor.yaml); do
+  echo "## Component: $component"
+
+  # Get current and latest versions
+  CURRENT=$(yq eval ".components.$component.upstream_version" vendor-manifest.yaml)
+  SOURCE=$(yq eval ".components.$component.origin.repository" vendor-manifest.yaml)
+
+  # Fetch latest version from upstream (example for GitHub)
+  LATEST=$(gh api repos/${SOURCE#github.com/}/releases/latest --jq .tag_name 2>/dev/null || echo "unknown")
+
+  echo "- Current Version: $CURRENT"
+  echo "- Latest Version: $LATEST"
+  echo "- Last Vendored: $(yq eval ".components.$component.origin.vendor_date" vendor-manifest.yaml)"
+
+  # Check for local modifications
+  MODS=$(yq eval ".components.$component.local_modifications | length" vendor-manifest.yaml)
+  if [ "$MODS" -gt 0 ]; then
+    echo "- Local Modifications: $MODS files modified"
+    echo "  ⚠️  Review modifications before updating"
+  fi
+
+  # Check if update available
+  if [ "$CURRENT" != "$LATEST" ] && [ "$LATEST" != "unknown" ]; then
+    echo "- Status: ⬆️ Update available"
+  else
+    echo "- Status: ✅ Up to date"
+  fi
+
+  echo ""
+done
+
+# Security scan
+echo "## Security Scan"
+echo "Running tfsec on vendored components..."
+for component in $(ls components/terraform); do
+  tfsec components/terraform/$component --format json > /tmp/tfsec-$component.json 2>/dev/null
+  ISSUES=$(jq '.results | length' /tmp/tfsec-$component.json)
+  if [ "$ISSUES" -gt 0 ]; then
+    echo "- $component: ⚠️  $ISSUES security issues found"
+  else
+    echo "- $component: ✅ No security issues"
+  fi
+done
+```
+</File>
+
+## Benefits
+
+The **Vendoring Components** pattern provides:
+
+- **Local Control**: Full control over code and update timing
+- **Predictable Updates**: Updates happen on your schedule
+- **Audit Capability**: Review all code before deployment
+- **Offline Operation**: No runtime dependency on external repositories
+- **Custom Patches**: Apply and maintain local modifications
+- **Compliance**: Meet security and audit requirements
+- **Resilience**: Protected from upstream availability issues
+
+## Drawbacks
+
+The pattern also has limitations:
+
+- **Maintenance Burden**: You own security patches and bug fixes
+- **Repository Size**: Vendored code increases repository size
+- **Update Lag**: May fall behind upstream improvements
+- **Merge Complexity**: Reconciling local changes with updates
+- **Tooling Requirements**: Need processes for vendor management
+
+## Best Practices
+
+### 1. Maintain Clear Lineage
+
+Always track where code came from:
+
+```yaml
+# In every vendored component directory
+.vendor-info:
+  origin: "github.com/cloudposse/terraform-aws-vpc"
+  version: "2.1.0"
+  vendored: "2024-01-20"
+  modified: true
+  modifications:
+    - "Added compliance tags"
+    - "Custom security groups"
+```
+
+### 2. Regular Update Cycles
+
+Schedule regular vendor updates:
+
+```yaml
+# .github/workflows/vendor-update.yml
+name: Vendor Update Check
+on:
+  schedule:
+    # Every Monday at 9 AM
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check for Updates
+        run: |
+          ./scripts/vendor-audit.sh > audit-report.md
+
+      - name: Create Issue if Updates Available
+        run: |
+          if grep -q "Update available" audit-report.md; then
+            gh issue create \
+              --title "Vendor Updates Available: $(date +%Y-%m-%d)" \
+              --body-file audit-report.md \
+              --label "vendor-update"
+          fi
+```
+
+### 3. Document Divergence
+
+Clearly document why and how you've diverged:
+
+```markdown
+# Divergence Documentation
+
+## Component: VPC
+**Diverged**: Yes
+**Date**: 2024-01-21
+**Reason**: Compliance requirements
+
+### Changes Made:
+1. Added mandatory compliance tags
+2. Modified security group rules
+3. Added custom outputs for monitoring
+
+### Update Strategy:
+- Manual review required
+- Cannot auto-update due to custom changes
+- Patches must be manually applied
+
+### Future Plans:
+- Working with upstream to incorporate changes
+- Target convergence: Q2 2024
+```
+
+### 4. Test Vendored Components
+
+Maintain tests for vendored components:
+
+```bash
+# Test vendored components
+for component in components/terraform/*; do
+  echo "Testing $component..."
+  cd $component
+  terraform init
+  terraform validate
+  tflint
+  tfsec .
+  cd -
+done
+```
+
+### 5. Security Scanning
+
+Regularly scan vendored code:
+
+```bash
+# Security scanning workflow
+- name: Security Scan
+  run: |
+    # Scan for vulnerabilities
+    trivy fs components/terraform/
+
+    # Check for secrets
+    gitleaks detect --source=components/terraform/
+
+    # Terraform security
+    tfsec components/terraform/
+```
+
+## Migration Strategies
+
+### To Vendoring from Direct References
+
+1. **Inventory External Dependencies**: List all external module references
+2. **Create Vendor Configuration**: Define sources in vendor.yaml
+3. **Initial Vendoring**: Run `atmos vendor pull`
+4. **Update Stack References**: Change from external URLs to local paths
+5. **Test Thoroughly**: Ensure vendored version produces same results
+6. **Document Origin**: Create vendor-manifest.yaml
+
+### From Vendoring to Other Patterns
+
+If moving away from vendoring:
+
+1. **To Direct References**: Update source URIs to point to external repositories
+2. **To Release Tracks**: Organize vendored components into track folders
+3. **To Folder Versioning**: Rename vendored folders with version suffixes
+
+## Summary
+
+Vendoring Components provides maximum control over external dependencies at the cost of increased maintenance responsibility. It's ideal for organizations with strict compliance requirements, those needing predictable update windows, or teams that must maintain custom patches. While it increases repository size and maintenance burden, the benefits of local control, audit capability, and resilience often justify these trade-offs for critical infrastructure components.
+
+:::tip Key Takeaway
+Vendoring is about taking ownership of your dependencies. Use it when external code is critical to your infrastructure and you need full control over when and how it changes.
+:::
+
+## Related Patterns
+
+- [Folder-Based Versioning](./folder-based-versioning) - Version through repository structure
+- [Release Tracks/Channels](./release-tracks-channels) - Abstract version management
+- [Component Catalog](/design-patterns/component-catalog) - Organizing vendored components
+- [Component Inheritance](/design-patterns/component-inheritance) - Extending vendored components
