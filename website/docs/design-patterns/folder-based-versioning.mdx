@@ -457,6 +457,49 @@ components:
 ```
 </File>
 
+## Rollback Strategy
+
+Folder-based versioning makes rollback trivial - just switch the folder reference:
+
+### Update Stack Configuration
+
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        # Rollback from v2 to v1
+        component: vpc/v1  # Was: vpc/v2
+      settings:
+        workspace_key_prefix: "prod/vpc"  # Keep stable!
+```
+
+### Validate and Apply
+
+```bash
+# Validate the rollback
+atmos terraform plan vpc --stack prod-us-east-1
+
+# Review the changes - should show reverting to v1 behavior
+
+# Apply the rollback
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+:::tip Zero-Downtime Rollback
+Since the old version folder still exists unchanged, rollback is instantaneous and risk-free. The stable workspace key means no state migration is needed.
+:::
+
+### Rollback Verification
+
+```bash
+# Verify the component is using the correct version
+atmos describe component vpc --stack prod-us-east-1 | grep "component:"
+
+# Should show: component: vpc/v1
+```
+
 ## Benefits
 
 The **Folder-Based Versioning** pattern provides:
@@ -465,7 +508,7 @@ The **Folder-Based Versioning** pattern provides:
 - **Safe Experimentation**: New versions can be developed without affecting stable code
 - **Gradual Migration**: Environments can migrate at their own pace
 - **Parallel Development**: Multiple versions can evolve independently
-- **Easy Rollback**: Simply change the folder reference to revert
+- **Instant Rollback**: Simply change the folder reference to revert
 - **Clear Deprecation Path**: Old versions are visibly marked for removal
 
 ## Drawbacks

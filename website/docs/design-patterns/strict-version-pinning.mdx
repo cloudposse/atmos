@@ -314,6 +314,44 @@ components:
 ```
 </File>
 
+## Rollback Strategy
+
+With strict version pinning, rollback is straightforward:
+
+### Update Vendor Configuration
+
+```yaml
+# vendor.yaml - Revert to previous version
+spec:
+  sources:
+    - component: vpc
+      # Was: v1.12.4 (problematic)
+      # Reverting to: v1.12.3 (last known good)
+      source: "github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.3"
+      targets:
+        - "components/terraform/vpc-prod"
+```
+
+### Re-vendor and Apply
+
+```bash
+# Re-vendor the previous version
+atmos vendor pull --component vpc
+
+# Validate the rollback
+atmos validate component vpc --stack prod-us-east-1
+
+# Plan the rollback
+atmos terraform plan vpc --stack prod-us-east-1
+
+# Apply the rollback
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+:::tip
+Strict pinning makes rollback predictable since you're reverting to an exact, previously-tested version.
+:::
+
 ## Benefits
 
 The **Strict Version Pinning** pattern provides:

@@ -638,6 +638,61 @@ Regularly scan vendored code:
     tfsec components/terraform/
 ```
 
+## Rollback Strategy
+
+Vendoring provides multiple rollback approaches:
+
+### Option 1: Revert to Previous Vendored Version
+
+```bash
+# Check Git history for the vendored component
+git log --oneline components/terraform/vpc/
+
+# Revert to a previous commit
+git checkout <previous-commit> -- components/terraform/vpc/
+
+# Or use Git to revert the vendor pull
+git revert <vendor-update-commit>
+
+# Validate the rollback
+atmos validate component vpc --stack prod-us-east-1
+
+# Apply the rollback
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+### Option 2: Re-vendor Previous Version
+
+```yaml
+# vendor.yaml - Specify the previous version
+spec:
+  sources:
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-vpc.git"
+      version: "2.0.0"  # Was 2.1.0, rolling back
+      targets:
+        - "components/terraform/vpc"
+```
+
+```bash
+# Re-vendor the previous version
+atmos vendor pull --component vpc
+
+# This will overwrite local changes - use with caution!
+```
+
+### Option 3: Use Version Control for Rollback
+
+```bash
+# If vendored components are committed to Git
+git diff HEAD~1 components/terraform/vpc/ # Review changes
+git checkout HEAD~1 -- components/terraform/vpc/ # Rollback
+```
+
+:::warning Local Modifications
+If you have local modifications, ensure they're preserved during rollback or reapplied afterward.
+:::
+
 ## Migration Strategies
 
 ### To Vendoring from Direct References

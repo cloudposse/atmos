@@ -466,6 +466,52 @@ atmos terraform plan vpc --stack staging-us-east-1
 atmos terraform apply vpc --stack staging-us-east-1
 ```
 
+## Rollback Strategy
+
+Release tracks make rollback simple by reverting the track version:
+
+### Option 1: Revert Track in Vendor Configuration
+
+```yaml
+# vendor.yaml - Revert prod track to previous version
+spec:
+  sources:
+    - component: vpc-prod
+      # Was: v1.13.2 (problematic)
+      # Reverting to: v1.12.8 (last known good)
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.8"
+      targets:
+        - "components/terraform/vpc/prod"
+```
+
+### Option 2: Revert Track in Configuration Variables
+
+```yaml
+# stacks/catalog/tracks.yaml
+vars:
+  tracks:
+    component_versions:
+      vpc:
+        prod: "v1.12.8"  # Was v1.13.2, rolling back
+```
+
+### Apply the Rollback
+
+```bash
+# Re-vendor if using vendor.yaml approach
+atmos vendor pull --component vpc-prod
+
+# Validate rollback across all prod stacks
+atmos validate stacks | grep prod
+
+# Apply rollback to production
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+:::tip
+Track-based rollback affects all environments subscribed to that track, providing consistent rollback across similar environments.
+:::
+
 ## Benefits
 
 The **Release Tracks/Channels** pattern provides:
