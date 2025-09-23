@@ -175,7 +175,8 @@ func extractPackageFromPath(path string) string {
 	if dir == "." {
 		return "main"
 	}
-	return dir
+	// Normalize path separators to forward slashes for consistent output
+	return filepath.ToSlash(dir)
 }
 
 // getCoverageColor returns the appropriate color for a coverage percentage.
@@ -588,6 +589,8 @@ func truncateString(s string, maxLen int) string {
 }
 
 func shortenPath(path string) string {
+	// Normalize to forward slashes for consistent handling
+	path = filepath.ToSlash(path)
 	parts := strings.Split(path, "/")
 	if len(parts) > 3 {
 		return ".../" + strings.Join(parts[len(parts)-2:], "/")

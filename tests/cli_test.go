@@ -226,7 +226,6 @@ func (pm *PathManager) Prepend(dirs ...string) {
 		absPath, err := filepath.Abs(dir)
 		if err != nil {
 			logger.Fatal("Failed to resolve absolute path", "dir", dir, "error", err)
-			continue
 		}
 		pm.Prepended = append(pm.Prepended, absPath)
 	}
