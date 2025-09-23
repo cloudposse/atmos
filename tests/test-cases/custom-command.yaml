@@ -18,6 +18,4 @@ tests:
       stdout:
         - "Cobra Args: \\[Name\\]"
         - "Trailing Args: \\[-this --is trailing - arg\\]"
-      stderr:
-        - "^$"
       exit_code: 0

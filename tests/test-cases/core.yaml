@@ -3,7 +3,7 @@
 tests:
   - name: "test tty"
     enabled: true
-    snapshot: false
+    snapshot: true
     tty: true
     description: "Ensure tty is enabled."
     workdir: "../"
@@ -14,13 +14,11 @@ tests:
     expect:
       stdout:
         - "^(/dev)"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: "test non-tty"
     enabled: true
-    snapshot: false
+    snapshot: true
     tty: false
     description: "Ensure tty is disabled."
     workdir: "../"
@@ -28,13 +26,11 @@ tests:
     expect:
       stdout:
         - "^not a tty"
-      stderr:
-        - "^$"
       exit_code: 1
 
   - name: "which atmos"
     enabled: true
-    snapshot: false
+    snapshot: true
     description: "Ensure atmos CLI is installed and we're using the one that was built."
     workdir: "../"
     command: "which"
@@ -45,8 +41,6 @@ tests:
         # build/atmos is local
         # atmos/atmos is in GitHub Actions
         - '(build[/\\]atmos|atmos/atmos)'
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: "atmos"
@@ -60,8 +54,6 @@ tests:
       stdout:
         - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
         - "but the directory does not exist."
-      stderr:
-        - "^$"
       exit_code: 1
 
   - name: atmos docs
@@ -77,5 +69,3 @@ tests:
       exit_code: 0
       stdout:
         - "Opening default browser to 'https://atmos.tools'."
-      stderr:
-        - "^$"

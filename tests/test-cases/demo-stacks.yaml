@@ -28,13 +28,11 @@ tests:
         - "\\bworkflow\\b"
         - "Flags:"
         - "for more information about a command"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos version
     enabled: true
-    snapshot: false
+    snapshot: true
     description: "Check that atmos version command outputs version details."
     workdir: "../examples/demo-stacks"
     command: "atmos"
@@ -43,13 +41,11 @@ tests:
     expect:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos version --check
     enabled: true
-    snapshot: false
+    snapshot: true
     description: "Verify atmos version --check command functions correctly."
     workdir: "../examples/demo-stacks"
     env:
@@ -63,8 +59,6 @@ tests:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
         - 'Atmos Releases: https://github\.com/cloudposse/atmos/releases'
         - 'Install Atmos: https://atmos\.tools/install'
-      stderr:
-        - "^$"
       exit_code: 0
 
 
@@ -83,8 +77,6 @@ tests:
       diff: []
       stdout:
         - "Example Terraform Weather Component"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos describe config -f yaml
@@ -105,8 +97,6 @@ tests:
         - "github_token"
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos describe config
@@ -126,8 +116,6 @@ tests:
         - "GithubToken"
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos greet with args
@@ -141,8 +129,6 @@ tests:
     expect:
       stdout:
         - "Hello, Andrey\n"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos greet without args
@@ -155,6 +141,4 @@ tests:
     expect:
       stdout:
         - "Hello, John Doe\n"
-      stderr:
-        - "^$"
       exit_code: 0

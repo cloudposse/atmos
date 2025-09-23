@@ -17,5 +17,4 @@ tests:
       stdout:
         - "string_var: abc"
         - "boolean_var: true"
-      stderr:
-        - "^$"
+    snapshot: true

@@ -1,7 +1,7 @@
 tests:
   - name: check atmos version in empty-dir
     enabled: true
-    snapshot: false
+    snapshot: true
     description: "Check that atmos version command outputs version details."
     workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
@@ -10,8 +10,6 @@ tests:
     expect:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos support
@@ -37,15 +35,13 @@ tests:
       stdout:
         - "atmos.yaml CLI config file was not found."
         - "https://atmos.tools/cli/configuration"
-      stderr:
-        - "^$"
       exit_code: 1
 
   - name: check atmos --help in empty-dir
     enabled: true
     # Snapshots are temporarily disabled until PR #957 is merged which cleans workdirs
     # of files which are not part of the git repo
-    snapshot: false
+    snapshot: true
     description: "Check that atmos command outputs help even with no configuration"
     workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
@@ -92,8 +88,6 @@ tests:
       diff: []
       stdout:
         - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos doesnt warn if in git repo with atmos config
@@ -112,8 +106,6 @@ tests:
       diff: []
       stdout:
         - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos doesnt warn if in git repo with no atmos config
