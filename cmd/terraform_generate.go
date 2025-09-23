@@ -8,7 +8,7 @@ import (
 var terraformGenerateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate Terraform configuration files for Atmos components and stacks.",
-	Long: `The 'atmos terraform generate' command is used to generate Terraform configuration files 
+	Long: `The 'atmos terraform generate' command is used to generate Terraform configuration files
 for specific components and stacks within your Atmos setup.
 
 This command supports the following subcommands:

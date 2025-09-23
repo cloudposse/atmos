@@ -135,8 +135,9 @@ components:
         # Include a local file
         config: !include ./dev-config.yaml
 
-        # Download a remote file, query data from the file using a YQ expression, and assign the result to the variable
-        allowed_ips: !include https://api.github.com/meta .api
+        # Download a remote JSON file with .json extension and query data using YQ
+        # Note: URLs without extensions are treated as text, so use URLs with appropriate extensions
+        github_data: !include ./github-meta.json .api
 ```
 </File>
 

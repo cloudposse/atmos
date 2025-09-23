@@ -23,7 +23,7 @@ runs:
             console.log('Not a pull request event, skipping label cleanup');
             return;
           }
-          
+
           // Check if the PR author is Dependabot
           const prAuthor = context.payload.pull_request.user.login;
           if (prAuthor !== 'dependabot[bot]') {
@@ -79,4 +79,3 @@ runs:
             console.log('⚠️  Warning: no-release label is missing from this Dependabot PR');
             console.log('    This label should be added via .github/dependabot.yml configuration');
           }
-
