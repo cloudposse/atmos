@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/mitchellh/go-wordwrap"
-	"golang.org/x/term"
 )
 
 // TerminalWriter wraps an io.Writer and provides automatic line wrapping based on terminal width
@@ -30,11 +29,11 @@ func NewResponsiveWriter(w io.Writer) io.Writer {
 		return w
 	}
 
-	if !IsTTYSupportForStdout() {
+	if !Detector.IsTTYSupportForStdout() {
 		return w
 	}
 
-	width, _, err := term.GetSize(int(file.Fd()))
+	width, _, err := Detector.GetSize(int(file.Fd()))
 	if err != nil {
 		return w
 	}
@@ -79,16 +78,12 @@ func (w *TerminalWriter) GetWidth() uint {
 	return w.width
 }
 
-// CheckTTYSupportStdout checks if stdout supports TTY for displaying the progress UI.
+// IsTTYSupportForStdout checks if stdout supports TTY for displaying the progress UI.
 func IsTTYSupportForStdout() bool {
-	fd := int(os.Stdout.Fd())
-	isTerminal := term.IsTerminal(fd)
-	return isTerminal
+	return Detector.IsTTYSupportForStdout()
 }
 
-// CheckTTYSupportStderr checks if stderr supports TTY for displaying the progress UI.
+// IsTTYSupportForStderr checks if stderr supports TTY for displaying the progress UI.
 func IsTTYSupportForStderr() bool {
-	fd := int(os.Stderr.Fd())
-	isTerminal := term.IsTerminal(fd)
-	return isTerminal
+	return Detector.IsTTYSupportForStderr()
 }

@@ -20,9 +20,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/cmd"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
@@ -35,7 +36,7 @@ import (
 	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/term"
+	golangterm "golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/config"
@@ -47,6 +48,8 @@ var (
 	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 	startingDir         string
 	snapshotBaseDir     string
+	repoRoot            string // Repository root directory for path normalization and binary checks
+	skipReason          string // Package-level variable to track why tests should be skipped
 )
 
 // Define styles using lipgloss.
@@ -251,7 +254,7 @@ func (pm *PathManager) Apply() error {
 	return os.Setenv("PATH", pm.GetPath())
 }
 
-// Determine if running in a CI environment
+// Determine if running in a CI environment.
 func isCIEnvironment() bool {
 	// Check for common CI environment variables
 	// Note, that the CI variable has many possible truthy values, so we check for any non-empty value that is not "false".
@@ -350,6 +353,11 @@ func sanitizeOutput(output string) (string, error) {
 	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
 
+	// 8. Mask PostHog tokens to prevent real tokens from appearing in snapshots.
+	// Match any token starting with phc_ followed by alphanumeric characters and underscores.
+	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
+	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
+
 	return result, nil
 }
 
@@ -398,7 +406,7 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	}
 	defer func() { _ = ptmx.Close() }()
 
-	// t.Logf("PTY Fd: %d, IsTerminal: %v", ptmx.Fd(), term.IsTerminal(int(ptmx.Fd())))
+	// t.Logf("PTY Fd: %d, IsTerminal: %v", ptmx.Fd(), golangterm.IsTerminal(int(ptmx.Fd())))
 
 	if input != "" {
 		go func() {
@@ -571,6 +579,19 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	tc.Env["PATH"] = os.Getenv("PATH")
 
+	// Set the test Git root to a clean temporary directory
+	// This makes each test scenario act as if it's its own Git repository
+	// preventing the actual repository's .atmos.d from being loaded
+	// This is especially important for tests that use workdir: "../"
+	testGitRoot := filepath.Join(tempDir, "mock-git-root")
+	if err := os.MkdirAll(testGitRoot, 0o755); err == nil {
+		tc.Env["TEST_GIT_ROOT"] = testGitRoot
+	}
+
+	// Also set an environment variable to exclude the repository's .atmos.d
+	// This is needed for tests that change to parent directories
+	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
+
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
 	err = removeCacheFile()
@@ -643,6 +664,10 @@ func removeCacheFile() error {
 }
 
 func TestCLICommands(t *testing.T) {
+	if skipReason != "" {
+		t.Skipf("%s", skipReason)
+	}
+
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {
@@ -707,17 +732,17 @@ func runAtmosInternal(ctx context.Context, t *testing.T, tc *TestCase) (string, 
 	exitCode := 0
 	oldExit := utils.OsExit
 	oldErrExit := errUtils.Exit
-	utils.OsExit = func(code int) { 
-		exitCode = code 
+	utils.OsExit = func(code int) {
+		exitCode = code
 		// Give a brief moment for any pending output to be flushed
 		time.Sleep(10 * time.Millisecond)
 		panic("exit:" + strconv.Itoa(code)) // Use established exit convention
 	}
-	errUtils.Exit = func(code int) { 
-		exitCode = code 
+	errUtils.Exit = func(code int) {
+		exitCode = code
 		// Give a brief moment for any pending output to be flushed
 		time.Sleep(10 * time.Millisecond)
-		panic("exit:" + strconv.Itoa(code)) // Use established exit convention  
+		panic("exit:" + strconv.Itoa(code)) // Use established exit convention
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -981,7 +1006,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 
 	if filteredStdoutExpected != filteredStdoutActual {
 		var diff string
-		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
+		if isCIEnvironment() || !golangterm.IsTerminal(int(os.Stdout.Fd())) {
 			// Generate a colorized diff for better readability
 			diff = generateUnifiedDiff(filteredStdoutActual, filteredStdoutExpected)
 		} else {
@@ -1002,7 +1027,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 
 	if filteredStderrExpected != filteredStderrActual {
 		var diff string
-		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
+		if isCIEnvironment() || !golangterm.IsTerminal(int(os.Stdout.Fd())) {
 			diff = generateUnifiedDiff(filteredStderrActual, filteredStderrExpected)
 		} else {
 			// Generate a colorized diff for better readability
@@ -1210,7 +1235,7 @@ func setupEnvironment(env map[string]string) func() {
 		oldEnv[k] = os.Getenv(k)
 		_ = os.Setenv(k, v)
 	}
-	
+
 	return func() {
 		for k, v := range oldEnv {
 			if v == "" {
@@ -1224,12 +1249,25 @@ func setupEnvironment(env map[string]string) func() {
 
 func executeAtmosCommand(ctx context.Context, t *testing.T, tc *TestCase) (string, string) {
 	if tc.Tty {
+		// Note: We considered using teatest from github.com/charmbracelet/x/exp/teatest
+		// but it's designed specifically for testing Bubble Tea models, not for general
+		// TTY simulation. Atmos doesn't always use Bubble Tea (only for certain TUI
+		// components like vendor and workflows), so we use the traditional PTY approach.
 		return executeAtmosTtyCommand(ctx, t, tc)
 	}
 	return executeAtmosNonTtyCommand(ctx, t, tc)
 }
 
 func executeAtmosTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) (string, string) {
+	// Set up mock terminal detector for TTY tests
+	originalDetector := term.Detector
+	term.Detector = &MockTerminalDetector{
+		IsTTY:  true,
+		Width:  80, // Standard terminal width for tests
+		Height: 24, // Standard terminal height
+	}
+	defer func() { term.Detector = originalDetector }()
+
 	var stdoutBuf bytes.Buffer
 	var wg sync.WaitGroup
 
@@ -1285,6 +1323,15 @@ func executeAtmosTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) (st
 }
 
 func executeAtmosNonTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) (string, string) {
+	// Ensure non-TTY behavior
+	originalDetector := term.Detector
+	term.Detector = &MockTerminalDetector{
+		IsTTY:  false,
+		Width:  0,
+		Height: 0,
+	}
+	defer func() { term.Detector = originalDetector }()
+
 	var stdoutBuf, stderrBuf bytes.Buffer
 	var wg sync.WaitGroup
 
@@ -1336,6 +1383,3 @@ func executeAtmosNonTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) 
 
 	return stdoutBuf.String(), stderrBuf.String()
 }
-
-
-
