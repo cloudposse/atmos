@@ -11,10 +11,10 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Strict Version Pinning** Design Pattern involves pinning every environment to specific component versions. While this traditional approach optimizes for reproducibility and rollback capabilities, it often creates divergence between environments and weakens the feedback loop during planning.
+The **Strict Version Pinning** Design Pattern is a trunk-based approach where every environment pins to specific component versions using tags or commit SHAs from the main branch. While this traditional approach optimizes for reproducibility and rollback capabilities, it often creates divergence between environments and weakens the feedback loop during planning.
 </Intro>
 
-Strict Version Pinning is the most traditional approach to version management in infrastructure-as-code. Each environment explicitly declares which version of each component it uses, providing maximum control and reproducibility. However, this pattern requires careful management to avoid environment drift and must be applied with discipline to prevent state migration issues.
+Strict Version Pinning is the most traditional approach to version management in infrastructure-as-code. As a trunk-based pattern, all code lives in the main branch, and environments reference specific points in that branch's history through version tags or commit identifiers. Each environment explicitly declares which version of each component it uses, providing maximum control and reproducibility. However, this pattern requires careful management to avoid environment drift and must be applied with discipline to prevent state migration issues.
 
 <KeyPoints>
 - How strict pinning provides reproducibility but encourages environment divergence

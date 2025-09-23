@@ -11,10 +11,10 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Release Tracks/Channels** Design Pattern allows environments to subscribe to moving version tracks (e.g., `alpha`, `beta`, `prod`) instead of pinning individual versions. This approach dramatically reduces operational overhead while maintaining strong convergence and feedback loops across environments.
+The **Release Tracks/Channels** Design Pattern is a trunk-based approach where environments subscribe to moving version tracks (e.g., `alpha`, `beta`, `prod`) defined in configuration files on the main branch. This approach dramatically reduces operational overhead while maintaining strong convergence and feedback loops across environments.
 </Intro>
 
-Release Tracks provide a middle ground between strict version pinning and bleeding-edge updates. By grouping environments into tracks and promoting versions through tracks rather than individual environments, teams can maintain control while reducing the burden of version management. This pattern scales well and provides early warning of issues through strong cross-environment feedback.
+Release Tracks provide a middle ground between strict version pinning and bleeding-edge updates. As a trunk-based pattern, all components and track definitions live in the main branch, with tracks pointing to different versions or commits within that same branch. By grouping environments into tracks and promoting versions through tracks rather than individual environments, teams can maintain control while reducing the burden of version management. This pattern scales well and provides early warning of issues through strong cross-environment feedback.
 
 <KeyPoints>
 - How tracks reduce version management overhead across many environments

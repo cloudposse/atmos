@@ -11,10 +11,10 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Folder-Based Versioning** Design Pattern uses the repository's directory structure to manage component versions. By creating separate folders for different versions (e.g., `vpc`, `vpc-v2`), teams can safely iterate on new versions while maintaining stability for existing deployments.
+The **Folder-Based Versioning** Design Pattern is a trunk-based approach that uses the repository's directory structure on the main branch to manage component versions. By creating separate folders for different versions (e.g., `vpc`, `vpc-v2`), teams can safely iterate on new versions while maintaining stability for existing deployments.
 </Intro>
 
-Folder-Based Versioning makes version boundaries explicit and visible in the repository structure. This approach allows for long-lived divergence between versions, gradual migration paths, and clear separation of concerns. It's particularly useful for major version changes that require extended development and testing periods.
+Folder-Based Versioning makes version boundaries explicit and visible in the repository structure. As a trunk-based pattern, all version folders exist in the main branch simultaneously, allowing environments to choose their version by selecting the appropriate folder. This approach allows for long-lived divergence between versions, gradual migration paths, and clear separation of concerns. It's particularly useful for major version changes that require extended development and testing periods.
 
 <KeyPoints>
 - How folder structure provides explicit version boundaries

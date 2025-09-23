@@ -11,10 +11,10 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Vendoring Components** Design Pattern involves copying external component code into your repository while maintaining metadata about its origin and lineage. This approach provides local control over third-party dependencies, predictable update cycles, and the ability to apply custom modifications when necessary.
+The **Vendoring Components** Design Pattern is a trunk-based approach that involves copying external component code into your main branch while maintaining metadata about its origin and lineage. This approach provides local control over third-party dependencies, predictable update cycles, and the ability to apply custom modifications when necessary.
 </Intro>
 
-Vendoring gives teams full control over their infrastructure dependencies by bringing external code in-house. Unlike direct references to external repositories, vendored components can be audited, modified, and updated on your schedule. This pattern is particularly valuable when dealing with critical third-party modules, compliance requirements, or when you need to maintain patches against upstream code.
+Vendoring gives teams full control over their infrastructure dependencies by bringing external code in-house. As a trunk-based pattern, all vendored code lives in the main branch alongside your other infrastructure code, with version updates happening through commits to that branch. Unlike direct references to external repositories, vendored components can be audited, modified, and updated on your schedule. This pattern is particularly valuable when dealing with critical third-party modules, compliance requirements, or when you need to maintain patches against upstream code.
 
 <KeyPoints>
 - How vendoring provides control over external dependencies and update timing

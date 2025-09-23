@@ -42,41 +42,61 @@ Atmos's default philosophy differs from strict pinning: allow **transient diverg
 
 ## Core Concepts
 
-Before exploring the patterns, it's important to understand the distinction between:
+Before exploring the patterns, it's important to understand key distinctions:
+
+### Deployment vs Release
 
 - **Deployment**: Declaring that an environment should converge to a specific version of a component (the target state)
 - **Release**: Actually updating the environment to that version (the change is applied)
 
 Some teams use Git for both deployment and release (Git-as-source-of-truth _and_ rollout trigger), while others separate these concerns (e.g., Git for deployment, CI/CD for release).
 
+### Trunk-Based Development vs Git Flow
+
+Most version management patterns in Atmos follow **trunk-based development**, where:
+- All changes flow through a single main branch (trunk)
+- Versioning happens through tags, folders, or configuration files
+- Environments pull from the same branch but use different version selectors
+- Short-lived feature branches merge quickly back to main
+
+This contrasts with **Git Flow**, which uses:
+- Multiple long-lived branches representing different stages
+- Environments tied to specific branches
+- Promotion through merges between branches
+- More complex branching strategies
+
 ## Available Patterns
 
-Atmos supports five primary version management patterns, each optimizing for different goals:
+Atmos supports five primary version management patterns. The first four are **trunk-based** approaches, while the fifth adapts **Git Flow** for infrastructure:
 
-### 1. [Strict Version Pinning](#strict-version-pinning)
-Pin component versions per environment. Optimizes for reproducibility and rollback capability at the cost of high operational overhead and weak feedback loops. Requires lockstep promotions.
+### Trunk-Based Patterns
 
-### 2. [Release Tracks/Channels](#release-trackschannels)
-Environments subscribe to moving tracks (e.g., `alpha`, `beta`, `prod`). You promote tracks, not individual environment pins. Provides strong convergence and feedback with medium overhead.
+#### 1. [Strict Version Pinning](#strict-version-pinning)
+**Trunk-based**: Pin component versions per environment using tags or commit SHAs from the main branch. Optimizes for reproducibility and rollback capability at the cost of high operational overhead and weak feedback loops. Requires lockstep promotions.
 
-### 3. [Folder-Based Versioning](#folder-based-versioning)
-Create new component folders for deliberate, long-lived divergence (e.g., `vpc-v2`). Makes versioning explicit in the repository structure and allows gradual convergence by switching folders.
+#### 2. [Release Tracks/Channels](#release-trackschannels)
+**Trunk-based**: Environments subscribe to moving tracks (e.g., `alpha`, `beta`, `prod`) defined in configuration on the main branch. You promote tracks, not individual environment pins. Provides strong convergence and feedback with medium overhead.
 
-### 4. [Vendoring Components](#vendoring-components)
-Copy upstream code locally with a manifest tracking origin and lineage. Update locally in bulk; diverge intentionally when needed. Provides strong local control with predictable update windows.
+#### 3. [Folder-Based Versioning](#folder-based-versioning)
+**Trunk-based**: Create new component folders for deliberate, long-lived divergence (e.g., `vpc-v2`) in the main branch. Makes versioning explicit in the repository structure and allows gradual convergence by switching folders.
 
-### 5. [Git Flow: Branches as Channels](#git-flow-branches-as-channels)
-Long-lived branches map to release channels. Environments track branches; promotions happen via merges. Leverages familiar Git workflows with standard branch divergence trade-offs.
+#### 4. [Vendoring Components](#vendoring-components)
+**Trunk-based**: Copy upstream code locally into the main branch with a manifest tracking origin and lineage. Update locally in bulk; diverge intentionally when needed. Provides strong local control with predictable update windows.
+
+### Git Flow Pattern
+
+#### 5. [Git Flow: Branches as Channels](#git-flow-branches-as-channels)
+**Branch-based**: Long-lived branches map to release channels. Environments track branches; promotions happen via merges between branches. This is the only pattern that diverges from trunk-based development, using Git Flow's branching model instead.
 
 ## Quick Comparison
 
-| Strategy                 | Convergence | Feedback During Plan | Rollback Ease | Overhead @ Scale | Version Skipping Risk |
-|--------------------------|-------------|---------------------|---------------|------------------|----------------------|
-| Strict Pinning           | Low         | Weak (late)         | Strong        | High             | **High Risk**        |
-| Release Tracks/Channels  | High        | Strong              | Medium        | Medium           | Lower Risk           |
-| Folder-Based Versioning  | Medium      | Strong (explicit)   | Medium        | Medium           | Lower Risk           |
-| Vendoring                | Medium–High | Strong (local)      | Medium        | Medium           | Lower Risk           |
-| Git Flow (per channel)   | Medium      | Medium              | Medium        | Medium–High      | High if skipped      |
+| Strategy                 | Development Model | Convergence | Feedback During Plan | Rollback Ease | Overhead @ Scale | Version Skipping Risk |
+|--------------------------|------------------|-------------|---------------------|---------------|------------------|----------------------|
+| Strict Pinning           | Trunk-based      | Low         | Weak (late)         | Strong        | High             | **High Risk**        |
+| Release Tracks/Channels  | Trunk-based      | High        | Strong              | Medium        | Medium           | Lower Risk           |
+| Folder-Based Versioning  | Trunk-based      | Medium      | Strong (explicit)   | Medium        | Medium           | Lower Risk           |
+| Vendoring                | Trunk-based      | Medium–High | Strong (local)      | Medium        | Medium           | Lower Risk           |
+| Git Flow (per channel)   | Branch-based     | Medium      | Medium              | Medium        | Medium–High      | High if skipped      |
 
 ## Choosing a Pattern
 

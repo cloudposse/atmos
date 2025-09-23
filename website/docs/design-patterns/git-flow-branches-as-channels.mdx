@@ -11,10 +11,38 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Git Flow: Branches as Channels** Design Pattern uses long-lived Git branches to represent release channels. Environments track specific branches, and version promotion happens through merges between branches. This approach leverages familiar Git workflows and provides centralized promotion control through pull requests and merge reviews.
+The **Git Flow: Branches as Channels** Design Pattern adapts the Git Flow branching model for infrastructure versioning. Unlike trunk-based patterns where all environments pull from the main branch, Git Flow uses multiple long-lived branches to represent different release stages, with environments tracking specific branches and promotions happening through merges.
 </Intro>
 
-Git Flow for infrastructure brings the well-understood branching model to infrastructure-as-code. Each long-lived branch represents a release channel (e.g., `develop`, `staging`, `production`), and environments subscribe to branches rather than specific versions. This pattern works well for teams already familiar with Git Flow and provides strong integration with existing CI/CD pipelines.
+## Understanding Git Flow
+
+Git Flow is a branching model introduced by Vincent Driessen in 2010 that has become widely adopted in software development. It defines a strict branching structure designed around project releases, using multiple parallel long-lived branches.
+
+### Conventional Git Flow Structure
+
+In traditional Git Flow:
+- **main/master**: Production-ready code
+- **develop**: Integration branch for features
+- **feature/\***: Individual feature development
+- **release/\***: Release preparation branches
+- **hotfix/\***: Emergency production fixes
+
+Changes flow through a defined path:
+1. Features are developed in feature branches
+2. Features merge into develop
+3. Release branches are created from develop
+4. After testing, releases merge into main and back to develop
+5. Hotfixes branch from main and merge back to both main and develop
+
+### Git Flow for Infrastructure
+
+When applied to infrastructure-as-code, Git Flow needs adaptation because:
+- Infrastructure has **persistent state** that doesn't reset between branches
+- You can't easily **test infrastructure in isolation** like application code
+- **Merge conflicts** in infrastructure often have wider implications
+- **Rollback** means reverting infrastructure, not just code
+
+This pattern adapts Git Flow by using branches as deployment channels that environments subscribe to, rather than following the strict feature → develop → release → main flow.
 
 <KeyPoints>
 - How Git branches can serve as release channels for infrastructure
