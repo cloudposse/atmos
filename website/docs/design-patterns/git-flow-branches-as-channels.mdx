@@ -117,9 +117,31 @@ Repository Structure:
 ```
 </File>
 
+### Component Vendoring from Branches
+
+With Git Flow, components are vendored from specific branches using `vendor.yaml`. Each environment vendors components from its corresponding channel branch:
+
+<File title="vendor.yaml">
+```yaml
+spec:
+  sources:
+    # Vendor VPC from production channel
+    - component: vpc
+      source: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/prod"
+      targets:
+        - "components/terraform/vpc"
+
+    # Vendor EKS from staging for testing
+    - component: eks
+      source: "git::https://github.com/acme/infrastructure.git//components/terraform/eks?ref=channels/staging"
+      targets:
+        - "components/terraform/eks"
+```
+</File>
+
 ### Stack Configuration
 
-Environments reference channel branches:
+After vendoring components from the appropriate branches, stacks reference the local vendored components:
 
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
@@ -132,9 +154,6 @@ components:
         channel: dev
       settings:
         workspace_key_prefix: "dev/vpc"
-      source:
-        # Reference the dev channel branch
-        uri: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/dev"
       vars:
         name: "dev-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -152,9 +171,6 @@ components:
         channel: staging
       settings:
         workspace_key_prefix: "staging/vpc"
-      source:
-        # Reference the staging channel branch
-        uri: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/staging"
       vars:
         name: "staging-use1-vpc"
         cidr_block: "10.1.0.0/16"
@@ -172,9 +188,6 @@ components:
         channel: prod
       settings:
         workspace_key_prefix: "prod/vpc"
-      source:
-        # Reference the prod channel branch
-        uri: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/prod"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.2.0.0/16"
