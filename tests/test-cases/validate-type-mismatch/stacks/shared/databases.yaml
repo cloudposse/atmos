@@ -1,0 +1,18 @@
+# Shared database configuration
+components:
+  terraform:
+    rds:
+      vars:
+        instances:
+          primary:
+            instance_class: "db.t3.medium"
+            allocated_storage: 100
+          replica:
+            instance_class: "db.t3.small"
+            allocated_storage: 50
+        # This will be used to test nested merges
+        connections:
+          - host: "primary.db.local"
+            port: 5432
+          - host: "replica.db.local"
+            port: 5432
