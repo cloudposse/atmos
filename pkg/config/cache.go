@@ -78,12 +78,13 @@ func LoadCache() (CacheConfig, error) {
 	return cfg, nil
 }
 
-func SaveCache2(cfg CacheConfig) error {
+func SaveCache(cfg CacheConfig) error {
 	cacheFile, err := GetCacheFilePath()
 	if err != nil {
 		return err
 	}
 
+	// Use file locking to prevent concurrent writes
 	return withCacheFileLock(cacheFile, func() error {
 		v := viper.New()
 		v.Set("last_checked", cfg.LastChecked)
@@ -94,22 +95,6 @@ func SaveCache2(cfg CacheConfig) error {
 		}
 		return nil
 	})
-}
-
-func SaveCache(cfg CacheConfig) error {
-	cacheFile, err := GetCacheFilePath()
-	if err != nil {
-		return err
-	}
-
-	v := viper.New()
-	v.Set("last_checked", cfg.LastChecked)
-	v.Set("installation_id", cfg.InstallationId)
-	v.Set("telemetry_disclosure_shown", cfg.TelemetryDisclosureShown)
-	if err := v.WriteConfigAs(cacheFile); err != nil {
-		return errors.Wrap(err, "failed to write cache file")
-	}
-	return nil
 }
 
 func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
