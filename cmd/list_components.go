@@ -28,7 +28,7 @@ var listComponentsCmd = &cobra.Command{
 		}
 
 		// Print the output directly without color since it's a simple list
-		fmt.Println(strings.Join(output, "\n"))
+		cmd.Println(strings.Join(output, "\n"))
 		return nil
 	},
 }

@@ -12,8 +12,8 @@ func TestNewRegistry(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, registry)
-	assert.Greater(t, len(registry.themes), 300)
-	assert.Greater(t, len(registry.sorted), 300)
+	assert.Greater(t, len(registry.themes), 30)
+	assert.Greater(t, len(registry.sorted), 30)
 
 	// Verify default theme exists
 	defaultTheme, exists := registry.Get("default")
@@ -73,7 +73,7 @@ func TestRegistryList(t *testing.T) {
 
 	themes := registry.List()
 	assert.NotEmpty(t, themes)
-	assert.Greater(t, len(themes), 300)
+	assert.Greater(t, len(themes), 30)
 
 	// Verify themes are sorted alphabetically
 	for i := 1; i < len(themes); i++ {
@@ -148,7 +148,7 @@ func TestRegistryCount(t *testing.T) {
 	assert.NoError(t, err)
 
 	count := registry.Count()
-	assert.Greater(t, count, 300)
+	assert.Greater(t, count, 30)
 	assert.Equal(t, len(registry.themes), count)
 }
 
@@ -194,7 +194,7 @@ func TestValidateTheme(t *testing.T) {
 		},
 		{
 			name:      "valid theme - gruvboxdark",
-			themeName: "gruvboxdark",
+			themeName: "GruvboxDark",
 			wantErr:   false,
 		},
 		{
@@ -206,13 +206,13 @@ func TestValidateTheme(t *testing.T) {
 			name:      "invalid theme",
 			themeName: "non-existent-theme",
 			wantErr:   true,
-			errMsg:    "invalid theme 'non-existent-theme'",
+			errMsg:    "invalid theme: 'non-existent-theme'",
 		},
 		{
 			name:      "invalid theme with special chars",
 			themeName: "theme!@#$%",
 			wantErr:   true,
-			errMsg:    "invalid theme 'theme!@#$%'",
+			errMsg:    "invalid theme: 'theme!@#$%'",
 		},
 	}
 

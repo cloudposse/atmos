@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/config"
@@ -45,7 +43,7 @@ var listWorkflowsCmd = &cobra.Command{
 		}
 
 		// Print the formatted output directly (table/json/csv already formatted)
-		fmt.Print(output)
+		cmd.Print(output)
 		return nil
 	},
 }
