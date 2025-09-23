@@ -37,8 +37,6 @@ linters:
       forbid:
         - pattern: os\.Getenv
           msg: Use `viper.BindEnv` for new environment variables instead of `os.Getenv`
-        - pattern: '\.Skip\('
-          msg: Use `t.Skipf` with a descriptive reason instead of `t.Skip`
     funlen:
       lines: 60
       statements: 40

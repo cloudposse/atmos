@@ -7,9 +7,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestLoadAWSConfig(t *testing.T) {
+	// Check for AWS profile precondition
+	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
 	tests := []struct {
 		name       string
 		region     string

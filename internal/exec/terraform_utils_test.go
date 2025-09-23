@@ -10,6 +10,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 // Helper function to create a bool pointer for testing.
@@ -89,9 +90,12 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 }
 
 func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
+	// Check for valid Git remote URL before running test
+	tests.RequireGitRemoteWithValidURL(t)
+
 	// Skip if terraform is not installed
 	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skip("Skipping test: terraform is not installed or not in PATH")
+		t.Skipf("Skipping test: terraform is not installed or not in PATH")
 	}
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
