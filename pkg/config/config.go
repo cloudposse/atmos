@@ -97,7 +97,12 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 
 	// Handle NO_PAGER environment variable (standard CLI convention)
 	// Check this after --pager flag so CLI flag takes precedence
-	//nolint:forbidigo // NO_PAGER is a standard CLI convention that requires direct env access
+	//nolint:forbidigo // NO_PAGER is a standard CLI convention that requires direct env access.
+	// We intentionally don't use viper.BindEnv() here because:
+	// 1. NO_PAGER uses negative logic (NO_PAGER=true disables pager)
+	// 2. Atmos config convention uses positive boolean names (pager: true enables pager)
+	// 3. We don't want a configurable "no_pager" field that would confuse the config schema
+	// 4. NO_PAGER should remain an environment-only standard, not a config file setting
 	if os.Getenv("NO_PAGER") != "" {
 		// Check if --pager flag was explicitly provided
 		if _, hasPagerFlag := flagKeyValue["pager"]; !hasPagerFlag {
