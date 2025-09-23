@@ -8,10 +8,10 @@ import (
 // TestVerifyYAMLFormatUnit tests the YAML validation function directly.
 func TestVerifyYAMLFormatUnit(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		shouldPass  bool
-		errorCheck  string // substring that should appear in error
+		name       string
+		input      string
+		shouldPass bool
+		errorCheck string // substring that should appear in error
 	}{
 		{
 			name:       "Valid YAML - simple key-value",
@@ -75,7 +75,7 @@ stacks:
 		t.Run(tt.name, func(t *testing.T) {
 			// Run validation directly and check result
 			validationPassed := verifyYAMLFormat(t, tt.input)
-			
+
 			if validationPassed != tt.shouldPass {
 				t.Errorf("YAML validation returned %v, expected %v", validationPassed, tt.shouldPass)
 			}
@@ -86,10 +86,10 @@ stacks:
 // TestVerifyJSONFormatUnit tests the JSON validation function directly.
 func TestVerifyJSONFormatUnit(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		shouldPass  bool
-		errorCheck  string
+		name       string
+		input      string
+		shouldPass bool
+		errorCheck string
 	}{
 		{
 			name:       "Valid JSON - simple object",
@@ -171,7 +171,7 @@ func TestVerifyJSONFormatUnit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			validationPassed := verifyJSONFormat(t, tt.input)
-			
+
 			if validationPassed != tt.shouldPass {
 				t.Errorf("JSON validation returned %v, expected %v", validationPassed, tt.shouldPass)
 			}
@@ -234,7 +234,7 @@ func TestVerifyFormatValidationUnit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := verifyFormatValidation(t, tt.input, tt.formats)
-			
+
 			if result != tt.shouldPass {
 				t.Errorf("verifyFormatValidation() = %v, expected %v", result, tt.shouldPass)
 			}
@@ -266,7 +266,7 @@ func TestMinMaxHelpers(t *testing.T) {
 			if gotMin != tc.wantMin {
 				t.Errorf("min(%d, %d) = %d, want %d", tc.a, tc.b, gotMin, tc.wantMin)
 			}
-			
+
 			gotMax := max(tc.a, tc.b)
 			if gotMax != tc.wantMax {
 				t.Errorf("max(%d, %d) = %d, want %d", tc.a, tc.b, gotMax, tc.wantMax)
@@ -281,18 +281,18 @@ func TestValidationErrorContext(t *testing.T) {
 	t.Run("YAML error shows preview", func(t *testing.T) {
 		longYAML := strings.Repeat("key: value\n", 20) + "  bad: indentation"
 		result := verifyYAMLFormat(t, longYAML)
-		
+
 		if result {
 			t.Error("Expected YAML validation to fail for bad indentation")
 		}
 		// The error should be logged via t.Errorf in the actual function
 	})
-	
+
 	// Test JSON error shows offset
 	t.Run("JSON error shows offset context", func(t *testing.T) {
 		jsonWithError := `{"valid": "start", "bad": unterminated}`
 		result := verifyJSONFormat(t, jsonWithError)
-		
+
 		if result {
 			t.Error("Expected JSON validation to fail for unterminated value")
 		}
@@ -309,13 +309,13 @@ func TestLargeInputValidation(t *testing.T) {
 			items = append(items, `"item"`)
 		}
 		largeJSON := "[" + strings.Join(items, ",") + "]"
-		
+
 		result := verifyJSONFormat(t, largeJSON)
 		if !result {
 			t.Error("Failed to validate large valid JSON array")
 		}
 	})
-	
+
 	// Generate a large valid YAML list
 	t.Run("Large YAML list", func(t *testing.T) {
 		var sb strings.Builder
@@ -323,19 +323,19 @@ func TestLargeInputValidation(t *testing.T) {
 		for i := 0; i < 1000; i++ {
 			sb.WriteString("  - item\n")
 		}
-		
+
 		result := verifyYAMLFormat(t, sb.String())
 		if !result {
 			t.Error("Failed to validate large valid YAML list")
 		}
 	})
-	
+
 	// Test preview truncation for large invalid input
 	t.Run("Large invalid input preview truncation", func(t *testing.T) {
 		// Create a large string that's invalid JSON
 		largeInvalid := strings.Repeat("not json ", 1000)
 		result := verifyJSONFormat(t, largeInvalid)
-		
+
 		if result {
 			t.Error("Expected validation to fail for large invalid input")
 		}
@@ -350,4 +350,4 @@ type testRecorder struct {
 }
 
 func (r *testRecorder) Fprint(w interface{}, args ...interface{}) {}
-func (r *testRecorder) Failed() bool { return r.failed }
+func (r *testRecorder) Failed() bool                              { return r.failed }
