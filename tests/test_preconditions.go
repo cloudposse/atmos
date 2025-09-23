@@ -96,7 +96,7 @@ func RequireGitRepository(t *testing.T) *git.Repository {
 	// and EnableDotGitCommonDir to properly handle worktrees
 	repo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
 		DetectDotGit:          true,
-		EnableDotGitCommonDir: true,  // Critical for worktree support
+		EnableDotGitCommonDir: true, // Critical for worktree support
 	})
 	if err != nil {
 		t.Skipf("Not in a Git repository: %v. Initialize a Git repo or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true", err)
