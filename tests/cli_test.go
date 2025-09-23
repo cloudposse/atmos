@@ -468,7 +468,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		// Set skip reason instead of calling Fatal so tests run properly
 		skipReason = fmt.Sprintf("Failed to get current working directory: %v", err)
-		logger.Error("Failed to get current working directory", "error", err)
+		logger.Info("Tests will be skipped", "reason", skipReason)
 		// Run tests anyway - they'll skip themselves
 		exitCode := m.Run()
 		os.Exit(exitCode)
@@ -479,7 +479,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		// Set skip reason instead of calling Fatal so tests run properly
 		skipReason = fmt.Sprintf("Failed to locate git repository from dir: %s", startingDir)
-		logger.Error("Failed to locate git repository", "dir", startingDir, "error", err)
+		logger.Info("Tests will be skipped", "reason", skipReason)
 		// Run tests anyway - they'll skip themselves
 		exitCode := m.Run()
 		os.Exit(exitCode)
