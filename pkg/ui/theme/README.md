@@ -14,7 +14,7 @@ Each individual theme in the collection maintains its original creator's attribu
 ## Files
 
 - `theme.go` - Core theme structures and management
-- `registry.go` - Theme registry for loading and accessing themes  
+- `registry.go` - Theme registry for loading and accessing themes
 - `converter.go` - Converts terminal themes to glamour styles
 - `themes.json` - Embedded JSON file with 349 terminal themes
 - `LICENSE-THEMES` - Full attribution and license information

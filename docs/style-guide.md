@@ -274,14 +274,14 @@ func displayComponentInfo(name, stack string) {
         fmt.Printf("Stack: %s\n", stack)
         return
     }
-    
+
     // Use theme-aware styles
     fmt.Println(styles.Title.Render("Component Information"))
     fmt.Println()
-    
+
     fmt.Print(styles.Label.Render("Name:"))
     fmt.Printf(" %s\n", name)
-    
+
     fmt.Print(styles.Label.Render("Stack:"))
     fmt.Printf(" %s\n", stack)
 }
@@ -296,7 +296,7 @@ func reportOperationStatus(success bool, message string) {
         fmt.Println(message)
         return
     }
-    
+
     if success {
         fmt.Println(styles.Success.Render("✓ " + message))
     } else {
@@ -317,7 +317,7 @@ func displaySection(title string, items []string) {
         }
         return
     }
-    
+
     // Use Label style for section headers
     fmt.Println(styles.Label.Render(title + ":"))
     for _, item := range items {

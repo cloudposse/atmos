@@ -159,7 +159,7 @@ func formatUIElements(styles *theme.StyleSet) string {
 func formatMarkdownPreview(t *theme.Theme, _ *theme.StyleSet) string {
 	// Sample markdown content
 	markdownContent := `# Heading Level 1
-## Heading Level 2  
+## Heading Level 2
 ### Heading Level 3
 
 This is a paragraph with **bold text** and *italic text*.

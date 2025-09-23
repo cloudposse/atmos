@@ -30,8 +30,8 @@ SOFTWARE.
 
 Individual Theme Credits:
 -------------------------
-Each theme in themes.json includes its own credits in the meta.credits field, 
-attributing the original theme creators. These individual attributions are 
+Each theme in themes.json includes its own credits in the meta.credits field,
+attributing the original theme creators. These individual attributions are
 preserved and displayed when listing themes.
 
 The themes themselves come from various sources including but not limited to:
@@ -46,6 +46,6 @@ Modifications:
 
 Note:
 -----
-Theme creators retain all rights to their individual color schemes. This 
-collection is provided as a convenience for Atmos users to enhance their 
+Theme creators retain all rights to their individual color schemes. This
+collection is provided as a convenience for Atmos users to enhance their
 terminal experience.
