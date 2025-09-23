@@ -29,4 +29,3 @@ releases:
         - path: spec/template/metadata/annotations
           create: true
     values:
-      

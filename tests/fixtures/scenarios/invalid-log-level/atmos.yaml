@@ -5,4 +5,4 @@ logs:
 stacks:
   base_path: stacks
   included_paths:
-    - "**/*" 
+    - "**/*"

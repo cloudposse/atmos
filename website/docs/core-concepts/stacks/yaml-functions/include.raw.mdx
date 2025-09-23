@@ -41,10 +41,10 @@ components:
       vars:
         # Kubernetes manifest template as string
         manifest_template: !include.raw k8s-deployment-template.yaml
-        
+
         # JSON config template for interpolation
         config_template: !include.raw config-template.json
-        
+
         # Terraform HCL template
         tf_template: !include.raw module-template.tf
 ```
@@ -58,7 +58,7 @@ metadata:
   # Include markdown documentation
   readme: !include.raw README.md
   changelog: !include.raw CHANGELOG.md
-  
+
   # Include shell scripts
   install_script: !include.raw ./scripts/install.sh
   deploy_script: !include.raw ./scripts/deploy.sh
@@ -72,10 +72,10 @@ When you need to preserve the exact formatting of a file:
 vars:
   # Preserve JSON formatting for display or logging
   example_config: !include.raw example-config.json
-  
+
   # Keep YAML with comments intact
   annotated_yaml: !include.raw annotated-config.yaml
-  
+
   # Include HCL with original formatting
   terraform_example: !include.raw example.tf
 ```
@@ -91,7 +91,7 @@ components:
       vars:
         # Pass JSON config as string to Terraform
         json_config_string: !include.raw app-config.json
-        
+
         # YAML config for base64 encoding
         yaml_config_string: !include.raw settings.yaml
 ```
@@ -104,13 +104,13 @@ The `!include.raw` function works with all remote sources supported by `!include
 vars:
   # GitHub raw content
   remote_template: !include.raw https://raw.githubusercontent.com/org/repo/main/template.yaml
-  
+
   # S3 bucket files
   s3_script: !include.raw s3://my-bucket/scripts/deploy.sh
-  
+
   # Google Cloud Storage
   gcs_config: !include.raw gcs://my-bucket/configs/app.json
-  
+
   # With query parameters (extension detection ignores query strings)
   versioned_template: !include.raw https://api.example.com/template.yaml?version=2
 ```
@@ -143,7 +143,7 @@ components:
         # Parsed as JSON object
         config_parsed: !include config.json
         # Result: {database: {host: localhost, port: 5432}}
-        
+
         # Raw string
         config_string: !include.raw config.json
         # Result: '{"database":{"host":"localhost","port":5432}}'
@@ -161,7 +161,7 @@ vars:
   # ❌ YQ expressions are not supported with !include.raw
   # This will fail - !include.raw does not process YQ expressions
   invalid: !include.raw config.json .database.host
-  
+
   # ✅ Use regular !include for YQ expressions
   valid: !include config.json .database.host
 ```

@@ -13,8 +13,8 @@ var (
 
 Example usage:
   atmos packer inspect <component> --stack <stack>
-  atmos packer inspect <component> --stack <stack> --template <template> 
-  atmos packer inspect <component> -s <stack> --t <template> 
+  atmos packer inspect <component> --stack <stack> --template <template>
+  atmos packer inspect <component> -s <stack> --t <template>
 `
 )
 
