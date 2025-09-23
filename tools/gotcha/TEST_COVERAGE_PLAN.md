@@ -92,7 +92,7 @@ func TestFunction(t *testing.T) {
     // Setup
     originalValue := packageVariable
     defer func() { packageVariable = originalValue }()
-    
+
     // Test
     // ...
 }
@@ -110,7 +110,7 @@ func TestFunction(t *testing.T) {
         {"valid input", "input", "output", false},
         {"invalid input", "", "", true},
     }
-    
+
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             got, err := Function(tt.input)

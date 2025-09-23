@@ -129,7 +129,7 @@ filter:
   # Regex patterns to include packages (default: include all)
   include:
     - ".*"
-  
+
   # Regex patterns to exclude packages
   exclude: []
     # Example exclusions:

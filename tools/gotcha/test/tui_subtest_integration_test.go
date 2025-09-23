@@ -287,7 +287,7 @@ func TestTableDriven(t *testing.T) {
 		{"case4", 4},
 		{"case5", 5},
 	}
-	
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Logf("test case: %v", tc.val)

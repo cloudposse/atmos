@@ -110,7 +110,7 @@ func processEvent(event Event) error {
     if err := validateEvent(event); err != nil {
         return err
     }
-    
+
     switch event.Type {
     case PackageEvent:
         return handlePackageEvent(event)
@@ -119,7 +119,7 @@ func processEvent(event Event) error {
     case OutputEvent:
         return handleOutputEvent(event)
     }
-    
+
     return nil
 }
 
@@ -152,15 +152,15 @@ func process(data *Data) error {
     if data == nil {
         return errors.New("data is nil")
     }
-    
+
     if !data.IsValid() {
         return errors.New("invalid data")
     }
-    
+
     if data.Type == "special" {
         return processSpecial(data)
     }
-    
+
     return processNormal(data)
 }
 ```

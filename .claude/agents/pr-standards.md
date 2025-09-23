@@ -86,7 +86,7 @@ This agent helps create and validate pull requests according to the project's co
 - Include implementation details when they help understand the change
 - Describe the end state, not the development journey
 
-## why  
+## why
 - Business justification for the changes
 - Explain why these changes solve the problem
 - Use bullet points for clarity
@@ -114,7 +114,7 @@ This agent helps create and validate pull requests according to the project's co
 **DO NOT include:**
 - ❌ Bugs you introduced and fixed within the same PR
 - ❌ "Fixed missing flags" (if YOU removed them earlier in the PR)
-- ❌ "Restored functionality" (if YOU broke it earlier in the PR)  
+- ❌ "Restored functionality" (if YOU broke it earlier in the PR)
 - ❌ "Fixed compilation errors" (if YOUR changes caused them)
 - ❌ Any problem that didn't exist before you started work
 
@@ -298,10 +298,10 @@ When creating or updating a PR, the agent should:
    ```bash
    # For Go projects
    go build ./...
-   
+
    # For Atmos
    make build
-   
+
    # For gotcha
    cd tools/gotcha && go build ./cmd/gotcha
    ```
@@ -310,7 +310,7 @@ When creating or updating a PR, the agent should:
    ```bash
    # Run all tests
    go test ./...
-   
+
    # Or use make targets
    make test
    make testacc
@@ -320,7 +320,7 @@ When creating or updating a PR, the agent should:
    ```bash
    # Run linters
    make lint
-   
+
    # Or directly
    golangci-lint run
    ```
@@ -362,11 +362,11 @@ When pushing additional commits to an existing PR branch, the agent should:
    ## what
    - Refactored large files to meet lint requirements
    - Created new package structure for better organization
-   
+
    ## why
    - Files over 500 lines violate lint standards
    - Improves maintainability
-   
+
    ## references
    - Addresses `.golangci.yml` requirements
    ```
@@ -378,13 +378,13 @@ When pushing additional commits to an existing PR branch, the agent should:
    - Created new package structure for better organization
    - Added Claude agent and command for PR standards enforcement
    - Updated CLAUDE.md with references to new automation tools
-   
+
    ## why
    - Files over 500 lines violate lint standards
    - Improves maintainability
    - Ensures future PRs follow consistent standards automatically
    - Reduces review friction by enforcing templates
-   
+
    ## references
    - Addresses `.golangci.yml` requirements
    - Implements PR standards from CLAUDE.md

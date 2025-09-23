@@ -38,7 +38,7 @@ function Home() {
             <Screengrab title="Write your Components" command="# Then write your terraform root modules..." slug="demo-stacks/write-your-components" />
             <div className="section__description">
               <h2>Write your Components</h2>
-              <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy. 
+              <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy.
                  Use vendoring to pull down remote dependencies.</p>
               <Link to="/core-concepts/components" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>

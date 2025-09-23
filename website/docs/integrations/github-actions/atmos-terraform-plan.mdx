@@ -23,7 +23,7 @@ This GitHub Action incorporates superior GitOps support for Terraform by utilizi
 
 * **Implements Native GitOps** with Atmos and Terraform
 * **No hardcoded credentials.** Use GitHub OIDC to assume roles.
-* **Compatible with GitHub Cloud & Self-hosted Runners** for maximum flexibility. 
+* **Compatible with GitHub Cloud & Self-hosted Runners** for maximum flexibility.
 * **Beautiful Job Summaries** don't clutter up pull requests with noisy GitHub comments
 * **100% Open Source with Permissive APACHE2 License** means you have no expensive subscriptions or long-term commitments.
 
@@ -44,7 +44,7 @@ Furthermore, when a resource is marked for deletion, the Plan Summary will inclu
 
 ## Usage
 
-In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "plan" job, the "component" and "stack" are hardcoded (`foobar` and `plat-ue2-sandbox`). In practice, these are usually derived from another action. 
+In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "plan" job, the "component" and "stack" are hardcoded (`foobar` and `plat-ue2-sandbox`). In practice, these are usually derived from another action.
 
 :::tip Passing Affected Stacks
 
@@ -53,7 +53,7 @@ We recommend combining this action with the [`affected-stacks`](/integrations/gi
 :::
 
 
-<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-plan.yaml"/>
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/refs/heads/master/examples/legacy/snippets/.github/workflows/atmos-terraform-plan.yaml"/>
 
 :::info Why Do We have Two Workflows?
 
@@ -63,7 +63,7 @@ GitHub Actions support 256 matrix jobs in a single workflow at most! When planni
 
 :::
 
-<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-terraform-plan-matrix.yaml"/>
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/refs/heads/master/examples/legacy/snippets/.github/workflows/atmos-terraform-plan-matrix.yaml"/>
 
 with the following configuration as an example:
 
@@ -137,7 +137,7 @@ components:
         # This key (case-sensitive) is required for the cloudposse/github-action-terraform-plan-storage action
         hash_key: id
         range_key: ""
-        # Only these 2 attributes are required for creating the GSI, 
+        # Only these 2 attributes are required for creating the GSI,
         # but there will be several other attributes on the table itself
         dynamodb_attributes:
           - name: 'createdAt'

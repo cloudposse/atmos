@@ -86,7 +86,7 @@ jobs:
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}        
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.target }}
           path: |
@@ -236,8 +236,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make testacc-ci
-      
+          # Skip precondition checks in CI to ensure tests run and maintain coverage
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+        run: make testacc-cover
+
       # Setup tmate session for debugging after failure (activate by creating a label 'debug-on-failure' on the PR or enable-tmate=on-failure input)
       # Skip for bot accounts since they don't have SSH keys
       - name: Setup tmate session on failure

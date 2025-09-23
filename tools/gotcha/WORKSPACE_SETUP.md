@@ -30,7 +30,7 @@ use (
 
 This configuration ensures:
 1. ✅ Both modules can be developed together
-2. ✅ Dependencies are isolated between modules  
+2. ✅ Dependencies are isolated between modules
 3. ✅ No version conflicts between Atmos and gotcha
 4. ✅ Clean module boundaries while enabling local development
 

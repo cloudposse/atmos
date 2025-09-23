@@ -21,7 +21,7 @@
 
 #### [x] Create Constants Files:
 - [x] `cmd/gotcha/constants_internal.go`
-- [x] `internal/tui/constants.go` 
+- [x] `internal/tui/constants.go`
 - [x] `pkg/stream/constants.go`
 
 #### [x] Extract Constants:
@@ -133,7 +133,7 @@
 
 ### Current Issue Breakdown (248 total):
 - **revive**: 133 (-11) - mostly magic numbers, unexported returns
-- **nestif**: 32 (unchanged) - deeply nested if statements  
+- **nestif**: 32 (unchanged) - deeply nested if statements
 - **gocognit**: 25 (unchanged) - high cognitive complexity
 - **gocritic**: 15 (+2) - code style issues
 - **gofumpt**: 5 (-7) - formatting issues ✅
@@ -237,7 +237,7 @@
 
 ### Estimated Timeline:
 - **Quick Wins (1-4)**: 1-2 hours
-- **Medium Priority (5-7)**: 2-3 hours  
+- **Medium Priority (5-7)**: 2-3 hours
 - **Complex Refactoring (8-10)**: 8-12 hours
 - **Total**: ~15-20 hours of work
 

@@ -30,20 +30,20 @@ With its customizable features, you can design an automated workflow tailored to
 - **Informative PRs:** Link PRs to release notes for new components, providing easy access to relevant information, and use consistent naming for easy tracking.
 - **Scheduled Updates:** Run the action on a cron schedule tailored to your organization's needs, ensuring regular and efficient updates.
 
-Discover more details and a comprehensive list of `inputs` and `outputs` in the [GitHub Action repository](https://github.com/cloudposse/github-action-atmos-component-updater) on GitHub. 
+Discover more details and a comprehensive list of `inputs` and `outputs` in the [GitHub Action repository](https://github.com/cloudposse/github-action-atmos-component-updater) on GitHub.
 
 ## Usage Examples
 
 ### Workflow example
 
-<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/master/examples/snippets/.github/workflows/atmos-components-updater.yml" />
+<RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/refs/heads/master/examples/legacy/snippets/.github/workflows/atmos-components-updater.yml" />
 
 ### Requirements
 
 This action will automatically open pull requests for updated components in your repository.
 To use it, we recommend installing a GitHub App to allow GitHub Actions to create pull requests within your GitHub Organization.
 
-<Step> 
+<Step>
   #### <StepNumber/> Create and install a GitHub App
 
   Follow the [Using a GitHub App](#using-a-github-app) steps below.
@@ -54,7 +54,7 @@ To use it, we recommend installing a GitHub App to allow GitHub Actions to creat
   If you're using GitHub Enterprise, first update this setting under "enterprises". The setting for the Organization will not be available until it's allowed for the Enterprise.
   `https://github.com/enterprises/YOUR_ORG/settings/actions`
 
-  In either case, then enable the setting for your "organization": 
+  In either case, then enable the setting for your "organization":
   `https://github.com/organizations/YOUR_ORG/settings/actions`
 
   1. Find the section called "Workflow permissions"
@@ -63,10 +63,10 @@ To use it, we recommend installing a GitHub App to allow GitHub Actions to creat
 <Step>
   #### <StepNumber/> Allow GitHub Actions to create and approve pull requests
 
-  Again, if you're using GitHub Enterprise first update this setting under "enterprises": 
+  Again, if you're using GitHub Enterprise first update this setting under "enterprises":
   `https://github.com/enterprises/YOUR_ORG/settings/actions`
 
-  In either case, then enable the setting for your "organization": 
+  In either case, then enable the setting for your "organization":
   `https://github.com/organizations/YOUR_ORG/settings/actions`
 
   1. Check "Allow GitHub Actions to create and approve pull requests"

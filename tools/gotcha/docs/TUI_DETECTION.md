@@ -20,12 +20,12 @@ func IsTTY() bool {
     if config.ForceNoTTY() {
         return false
     }
-    
+
     // Check all three file descriptors
     stdoutTTY := isatty.IsTerminal(os.Stdout.Fd())
     stdinTTY := isatty.IsTerminal(os.Stdin.Fd())
     stderrTTY := isatty.IsTerminal(os.Stderr.Fd())
-    
+
     // All three must be TTY for TUI mode
     return stdoutTTY && stdinTTY && stderrTTY
 }

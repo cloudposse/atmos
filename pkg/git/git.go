@@ -11,7 +11,7 @@ func GetLocalRepo() (*git.Repository, error) {
 
 	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
 		DetectDotGit:          true,
-		EnableDotGitCommonDir: false,
+		EnableDotGitCommonDir: true, // Enable worktree support
 	})
 	if err != nil {
 		return nil, err
@@ -102,4 +102,19 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 	}
 
 	return response, nil
+}
+
+// OpenWorktreeAwareRepo opens a Git repository at the given path,
+// handling both regular repositories and worktrees correctly.
+// It uses EnableDotGitCommonDir to properly support worktrees with
+// access to the main repository's config, remotes, and references.
+func OpenWorktreeAwareRepo(path string) (*git.Repository, error) {
+	// Always try with EnableDotGitCommonDir first
+	// This works for both regular repos and worktrees
+	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{
+		DetectDotGit:          false, // We want exact path, not parent search
+		EnableDotGitCommonDir: true,  // Enable worktree support for config/remotes
+	})
+
+	return repo, err
 }

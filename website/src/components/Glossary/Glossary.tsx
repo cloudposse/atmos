@@ -45,7 +45,7 @@ const Glossary = () => {
                                 {Object.entries(content[key].metadata.disambiguation).map(([term, desc]) => {
                                     return (
                                         <Link to={withBaseUrl('terms/' + term)}>{desc}</Link>
-                                    )       
+                                    )
                                 })}
                             </dd>
                         )}

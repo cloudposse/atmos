@@ -43,6 +43,11 @@
 **/cache.*.txt
 .gotcha/cache.yaml
 
+# Development configs - track only specific files
+.atmos.d/*
+!.atmos.d/dev.yaml
+!.atmos.d/README.md
+
 # Ignore components vendored during tests
 examples/demo-vendoring/components/**
 tests/fixtures/scenarios/vendor-globs/components/**

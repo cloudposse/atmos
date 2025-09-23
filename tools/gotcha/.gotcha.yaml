@@ -32,7 +32,7 @@ log:
 test:
   # Timeout for tests (e.g., "30m", "1h")
   timeout: 30m
-  
+
   # Number of parallel test executions
   # Set to 0 for default (number of CPUs)
   parallel: 0
@@ -41,10 +41,10 @@ test:
 coverage:
   # Enable coverage reporting
   enabled: true
-  
+
   # Coverage profile output file
   profile: coverage.out
-  
+
   # Minimum coverage percentage required
   # Tests will fail if coverage is below this threshold
   threshold: 0
@@ -54,7 +54,7 @@ github:
   # Enable GitHub Actions specific features
   # NOTE: This enables GitHub Actions features when running in GitHub Actions environment
   actions: true
-  
+
   # Create step summary when running in GitHub Actions
   step_summary: true
 
@@ -62,7 +62,7 @@ github:
 tui:
   # Enable terminal bell alerts in TUI mode
   alert: true
-  
+
   # Color profile for terminal output
   # Options: auto, always, never
   colors: auto

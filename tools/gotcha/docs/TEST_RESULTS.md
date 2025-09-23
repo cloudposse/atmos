@@ -19,28 +19,28 @@ All tests correctly fail, confirming the bug:
 ## What Each Test Verifies
 
 ### 1. `TestSubtestsAreInTestOrder` ❌ FAILS
-**Expected:** Subtests should be included in `TestOrder` for display  
-**Actual:** Only parent test is in `TestOrder` (1 item instead of 4)  
+**Expected:** Subtests should be included in `TestOrder` for display
+**Actual:** Only parent test is in `TestOrder` (1 item instead of 4)
 **Evidence:** `TestOrder` contains `["TestParent"]` but should contain all 4 tests including subtests
 
-### 2. `TestCountMatchesDisplay` ❌ FAILS  
-**Expected:** Number of displayable tests should match total tests run (11)  
-**Actual:** Only 3 tests are in `TestOrder` (only top-level tests)  
+### 2. `TestCountMatchesDisplay` ❌ FAILS
+**Expected:** Number of displayable tests should match total tests run (11)
+**Actual:** Only 3 tests are in `TestOrder` (only top-level tests)
 **Evidence:** 11 tests run, but only 3 would be displayed
 
 ### 3. `TestAllTestsAreDisplayed` ❌ FAILS
-**Expected:** All test names should appear in display output  
-**Actual:** Subtests are not shown in the display  
+**Expected:** All test names should appear in display output
+**Actual:** Subtests are not shown in the display
 **Evidence:** Display output missing subtest names like "empty_input", "valid_input", etc.
 
 ### 4. `TestPackagesWithOnlySubtestsShowTests` ❌ FAILS
-**Expected:** Packages with only subtests should still show test names  
-**Actual:** Package shows as blank or "No tests"  
+**Expected:** Packages with only subtests should still show test names
+**Actual:** Package shows as blank or "No tests"
 **Evidence:** `TestOrder` is empty (0 items) when it should have 5 subtests
 
 ### 5. `TestTotalCountAccuracy` ✅ PASSES
-**Purpose:** Ensures the counting logic is correct (this part works)  
-**Result:** The total count correctly includes all subtests  
+**Purpose:** Ensures the counting logic is correct (this part works)
+**Result:** The total count correctly includes all subtests
 **Note:** This is why users see "Total: 1764" but only a few test names
 
 ## The Core Problem
@@ -76,7 +76,7 @@ But in the output:
 ▶ github.com/cloudposse/atmos/pkg/config
   [blank - no test names shown]
 
-▶ github.com/cloudposse/atmos/internal/exec  
+▶ github.com/cloudposse/atmos/internal/exec
   ✔ All 5 tests passed    <-- Just a summary, no test names
 ```
 
@@ -94,7 +94,7 @@ go test -v ./internal/tui -run TestSubtestsAreInTestOrder
 
 When the bug is fixed, all tests should pass:
 - Subtests will be in `TestOrder`
-- Display count will match actual test count  
+- Display count will match actual test count
 - All test names will be visible in output
 - Packages with only subtests will show test details
 

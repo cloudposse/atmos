@@ -219,19 +219,19 @@ experience with intuitive visual feedback and comprehensive test result analysis
   gotcha ./tests
   gotcha stream --packages="./..." --show=failed
   gotcha stream --packages="./pkg/..." --timeout=5m
-  
+
   # Run specific tests using -run flag
   gotcha -- -run TestConfigLoad
   gotcha -- -run "TestConfig.*" -v
   gotcha stream -- -run TestStackProcess -race
-  
-  # Process existing JSON results  
+
+  # Process existing JSON results
   go test -json ./... | gotcha parse
   gotcha parse --input=test-results.json --format=markdown
-  
+
   # Generate GitHub step summaries
   gotcha stream --format=github --output=step-summary.md
-  
+
   # Advanced filtering and configuration
   gotcha stream --include=".*api.*" --exclude=".*mock.*" -- -race -short`,
 		Args: cobra.ArbitraryArgs,

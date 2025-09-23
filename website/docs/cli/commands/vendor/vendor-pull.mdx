@@ -29,7 +29,7 @@ With Atmos vendoring, you can copy components and other artifacts from the follo
 Execute the `vendor pull` command like this:
 
 ```shell
-atmos vendor pull 
+atmos vendor pull
 atmos vendor pull --everything
 atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
@@ -110,10 +110,10 @@ The following config can be used to download the `vpc` component from an AWS pub
 
 ## Vendoring from SSH
 
-Atmos supports SSH for accessing non-public Git repositories, which is convenient for local development. Atmos will use any installed SSH keys automatically. 
+Atmos supports SSH for accessing non-public Git repositories, which is convenient for local development. Atmos will use any installed SSH keys automatically.
 
-:::tip  
-In automated systems like GitHub Actions, we recommend sticking with the `https://` scheme for vendoring. Atmos will automatically inject the `GITHUB_TOKEN`.  
+:::tip
+In automated systems like GitHub Actions, we recommend sticking with the `https://` scheme for vendoring. Atmos will automatically inject the `GITHUB_TOKEN`.
 :::
 
 There are two primary ways to specify an SSH source.
@@ -222,7 +222,7 @@ When resolving Git sources, Atmos follows these rules:
 
 :::note
 For more details on configuration, refer to [Atmos Configuration](/cli/configuration).
- 
+
 :::
 
 
@@ -233,7 +233,7 @@ Run `atmos vendor pull --help` to see all the available options
 ## Examples
 
 ```shell
-atmos vendor pull 
+atmos vendor pull
 atmos vendor pull --everything
 atmos vendor pull --component vpc
 atmos vendor pull -c vpc-flow-logs-bucket

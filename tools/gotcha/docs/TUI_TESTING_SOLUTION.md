@@ -18,7 +18,7 @@ The AI agent (and other headless environments) cannot test TUI mode because:
 
 Changed verbose mode selection logging from `logger.Warn` to `logger.Debug`:
 - `tools/gotcha/cmd/gotcha/stream_orchestrator.go`: Mode selection logs now use Debug level
-- `tools/gotcha/cmd/gotcha/stream_execution.go`: TUI confirmation now uses Debug level  
+- `tools/gotcha/cmd/gotcha/stream_execution.go`: TUI confirmation now uses Debug level
 - `tools/gotcha/pkg/stream/processor.go`: Removed stderr confirmation message
 
 ### 2. WithoutRenderer Mode (Completed)

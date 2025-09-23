@@ -13,6 +13,13 @@ import (
 // avoid copying large structs and to allow tests to modify it.
 type TelemetryClientProvider func(string, *posthog.Config) (posthog.Client, error)
 
+// Options contains optional configuration for telemetry.
+type Options struct {
+	Endpoint   string // PostHog endpoint URL
+	DistinctID string // Unique identifier for the user/instance
+	Logging    bool   // Whether PostHog internal logging is enabled
+}
+
 // PosthogClientProvider is the default implementation of TelemetryClientProvider
 // that creates a real PostHog client using the provided token and configuration.
 // PosthogClientProvider is the default implementation of TelemetryClientProvider
@@ -29,18 +36,20 @@ type Telemetry struct {
 	token          string                  // PostHog API token for authentication
 	endpoint       string                  // PostHog endpoint URL
 	distinctId     string                  // Unique identifier for the user/instance
+	logging        bool                    // Whether PostHog internal logging is enabled
 	clientProvider TelemetryClientProvider // Function to create PostHog client
 }
 
 // NewTelemetry creates a new Telemetry instance with the specified configuration.
 // The clientProvider parameter allows for dependency injection, making it easier
 // to test the telemetry system with mock clients.
-func NewTelemetry(isEnabled bool, token string, endpoint string, distinctId string, clientProvider TelemetryClientProvider) *Telemetry {
+func NewTelemetry(isEnabled bool, token string, opts Options, clientProvider TelemetryClientProvider) *Telemetry {
 	return &Telemetry{
 		isEnabled:      isEnabled,
 		token:          token,
-		endpoint:       endpoint,
-		distinctId:     distinctId,
+		endpoint:       opts.Endpoint,
+		distinctId:     opts.DistinctID,
+		logging:        opts.Logging,
 		clientProvider: clientProvider,
 	}
 }
@@ -58,15 +67,31 @@ func (t *Telemetry) Capture(eventName string, properties map[string]interface{})
 		return false
 	}
 
-	// Create PostHog client using the provided client provider
+	// Create PostHog client using the provided client provider with custom logger
+	// This ensures PostHog errors don't leak to stdout/stderr
+	// Select logger based on logging configuration
+	var logger posthog.Logger
+	if t.logging {
+		logger = NewPosthogLogger() // Use our custom logger adapter that routes to Atmos logging
+	} else {
+		logger = NewSilentLogger() // Completely suppress PostHog internal logging
+	}
+
 	client, err := t.clientProvider(t.token, &posthog.Config{
 		Endpoint: t.endpoint,
+		Logger:   logger,
 	})
 	if err != nil {
-		log.Error("Could not create PostHog client", "error", err)
+		// Log at debug level to avoid polluting user output with telemetry errors
+		log.Debug("Could not create PostHog client", "error", err)
 		return false
 	}
-	defer client.Close()
+	defer func() {
+		// Ensure client close doesn't panic or output errors
+		if client != nil {
+			client.Close()
+		}
+	}()
 
 	// TODO: PostHog Enqueue always returns nil, but we still check errors
 	// to handle them if posthog go lib will return them in the future
@@ -76,9 +101,11 @@ func (t *Telemetry) Capture(eventName string, properties map[string]interface{})
 		Properties: properties,
 	})
 	if err != nil {
-		log.Error("Could not enqueue event", "error", err)
+		// Log at debug level to avoid polluting user output with telemetry errors
+		log.Debug("Could not enqueue event", "error", err)
 		return false
 	}
-	log.Debug("Telemetry event captured")
+	// Note: Event is only sent when client.Close() is called in the deferred function
+	log.Debug("Telemetry event enqueued")
 	return true
 }

@@ -52,7 +52,7 @@ export GOTCHA_FORCE_TTY=true
 gotcha stream
 
 # Force non-TTY mode (headless)
-export GOTCHA_FORCE_NO_TTY=true  
+export GOTCHA_FORCE_NO_TTY=true
 gotcha stream
 
 # Or use explicit flags (coming soon)
@@ -133,7 +133,7 @@ gotcha
 # Test specific packages
 gotcha ./pkg/utils ./internal/...
 
-# Show only failed tests with custom timeout  
+# Show only failed tests with custom timeout
 gotcha stream --show=failed --timeout=10m
 
 # Apply package filters
@@ -291,7 +291,7 @@ Configure coverage behavior in `.gotcha.yaml`:
 coverage:
   enabled: true
   profile: coverage.out
-  
+
   analysis:
     functions: true      # Show function-level coverage
     statements: true     # Show statement coverage summary
@@ -299,12 +299,12 @@ coverage:
     exclude:
       - "**/mock*.go"    # Exclude mock files
       - "**/*_test.go"   # Exclude test files
-  
+
   output:
     terminal:
       format: summary    # summary, detailed, or none
       show_uncovered: 10 # Number of uncovered functions to show
-  
+
   thresholds:
     total: 80           # Minimum required coverage percentage
     fail_under: true    # Fail tests if below threshold
@@ -385,7 +385,7 @@ log:
 test:
   # Timeout for tests (e.g., "30m", "1h")
   timeout: 30m
-  
+
   # Number of parallel test executions
   # Set to 0 for default (number of CPUs)
   parallel: 0
@@ -394,41 +394,41 @@ test:
 coverage:
   # Enable coverage collection and analysis
   enabled: true
-  
+
   # Coverage profile output file
   profile: coverage.out
-  
+
   # Coverage analysis options
   analysis:
     # Run 'go tool cover -func' after tests to show function coverage
     functions: true
-    
+
     # Show statement coverage summary
     statements: true
-    
+
     # Show only uncovered code (helpful for finding gaps)
     uncovered: false
-    
+
     # Exclude files from analysis (glob patterns)
     exclude:
       - "**/mock*.go"
       - "**/*_test.go"
-  
+
   # Coverage output formats
   output:
     # Terminal output settings
     terminal:
       # Format: summary, detailed, or none
       format: summary
-      
+
       # Show top N uncovered functions
       show_uncovered: 10
-  
+
   # Coverage thresholds
   thresholds:
     # Overall coverage threshold (0 = disabled)
     total: 0
-    
+
     # Fail tests if below threshold
     fail_under: false
 
@@ -437,7 +437,7 @@ github:
   # Enable GitHub Actions specific features
   # NOTE: This enables GitHub Actions features when running in GitHub Actions environment
   actions: true
-  
+
   # Create step summary when running in GitHub Actions
   step_summary: true
 
@@ -445,7 +445,7 @@ github:
 tui:
   # Enable terminal bell alerts in TUI mode
   alert: true
-  
+
   # Color profile for terminal output
   # Options: auto, always, never
   colors: auto
@@ -454,11 +454,11 @@ tui:
 vcs:
   # Platform: github, gitlab, bitbucket, azuredevops
   platform: github
-  
+
   # Comment posting strategy
   # Options: always, never, adaptive, on-failure, on-skip, <platform>
   post-comment: adaptive
-  
+
   # Generate job summary (for GitHub Actions)
   generate-summary: true
 
@@ -466,7 +466,7 @@ vcs:
 cache:
   # Enable test count caching
   enabled: true
-  
+
   # Cache expiration time
   max-age: 24h
 
@@ -475,7 +475,7 @@ filter:
   # Regular expressions to include packages
   include:
     - ".*"
-  
+
   # Regular expressions to exclude packages
   exclude: []
 
@@ -593,7 +593,7 @@ Gotcha supports multiple VCS platforms through a provider-based architecture:
 
 - **GitHub Actions** - Full support for PR comments and job summaries
 - **GitLab CI** - Coming soon
-- **Bitbucket Pipelines** - Coming soon  
+- **Bitbucket Pipelines** - Coming soon
 - **Azure DevOps** - Coming soon
 
 Force a specific platform:
@@ -619,7 +619,7 @@ export GOTCHA_VCS_PLATFORM=github
 strategy:
   matrix:
     os: [ubuntu-latest, windows-latest, macos-latest]
-    
+
 steps:
   - name: Run tests
     env:
@@ -710,7 +710,7 @@ Gotcha provides rich visual feedback during test execution with a carefully desi
 
 #### Test Status Symbols
 - ✔ **Pass**: Green color for immediate success identification
-- ✘ **Fail**: Red color for immediate failure identification  
+- ✘ **Fail**: Red color for immediate failure identification
 - ⊘ **Skip**: Amber/orange color for skipped test identification
 
 #### Subtest Visualization
@@ -727,7 +727,7 @@ Gotcha provides rich visual feedback during test execution with a carefully desi
 ### Progress Indicators
 
 - **Real-time Progress Bar** (TUI mode) - Visual test completion percentage
-- **Test Counters** - Running tally of passed/failed/skipped tests  
+- **Test Counters** - Running tally of passed/failed/skipped tests
 - **Elapsed Time** - Live timer showing test execution duration
 - **Spinner Animation** - Visual feedback during test execution
 - **Mini Progress Dots** - Colored dots representing subtest progress (up to 10 dots max)
@@ -766,7 +766,7 @@ Gotcha provides rich visual feedback during test execution with a carefully desi
 
 #### Color Control
 - **CLI Flag**: `--no-color` disables all color output
-- **Environment Variables**: 
+- **Environment Variables**:
   - `NO_COLOR=1` to disable colors globally
   - `FORCE_COLOR=1/2/3` to force ANSI/ANSI256/TrueColor
 - **Default Behavior**: Colors enabled by default, even when piping
@@ -794,7 +794,7 @@ Gotcha implements an intelligent caching system to improve performance and user 
 
 #### Cache Invalidation
 - **Timestamp-based expiration** - Entries expire after max age
-- **go.mod tracking** - Invalidate when go.mod modification time changes  
+- **go.mod tracking** - Invalidate when go.mod modification time changes
 - **Manual invalidation** - Use `--no-cache` flag when needed
 - **Automatic cleanup** - Remove stale entries on save
 
@@ -811,7 +811,7 @@ Gotcha implements an intelligent caching system to improve performance and user 
 
 ## Summary
 - ✅ **Passed**: 156 tests
-- ❌ **Failed**: 2 tests  
+- ❌ **Failed**: 2 tests
 - ⏭️ **Skipped**: 1 test
 - ⏱️ **Duration**: 45.2s
 
@@ -850,7 +850,7 @@ Exit codes:
 gotcha draws inspiration from several excellent Go testing tools:
 
 - **[gotestdox](https://github.com/bitfield/gotestdox)** - BDD-style test runner that converts Go test function names into readable specifications
-- **[gotest](https://github.com/rakyll/gotest)** - Colorized `go test` output with enhanced readability and formatting  
+- **[gotest](https://github.com/rakyll/gotest)** - Colorized `go test` output with enhanced readability and formatting
 - **[gotestsum](https://github.com/gotestyourself/gotestsum)** - Advanced test runner with multiple output formats and JUnit XML support
 
 Each of these tools brings unique strengths to Go testing, and gotcha aims to combine the best aspects: real-time progress tracking, beautiful terminal output, flexible formatting options, and comprehensive test result analysis.

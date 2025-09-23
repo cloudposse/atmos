@@ -41,19 +41,19 @@ func createStreamCommand(logger *log.Logger) *cobra.Command {
 This is the default command when running gotcha without arguments.`,
 		Example: `  # Run all tests with default settings
   gotcha stream
-  
-  # Test specific packages  
+
+  # Test specific packages
   gotcha stream ./pkg/utils ./internal/...
-  
+
   # Show only failed tests with custom timeout
   gotcha stream --show=failed --timeout=10m
-  
+
   # Apply package filters
   gotcha stream --include=".*api.*" --exclude=".*mock.*"
-  
+
   # Pass arguments to go test
   gotcha stream -- -race -short -count=3
-  
+
   # Run specific tests using -run flag
   gotcha stream -- -run TestConfigLoad
   gotcha stream -- -run "TestConfig.*" -v

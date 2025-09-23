@@ -1,9 +1,9 @@
 package stream
 
 import (
-	"context"
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,8 +11,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
-	"syscall"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
@@ -234,7 +234,7 @@ func extractExitCode(err error) int {
 	if err == nil {
 		return 0
 	}
-	
+
 	// Check for ExitError to get the actual exit code
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		// Check if process was terminated by signal (Unix-like systems)
@@ -249,7 +249,7 @@ func extractExitCode(err error) int {
 		}
 		return exitErr.ExitCode()
 	}
-	
+
 	// Default to 1 for other errors
 	return 1
 }
@@ -311,15 +311,17 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 				interruptedMutex.Lock()
 				interrupted = true
 				interruptedMutex.Unlock()
-				
+
 				// Cancel context to signal subprocess
 				cancel()
-				
+
 				// Print abort message
 				writer.PrintUI("\n\n\033[1;31m✗ Test run aborted\033[0m\n")
-				
+
 				// Forward signal to the process group
-				if cmd.Process != nil { killProcessGroup(cmd.Process.Pid) }
+				if cmd.Process != nil {
+					killProcessGroup(cmd.Process.Pid)
+				}
 			}
 		case <-ctx.Done():
 			// Context cancelled, exit goroutine
@@ -345,8 +347,8 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 
 	// Stop listening for signals and cleanup
 	signal.Stop(sigChan)
-	cancel() // Cancel context to stop signal goroutine
-	close(sigChan) // Close channel to unblock goroutine
+	cancel()        // Cancel context to stop signal goroutine
+	close(sigChan)  // Close channel to unblock goroutine
 	signalWg.Wait() // Wait for signal goroutine to exit
 
 	// Check if interrupted
@@ -372,7 +374,7 @@ func RunTestsWithSimpleStreaming(testArgs []string, outputFile, showFilter strin
 	case testErr != nil:
 		// Extract exit code with better handling
 		exitCode = extractExitCode(testErr)
-		
+
 		// Special handling for CI environments where go test -json may exit 1 even with passing tests
 		if exitCode == 1 && processor.failed == 0 && processor.passed > 0 {
 			// In CI, this often happens due to pipe closure or stderr issues

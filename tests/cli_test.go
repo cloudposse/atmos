@@ -41,6 +41,7 @@ var (
 	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 	startingDir         string
 	snapshotBaseDir     string
+	repoRoot            string // Repository root directory for path normalization and binary checks
 	skipReason          string // Package-level variable to track why tests should be skipped
 )
 
@@ -245,7 +246,7 @@ func (pm *PathManager) Apply() error {
 	return os.Setenv("PATH", pm.GetPath())
 }
 
-// Determine if running in a CI environment
+// Determine if running in a CI environment.
 func isCIEnvironment() bool {
 	// Check for common CI environment variables
 	// Note, that the CI variable has many possible truthy values, so we check for any non-empty value that is not "false".
@@ -343,6 +344,11 @@ func sanitizeOutput(output string) (string, error) {
 	// 7. Remove the random number added to file name like `atmos-import-454656846`
 	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
+
+	// 8. Mask PostHog tokens to prevent real tokens from appearing in snapshots.
+	// Match any token starting with phc_ followed by alphanumeric characters and underscores.
+	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
+	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
 	return result, nil
 }
@@ -461,7 +467,6 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
-	var repoRoot string
 
 	// Capture the starting working directory
 	startingDir, err = os.Getwd()
@@ -612,6 +617,19 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Include the system PATH in the test environment
 	tc.Env["PATH"] = os.Getenv("PATH")
+
+	// Set the test Git root to a clean temporary directory
+	// This makes each test scenario act as if it's its own Git repository
+	// preventing the actual repository's .atmos.d from being loaded
+	// This is especially important for tests that use workdir: "../"
+	testGitRoot := filepath.Join(tempDir, "mock-git-root")
+	if err := os.MkdirAll(testGitRoot, 0o755); err == nil {
+		tc.Env["TEST_GIT_ROOT"] = testGitRoot
+	}
+
+	// Also set an environment variable to exclude the repository's .atmos.d
+	// This is needed for tests that change to parent directories
+	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.

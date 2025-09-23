@@ -1,0 +1,46 @@
+repos:
+  # Go-specific hooks
+  - repo: https://github.com/tekwizely/pre-commit-golang
+    rev: v1.0.0-rc.1
+    hooks:
+      - id: go-fumpt
+        args: [-w]
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
+
+      # Disabled go-build-mod because it doesn't work with go.work files
+      # The code is built and tested in CI anyway
+      #- id: go-build-mod
+      #  name: Check Go build
+      #  description: Ensure code compiles before commit
+
+      - id: go-mod-tidy
+        name: Tidy go.mod
+        description: Ensure go.mod and go.sum are clean
+
+  # Run golangci-lint using system binary to avoid Go 1.25 compatibility issues
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        description: Run golangci-lint on modified Go files
+        entry: golangci-lint run --new-from-rev=origin/main --config=.golangci.yml
+        language: system
+        types: [go]
+        pass_filenames: false
+        require_serial: true
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
+
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
+      - id: end-of-file-fixer
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
+      - id: check-yaml
+        exclude: ^(vendor/|tests/fixtures/scenarios/complete/stacks/catalog/invalid-yaml-and-schema/|tests/fixtures/scenarios/invalid-stacks/|tests/fixtures/scenarios/complete/components/helmfile/)
+        args: [--allow-multiple-documents, --unsafe]
+      - id: check-added-large-files
+        args: [--maxkb=500]
+        exclude: ^(docs/demo.gif|website/)
