@@ -67,6 +67,16 @@ func LoadCache() (CacheConfig, error) {
 		return cfg, nil
 	}
 
+	// Use file locking to prevent reading while another process is writing
+	lock := flock.New(cacheFile)
+	err = lock.RLock() // Use read lock to allow concurrent reads
+	if err != nil {
+		return cfg, errors.Wrap(err, "error acquiring read lock")
+	}
+	defer func() {
+		_ = lock.Unlock()
+	}()
+
 	v := viper.New()
 	v.SetConfigFile(cacheFile)
 	if err := v.ReadInConfig(); err != nil {
