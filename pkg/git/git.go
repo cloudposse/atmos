@@ -122,11 +122,11 @@ type DefaultGitRepo struct{}
 func (d *DefaultGitRepo) GetLocalRepoInfo() (*RepoInfo, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get local repository: %v", errUtils.ErrFailedToGetLocalRepo, err)
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, fmt.Errorf("failed to get local repository: %w", err))
 	}
 	info, err := GetRepoInfo(repo)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get repository info: %v", errUtils.ErrFailedToGetRepoInfo, err)
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, fmt.Errorf("failed to get repository info: %w", err))
 	}
 	return &info, nil
 }
@@ -142,7 +142,7 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 		} else {
 			repoPath = "unknown"
 		}
-		return RepoInfo{}, fmt.Errorf("%w: GetRepoInfo failed for repo %s: %v", errUtils.ErrFailedToGetRepoInfo, repoPath, err)
+		return RepoInfo{}, fmt.Errorf("%w: GetRepoInfo failed for repo %s: %w", errUtils.ErrFailedToGetRepoInfo, repoPath, err)
 	}
 	return info, nil
 }
