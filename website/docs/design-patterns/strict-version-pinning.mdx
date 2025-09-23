@@ -68,9 +68,23 @@ At scale, maintaining individual pins creates significant overhead:
 
 When implementing strict version pinning in Atmos:
 
-### 1. Place Version Pins in Stack Configuration
+### 1. Pin Versions Through Vendoring
 
-Each stack explicitly declares component versions:
+With strict version pinning, components are vendored at specific versions:
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: "github.com/acme/terraform-components.git//modules/vpc?ref={{.Version}}"
+      version: "v1.12.3"  # Strict pin for production
+      targets:
+        - "components/terraform/vpc"
+```
+</File>
 
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
@@ -78,16 +92,13 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc  # Points to vendored component at v1.12.3
       vars:
         name: "prod-vpc"
         cidr_block: "10.0.0.0/16"
       settings:
         # CRITICAL: Don't include version in workspace_key_prefix
         workspace_key_prefix: "prod/vpc"
-      source:
-        # Pin to specific version
-        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.3"
 ```
 </File>
 
@@ -219,6 +230,30 @@ components:
 ```
 </File>
 
+To use different versions per environment, update the vendor configuration:
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    # Different environments vendor different versions
+    - component: vpc
+      source: "github.com/acme/terraform-components.git//modules/vpc?ref=v1.13.0"
+      targets:
+        - "components/terraform/vpc-dev"  # Dev-specific vendor
+    - component: vpc
+      source: "github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.4"
+      targets:
+        - "components/terraform/vpc-staging"  # Staging-specific vendor
+    - component: vpc
+      source: "github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.3"
+      targets:
+        - "components/terraform/vpc-prod"  # Prod-specific vendor
+```
+</File>
+
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
 import:
@@ -228,7 +263,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc-dev  # Points to vpc vendored at v1.13.0
         inherits:
           - vpc/defaults
       vars:
@@ -236,9 +271,6 @@ components:
         cidr_block: "10.0.0.0/16"
       settings:
         workspace_key_prefix: "dev/vpc"
-      source:
-        # Development on latest version
-        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.13.0"
 ```
 </File>
 
@@ -251,7 +283,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc-staging  # Points to vpc vendored at v1.12.4
         inherits:
           - vpc/defaults
       vars:
@@ -259,9 +291,6 @@ components:
         cidr_block: "10.1.0.0/16"
       settings:
         workspace_key_prefix: "staging/vpc"
-      source:
-        # Staging on previous version
-        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.4"
 ```
 </File>
 
@@ -274,7 +303,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc-prod  # Points to vpc vendored at v1.12.3
         inherits:
           - vpc/defaults
       vars:
@@ -282,9 +311,6 @@ components:
         cidr_block: "10.2.0.0/16"
       settings:
         workspace_key_prefix: "prod/vpc"
-      source:
-        # Production on stable version
-        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.3"
 ```
 </File>
 

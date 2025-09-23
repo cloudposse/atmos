@@ -105,13 +105,10 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc/v2  # Reference v2 folder for development
       settings:
         # CRITICAL: Don't include version in workspace key
         workspace_key_prefix: "dev/vpc"
-      source:
-        # Reference v2 folder for development
-        uri: "./components/terraform/vpc/v2"
       vars:
         name: "dev-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -124,13 +121,10 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc/v1  # Production still on stable v1
       settings:
         # Same workspace key as dev - enables migration
         workspace_key_prefix: "prod/vpc"
-      source:
-        # Production still on stable v1
-        uri: "./components/terraform/vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.2.0.0/16"
@@ -192,22 +186,26 @@ Roll out new versions progressively through environments:
 # Week 1: Development environments
 dev:
   vpc:
-    source: "./components/terraform/vpc/v2"
+    metadata:
+      component: vpc/v2
 
 # Week 2: Staging environments
 staging:
   vpc:
-    source: "./components/terraform/vpc/v2"
+    metadata:
+      component: vpc/v2
 
 # Week 3: Production canary
 prod-canary:
   vpc:
-    source: "./components/terraform/vpc/v2"
+    metadata:
+      component: vpc/v2
 
 # Week 4: All production
 prod:
   vpc:
-    source: "./components/terraform/vpc/v2"
+    metadata:
+      component: vpc/v2
 ```
 </File>
 
@@ -222,20 +220,16 @@ components:
     # Original VPC (blue)
     vpc:
       metadata:
-        component: vpc
+        component: vpc/v1  # Original version
       settings:
         workspace_key_prefix: "prod/vpc"
-      source:
-        uri: "./components/terraform/vpc"
 
     # New VPC (green) - different workspace key for parallel run
     vpc-next:
       metadata:
-        component: vpc
+        component: vpc/v2  # New version
       settings:
         workspace_key_prefix: "prod/vpc-next"
-      source:
-        uri: "./components/terraform/vpc/v2"
 ```
 </File>
 
@@ -250,7 +244,7 @@ For backwards-compatible changes, switch the folder reference:
 atmos terraform plan vpc --stack prod-us-east-1
 
 # Update stack configuration to point to new version
-# Edit: source.uri from "./components/terraform/vpc" to "./components/terraform/vpc/v2"
+# Edit: metadata.component from "vpc/v1" to "vpc/v2"
 
 # Plan with new version - should show intended changes
 atmos terraform plan vpc --stack prod-us-east-1
@@ -325,9 +319,9 @@ vars:
   enable_flow_logs: true
   flow_logs_bucket: "org-vpc-flow-logs"
 
-# Update source reference
-source:
-  uri: "./components/terraform/vpc/v2"  # was: vpc
+# Update component reference
+metadata:
+  component: vpc/v2  # was: vpc/v1
 ```
 
 ### 3. Review Changes
@@ -341,7 +335,7 @@ The following resources will be recreated:
 - Route table associations (automatic)
 
 ## Rollback Procedure
-Change source.uri back to "./components/terraform/vpc"
+Change metadata.component back to "vpc/v1"
 ```
 </File>
 
@@ -363,8 +357,8 @@ This version is under active development. APIs will change.
 ## Testing
 Use in development environments only:
 ```yaml
-source:
-  uri: "./components/terraform/vpc/v3-preview"
+metadata:
+  component: vpc/v3-preview
 ```
 ```
 </File>
@@ -400,13 +394,11 @@ components:
     # Testing v3 preview in dev
     vpc:
       metadata:
-        component: vpc
+        component: vpc/v3-preview  # Testing v3 preview
         inherits:
           - vpc/defaults
       settings:
         workspace_key_prefix: "dev/vpc"
-      source:
-        uri: "./components/terraform/vpc/v3-preview"
       vars:
         name: "dev-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -426,13 +418,11 @@ components:
     # Staging on stable v2
     vpc:
       metadata:
-        component: vpc
+        component: vpc/v2  # Staging on stable v2
         inherits:
           - vpc/defaults
       settings:
         workspace_key_prefix: "staging/vpc"
-      source:
-        uri: "./components/terraform/vpc/v2"
       vars:
         name: "staging-use1-vpc"
         cidr_block: "10.1.0.0/16"
@@ -453,13 +443,11 @@ components:
     # Production on stable v1 (conservative approach)
     vpc:
       metadata:
-        component: vpc
+        component: vpc/v1  # Production on stable v1
         inherits:
           - vpc/defaults
       settings:
         workspace_key_prefix: "prod/vpc"
-      source:
-        uri: "./components/terraform/vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.2.0.0/16"
@@ -584,10 +572,8 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
-      source:
         # Change from vpc/v1 to vpc/v2
-        uri: "./components/terraform/vpc/v2"
+        component: vpc/v2
 ```
 
 Then apply the migration:

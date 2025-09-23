@@ -456,12 +456,9 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc  # Points to vendored component at ./components/terraform/vpc
       settings:
         workspace_key_prefix: "prod/vpc"
-      source:
-        # Local path to vendored component
-        uri: "./components/terraform/vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.0.0.0/16"

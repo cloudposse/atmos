@@ -90,13 +90,10 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc/prod  # Subscribe to production track
       settings:
         # Stable workspace key (no track/version info)
         workspace_key_prefix: "prod/vpc"
-      # Subscribe to production track
-      source:
-        uri: "./components/terraform/vpc/prod"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -124,6 +121,18 @@ vars:
 ```
 </File>
 
+<File title="vendor.yaml">
+```yaml
+# Use vendoring to manage track versions
+spec:
+  sources:
+    - component: vpc-prod
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.component_tracks.vpc.prod }}"
+      targets:
+        - "components/terraform/vpc/prod"
+```
+</File>
+
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
 import:
@@ -133,12 +142,9 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc/prod  # Reference vendored prod track
       settings:
         workspace_key_prefix: "prod/vpc"
-      source:
-        # Reference track via variable
-        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.component_tracks.vpc.prod }}"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -173,13 +179,11 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
-        # Specify which track this environment follows
+        component: vpc/prod  # Reference vendored prod track
+        # Track metadata for reference
         track: prod
       settings:
         workspace_key_prefix: "prod/vpc"
-      source:
-        uri: "./components/terraform/vpc/prod"
 ```
 </File>
 
@@ -187,18 +191,27 @@ components:
 
 Use Git branches as tracks, with environments referencing specific branches:
 
+<File title="vendor.yaml">
+```yaml
+# Vendor from track branches
+spec:
+  sources:
+    - component: vpc-prod
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=track/prod"
+      targets:
+        - "components/terraform/vpc/prod"
+```
+</File>
+
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
 components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc/prod  # Reference vendored from prod track branch
       settings:
         workspace_key_prefix: "prod/vpc"
-      source:
-        # Reference the prod track branch
-        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=track/prod"
 ```
 </File>
 
@@ -318,6 +331,31 @@ components:
 ```
 </File>
 
+<File title="vendor.yaml">
+```yaml
+# Vendor components for each track
+spec:
+  sources:
+    # Alpha track - latest development
+    - component: vpc-alpha
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.14.0"
+      targets:
+        - "components/terraform/vpc/alpha"
+
+    # Beta track - staging validation
+    - component: vpc-beta
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.13.2"
+      targets:
+        - "components/terraform/vpc/beta"
+
+    # Prod track - stable production
+    - component: vpc-prod
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.8"
+      targets:
+        - "components/terraform/vpc/prod"
+```
+</File>
+
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
 import:
@@ -333,14 +371,11 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc/alpha  # Use alpha track for dev
         inherits:
           - vpc/defaults
       settings:
         workspace_key_prefix: "dev/vpc"
-      source:
-        # Use alpha track for dev
-        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.tracks.component_versions.vpc.alpha }}"
       vars:
         name: "dev-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -364,14 +399,11 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc/beta  # Use beta track for staging
         inherits:
           - vpc/defaults
       settings:
         workspace_key_prefix: "staging/vpc"
-      source:
-        # Use beta track for staging
-        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.tracks.component_versions.vpc.beta }}"
       vars:
         name: "staging-use1-vpc"
         cidr_block: "10.1.0.0/16"
@@ -395,14 +427,11 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc
+        component: vpc/prod  # Use prod track for production
         inherits:
           - vpc/defaults
       settings:
         workspace_key_prefix: "prod/vpc"
-      source:
-        # Use prod track for production
-        uri: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.tracks.component_versions.vpc.prod }}"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.2.0.0/16"
