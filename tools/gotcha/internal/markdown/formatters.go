@@ -221,7 +221,7 @@ func calculateFunctionCoverage(functions []types.CoverageFunction) (covered, tot
 	if total > 0 {
 		percentage = (float64(covered) / float64(total)) * constants.PercentageMultiplier
 	}
-	return
+	return covered, total, percentage
 }
 
 // writeTestCoverageSection writes the test coverage section with table format.

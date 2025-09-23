@@ -1,8 +1,6 @@
 module github.com/cloudposse/atmos
 
-go 1.24.6
-
-toolchain go1.24.7
+go 1.25.0
 
 // Map the gotcha module to its local directory to prevent Go from trying
 // to fetch it as an external dependency
