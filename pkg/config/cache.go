@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/adrg/xdg"
 	log "github.com/charmbracelet/log"
-	homedir "github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -22,21 +22,9 @@ type CacheConfig struct {
 }
 
 func GetCacheFilePath() (string, error) {
-	xdgCacheHome := os.Getenv("XDG_CACHE_HOME")
-	var cacheDir string
-	if xdgCacheHome == "" {
-		// Follow XDG Base Directory specification: default to $HOME/.cache
-		// Use our advanced homedir package which handles edge cases across platforms
-		homeDir, err := homedir.Dir()
-		if err != nil {
-			// Fallback to current directory if home directory cannot be determined
-			cacheDir = filepath.Join(".", ".atmos")
-		} else {
-			cacheDir = filepath.Join(homeDir, ".cache", "atmos")
-		}
-	} else {
-		cacheDir = filepath.Join(xdgCacheHome, "atmos")
-	}
+	// Use the XDG library which automatically handles XDG_CACHE_HOME
+	// and falls back to the correct default based on the OS
+	cacheDir := filepath.Join(xdg.CacheHome, "atmos")
 
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return "", errors.Wrap(err, "error creating cache directory")

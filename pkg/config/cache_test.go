@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	homedir "github.com/cloudposse/atmos/pkg/config/go-homedir"
+	"github.com/adrg/xdg"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,6 +18,9 @@ func TestGetCacheFilePathWithXDGCacheHome(t *testing.T) {
 	// Test with XDG_CACHE_HOME set
 	testDir := t.TempDir()
 	os.Setenv("XDG_CACHE_HOME", testDir)
+
+	// Reload XDG to pick up the environment change
+	xdg.Reload()
 
 	path, err := GetCacheFilePath()
 	assert.NoError(t, err)
@@ -33,13 +36,17 @@ func TestGetCacheFilePathWithoutXDGCacheHome(t *testing.T) {
 	// Clear XDG_CACHE_HOME to test default behavior
 	os.Unsetenv("XDG_CACHE_HOME")
 
+	// Reload XDG to pick up the environment change
+	xdg.Reload()
+
 	path, err := GetCacheFilePath()
 	assert.NoError(t, err)
 
-	// Should use $HOME/.cache/atmos/cache.yaml by default
-	// Use the same homedir package as the implementation for consistency
-	homeDir, _ := homedir.Dir()
-	expectedPath := filepath.Join(homeDir, ".cache", "atmos", "cache.yaml")
+	// The XDG library will use the appropriate default for the OS
+	// On Unix-like systems: $HOME/.cache/atmos/cache.yaml
+	// On Windows: %LOCALAPPDATA%/atmos/cache.yaml
+	// On macOS: $HOME/Library/Caches/atmos/cache.yaml
+	expectedPath := filepath.Join(xdg.CacheHome, "atmos", "cache.yaml")
 	assert.Equal(t, expectedPath, path)
 }
 
@@ -53,6 +60,9 @@ func TestCacheSharedBetweenVersionAndTelemetry(t *testing.T) {
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
+
+	// Reload XDG to pick up the environment change
+	xdg.Reload()
 
 	// Create a cache with both fields set
 	cache := CacheConfig{
@@ -82,6 +92,9 @@ func TestLoadCacheNonExistent(t *testing.T) {
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
 
+	// Reload XDG to pick up the environment change
+	xdg.Reload()
+
 	// Load non-existent cache should return empty config without error
 	cache, err := LoadCache()
 	assert.NoError(t, err)
@@ -98,6 +111,9 @@ func TestSaveCacheCreatesDirectory(t *testing.T) {
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", cacheDir)
+
+	// Reload XDG to pick up the environment change
+	xdg.Reload()
 
 	cache := CacheConfig{
 		LastChecked:              9876543210,
@@ -124,6 +140,9 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
+
+	// Reload XDG to pick up the environment change
+	xdg.Reload()
 
 	// Create initial cache
 	initialCache := CacheConfig{
