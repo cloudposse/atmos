@@ -265,7 +265,7 @@ atmos vendor pull --dry-run
 
 When making local changes to vendored components:
 
-<File title="components/terraform/vpc/LOCAL_MODIFICATIONS.md">
+<File title="LOCAL_MODIFICATIONS.md">
 ```markdown
 # Local Modifications
 
@@ -345,16 +345,14 @@ When intentionally diverging from upstream:
 spec:
   sources:
     - component: vpc
-      source: "github.com/cloudposse/terraform-aws-vpc.git"
+      source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
       version: "2.1.0"
       targets:
-        - "vpc"
-      # Mark as diverged to prevent auto-updates
-      diverged: true
-      divergence_reason: |
-        Custom modifications for multi-region support.
-        See LOCAL_MODIFICATIONS.md for details.
-        Manual review required for any updates.
+        - "components/terraform/vpc"
+      # Document divergence in comments
+      # DIVERGED: Custom modifications for multi-region support
+      # See LOCAL_MODIFICATIONS.md for details
+      # Manual review required for any updates
 ```
 </File>
 
