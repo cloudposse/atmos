@@ -241,7 +241,7 @@ func TestValidationWithEmptyAndWhitespace(t *testing.T) {
 			} else {
 				result = verifyJSONFormat(t, tt.input)
 			}
-			
+
 			if result != tt.shouldPass {
 				t.Errorf("Expected %v for %s validation of %q", tt.shouldPass, tt.format, tt.input)
 			}
@@ -259,14 +259,14 @@ func TestPreviewTruncation(t *testing.T) {
 			lines[i] = "valid: line" + string(rune('0'+i))
 		}
 		input := strings.Join(lines, "\n")
-		
+
 		// This should use all 10 lines in preview
 		result := verifyYAMLFormat(t, input)
 		if !result {
 			t.Error("Valid YAML should pass")
 		}
 	})
-	
+
 	// Test with fewer than 10 lines
 	t.Run("YAML preview with few lines", func(t *testing.T) {
 		input := "line1\nline2\nline3"
@@ -275,7 +275,7 @@ func TestPreviewTruncation(t *testing.T) {
 			t.Error("Valid YAML should pass")
 		}
 	})
-	
+
 	// Test preview length truncation at 500 chars
 	t.Run("YAML preview length truncation", func(t *testing.T) {
 		// Create a very long single line that will be truncated
@@ -315,7 +315,7 @@ func TestJSONSyntaxErrorContext(t *testing.T) {
 			expectContext: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// We expect these to fail and report context
@@ -367,7 +367,7 @@ func TestFormatValidationCombinations(t *testing.T) {
 			shouldPass: false, // Unknown format fails
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := verifyFormatValidation(t, tt.input, tt.formats)
@@ -383,7 +383,7 @@ func TestMinMaxBoundaries(t *testing.T) {
 	// Test with minimum and maximum int values
 	const MaxInt = int(^uint(0) >> 1)
 	const MinInt = -MaxInt - 1
-	
+
 	tests := []struct {
 		name    string
 		a, b    int
@@ -398,14 +398,14 @@ func TestMinMaxBoundaries(t *testing.T) {
 		{"MaxInt-1 and MaxInt", MaxInt - 1, MaxInt, MaxInt - 1, MaxInt},
 		{"MinInt and MinInt+1", MinInt, MinInt + 1, MinInt, MinInt + 1},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotMin := min(tt.a, tt.b)
 			if gotMin != tt.wantMin {
 				t.Errorf("min(%d, %d) = %d, want %d", tt.a, tt.b, gotMin, tt.wantMin)
 			}
-			
+
 			gotMax := max(tt.a, tt.b)
 			if gotMax != tt.wantMax {
 				t.Errorf("max(%d, %d) = %d, want %d", tt.a, tt.b, gotMax, tt.wantMax)
