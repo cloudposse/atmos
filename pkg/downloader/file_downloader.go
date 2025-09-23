@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/google/uuid"
 )
+
+const errDownloadFileFormat = "%w: '%s': %v"
 
 // fileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
@@ -35,7 +38,7 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 
 	client, err := fd.clientFactory.NewClient(ctx, src, dest, mode)
 	if err != nil {
-		return fmt.Errorf("failed to create download client: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrCreateDownloadClient, err)
 	}
 
 	return client.Get()
@@ -47,7 +50,7 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
 	}
 
 	return filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
@@ -59,7 +62,7 @@ func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
 	}
 
 	// Create a custom reader that reads the downloaded file but uses the original URL for extension detection
@@ -78,7 +81,7 @@ func (fd *fileDownloader) FetchAndParseRaw(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
 	}
 
 	return filetype.ParseFileRaw(fd.fileReader, filePath)
@@ -90,7 +93,7 @@ func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
 	}
 
 	return fd.fileReader(filePath)

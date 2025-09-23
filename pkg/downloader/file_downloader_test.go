@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
@@ -29,8 +30,8 @@ func TestFileDownloader_Fetch_Failure(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockFactory := NewMockClientFactory(ctrl)
-	expectedErr := ErrInvalidURL
-	mockFactory.EXPECT().NewClient(gomock.Any(), "src", "dest", ClientModeFile).Return(nil, ErrInvalidURL)
+	expectedErr := errUtils.ErrInvalidURL
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", "dest", ClientModeFile).Return(nil, errUtils.ErrInvalidURL)
 
 	fd := NewFileDownloader(mockFactory)
 	err := fd.Fetch("src", "dest", ClientModeFile, 10*time.Second)
