@@ -42,5 +42,15 @@ jobs:
           # shellcheck disable=SC2086
           gofumpt -l -w $ALL_CHANGED_FILES
 
+      # Run pre-commit hooks for whitespace fixes
+      - name: Install pre-commit
+        run: |
+          pip install pre-commit
+
+      - name: Run pre-commit whitespace fixes
+        run: |
+          # Run only the whitespace-related hooks from pre-commit
+          pre-commit run trailing-whitespace --all-files || true
+          pre-commit run end-of-file-fixer --all-files || true
 
       - uses: autofix-ci/action@2891949f3779a1cafafae1523058501de3d4e944 # v1.3.1
