@@ -30,4 +30,3 @@ components:
       vars:
         foo: "foo prod override"
         bar: "bar prod override"
-

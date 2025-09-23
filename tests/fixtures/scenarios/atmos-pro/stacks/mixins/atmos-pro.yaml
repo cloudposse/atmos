@@ -3,7 +3,7 @@ plan-wf-config: &plan-wf-config
     inputs:
       component: "{{ .atmos_component }}"
       stack: "{{ .atmos_stack }}"
- 
+
 apply-wf-config: &apply-wf-config
   atmos-pro-terraform-apply.yaml:
     inputs:
