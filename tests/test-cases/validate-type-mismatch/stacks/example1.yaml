@@ -1,0 +1,14 @@
+vars:
+  stage: "dev"
+  environment: "test"
+
+components:
+  terraform:
+    test:
+      vars:
+        nested_config:
+          database:
+            - host: "db1.example.com"
+              port: 5432
+            - host: "db2.example.com"  
+              port: 5432

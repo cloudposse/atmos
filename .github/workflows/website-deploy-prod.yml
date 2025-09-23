@@ -56,6 +56,8 @@ jobs:
           cd website
           npm install --only=production
           npm run build:site
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Copy Website to S3 Bucket
         run: |

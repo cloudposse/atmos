@@ -120,6 +120,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.telemetry.enabled", "ATMOS_TELEMETRY_ENABLED")
 	bindEnv(v, "settings.telemetry.token", "ATMOS_TELEMETRY_TOKEN")
 	bindEnv(v, "settings.telemetry.endpoint", "ATMOS_TELEMETRY_ENDPOINT")
+	bindEnv(v, "settings.telemetry.logging", "ATMOS_TELEMETRY_LOGGING")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
@@ -265,59 +266,164 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	return nil
 }
 
-// mergeConfig merge config from a specified path directory and process imports. Return error if config file does not exist.
-func mergeConfig(v *viper.Viper, path string, fileName string, processImports bool) error {
-	// Create a temporary Viper instance to isolate this configuration load
+// loadConfigFile reads a configuration file and returns a temporary Viper instance with its contents.
+func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 	tempViper := viper.New()
 	tempViper.AddConfigPath(path)
 	tempViper.SetConfigName(fileName)
 	tempViper.SetConfigType("yaml")
-	// Read configuration into temporary instance
+
 	if err := tempViper.ReadInConfig(); err != nil {
-		return err
+		// Return sentinel error unwrapped for type checking
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
+			return nil, err
+		}
+		// Wrap any other error with context
+		return nil, fmt.Errorf("failed to read config %s/%s: %w", path, fileName, err)
 	}
 
-	if processImports {
-		if err := mergeDefaultImports(path, tempViper); err != nil {
-			log.Debug("error process imports", "path", path, "error", err)
-		}
-		if err := mergeImports(tempViper); err != nil {
-			log.Debug("error process imports", "file", tempViper.ConfigFileUsed(), "error", err)
-		}
+	return tempViper, nil
+}
+
+// readConfigFileContent reads the content of a configuration file.
+func readConfigFileContent(configFilePath string) ([]byte, error) {
+	content, err := os.ReadFile(configFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("read config file %s: %w", configFilePath, err)
+	}
+	return content, nil
+}
+
+// processConfigImportsAndReapply processes imports and re-applies the original config for proper precedence.
+func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content []byte) error {
+	// Process default imports
+	if err := mergeDefaultImports(path, tempViper); err != nil {
+		log.Debug("error process imports", "path", path, "error", err)
+	}
+
+	// Process explicit imports
+	if err := mergeImports(tempViper); err != nil {
+		log.Debug("error process imports", "file", tempViper.ConfigFileUsed(), "error", err)
+	}
+
+	// Re-apply this config file's content after processing its imports
+	// This ensures proper precedence: each config file's own settings override
+	// the settings from any files it imports (directly or transitively).
+	// For example: if A imports B, and B imports C, then:
+	// - B's settings override C's settings
+	// - A's settings override both B's and C's settings
+	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
+		return fmt.Errorf("merge temp config: %w", err)
+	}
+
+	return nil
+}
+
+// marshalViperToYAML marshals a Viper instance's settings to YAML.
+func marshalViperToYAML(tempViper *viper.Viper) ([]byte, error) {
+	allSettings := tempViper.AllSettings()
+	yamlBytes, err := yaml.Marshal(allSettings)
+	if err != nil {
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedMarshalConfigToYaml, err)
+	}
+	return yamlBytes, nil
+}
+
+// mergeYAMLIntoViper merges YAML content into a Viper instance.
+func mergeYAMLIntoViper(v *viper.Viper, configFilePath string, yamlContent []byte) error {
+	v.SetConfigFile(configFilePath)
+	if err := v.MergeConfig(strings.NewReader(string(yamlContent))); err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrMerge, err)
+	}
+	return nil
+}
+
+// mergeConfig merges a config file and its imports with proper precedence.
+// Each config file's settings override the settings from files it imports.
+// This creates a hierarchy where the importing file always takes precedence over imported files.
+func mergeConfig(v *viper.Viper, path string, fileName string, processImports bool) error {
+	// Load the configuration file
+	tempViper, err := loadConfigFile(path, fileName)
+	if err != nil {
+		return err
 	}
 
 	configFilePath := tempViper.ConfigFileUsed()
 
-	tempViper.SetConfigFile(configFilePath)
-	err := tempViper.MergeInConfig()
-	if err != nil {
-		return err
-	}
-	content, err := os.ReadFile(configFilePath)
+	// Read the config file's content
+	content, err := readConfigFileContent(configFilePath)
 	if err != nil {
 		return err
 	}
 
-	err = preprocessAtmosYamlFunc(content, tempViper)
+	// Process imports if requested
+	if processImports {
+		if err := processConfigImportsAndReapply(path, tempViper, content); err != nil {
+			return err
+		}
+	}
+
+	// Process YAML functions
+	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
+		return fmt.Errorf("preprocess YAML functions: %w", err)
+	}
+
+	// Marshal to YAML
+	yamlBytes, err := marshalViperToYAML(tempViper)
 	if err != nil {
 		return err
 	}
 
-	// Marshal the temporary Viper instance to YAML content
-	allSettings := tempViper.AllSettings()
-	yamlBytes, err := yaml.Marshal(allSettings)
-	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedMarshalConfigToYaml, err)
+	// Merge into the main Viper instance
+	return mergeYAMLIntoViper(v, configFilePath, yamlBytes)
+}
+
+// shouldExcludePathForTesting checks if a directory path should be excluded from .atmos.d loading during testing.
+// It compares the given directory path against a list of excluded paths from the TEST_EXCLUDE_ATMOS_D environment variable.
+// Returns true if the path should be excluded, false otherwise.
+func shouldExcludePathForTesting(dirPath string) bool {
+	//nolint:forbidigo // TEST_EXCLUDE_ATMOS_D is specifically for test isolation, not application configuration.
+	excludePaths := os.Getenv("TEST_EXCLUDE_ATMOS_D")
+	if excludePaths == "" {
+		return false
 	}
 
-	// Merge the YAML content into the main Viper instance
-	v.SetConfigFile(configFilePath)
-	err = v.MergeConfig(strings.NewReader(string(yamlBytes)))
+	// Canonicalize the directory path we're checking.
+	absDirPath, err := filepath.Abs(filepath.Clean(dirPath))
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrMerge, err)
+		absDirPath = dirPath
 	}
 
-	return nil
+	// Split paths using the OS-specific path list separator.
+	for _, excludePath := range strings.Split(excludePaths, string(os.PathListSeparator)) {
+		if excludePath == "" {
+			continue
+		}
+
+		// Canonicalize the exclude path.
+		absExcludePath, err := filepath.Abs(filepath.Clean(excludePath))
+		if err != nil {
+			continue
+		}
+
+		// Check if the current directory is within or equals the excluded path.
+		// We currently only check for exact matches, but this could be extended
+		// to check for containment using filepath.Rel if needed.
+		pathsMatch := false
+		if runtime.GOOS == "windows" {
+			// Case-insensitive comparison on Windows.
+			pathsMatch = strings.EqualFold(absDirPath, absExcludePath)
+		} else {
+			pathsMatch = absDirPath == absExcludePath
+		}
+
+		if pathsMatch {
+			return true
+		}
+	}
+
+	return false
 }
 
 // mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)
@@ -330,14 +436,21 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	if !isDir {
 		return ErrAtmosDIrConfigNotFound
 	}
+
+	// Check if we should exclude .atmos.d from this directory during testing.
+	if shouldExcludePathForTesting(dirPath) {
+		// Silently skip without logging to avoid test output pollution.
+		return nil
+	}
+
 	var atmosFoundFilePaths []string
-	// Search for `atmos.d/` configurations
+	// Search for `atmos.d/` configurations.
 	searchDir := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
 	foundPaths1, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths1) > 0 {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths1...)
 	}
-	// Search for `.atmos.d` configurations
+	// Search for `.atmos.d` configurations.
 	searchDir = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
 	foundPaths2, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths2) > 0 {

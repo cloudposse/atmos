@@ -1,0 +1,9 @@
+# First configuration with a list
+components:
+  terraform:
+    test-component:
+      vars:
+        config_value:
+          - item1
+          - item2
+          - item3

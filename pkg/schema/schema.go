@@ -250,6 +250,7 @@ type TelemetrySettings struct {
 	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
 	Token    string `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
+	Logging  bool   `yaml:"logging" json:"logging" mapstructure:"logging"`
 }
 
 // ProSettings contains Atmos Pro integration configuration.
