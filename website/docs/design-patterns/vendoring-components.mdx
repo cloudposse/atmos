@@ -127,10 +127,6 @@ spec:
   settings:
     # Base path for all vendored components
     base_path: "components/terraform"
-    # Enable parallel vendoring
-    parallel: true
-    # Maximum parallel operations
-    max_parallel: 5
 
   # Component sources with mixins
   sources:
@@ -180,61 +176,72 @@ spec:
 ```
 </File>
 
-### Vendor Manifest with Origin Tracking
+### Tracking Vendored Components
 
-<File title="vendor-manifest.yaml">
+The `vendor.yaml` file serves as your vendor manifest, documenting all component sources and versions:
+
+<File title="vendor.yaml (vendor manifest)">
 ```yaml
-# Manifest tracking vendored component origins
+# Vendor manifest tracking all component sources and versions
 apiVersion: atmos/v1
-kind: VendorManifest
+kind: AtmosVendorConfig
 metadata:
-  generated: "2024-01-20T10:00:00Z"
-  generator: "atmos vendor"
+  name: infrastructure-components
+  description: Vendor manifest for infrastructure components
 
-components:
-  vpc:
-    origin:
-      repository: "github.com/cloudposse/terraform-aws-vpc"
-      ref: "2.1.0"
-      commit: "a1b2c3d4e5f6"
-      vendor_date: "2024-01-20"
-    license: "Apache-2.0"
-    upstream_version: "2.1.0"
-    local_modifications:
-      - file: "main.tf"
-        description: "Added custom tags for compliance"
-        date: "2024-01-21"
-        author: "john.doe@example.com"
+spec:
+  sources:
+    # VPC component - specific version
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
+      version: "2.1.0"
+      targets:
+        - "components/terraform/vpc"
+      included_paths:
+        - "**/*.tf"
+        - "**/*.tfvars"
+        - "README.md"
+      tags:
+        - networking
+        - production
 
-  eks:
-    origin:
-      repository: "github.com/cloudposse/terraform-aws-eks-cluster"
-      ref: "4.0.0"
-      commit: "f6e5d4c3b2a1"
-      vendor_date: "2024-01-15"
-    license: "Apache-2.0"
-    upstream_version: "4.0.0"
-    local_modifications: []
+    # EKS component - specific version
+    - component: eks
+      source: "github.com/cloudposse/terraform-aws-eks-cluster.git///?ref={{.Version}}"
+      version: "4.0.0"
+      targets:
+        - "components/terraform/eks"
+      included_paths:
+        - "**/*.tf"
+        - "**/*.tfvars"
+      excluded_paths:
+        - "test/**"
+        - "examples/**"
+      tags:
+        - kubernetes
+        - production
 
-  rds:
-    origin:
-      repository: "github.com/acme/terraform-modules"
-      ref: "v3.5.0"
-      commit: "9z8y7x6w5v4u"
-      vendor_date: "2024-01-10"
-    license: "MIT"
-    upstream_version: "3.5.0"
-    local_modifications:
-      - file: "outputs.tf"
-        description: "Added connection string output"
-        date: "2024-01-12"
-        author: "jane.smith@example.com"
-    divergence_notes: |
-      This component has diverged from upstream to support our
-      custom monitoring requirements. Do not auto-update without
-      reviewing monitoring integration changes.
+    # RDS component from private repository
+    - component: rds
+      source: "git::ssh://git@github.com/acme/terraform-modules.git//rds?ref={{.Version}}"
+      version: "v3.5.0"
+      targets:
+        - "components/terraform/rds"
+      tags:
+        - database
+        - production
 ```
 </File>
+
+:::note Version Tracking
+The `vendor.yaml` file IS your vendor manifest. It tracks:
+- **Source repository** and exact version for each component
+- **Target location** where the component is vendored
+- **Included/excluded paths** to control what gets vendored
+- **Tags** for organizing and filtering components
+
+To see what version is currently vendored, check the `vendor.yaml` file.
+:::
 
 ## Vendoring Workflow
 
@@ -319,18 +326,14 @@ atmos vendor pull --dry-run
 Track vendor updates in your vendor manifest:
 
 ```yaml
-# vendor-manifest.yaml
-components:
-  vpc:
-    origin:
-      repository: "github.com/cloudposse/terraform-aws-vpc"
-      ref: "2.2.0"  # Updated from 2.1.0
-      vendor_date: "2024-01-25"
-    upstream_version: "2.2.0"
-    changelog: |
-      - Updated from 2.1.0 to 2.2.0
-      - Added support for IPv6
-      - Fixed NAT gateway issue
+# vendor.yaml - Update component version
+spec:
+  sources:
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
+      version: "2.2.0"  # Updated from 2.1.0
+      targets:
+        - "components/terraform/vpc"
 ```
 
 ### 4. Handling Divergence
@@ -381,18 +384,17 @@ The pattern also has limitations:
 
 ### 1. Maintain Clear Lineage
 
-Always track where code came from:
+Always document in vendor.yaml where code came from:
 
 ```yaml
-# In every vendored component directory
-.vendor-info:
-  origin: "github.com/cloudposse/terraform-aws-vpc"
-  version: "2.1.0"
-  vendored: "2024-01-20"
-  modified: true
-  modifications:
-    - "Added compliance tags"
-    - "Custom security groups"
+# Track all component sources in vendor.yaml
+spec:
+  sources:
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
+      version: "2.1.0"
+      # Use comments to document any local modifications
+      # Modified: Added compliance tags, custom security groups
 ```
 
 ### 2. Regular Update Cycles
@@ -558,7 +560,7 @@ If you have local modifications, ensure they're preserved during rollback or rea
 3. **Initial Vendoring**: Run `atmos vendor pull`
 4. **Update Stack References**: Change from external URLs to local paths
 5. **Test Thoroughly**: Ensure vendored version produces same results
-6. **Document Origin**: Create vendor-manifest.yaml
+6. **Document Origin**: Update vendor.yaml with source information
 
 ### From Vendoring to Other Patterns
 

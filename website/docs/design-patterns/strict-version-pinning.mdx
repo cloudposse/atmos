@@ -82,7 +82,7 @@ spec:
       source: "github.com/acme/terraform-components.git//modules/vpc?ref={{.Version}}"
       version: "v1.12.3"  # Strict pin for production
       targets:
-        - "components/terraform/vpc"
+        - "components/terraform/vpc/{{.Version}}"
 ```
 </File>
 
@@ -92,7 +92,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc  # Points to vendored component at v1.12.3
+        component: vpc/v1.12.3  # Points to vendored component at specific version
       vars:
         name: "prod-vpc"
         cidr_block: "10.0.0.0/16"
@@ -203,9 +203,21 @@ spec:
     - component: vpc
       # Was: v1.12.4 (problematic)
       # Reverting to: v1.12.3 (last known good)
-      source: "github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.3"
+      source: "github.com/acme/terraform-components.git//modules/vpc?ref={{.Version}}"
+      version: "v1.12.3"
       targets:
-        - "components/terraform/vpc-prod"
+        - "components/terraform/vpc/{{.Version}}"
+```
+
+### Update Stack Configuration
+
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc/v1.12.3  # Update to rollback version
 ```
 
 ### Re-vendor and Apply
