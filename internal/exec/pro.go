@@ -216,7 +216,7 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 	}
 
 	// Get the git repository info
-	repoInfo, err := gitRepo.GetLocalRepo()
+	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
 		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToGetLocalRepo, err)
 	}

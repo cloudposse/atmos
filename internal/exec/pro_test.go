@@ -31,7 +31,7 @@ type MockGitRepo struct {
 	mock.Mock
 }
 
-func (m *MockGitRepo) GetLocalRepo() (*atmosgit.RepoInfo, error) {
+func (m *MockGitRepo) GetLocalRepoInfo() (*atmosgit.RepoInfo, error) {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -193,7 +193,7 @@ func TestUploadStatus(t *testing.T) {
 			// The function only processes exit codes 0 and 2
 			if tc.exitCode == 0 || tc.exitCode == 2 {
 				// Set up mock expectations for git functions
-				mockGitRepo.On("GetLocalRepo").Return(testRepoInfo, nil)
+				mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
 				mockGitRepo.On("GetCurrentCommitSHA").Return("abc123def456", nil)
 
 				// Set up mock expectations for pro client

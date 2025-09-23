@@ -110,7 +110,7 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 
 // GitRepoInterface defines the interface for git repository operations.
 type GitRepoInterface interface {
-	GetLocalRepo() (*RepoInfo, error)
+	GetLocalRepoInfo() (*RepoInfo, error)
 	GetRepoInfo(repo *git.Repository) (RepoInfo, error)
 	GetCurrentCommitSHA() (string, error)
 }
@@ -118,8 +118,8 @@ type GitRepoInterface interface {
 // DefaultGitRepo is the default implementation of GitRepoInterface.
 type DefaultGitRepo struct{}
 
-// GetLocalRepo returns information about the local git repository.
-func (d *DefaultGitRepo) GetLocalRepo() (*RepoInfo, error) {
+// GetLocalRepoInfo returns information about the local git repository.
+func (d *DefaultGitRepo) GetLocalRepoInfo() (*RepoInfo, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get local repository: %v", errUtils.ErrFailedToGetLocalRepo, err)
