@@ -41,6 +41,7 @@ var (
 	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 	startingDir         string
 	snapshotBaseDir     string
+	repoRoot            string // Repository root directory for path normalization and binary checks
 	skipReason          string // Package-level variable to track why tests should be skipped
 )
 
@@ -484,7 +485,6 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
-	var repoRoot string
 
 	// Capture the starting working directory
 	startingDir, err = os.Getwd()
@@ -635,6 +635,19 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			tc.Env["ATMOS_BASE_PATH"] = strings.ReplaceAll(basePath, "./atmos/", "./"+repoDirName+"/")
 		}
 	}
+
+	// Set the test Git root to a clean temporary directory
+	// This makes each test scenario act as if it's its own Git repository
+	// preventing the actual repository's .atmos.d from being loaded
+	// This is especially important for tests that use workdir: "../"
+	testGitRoot := filepath.Join(tempDir, "mock-git-root")
+	if err := os.MkdirAll(testGitRoot, 0o755); err == nil {
+		tc.Env["TEST_GIT_ROOT"] = testGitRoot
+	}
+
+	// Also set an environment variable to exclude the repository's .atmos.d
+	// This is needed for tests that change to parent directories
+	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.

@@ -25,7 +25,7 @@ make build-windows           # Build for Windows
 make build-macos             # Build for macOS
 
 # Testing
-make testacc                 # Run acceptance tests  
+make testacc                 # Run acceptance tests
 make testacc-cover          # Run tests with coverage
 make testacc-coverage       # Generate coverage HTML report
 
@@ -55,7 +55,7 @@ atmos validate component <component> -s <stack>
 atmos validate schema [<schema-key>]
 atmos validate schema --schemas-atmos-manifest <path-to-schema>
 
-# Vendoring and dependencies  
+# Vendoring and dependencies
 atmos vendor pull
 # atmos vendor diff  # Not currently registered
 ```
@@ -67,7 +67,7 @@ atmos vendor pull
 - **`internal/exec/`** - Core business logic and orchestration engine
 - **`pkg/`** - Reusable packages organized by domain:
   - `config/` - Configuration loading, parsing, and merging
-  - `stack/` - Stack processing and inheritance logic  
+  - `stack/` - Stack processing and inheritance logic
   - `component/` - Component lifecycle management
   - `utils/` - Shared utilities (YAML, JSON, file operations)
   - `validate/` - Schema and policy validation
@@ -77,7 +77,7 @@ atmos vendor pull
 
 ### Key Architectural Concepts
 
-**Stack Processing Pipeline**: 
+**Stack Processing Pipeline**:
 1. Load base configuration (`atmos.yaml`)
 2. Process stack imports and inheritance hierarchy
 3. Apply component configurations and overrides
@@ -124,10 +124,10 @@ viper.SetEnvPrefix("ATMOS")
   ```go
   // WRONG: Dynamic error (will trigger linting warning)
   return fmt.Errorf("processing component %s: %w", component, err)
-  
+
   // CORRECT: Use static error from errors package
   import errUtils "github.com/cloudposse/atmos/errors"
-  
+
   return fmt.Errorf("%w: Atmos component `%s` is invalid",
       errUtils.ErrInvalidComponent,
       component,
@@ -162,7 +162,7 @@ viper.SetEnvPrefix("ATMOS")
   ```go
   // WRONG: No reason provided
   t.Skipf("Skipping test")
-  
+
   // CORRECT: Clear reason with context
   t.Skipf("Skipping symlink test on Windows: symlinks require special privileges")
   t.Skipf("Skipping test: %s", dynamicReason)
@@ -185,7 +185,7 @@ var exampleCmd = &cobra.Command{
     Use:   "example [component] -s [stack]",
     Short: "Brief description with **markdown** formatting",
     Long: `Detailed description with context using markdown formatting.
-    
+
 Use **bold** for emphasis and \`code\` for technical terms.
 Supports multiple paragraphs and formatting.`,
     // Examples are loaded from embedded markdown files
@@ -221,7 +221,7 @@ $ atmos example <component> -s <stack> --file output.yaml
 
 **Usage System**:
 - Examples auto-load from `cmd/markdown/*_usage.md` files via `//go:embed`
-- Use `utils.PrintfMarkdown()` to render markdown content 
+- Use `utils.PrintfMarkdown()` to render markdown content
 - Register examples in `cmd/markdown_help.go` `examples` map with suggestion URLs
 - File naming: `atmos_<command>_<subcommand>_usage.md`
 
@@ -232,7 +232,7 @@ $ atmos example <component> -s <stack> --file output.yaml
   ```go
   // pkg/store/
   store.go              // Interface definition
-  aws_ssm_store.go     // AWS SSM implementation 
+  aws_ssm_store.go     // AWS SSM implementation
   azure_keyvault_store.go // Azure implementation
   google_secretmanager_store.go // Google implementation
   ```
@@ -241,9 +241,9 @@ $ atmos example <component> -s <stack> --file output.yaml
   // Implementation files
   aws_ssm_store.go
   azure_keyvault_store.go
-  
+
   // Corresponding test files
-  aws_ssm_store_test.go  
+  aws_ssm_store_test.go
   azure_keyvault_store_test.go
   ```
 - **Group related functionality** in `pkg/` subpackages by domain
@@ -257,7 +257,7 @@ Atmos provides extensive template functions available in stack configurations:
 
 ### Core Functions
 - `atmos.Component(component, stack)` - Get component configuration
-- `atmos.Stack(stack)` - Get stack configuration  
+- `atmos.Stack(stack)` - Get stack configuration
 - `atmos.Setting(path)` - Get setting from atmos.yaml
 
 ### Integration Functions
@@ -278,13 +278,13 @@ Atmos provides extensive template functions available in stack configurations:
 - Integration tests: `tests/**/*_test.go` with fixtures in `tests/test-cases/`
 - Command tests: `cmd/**/*_test.go`
 
-### Running Specific Tests  
+### Running Specific Tests
 ```bash
 # Run specific test
 go test ./pkg/config -run TestConfigLoad
 # Run with coverage
 go test ./pkg/config -cover
-# Integration tests  
+# Integration tests
 go test ./tests -run TestCLI
 ```
 
@@ -308,7 +308,7 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 3. **Use `//go:embed` and `utils.PrintfMarkdown()`** for example rendering
 4. **Register in `cmd/markdown_help.go`** examples map with suggestion URL
 5. **Use markdown formatting** in Short/Long descriptions (supports **bold**, `code`, etc.)
-6. Add business logic in appropriate `pkg/` or `internal/exec/` package  
+6. Add business logic in appropriate `pkg/` or `internal/exec/` package
 7. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
 8. Add tests with fixtures
 9. Add integration test in `tests/`
@@ -320,21 +320,21 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 - **Use definition lists `<dl>` instead of tables** for arguments and flags:
   ```mdx
   ## Arguments
-  
+
   <dl>
     <dt>`component`</dt>
     <dd>Atmos component name</dd>
-    
-    <dt>`stack`</dt>  
+
+    <dt>`stack`</dt>
     <dd>Atmos stack name</dd>
   </dl>
-  
+
   ## Flags
-  
+
   <dl>
     <dt>`--stack` / `-s`</dt>
     <dd>Atmos stack (required)</dd>
-    
+
     <dt>`--format`</dt>
     <dd>Output format: `yaml`, `json`, or `table` (default: `yaml`)</dd>
   </dl>
@@ -343,7 +343,7 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 - **Follow Docusaurus conventions** from existing files:
   ```mdx
   ---
-  title: atmos command subcommand  
+  title: atmos command subcommand
   sidebar_label: subcommand
   sidebar_class_name: command
   id: subcommand
@@ -351,21 +351,21 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   ---
   import Screengrab from '@site/src/components/Screengrab'
   import Terminal from '@site/src/components/Terminal'
-  
+
   :::note Purpose
   Use this command to [describe purpose with links to concepts].
   :::
-  
+
   <Screengrab title="atmos command subcommand --help" slug="atmos-command-subcommand--help" />
-  
+
   ## Usage
-  
+
   ```shell
   atmos command subcommand <args> [options]
   ```
-  
+
   ## Examples
-  
+
   ```shell
   atmos command subcommand example1
   atmos command subcommand example2 --flag=value
@@ -383,12 +383,12 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
   ## what
   - High-level description of changes in plain English
   - Use bullet points for clarity
-  
-  ## why  
+
+  ## why
   - Business justification for the changes
   - Explain why these changes solve the problem
   - Use bullet points for clarity
-  
+
   ## references
   - Link to supporting GitHub issues or documentation
   - Use `closes #123` if PR closes an issue
@@ -414,10 +414,10 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 func TestParseConfig_HandlesEmptyStringInput(t *testing.T) {
     // Setup conditions that reproduce the issue
     input := ""
-    
+
     // Call the function that should handle this case
     result, err := ParseConfig(input)
-    
+
     // Assert the expected behavior (this should initially fail)
     assert.NoError(t, err)
     assert.Equal(t, DefaultConfig, result)
@@ -426,9 +426,9 @@ func TestParseConfig_HandlesEmptyStringInput(t *testing.T) {
 // Or for error conditions:
 func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
     invalidStack := "malformed-stack-config"
-    
+
     err := ValidateStack(invalidStack)
-    
+
     assert.Error(t, err)
     assert.Contains(t, err.Error(), "invalid format")
 }
@@ -453,10 +453,10 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
   ```bash
   # Format all changed Go files (preferred)
   gofumpt -l -w $ALL_CHANGED_FILES
-  
+
   # Or format specific files
   gofumpt -l -w cmd/theme_show.go pkg/ui/theme/styles.go
-  
+
   # Or format entire project
   gofumpt -l -w .
   ```
@@ -474,12 +474,12 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 
 ### Environment Variable Conventions (MANDATORY)
 - **ALWAYS use `viper.BindEnv()`** for environment variable binding
-- **EVERY env var MUST have an ATMOS_ alternative**: 
+- **EVERY env var MUST have an ATMOS_ alternative**:
   ```go
   // WRONG: Only binding external env var
   viper.BindEnv("GITHUB_TOKEN")
-  
-  // CORRECT: Provide Atmos alternative  
+
+  // CORRECT: Provide Atmos alternative
   viper.BindEnv("ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
   viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
   ```
@@ -490,11 +490,11 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
   // WRONG: Using logging for user interface
   log.Info("Enter your password:")
   log.Error("Invalid input, please try again")
-  
+
   // CORRECT: Use UI output for user interaction
   fmt.Fprintf(os.Stderr, "Enter your password: ")
   fmt.Fprintf(os.Stderr, "❌ Invalid input, please try again\n")
-  
+
   // CORRECT: Use logging for system/debug information
   log.Debug("Processing authentication", "user", username)
   log.Error("Authentication failed", "error", err, "user", username)
@@ -502,7 +502,7 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 
 - **UI Output Rules**:
   - User prompts, status messages, progress indicators → stderr
-  - Error messages requiring user action → stderr  
+  - Error messages requiring user action → stderr
   - Data/results for piping → stdout
   - **Never use logging for UI elements**
 
@@ -514,21 +514,21 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
   - Use appropriate levels per `docs/logging.md` guidance
   - Production should have LogError/LogWarn enabled, Debug/Trace disabled
 
-### Output Conventions (MANDATORY)  
+### Output Conventions (MANDATORY)
 - **Most text UI MUST go to stderr** to enable proper piping
 - **Only data/results go to stdout** for piping compatibility
 - **Examples**:
   ```go
   import "github.com/cloudposse/atmos/pkg/utils"
-  
+
   // WRONG: UI to stdout (breaks piping)
   fmt.Println("Processing component...")
   fmt.Print(componentData)
-  
+
   // CORRECT: Use TUI function for UI messages, stdout for data
   utils.PrintfMessageToTUI("Processing component...\n")
   fmt.Print(componentData) // Data goes to stdout for piping
-  
+
   // ACCEPTABLE: Direct stderr as last resort
   fmt.Fprintf(os.Stderr, "Processing component...\n")
   fmt.Print(componentData) // Data goes to stdout for piping
@@ -537,7 +537,7 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 ### Schema Updates (MANDATORY)
 - **Update ALL schema files** when adding Atmos configuration options:
   - `/pkg/datafetcher/schema/config/global/1.0.json`
-  - `/pkg/datafetcher/schema/atmos/manifest/1.0.json`  
+  - `/pkg/datafetcher/schema/atmos/manifest/1.0.json`
   - `/pkg/datafetcher/schema/stacks/stack-config/1.0.json`
   - `/pkg/datafetcher/schema/vendor/package/1.0.json`
 - Validate schema changes don't break existing configurations
@@ -545,7 +545,7 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 ### Styling & Theme (MANDATORY)
 - **Use consistent Atmos theme colors** from `pkg/ui/theme/colors.go`:
   - Success: `ColorGreen` (#00FF00)
-  - Info: `ColorCyan` (#00FFFF) 
+  - Info: `ColorCyan` (#00FFFF)
   - Error: `ColorRed` (#FF0000)
   - Selected: `ColorSelectedItem` (#10ff10)
   - Border: `ColorBorder` (#5F5FD7)
@@ -579,7 +579,7 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
   ```go
   // WRONG: Calling external binary (platform-specific)
   cmd := exec.Command("terraform", "plan")
-  
+
   // CORRECT: Using SDK (cross-platform)
   import "github.com/hashicorp/terraform-exec/tfexec"
   tf, err := tfexec.NewTerraform(workingDir, execPath)
@@ -600,12 +600,12 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
       Put(ctx context.Context, key, value string) error
       Delete(ctx context.Context, key string) error
   }
-  
+
   // Implement for each provider
   type AWSSSMStore struct { /* ... */ }
   type AzureKeyVaultStore struct { /* ... */ }
   type GoogleSecretManagerStore struct { /* ... */ }
-  
+
   func (s *AWSSSMStore) Get(ctx context.Context, key string) (string, error) {
       // AWS SSM implementation
   }
@@ -614,7 +614,7 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 - **Generate mocks for all interfaces** (no cloud connectivity required for tests):
   ```go
   //go:generate mockgen -source=secret_store.go -destination=mock_secret_store.go
-  
+
   func TestSecretProcessing(t *testing.T) {
       mockStore := NewMockSecretStore(ctrl)
       mockStore.EXPECT().Get(gomock.Any(), "test-key").Return("test-value", nil)
@@ -627,11 +627,11 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
   type ProviderRegistry struct {
       stores map[string]SecretStore
   }
-  
+
   func (r *ProviderRegistry) Register(name string, store SecretStore) {
       r.stores[name] = store
   }
-  
+
   func (r *ProviderRegistry) Get(name string) (SecretStore, error) {
       // Return appropriate implementation
   }
@@ -645,10 +645,10 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 - **For non-standard execution paths**, use:
   ```go
   import "github.com/cloudposse/atmos/pkg/telemetry"
-  
+
   // For cobra commands
   telemetry.CaptureCmd(cmd, err)
-  
+
   // For command strings
   telemetry.CaptureCmdString("command name", err)
   ```
@@ -661,10 +661,10 @@ func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
 - golangci-lint for linting
 - Make for build automation
 
-### IDE Configuration  
+### IDE Configuration
 The project includes Cursor rules in `.cursor/rules/atmos-rules.mdc` covering:
 - Code structure and patterns
-- Testing requirements  
+- Testing requirements
 - Documentation standards
 - Quality checks and linting
 

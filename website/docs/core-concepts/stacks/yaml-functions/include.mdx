@@ -32,7 +32,7 @@ from different local and remote sources. The `!include` function also provides t
 - Determines the format based on file extensions. It supports files in JSON (`.json`), YAML (`.yaml`, `.yml`),
 and [HCL](https://github.com/hashicorp/hcl) (`.hcl`, `.tf`, `.tfvars`) formats, and automatically converts them into correct
 YAML structures (simple and complex types like maps and lists are supported).
-All other file extensions (including `.txt` or files without extensions) are returned as raw strings, 
+All other file extensions (including `.txt` or files without extensions) are returned as raw strings,
 allowing you to include text and [Markdown](https://www.markdownguide.org/) files as strings in Atmos manifests.
 
 Atmos resolves the `!include` functions during the initial loading of YAML files from the local filesystem or remote sources,
@@ -50,12 +50,12 @@ With `!include` it's possible to import multiple different file formats into Atm
 - **Text** - All other extensions (including `.txt` or no extension) are loaded as plain text
 
 <Note>
-    File type detection is based on the file extension, not the content. For example, a `.txt` file containing JSON 
-    will be returned as a raw string. To force any file to be included as raw text regardless of extension, 
+    File type detection is based on the file extension, not the content. For example, a `.txt` file containing JSON
+    will be returned as a raw string. To force any file to be included as raw text regardless of extension,
     use the [`!include.raw`](./include.raw) function.
-    
-    **Important for URLs:** URLs that lack a file extension (like `https://api.github.com/meta`) will be treated as 
-    plain text. If you need to parse such URLs as JSON or YAML, ensure the URL ends with the appropriate extension 
+
+    **Important for URLs:** URLs that lack a file extension (like `https://api.github.com/meta`) will be treated as
+    plain text. If you need to parse such URLs as JSON or YAML, ensure the URL ends with the appropriate extension
     (e.g., `.json`) or save the content to a local file with the correct extension first.
 </Note>
 
@@ -132,15 +132,15 @@ To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/
 The `!include` directive enables modular, reusable configuration patterns across all Atmos YAML files.
 This has several important implications:
 
-- **Modularization & Reuse**  
+- **Modularization & Reuse**
   `!include` supports a [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) approach by allowing shared configuration fragments to be stored in local or remote
    files and reused across multiple stacks or components. You can use it in place of YAML anchors, which don't work across files.
 
-- **Preprocessing for Inheritance**  
+- **Preprocessing for Inheritance**
   Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-merging
   behaviors using fully expanded configuration data.
 
-- **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**  
+- **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**
   If you're already managing your root modules using `.tfvars` files — for example, separate files for `dev`, `staging`,
   and `prod` — you can reference them directly in Atmos using `!include`. This makes it easy to adopt Atmos without
   having to translate all variables into Atmos stacks.

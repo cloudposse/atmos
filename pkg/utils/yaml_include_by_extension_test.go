@@ -76,7 +76,7 @@ components:
         text_content: !include readme.txt
         json_as_text: !include data.json.txt
         yaml_as_text: !include config.yaml.txt
-        
+
         # Test with YQ expressions
         db_host: !include config.json .database.host
         server_name: !include settings.yaml .server.name`
@@ -333,10 +333,10 @@ components:
       vars:
         # Multiple dots - should use last extension (.json)
         multi_dot: !include backup.2024.config.json
-        
+
         # Hidden file with extension - should parse as JSON
         hidden_json: !include .hidden.json
-        
+
         # Same files with !include.raw
         multi_dot_raw: !include.raw backup.2024.config.json
         hidden_json_raw: !include.raw .hidden.json`
