@@ -32,6 +32,26 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	errUtils.CheckErrorAndPrint(err, "", "")
 }
 
+// PrintfMarkdownToTUI prints a message in Markdown format to stderr.
+// This is useful for notices, warnings, and other messages that should not
+// interfere with stdout when piping command output.
+func PrintfMarkdownToTUI(format string, a ...interface{}) {
+	if render == nil {
+		_, err := os.Stderr.WriteString(fmt.Sprintf(format, a...))
+		errUtils.CheckErrorAndPrint(err, "", "")
+		return
+	}
+	message := fmt.Sprintf(format, a...)
+	var md string
+	var renderErr error
+	md, renderErr = render.Render(message)
+	if renderErr != nil {
+		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
+	}
+	_, err := os.Stderr.WriteString(fmt.Sprint(md + "\n"))
+	errUtils.CheckErrorAndPrint(err, "", "")
+}
+
 // InitializeMarkdown initializes a new Markdown renderer.
 func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error

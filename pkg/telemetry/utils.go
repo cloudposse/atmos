@@ -21,10 +21,12 @@ const (
 	// DisclosureMessage contains the standard telemetry disclosure message shown to users
 	// when telemetry is first enabled. It explains that Atmos collects anonymous
 	// usage data and provides a link for users to learn more or opt out.
-	DisclosureMessage = `Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
+	DisclosureMessage = `## Notice: Telemetry Enabled
+
+Atmos now collects completely anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features.
+
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting:
+<https://atmos.tools/cli/telemetry>
 
 `
 )
@@ -50,11 +52,11 @@ func CaptureCmd(cmd *cobra.Command, err ...error) {
 }
 
 // PrintTelemetryDisclosure displays the telemetry disclosure message if one is available.
-// It calls disclosureMessage() to get the message and prints as markdown
-// if a message is returned.
+// It calls disclosureMessage() to get the message and prints to stderr with markdown
+// formatting if a message is returned.
 func PrintTelemetryDisclosure() {
 	if message := disclosureMessage(); message != "" {
-		utils.PrintMessageInColor(message, theme.Colors.Default)
+		utils.PrintfMarkdownToTUI("%s", message)
 	}
 }
 
