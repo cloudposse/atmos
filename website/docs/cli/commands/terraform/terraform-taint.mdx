@@ -7,9 +7,9 @@ id: taint
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 
-:::note purpose
-Use this command to mark a resource as tainted, forcing it to be destroyed and recreated on the next apply.
-:::
+<Intro>
+Use this command to mark a Terraform resource for recreation in an Atmos component's next apply operation. Note: This command is deprecated in Terraform v1.0+.
+</Intro>
 
 <Screengrab title="atmos terraform taint --help" slug="atmos-terraform-taint--help" />
 
