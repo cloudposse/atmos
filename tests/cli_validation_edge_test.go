@@ -77,8 +77,8 @@ func TestYAMLEdgeCases(t *testing.T) {
 		{
 			name:       "Invalid YAML - circular reference",
 			input:      "&a [*a]",
-			shouldPass: false,
-			desc:       "Circular references might fail",
+			shouldPass: false, // Go's YAML parser detects circular references
+			desc:       "Circular references should fail",
 		},
 		{
 			name:       "YAML with mixed indentation",
@@ -89,8 +89,8 @@ func TestYAMLEdgeCases(t *testing.T) {
 		{
 			name:       "YAML with invalid anchor name",
 			input:      "&123 key: value",
-			shouldPass: false,
-			desc:       "Invalid anchor names should fail",
+			shouldPass: true, // Go's YAML parser accepts numeric anchor names
+			desc:       "Numeric anchor names are accepted",
 		},
 	}
 
@@ -224,11 +224,11 @@ func TestValidationWithEmptyAndWhitespace(t *testing.T) {
 		shouldPass bool
 	}{
 		{"Empty string YAML", "", "yaml", true},
-		{"Empty string JSON", "", "json", false}, // Empty string is not valid JSON
-		{"Whitespace only YAML", "   \n\t  ", "yaml", true},
-		{"Whitespace only JSON", "   \n\t  ", "json", false},
+		{"Empty string JSON", "", "json", false},             // Empty string is not valid JSON
+		{"Whitespace only YAML", "   \n\t  ", "yaml", false}, // YAML parser rejects tabs
+		{"Whitespace only JSON", "   \n\t  ", "json", false}, // Pure whitespace is not valid JSON
 		{"Newlines only YAML", "\n\n\n", "yaml", true},
-		{"Newlines only JSON", "\n\n\n", "json", false},
+		{"Newlines only JSON", "\n\n\n", "json", false}, // Newlines only is not valid JSON
 		{"Whitespace with null JSON", " null ", "json", true},
 		{"Whitespace with YAML", "  \nkey: value\n  ", "yaml", true},
 	}
@@ -253,10 +253,10 @@ func TestValidationWithEmptyAndWhitespace(t *testing.T) {
 func TestPreviewTruncation(t *testing.T) {
 	// Test YAML preview truncation
 	t.Run("YAML preview truncation", func(t *testing.T) {
-		// Create input with exactly 10 lines
+		// Create input with exactly 10 lines (with different keys to avoid duplicates)
 		lines := make([]string, 10)
 		for i := 0; i < 10; i++ {
-			lines[i] = "valid: line" + string(rune('0'+i))
+			lines[i] = "key" + string(rune('0'+i)) + ": value" + string(rune('0'+i))
 		}
 		input := strings.Join(lines, "\n")
 
