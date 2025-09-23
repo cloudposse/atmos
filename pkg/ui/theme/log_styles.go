@@ -5,6 +5,44 @@ import (
 	log "github.com/charmbracelet/log"
 )
 
+// createLogLevelStyles creates log level styles with badge-like appearance.
+func createLogLevelStyles(scheme *ColorScheme) map[log.Level]lipgloss.Style {
+	levels := make(map[log.Level]lipgloss.Style)
+
+	// Bold white text on colored backgrounds for better readability
+	levels[log.DebugLevel] = lipgloss.NewStyle().
+		Background(lipgloss.Color(scheme.LogDebug)).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true).
+		Padding(0, 1) // Add horizontal padding for badge effect
+
+	levels[log.InfoLevel] = lipgloss.NewStyle().
+		Background(lipgloss.Color(scheme.LogInfo)).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true).
+		Padding(0, 1)
+
+	levels[log.WarnLevel] = lipgloss.NewStyle().
+		Background(lipgloss.Color(scheme.LogWarning)).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true).
+		Padding(0, 1)
+
+	levels[log.ErrorLevel] = lipgloss.NewStyle().
+		Background(lipgloss.Color(scheme.LogError)).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true).
+		Padding(0, 1)
+
+	levels[log.FatalLevel] = lipgloss.NewStyle().
+		Background(lipgloss.Color(scheme.LogError)). // Use error color for fatal
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true).
+		Padding(0, 1)
+
+	return levels
+}
+
 // GetLogStyles returns charm/log styles configured with the current theme colors.
 // This includes background colors for log level badges and key-value pair styling.
 func GetLogStyles(scheme *ColorScheme) *log.Styles {
@@ -14,42 +52,10 @@ func GetLogStyles(scheme *ColorScheme) *log.Styles {
 	}
 
 	styles := &log.Styles{
-		Levels: make(map[log.Level]lipgloss.Style),
+		Levels: createLogLevelStyles(scheme),
 		Keys:   make(map[string]lipgloss.Style),
 		Values: make(map[string]lipgloss.Style),
 	}
-
-	// Define log level styles with backgrounds and padding for badge-like appearance
-	// Use bold white text on colored backgrounds for better readability
-	styles.Levels[log.DebugLevel] = lipgloss.NewStyle().
-		Background(lipgloss.Color(scheme.LogDebug)).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 1) // Add horizontal padding for badge effect
-
-	styles.Levels[log.InfoLevel] = lipgloss.NewStyle().
-		Background(lipgloss.Color(scheme.LogInfo)).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 1)
-
-	styles.Levels[log.WarnLevel] = lipgloss.NewStyle().
-		Background(lipgloss.Color(scheme.LogWarning)).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 1)
-
-	styles.Levels[log.ErrorLevel] = lipgloss.NewStyle().
-		Background(lipgloss.Color(scheme.LogError)).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 1)
-
-	styles.Levels[log.FatalLevel] = lipgloss.NewStyle().
-		Background(lipgloss.Color(scheme.LogError)). // Use error color for fatal
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 1)
 
 	// Configure key-value pair colors
 	// Keys use the theme's muted color for subtle emphasis
