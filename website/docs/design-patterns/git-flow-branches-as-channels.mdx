@@ -503,67 +503,37 @@ jobs:
 
 ### Channel Divergence Monitoring
 
-Monitor and alert on channel divergence:
+Monitor and alert on channel divergence using Git commands:
 
-<File title="scripts/monitor-divergence.sh">
 ```bash
-#!/bin/bash
-# Monitor divergence between channel branches
+# Check divergence between channels
+git rev-list --count channels/staging..channels/dev  # Commits dev is ahead
+git rev-list --count channels/dev..channels/staging  # Commits dev is behind
 
-CHANNELS=("channels/dev" "channels/staging" "channels/prod")
+# Show files changed between channels
+git diff --name-status channels/prod..channels/staging
 
-echo "Channel Divergence Report"
-echo "========================="
-echo ""
+# Find commits unique to a channel
+git log --oneline channels/dev --not channels/staging channels/prod
 
-for i in "${!CHANNELS[@]}"; do
-  if [ $i -eq $((${#CHANNELS[@]} - 1)) ]; then
-    break
-  fi
-
-  FROM="${CHANNELS[$i]}"
-  TO="${CHANNELS[$((i + 1))]}"
-
-  echo "## $FROM → $TO"
-
-  # Count commits ahead/behind
-  AHEAD=$(git rev-list --count $TO..$FROM)
-  BEHIND=$(git rev-list --count $FROM..$TO)
-
-  echo "- $FROM is $AHEAD commits ahead of $TO"
-  echo "- $FROM is $BEHIND commits behind $TO"
-
-  if [ $AHEAD -gt 10 ]; then
-    echo "  ⚠️  Warning: Significant divergence detected"
-  fi
-
-  # Show changed files
-  if [ $AHEAD -gt 0 ]; then
-    echo "- Files changed in $FROM not in $TO:"
-    git diff --name-only $TO..$FROM | head -5 | sed 's/^/    - /'
-
-    TOTAL_CHANGES=$(git diff --name-only $TO..$FROM | wc -l)
-    if [ $TOTAL_CHANGES -gt 5 ]; then
-      echo "    ... and $((TOTAL_CHANGES - 5)) more files"
-    fi
-  fi
-
-  echo ""
-done
-
-# Check for unique commits (cherry-picks or divergence)
-echo "## Divergence Analysis"
-for channel in "${CHANNELS[@]}"; do
-  echo "- $channel unique commits:"
-
-  # Find commits unique to this branch
-  OTHER_CHANNELS=("${CHANNELS[@]}")
-  unset OTHER_CHANNELS[$channel]
-
-  git log --oneline $channel --not ${OTHER_CHANNELS[@]} | head -3
-done
+# Check for merge conflicts before promotion
+git merge --no-commit --no-ff channels/dev
+git merge --abort  # If checking only
 ```
-</File>
+
+Use Atmos to validate channel configurations:
+
+```bash
+# Validate all stacks on a channel
+atmos validate stacks --ref channels/dev
+atmos validate stacks --ref channels/staging
+atmos validate stacks --ref channels/prod
+
+# Compare configurations between channels
+atmos describe stacks --ref channels/dev > dev-stacks.yaml
+atmos describe stacks --ref channels/staging > staging-stacks.yaml
+diff dev-stacks.yaml staging-stacks.yaml
+```
 
 ## Benefits
 
@@ -593,16 +563,29 @@ The pattern also has challenges:
 Minimize divergence between channels:
 
 ```yaml
-# Daily sync workflow
-- cron: '0 0 * * *'
-  run: |
-    # Check divergence
-    ./scripts/monitor-divergence.sh
+# Daily sync workflow in GitHub Actions
+name: Channel Sync Check
+on:
+  schedule:
+    - cron: '0 0 * * *'
+jobs:
+  check-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Check Channel Divergence
+        run: |
+          # Check divergence
+          AHEAD=$(git rev-list --count channels/staging..channels/dev)
 
-    # Auto-sync if within threshold
-    if [ $AHEAD -lt 5 ]; then
-      git merge --ff-only channels/dev
-    fi
+          # Auto-sync if within threshold
+          if [ "$AHEAD" -lt 5 ] && [ "$AHEAD" -gt 0 ]; then
+            git checkout channels/staging
+            git merge --ff-only channels/dev
+            git push origin channels/staging
+          fi
 ```
 
 ### 2. Use Feature Flags for Long-Running Changes
@@ -632,35 +615,47 @@ locals {
 
 ### 3. Implement Break-Glass Procedures
 
-Handle emergency situations:
+Handle emergency situations using Atmos and Git:
 
-<File title="scripts/emergency-deploy.sh">
 ```bash
-#!/bin/bash
-# Emergency deployment bypassing normal channels
+# Create emergency hotfix branch from production
+git checkout -b hotfix/critical-fix channels/prod
 
-COMPONENT=$1
-TARGET_ENV=$2
-COMMIT=$3
+# Make necessary changes
+# ... edit files ...
 
-echo "⚠️  EMERGENCY DEPLOYMENT"
-echo "Component: $COMPONENT"
-echo "Target: $TARGET_ENV"
-echo "Commit: $COMMIT"
+# Validate the fix
+atmos validate stacks
+atmos terraform plan <component> --stack prod-us-east-1
 
-# Create emergency branch
-git checkout -b emergency/$COMPONENT-$TARGET_ENV-$(date +%s) $COMMIT
+# Apply the emergency fix
+atmos terraform apply <component> --stack prod-us-east-1
 
-# Apply directly to environment
-atmos terraform apply $COMPONENT --stack $TARGET_ENV
+# Create tracking for the emergency deployment
+git commit -m "HOTFIX: Emergency deployment for <component>"
+git push origin hotfix/critical-fix
 
-# Create tracking issue
-gh issue create \
-  --title "EMERGENCY: Direct deployment to $TARGET_ENV" \
-  --body "Component: $COMPONENT, Commit: $COMMIT" \
+# Create PR to merge back to channels
+gh pr create \
+  --base channels/prod \
+  --head hotfix/critical-fix \
+  --title "HOTFIX: Emergency deployment" \
   --label "emergency,requires-followup"
 ```
-</File>
+
+Document emergency procedures in your runbooks:
+
+```yaml
+# .atmos/emergency-procedures.yaml
+emergency:
+  hotfix_process:
+    - step: "Create hotfix branch from production channel"
+    - step: "Apply minimal necessary changes"
+    - step: "Validate with atmos validate stacks"
+    - step: "Deploy to affected environment"
+    - step: "Backport to all channels"
+    - step: "Document in incident report"
+```
 
 ### 4. Monitor Channel Health
 

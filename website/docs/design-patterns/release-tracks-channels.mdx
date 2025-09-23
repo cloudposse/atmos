@@ -411,41 +411,31 @@ components:
 ```
 </File>
 
-### Promotion Script
+### Track Promotion Process
 
-<File title="scripts/promote-track.sh">
-```bash
-#!/bin/bash
-# Script to promote versions between tracks
+To promote versions between tracks, update the track configuration:
 
-set -e
-
-COMPONENT=$1
-FROM_TRACK=$2
-TO_TRACK=$3
-
-if [ -z "$COMPONENT" ] || [ -z "$FROM_TRACK" ] || [ -z "$TO_TRACK" ]; then
-  echo "Usage: $0 <component> <from-track> <to-track>"
-  echo "Example: $0 vpc alpha beta"
-  exit 1
-fi
-
-# Get current version from source track
-CURRENT_VERSION=$(yq eval ".vars.tracks.component_versions.$COMPONENT.$FROM_TRACK" stacks/catalog/tracks.yaml)
-
-echo "Promoting $COMPONENT from $FROM_TRACK ($CURRENT_VERSION) to $TO_TRACK"
-
-# Update target track
-yq eval -i ".vars.tracks.component_versions.$COMPONENT.$TO_TRACK = \"$CURRENT_VERSION\"" stacks/catalog/tracks.yaml
-
-# Create PR for the promotion
-git add stacks/catalog/tracks.yaml
-git commit -m "Promote $COMPONENT from $FROM_TRACK to $TO_TRACK ($CURRENT_VERSION)"
-git push origin "promote-$COMPONENT-$TO_TRACK-$(date +%Y%m%d)"
-
-echo "Promotion complete. Please review and merge the PR."
+```yaml
+# stacks/catalog/tracks.yaml
+vars:
+  tracks:
+    component_versions:
+      vpc:
+        alpha: "v1.14.0"
+        beta: "v1.14.0"  # Promote alpha version to beta
+        prod: "v1.13.2"  # Keep prod stable for now
 ```
-</File>
+
+Then validate and apply:
+
+```bash
+# Validate all affected stacks
+atmos validate stacks
+
+# Test in the target track environments
+atmos terraform plan vpc --stack staging-us-east-1
+atmos terraform apply vpc --stack staging-us-east-1
+```
 
 ## Benefits
 
@@ -510,12 +500,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Setup Atmos
+        uses: cloudposse/github-action-atmos@v2
       - name: Promote Version
         run: |
-          ./scripts/promote-track.sh \
-            ${{ inputs.component }} \
-            ${{ inputs.from_track }} \
-            ${{ inputs.to_track }}
+          # Update track configuration
+          yq eval -i ".vars.tracks.component_versions.${{ inputs.component }}.${{ inputs.to_track }} = \
+            $(yq eval '.vars.tracks.component_versions.${{ inputs.component }}.${{ inputs.from_track }}' stacks/catalog/tracks.yaml)" \
+            stacks/catalog/tracks.yaml
+
+          # Validate changes
+          atmos validate stacks
 ```
 
 ### 3. Monitor Track Health

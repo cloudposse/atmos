@@ -11,7 +11,7 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Folder-Based Versioning** Design Pattern is a trunk-based approach that uses the repository's directory structure on the main branch to manage component versions. By creating separate folders for different versions (e.g., `vpc`, `vpc-v2`), teams can safely iterate on new versions while maintaining stability for existing deployments.
+The **Folder-Based Versioning** Design Pattern is a trunk-based approach that uses the repository's directory structure on the main branch to manage component versions. By creating separate folders for different versions (e.g., `vpc/v1`, `vpc/v2`), teams can safely iterate on new versions while maintaining stability for existing deployments.
 </Intro>
 
 Folder-Based Versioning makes version boundaries explicit and visible in the repository structure. As a trunk-based pattern, all version folders exist in the main branch simultaneously, allowing environments to choose their version by selecting the appropriate folder. This approach allows for long-lived divergence between versions, gradual migration paths, and clear separation of concerns. It's particularly useful for major version changes that require extended development and testing periods.
@@ -67,29 +67,31 @@ Organize components with version-specific folders:
 ```
 components/
   terraform/
-    vpc/                    # Original/v1 implementation
-      main.tf
-      variables.tf
-      outputs.tf
-      README.md
-    vpc-v2/                 # New v2 implementation
-      main.tf
-      variables.tf
-      outputs.tf
-      README.md
-      MIGRATION.md          # Migration guide from v1
-    vpc-v3-preview/         # Future v3 in development
-      main.tf
-      variables.tf
-      outputs.tf
-      README.md
-    rds/                    # Current stable version
-      main.tf
-    rds-aurora/             # Alternative implementation
-      main.tf
-    rds-v2-deprecated/      # Deprecated, pending removal
-      main.tf
-      DEPRECATED.md
+    vpc/
+      v1/                   # Version 1 implementation
+        main.tf
+        variables.tf
+        outputs.tf
+        README.md
+      v2/                   # Version 2 implementation
+        main.tf
+        variables.tf
+        outputs.tf
+        README.md
+        MIGRATION.md        # Migration guide from v1
+      v3-preview/           # Version 3 in development
+        main.tf
+        variables.tf
+        outputs.tf
+        README.md
+    rds/
+      standard/             # Standard RDS version
+        main.tf
+      aurora/               # Aurora variant
+        main.tf
+      v2-deprecated/        # Deprecated version
+        main.tf
+        DEPRECATED.md
 ```
 </File>
 
@@ -109,7 +111,7 @@ components:
         workspace_key_prefix: "dev/vpc"
       source:
         # Reference v2 folder for development
-        uri: "./components/terraform/vpc-v2"
+        uri: "./components/terraform/vpc/v2"
       vars:
         name: "dev-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -141,19 +143,19 @@ Choose clear, consistent naming patterns:
 
 ```
 # Semantic versioning
-vpc-v1/
-vpc-v2/
-vpc-v3/
+vpc/v1/
+vpc/v2/
+vpc/v3/
 
 # Feature-based versioning
-rds/
-rds-aurora/
-rds-serverless/
+rds/standard/
+rds/aurora/
+rds/serverless/
 
 # Status-based versioning
-eks/
-eks-beta/
-eks-deprecated/
+eks/stable/
+eks/beta/
+eks/deprecated/
 
 # Date-based versioning
 lambda-2023/
@@ -169,7 +171,7 @@ The `workspace_key_prefix` must remain stable across version changes to avoid st
 ```yaml
 # WRONG - Version in workspace key causes state problems
 settings:
-  workspace_key_prefix: "prod/vpc-v2"  # Don't do this!
+  workspace_key_prefix: "prod/vpc/v2"  # Don't do this!
 
 # CORRECT - Stable workspace key across versions
 settings:
@@ -190,22 +192,22 @@ Roll out new versions progressively through environments:
 # Week 1: Development environments
 dev:
   vpc:
-    source: "./components/terraform/vpc-v2"
+    source: "./components/terraform/vpc/v2"
 
 # Week 2: Staging environments
 staging:
   vpc:
-    source: "./components/terraform/vpc-v2"
+    source: "./components/terraform/vpc/v2"
 
 # Week 3: Production canary
 prod-canary:
   vpc:
-    source: "./components/terraform/vpc-v2"
+    source: "./components/terraform/vpc/v2"
 
 # Week 4: All production
 prod:
   vpc:
-    source: "./components/terraform/vpc-v2"
+    source: "./components/terraform/vpc/v2"
 ```
 </File>
 
@@ -233,7 +235,7 @@ components:
       settings:
         workspace_key_prefix: "prod/vpc-next"
       source:
-        uri: "./components/terraform/vpc-v2"
+        uri: "./components/terraform/vpc/v2"
 ```
 </File>
 
@@ -248,7 +250,7 @@ For backwards-compatible changes, switch the folder reference:
 atmos terraform plan vpc --stack prod-us-east-1
 
 # Update stack configuration to point to new version
-# Edit: source.uri from "./components/terraform/vpc" to "./components/terraform/vpc-v2"
+# Edit: source.uri from "./components/terraform/vpc" to "./components/terraform/vpc/v2"
 
 # Plan with new version - should show intended changes
 atmos terraform plan vpc --stack prod-us-east-1
@@ -275,11 +277,11 @@ Original VPC implementation. Stable and widely deployed.
 - Internet Gateway for public subnet access
 
 ## Status: Stable (Maintenance Mode)
-New deployments should consider vpc-v2 for additional features.
+New deployments should consider vpc/v2 for additional features.
 ```
 </File>
 
-<File title="components/terraform/vpc-v2/README.md">
+<File title="components/terraform/vpc/v2/README.md">
 ```markdown
 # VPC Component (v2)
 
@@ -299,7 +301,7 @@ See MIGRATION.md for upgrade instructions.
 ```
 </File>
 
-<File title="components/terraform/vpc-v2/MIGRATION.md">
+<File title="components/terraform/vpc/v2/MIGRATION.md">
 ```markdown
 # Migration Guide: VPC v1 to v2
 
@@ -313,7 +315,7 @@ See MIGRATION.md for upgrade instructions.
 ### 1. Pre-Migration Validation
 ```bash
 # Capture current state
-atmos terraform output vpc --stack $STACK > vpc-v1-outputs.json
+atmos terraform output vpc --stack $STACK > vpc/v1-outputs.json
 ```
 
 ### 2. Update Configuration
@@ -325,7 +327,7 @@ vars:
 
 # Update source reference
 source:
-  uri: "./components/terraform/vpc-v2"  # was: vpc
+  uri: "./components/terraform/vpc/v2"  # was: vpc
 ```
 
 ### 3. Review Changes
@@ -343,7 +345,7 @@ Change source.uri back to "./components/terraform/vpc"
 ```
 </File>
 
-<File title="components/terraform/vpc-v3-preview/README.md">
+<File title="components/terraform/vpc/v3-preview/README.md">
 ```markdown
 # VPC Component (v3-preview)
 
@@ -362,7 +364,7 @@ This version is under active development. APIs will change.
 Use in development environments only:
 ```yaml
 source:
-  uri: "./components/terraform/vpc-v3-preview"
+  uri: "./components/terraform/vpc/v3-preview"
 ```
 ```
 </File>
@@ -404,7 +406,7 @@ components:
       settings:
         workspace_key_prefix: "dev/vpc"
       source:
-        uri: "./components/terraform/vpc-v3-preview"
+        uri: "./components/terraform/vpc/v3-preview"
       vars:
         name: "dev-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -430,7 +432,7 @@ components:
       settings:
         workspace_key_prefix: "staging/vpc"
       source:
-        uri: "./components/terraform/vpc-v2"
+        uri: "./components/terraform/vpc/v2"
       vars:
         name: "staging-use1-vpc"
         cidr_block: "10.1.0.0/16"
@@ -532,9 +534,9 @@ Maintain clear documentation for each version:
 | eks | Stable | - | - |
 
 ## Version Notes
-- **vpc-v1**: Deprecated as of 2024-01-01, removal planned 2024-04-01
-- **vpc-v2**: Current recommended version
-- **vpc-v3**: Preview features, not for production
+- **vpc/v1**: Deprecated as of 2024-01-01, removal planned 2024-04-01
+- **vpc/v2**: Current recommended version
+- **vpc/v3**: Preview features, not for production
 ```
 
 ### 3. Shared Code Management
@@ -546,7 +548,7 @@ components/
   terraform/
     vpc/
       main.tf                   # Imports from shared
-    vpc-v2/
+    vpc/v2/
       main.tf                   # Imports from shared
     vpc-shared/                 # Shared code
       modules/
@@ -557,61 +559,46 @@ components/
 
 ### 4. Testing Strategy
 
-Test all active versions:
+Test all active versions using Atmos validation:
 
 ```bash
-#!/bin/bash
-# test-all-versions.sh
+# Validate all components and their versions
+atmos validate stacks
+atmos validate components
 
-COMPONENTS="vpc rds eks"
-VERSIONS="v1 v2 v3"
+# Test specific versioned components
+atmos terraform validate vpc/v2 --stack dev-us-east-1
+atmos terraform validate vpc/v3-preview --stack dev-us-east-1
 
-for component in $COMPONENTS; do
-  for version in $VERSIONS; do
-    if [ -d "components/terraform/${component}-${version}" ]; then
-      echo "Testing ${component}-${version}..."
-      cd "components/terraform/${component}-${version}"
-      terraform init
-      terraform validate
-      tflint
-      cd -
-    fi
-  done
-done
+# Run validation for all stacks
+atmos validate all
 ```
 
-### 5. Migration Automation
+### 5. Migration Process
 
-Automate common migration tasks:
+Migrate components to new versions using Atmos:
 
-<File title="scripts/migrate-component.sh">
+```yaml
+# Update stack configuration to reference new version
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      source:
+        # Change from vpc/v1 to vpc/v2
+        uri: "./components/terraform/vpc/v2"
+```
+
+Then apply the migration:
+
 ```bash
-#!/bin/bash
-# Migrate a component to a new version
+# Preview the migration changes
+atmos terraform plan vpc --stack prod-us-east-1
 
-STACK=$1
-COMPONENT=$2
-FROM_VERSION=$3
-TO_VERSION=$4
-
-echo "Migrating $COMPONENT from $FROM_VERSION to $TO_VERSION in $STACK"
-
-# Backup current state
-atmos terraform state pull $COMPONENT --stack $STACK > "backup-$STACK-$COMPONENT-$(date +%s).tfstate"
-
-# Update configuration
-yq eval -i ".components.terraform.$COMPONENT.source.uri = \"./components/terraform/$COMPONENT-$TO_VERSION\"" "stacks/$STACK.yaml"
-
-# Plan changes
-atmos terraform plan $COMPONENT --stack $STACK
-
-# Prompt for confirmation
-read -p "Apply migration? (y/n) " -n 1 -r
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-  atmos terraform apply $COMPONENT --stack $STACK
-fi
+# Apply the migration with interactive approval
+atmos terraform apply vpc --stack prod-us-east-1 --auto-approve=false
 ```
-</File>
 
 ## Migration from Other Patterns
 

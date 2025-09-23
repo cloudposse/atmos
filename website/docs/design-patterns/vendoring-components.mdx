@@ -300,66 +300,38 @@ When updating from upstream:
 
 ### 3. Bulk Updates
 
-Perform controlled bulk updates:
+Perform controlled bulk updates using Atmos vendor commands:
 
-<File title="scripts/vendor-update.sh">
 ```bash
-#!/bin/bash
-# Bulk vendor update script
-
-set -e
-
-echo "Starting bulk vendor update..."
-DATE=$(date +%Y%m%d)
-BRANCH="vendor-update-$DATE"
-
-# Create update branch
-git checkout -b $BRANCH
-
-# Update all components
+# Update all vendored components
 atmos vendor pull
 
-# Check for changes
-if [ -z "$(git status --porcelain)" ]; then
-  echo "No vendor updates available"
-  exit 0
-fi
+# Update specific component
+atmos vendor pull --component vpc
 
-# Generate update report
-echo "# Vendor Update Report - $DATE" > VENDOR_UPDATE.md
-echo "" >> VENDOR_UPDATE.md
+# Update with specific version
+atmos vendor pull --component vpc --version v2.2.0
 
-for component in $(ls components/terraform); do
-  if [ -n "$(git diff --name-only HEAD -- components/terraform/$component)" ]; then
-    echo "## $component" >> VENDOR_UPDATE.md
-
-    # Extract version info from vendor-manifest.yaml
-    OLD_VERSION=$(git show HEAD:vendor-manifest.yaml | yq eval ".components.$component.upstream_version" -)
-    NEW_VERSION=$(yq eval ".components.$component.upstream_version" vendor-manifest.yaml)
-
-    echo "- Previous: $OLD_VERSION" >> VENDOR_UPDATE.md
-    echo "- Updated: $NEW_VERSION" >> VENDOR_UPDATE.md
-    echo "- Changes: $(git diff --stat HEAD -- components/terraform/$component | tail -1)" >> VENDOR_UPDATE.md
-    echo "" >> VENDOR_UPDATE.md
-  fi
-done
-
-# Commit changes
-git add -A
-git commit -m "Vendor update: $DATE
-
-See VENDOR_UPDATE.md for details"
-
-# Push and create PR
-git push origin $BRANCH
-gh pr create \
-  --title "Vendor Update: $DATE" \
-  --body "$(cat VENDOR_UPDATE.md)" \
-  --label "vendor-update"
-
-echo "Vendor update complete. PR created."
+# Dry run to preview changes
+atmos vendor pull --dry-run
 ```
-</File>
+
+Track vendor updates in your vendor manifest:
+
+```yaml
+# vendor-manifest.yaml
+components:
+  vpc:
+    origin:
+      repository: "github.com/cloudposse/terraform-aws-vpc"
+      ref: "2.2.0"  # Updated from 2.1.0
+      vendor_date: "2024-01-25"
+    upstream_version: "2.2.0"
+    changelog: |
+      - Updated from 2.1.0 to 2.2.0
+      - Added support for IPv6
+      - Fixed NAT gateway issue
+```
 
 ### 4. Handling Divergence
 
@@ -409,9 +381,7 @@ Here's a complete example of vendoring components for a production infrastructur
 ├── stacks/
 │   └── prod/
 │       └── us-east-1.yaml
-└── scripts/
-    ├── vendor-update.sh
-    └── vendor-audit.sh
+└── vendor.yaml
 ```
 
 ### Vendor Configuration
@@ -487,10 +457,6 @@ components:
     vpc:
       metadata:
         component: vpc
-        # Reference vendored component
-        vendored: true
-        vendor_version: "2.1.0"
-        last_updated: "2024-01-20"
       settings:
         workspace_key_prefix: "prod/vpc"
       source:
@@ -505,63 +471,36 @@ components:
 ```
 </File>
 
-### Audit Script
+### Vendor Auditing
 
-<File title="scripts/vendor-audit.sh">
+Check the status of vendored components using the vendor manifest:
+
 ```bash
-#!/bin/bash
-# Audit vendored components for updates and security issues
+# Check vendor manifest for outdated components
+atmos vendor status
 
-echo "Vendored Component Audit Report"
-echo "================================"
-echo ""
+# Validate vendored components
+atmos validate components
 
-# Check each vendored component
-for component in $(yq eval '.spec.sources[].component' vendor.yaml); do
-  echo "## Component: $component"
-
-  # Get current and latest versions
-  CURRENT=$(yq eval ".components.$component.upstream_version" vendor-manifest.yaml)
-  SOURCE=$(yq eval ".components.$component.origin.repository" vendor-manifest.yaml)
-
-  # Fetch latest version from upstream (example for GitHub)
-  LATEST=$(gh api repos/${SOURCE#github.com/}/releases/latest --jq .tag_name 2>/dev/null || echo "unknown")
-
-  echo "- Current Version: $CURRENT"
-  echo "- Latest Version: $LATEST"
-  echo "- Last Vendored: $(yq eval ".components.$component.origin.vendor_date" vendor-manifest.yaml)"
-
-  # Check for local modifications
-  MODS=$(yq eval ".components.$component.local_modifications | length" vendor-manifest.yaml)
-  if [ "$MODS" -gt 0 ]; then
-    echo "- Local Modifications: $MODS files modified"
-    echo "  ⚠️  Review modifications before updating"
-  fi
-
-  # Check if update available
-  if [ "$CURRENT" != "$LATEST" ] && [ "$LATEST" != "unknown" ]; then
-    echo "- Status: ⬆️ Update available"
-  else
-    echo "- Status: ✅ Up to date"
-  fi
-
-  echo ""
-done
-
-# Security scan
-echo "## Security Scan"
-echo "Running tfsec on vendored components..."
-for component in $(ls components/terraform); do
-  tfsec components/terraform/$component --format json > /tmp/tfsec-$component.json 2>/dev/null
-  ISSUES=$(jq '.results | length' /tmp/tfsec-$component.json)
-  if [ "$ISSUES" -gt 0 ]; then
-    echo "- $component: ⚠️  $ISSUES security issues found"
-  else
-    echo "- $component: ✅ No security issues"
-  fi
-done
+# Run security scans on vendored code
+atmos validate stacks --include-vendored
 ```
-</File>
+
+Track vendor status in the manifest:
+
+```yaml
+# vendor-manifest.yaml
+components:
+  vpc:
+    status: "up-to-date"
+    last_checked: "2024-01-25"
+    upstream_version: "2.2.0"
+    local_version: "2.2.0"
+    security_scan:
+      date: "2024-01-25"
+      issues: 0
+      scanner: "atmos"
+```
 
 ## Benefits
 
@@ -621,16 +560,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Check for Updates
+      - name: Setup Atmos
+        uses: cloudposse/github-action-atmos@v2
+      - name: Check for Vendor Updates
         run: |
-          ./scripts/vendor-audit.sh > audit-report.md
+          # Check vendor status
+          atmos vendor status
 
       - name: Create Issue if Updates Available
         run: |
-          if grep -q "Update available" audit-report.md; then
+          # Create issue if updates are available
+          if atmos vendor status --check-updates; then
+            atmos vendor status --format=markdown > vendor-report.md
             gh issue create \
               --title "Vendor Updates Available: $(date +%Y-%m-%d)" \
-              --body-file audit-report.md \
+              --body-file vendor-report.md \
               --label "vendor-update"
           fi
 ```
