@@ -342,12 +342,3 @@ func TestLargeInputValidation(t *testing.T) {
 		// The preview should be truncated to 500 chars
 	})
 }
-
-// testRecorder implements a minimal test result recorder.
-type testRecorder struct {
-	failed bool
-	output []string
-}
-
-func (r *testRecorder) Fprint(w interface{}, args ...interface{}) {}
-func (r *testRecorder) Failed() bool                              { return r.failed }
