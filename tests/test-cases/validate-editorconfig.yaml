@@ -12,6 +12,8 @@ tests:
       diff: []
       stdout:
         - "No errors found"
+      stderr:
+        - "^$"
       exit_code: 0
   - name: atmos validate editorconfig error
     enabled: true

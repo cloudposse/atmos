@@ -75,6 +75,7 @@ tests:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stdout:
         - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      stderr:
         - "Set logs-level=debug logs-file=/dev/stderr"
       exit_code: 0
 
@@ -96,6 +97,8 @@ tests:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stdout:
         - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      stderr:
+        - "^$"
       exit_code: 0
   - name: "Valid log level in env should be priortized over config"
     enabled: true
@@ -112,6 +115,7 @@ tests:
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
         # We are fine with any debug logs config is set to info but if env gets priority we would get debug
         - "DEBU"
       exit_code: 0
@@ -132,6 +136,7 @@ tests:
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
         # We are fine with any debug logs config and env is set to info but if flag gets priority we would get debug logs
         - "DEBU"
       exit_code: 0
