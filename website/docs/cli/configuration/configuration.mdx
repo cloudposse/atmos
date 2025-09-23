@@ -274,14 +274,14 @@ The `settings` section configures Atmos global settings.
 
       <dt>`pager`</dt>
       <dd>Configure pager behavior. Can be set to `false` (disabled, default), `true` (enabled), or a specific pager like `less` or `more`.</dd>
-      
+
       <dt>`color`</dt>
       <dd>Enable or disable colored output (default: `true`). Can be overridden with `--no-color` flag or `NO_COLOR`/`ATMOS_NO_COLOR` environment variables.</dd>
     </dl>
-    
+
     :::info Environment Variables for Portability
     **Configuration Deprecation**: The `no_color` field in `atmos.yaml` is deprecated. Use `color: false` instead.
-    
+
     **Environment Variables Still Supported**: The `NO_COLOR` and `ATMOS_NO_COLOR` environment variables remain fully supported for portability across different environments and CI/CD systems.
     :::
   </dd>

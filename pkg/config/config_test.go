@@ -487,6 +487,7 @@ func changeWorkingDir(t *testing.T, dir string) {
 	err = os.Chdir(dir)
 	require.NoError(t, err, "Failed to change working directory")
 }
+
 func TestParseFlagsForPager(t *testing.T) {
 	tests := []struct {
 		name            string
