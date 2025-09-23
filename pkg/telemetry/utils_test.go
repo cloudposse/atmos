@@ -694,7 +694,8 @@ func TestPrintTelemetryDisclosure(t *testing.T) {
 
 	// Verify the output contains the telemetry disclosure message
 	// In a non-TTY environment, it will be plain text
-	assert.Contains(t, output, "Notice: Telemetry Enabled")
+	assert.Contains(t, output, "Notice:")
+	assert.Contains(t, output, "Telemetry Enabled")
 	assert.Contains(t, output, "Atmos now collects completely anonymous telemetry")
 	assert.Contains(t, output, "https://atmos.tools/cli/telemetry")
 }
@@ -727,7 +728,8 @@ func TestPrintTelemetryDisclosureOnlyOnce(t *testing.T) {
 	firstOutput := buf1.String()
 
 	// Verify first call shows the message
-	assert.Contains(t, firstOutput, "Notice: Telemetry Enabled")
+	assert.Contains(t, firstOutput, "Notice:")
+	assert.Contains(t, firstOutput, "Telemetry Enabled")
 
 	// Second call should NOT show the message
 	r2, w2, _ := os.Pipe()
@@ -741,7 +743,8 @@ func TestPrintTelemetryDisclosureOnlyOnce(t *testing.T) {
 	secondOutput := buf2.String()
 
 	// Verify second call does not show the message
-	assert.NotContains(t, secondOutput, "Notice: Telemetry Enabled")
+	assert.NotContains(t, secondOutput, "Notice:")
+	assert.NotContains(t, secondOutput, "Telemetry Enabled")
 }
 
 // TestPrintTelemetryDisclosureDisabledInCI tests that the telemetry disclosure
@@ -777,7 +780,8 @@ func TestPrintTelemetryDisclosureDisabledInCI(t *testing.T) {
 	output := buf.String()
 
 	// Verify no telemetry disclosure is shown in CI
-	assert.NotContains(t, output, "Notice: Telemetry Enabled")
+	assert.NotContains(t, output, "Notice:")
+	assert.NotContains(t, output, "Telemetry Enabled")
 }
 
 // TestPrintTelemetryDisclosureDisabledByConfig tests that the telemetry disclosure
@@ -813,5 +817,6 @@ func TestPrintTelemetryDisclosureDisabledByConfig(t *testing.T) {
 	output := buf.String()
 
 	// Verify no telemetry disclosure is shown when disabled
-	assert.NotContains(t, output, "Notice: Telemetry Enabled")
+	assert.NotContains(t, output, "Notice:")
+	assert.NotContains(t, output, "Telemetry Enabled")
 }
