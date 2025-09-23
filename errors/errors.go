@@ -72,6 +72,18 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// Config loading errors.
+	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
+	ErrReadConfig                  = errors.New("failed to read config")
+	ErrMergeTempConfig             = errors.New("failed to merge temp config")
+	ErrPreprocessYAMLFunctions     = errors.New("failed to preprocess YAML functions")
+	ErrMergeEmbeddedConfig         = errors.New("failed to merge embedded config")
+	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
+	ErrFileNotFound                = errors.New("file not found")
+	ErrExpectedFile                = errors.New("--config expected file found directory")
+	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
+	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found on directory")
+
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)\"")
 	ErrInvalidComponent                   = errors.New("invalid component")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")

@@ -26,8 +26,6 @@ var embeddedConfigData []byte
 
 const MaximumImportLvL = 10
 
-var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
-
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
 // * Home directory (~/.atmos).
@@ -280,7 +278,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 			return nil, err
 		}
 		// Wrap any other error with context
-		return nil, fmt.Errorf("failed to read config %s/%s: %w", path, fileName, err)
+		return nil, fmt.Errorf("%w: %s/%s: %v", errUtils.ErrReadConfig, path, fileName, err)
 	}
 
 	return tempViper, nil
@@ -290,7 +288,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 func readConfigFileContent(configFilePath string) ([]byte, error) {
 	content, err := os.ReadFile(configFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("read config file %s: %w", configFilePath, err)
+		return nil, fmt.Errorf("%w: %s: %v", errUtils.ErrReadConfig, configFilePath, err)
 	}
 	return content, nil
 }
@@ -314,7 +312,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// - B's settings override C's settings
 	// - A's settings override both B's and C's settings
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("merge temp config: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrMergeTempConfig, err)
 	}
 
 	return nil
@@ -366,7 +364,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	// Process YAML functions
 	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return fmt.Errorf("preprocess YAML functions: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrPreprocessYAMLFunctions, err)
 	}
 
 	// Marshal to YAML
@@ -434,7 +432,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 		isDir = true
 	}
 	if !isDir {
-		return ErrAtmosDIrConfigNotFound
+		return errUtils.ErrAtmosDirConfigNotFound
 	}
 
 	// Check if we should exclude .atmos.d from this directory during testing.
@@ -508,7 +506,7 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 
 	// Merge the embedded configuration into Viper
 	if err := v.MergeConfig(reader); err != nil {
-		return fmt.Errorf("failed to merge embedded config: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrMergeEmbeddedConfig, err)
 	}
 
 	return nil
