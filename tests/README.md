@@ -137,33 +137,33 @@ import "github.com/cloudposse/atmos/tests"
 func TestAWSFeature(t *testing.T) {
     // Check AWS precondition at test start
     tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
-    
+
     // Test code here...
 }
 
 func TestGitHubVendoring(t *testing.T) {
     // Check GitHub access and rate limits
     rateLimits := tests.RequireGitHubAccess(t)
-    
+
     // Optionally check if we have enough requests
     if rateLimits != nil && rateLimits.Remaining < 20 {
         t.Skipf("Need at least 20 GitHub API requests, only %d remaining", rateLimits.Remaining)
     }
-    
+
     // Test code here...
 }
 
 func TestGitOperations(t *testing.T) {
     // Check for Git repository with valid remotes
     tests.RequireGitRemoteWithValidURL(t)
-    
+
     // Test code here...
 }
 
 func TestOCIVendoring(t *testing.T) {
     // Check for OCI authentication (GitHub token)
     tests.RequireOCIAuthentication(t)
-    
+
     // Test code here...
 }
 ```

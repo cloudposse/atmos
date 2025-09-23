@@ -93,7 +93,7 @@ For CLI tests that depend on built binaries:
 func TestAWSIntegration(t *testing.T) {
     // Check precondition at test start
     tests.RequireAWSProfile(t, "dev-profile")
-    
+
     // Test code only runs if precondition met
     // ...
 }
@@ -102,12 +102,12 @@ func TestGitHubVendoring(t *testing.T) {
     // Check multiple preconditions
     tests.RequireGitRepository(t)
     rateLimits := tests.RequireGitHubAccess(t)
-    
+
     // Can make decisions based on returned data
     if rateLimits != nil && rateLimits.Remaining < 50 {
         t.Skipf("Need at least 50 API requests, only %d remaining", rateLimits.Remaining)
     }
-    
+
     // Test code
     // ...
 }
