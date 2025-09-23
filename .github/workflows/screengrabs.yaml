@@ -28,8 +28,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name)
-          if [ "$VERSION" = "null" ] || [ -z "$VERSION" ]; then
+          VERSION=$(gh release view --repo cloudposse/atmos --json tagName -q .tagName)
+          if [ -z "$VERSION" ]; then
             echo "Failed to get latest version, using fallback"
             VERSION="v1.190.0"
           fi
