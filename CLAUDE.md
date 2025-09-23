@@ -18,7 +18,7 @@ Atmos is a sophisticated Go CLI tool for managing complex cloud infrastructure u
 
 **Important**: Check the `prd/` directory for design decisions and requirements for features. PRDs contain:
 - Problem statements and goals
-- User stories and acceptance criteria  
+- User stories and acceptance criteria
 - Design decisions with alternatives considered
 - Technical specifications
 - Implementation plans

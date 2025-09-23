@@ -9,7 +9,7 @@ HashiCorp's fix in go-getter v1.7.9 simply disables all symlinks for git operati
 ## Goals
 
 1. **Protect against symlink attacks** - Prevent unauthorized file access outside vendor boundaries
-2. **Maintain functionality** - Support legitimate symlinks within repository boundaries  
+2. **Maintain functionality** - Support legitimate symlinks within repository boundaries
 3. **Provide flexibility** - Allow users to choose their security posture based on trust levels
 4. **Ensure backward compatibility** - Don't break existing workflows that depend on symlinks
 5. **Enable auditing** - Log security decisions for compliance and debugging
@@ -24,8 +24,8 @@ HashiCorp's fix in go-getter v1.7.9 simply disables all symlinks for git operati
 ## User Stories
 
 ### Story 1: Security-Conscious DevOps Engineer
-**As a** DevOps engineer vendoring from public repositories  
-**I want** protection against malicious symlinks  
+**As a** DevOps engineer vendoring from public repositories
+**I want** protection against malicious symlinks
 **So that** I don't accidentally expose sensitive files from my system
 
 **Acceptance Criteria:**
@@ -34,8 +34,8 @@ HashiCorp's fix in go-getter v1.7.9 simply disables all symlinks for git operati
 - No manual configuration needed for basic protection
 
 ### Story 2: Enterprise Security Team
-**As a** security team member  
-**I want** to enforce maximum security when vendoring from untrusted sources  
+**As a** security team member
+**I want** to enforce maximum security when vendoring from untrusted sources
 **So that** we maintain compliance with security policies
 
 **Acceptance Criteria:**
@@ -44,8 +44,8 @@ HashiCorp's fix in go-getter v1.7.9 simply disables all symlinks for git operati
 - Audit logs show all symlink decisions
 
 ### Story 3: Platform Engineer with Legacy Infrastructure
-**As a** platform engineer with existing symlink-dependent infrastructure  
-**I want** to continue using symlinks within my trusted repositories  
+**As a** platform engineer with existing symlink-dependent infrastructure
+**I want** to continue using symlinks within my trusted repositories
 **So that** I don't have to refactor working infrastructure code
 
 **Acceptance Criteria:**

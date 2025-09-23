@@ -251,7 +251,7 @@ vendor:
   <dd>
     Validates that symlink targets remain within the vendor source boundaries. This policy:
     - Allows symlinks that point to files within the repository
-    - Blocks symlinks that attempt to escape to parent directories or system files  
+    - Blocks symlinks that attempt to escape to parent directories or system files
     - Logs warnings when symlinks are rejected for security reasons
     - Provides balanced security while maintaining functionality for legitimate use cases
   </dd>
@@ -317,7 +317,7 @@ spec:
 **Balanced Configuration for Mixed Sources:**
 
 ```yaml
-# atmos.yaml  
+# atmos.yaml
 vendor:
   policy:
     symlinks: "allow_safe"  # Validate symlinks (default)

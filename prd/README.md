@@ -7,7 +7,7 @@ This directory contains Product Requirements Documents for Atmos features.
 PRDs serve as the source of truth for feature design and implementation. They document:
 
 - **Problem Statement**: What problem are we solving and why
-- **Goals & Non-Goals**: What we're trying to achieve and what's out of scope  
+- **Goals & Non-Goals**: What we're trying to achieve and what's out of scope
 - **User Stories**: Who will use this and how
 - **Design Decisions**: Technical choices made and alternatives considered
 - **Implementation Plan**: How we'll build and roll out the feature
