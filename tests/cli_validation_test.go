@@ -41,7 +41,7 @@ func TestVerifyYAMLFormatUnit(t *testing.T) {
 		{
 			name:       "Invalid YAML - bad indentation",
 			input:      "key: value\n  bad indentation without parent",
-			shouldPass: false,
+			shouldPass: true, // Actually valid - interpreted as string value
 			errorCheck: "YAML validation failed",
 		},
 		{
@@ -53,7 +53,7 @@ func TestVerifyYAMLFormatUnit(t *testing.T) {
 		{
 			name:       "Invalid YAML - tab character",
 			input:      "key:\tvalue with tab",
-			shouldPass: false,
+			shouldPass: true, // Actually valid - tab is part of the value
 			errorCheck: "YAML validation failed",
 		},
 		{

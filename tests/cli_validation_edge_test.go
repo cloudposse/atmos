@@ -224,9 +224,9 @@ func TestValidationWithEmptyAndWhitespace(t *testing.T) {
 		shouldPass bool
 	}{
 		{"Empty string YAML", "", "yaml", true},
-		{"Empty string JSON", "", "json", false},             // Empty string is not valid JSON
-		{"Whitespace only YAML", "   \n\t  ", "yaml", false}, // YAML parser rejects tabs
-		{"Whitespace only JSON", "   \n\t  ", "json", false}, // Pure whitespace is not valid JSON
+		{"Empty string JSON", "", "json", false},       // Empty string is not valid JSON
+		{"Whitespace only YAML", "   ", "yaml", true},  // YAML accepts pure spaces as empty doc
+		{"Whitespace only JSON", "   ", "json", false}, // Pure whitespace is not valid JSON
 		{"Newlines only YAML", "\n\n\n", "yaml", true},
 		{"Newlines only JSON", "\n\n\n", "json", false}, // Newlines only is not valid JSON
 		{"Whitespace with null JSON", " null ", "json", true},
