@@ -236,13 +236,12 @@ func (t *Terminal) IsColorEnabled() bool {
 }
 
 type SyntaxHighlighting struct {
-	Enabled                bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Lexer                  string `yaml:"lexer" json:"lexer" mapstructure:"lexer"`
-	Formatter              string `yaml:"formatter" json:"formatter" mapstructure:"formatter"`
-	Theme                  string `yaml:"theme" json:"theme" mapstructure:"theme"`
-	HighlightedOutputPager bool   `yaml:"pager" json:"pager" mapstructure:"pager"`
-	LineNumbers            bool   `yaml:"line_numbers" json:"line_numbers" mapstructure:"line_numbers"`
-	Wrap                   bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
+	Enabled     bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Lexer       string `yaml:"lexer" json:"lexer" mapstructure:"lexer"`
+	Formatter   string `yaml:"formatter" json:"formatter" mapstructure:"formatter"`
+	Theme       string `yaml:"theme" json:"theme" mapstructure:"theme"`
+	LineNumbers bool   `yaml:"line_numbers" json:"line_numbers" mapstructure:"line_numbers"`
+	Wrap        bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
 }
 
 type AtmosSettings struct {
