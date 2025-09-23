@@ -10,35 +10,36 @@ func createLogLevelStyles(scheme *ColorScheme) map[log.Level]lipgloss.Style {
 	levels := make(map[log.Level]lipgloss.Style)
 
 	// Bold white text on colored backgrounds for better readability
+	// Using 4-letter log level format as expected by snapshots
 	levels[log.DebugLevel] = lipgloss.NewStyle().
+		SetString("DEBU").
 		Background(lipgloss.Color(scheme.LogDebug)).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 2) // Two spaces of horizontal padding for badge effect
+		Bold(true)
 
 	levels[log.InfoLevel] = lipgloss.NewStyle().
+		SetString("INFO").
 		Background(lipgloss.Color(scheme.LogInfo)).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 2)
+		Bold(true)
 
 	levels[log.WarnLevel] = lipgloss.NewStyle().
+		SetString("WARN").
 		Background(lipgloss.Color(scheme.LogWarning)).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 2)
+		Bold(true)
 
 	levels[log.ErrorLevel] = lipgloss.NewStyle().
+		SetString("EROR").
 		Background(lipgloss.Color(scheme.LogError)).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 2)
+		Bold(true)
 
 	levels[log.FatalLevel] = lipgloss.NewStyle().
+		SetString("FATL").
 		Background(lipgloss.Color(scheme.LogError)). // Use error color for fatal
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 2)
+		Bold(true)
 
 	return levels
 }
@@ -90,15 +91,17 @@ func GetLogStyles(scheme *ColorScheme) *log.Styles {
 
 // GetLogStylesNoColor returns charm/log styles with no colors for --no-color mode.
 func GetLogStylesNoColor() *log.Styles {
-	stylesDefault := log.DefaultStyles()
 	styles := &log.Styles{
 		Levels: make(map[log.Level]lipgloss.Style),
 	}
 
-	// Clear all colors and formatting for no-color mode
-	for level := range stylesDefault.Levels {
-		styles.Levels[level] = lipgloss.NewStyle()
-	}
+	// Set log level strings without colors for no-color mode
+	// Using 4-letter log level format as expected by snapshots
+	styles.Levels[log.DebugLevel] = lipgloss.NewStyle().SetString("DEBU")
+	styles.Levels[log.InfoLevel] = lipgloss.NewStyle().SetString("INFO")
+	styles.Levels[log.WarnLevel] = lipgloss.NewStyle().SetString("WARN")
+	styles.Levels[log.ErrorLevel] = lipgloss.NewStyle().SetString("EROR")
+	styles.Levels[log.FatalLevel] = lipgloss.NewStyle().SetString("FATL")
 
 	// Clear other style elements
 	styles.Timestamp = lipgloss.NewStyle()
