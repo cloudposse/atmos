@@ -264,8 +264,6 @@ func initCobraConfig() {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
-			telemetry.PrintTelemetryDisclosure()
-
 			if err := oldUsageFunc(command); err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
@@ -278,7 +276,6 @@ func initCobraConfig() {
 			fmt.Println()
 			err := tuiUtils.PrintStyledText("ATMOS")
 			errUtils.CheckErrorPrintAndExit(err, "", "")
-			telemetry.PrintTelemetryDisclosure()
 
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
