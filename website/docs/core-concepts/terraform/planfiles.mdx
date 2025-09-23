@@ -233,20 +233,27 @@ When you run `atmos terraform plan`, Atmos automatically:
 2. **Stores it** in the component's working directory
 3. **Makes it available** for subsequent apply operations
 
-The planfile naming convention follows this pattern:
+### Automatic Planfile Naming
+
+When no custom planfile name is specified with `-out`, Atmos automatically generates a planfile name following this pattern:
 
 ```
 # Without folder prefix
-<context>-<component>.planfile
+<stack>-<component>.planfile
 
 # With folder prefix
-<context>-<folder_prefix>-<component>.planfile
+<stack>-<folder_prefix>-<component>.planfile
 
 # Examples:
-dev-vpc.planfile
-prod-us-east-1-database.planfile
-staging-platform-kubernetes.planfile
+dev-vpc.planfile                    # Stack: dev, Component: vpc
+prod-us-east-1-database.planfile    # Stack: prod, Folder: us-east-1, Component: database
+staging-platform-kubernetes.planfile # Stack: staging, Folder: platform, Component: kubernetes
 ```
+
+This automatic naming ensures:
+- Consistent planfile identification across teams
+- No accidental planfile overwrites between runs
+- Easy correlation between planfiles and their stack/component
 
 ### Planfile Storage Location
 

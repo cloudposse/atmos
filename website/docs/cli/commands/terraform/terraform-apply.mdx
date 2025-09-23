@@ -212,7 +212,24 @@ atmos terraform apply vpc -s dev
 
 ## Native Terraform Flags
 
-The `atmos terraform apply` command supports all native `terraform apply` flags. Some commonly used flags include:
+The `atmos terraform apply` command supports all native `terraform apply` flags. To pass native Terraform flags, you have two options:
+
+1. **Direct flags** - Pass Terraform flags directly if they don't conflict with Atmos flags
+2. **Double-dash separator** - Use `--` to explicitly separate Atmos flags from Terraform flags
+
+:::tip Using the Double-Dash Separator
+The `--` separator is a common Unix convention that indicates "end of options". Everything after `--` is passed directly to Terraform without interpretation by Atmos. This is useful when:
+- You want to ensure a flag is passed to Terraform, not Atmos
+- You're using flags that might conflict with Atmos flags
+- You want to be explicit about which tool receives which flags
+
+**Example:**
+```shell
+atmos terraform apply vpc -s dev -- -auto-approve -parallelism=20
+```
+:::
+
+Some commonly used native flags include:
 
 <dl>
     <dt>`-auto-approve`</dt>
