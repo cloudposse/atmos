@@ -191,7 +191,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Vendor.BasePath = vendorBasePath
 	}
 
-	vendorPolicySymlinks := os.Getenv("ATMOS_VENDOR_POLICY_SYMLINKS")
+	vendorPolicySymlinks := os.Getenv("ATMOS_VENDOR_POLICY_SYMLINKS") //nolint:forbidigo // Consistent with existing env var handling in this function
 	if len(vendorPolicySymlinks) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_VENDOR_POLICY_SYMLINKS", vendorPolicySymlinks)
 		atmosConfig.Vendor.Policy.Symlinks = vendorPolicySymlinks

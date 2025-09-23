@@ -122,39 +122,44 @@ func ValidateSymlinks(root string, policy SymlinkPolicy) error {
 			return nil
 		}
 
-		// Handle based on policy.
-		switch policy {
-		case PolicyRejectAll:
-			// Remove all symlinks for maximum security.
-			log.Debug("Removing symlink (reject_all policy)", "path", path)
-			if err := os.Remove(path); err != nil {
-				return fmt.Errorf("removing symlink %s: %w", path, err)
-			}
-			return nil
-
-		case PolicyAllowSafe:
-			// Validate and remove unsafe symlinks.
-			if !IsSymlinkSafe(path, root) {
-				log.Warn("Removing unsafe symlink", "path", path)
-				if err := os.Remove(path); err != nil {
-					return fmt.Errorf("removing unsafe symlink %s: %w", path, err)
-				}
-			} else {
-				log.Debug("Keeping safe symlink", "path", path)
-			}
-			return nil
-
-		default:
-			// For unknown policies, default to safe behavior.
-			if !IsSymlinkSafe(path, root) {
-				log.Warn("Removing unsafe symlink (unknown policy, defaulting to safe)", "path", path, "policy", policy)
-				if err := os.Remove(path); err != nil {
-					return fmt.Errorf("removing unsafe symlink %s (unknown policy %s): %w", path, policy, err)
-				}
-			}
-			return nil
-		}
+		// Handle symlink based on policy.
+		return handleSymlink(path, root, policy)
 	})
+}
+
+// handleSymlink processes a single symlink according to the security policy.
+func handleSymlink(path, root string, policy SymlinkPolicy) error {
+	switch policy {
+	case PolicyRejectAll:
+		// Remove all symlinks for maximum security.
+		log.Debug("Removing symlink (reject_all policy)", "path", path)
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("removing symlink %s: %w", path, err)
+		}
+		return nil
+
+	case PolicyAllowSafe:
+		// Validate and remove unsafe symlinks.
+		if !IsSymlinkSafe(path, root) {
+			log.Warn("Removing unsafe symlink", "path", path)
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("removing unsafe symlink %s: %w", path, err)
+			}
+		} else {
+			log.Debug("Keeping safe symlink", "path", path)
+		}
+		return nil
+
+	default:
+		// For unknown policies, default to safe behavior.
+		if !IsSymlinkSafe(path, root) {
+			log.Warn("Removing unsafe symlink (unknown policy, defaulting to safe)", "path", path, "policy", policy)
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("removing unsafe symlink %s (unknown policy %s): %w", path, policy, err)
+			}
+		}
+		return nil
+	}
 }
 
 // ParsePolicy converts a string policy value to SymlinkPolicy type.
