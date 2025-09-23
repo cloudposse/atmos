@@ -15,31 +15,36 @@ func createLogLevelStyles(scheme *ColorScheme) map[log.Level]lipgloss.Style {
 		SetString("DEBU").
 		Background(lipgloss.Color(scheme.LogDebug)).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
+		Bold(true).
+		Padding(0, 1) // 1 space padding left and right
 
 	levels[log.InfoLevel] = lipgloss.NewStyle().
 		SetString("INFO").
 		Background(lipgloss.Color(scheme.LogInfo)).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
+		Bold(true).
+		Padding(0, 1)
 
 	levels[log.WarnLevel] = lipgloss.NewStyle().
 		SetString("WARN").
 		Background(lipgloss.Color(scheme.LogWarning)).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
+		Bold(true).
+		Padding(0, 1)
 
 	levels[log.ErrorLevel] = lipgloss.NewStyle().
 		SetString("EROR").
 		Background(lipgloss.Color(scheme.LogError)).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
+		Bold(true).
+		Padding(0, 1)
 
 	levels[log.FatalLevel] = lipgloss.NewStyle().
 		SetString("FATL").
 		Background(lipgloss.Color(scheme.LogError)). // Use error color for fatal
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
+		Bold(true).
+		Padding(0, 1)
 
 	return levels
 }
