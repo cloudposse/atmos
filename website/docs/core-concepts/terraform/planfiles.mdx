@@ -52,7 +52,7 @@ When you apply a planfile, Terraform uses this snapshot instead of re-calculatin
 ### 1. **Guaranteed Consistency**
 - **No Drift**: Changes applied match exactly what was planned, even if infrastructure or configuration changed
 - **Immutable Plans**: Once generated, a planfile cannot be modified, ensuring integrity
-- **State Locking**: Planfiles include state version information, preventing concurrent modifications
+- **State Version Tracking**: Planfiles record the state version at plan time, helping detect state changes between plan and apply (actual concurrency protection depends on backend state locking mechanisms)
 
 ### 2. **Enhanced Security and Compliance**
 - **Audit Trail**: Planfiles serve as immutable records of approved changes for compliance
@@ -638,9 +638,9 @@ For production deployments, always use planfiles to ensure consistency:
 
 ```bash
 # Production workflow
-atmos terraform plan app -s prod -out=prod-$(date +%Y%m%d-%H%M%S).plan
+atmos terraform plan app -s prod -out=prod-$(date +%Y%m%d-%H%M%S).planfile
 # Get approval...
-atmos terraform apply app -s prod --planfile prod-20240115-143022.plan
+atmos terraform apply app -s prod --planfile prod-20240115-143022.planfile
 ```
 
 ### 3. Clean Up Old Planfiles

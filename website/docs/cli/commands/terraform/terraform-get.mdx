@@ -42,12 +42,16 @@ atmos terraform get vpc -s dev
 atmos terraform get vpc -s dev -update
 ```
 
-### Skip Module Download
+### Suppress Color Output
 
 ```shell
-# Get without downloading modules (validation only)
+# Get modules without color in output
 atmos terraform get vpc -s dev -no-color
 ```
+
+:::note
+The `-no-color` flag only suppresses color output. It does not affect module downloads. Terraform `get` always downloads modules when needed.
+:::
 
 ## Arguments
 

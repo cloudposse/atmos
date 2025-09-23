@@ -49,6 +49,11 @@ atmos terraform untaint app -s dev module.vpc.aws_subnet.private[0]
     <dd>
         Atmos component name.
     </dd>
+
+    <dt>`resource_address` <em>(required)</em></dt>
+    <dd>
+        Terraform resource address to untaint. This is the full resource address including any module prefix and resource index (e.g., `aws_instance.example` or `module.vpc.aws_subnet.private[0]`).
+    </dd>
 </dl>
 
 ## Flags

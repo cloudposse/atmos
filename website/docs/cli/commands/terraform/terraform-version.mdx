@@ -2,7 +2,6 @@
 title: atmos terraform version
 sidebar_label: version
 sidebar_class_name: command
-id: version
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
@@ -62,11 +61,7 @@ atmos terraform version vpc -s dev -json
 
     <dt>`--skip-init` <em>(optional)</em></dt>
     <dd>
-        Skip running `terraform init` before executing the command.
-
-        ```shell
-        atmos terraform version vpc -s dev --skip-init
-        ```
+        This flag has no effect for the `version` command since it does not perform initialization.
     </dd>
 
     <dt>`--dry-run` <em>(optional)</em></dt>

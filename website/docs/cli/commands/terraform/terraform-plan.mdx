@@ -161,10 +161,11 @@ components:
 
     <dt>`--affected` <em>(optional)</em></dt>
     <dd>
-        Plan only affected components based on changes in the repository.
+        Plan only affected components based on changes in the repository. This is a global operation that identifies and plans all components affected by recent changes across all stacks.
 
         ```shell
-        atmos terraform plan vpc -s dev --affected
+        # Plan only affected components across all stacks
+        atmos terraform plan --affected
         ```
     </dd>
 
