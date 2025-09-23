@@ -168,8 +168,10 @@ func Execute() error {
 		}
 	}
 
-	// Print telemetry disclosure if needed
-	telemetry.PrintTelemetryDisclosure()
+	// Print telemetry disclosure if needed (skip for completion commands)
+	if !isCompletionCommand() {
+		telemetry.PrintTelemetryDisclosure()
+	}
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
@@ -182,6 +184,26 @@ func Execute() error {
 		}
 	}
 	return err
+}
+
+// isCompletionCommand checks if the current command is a shell completion command.
+// This includes both user-visible completion commands and Cobra's internal
+// hidden completion commands (__complete, __completeNoDesc).
+func isCompletionCommand() bool {
+	// Check if running completion commands
+	args := os.Args
+	if len(args) > 1 {
+		// Check for the regular completion command
+		if args[1] == "completion" {
+			return true
+		}
+		// Check for Cobra's hidden shell completion commands
+		// These are used internally by shell completion scripts
+		if args[1] == "__complete" || args[1] == "__completeNoDesc" {
+			return true
+		}
+	}
+	return false
 }
 
 func getInvalidCommandName(input string) string {
