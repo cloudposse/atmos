@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}        
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.target }}
           path: |

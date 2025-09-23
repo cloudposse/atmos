@@ -104,10 +104,10 @@ api_key: !store.get ssm /external/config | default "{}" | query .api.key
 vars:
   # Retrieve a global configuration object
   global_config: !store.get redis global-config
-  
+
   # Get a specific field from the configuration
   api_version: !store.get redis global-config | query .version
-  
+
   # Use templating to construct the key dynamically
   regional_config: !store.get redis "config-{{ .vars.region }}"
 ```
@@ -120,7 +120,7 @@ vars:
 vars:
   # Retrieve a parameter by its full path
   database_password: !store.get ssm /myapp/prod/db/password
-  
+
   # Get a parameter with a default value
   feature_flag: !store.get ssm /features/new-feature | default "disabled"
 ```
@@ -133,7 +133,7 @@ vars:
 vars:
   # Retrieve a secret by its exact name
   api_secret: !store.get azure-keyvault external-api-key
-  
+
   # Get a certificate with error handling
   ssl_cert: !store.get azure-keyvault ssl-certificate | default ""
 ```
@@ -146,7 +146,7 @@ vars:
 vars:
   # Retrieve a secret by its resource ID
   service_account: !store.get gsm projects/my-project/secrets/service-account/versions/latest
-  
+
   # Parse JSON secret and extract a field
   client_id: !store.get gsm oauth-config | query .client_id
 ```

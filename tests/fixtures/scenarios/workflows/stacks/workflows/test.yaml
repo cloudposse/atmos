@@ -51,4 +51,3 @@ workflows:
     stack: prod
     steps:
       - command: terraform plan idontexist
-

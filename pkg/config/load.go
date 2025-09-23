@@ -379,6 +379,53 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	return mergeYAMLIntoViper(v, configFilePath, yamlBytes)
 }
 
+// shouldExcludePathForTesting checks if a directory path should be excluded from .atmos.d loading during testing.
+// It compares the given directory path against a list of excluded paths from the TEST_EXCLUDE_ATMOS_D environment variable.
+// Returns true if the path should be excluded, false otherwise.
+func shouldExcludePathForTesting(dirPath string) bool {
+	//nolint:forbidigo // TEST_EXCLUDE_ATMOS_D is specifically for test isolation, not application configuration.
+	excludePaths := os.Getenv("TEST_EXCLUDE_ATMOS_D")
+	if excludePaths == "" {
+		return false
+	}
+
+	// Canonicalize the directory path we're checking.
+	absDirPath, err := filepath.Abs(filepath.Clean(dirPath))
+	if err != nil {
+		absDirPath = dirPath
+	}
+
+	// Split paths using the OS-specific path list separator.
+	for _, excludePath := range strings.Split(excludePaths, string(os.PathListSeparator)) {
+		if excludePath == "" {
+			continue
+		}
+
+		// Canonicalize the exclude path.
+		absExcludePath, err := filepath.Abs(filepath.Clean(excludePath))
+		if err != nil {
+			continue
+		}
+
+		// Check if the current directory is within or equals the excluded path.
+		// We currently only check for exact matches, but this could be extended
+		// to check for containment using filepath.Rel if needed.
+		pathsMatch := false
+		if runtime.GOOS == "windows" {
+			// Case-insensitive comparison on Windows.
+			pathsMatch = strings.EqualFold(absDirPath, absExcludePath)
+		} else {
+			pathsMatch = absDirPath == absExcludePath
+		}
+
+		if pathsMatch {
+			return true
+		}
+	}
+
+	return false
+}
+
 // mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)
 // from a specified directory into the destination configuration.
 func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
@@ -389,14 +436,21 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	if !isDir {
 		return ErrAtmosDIrConfigNotFound
 	}
+
+	// Check if we should exclude .atmos.d from this directory during testing.
+	if shouldExcludePathForTesting(dirPath) {
+		// Silently skip without logging to avoid test output pollution.
+		return nil
+	}
+
 	var atmosFoundFilePaths []string
-	// Search for `atmos.d/` configurations
+	// Search for `atmos.d/` configurations.
 	searchDir := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
 	foundPaths1, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths1) > 0 {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths1...)
 	}
-	// Search for `.atmos.d` configurations
+	// Search for `.atmos.d` configurations.
 	searchDir = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
 	foundPaths2, _ := SearchAtmosConfig(searchDir)
 	if len(foundPaths2) > 0 {

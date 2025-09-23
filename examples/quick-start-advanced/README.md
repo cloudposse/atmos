@@ -3,7 +3,7 @@
 [Atmos](https://atmos.tools/) is a universal tool for DevOps and cloud automation. It allows
 deploying and destroying Terraform and helmfile components, as well as running workflows to bootstrap or teardown all resources in an account.
 
-Refer to the Atmos [Quick Start](https://atmos.tools/category/quick-start/) guide that describes the steps to configure and provision the 
+Refer to the Atmos [Quick Start](https://atmos.tools/category/quick-start/) guide that describes the steps to configure and provision the
 infrastructure from this repository.
 
 ## Run Atmos Docker Image

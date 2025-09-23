@@ -105,7 +105,6 @@ linters:
         - name: function-result-limit
           arguments:
             - 3
-          severity: warning
         - name: cognitive-complexity
           arguments:
             - 25
@@ -127,7 +126,6 @@ linters:
           arguments:
             - mypragma
             - otherpragma
-          severity: warning
           disabled: false
         - name: var-declaration
   exclusions:
@@ -158,14 +156,15 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+
 severity:
   default: error
   rules:
     - linters:
-        - cognitive-complexity
-        - cyclomatic
-        - function-length
-        - function-result-limit
+        - revive
+      text: "cognitive-complexity|cyclomatic|function-length|function-result-limit|comment-spacings"
+      severity: warning
+    - linters:
         - nestif
         - nolintlint
       severity: warning
