@@ -118,6 +118,11 @@ type GitRepoInterface interface {
 // DefaultGitRepo is the default implementation of GitRepoInterface.
 type DefaultGitRepo struct{}
 
+// NewDefaultGitRepo creates a new instance of DefaultGitRepo.
+func NewDefaultGitRepo() GitRepoInterface {
+	return &DefaultGitRepo{}
+}
+
 // GetLocalRepoInfo returns information about the local git repository.
 func (d *DefaultGitRepo) GetLocalRepoInfo() (*RepoInfo, error) {
 	repo, err := GetLocalRepo()
@@ -142,7 +147,8 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 		} else {
 			repoPath = "unknown"
 		}
-		return RepoInfo{}, fmt.Errorf("%w: GetRepoInfo failed for repo %s: %w", errUtils.ErrFailedToGetRepoInfo, repoPath, err)
+		cause := fmt.Errorf("GetRepoInfo failed for repo %s: %w", repoPath, err)
+		return RepoInfo{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, cause)
 	}
 	return info, nil
 }
@@ -151,12 +157,12 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return "", errUtils.ErrLocalRepoFetch
+		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrLocalRepoFetch, fmt.Errorf("failed to get local repository: %w", err))
 	}
 
 	ref, err := repo.Head()
 	if err != nil {
-		return "", errUtils.ErrHeadLookup
+		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrHeadLookup, fmt.Errorf("failed to get HEAD reference: %w", err))
 	}
 
 	return ref.Hash().String(), nil
