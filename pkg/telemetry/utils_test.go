@@ -1,8 +1,10 @@
 package telemetry
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"os"
 	"runtime"
@@ -10,7 +12,9 @@ import (
 	"testing"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
@@ -654,4 +658,160 @@ func TestCaptureCmdWithLoggingDisabled(t *testing.T) {
 
 	// Capture telemetry event.
 	captureCmdString("test-cmd-no-logging", nil, mockClientProvider.NewMockClient)
+}
+
+// TestPrintTelemetryDisclosure tests that the telemetry disclosure message
+// is properly printed to stderr with markdown formatting.
+func TestPrintTelemetryDisclosure(t *testing.T) {
+	// Save original stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Save original CI env vars
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Clean up test cache
+	cacheDir := "./.atmos"
+	os.RemoveAll(cacheDir)
+	defer os.RemoveAll(cacheDir)
+
+	// Initialize markdown renderer for testing
+	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+
+	// Call PrintTelemetryDisclosure
+	PrintTelemetryDisclosure()
+
+	// Close the writer and restore stderr
+	w.Close()
+	os.Stderr = oldStderr
+
+	// Read the output
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	// Verify the output contains the telemetry disclosure message
+	// In a non-TTY environment, it will be plain text
+	assert.Contains(t, output, "Notice: Telemetry Enabled")
+	assert.Contains(t, output, "Atmos now collects completely anonymous telemetry")
+	assert.Contains(t, output, "https://atmos.tools/cli/telemetry")
+}
+
+// TestPrintTelemetryDisclosureOnlyOnce tests that the telemetry disclosure
+// message is only shown once and not on subsequent calls.
+func TestPrintTelemetryDisclosureOnlyOnce(t *testing.T) {
+	// Save original CI env vars
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Clean up test cache
+	cacheDir := "./.atmos"
+	os.RemoveAll(cacheDir)
+	defer os.RemoveAll(cacheDir)
+
+	// Initialize markdown renderer for testing
+	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+
+	// First call should show the message
+	oldStderr := os.Stderr
+	r1, w1, _ := os.Pipe()
+	os.Stderr = w1
+	PrintTelemetryDisclosure()
+	w1.Close()
+	os.Stderr = oldStderr
+
+	var buf1 bytes.Buffer
+	io.Copy(&buf1, r1)
+	firstOutput := buf1.String()
+
+	// Verify first call shows the message
+	assert.Contains(t, firstOutput, "Notice: Telemetry Enabled")
+
+	// Second call should NOT show the message
+	r2, w2, _ := os.Pipe()
+	os.Stderr = w2
+	PrintTelemetryDisclosure()
+	w2.Close()
+	os.Stderr = oldStderr
+
+	var buf2 bytes.Buffer
+	io.Copy(&buf2, r2)
+	secondOutput := buf2.String()
+
+	// Verify second call does not show the message
+	assert.NotContains(t, secondOutput, "Notice: Telemetry Enabled")
+}
+
+// TestPrintTelemetryDisclosureDisabledInCI tests that the telemetry disclosure
+// message is not shown when running in a CI environment.
+func TestPrintTelemetryDisclosureDisabledInCI(t *testing.T) {
+	// Save original CI env vars
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Set CI environment variable
+	os.Setenv("CI", "true")
+	defer os.Unsetenv("CI")
+
+	// Clean up test cache
+	cacheDir := "./.atmos"
+	os.RemoveAll(cacheDir)
+	defer os.RemoveAll(cacheDir)
+
+	// Initialize markdown renderer for testing
+	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	PrintTelemetryDisclosure()
+	w.Close()
+	os.Stderr = oldStderr
+
+	// Read the output
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	// Verify no telemetry disclosure is shown in CI
+	assert.NotContains(t, output, "Notice: Telemetry Enabled")
+}
+
+// TestPrintTelemetryDisclosureDisabledByConfig tests that the telemetry disclosure
+// message is not shown when telemetry is disabled via environment variable.
+func TestPrintTelemetryDisclosureDisabledByConfig(t *testing.T) {
+	// Save original CI env vars
+	currentEnvVars := PreserveCIEnvVars()
+	defer RestoreCIEnvVars(currentEnvVars)
+
+	// Disable telemetry
+	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
+	defer os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+
+	// Clean up test cache
+	cacheDir := "./.atmos"
+	os.RemoveAll(cacheDir)
+	defer os.RemoveAll(cacheDir)
+
+	// Initialize markdown renderer for testing
+	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	PrintTelemetryDisclosure()
+	w.Close()
+	os.Stderr = oldStderr
+
+	// Read the output
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	// Verify no telemetry disclosure is shown when disabled
+	assert.NotContains(t, output, "Notice: Telemetry Enabled")
 }
