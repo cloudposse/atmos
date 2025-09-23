@@ -1,0 +1,257 @@
+atmos_cli_config:
+  base_path: ./
+  components:
+    terraform:
+      base_path: ../../components/terraform
+      apply_auto_approve: false
+      append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+      deploy_run_init: true
+      init_run_reconfigure: true
+      auto_generate_backend_file: false
+      command: ""
+      shell:
+        prompt: ""
+      init:
+        pass_vars: false
+      plan:
+        skip_planfile: false
+    helmfile:
+      base_path: ""
+      use_eks: true
+      kubeconfig_path: ""
+      helm_aws_profile_pattern: ""
+      cluster_name_pattern: ""
+      command: ""
+    packer:
+      base_path: ""
+      command: ""
+  stacks:
+    base_path: stacks
+    included_paths:
+      - deploy/**/*
+    excluded_paths:
+      - '**/_defaults.yaml'
+    name_pattern: '{stage}'
+    name_template: ""
+  workflows:
+    base_path: ""
+    list:
+      format: ""
+      columns: []
+atmos_component: component-1
+atmos_manifest: deploy/nonprod
+atmos_stack: nonprod
+atmos_stack_file: deploy/nonprod
+backend: {}
+backend_type: ""
+cli_args:
+  - describe
+  - component
+command: terraform
+component: yaml-functions
+component_info:
+  component_path: ../../components/terraform/yaml-functions
+  component_type: terraform
+  terraform_config:
+    path: ../../components/terraform/yaml-functions
+    variables:
+      boolean_var:
+        name: boolean_var
+        type: bool
+        description: Boolean variable
+        default: false
+        required: false
+        sensitive: false
+        pos:
+          filename: ../../components/terraform/yaml-functions/variables.tf
+          line: 12
+      list_var:
+        name: list_var
+        type: list(string)
+        description: List variable
+        default: []
+        required: false
+        sensitive: false
+        pos:
+          filename: ../../components/terraform/yaml-functions/variables.tf
+          line: 18
+      map_var:
+        name: map_var
+        type: map(string)
+        description: Map variable
+        default: {}
+        required: false
+        sensitive: false
+        pos:
+          filename: ../../components/terraform/yaml-functions/variables.tf
+          line: 24
+      stage:
+        name: stage
+        type: string
+        description: Stage where it will be deployed
+        default: null
+        required: true
+        sensitive: false
+        pos:
+          filename: ../../components/terraform/yaml-functions/variables.tf
+          line: 1
+      string_var:
+        name: string_var
+        type: string
+        description: String variable
+        default: test
+        required: false
+        sensitive: false
+        pos:
+          filename: ../../components/terraform/yaml-functions/variables.tf
+          line: 6
+    outputs:
+      boolean_var:
+        name: boolean_var
+        description: Boolean output
+        sensitive: false
+        pos:
+          filename: ../../components/terraform/yaml-functions/outputs.tf
+          line: 6
+        type: ""
+      list_var:
+        name: list_var
+        description: List output
+        sensitive: false
+        pos:
+          filename: ../../components/terraform/yaml-functions/outputs.tf
+          line: 11
+        type: ""
+      map_var:
+        name: map_var
+        description: Map output
+        sensitive: false
+        pos:
+          filename: ../../components/terraform/yaml-functions/outputs.tf
+          line: 16
+        type: ""
+      string_var:
+        name: string_var
+        description: String output
+        sensitive: false
+        pos:
+          filename: ../../components/terraform/yaml-functions/outputs.tf
+          line: 1
+        type: ""
+    requiredcore: []
+    requiredproviders: {}
+    providerconfigs: {}
+    managedresources: {}
+    dataresources: {}
+    modulecalls: {}
+    diagnostics: []
+component_type: terraform
+deps:
+  - deploy/nonprod
+  - mixins/stage/nonprod
+deps_all:
+  - deploy/nonprod
+  - mixins/stage/nonprod
+env: {}
+hooks: {}
+imports:
+  - mixins/stage/nonprod
+inheritance: []
+metadata:
+  component: yaml-functions
+overrides: {}
+providers: {}
+remote_state_backend: {}
+remote_state_backend_type: ""
+settings:
+  config:
+    a: component-1-a
+    b: component-1-b
+    c: component-1-c
+sources:
+  backend: {}
+  env: {}
+  settings:
+    config:
+      final_value:
+        a: component-1-a
+        b: component-1-b
+        c: component-1-c
+      name: config
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: deploy/nonprod
+          stack_file_section: settings
+          variable_value:
+            a: component-1-a
+            b: component-1-b
+            c: component-1-c
+  vars:
+    boolean_var:
+      final_value: true
+      name: boolean_var
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: deploy/nonprod
+          stack_file_section: components.terraform.vars
+          variable_value: true
+    list_var:
+      final_value:
+        - a
+        - b
+        - c
+      name: list_var
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: deploy/nonprod
+          stack_file_section: components.terraform.vars
+          variable_value:
+            - a
+            - b
+            - c
+    map_var:
+      final_value:
+        a: 1
+        b: 2
+        c: 3
+      name: map_var
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: deploy/nonprod
+          stack_file_section: components.terraform.vars
+          variable_value:
+            a: 1
+            b: 2
+            c: 3
+    stage:
+      final_value: nonprod
+      name: stage
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: mixins/stage/nonprod
+          stack_file_section: vars
+          variable_value: nonprod
+    string_var:
+      final_value: abc
+      name: string_var
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: deploy/nonprod
+          stack_file_section: components.terraform.vars
+          variable_value: abc
+stack: nonprod
+tf_cli_vars: {}
+vars:
+  boolean_var: true
+  list_var:
+    - a
+    - b
+    - c
+  map_var:
+    a: 1
+    b: 2
+    c: 3
+  stage: nonprod
+  string_var: abc
+workspace: nonprod-component-1
+

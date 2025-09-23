@@ -4,6 +4,12 @@ DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/at
 DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/tools/helmfile.yml
 DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/tools/stack.yaml
 DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/tools/terraform.yaml
+**Notice:** Telemetry Enabled - Atmos now collects completely anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/commands.yaml
+DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/logs.yaml
+DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/tools/helmfile.yml
+DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/tools/stack.yaml
+DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/tools/terraform.yaml
 DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/commands.yaml
 DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/logs.yaml
 DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/tools/helmfile.yml
