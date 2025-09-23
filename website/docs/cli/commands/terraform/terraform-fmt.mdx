@@ -9,6 +9,7 @@ import Terminal from '@site/src/components/Terminal'
 
 :::note purpose
 Use this command to format Terraform configuration files to a canonical format and style.
+ This command is a direct passthrough to the native `terraform fmt` command.
 :::
 
 <Screengrab title="atmos terraform fmt --help" slug="atmos-terraform-fmt--help" />
@@ -23,6 +24,9 @@ atmos terraform fmt <component> -s <stack> [options]
 
 This command rewrites Terraform configuration files to a canonical format and style. This ensures consistency across your codebase and makes the code easier to read and maintain.
 
+:::info Atmos Behavior
+This is a pure passthrough command. Atmos does not perform automatic initialization, workspace management, or variable generation for `terraform fmt`. The command is executed directly in the component directory.
+:::
 ## Examples
 
 ### Format Files

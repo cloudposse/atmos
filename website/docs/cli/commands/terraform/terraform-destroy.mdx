@@ -23,6 +23,14 @@ atmos terraform destroy <component> -s <stack> [options]
 
 This command creates a plan to destroy all resources managed by the given configuration and state, and then applies that plan.
 
+:::info Atmos Enhancements
+Atmos enhances the destroy command with:
+- Automatic `terraform init` before destroying
+- Workspace selection and management
+- **Automatic variable file generation and passing**
+- Backend configuration
+- Component validation and locking support
+:::
 ## Examples
 
 ### Basic Destroy

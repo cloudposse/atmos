@@ -23,6 +23,9 @@ atmos terraform output <component> -s <stack> [options]
 
 This command reads output values from the Terraform state file and prints them. Output values are useful for passing information between different Terraform configurations or to external systems.
 
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. The output retrieval itself is handled by native Terraform.
+:::
 ## Examples
 
 ### Show All Outputs

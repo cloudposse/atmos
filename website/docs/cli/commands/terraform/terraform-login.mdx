@@ -23,6 +23,9 @@ atmos terraform login <component> -s <stack> [options]
 
 This command retrieves an API token from Terraform Cloud or Terraform Enterprise and saves it locally for use with other commands that require authentication.
 
+:::info Atmos Behavior
+This is a pure passthrough command. Atmos does not perform automatic initialization or workspace management for `terraform login`. The command is executed directly to manage Terraform Cloud credentials.
+:::
 ## Examples
 
 ### Login to Terraform Cloud

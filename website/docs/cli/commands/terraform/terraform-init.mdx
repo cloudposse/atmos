@@ -27,6 +27,15 @@ This command performs several initialization steps:
 - Downloads modules referenced in the configuration
 - Creates or updates the `.terraform` directory
 
+:::info Atmos Enhancements
+Atmos enhances the init command with:
+- Cleans `.terraform/environment` file before running
+- Can add `-reconfigure` flag based on configuration
+- Supports passing varfile to init (OpenTofu feature) via `--init-pass-vars` flag
+- Can be skipped with `--skip-init` flag for other commands
+- Automatically runs before plan/apply/destroy commands unless skipped
+:::
+
 :::tip
 Atmos automatically runs `terraform init` before executing `plan` and `apply` commands, so you typically don't need to run this manually unless you want to reinitialize with different options.
 :::
@@ -339,7 +348,7 @@ atmos terraform init vpc -s dev
 
 ## Related Commands
 
-- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
-- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
-- [`atmos terraform clean`](/cli/commands/terraform/clean) - Clean terraform files
-- [`atmos terraform workspace`](/cli/commands/terraform/workspace) - Manage workspaces
+- [`atmos terraform plan`](/cli/commands/terraform/terraform-plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/terraform-apply) - Apply changes
+- [`atmos terraform clean`](/cli/commands/terraform/terraform-clean) - Clean terraform files
+- [`atmos terraform workspace`](/cli/commands/terraform/terraform-workspace) - Manage workspaces

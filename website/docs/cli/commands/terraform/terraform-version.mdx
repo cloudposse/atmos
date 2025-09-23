@@ -9,6 +9,7 @@ import Terminal from '@site/src/components/Terminal'
 
 :::note purpose
 Use this command to display the version of Terraform/OpenTofu being used.
+ This command is a direct passthrough to the native `terraform version` command.
 :::
 
 <Screengrab title="atmos terraform version --help" slug="atmos-terraform-version--help" />
@@ -23,6 +24,9 @@ atmos terraform version <component> -s <stack> [options]
 
 This command displays the Terraform or OpenTofu version, along with the versions of installed providers.
 
+:::info Atmos Behavior
+This is a pure passthrough command. Atmos does not perform any special processing for `terraform version`. The command is executed directly without workspace management or variable generation.
+:::
 ## Examples
 
 ### Show Version

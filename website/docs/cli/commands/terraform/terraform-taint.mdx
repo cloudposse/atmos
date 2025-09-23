@@ -23,6 +23,9 @@ atmos terraform taint <component> -s <stack> [options]
 
 This command marks a resource as tainted in the Terraform state. Tainted resources will be destroyed and recreated on the next apply. Note: This command is deprecated in Terraform v1.0+ in favor of `terraform apply -replace`.
 
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. Additionally, Atmos blocks this operation if the component is locked (`metadata.locked: true`). The taint operation itself is handled by native Terraform.
+:::
 ## Examples
 
 ### Taint a Resource

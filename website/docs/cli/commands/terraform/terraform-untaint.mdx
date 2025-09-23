@@ -23,6 +23,9 @@ atmos terraform untaint <component> -s <stack> [options]
 
 This command removes the tainted state from a resource, preventing it from being destroyed and recreated on the next apply. Note: This command is deprecated in Terraform v1.0+ since `taint` is also deprecated.
 
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. Additionally, Atmos blocks this operation if the component is locked (`metadata.locked: true`). The untaint operation itself is handled by native Terraform.
+:::
 ## Examples
 
 ### Untaint a Resource

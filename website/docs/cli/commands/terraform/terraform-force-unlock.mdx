@@ -23,6 +23,9 @@ atmos terraform force-unlock <component> -s <stack> [options]
 
 This command manually unlocks the state for the defined configuration. This is useful when automatic unlocking fails due to a process crash or network issue. Use with caution as it can cause state corruption if another process is actually using the state.
 
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The unlock operation itself is handled by native Terraform.
+:::
 ## Examples
 
 ### Force Unlock State

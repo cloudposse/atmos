@@ -23,6 +23,9 @@ atmos terraform metadata <component> -s <stack> [options]
 
 This command provides metadata functions for Terraform configurations. This is primarily used for advanced Terraform Cloud operations.
 
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The metadata operations are handled by native Terraform.
+:::
 ## Examples
 
 ### Metadata Functions

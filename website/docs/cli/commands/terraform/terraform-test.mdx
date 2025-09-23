@@ -23,6 +23,9 @@ atmos terraform test <component> -s <stack> [options]
 
 This command runs tests for Terraform modules. Tests are written in `.tftest.hcl` or `.tftest.json` files and can validate that your infrastructure code works as expected.
 
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The test execution is handled by native Terraform.
+:::
 ## Examples
 
 ### Run Tests

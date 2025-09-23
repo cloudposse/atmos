@@ -23,6 +23,14 @@ atmos terraform import <component> -s <stack> [options]
 
 This command imports existing infrastructure into your Terraform state. This allows you to bring resources created outside of Terraform under Terraform management. Atmos automatically sets AWS_REGION if a region variable is found.
 
+:::info Atmos Enhancements
+Atmos provides several enhancements for the import command:
+- Automatic `terraform init` before importing
+- Workspace selection and management
+- Variable file generation and passing
+- **Automatic AWS_REGION environment variable** setting based on the component's region variable
+- Component locking support (blocks import if `metadata.locked: true`)
+:::
 ## Examples
 
 ### Basic Import

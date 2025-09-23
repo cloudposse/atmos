@@ -23,6 +23,9 @@ atmos terraform state <component> -s <stack> [options]
 
 This command provides subcommands for advanced state management. These are useful for manipulating the Terraform state when necessary, though manual state manipulation should be done carefully.
 
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. Additionally, Atmos blocks state modifications if the component is locked (`metadata.locked: true`). The state operations themselves are handled by native Terraform.
+:::
 ## Examples
 
 ### List Resources in State

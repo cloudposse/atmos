@@ -23,6 +23,9 @@ atmos terraform show <component> -s <stack> [options]
 
 This command provides a human-readable view of either a Terraform state file or a plan file. It's useful for inspecting current state or reviewing planned changes.
 
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The show operation itself is handled by native Terraform.
+:::
 ## Examples
 
 ### Show Current State
