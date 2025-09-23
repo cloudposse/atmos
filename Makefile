@@ -61,9 +61,12 @@ testacc: get
 	@echo "Running acceptance tests"
 	go test $(TEST) -v $(TESTARGS) -timeout 40m
 
-testacc-cover: get
+testacc-cover: get $(GOTCHA_BIN)
 	@echo "Running tests with coverage"
-	go test $(TEST) -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out
+	$(GOTCHA_BIN) test ./... \
+		--coverprofile=coverage.out \
+		--timeout=40m \
+		-- -coverpkg=./... $(TESTARGS)
 
 # Run acceptance tests with coverage report
 testacc-coverage: testacc-cover
