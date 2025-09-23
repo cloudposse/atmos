@@ -66,6 +66,12 @@ var (
 	ErrGitVersionMismatch   = errors.New("git version requirement not met")
 	ErrFailedToGetLocalRepo = errors.New("failed to get local repository")
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
+	ErrLocalRepoFetch       = errors.New("local repo unavailable")
+	ErrHeadLookup           = errors.New("HEAD not found")
+
+	// Slice utility errors.
+	ErrNilInput         = errors.New("input must not be nil")
+	ErrNonStringElement = errors.New("element is not a string")
 
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")

@@ -6,6 +6,8 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	giturl "github.com/kubescape/go-git-url"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func GetLocalRepo() (*git.Repository, error) {
@@ -120,30 +122,41 @@ type DefaultGitRepo struct{}
 func (d *DefaultGitRepo) GetLocalRepo() (*RepoInfo, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get local repository: %w", err)
+		return nil, fmt.Errorf("%w: failed to get local repository: %v", errUtils.ErrFailedToGetLocalRepo, err)
 	}
 	info, err := GetRepoInfo(repo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get repository info: %w", err)
+		return nil, fmt.Errorf("%w: failed to get repository info: %v", errUtils.ErrFailedToGetRepoInfo, err)
 	}
 	return &info, nil
 }
 
 // GetRepoInfo returns the repository information for the given git.Repository.
 func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
-	return GetRepoInfo(repo)
+	info, err := GetRepoInfo(repo)
+	if err != nil {
+		// Get repository path for context
+		var repoPath string
+		if worktree, worktreeErr := repo.Worktree(); worktreeErr == nil {
+			repoPath = worktree.Filesystem.Root()
+		} else {
+			repoPath = "unknown"
+		}
+		return RepoInfo{}, fmt.Errorf("%w: GetRepoInfo failed for repo %s: %v", errUtils.ErrFailedToGetRepoInfo, repoPath, err)
+	}
+	return info, nil
 }
 
 // GetCurrentCommitSHA returns the SHA of the current HEAD commit.
 func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return "", fmt.Errorf("failed to get local repository: %w", err)
+		return "", errUtils.ErrLocalRepoFetch
 	}
 
 	ref, err := repo.Head()
 	if err != nil {
-		return "", fmt.Errorf("failed to get HEAD reference: %w", err)
+		return "", errUtils.ErrHeadLookup
 	}
 
 	return ref.Hash().String(), nil

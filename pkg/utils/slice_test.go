@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestSliceOfInterfacesToSliceOfStrings(t *testing.T) {
@@ -267,7 +269,7 @@ func TestSliceOfInterfacesToSliceOfStringsWithTypeAssertion(t *testing.T) {
 			input:       nil,
 			expected:    nil,
 			expectError: true,
-			errorType:   ErrNilInput,
+			errorType:   errUtils.ErrNilInput,
 		},
 		{
 			name:        "empty slice",
@@ -292,56 +294,56 @@ func TestSliceOfInterfacesToSliceOfStringsWithTypeAssertion(t *testing.T) {
 			input:       []any{42, "hello"},
 			expected:    nil,
 			expectError: true,
-			errorType:   ErrNonStringElement,
+			errorType:   errUtils.ErrNonStringElement,
 		},
 		{
 			name:        "non-string element at index 1",
 			input:       []any{"hello", 42, "world"},
 			expected:    nil,
 			expectError: true,
-			errorType:   ErrNonStringElement,
+			errorType:   errUtils.ErrNonStringElement,
 		},
 		{
 			name:        "non-string element at end",
 			input:       []any{"hello", "world", 3.14},
 			expected:    nil,
 			expectError: true,
-			errorType:   ErrNonStringElement,
+			errorType:   errUtils.ErrNonStringElement,
 		},
 		{
 			name:        "multiple non-string elements",
 			input:       []any{42, 3.14, true},
 			expected:    nil,
 			expectError: true,
-			errorType:   ErrNonStringElement,
+			errorType:   errUtils.ErrNonStringElement,
 		},
 		{
 			name:        "mixed types with non-string first",
 			input:       []any{true, "hello", "world"},
 			expected:    nil,
 			expectError: true,
-			errorType:   ErrNonStringElement,
+			errorType:   errUtils.ErrNonStringElement,
 		},
 		{
 			name:        "nil element",
 			input:       []any{"hello", nil, "world"},
 			expected:    nil,
 			expectError: true,
-			errorType:   ErrNonStringElement,
+			errorType:   errUtils.ErrNonStringElement,
 		},
 		{
 			name:        "slice element",
 			input:       []any{"hello", []string{"nested"}, "world"},
 			expected:    nil,
 			expectError: true,
-			errorType:   ErrNonStringElement,
+			errorType:   errUtils.ErrNonStringElement,
 		},
 		{
 			name:        "map element",
 			input:       []any{"hello", map[string]string{"key": "value"}, "world"},
 			expected:    nil,
 			expectError: true,
-			errorType:   ErrNonStringElement,
+			errorType:   errUtils.ErrNonStringElement,
 		},
 	}
 
@@ -373,9 +375,9 @@ func assertErrorCase(t *testing.T, tc *struct {
 	assert.Nil(t, result)
 
 	switch tc.errorType {
-	case ErrNilInput:
-		assert.Equal(t, ErrNilInput, err)
-	case ErrNonStringElement:
+	case errUtils.ErrNilInput:
+		assert.Equal(t, errUtils.ErrNilInput, err)
+	case errUtils.ErrNonStringElement:
 		assertNonStringElementError(t, tc.input, err)
 	}
 }
@@ -383,7 +385,7 @@ func assertErrorCase(t *testing.T, tc *struct {
 // assertNonStringElementError validates ErrNonStringElement specific assertions.
 func assertNonStringElementError(t *testing.T, input []any, err error) {
 	// Verify the error wraps ErrNonStringElement
-	assert.ErrorIs(t, err, ErrNonStringElement)
+	assert.ErrorIs(t, err, errUtils.ErrNonStringElement)
 
 	// For non-string element errors, verify the error message contains index and type info
 	errorMsg := err.Error()

@@ -1,15 +1,10 @@
 package utils
 
 import (
-	"errors"
 	"fmt"
 	"strings"
-)
 
-// Package-level sentinel errors for slice operations.
-var (
-	ErrNilInput         = errors.New("input must not be nil")
-	ErrNonStringElement = errors.New("element is not a string")
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // SliceContainsString checks if a string is present in a slice.
@@ -73,14 +68,14 @@ func SliceOfInterfacesToSliceOfStrings(input []any) []string {
 // This function returns an error if any element is not a string.
 func SliceOfInterfacesToSliceOfStringsWithTypeAssertion(input []any) ([]string, error) {
 	if input == nil {
-		return nil, ErrNilInput
+		return nil, errUtils.ErrNilInput
 	}
 
 	output := make([]string, len(input))
 	for i, current := range input {
 		s, ok := current.(string)
 		if !ok {
-			return nil, fmt.Errorf("%w: index=%d, got=%T", ErrNonStringElement, i, current)
+			return nil, fmt.Errorf("%w: index=%d, got=%T", errUtils.ErrNonStringElement, i, current)
 		}
 		output[i] = s
 	}
