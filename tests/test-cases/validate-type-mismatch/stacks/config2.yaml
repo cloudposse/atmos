@@ -1,0 +1,6 @@
+# Second configuration with a conflicting type
+components:
+  terraform:
+    test-component:
+      vars:
+        config_value: "single-string-value"
