@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -247,7 +247,7 @@ func (pm *PathManager) Apply() error {
 	return os.Setenv("PATH", pm.GetPath())
 }
 
-// Determine if running in a CI environment
+// Determine if running in a CI environment.
 func isCIEnvironment() bool {
 	// Check for common CI environment variables
 	// Note, that the CI variable has many possible truthy values, so we check for any non-empty value that is not "false".

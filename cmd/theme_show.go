@@ -211,13 +211,8 @@ func main() {
 
 // generateLogDemo creates a demonstration of log output with styled levels and key-value pairs.
 func generateLogDemo(scheme *theme.ColorScheme) string {
-	// Create styled level badges using the theme colors
+	// Get theme styles
 	logStyles := theme.GetLogStyles(scheme)
-
-	debugBadge := logStyles.Levels[log.DebugLevel].Render(" DEBUG ")
-	infoBadge := logStyles.Levels[log.InfoLevel].Render(" INFO  ")
-	warnBadge := logStyles.Levels[log.WarnLevel].Render(" WARN  ")
-	errorBadge := logStyles.Levels[log.ErrorLevel].Render(" ERROR ")
 
 	// Create a buffer to capture log output
 	var buf bytes.Buffer
@@ -238,22 +233,22 @@ func generateLogDemo(scheme *theme.ColorScheme) string {
 
 	// Debug message
 	demoLogger.Debug("Processing component", "component", "vpc", "stack", "dev")
-	output.WriteString(debugBadge + buf.String())
+	output.WriteString(buf.String())
 	buf.Reset()
 
 	// Info message
 	demoLogger.Info("Terraform init completed", "duration", "3.2s", "providers", providerCount)
-	output.WriteString(infoBadge + buf.String())
+	output.WriteString(buf.String())
 	buf.Reset()
 
 	// Warn message
 	demoLogger.Warn("Resource already exists", "resource", "aws_vpc.main", "action", "skip")
-	output.WriteString(warnBadge + buf.String())
+	output.WriteString(buf.String())
 	buf.Reset()
 
 	// Error message
 	demoLogger.Error("Failed to connect", "endpoint", "api.example.com", "retry", 3)
-	output.WriteString(errorBadge + buf.String())
+	output.WriteString(buf.String())
 
 	return output.String()
 }
