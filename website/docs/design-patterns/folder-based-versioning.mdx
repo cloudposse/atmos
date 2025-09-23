@@ -133,29 +133,33 @@ components:
 
 ### Version Naming Conventions
 
-Choose clear, consistent naming patterns:
+Choose clear, consistent naming patterns within your component folders:
 
+<File title="components/terraform directory structure">
 ```
-# Semantic versioning
-vpc/v1/
-vpc/v2/
-vpc/v3/
+components/
+  terraform/
+    vpc/
+      v1/                    # Semantic versioning
+      v2/
+      v3-preview/
 
-# Feature-based versioning
-rds/standard/
-rds/aurora/
-rds/serverless/
+    rds/
+      standard/              # Feature-based versioning
+      aurora/
+      serverless/
 
-# Status-based versioning
-eks/stable/
-eks/beta/
-eks/deprecated/
+    eks/
+      stable/                # Status-based versioning
+      beta/
+      deprecated/
 
-# Date-based versioning
-lambda-2023/
-lambda-2024/
-lambda-2025/
+    lambda/
+      2023/                  # Date-based versioning
+      2024/
+      2025/
 ```
+</File>
 
 ## Workspace Key Management
 
@@ -252,210 +256,6 @@ atmos terraform plan vpc --stack prod-us-east-1
 # Apply the upgrade
 atmos terraform apply vpc --stack prod-us-east-1
 ```
-
-## Example Implementation
-
-Here's a complete example showing folder-based versioning for a VPC component evolution:
-
-### Component Versions
-
-<File title="components/terraform/vpc/README.md">
-```markdown
-# VPC Component (v1)
-
-Original VPC implementation. Stable and widely deployed.
-
-## Features
-- Basic VPC with public/private subnets
-- NAT Gateways for private subnet egress
-- Internet Gateway for public subnet access
-
-## Status: Stable (Maintenance Mode)
-New deployments should consider vpc/v2 for additional features.
-```
-</File>
-
-<File title="components/terraform/vpc/v2/README.md">
-```markdown
-# VPC Component (v2)
-
-Enhanced VPC with additional features and better defaults.
-
-## New Features
-- IPv6 support
-- VPC Flow Logs enabled by default
-- Transit Gateway attachments
-- VPC Endpoints for AWS services
-- Improved tagging strategy
-
-## Migration from v1
-See MIGRATION.md for upgrade instructions.
-
-## Status: Stable (Recommended)
-```
-</File>
-
-<File title="components/terraform/vpc/v2/MIGRATION.md">
-```markdown
-# Migration Guide: VPC v1 to v2
-
-## Breaking Changes
-1. Subnet CIDR calculation changed - review allocations
-2. NAT Gateway configuration restructured
-3. New required variables: `enable_flow_logs`, `flow_logs_bucket`
-
-## Migration Steps
-
-### 1. Pre-Migration Validation
-```bash
-# Capture current state
-atmos terraform output vpc --stack $STACK > vpc/v1-outputs.json
-```
-
-### 2. Update Configuration
-```yaml
-# Add new required variables
-vars:
-  enable_flow_logs: true
-  flow_logs_bucket: "org-vpc-flow-logs"
-
-# Update component reference
-metadata:
-  component: vpc/v2  # was: vpc/v1
-```
-
-### 3. Review Changes
-```bash
-atmos terraform plan vpc --stack $STACK
-```
-
-### 4. Apply with Caution
-The following resources will be recreated:
-- NAT Gateways (brief connectivity interruption)
-- Route table associations (automatic)
-
-## Rollback Procedure
-Change metadata.component back to "vpc/v1"
-```
-</File>
-
-<File title="components/terraform/vpc/v3-preview/README.md">
-```markdown
-# VPC Component (v3-preview)
-
-Next generation VPC with cloud-native networking.
-
-## Experimental Features
-- AWS Cloud WAN integration
-- PrivateLink mesh networking
-- Multi-region peering automation
-- ML-based capacity planning
-
-## Status: Preview (Not for Production)
-This version is under active development. APIs will change.
-
-## Testing
-Use in development environments only:
-```yaml
-metadata:
-  component: vpc/v3-preview
-```
-```
-</File>
-
-### Stack Configurations
-
-<File title="stacks/catalog/vpc/defaults.yaml">
-```yaml
-# Base configuration for all VPC versions
-components:
-  terraform:
-    vpc/defaults:
-      metadata:
-        type: abstract
-      vars:
-        # Common variables across all versions
-        enable_dns_hostnames: true
-        enable_dns_support: true
-        instance_tenancy: default
-        tags:
-          Component: "vpc"
-          ManagedBy: "terraform"
-```
-</File>
-
-<File title="stacks/dev/us-east-1.yaml">
-```yaml
-import:
-  - catalog/vpc/defaults
-
-components:
-  terraform:
-    # Testing v3 preview in dev
-    vpc:
-      metadata:
-        component: vpc/v3-preview  # Testing v3 preview
-        inherits:
-          - vpc/defaults
-      settings:
-        workspace_key_prefix: "dev/vpc"
-      vars:
-        name: "dev-use1-vpc"
-        cidr_block: "10.0.0.0/16"
-        # v3-specific features
-        enable_cloud_wan: true
-        ml_capacity_planning: true
-```
-</File>
-
-<File title="stacks/staging/us-east-1.yaml">
-```yaml
-import:
-  - catalog/vpc/defaults
-
-components:
-  terraform:
-    # Staging on stable v2
-    vpc:
-      metadata:
-        component: vpc/v2  # Staging on stable v2
-        inherits:
-          - vpc/defaults
-      settings:
-        workspace_key_prefix: "staging/vpc"
-      vars:
-        name: "staging-use1-vpc"
-        cidr_block: "10.1.0.0/16"
-        # v2-specific features
-        enable_flow_logs: true
-        flow_logs_bucket: "org-vpc-flow-logs-staging"
-        enable_ipv6: true
-```
-</File>
-
-<File title="stacks/prod/us-east-1.yaml">
-```yaml
-import:
-  - catalog/vpc/defaults
-
-components:
-  terraform:
-    # Production on stable v1 (conservative approach)
-    vpc:
-      metadata:
-        component: vpc/v1  # Production on stable v1
-        inherits:
-          - vpc/defaults
-      settings:
-        workspace_key_prefix: "prod/vpc"
-      vars:
-        name: "prod-use1-vpc"
-        cidr_block: "10.2.0.0/16"
-        # v1 configuration
-        nat_gateway_enabled: true
-        single_nat_gateway: false
-```
-</File>
 
 ## Rollback Strategy
 
