@@ -147,6 +147,7 @@ func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
 	}
 
 	return ref.Hash().String(), nil
+}
 
 // OpenWorktreeAwareRepo opens a Git repository at the given path,
 // handling both regular repositories and worktrees correctly.

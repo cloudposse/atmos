@@ -351,34 +351,51 @@ func TestSliceOfInterfacesToSliceOfStringsWithTypeAssertion(t *testing.T) {
 			result, err := SliceOfInterfacesToSliceOfStringsWithTypeAssertion(tc.input)
 
 			if tc.expectError {
-				assert.Error(t, err)
-				assert.Nil(t, result)
-
-				// Check error type
-				if tc.errorType == ErrNilInput {
-					assert.Equal(t, ErrNilInput, err)
-				} else if tc.errorType == ErrNonStringElement {
-					// Verify the error wraps ErrNonStringElement
-					assert.ErrorIs(t, err, ErrNonStringElement)
-
-					// For non-string element errors, verify the error message contains index and type info
-					errorMsg := err.Error()
-					assert.Contains(t, errorMsg, "index=")
-					assert.Contains(t, errorMsg, "got=")
-
-					// Find the actual index and type for verification
-					for i, item := range tc.input {
-						if _, ok := item.(string); !ok {
-							assert.Contains(t, errorMsg, fmt.Sprintf("index=%d", i))
-							assert.Contains(t, errorMsg, fmt.Sprintf("got=%T", item))
-							break
-						}
-					}
-				}
+				assertErrorCase(t, &tc, err, result)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expected, result)
 			}
 		})
+	}
+}
+
+// assertErrorCase validates error cases for SliceOfInterfacesToSliceOfStringsWithTypeAssertion tests.
+func assertErrorCase(t *testing.T, tc *struct {
+	name        string
+	input       []any
+	expected    []string
+	expectError bool
+	errorType   error
+}, err error, result []string,
+) {
+	assert.Error(t, err)
+	assert.Nil(t, result)
+
+	switch tc.errorType {
+	case ErrNilInput:
+		assert.Equal(t, ErrNilInput, err)
+	case ErrNonStringElement:
+		assertNonStringElementError(t, tc.input, err)
+	}
+}
+
+// assertNonStringElementError validates ErrNonStringElement specific assertions.
+func assertNonStringElementError(t *testing.T, input []any, err error) {
+	// Verify the error wraps ErrNonStringElement
+	assert.ErrorIs(t, err, ErrNonStringElement)
+
+	// For non-string element errors, verify the error message contains index and type info
+	errorMsg := err.Error()
+	assert.Contains(t, errorMsg, "index=")
+	assert.Contains(t, errorMsg, "got=")
+
+	// Find the actual index and type for verification
+	for i, item := range input {
+		if _, ok := item.(string); !ok {
+			assert.Contains(t, errorMsg, fmt.Sprintf("index=%d", i))
+			assert.Contains(t, errorMsg, fmt.Sprintf("got=%T", item))
+			break
+		}
 	}
 }

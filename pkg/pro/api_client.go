@@ -24,6 +24,7 @@ const (
 	DefaultIdleConnTimeoutSecs       = 30
 	DefaultResponseHeaderTimeoutSecs = 15
 	DefaultExpectContinueTimeoutSecs = 1
+	logKeyURL                        = "url"
 	logKeyOperation                  = "operation"
 	logKeyRequest                    = "request"
 	logKeyStatus                     = "status"
@@ -163,7 +164,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
 	}
 
-	log.Debug("Uploading affected components and stacks.", "url", url)
+	log.Debug("Uploading affected components and stacks.", logKeyURL, url)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -175,7 +176,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadStacks, err)
 	}
 
-	log.Debug("Uploaded affected components and stacks.", "url", url)
+	log.Debug("Uploaded affected components and stacks.", logKeyURL, url)
 
 	return nil
 }
@@ -230,7 +231,7 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 // LockStack locks a specific stack.
 func (c *AtmosProAPIClient) LockStack(dto *dtos.LockStackRequest) (dtos.LockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
-	log.Debug("Locking stack.", "url", url)
+	log.Debug("Locking stack.", logKeyURL, url)
 
 	var responseData dtos.LockStackResponse
 	err := c.doStackLockAction(&schema.StackLockActionParams{
@@ -251,7 +252,7 @@ func (c *AtmosProAPIClient) LockStack(dto *dtos.LockStackRequest) (dtos.LockStac
 // UnlockStack unlocks a specific stack.
 func (c *AtmosProAPIClient) UnlockStack(dto *dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
-	log.Debug("Unlocking stack.", "url", url)
+	log.Debug("Unlocking stack.", logKeyURL, url)
 
 	var responseData dtos.UnlockStackResponse
 	err := c.doStackLockAction(&schema.StackLockActionParams{
