@@ -25,9 +25,16 @@ jobs:
 
       - name: Get Atmos version
         id: get-version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name)
+          VERSION=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name)
+          if [ "$VERSION" = "null" ] || [ -z "$VERSION" ]; then
+            echo "Failed to get latest version, using fallback"
+            VERSION="v1.190.0"
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using Atmos version: $VERSION"
 
     outputs:
       version: ${{ steps.get-version.outputs.version }}
@@ -59,6 +66,8 @@ jobs:
           chmod: 0755
           extension-matching: disable
           rename-to: atmos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: hashicorp/setup-terraform@v3
         with:
