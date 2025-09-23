@@ -39,11 +39,11 @@ atmos hello
 
 ## Positional Arguments
 
-Atmos also supports positional arguments. If a positional argument is required but not provided by the user, 
-the command will fail—unless you define a default in your config. 
+Atmos also supports positional arguments. If a positional argument is required but not provided by the user,
+the command will fail—unless you define a default in your config.
 
 For the example, adding the following to `atmos.yaml` will introduce a new `greet` command that accepts one `name` argument,
-but uses a default of "John Doe" if none is provided. 
+but uses a default of "John Doe" if none is provided.
 
 ```yaml
 # subcommands
@@ -451,18 +451,18 @@ commands:
                   describe_how_to_fix_helm_releases="
                     \nBefore upgrading the cluster to Kubernetes ${next_k8s_version}, the Helm releases need to be fixed.
 
-                    - For the Helm releases identified, you need to check for the latest version of the Chart (which has supported API versions) 
+                    - For the Helm releases identified, you need to check for the latest version of the Chart (which has supported API versions)
                       or update the Chart yourself. Then deploy the updated Chart
 
-                    - If the cluster was already upgraded to a new Kubernetes version without auditing for the removed API versions, it might be already running 
+                    - If the cluster was already upgraded to a new Kubernetes version without auditing for the removed API versions, it might be already running
                       with the removed API versions. When trying to redeploy the Helm Chart, you might encounter an error similar to the following:
 
                           Error: UPGRADE FAILED: current release manifest contains removed kubernetes api(s)
                           for this kubernetes version and it is therefore unable to build the kubernetes
-                          objects for performing the diff. 
+                          objects for performing the diff.
                           Error from Kubernetes: unable to recognize \"\": no matches for kind "Deployment" in version "apps/v1beta1"
 
-                      Helm fails in this scenario because it attempts to create a diff patch between the current deployed release 
+                      Helm fails in this scenario because it attempts to create a diff patch between the current deployed release
                       (which contains the Kubernetes APIs that are removed) against the Chart you are passing with the updated/supported API versions.
 
                       To fix this, you need to edit the release manifests that are stored in the cluster to use the supported API versions.
@@ -472,7 +472,7 @@ commands:
                           helm plugin install https://github.com/helm/helm-mapkubeapis
                           helm mapkubeapis <NAME> -n <NAMESPACE>
 
-                    NOTE: The best practice is to upgrade Helm releases that are using deprecated API versions to supported API versions 
+                    NOTE: The best practice is to upgrade Helm releases that are using deprecated API versions to supported API versions
                           prior to upgrading to a Kubernetes version that removes those APIs.
 
                     For more information, refer to:

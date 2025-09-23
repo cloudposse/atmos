@@ -47,7 +47,7 @@ Here is an example of a workflow with retry configuration:
 workflows:
   eks-up:
     description: Bring up the eks cluster
-    steps: 
+    steps:
       - command: terraform apply vpc -auto-approve
         retry:
           max_attempts: 3
@@ -406,7 +406,7 @@ The Atmos stack used by the workflow commands of type `atmos` can be specified i
 
 When a workflow step fails, Atmos will:
 1. Display which step failed
-2. Show the exact command that failed 
+2. Show the exact command that failed
 3. Provide a ready-to-use command to resume the workflow from the failed step
 
 Given this workflow:
@@ -429,7 +429,7 @@ If step-2 fails, you'll see:
 ```console
 Step 'step-2' failed!
 
-Command failed: 
+Command failed:
 terraform plan vpc -s plat-ue2-staging
 
 To resume the workflow from this step, run:

@@ -23,7 +23,7 @@ const (
 	// usage data and provides a link for users to learn more or opt out.
 	DisclosureMessage = `Notice: Atmos now collects completely anonymous telemetry regarding usage.
 This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
 by visiting the following URL: https://atmos.tools/cli/telemetry
 
 `

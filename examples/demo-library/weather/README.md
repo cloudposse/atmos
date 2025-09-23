@@ -1,7 +1,7 @@
 # Example Terraform Weather Component
 
 This Terraform "root" module fetches weather information for a specified location with custom display options.
-It queries data from the [`wttr.in`](https://wttr.in) weather service and stores the result in a local file (`cache.txt`). 
+It queries data from the [`wttr.in`](https://wttr.in) weather service and stores the result in a local file (`cache.txt`).
 It also provides several outputs like weather information, request URL, stage, location, language, and units of measurement.
 
 ## Features

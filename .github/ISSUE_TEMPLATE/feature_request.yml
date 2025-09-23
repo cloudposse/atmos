@@ -8,7 +8,7 @@ body:
     attributes:
       value: |
         Have a question?
-        
+
         Please checkout our [Slack Community](https://slack.cloudposse.com)
         or visit our [Slack Archive](https://archive.sweetops.com/).
 
@@ -39,7 +39,7 @@ body:
       description: |
         Is your feature request related to a problem/challenge you are trying
         to solve?
-        
+
         Please provide some additional context of why this feature or
         capability will be valuable.
     validations:

@@ -11,7 +11,7 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
-  
+
 stacks:
   base_path: "stacks"
   included_paths:
@@ -94,4 +94,3 @@ commands:
       steps:
         - find . -type f -name "*.tfstate" -delete
         - echo "Deleted all state files"
-    
