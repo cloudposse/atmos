@@ -7,7 +7,7 @@ export LESS=-X
 
 # Determine the correct sed syntax based on the operating system
 if [ "$(uname)" = "Darwin" ]; then
-		SED="$SED" # macOS requires '' for in-place editing
+		SED="sed -i ''" # macOS requires '' for in-place editing
 else
 		SED="sed -i"    # Linux does not require ''
 fi
