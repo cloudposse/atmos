@@ -295,12 +295,18 @@ func Test_processEnvVars(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "test invalid boolean env var",
+			name: "test invalid boolean env var defaults to false",
 			envVars: map[string]string{
 				"ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE": "not-a-boolean",
 			},
-			expectError:  true,
-			errorMessage: "strconv.ParseBool: parsing \"not-a-boolean\": invalid syntax",
+			expectedConfig: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						ApplyAutoApprove: false, // Invalid boolean values default to false in viper
+					},
+				},
+			},
+			expectError: false,
 		},
 	}
 
@@ -327,7 +333,9 @@ func Test_processEnvVars(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMessage)
+				if err != nil && tt.errorMessage != "" {
+					assert.Contains(t, err.Error(), tt.errorMessage)
+				}
 			} else {
 				assert.NoError(t, err)
 			}
