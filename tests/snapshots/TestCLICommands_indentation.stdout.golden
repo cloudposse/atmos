@@ -48,6 +48,7 @@ settings:
       pager: false
       line_numbers: false
       wrap: false
+    color: true
     no_color: false
     tab_width: 4
   inject_github_token: true

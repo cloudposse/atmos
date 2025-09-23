@@ -139,6 +139,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Warning")
 
+	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", true)
 	v.SetDefault("docs.generate.readme.output", "./README.md")
