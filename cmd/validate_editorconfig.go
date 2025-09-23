@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -114,8 +115,10 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == u.LogLevelTrace {
 		cliConfig.Verbose = true
 	} else if cmd.Flags().Changed("logs-level") {
-		if v, err := cmd.Flags().GetString("logs-level"); err == nil && v == u.LogLevelTrace {
-			cliConfig.Verbose = true
+		if v, err := cmd.Flags().GetString("logs-level"); err == nil {
+			if parsedLevel, parseErr := logger.ParseLogLevel(v); parseErr == nil && parsedLevel == u.LogLevelTrace {
+				cliConfig.Verbose = true
+			}
 		}
 	}
 	if !cmd.Flags().Changed("no-color") && atmosConfig.Settings.Terminal.NoColor {
