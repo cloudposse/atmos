@@ -54,7 +54,8 @@ func CaptureCmd(cmd *cobra.Command, err ...error) {
 // It calls disclosureMessage() to get the message and prints to stderr with markdown
 // formatting if a message is returned.
 func PrintTelemetryDisclosure() {
-	if message := disclosureMessage(); message != "" {
+	message := disclosureMessage()
+	if message != "" {
 		utils.PrintfMarkdownToTUI("%s", message)
 	}
 }
@@ -155,20 +156,20 @@ func disclosureMessage() string {
 		return ""
 	}
 
-	TelemetryDisclosureShown := getOrInitializeCacheValue(
-		func(cfg *cfg.CacheConfig) bool {
-			return cfg.TelemetryDisclosureShown
-		},
-		func(cfg *cfg.CacheConfig, _ bool) {
-			cfg.TelemetryDisclosureShown = true
-		},
-		false,
-	)
-
-	// If disclosure has already been shown, return empty
-	if TelemetryDisclosureShown {
+	// Check if disclosure has already been shown
+	cacheCfg, err := cfg.LoadCache()
+	if err == nil && cacheCfg.TelemetryDisclosureShown {
+		// Already shown, don't show again
 		return ""
 	}
+
+	// Mark disclosure as shown for future runs
+	cacheCfg.TelemetryDisclosureShown = true
+	if err := cfg.SaveCache(cacheCfg); err != nil {
+		log.Warn("Could not save telemetry disclosure state to cache", "error", err)
+	}
+
+	// Show the disclosure message
 	return DisclosureMessage
 }
 

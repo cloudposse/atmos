@@ -168,6 +168,9 @@ func Execute() error {
 		}
 	}
 
+	// Print telemetry disclosure if needed
+	telemetry.PrintTelemetryDisclosure()
+
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
