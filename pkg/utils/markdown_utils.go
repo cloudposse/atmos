@@ -37,7 +37,7 @@ func PrintfMarkdown(format string, a ...interface{}) {
 // interfere with stdout when piping command output.
 func PrintfMarkdownToTUI(format string, a ...interface{}) {
 	if render == nil {
-		_, err := os.Stderr.WriteString(fmt.Sprintf(format, a...))
+		_, err := fmt.Fprintf(os.Stderr, format, a...)
 		errUtils.CheckErrorAndPrint(err, "", "")
 		return
 	}
@@ -48,7 +48,7 @@ func PrintfMarkdownToTUI(format string, a ...interface{}) {
 	if renderErr != nil {
 		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
 	}
-	_, err := os.Stderr.WriteString(fmt.Sprint(md + "\n"))
+	_, err := fmt.Fprint(os.Stderr, md+"\n")
 	errUtils.CheckErrorAndPrint(err, "", "")
 }
 
