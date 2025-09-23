@@ -18,7 +18,7 @@ Use this command to remove the tainted state from a resource.
 Execute the `terraform untaint` command like this:
 
 ```shell
-atmos terraform untaint <component> -s <stack> [options]
+atmos terraform untaint <component> -s <stack> <resource_address> [-- <terraform_flags>]
 ```
 
 This command removes the tainted state from a resource, preventing it from being destroyed and recreated on the next apply. Note: This command is deprecated in Terraform v1.0+ since `taint` is also deprecated.
