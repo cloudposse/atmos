@@ -24,7 +24,14 @@ func GetCacheFilePath() (string, error) {
 	xdgCacheHome := os.Getenv("XDG_CACHE_HOME")
 	var cacheDir string
 	if xdgCacheHome == "" {
-		cacheDir = filepath.Join(".", ".atmos")
+		// Follow XDG Base Directory specification: default to $HOME/.cache
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			// Fallback to current directory if home directory cannot be determined
+			cacheDir = filepath.Join(".", ".atmos")
+		} else {
+			cacheDir = filepath.Join(homeDir, ".cache", "atmos")
+		}
 	} else {
 		cacheDir = filepath.Join(xdgCacheHome, "atmos")
 	}

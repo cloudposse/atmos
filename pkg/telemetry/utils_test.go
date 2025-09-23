@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
@@ -702,8 +703,9 @@ func TestPrintTelemetryDisclosureOnlyOnce(t *testing.T) {
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
-	// Clean up test cache
-	cacheDir := "./.atmos"
+	// Clean up test cache - get the actual cache file path
+	cacheFilePath, _ := cfg.GetCacheFilePath()
+	cacheDir := filepath.Dir(cacheFilePath)
 	os.RemoveAll(cacheDir)
 	defer os.RemoveAll(cacheDir)
 
