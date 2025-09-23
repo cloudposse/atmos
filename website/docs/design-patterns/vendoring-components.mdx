@@ -265,7 +265,7 @@ atmos vendor pull --dry-run
 
 When making local changes to vendored components:
 
-<File title="LOCAL_MODIFICATIONS.md">
+<File title="components/terraform/vpc/LOCAL_MODIFICATIONS.md">
 ```markdown
 # Local Modifications
 
@@ -277,15 +277,7 @@ This component has been vendored from github.com/cloudposse/terraform-aws-vpc
 - **File**: main.tf
 - **Author**: john.doe@example.com
 - **Reason**: Added required compliance tags per security policy
-- **Changes**:
-  ```hcl
-  # Added to locals
-  compliance_tags = {
-    DataClassification = var.data_classification
-    ComplianceLevel    = var.compliance_level
-    LastReviewed       = timestamp()
-  }
-  ```
+- **Changes**: Added compliance_tags to locals with DataClassification, ComplianceLevel, and LastReviewed fields
 
 ### 2024-01-25: Custom Security Groups
 - **File**: security-groups.tf (new file)
