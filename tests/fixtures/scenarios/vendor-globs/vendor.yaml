@@ -29,7 +29,7 @@ spec:
         - "components/library/"
       tags:
         - demo
-    
+
     - component: "test shallow globs and folder exclusion"
       source: "github.com/cloudposse/atmos.git?ref={{.Version}}"
       version: "main"
