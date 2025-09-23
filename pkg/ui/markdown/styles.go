@@ -93,6 +93,9 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
 		style.CodeBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 	}
+	if atmosConfig.Settings.Markdown.CodeBlock.Indent >= 0 {
+		style.CodeBlock.Indent = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Indent))
+	}
 
 	if atmosConfig.Settings.Markdown.Link.Color != "" {
 		applyStyleSafely(&style.Link, atmosConfig.Settings.Markdown.Link.Color)
@@ -235,6 +238,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 					Color: stringPtr(Blue),
 				},
 				Margin: uintPtr(1),
+				Indent: uintPtr(2),
 			},
 			Chroma: &ansi.Chroma{
 				Text: ansi.StylePrimitive{
@@ -427,6 +431,9 @@ func applyCustomStylesToTheme(themeStyleBytes []byte, atmosConfig *schema.AtmosC
 	}
 	if atmosConfig.Settings.Markdown.CodeBlock.Margin >= 0 {
 		style.CodeBlock.Margin = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
+	}
+	if atmosConfig.Settings.Markdown.CodeBlock.Indent >= 0 {
+		style.CodeBlock.Indent = uintPtr(safeIntToUint(atmosConfig.Settings.Markdown.CodeBlock.Indent))
 	}
 
 	if atmosConfig.Settings.Markdown.Link.Color != "" {

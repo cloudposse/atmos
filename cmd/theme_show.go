@@ -211,23 +211,51 @@ func main() {
 
 // generateLogDemo creates a demonstration of log output with styled levels and key-value pairs.
 func generateLogDemo(scheme *theme.ColorScheme) string {
+	// Create styled level badges using the theme colors
+	logStyles := theme.GetLogStyles(scheme)
+
+	debugBadge := logStyles.Levels[log.DebugLevel].Render(" DEBUG ")
+	infoBadge := logStyles.Levels[log.InfoLevel].Render(" INFO  ")
+	warnBadge := logStyles.Levels[log.WarnLevel].Render(" WARN  ")
+	errorBadge := logStyles.Levels[log.ErrorLevel].Render(" ERROR ")
+
 	// Create a buffer to capture log output
 	var buf bytes.Buffer
 
 	// Create a new logger instance with our theme styles
 	demoLogger := log.New(&buf)
-	demoLogger.SetStyles(theme.GetLogStyles(scheme))
+	demoLogger.SetStyles(logStyles)
+
+	// Configure logger to show the level prefix
+	demoLogger.SetReportTimestamp(false)
+	demoLogger.SetReportCaller(false)
 
 	// Temporarily set the log level to show all messages
 	demoLogger.SetLevel(log.DebugLevel)
 
 	// Generate sample log messages with key-value pairs
-	demoLogger.Debug("Processing component", "component", "vpc", "stack", "dev")
-	demoLogger.Info("Terraform init completed", "duration", "3.2s", "providers", providerCount)
-	demoLogger.Warn("Resource already exists", "resource", "aws_vpc.main", "action", "skip")
-	demoLogger.Error("Failed to connect", "endpoint", "api.example.com", "retry", 3)
+	var output strings.Builder
 
-	return buf.String()
+	// Debug message
+	demoLogger.Debug("Processing component", "component", "vpc", "stack", "dev")
+	output.WriteString(debugBadge + buf.String())
+	buf.Reset()
+
+	// Info message
+	demoLogger.Info("Terraform init completed", "duration", "3.2s", "providers", providerCount)
+	output.WriteString(infoBadge + buf.String())
+	buf.Reset()
+
+	// Warn message
+	demoLogger.Warn("Resource already exists", "resource", "aws_vpc.main", "action", "skip")
+	output.WriteString(warnBadge + buf.String())
+	buf.Reset()
+
+	// Error message
+	demoLogger.Error("Failed to connect", "endpoint", "api.example.com", "retry", 3)
+	output.WriteString(errorBadge + buf.String())
+
+	return output.String()
 }
 
 // formatUsageInstructions generates the usage instructions section.

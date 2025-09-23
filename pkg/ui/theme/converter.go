@@ -145,6 +145,7 @@ func createGlamourStyleFromTheme(t *Theme) *ansi.StyleConfig {
 					Color: &primaryColor,
 				},
 				Margin: uintPtr(1),
+				Indent: uintPtr(2),
 			},
 			Chroma: createChromaStyle(t),
 		},
