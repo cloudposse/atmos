@@ -352,9 +352,9 @@ func sanitizeOutput(output string) (string, error) {
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
 	// 9. Normalize mock server port numbers in URLs for consistent testing.
-	// Replace dynamic port numbers in localhost/127.0.0.1 URLs with "PORT" placeholder.
-	mockServerPortRegex := regexp.MustCompile(`(http://(?:localhost|127\.0\.0\.1)):\d+`)
-	result = mockServerPortRegex.ReplaceAllString(result, `$1:PORT`)
+	// Replace dynamic port numbers in localhost/127.0.0.1 URLs with the standard "localhost:8080".
+	mockServerPortRegex := regexp.MustCompile(`http://(?:localhost|127\.0\.0\.1):\d+`)
+	result = mockServerPortRegex.ReplaceAllString(result, `http://localhost:8080`)
 
 	return result, nil
 }

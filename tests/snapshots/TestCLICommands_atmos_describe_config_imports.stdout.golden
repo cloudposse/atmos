@@ -175,7 +175,7 @@ validate:
     format: default
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 import:
-  - http://localhost:PORT/atmos.yaml
+  - http://localhost:8080/atmos.yaml
   - configs.d/**/*
   - ./logs.yaml
 docs:
