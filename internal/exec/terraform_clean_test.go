@@ -73,6 +73,16 @@ func TestCLITerraformClean(t *testing.T) {
 	}
 }
 
+func verifyFileExists(t *testing.T, files []string) (bool, string) {
+	for _, file := range files {
+		if _, err := os.Stat(file); err != nil {
+			t.Errorf("Reason: Expected file does not exist: %q", file)
+			return false, file
+		}
+	}
+	return true, ""
+}
+
 func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 	for _, file := range files {
 		fileAbs, err := os.Stat(file)

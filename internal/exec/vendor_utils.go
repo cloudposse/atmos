@@ -443,25 +443,43 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 //   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git?ref=v1.0.0"
 //   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
 func normalizeVendorURI(uri string) string {
-	// Check if the URI contains the triple slash pattern
-	if strings.Contains(uri, "///") {
-		// Replace "///" with "//" first to handle any path after the triple slash
-		normalized := strings.Replace(uri, "///", "//", 1)
+	// Don't modify file:/// URIs (valid file scheme with empty host)
+	if strings.HasPrefix(uri, "file:///") {
+		return uri
+	}
 
-		// If the result has "//" followed immediately by "?" (empty subdir), remove the "//"
-		if strings.Contains(normalized, "//?") {
-			normalized = strings.Replace(normalized, "//?", "?", 1)
-			log.Debug("Normalized vendor URI: removed empty subdirectory indicator (///)",
-				"original", uri, "normalized", normalized)
-		} else {
-			log.Debug("Normalized vendor URI: converted triple slash to double slash",
-				"original", uri, "normalized", normalized)
-		}
+	// Check if the URI contains the triple slash pattern for Git repos
+	// The pattern is: repository.git///?query or repository.git///path?query
+	if !strings.Contains(uri, ".git///") {
+		return uri
+	}
 
+	// Find the position of .git///
+	gitTripleSlashPos := strings.Index(uri, ".git///")
+	if gitTripleSlashPos == -1 {
+		return uri
+	}
+
+	// Extract parts before and after .git///
+	const gitSuffixLen = 4                                 // length of ".git"
+	const tripleSlashLen = 7                               // length of ".git///"
+	beforePattern := uri[:gitTripleSlashPos+gitSuffixLen]  // includes ".git"
+	afterPattern := uri[gitTripleSlashPos+tripleSlashLen:] // after "///"
+
+	// Check what comes after the triple slash
+	if afterPattern == "" || strings.HasPrefix(afterPattern, "?") {
+		// Empty subdirectory case: .git///? or .git///
+		normalized := beforePattern + afterPattern
+		log.Debug("Normalized vendor URI: removed empty subdirectory indicator (///)",
+			"original", uri, "normalized", normalized)
 		return normalized
 	}
 
-	return uri
+	// Path specified after triple slash: .git///path
+	normalized := beforePattern + "//" + afterPattern
+	log.Debug("Normalized vendor URI: converted triple slash to double slash",
+		"original", uri, "normalized", normalized)
+	return normalized
 }
 
 func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
