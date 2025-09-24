@@ -351,6 +351,11 @@ func sanitizeOutput(output string) (string, error) {
 	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
+	// 9. Normalize mock server port numbers in URLs for consistent testing.
+	// Replace dynamic port numbers in localhost/127.0.0.1 URLs with "PORT" placeholder.
+	mockServerPortRegex := regexp.MustCompile(`(http://(?:localhost|127\.0\.0\.1)):\d+`)
+	result = mockServerPortRegex.ReplaceAllString(result, `$1:PORT`)
+
 	return result, nil
 }
 
@@ -645,6 +650,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	var envVars []string
 	for key, value := range tc.Env {
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
+	}
+	// Always pass the mock server URL if it's set, so remote imports work in tests
+	if mockURL := os.Getenv("ATMOS_TEST_MOCK_SERVER_URL"); mockURL != "" {
+		envVars = append(envVars, fmt.Sprintf("ATMOS_TEST_MOCK_SERVER_URL=%s", mockURL))
 	}
 	cmd.Env = envVars
 
