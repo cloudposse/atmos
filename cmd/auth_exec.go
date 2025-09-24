@@ -102,7 +102,7 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 		// If it's an exit error, propagate as an error with exit status
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrSubcommandFailed, status.ExitStatus())
+				return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrSubcommandFailed, fmt.Sprintf("exit status %d", status.ExitStatus()))
 			}
 		}
 		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrSubcommandFailed, err)

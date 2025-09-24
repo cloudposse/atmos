@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,11 @@ import (
 )
 
 func TestExecutePacker_Validate(t *testing.T) {
+	// Skip test if packer binary is not available
+	if _, err := exec.LookPath("packer"); err != nil {
+		t.Skipf("Skipping test because packer binary is not found in PATH: %v", err)
+	}
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -62,6 +68,11 @@ func TestExecutePacker_Validate(t *testing.T) {
 }
 
 func TestExecutePacker_Inspect(t *testing.T) {
+	// Skip test if packer binary is not available
+	if _, err := exec.LookPath("packer"); err != nil {
+		t.Skipf("Skipping test because packer binary is not found in PATH: %v", err)
+	}
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -110,6 +121,11 @@ func TestExecutePacker_Inspect(t *testing.T) {
 }
 
 func TestExecutePacker_Version(t *testing.T) {
+	// Skip test if packer binary is not available
+	if _, err := exec.LookPath("packer"); err != nil {
+		t.Skipf("Skipping test because packer binary is not found in PATH: %v", err)
+	}
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -152,6 +168,11 @@ func TestExecutePacker_Version(t *testing.T) {
 }
 
 func TestExecutePacker_Init(t *testing.T) {
+	// Skip test if packer binary is not available
+	if _, err := exec.LookPath("packer"); err != nil {
+		t.Skipf("Skipping test because packer binary is not found in PATH: %v", err)
+	}
+
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -219,6 +240,11 @@ func TestExecutePacker_Errors(t *testing.T) {
 	})
 
 	t.Run("disabled component", func(t *testing.T) {
+		// Skip this subtest if packer binary is not available
+		if _, err := exec.LookPath("packer"); err != nil {
+			t.Skipf("Skipping subtest because packer binary is not found in PATH: %v", err)
+		}
+
 		info := schema.ConfigAndStacksInfo{
 			Stack:              "nonprod",
 			ComponentType:      "packer",
