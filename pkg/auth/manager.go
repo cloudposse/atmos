@@ -511,8 +511,8 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	log.Debug("Authenticating with provider", "provider", providerName)
 	credentials, err := provider.Authenticate(ctx)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateWithProvider", "")
-		return nil, errUtils.ErrAuthenticationFailed
+	    errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateWithProvider", "")
+            return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Cache provider credentials.
