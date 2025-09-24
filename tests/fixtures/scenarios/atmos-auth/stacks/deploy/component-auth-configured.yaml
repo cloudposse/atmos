@@ -16,4 +16,3 @@ components:
           identity-oidc:
             via:
               provider: provider-oidc
-          

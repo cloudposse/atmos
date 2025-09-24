@@ -348,8 +348,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 #### UC-001: Developer Daily Workflow
 
-**Actor**: Software Developer  
-**Goal**: Authenticate to development environments quickly  
+**Actor**: Software Developer
+**Goal**: Authenticate to development environments quickly
 **Scenario**:
 
 1. Developer runs `atmos auth login`
@@ -365,8 +365,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 #### UC-002: Multi-Environment Access
 
-**Actor**: DevOps Engineer  
-**Goal**: Access multiple environments with different permissions  
+**Actor**: DevOps Engineer
+**Goal**: Access multiple environments with different permissions
 **Scenario**:
 
 1. Engineer authenticates via SSO to base identity
@@ -382,8 +382,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 #### UC-003: CI/CD Pipeline Authentication
 
-**Actor**: CI/CD System  
-**Goal**: Authenticate using OIDC for automated deployments  
+**Actor**: CI/CD System
+**Goal**: Authenticate using OIDC for automated deployments
 **Scenario**:
 
 1. GitHub Actions workflow starts
@@ -399,8 +399,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 #### UC-004: Break-Glass Emergency Access
 
-**Actor**: Site Reliability Engineer  
-**Goal**: Access systems during emergency when SSO is unavailable  
+**Actor**: Site Reliability Engineer
+**Goal**: Access systems during emergency when SSO is unavailable
 **Scenario**:
 
 1. SSO system is down during incident
@@ -417,8 +417,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 #### UC-007: Interactive User Credential Setup
 
-**Actor**: DevOps Engineer  
-**Goal**: Configure AWS user credentials for break-glass access  
+**Actor**: DevOps Engineer
+**Goal**: Configure AWS user credentials for break-glass access
 **Scenario**:
 
 1. Engineer runs `atmos auth user configure`
@@ -438,8 +438,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 #### UC-005: Terraform Workflow with Auto-Authentication
 
-**Actor**: DevOps Engineer  
-**Goal**: Run Terraform commands with automatic authentication  
+**Actor**: DevOps Engineer
+**Goal**: Run Terraform commands with automatic authentication
 **Scenario**:
 
 1. Engineer runs `atmos terraform plan vpc -s plat-ue2-sandbox`
@@ -461,8 +461,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 #### UC-006: Component-Specific Identity Override
 
-**Actor**: Security Engineer  
-**Goal**: Use different identity for sensitive components  
+**Actor**: Security Engineer
+**Goal**: Use different identity for sensitive components
 **Scenario**:
 
 1. Engineer needs to deploy security-critical component
@@ -480,8 +480,8 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 
 #### UC-008: Deep Identity Chaining Authentication
 
-**Actor**: DevOps Engineer  
-**Goal**: Authenticate through a complex identity chain for production access  
+**Actor**: DevOps Engineer
+**Goal**: Authenticate through a complex identity chain for production access
 **Scenario**:
 
 1. Engineer runs `atmos auth login -i prod-cross-account-admin`
@@ -538,22 +538,22 @@ auth:
 
 #### EC-001: Credential Expiration During Long Operations
 
-**Scenario**: Terraform apply runs longer than token lifetime  
+**Scenario**: Terraform apply runs longer than token lifetime
 **Handling**: Automatic credential refresh with minimal disruption
 
 #### EC-002: Provider Unavailability
 
-**Scenario**: SSO provider is temporarily unavailable  
+**Scenario**: SSO provider is temporarily unavailable
 **Handling**: Graceful fallback to cached credentials or alternative providers
 
 #### EC-003: Circular Identity Chains
 
-**Scenario**: Identity A chains to Identity B which chains back to A  
+**Scenario**: Identity A chains to Identity B which chains back to A
 **Handling**: Validation prevents circular dependencies at configuration time
 
 #### EC-004: Identity Chain Authentication Failures
 
-**Scenario**: Authentication fails at any step in a deep identity chain  
+**Scenario**: Authentication fails at any step in a deep identity chain
 **Handling**:
 
 - Clear error messages indicating which step failed and why
@@ -564,7 +564,7 @@ auth:
 
 #### EC-005: Identity Chain Credential Mismatch
 
-**Scenario**: Identity receives credentials that are incompatible with its authentication method  
+**Scenario**: Identity receives credentials that are incompatible with its authentication method
 **Handling**:
 
 - Each identity validates incoming credential format and type
@@ -1023,14 +1023,14 @@ identities:
       secret_access_key: !env AWS_SECRET_ACCESS_KEY
       mfa_arn: !env AWS_MFA_ARN
       region: !env AWS_DEFAULT_REGION
-    
+
 
   emergency-admin:
     kind: aws/user
     credentials:
       # If not defined, the credentials will try to be pulled from the keyring.
       region: us-east-1
-    
+
 ```
 
 **Key Characteristics:**
@@ -1053,7 +1053,7 @@ identities:
     principal:
       role_definition_id: b24988ac-6180-42a0-ab88-20f7382dd24c
       scope: /subscriptions/12345678-1234-1234-1234-123456789012
-    
+
 ```
 
 #### GCP Service Account Impersonation (Not Implemented)
@@ -1066,7 +1066,7 @@ identities:
     principal:
       service_account: admin@project.iam.gserviceaccount.com
       project: my-project
-    
+
 ```
 
 #### Okta Application (Not Implemented)
@@ -1078,7 +1078,7 @@ identities:
     via: { provider: okta }
     principal:
       app: datadog-admin
-    
+
 ```
 
 ### 5.3 Component-Level Auth Configuration
@@ -1109,7 +1109,7 @@ auth:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
-      
+
 
     superuser:
       kind: aws/user
@@ -1216,7 +1216,7 @@ auth:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
-      
+
       # AWS files automatically managed:
       # ~/.aws/atmos/cplive-sso/credentials
       # ~/.aws/atmos/cplive-sso/config
@@ -1235,7 +1235,7 @@ auth:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
-      
+
     security-admin: # Component-specific identity
       kind: aws/permission-set
       via: { provider: cplive-sso }
@@ -1275,7 +1275,7 @@ identities:
     via: { provider: okta-saml }
     principal:
       role_arn: arn:aws:iam::123456789012:role/SAMLAdminRole
-    
+
 
   # Chained: SAML → Cross-account role
   prod-deployer:
@@ -1283,7 +1283,7 @@ identities:
     via: { identity: saml-admin }
     principal:
       role_arn: arn:aws:iam::987654321098:role/DeployerRole
-    
+
 ```
 
 **Authentication Flow:**
@@ -1473,7 +1473,7 @@ identities:
     principal:
       name: TerraformAdminAccess
       account.name: production
-    
+
 
 # Bad: Unclear, generic names
 identities:
@@ -1521,8 +1521,8 @@ identities:
 
 #### Unit Tests
 
-**Scope**: Individual functions and methods  
-**Coverage**: 90%+ code coverage required  
+**Scope**: Individual functions and methods
+**Coverage**: 90%+ code coverage required
 **Examples**:
 
 - Provider configuration parsing
@@ -1532,8 +1532,8 @@ identities:
 
 #### Integration Tests
 
-**Scope**: End-to-end authentication flows  
-**Coverage**: All supported provider-identity combinations  
+**Scope**: End-to-end authentication flows
+**Coverage**: All supported provider-identity combinations
 **Examples**:
 
 - AWS SSO → Permission Set flow
@@ -1543,8 +1543,8 @@ identities:
 
 #### Security Tests
 
-**Scope**: Security-critical functionality  
-**Coverage**: All credential handling paths  
+**Scope**: Security-critical functionality
+**Coverage**: All credential handling paths
 **Examples**:
 
 - Credential storage encryption
@@ -1554,8 +1554,8 @@ identities:
 
 #### Performance Tests
 
-**Scope**: Authentication speed and resource usage  
-**Coverage**: All authentication paths under load  
+**Scope**: Authentication speed and resource usage
+**Coverage**: All authentication paths under load
 **Examples**:
 
 - Authentication completion time < 5s
