@@ -222,7 +222,7 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 
 	if err := form.Run(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrUnsupportedInputType, "promptForIdentity", "")
-		return "", errUtils.ErrUnsupportedInputType
+		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrUnsupportedInputType, err)
 	}
 
 	return selectedIdentity, nil
@@ -317,12 +317,12 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
-		return "", errUtils.ErrInvalidAuthConfig
+		return "", fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	if len(chain) == 0 {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
-		return "", errUtils.ErrInvalidAuthConfig
+		return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidAuthConfig, "empty chain")
 	}
 
 	// The first element in the chain is the root provider name.
@@ -338,7 +338,7 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	}
 
 	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderKindForIdentity", fmt.Sprintf("provider %q not found in configuration", providerName))
-	return "", errUtils.ErrInvalidAuthConfig
+	return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidAuthConfig, fmt.Sprintf("provider %q not found in configuration", providerName))
 }
 
 // authenticateHierarchical performs hierarchical authentication with bottom-up validation.
