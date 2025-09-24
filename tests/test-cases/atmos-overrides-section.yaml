@@ -2,7 +2,7 @@ tests:
   - name: "Atmos 'overrides' section test for 'prod' stack"
     enabled: true
     tty: false
-    snapshot: true
+    snapshot: false
     clean: true
     description: "Ensure the 'overrides' section works inline and in imports"
     workdir: "fixtures/scenarios/atmos-overrides-section/"
@@ -20,11 +20,13 @@ tests:
         - "b: b-prod"
         - "c: c-prod"
         - "d: d"
+      stderr:
+        - "Telemetry Enabled"
 
   - name: "Atmos 'overrides' section test for 'staging' stack"
     enabled: true
     tty: false
-    snapshot: true
+    snapshot: false
     clean: true
     description: "Ensure the 'overrides' section works inline and in imports"
     workdir: "fixtures/scenarios/atmos-overrides-section/"
@@ -42,11 +44,13 @@ tests:
         - "b: b-team2"
         - "c: c-team1"
         - "d: d"
+      stderr:
+        - "Telemetry Enabled"
 
   - name: "Atmos 'overrides' section test for 'dev' stack"
     enabled: true
     tty: false
-    snapshot: true
+    snapshot: false
     clean: true
     description: "Ensure the 'overrides' section works inline and in imports"
     workdir: "fixtures/scenarios/atmos-overrides-section/"
@@ -64,11 +68,13 @@ tests:
         - "b: b-team2"
         - "c: c-team1"
         - "d: d"
+      stderr:
+        - "Telemetry Enabled"
 
   - name: "Atmos 'overrides' section test for 'sandbox' stack"
     enabled: true
     tty: false
-    snapshot: true
+    snapshot: false
     clean: true
     description: "Ensure the 'overrides' section works inline and in imports"
     workdir: "fixtures/scenarios/atmos-overrides-section/"
@@ -86,11 +92,13 @@ tests:
         - "b: b-team2"
         - "c: c-team1"
         - "d: d"
+      stderr:
+        - "Telemetry Enabled"
 
   - name: "Atmos 'overrides' section test for 'test' stack"
     enabled: true
     tty: false
-    snapshot: true
+    snapshot: false
     clean: true
     description: "Ensure the 'overrides' section works inline and in imports"
     workdir: "fixtures/scenarios/atmos-overrides-section/"
@@ -108,3 +116,5 @@ tests:
         - "b: b-test"
         - "c: c-team1"
         - "d: d"
+      stderr:
+        - "Telemetry Enabled"

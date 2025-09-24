@@ -16,6 +16,7 @@ tests:
       os: !not windows
     expect:
       stdout:
+        - "Telemetry Enabled"
         - "Pulling"
         - "github/stargazers"
         - "weather"

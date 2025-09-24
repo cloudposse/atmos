@@ -41,6 +41,8 @@ tests:
     expect:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        - "Telemetry Enabled"
       exit_code: 0
 
   - name: atmos version --check
@@ -59,6 +61,8 @@ tests:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
         - 'Atmos Releases: https://github\.com/cloudposse/atmos/releases'
         - 'Install Atmos: https://atmos\.tools/install'
+      stderr:
+        - "Telemetry Enabled"
       exit_code: 0
 
 
@@ -129,6 +133,8 @@ tests:
     expect:
       stdout:
         - "Hello, Andrey\n"
+      stderr:
+        - "Telemetry Enabled"
       exit_code: 0
 
   - name: atmos greet without args
@@ -141,4 +147,6 @@ tests:
     expect:
       stdout:
         - "Hello, John Doe\n"
+      stderr:
+        - "Telemetry Enabled"
       exit_code: 0
