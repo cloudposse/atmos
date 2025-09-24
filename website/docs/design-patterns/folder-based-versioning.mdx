@@ -150,7 +150,7 @@ components/
       serverless/
 
     eks/
-      stable/                # Status-based versioning
+      stable/                # Release-channel versioning
       beta/
       deprecated/
 
@@ -163,8 +163,8 @@ components/
 
 ## Workspace Key Management
 
-:::warning Critical Configuration
-The `workspace_key_prefix` must remain stable across version changes to avoid state migration issues:
+:::warning Requires Dynamic Backends
+This pattern requires [dynamic backend generation](/core-concepts/components/terraform-backends#dynamic-terraform-backend) to be enabled. The `workspace_key_prefix` must remain stable across version changes to prevent state conflicts:
 
 ```yaml
 # WRONG - Version in workspace key causes state problems

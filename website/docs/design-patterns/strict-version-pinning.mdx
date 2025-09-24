@@ -118,54 +118,7 @@ settings:
 ```
 :::
 
-### 3. Implement Lockstep CI/CD
-
-Build pipelines that enforce sequential promotion:
-
-```yaml
-# Example GitHub Actions workflow
-name: Promote Component Version
-on:
-  workflow_dispatch:
-    inputs:
-      component:
-        description: 'Component to promote'
-        required: true
-      from_env:
-        description: 'Source environment'
-        required: true
-      to_env:
-        description: 'Target environment'
-        required: true
-
-jobs:
-  validate-promotion:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check Version Sequence
-        run: |
-          # Ensure no versions are skipped
-          # This script would verify that all intermediate
-          # versions have been applied in sequence
-          ./scripts/validate-promotion-sequence.sh \
-            --component ${{ inputs.component }} \
-            --from ${{ inputs.from_env }} \
-            --to ${{ inputs.to_env }}
-```
-
-### 4. Regular Cross-Environment Planning
-
-Periodically run plans across all environments to detect issues early:
-
-```bash
-# Script to plan across all environments
-for env in dev staging prod; do
-  echo "Planning $env..."
-  atmos terraform plan vpc --stack $env-us-east-1
-done
-```
-
-### 5. Document Version History
+### 3. Document Version History
 
 Maintain clear documentation of version promotions:
 
@@ -192,24 +145,11 @@ Maintain clear documentation of version promotions:
 
 ## Rollback Strategy
 
-With strict version pinning, rollback is straightforward:
+With strict version pinning, rollback is straightforward - simply update the component reference in your stack configuration:
 
-### Update Vendor Configuration
+### Option 1: Point to Previous Version
 
-```yaml
-# vendor.yaml - Revert to previous version
-spec:
-  sources:
-    - component: vpc
-      # Was: v1.12.4 (problematic)
-      # Reverting to: v1.12.3 (last known good)
-      source: "github.com/acme/terraform-components.git//modules/vpc?ref={{.Version}}"
-      version: "v1.12.3"
-      targets:
-        - "components/terraform/vpc/{{.Version}}"
-```
-
-### Update Stack Configuration
+If you've already vendored multiple versions:
 
 ```yaml
 # stacks/prod/us-east-1.yaml
@@ -217,19 +157,30 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc/v1.12.3  # Update to rollback version
+        # Change from problematic version to previous version
+        component: vpc/v1.12.3  # Was: vpc/v1.12.4
 ```
 
-### Re-vendor and Apply
+### Option 2: Revert the Commit
 
 ```bash
-# Re-vendor the previous version
-atmos vendor pull --component vpc
+# Find the commit that introduced the problematic version
+git log --oneline stacks/prod/us-east-1.yaml
 
+# Revert the specific commit
+git revert <commit-sha>
+
+# Or reset to a known good state
+git reset --hard <good-commit-sha>
+```
+
+### Apply the Rollback
+
+```bash
 # Validate the rollback
 atmos validate component vpc --stack prod-us-east-1
 
-# Plan the rollback
+# Plan to see what will change
 atmos terraform plan vpc --stack prod-us-east-1
 
 # Apply the rollback
@@ -237,7 +188,7 @@ atmos terraform apply vpc --stack prod-us-east-1
 ```
 
 :::tip
-Strict pinning makes rollback predictable since you're reverting to an exact, previously-tested version.
+No re-vendoring required! If you've maintained versioned folders through your vendor process, you can simply update the component reference to point to the previous version that's already vendored.
 :::
 
 ## Benefits

@@ -8,6 +8,8 @@ import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
 import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
@@ -49,6 +51,10 @@ Release Tracks solve these problems by introducing an abstraction layer between 
 
 Instead of each environment pinning versions directly, define tracks that represent promotion stages. Environments subscribe to tracks, and you promote versions by updating the track definition.
 
+:::info Builds on Folder-Based Versioning
+This pattern extends the [Folder-Based Versioning](/design-patterns/folder-based-versioning) strategy by adding a layer of indirection. While folder-based versioning requires each environment to explicitly reference version folders, Release Tracks allow multiple environments to follow a shared track that points to the appropriate version.
+:::
+
 ### Track Design Principles
 
 1. **Tracks are Moving Targets**: Unlike static versions, tracks point to the "current" version for their stage
@@ -58,29 +64,52 @@ Instead of each environment pinning versions directly, define tracks that repres
 
 ## Implementation Approaches
 
-Atmos supports multiple ways to implement release tracks:
+Atmos supports multiple ways to implement release tracks. The two primary approaches differ in how they organize the track structure:
 
-### Approach 1: Track Folders
+<Tabs>
+<TabItem value="tracks-per-component" label="Tracks Per Component" default>
 
-Create separate folders for each track, with environments referencing the appropriate folder:
+### Component-Centric Organization
+
+Each component has its own track folders, making it easy to see all tracks for a specific component.
+
+**Benefits:**
+- **Independent Component Evolution**: Each component can move through tracks at its own pace without affecting others
+- **Clear Version History**: Easy to trace how a specific component evolved through alpha, beta, and production stages
+- **Granular Control**: Teams can adopt cutting-edge versions of specific components while keeping others stable
+
+**Drawbacks:**
+- **Complex Dependency Management**: Components with interdependencies may require coordinated track updates
+- **Increased Cognitive Load**: Teams must understand the state of multiple components across different tracks
+- **Potential for Incompatibility**: Independent tracking can lead to version combinations that weren't tested together
 
 <File title="Directory Structure">
 ```
 components/
   terraform/
     vpc/
-      alpha/     # Alpha track
+      alpha/     # Alpha track for VPC
         main.tf
         variables.tf
         versions.tf
-      beta/      # Beta track
+      beta/      # Beta track for VPC
         main.tf
         variables.tf
         versions.tf
-      prod/      # Production track
+      prod/      # Production track for VPC
         main.tf
         variables.tf
         versions.tf
+    rds/
+      alpha/     # Alpha track for RDS
+        main.tf
+        variables.tf
+      beta/      # Beta track for RDS
+        main.tf
+        variables.tf
+      prod/      # Production track for RDS
+        main.tf
+        variables.tf
 ```
 </File>
 
@@ -90,21 +119,160 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc/prod  # Subscribe to production track
+        component: vpc/prod  # Subscribe to VPC production track
       settings:
-        # Stable workspace key (no track/version info)
         workspace_key_prefix: "prod/vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.0.0.0/16"
+
+    rds:
+      metadata:
+        component: rds/prod  # Subscribe to RDS production track
+      settings:
+        workspace_key_prefix: "prod/rds"
+      vars:
+        instance_class: "db.t3.large"
 ```
 </File>
 
-Promote by updating the track folder's content (via vendor updates, git submodules, or symlinks).
+**Use This Approach When:**
+- Components have independent release cycles
+- Different teams own different components
+- You need fine-grained control over component versions
 
-### Approach 2: Variable-Based Tracks
+</TabItem>
+<TabItem value="track-first" label="Track-First Organization">
 
-Use variables to define track versions, with environments referencing the variable:
+### Track-Centric Organization
+
+All components for a track are grouped together, making it easy to see what's available in each release track.
+
+**Benefits:**
+- **Component Visibility**: Immediately see which components are available in each track - as components are deprecated, they can be removed from tracks
+- **Cohesive Promotion**: All components in a track are tested and promoted together, ensuring compatibility
+- **Simplified Mental Model**: Teams only need to understand track states rather than individual component versions
+
+**Drawbacks:**
+- **Reduced Flexibility**: All components in a track must move together, even if only one needs updating
+- **Potential for Blocking**: A problem with one component can hold back the entire track
+- **Larger Blast Radius**: Issues affect all components in the track, not just the problematic one
+
+<File title="Directory Structure">
+```
+components/
+  terraform/
+    alpha/      # Alpha track (all components)
+      vpc/
+        main.tf
+        variables.tf
+        versions.tf
+      rds/
+        main.tf
+        variables.tf
+      eks/
+        main.tf
+        variables.tf
+    beta/       # Beta track (all components)
+      vpc/
+        main.tf
+        variables.tf
+        versions.tf
+      rds/
+        main.tf
+        variables.tf
+      eks/
+        main.tf
+        variables.tf
+    prod/       # Production track (all components)
+      vpc/
+        main.tf
+        variables.tf
+        versions.tf
+      rds/
+        main.tf
+        variables.tf
+      eks/
+        main.tf
+        variables.tf
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: prod/vpc  # VPC from production track
+      settings:
+        workspace_key_prefix: "prod/vpc"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+
+    rds:
+      metadata:
+        component: prod/rds  # RDS from production track
+      settings:
+        workspace_key_prefix: "prod/rds"
+      vars:
+        instance_class: "db.t3.large"
+```
+</File>
+
+**Use This Approach When:**
+- You want strong consistency across components
+- Components are tightly coupled and should move together
+- You prefer simplicity over granular control
+
+</TabItem>
+</Tabs>
+
+## Choosing Between Approaches
+
+The choice between **Tracks Per Component** and **Track-First Organization** depends on your operational model:
+
+| Aspect | Tracks Per Component | Track-First Organization |
+|--------|---------------------|------------------------|
+| **Best For** | Microservices, independent teams | Monolithic apps, platform teams |
+| **Component Updates** | Independent per component | Coordinated across components |
+| **Testing Strategy** | Component-level validation | Full-stack integration testing |
+| **Rollback Scope** | Single component | Entire track |
+| **Complexity** | Higher (many tracks to manage) | Lower (fewer tracks to manage) |
+| **Flexibility** | Maximum | Limited but consistent |
+
+## Naming Strategy Considerations
+
+The choice of track names is a key design decision that shapes how teams think about promotion:
+
+### Maturity Model (alpha/beta/stable)
+**Benefits:**
+- Technology-agnostic naming that focuses on stability
+- Clear expectations about reliability and feature completeness
+- Works well for components at different maturity levels
+
+**Drawbacks:**
+- May not align with organizational deployment stages
+- Can be confusing if "beta" doesn't map to staging environment
+
+### Environment Stages (dev/staging/prod)
+**Benefits:**
+- Direct mapping to environment tiers
+- Intuitive for teams already using these environment names
+- Clear promotion path matching deployment pipeline
+
+**Drawbacks:**
+- Implies tight coupling between tracks and specific environments
+- Less flexible if you have multiple staging or dev environments
+
+:::tip
+Choose names that reflect your organization's mental model. If your team thinks in terms of stability (alpha/beta/stable), use those. If you think in terms of deployment stages (dev/staging/prod), use those instead.
+:::
+
+### Managing Track Versions
+
+Regardless of organization, use a centralized configuration to manage track versions:
 
 <File title="stacks/catalog/tracks.yaml">
 ```yaml
@@ -123,95 +291,14 @@ vars:
 
 <File title="vendor.yaml">
 ```yaml
-# Use vendoring to manage track versions
-spec:
-  sources:
-    - component: vpc-prod
-      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{ .vars.component_tracks.vpc.prod }}"
-      targets:
-        - "components/terraform/vpc/prod"
-```
-</File>
-
-<File title="stacks/prod/us-east-1.yaml">
-```yaml
-import:
-  - catalog/tracks
-
-components:
-  terraform:
-    vpc:
-      metadata:
-        component: vpc/prod  # Reference vendored prod track
-      settings:
-        workspace_key_prefix: "prod/vpc"
-      vars:
-        name: "prod-use1-vpc"
-        cidr_block: "10.0.0.0/16"
-```
-</File>
-
-### Approach 3: Vendor-Based Tracks
-
-Use Atmos vendoring with track-specific configurations:
-
-<File title="vendor.yaml">
-```yaml
+# Vendor components at their track versions
 spec:
   sources:
     - component: vpc
       source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref={{.Version}}"
-      targets:
-        - "components/terraform/vpc/{{.Track}}"
-      tracks:
-        alpha:
-          version: "v1.14.0"
-        beta:
-          version: "v1.13.2"
-        prod:
-          version: "v1.12.8"
-```
-</File>
-
-<File title="stacks/prod/us-east-1.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      metadata:
-        component: vpc/prod  # Reference vendored prod track
-        # Track metadata for reference
-        track: prod
-      settings:
-        workspace_key_prefix: "prod/vpc"
-```
-</File>
-
-### Approach 4: Branch-Based Tracks
-
-Use Git branches as tracks, with environments referencing specific branches:
-
-<File title="vendor.yaml">
-```yaml
-# Vendor from track branches
-spec:
-  sources:
-    - component: vpc-prod
-      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=track/prod"
+      version: "{{ .vars.component_tracks.vpc.prod }}"
       targets:
         - "components/terraform/vpc/prod"
-```
-</File>
-
-<File title="stacks/prod/us-east-1.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      metadata:
-        component: vpc/prod  # Reference vendored from prod track branch
-      settings:
-        workspace_key_prefix: "prod/vpc"
 ```
 </File>
 
@@ -254,6 +341,27 @@ atmos vendor pull --component vpc --track prod --version v1.14.1
 atmos terraform plan vpc --stack prod-us-east-1
 atmos terraform apply vpc --stack prod-us-east-1
 ```
+
+## Benefits
+
+The **Release Tracks/Channels** pattern provides:
+
+- **Reduced Operational Overhead**: Update tracks instead of individual environment pins
+- **Strong Convergence**: Environments following the same track stay in sync
+- **Early Problem Detection**: Issues surface in alpha/beta before reaching production
+- **Clear Promotion Semantics**: Obvious progression through track stages
+- **Flexible Grouping**: Organize environments by team, region, or criticality
+- **Simplified Rollback**: Revert entire tracks rather than individual environments
+
+## Drawbacks
+
+The pattern also has limitations:
+
+- **Less Granular Control**: Cannot pin specific environments to exact versions easily
+- **Track Coupling**: Environments on the same track must accept the same versions
+- **Coordination Required**: Track updates affect multiple environments simultaneously
+- **Learning Curve**: Teams must understand track semantics and promotion patterns
+- **Potential for Wide Impact**: A bad track update affects all subscribed environments
 
 ## Rollback Strategy
 

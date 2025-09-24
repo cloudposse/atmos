@@ -91,6 +91,12 @@ main (or master)
   │                 └── feature/*  # Feature branches
 ```
 
+:::info Singleton Infrastructure
+Not all infrastructure concepts map to SDLC environments. Many things are singletons - for example, in AWS, there can only be one organization, one organizational CloudTrail, one Control Tower setup, etc.
+
+For singleton infrastructure that doesn't have environment-specific deployments, a single release channel such as `main` or `channels/main` makes sense as the default, rather than trying to force these into development/staging/production paradigms.
+:::
+
 ### Channel Branch Strategy
 
 1. **Long-lived Channel Branches**: Create persistent branches for each environment tier
@@ -246,13 +252,16 @@ The **Git Flow: Branches as Channels** pattern provides:
 
 ## Drawbacks
 
-The pattern also has challenges:
+The pattern has significant trade-offs to consider:
 
 - **Branch Divergence**: Long-lived branches naturally drift apart
 - **Merge Conflicts**: Infrastructure code often has structural conflicts
-- **Complex Rollbacks**: Reverting merges affects all environments on the branch
+- **Complex Rollbacks**: Rolling back after multiple changes have merged is complicated - cherry-picking individual commits is non-trivial and error-prone
 - **Testing Limitations**: Can't fully test infrastructure in isolated branches
 - **State Confusion**: Branch switches don't affect Terraform state
+- **Delayed Visibility**: Pinning stages to release tracks means you can't observe the future impact of changes on other environments until opening PRs to those environments
+- **Larger Releases**: The pattern often leads to batched, larger releases rather than smaller incremental updates
+- **Promotion Overhead**: Every change requires multiple merges through the branch hierarchy
 
 ## Best Practices
 
@@ -301,6 +310,128 @@ Maintain clear channel policies:
 4. Production promotions require approvals
 ```
 </File>
+
+## Security and Access Control
+
+### GitHub Environments
+
+Use GitHub Environments to manage deployments with proper access controls:
+
+<File title=".github/environments configuration">
+```yaml
+# GitHub Repository Settings → Environments
+environments:
+  development:
+    branches:
+      - channels/dev
+    reviewers: []
+    deployment_protection_rules:
+      - required_reviewers: 0
+
+  staging:
+    branches:
+      - channels/staging
+    reviewers:
+      - "@org/platform-team"
+    deployment_protection_rules:
+      - required_reviewers: 1
+      - wait_timer: 30  # minutes
+
+  production:
+    branches:
+      - channels/prod
+    reviewers:
+      - "@org/platform-leads"
+      - "@org/security-team"
+    deployment_protection_rules:
+      - required_reviewers: 2
+      - wait_timer: 60  # minutes
+```
+</File>
+
+### OIDC Permissions by Branch
+
+Configure cloud provider permissions based on the branch being deployed:
+
+<File title=".github/workflows/deploy.yml">
+```yaml
+name: Deploy Infrastructure
+on:
+  push:
+    branches:
+      - channels/dev
+      - channels/staging
+      - channels/prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: |
+            ${{ github.ref == 'refs/heads/channels/prod' && secrets.PROD_DEPLOY_ROLE ||
+                github.ref == 'refs/heads/channels/staging' && secrets.STAGING_DEPLOY_ROLE ||
+                secrets.DEV_DEPLOY_ROLE }}
+          aws-region: us-east-1
+```
+</File>
+
+### Repository Rulesets
+
+Use GitHub repository rulesets to enforce branch protection and merge requirements:
+
+<File title="Repository ruleset configuration">
+```yaml
+# GitHub Repository Settings → Rulesets
+rulesets:
+  - name: "Production Channel Protection"
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "~DEFAULT_BRANCH"
+          - "channels/prod"
+    rules:
+      - pull_request:
+          required_approving_review_count: 2
+          dismiss_stale_reviews_on_push: true
+          require_code_owner_review: true
+      - required_status_checks:
+          contexts:
+            - "terraform-plan"
+            - "security-scan"
+            - "policy-check"
+      - non_fast_forward: false  # Prevent force pushes
+
+  - name: "Staging Channel Protection"
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "channels/staging"
+    rules:
+      - pull_request:
+          required_approving_review_count: 1
+      - required_status_checks:
+          contexts:
+            - "terraform-plan"
+            - "security-scan"
+```
+</File>
+
+These security controls ensure:
+- **Branch-based permissions**: OIDC roles are scoped to specific branches
+- **Environment protection**: Deployment approvals and wait timers for production
+- **Merge protection**: Required reviews and status checks before channel updates
+- **Audit trail**: All deployments and approvals are logged in GitHub
 
 ## Summary
 

@@ -67,7 +67,43 @@ This contrasts with **Git Flow**, which uses:
 
 ## Available Patterns
 
-Atmos supports five primary version management patterns. The first four are **trunk-based** approaches, while the fifth adapts **Git Flow** for infrastructure:
+Atmos supports five primary version management patterns. The first four are **trunk-based** approaches, while the fifth adapts **Git Flow** for infrastructure.
+
+### Default Recommendation: Universal Pinning with Automation
+
+**The simplest and most recommended approach** is to pin all environments to the same component version and decouple release from deployment using automation rather than version control strategies. This approach:
+
+- **Promotes convergence**: All environments run the same version, reducing drift
+- **Embraces trunk-based development**: Single source of truth in the main branch
+- **Enables easy previews**: You can immediately see change impacts across all dependent environments
+- **Simplifies operations**: No complex version tracking or branch management
+- **Supports rapid iteration**: Deploy frequently with confidence
+
+<File title="Example: All environments on same version">
+```yaml
+# stacks/dev/us-east-1.yaml, stacks/staging/us-east-1.yaml, stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # All environments use the same component
+      vars:
+        # Environment-specific configuration
+```
+</File>
+
+Use feature flags, environment-specific configuration, and deployment automation to control rollout rather than versioning strategies. Only adopt the patterns below when you have specific requirements that universal pinning cannot address.
+
+### Alternative Pattern: Release Artifacts (Advanced)
+
+For teams requiring immutable deployment records, consider creating **release artifacts** separate from Git that represent exactly what was deployed to each environment. These artifacts:
+
+- Provide an immutable audit trail independent of Git history
+- Support cryptographic signing for compliance requirements
+- Enable exact reproduction of any historical deployment
+- Decouple deployment records from version control changes
+
+This pattern adds complexity but provides the strongest guarantees for regulated environments.
 
 ### Trunk-Based Patterns
 
