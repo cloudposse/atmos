@@ -244,7 +244,8 @@ func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Render
 	termWriter := term.NewResponsiveWriter(os.Stdout)
 	var wr *term.TerminalWriter
 	var ok bool
-	var screenWidth uint = 1000
+	// Use a more reasonable default width to avoid excessive padding
+	var screenWidth uint = 120
 	if wr, ok = termWriter.(*term.TerminalWriter); ok {
 		screenWidth = wr.GetWidth()
 	}
