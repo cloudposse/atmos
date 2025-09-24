@@ -27,11 +27,30 @@ Configure general terminal behavior. These are also the default settings if not 
 settings:
   terminal:
     max_width: 120        # Maximum width for terminal output
-    pager: true           # Pager setting for all terminal output
-    no_color: false       # Disable color output
+    pager: false          # Pager disabled by default (set to true, or pager name like 'less' to enable)
+    color: true           # Enable colored output (default: true)
     unicode: true         # Use Unicode characters in output
     tab_width: 2          # Number of spaces for YAML indentation (default: 2)
 ```
+
+## Configuration Precedence
+
+Atmos follows a clear precedence order for terminal settings, with command-line flags having the highest priority:
+
+### Pager Configuration Precedence
+1. **CLI Flags** (highest priority): `--pager=false`, `--pager=less`
+2. **NO_PAGER Environment Variable**: `NO_PAGER=1` (standard CLI convention)
+3. **ATMOS_PAGER Environment Variable**: `ATMOS_PAGER=less`
+4. **PAGER Environment Variable**: `PAGER=more` (system default)
+5. **Configuration File** (lowest priority): `settings.terminal.pager: true`
+
+### Color Configuration Precedence
+1. **CLI Flags** (highest priority): `--no-color`
+2. **NO_COLOR Environment Variable**: `NO_COLOR=1` (standard CLI convention)
+3. **ATMOS_NO_COLOR Environment Variable**: `ATMOS_NO_COLOR=true`
+4. **ATMOS_COLOR Environment Variable**: `ATMOS_COLOR=false`
+5. **COLOR Environment Variable**: `COLOR=false`
+6. **Configuration File** (lowest priority): `settings.terminal.color: false`
 
 ## Syntax Highlighting
 
@@ -40,6 +59,12 @@ You can customize the syntax highlighting behavior for terminal output using the
 ```yaml
 settings:
   terminal:
+    # Main terminal settings
+    pager: true                     # Enable pager for all terminal output
+    max_width: 120                  # Maximum width for terminal output
+    color: true                     # Enable colored output
+
+    # Syntax highlighting specific settings
     syntax_highlighting:
       enabled: true                 # Enable/disable syntax highlighting
       formatter: terminal           # Output formatter
@@ -48,7 +73,37 @@ settings:
       wrap: false                   # Wrap long lines
 ```
 
-### Configuration Options
+### Terminal Configuration Options
+
+<dl>
+  <dt>`max_width`</dt>
+  <dd>Maximum width for terminal output (default: `120`)</dd>
+
+  <dt>`pager`</dt>
+  <dd>
+    Configure pager behavior for output display.
+    - `false` or empty: Pager disabled (default)
+    - `true` or `on`: Enable pager with system default
+    - Pager command (e.g., `less`, `more`): Use specific pager program
+    - Environment variables: `NO_PAGER` (disable), `ATMOS_PAGER`, `PAGER` (system default)
+    - CLI control: `--pager` global flag
+  </dd>
+
+  <dt>`color`</dt>
+  <dd>
+    Enable colored terminal output (default: `true`).
+    - Environment variables: `NO_COLOR` (standard), `ATMOS_NO_COLOR`, `ATMOS_COLOR`, `COLOR`
+    - CLI control: `--no-color` global flag
+  </dd>
+
+  <dt>`unicode`</dt>
+  <dd>Use Unicode characters in output (default: `true`)</dd>
+
+  <dt>`tab_width`</dt>
+  <dd>Number of spaces for YAML indentation (default: `2`)</dd>
+</dl>
+
+### Syntax Highlighting Configuration Options
 
 <dl>
   <dt>`enabled`</dt>
@@ -70,18 +125,11 @@ settings:
     You can find the full list of supported themes [here](https://xyproto.github.io/splash/docs/).
   </dd>
 
-  <dt>`pager`</dt>
-  <dd>Whether to use a pager specifically for syntax-highlighted output. This setting is independent of the pager setting (default: `false`)</dd>
-
   <dt>`line_numbers`</dt>
   <dd>Show line numbers in output (default: `false`)</dd>
 
   <dt>`wrap`</dt>
   <dd>Wrap long lines (default: `false`)</dd>
-
-  <dt>`no_color`</dt>
-  <dd>Disable color output (default: `false`)</dd>
-
 </dl>
 
 ### Example Usage
