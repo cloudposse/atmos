@@ -10,17 +10,49 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `atmos.GomplateDatasource` template function provides cached access to external data sources like APIs, files, cloud services, and databases. It wraps [Gomplate Datasources](/core-concepts/stacks/templates/datasources) with automatic result caching for improved performance and reliability.
+**Stop hardcoding values in your infrastructure configurations.** The `atmos.GomplateDatasource` function lets you pull live data from anywhere - APIs, cloud services, databases, files - directly into your Atmos stacks. Instead of manually updating IP addresses, account IDs, or configuration values, your infrastructure can fetch them automatically at runtime. Plus, with built-in caching, it's lightning fast even when you reference the same data hundreds of times.
 </Intro>
 
 ## What are Datasources?
 
-Datasources are external data providers that your Atmos configurations can query at runtime. They allow you to:
-- **Fetch dynamic data** from APIs, databases, or cloud services
-- **Read configuration** from external files (JSON, YAML, CSV, etc.)
-- **Query metadata** from AWS, Azure, GCP, or other cloud providers
-- **Access secrets** from vaults and secret management systems
-- **Integrate external systems** into your infrastructure configuration
+Think of datasources as **live connections to your data**, wherever it lives. Instead of copying and pasting values into your configurations (and keeping them updated), datasources let Atmos fetch the latest data automatically when it runs.
+
+**The Problem:** Traditional infrastructure configurations require you to:
+- Hardcode values that change (IP addresses, account IDs, API keys)
+- Manually update configurations when external systems change
+- Duplicate data across multiple files
+- Risk using outdated or incorrect values
+
+**The Solution:** Datasources let you:
+- **Pull live data** from any API, database, or cloud service
+- **Stay synchronized** with external systems automatically
+- **Centralize configuration** in its proper home (not in your IaC)
+- **Access secrets securely** from vaults without exposing them
+- **Query cloud metadata** like account IDs, regions, or resource tags dynamically
+
+### Real-World Example
+
+**Without Datasources (Manual, Error-Prone):**
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        account_id: "123456789012"  # Hardcoded - wrong in other environments!
+        allowed_ip: "203.0.113.45"  # Bob's IP - outdated when he moves
+        db_password: "prod-pass-123" # SECURITY RISK! Password in git
+```
+
+**With Datasources (Dynamic, Secure):**
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        account_id: '{{ (atmos.GomplateDatasource "aws").account_id }}'
+        allowed_ip: '{{ (atmos.GomplateDatasource "myip").ip }}'
+        db_password: '{{ (atmos.GomplateDatasource "vault").database.password }}'
+```
 
 ### Common Use Cases
 
