@@ -128,7 +128,7 @@ func ExecuteAtmosCmd() error {
 			return err
 		}
 
-		log.Info("Validated successfully", "component", selectedComponent, "stack", selectedStack)
+		u.PrintfMessageToTUI("✓ Validated successfully: component=%s stack=%s\n", selectedComponent, selectedStack)
 		return nil
 	}
 

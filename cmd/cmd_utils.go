@@ -228,14 +228,13 @@ func preCustomCommand(
 			// do nothing here; let the code proceed
 		} else if len(commandConfig.Commands) > 0 {
 			// show sub-commands
-			sb.WriteString("Available command(s):\n")
-			for i, c := range commandConfig.Commands {
-				sb.WriteString(
-					fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name),
-				)
+			commandPath := fmt.Sprintf("%s %s", parentCommand.Use, commandConfig.Name)
+			details := fmt.Sprintf("The command `%s` requires a subcommand\n\nValid subcommands are:\n", commandPath)
+			for i := range commandConfig.Commands {
+				details += fmt.Sprintf("* %s\n", commandConfig.Commands[i].Name)
 			}
-			log.Info(sb.String())
-			errUtils.Exit(1)
+			suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", commandPath)
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %s", errUtils.ErrSubcommandRequired, details), "Incorrect Usage", suggestion)
 		} else {
 			// truly invalid, nothing to do
 			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))

@@ -1,11 +1,11 @@
 package cmd
 
 import (
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // validateComponentCmd validates atmos components
@@ -25,7 +25,7 @@ var validateComponentCmd = &cobra.Command{
 			return err
 		}
 
-		log.Info("Validated successfully", "component", component, "stack", stack)
+		u.PrintfMessageToTUI("✓ Validated successfully: component=%s stack=%s\n", component, stack)
 		return nil
 	},
 }

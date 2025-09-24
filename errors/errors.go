@@ -10,6 +10,7 @@ const (
 )
 
 var (
+	ErrSubcommandRequired                    = errors.New("subcommand required")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
 	ErrCopyPackage                           = errors.New("failed to copy package")
