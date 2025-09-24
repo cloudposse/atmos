@@ -68,13 +68,13 @@ func NewAuthManager(
 	// Initialize providers.
 	if err := m.initializeProviders(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingProviders, "initializeProviders", "failed to initialize providers")
-		return nil, errUtils.ErrInitializingProviders
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingProviders, err)
 	}
 
 	// Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInitializingIdentities, "initializeIdentities", "failed to initialize identities")
-		return nil, errUtils.ErrInitializingIdentities
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInitializingIdentities, err)
 	}
 
 	return m, nil
@@ -88,31 +88,35 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 // Authenticate performs hierarchical authentication for the specified identity.
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// We expect the identity name to be provided by the caller.
-	if identityName == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
-		return nil, errUtils.ErrNilParam
-	}
-	if _, exists := m.identities[identityName]; !exists {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
-		return nil, errUtils.ErrInvalidAuthConfig
-	}
+if identityName == "" {
+    errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
+    return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNilParam, identityNameKey)
+}
+if _, exists := m.identities[identityName]; !exists {
+    errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
+    return nil, fmt.Errorf(
+        errUtils.ErrStringWrappingFormat,
+        errUtils.ErrIdentityNotFound,
+        fmt.Sprintf(backtickedQuotedFmt, identityName),
+    )
+}
 
 	// Build the complete authentication chain.
-	chain, err := m.buildAuthenticationChain(identityName)
-	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "Check your atmos.yaml.")
-		return nil, errUtils.ErrInvalidAuthConfig
-	}
+    chain, err := m.buildAuthenticationChain(identityName)
+    if err != nil {
+        errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "Check your atmos.yaml.")
+        return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
+    }
 	// Persist the chain for later retrieval by providers or callers.
 	m.chain = chain
 	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
 	// Perform hierarchical credential validation (bottom-up).
-	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
-	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateHierarchical", "")
-		return nil, errUtils.ErrAuthenticationFailed
-	}
+    finalCreds, err := m.authenticateHierarchical(ctx, identityName)
+    if err != nil {
+        errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateHierarchical", "")
+        return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
+    }
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
 	if identity, exists := m.identities[identityName]; exists {
@@ -145,11 +149,13 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 	// Try to retrieve credentials for the resolved identity.
 	creds, err := m.credentialStore.Retrieve(identityName)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNoCredentialsFound, fmt.Sprintf(backtickedQuotedFmt, identityName))
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrNoCredentialsFound, err)
 	}
 
 	// Check if credentials are expired.
-	if expired, err := m.credentialStore.IsExpired(identityName); err != nil || expired {
+	if expired, err := m.credentialStore.IsExpired(identityName); err != nil {
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrExpiredCredentials, err)
+	} else if expired {
 		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedQuotedFmt, identityName))
 	}
 
@@ -158,7 +164,10 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 
 // Validate validates the entire auth configuration.
 func (m *manager) Validate() error {
-	return m.validator.ValidateAuthConfig(m.config)
+	if err := m.validator.ValidateAuthConfig(m.config); err != nil {
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
+	}
+	return nil
 }
 
 // GetDefaultIdentity returns the name of the default identity, if any.
@@ -244,7 +253,7 @@ func (m *manager) initializeProviders() error {
 		provider, err := NewProvider(name, &providerConfig)
 		if err != nil {
 			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidProviderConfig, "initializeProviders", "")
-			return errUtils.ErrInvalidProviderConfig
+			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidProviderConfig, err)
 		}
 		m.providers[name] = provider
 	}
@@ -257,7 +266,7 @@ func (m *manager) initializeIdentities() error {
 		identity, err := NewIdentity(name, &identityConfig)
 		if err != nil {
 			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, "initializeIdentities", "")
-			return errUtils.ErrInvalidIdentityConfig
+			return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidIdentityConfig, err)
 		}
 		m.identities[name] = identity
 	}
@@ -388,13 +397,15 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 		return false, nil
 	}
 
-	if expTime, err := cachedCreds.GetExpiration(); err == nil && expTime != nil {
-		if expTime.After(time.Now().Add(5 * time.Minute)) {
-			return true, expTime
-		}
-	}
-
-	return true, nil
+    if expTime, err := cachedCreds.GetExpiration(); err == nil && expTime != nil {
+        if expTime.After(time.Now().Add(5 * time.Minute)) {
+            return true, expTime
+        }
+        // Expiration exists but is too close or already expired -> treat as invalid.
+        return false, expTime
+    }
+    // Non-expiring credentials (no expiration info).
+    return true, nil
 }
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
