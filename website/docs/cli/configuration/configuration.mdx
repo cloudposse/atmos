@@ -119,9 +119,11 @@ templates:
 settings:
   list_merge_strategy: replace
   terminal:
-    no_color: false # Disable color output (Can also be set using 'ATMOS_NO_COLOR' or 'NO_COLOR' ENV var or '--no-color' command-line argument)
+    color: true     # Enable colored output (Can be set using 'ATMOS_COLOR' or 'COLOR' ENV var)
+    # no_color: false # DEPRECATED in config file - use 'color: false' instead
+                      # Note: NO_COLOR and ATMOS_NO_COLOR env vars are NOT deprecated
     max_width: 120  # Maximum width for terminal output
-    pager: true     # Use pager for long output
+    pager: false    # Pager disabled by default (set to true or pager command to enable)
 ```
 </File>
 
@@ -237,7 +239,8 @@ The `settings` section configures Atmos global settings.
       # Terminal settings for displaying content
       terminal:
         max_width: 120  # Maximum width for terminal output
-        pager: true     # Use pager for long output
+        pager: false    # Pager disabled by default
+        color: true     # Enable colored output
       inject_github_token: true # Adds the GITHUB_TOKEN as a Bearer token for GitHub API requests.
     ```
 </File>
@@ -270,8 +273,17 @@ The `settings` section configures Atmos global settings.
       <dd>The maximum width for displaying content in the terminal.</dd>
 
       <dt>`pager`</dt>
-      <dd>When enabled, displays long content in a pager instead of directly in the terminal.</dd>
+      <dd>Configure pager behavior. Can be set to `false` (disabled, default), `true` (enabled), or a specific pager like `less` or `more`.</dd>
+
+      <dt>`color`</dt>
+      <dd>Enable or disable colored output (default: `true`). Can be overridden with `--no-color` flag or `NO_COLOR`/`ATMOS_NO_COLOR` environment variables.</dd>
     </dl>
+
+    :::info Environment Variables for Portability
+    **Configuration Deprecation**: The `no_color` field in `atmos.yaml` is deprecated. Use `color: false` instead.
+
+    **Environment Variables Still Supported**: The `NO_COLOR` and `ATMOS_NO_COLOR` environment variables remain fully supported for portability across different environments and CI/CD systems.
+    :::
   </dd>
 
   <dt>`settings.inject_github_token`</dt>

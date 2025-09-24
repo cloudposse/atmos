@@ -13,7 +13,7 @@ import (
 // a portion of the file" errors when multiple terraform operations run in quick succession.
 func windowsFileDelay() {
 	if runtime.GOOS == "windows" {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 }
 
@@ -25,7 +25,7 @@ func retryOnWindows(fn func() error) error {
 	}
 
 	var lastErr error
-	delays := []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 500 * time.Millisecond}
+	delays := []time.Duration{200 * time.Millisecond, 500 * time.Millisecond, 1000 * time.Millisecond}
 
 	for i := 0; i < len(delays); i++ {
 		if err := fn(); err == nil {

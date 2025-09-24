@@ -81,10 +81,10 @@
         "lexer": "",
         "formatter": "",
         "theme": "",
-        "pager": false,
         "line_numbers": false,
         "wrap": false
       },
+      "color": true,
       "no_color": false
     },
     "docs": {
