@@ -64,8 +64,10 @@ func NewDescribeStacksExec() DescribeStacksExec {
 
 // Execute executes `describe stacks` command.
 func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
-	// Update pageCreator with the loaded atmosConfig settings
-	d.pageCreator = pager.NewFromAtmosConfig(atmosConfig)
+	// Update pageCreator with the loaded atmosConfig settings, but only if not already set (for testing)
+	if d.pageCreator == nil {
+		d.pageCreator = pager.NewFromAtmosConfig(atmosConfig)
+	}
 
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,

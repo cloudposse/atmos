@@ -77,26 +77,30 @@ func TestDescribeAffected(t *testing.T) {
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
 	d.pageCreator = mockPager
 	err = d.Execute(&DescribeAffectedCmdArgs{
-		Format: "json",
+		CLIConfig: d.atmosConfig,
+		Format:    "json",
 	})
 	assert.NoError(t, err)
 
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
 	err = d.Execute(&DescribeAffectedCmdArgs{
-		Format: "yaml",
+		CLIConfig: d.atmosConfig,
+		Format:    "yaml",
 	})
 	assert.NoError(t, err)
 
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
 	err = d.Execute(&DescribeAffectedCmdArgs{
-		Format:   "json",
-		RepoPath: "repo/path",
+		CLIConfig: d.atmosConfig,
+		Format:    "json",
+		RepoPath:  "repo/path",
 	})
 	assert.NoError(t, err)
 
 	err = d.Execute(&DescribeAffectedCmdArgs{
-		Format: "json",
-		Query:  ".0.stack",
+		CLIConfig: d.atmosConfig,
+		Format:    "json",
+		Query:     ".0.stack",
 	})
 	assert.NoError(t, err)
 }

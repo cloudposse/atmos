@@ -63,8 +63,10 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		return err
 	}
 
-	// Update pageCreator with the loaded atmosConfig settings
-	d.pageCreator = pager.NewFromAtmosConfig(&atmosConfig)
+	// Update pageCreator with the loaded atmosConfig settings, but only if not already set (for testing)
+	if d.pageCreator == nil {
+		d.pageCreator = pager.NewFromAtmosConfig(&atmosConfig)
+	}
 
 	componentSection, err := d.executeDescribeComponent(
 		component,
