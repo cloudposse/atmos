@@ -16,13 +16,13 @@ stacks:
     - "**/_defaults.yaml"
   name_template: "{stage}"
 
-vendor:  
+vendor:
   # Single file
   base_path: "./vendor.yaml"
-  
+
   # Directory with multiple files
   #base_path: "./vendor"
-  
+
   # Absolute path
   #base_path: "vendor.d/vendor1.yaml"
 

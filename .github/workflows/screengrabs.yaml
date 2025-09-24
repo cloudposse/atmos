@@ -25,9 +25,16 @@ jobs:
 
       - name: Get Atmos version
         id: get-version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name)
+          VERSION=$(gh release view --repo cloudposse/atmos --json tagName -q .tagName)
+          if [ -z "$VERSION" ]; then
+            echo "Failed to get latest version, using fallback"
+            VERSION="v1.190.0"
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using Atmos version: $VERSION"
 
     outputs:
       version: ${{ steps.get-version.outputs.version }}
@@ -35,6 +42,7 @@ jobs:
   build:
     needs: [prepare]
     runs-on: ubuntu-latest
+    environment: screengrabs
     steps:
       - name: Install dependencies
         run: |
@@ -58,6 +66,8 @@ jobs:
           chmod: 0755
           extension-matching: disable
           rename-to: atmos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -68,11 +78,19 @@ jobs:
           make -C demo/screengrabs build-all install
           git add -A
           git status
+        env:
+          ATMOS_PAGER: "false"
+
+      - uses: actions/create-github-app-token@v1
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.github-app.outputs.token }}
           branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
           title: "Update screengrabs for ${{ needs.prepare.outputs.version }}"
           delete-branch: true
@@ -83,4 +101,3 @@ jobs:
             This PR updates the screengrabs for Atmos version ${{ needs.prepare.outputs.version }}.
           base: main
           labels: "no-release"
-

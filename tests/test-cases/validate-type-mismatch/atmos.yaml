@@ -1,0 +1,27 @@
+base_path: "."
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{stage}-{environment}"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/*.tmpl"
+
+settings:
+  list_merge_strategy: "replace"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: true
+
+logs:
+  level: "Debug"
+
+schemas:
+  atmos:
+    manifest: ""

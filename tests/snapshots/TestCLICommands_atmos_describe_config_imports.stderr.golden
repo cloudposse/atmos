@@ -24,4 +24,4 @@ DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scen
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
-DEBU Telemetry event captured
+DEBU Telemetry event enqueued

@@ -42,6 +42,11 @@
 **/.atmos/cache.yaml
 **/cache.*.txt
 
+# Development configs - track only specific files
+.atmos.d/*
+!.atmos.d/dev.yaml
+!.atmos.d/README.md
+
 # Ignore components vendored during tests
 examples/demo-vendoring/components/**
 tests/fixtures/scenarios/vendor-globs/components/**
@@ -51,3 +56,4 @@ internal/exec/output.*
 # Coverage files
 coverage.out
 coverage.html
+tests.test

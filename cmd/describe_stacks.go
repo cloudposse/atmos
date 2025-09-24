@@ -70,13 +70,7 @@ func getRunnableDescribeStacksCmd(
 			return err
 		}
 
-		if cmd.Flags().Changed("pager") {
-			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
-			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			if err != nil {
-				return err
-			}
-		}
+		// Global --pager flag is now handled in cfg.InitCliConfig
 
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
 		return err
@@ -145,7 +139,7 @@ func init() {
 	AddStackCompletion(describeStacksCmd)
 	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific `atmos` components")
 
-	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types. Supported component types: terraform, helmfile")
+	describeStacksCmd.PersistentFlags().StringSlice("component-types", nil, "Filter by specific component types. Supported component types: terraform, helmfile")
 
 	describeStacksCmd.PersistentFlags().StringSlice("sections", nil, "Output only the specified component sections. Available component sections: `backend`, `backend_type`, `deps`, `env`, `inheritance`, `metadata`, `remote_state_backend`, `remote_state_backend_type`, `settings`, `vars`")
 

@@ -1,0 +1,14 @@
+# Stack that imports both base and override - will trigger type mismatch
+import:
+  - base
+  - override
+
+vars:
+  stage: "test"
+  environment: "environment"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        environment: "test-env"

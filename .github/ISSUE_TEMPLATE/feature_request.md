@@ -7,13 +7,13 @@ assignees: ''
 
 ---
 
-Have a question? Please checkout our [Slack Community](https://slack.cloudposse.com) or visit our [Slack Archive](https://archive.sweetops.com/). 
+Have a question? Please checkout our [Slack Community](https://slack.cloudposse.com) or visit our [Slack Archive](https://archive.sweetops.com/).
 
 [![Slack Community](https://slack.cloudposse.com/badge.svg)](https://slack.cloudposse.com)
 
 ## Describe the Feature
 
-A clear and concise description of what the bug is. 
+A clear and concise description of what the bug is.
 
 ## Expected Behavior
 

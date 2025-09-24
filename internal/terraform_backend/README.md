@@ -28,7 +28,7 @@ backend type in the `terraformBackends` registry:
   func RegisterTerraformBackends() {
     terraformBackends[cfg.BackendTypeLocal] = ReadTerraformBackendLocal
     terraformBackends[cfg.BackendTypeS3] = ReadTerraformBackendS3
-    
+
     // Register your new backend implementation here
     terraformBackends[cfg.BackendType<BackendType>] = ReadTerraformBackend<BackendType>
   }

@@ -8,4 +8,3 @@ export default function Card({ title, children }) {
         </div>
     );
 };
-

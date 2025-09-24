@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -41,6 +41,8 @@ var (
 	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 	startingDir         string
 	snapshotBaseDir     string
+	repoRoot            string // Repository root directory for path normalization and binary checks
+	skipReason          string // Package-level variable to track why tests should be skipped
 )
 
 // Define styles using lipgloss.
@@ -245,7 +247,7 @@ func (pm *PathManager) Apply() error {
 	return os.Setenv("PATH", pm.GetPath())
 }
 
-// Determine if running in a CI environment
+// Determine if running in a CI environment.
 func isCIEnvironment() bool {
 	// Check for common CI environment variables
 	// Note, that the CI variable has many possible truthy values, so we check for any non-empty value that is not "false".
@@ -343,6 +345,11 @@ func sanitizeOutput(output string) (string, error) {
 	// 7. Remove the random number added to file name like `atmos-import-454656846`
 	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
+
+	// 8. Mask PostHog tokens to prevent real tokens from appearing in snapshots.
+	// Match any token starting with phc_ followed by alphanumeric characters and underscores.
+	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
+	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
 	return result, nil
 }
@@ -461,7 +468,6 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
-	var repoRoot string
 
 	// Capture the starting working directory
 	startingDir, err = os.Getwd()
@@ -478,29 +484,36 @@ func TestMain(m *testing.M) {
 	// Check for the atmos binary
 	binaryPath, err := exec.LookPath("atmos")
 	if err != nil {
-		logger.Fatal("Binary not found", "command", "atmos", "PATH", os.Getenv("PATH"))
+		skipReason = fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
+		logger.Info("Tests will be skipped", "reason", skipReason)
+	} else {
+		rel, err := filepath.Rel(repoRoot, binaryPath)
+		if err == nil && strings.HasPrefix(rel, "..") {
+			skipReason = fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
+			logger.Info("Tests will be skipped", "reason", skipReason)
+		} else {
+			stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
+			if err != nil {
+				skipReason = fmt.Sprintf("Failed to check if rebuild needed: %v", err)
+				logger.Info("Tests will be skipped", "reason", skipReason)
+			} else if stale {
+				skipReason = fmt.Sprintf("Atmos binary at %s needs rebuild. Run 'make build' to rebuild.", binaryPath)
+				logger.Info("Tests will be skipped", "reason", skipReason)
+			}
+		}
 	}
 
-	rel, err := filepath.Rel(repoRoot, binaryPath)
-	if err == nil && strings.HasPrefix(rel, "..") {
-		logger.Fatal("Discovered atmos binary outside of repository", "binary", binaryPath)
-	} else {
-		stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
-		if err != nil {
-			logger.Fatal("failed to check if rebuild is needed", "error", err)
-		}
-		if stale {
-			logger.Fatal("Rebuild needed", "binary", binaryPath)
-		}
+	if skipReason == "" {
+		logger.Info("Atmos binary for tests", "binary", binaryPath)
 	}
-	logger.Info("Atmos binary for tests", "binary", binaryPath)
 
 	logger.Info("Starting directory", "dir", startingDir)
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
-	flag.Parse() // Parse command-line flags
-	errUtils.Exit(m.Run())
+	flag.Parse()        // Parse command-line flags
+	exitCode := m.Run() // ALWAYS run tests so they can skip properly
+	errUtils.Exit(exitCode)
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
@@ -593,6 +606,19 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Include the system PATH in the test environment
 	tc.Env["PATH"] = os.Getenv("PATH")
+
+	// Set the test Git root to a clean temporary directory
+	// This makes each test scenario act as if it's its own Git repository
+	// preventing the actual repository's .atmos.d from being loaded
+	// This is especially important for tests that use workdir: "../"
+	testGitRoot := filepath.Join(tempDir, "mock-git-root")
+	if err := os.MkdirAll(testGitRoot, 0o755); err == nil {
+		tc.Env["TEST_GIT_ROOT"] = testGitRoot
+	}
+
+	// Also set an environment variable to exclude the repository's .atmos.d
+	// This is needed for tests that change to parent directories
+	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
@@ -736,6 +762,10 @@ func removeCacheFile() error {
 }
 
 func TestCLICommands(t *testing.T) {
+	if skipReason != "" {
+		t.Skipf("%s", skipReason)
+	}
+
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {

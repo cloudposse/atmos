@@ -2,6 +2,7 @@ package schema
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -205,23 +206,42 @@ type Terminal struct {
 	Pager              string             `yaml:"pager" json:"pager" mapstructure:"pager"`
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
-	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"`
-	Color              *bool              `yaml:"color" json:"color" mapstructure:"color"`
+	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
+	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 }
 
+// IsPagerEnabled reports whether a pager should be used based on Terminal.Pager.
+// It returns true if the pager is explicitly enabled or set to a specific pager command,
+// and false if disabled or not configured.
 func (t *Terminal) IsPagerEnabled() bool {
-	return t.Pager == "" || t.Pager == "on" || t.Pager == "less" || t.Pager == "true" || t.Pager == "yes" || t.Pager == "y" || t.Pager == "1"
+	// Pager is disabled by default.
+	// Only enabled if explicitly set to true/on/yes/1 or a pager command.
+	p := strings.ToLower(strings.TrimSpace(t.Pager))
+	if p == "" || p == "false" || p == "off" || p == "no" || p == "n" || p == "0" {
+		return false
+	}
+	// Enable for true/on/yes/1 or specific pager commands like "less", "more".
+	return true
+}
+
+// IsColorEnabled determines if color output should be enabled.
+func (t *Terminal) IsColorEnabled() bool {
+	// Check deprecated NoColor field for backward compatibility
+	if t.NoColor {
+		return false
+	}
+	// Use Color setting (defaults to true if not explicitly set)
+	return t.Color
 }
 
 type SyntaxHighlighting struct {
-	Enabled                bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Lexer                  string `yaml:"lexer" json:"lexer" mapstructure:"lexer"`
-	Formatter              string `yaml:"formatter" json:"formatter" mapstructure:"formatter"`
-	Theme                  string `yaml:"theme" json:"theme" mapstructure:"theme"`
-	HighlightedOutputPager bool   `yaml:"pager" json:"pager" mapstructure:"pager"`
-	LineNumbers            bool   `yaml:"line_numbers" json:"line_numbers" mapstructure:"line_numbers"`
-	Wrap                   bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
+	Enabled     bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Lexer       string `yaml:"lexer" json:"lexer" mapstructure:"lexer"`
+	Formatter   string `yaml:"formatter" json:"formatter" mapstructure:"formatter"`
+	Theme       string `yaml:"theme" json:"theme" mapstructure:"theme"`
+	LineNumbers bool   `yaml:"line_numbers" json:"line_numbers" mapstructure:"line_numbers"`
+	Wrap        bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
 }
 
 type AtmosSettings struct {
@@ -251,6 +271,7 @@ type TelemetrySettings struct {
 	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
 	Token    string `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
+	Logging  bool   `yaml:"logging" json:"logging" mapstructure:"logging"`
 }
 
 // ProSettings contains Atmos Pro integration configuration.
@@ -355,8 +376,8 @@ type Stacks struct {
 	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
 	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
 	// Deprecated: Use NameTemplate instead.
-	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
-	NameTemplate  string   `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	NamePattern  string `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NameTemplate string `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
 }
 
 type Workflows struct {

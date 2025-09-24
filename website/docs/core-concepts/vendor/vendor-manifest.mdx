@@ -221,7 +221,7 @@ View the full Vendor configuration schema in the [Vendor Schema](/schemas/vendor
 
   <dt>`included_paths` and `excluded_paths`</dt>
   <dd>
-  `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths (double-star/globstar `**` is supported as well). For more details, see [Vendoring with Globs](#vendoring-with-globs).  
+  `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths (double-star/globstar `**` is supported as well). For more details, see [Vendoring with Globs](#vendoring-with-globs).
   </dd>
 
   <dt>`component`</dt>
@@ -518,7 +518,7 @@ atmos vendor pull -c vpc
 
 ## Vendoring with Globs
 
-In Atmos, **glob patterns** define which files and directories are included or excluded during vendoring. These patterns go beyond simple wildcard characters like `*`—they follow specific rules that dictate how paths are matched. Understanding the difference between **greedy** (`**`) and **non-greedy** (`*`) patterns, along with other advanced glob syntax, ensures precise control over vendoring behavior.  
+In Atmos, **glob patterns** define which files and directories are included or excluded during vendoring. These patterns go beyond simple wildcard characters like `*`—they follow specific rules that dictate how paths are matched. Understanding the difference between **greedy** (`**`) and **non-greedy** (`*`) patterns, along with other advanced glob syntax, ensures precise control over vendoring behavior.
 
 ### Understanding Wildcards, Ranges, and Recursion
 

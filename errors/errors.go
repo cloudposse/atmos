@@ -38,6 +38,7 @@ var (
 	ErrMissingStackNameTemplateCliConfig     = errors.New("stack name pattern must be provided in 'stacks.name_template' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	ErrMissingStackBasePath                  = errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
 	ErrMissingStackIncludedPaths             = errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
+	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -52,9 +53,21 @@ var (
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
 	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
-	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
-	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
-	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
+
+	ErrLoadAwsConfig    = errors.New("failed to load AWS config")
+	ErrGetObjectFromS3  = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody = errors.New("failed to read S3 object body")
+
+	// Git-related errors.
+	ErrGitNotAvailable     = errors.New("git must be available and on the PATH")
+	ErrInvalidGitPort      = errors.New("invalid port number")
+	ErrSSHKeyUsage         = errors.New("error using ssh key")
+	ErrGitCommandExited    = errors.New("git command exited with error")
+	ErrGitCommandFailed    = errors.New("error running git command")
+	ErrReadDestDir         = errors.New("failed to read the destination directory during git update")
+	ErrRemoveGitDir        = errors.New("failed to remove the .git directory in the destination directory during git update")
+	ErrUnexpectedGitOutput = errors.New("unexpected 'git version' output")
+	ErrGitVersionMismatch  = errors.New("git version requirement not met")
 
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
@@ -67,5 +80,8 @@ var (
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
 
-	ErrAtmosConfigIsNil = errors.New("atmos config is nil")
+	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
+	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
+	ErrMerge                    = errors.New("merge error")
+	ErrInvalidStackManifest     = errors.New("invalid stack manifest")
 )
