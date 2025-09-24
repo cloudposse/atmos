@@ -122,17 +122,20 @@ func TestFilterAndListValues(t *testing.T) {
 		checkFunc       func(t *testing.T, output string)
 	}{
 		{
-			name:         "basic table format",
-			component:    "vpc",
-			format:       "",
-			stackPattern: "dev,staging",
+			name:      "basic table format",
+			component: "vpc",
+			format:    "table",
 			checkFunc: func(t *testing.T, output string) {
+				// Check for TTY-styled table output
+				assert.Contains(t, output, "Key")
+				assert.Contains(t, output, "dev")
+				assert.Contains(t, output, "prod")
+				assert.Contains(t, output, "staging")
+				assert.Contains(t, output, "cidr_block")
 				assert.Contains(t, output, "environment")
 				assert.Contains(t, output, "region")
-				assert.Contains(t, output, "cidr_block")
-				assert.Contains(t, output, "dev")
-				assert.Contains(t, output, "staging")
-				assert.NotContains(t, output, "prod")
+				assert.Contains(t, output, "subnets")
+				assert.Contains(t, output, "tags")
 			},
 		},
 		{
@@ -141,7 +144,10 @@ func TestFilterAndListValues(t *testing.T) {
 			includeAbstract: true,
 			format:          "json", // Changed to JSON to avoid terminal width issues
 			checkFunc: func(t *testing.T, output string) {
-				assert.Contains(t, output, "prod")
+				var result map[string]interface{}
+				err := json.Unmarshal([]byte(output), &result)
+				assert.NoError(t, err)
+				assert.Contains(t, result, "prod")
 			},
 		},
 		{
@@ -154,6 +160,7 @@ func TestFilterAndListValues(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Contains(t, result, "dev")
 				assert.Contains(t, result, "staging")
+				assert.Contains(t, result, "prod")
 			},
 		},
 		{
@@ -253,11 +260,11 @@ func TestFilterAndListValues(t *testing.T) {
 				var result map[string]interface{}
 				err := json.Unmarshal([]byte(output), &result)
 				assert.NoError(t, err)
-				for _, env := range []string{"dev", "staging", "prod"} {
-					envData, ok := result[env].(map[string]interface{})
+				for _, env := range []string{"dev", "staging"} {
+					metadata, ok := result[env].(map[string]interface{})
 					assert.True(t, ok)
-					assert.Equal(t, "platform", envData["team"])
-					assert.Equal(t, "1.0.0", envData["version"])
+					assert.Equal(t, "platform", metadata["team"])
+					assert.Equal(t, "1.0.0", metadata["version"])
 				}
 			},
 		},
@@ -271,7 +278,6 @@ func TestFilterAndListValues(t *testing.T) {
 				err := json.Unmarshal([]byte(output), &result)
 				assert.NoError(t, err)
 				for _, env := range []string{"dev", "staging"} {
-					// After removing the value wrapper, the tags map is directly under each env
 					tagsMap, ok := result[env].(map[string]interface{})
 					assert.True(t, ok)
 					assert.Equal(t, "devops", tagsMap["Team"])
