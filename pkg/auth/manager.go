@@ -88,35 +88,35 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 // Authenticate performs hierarchical authentication for the specified identity.
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// We expect the identity name to be provided by the caller.
-if identityName == "" {
-    errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
-    return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNilParam, identityNameKey)
-}
-if _, exists := m.identities[identityName]; !exists {
-    errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
-    return nil, fmt.Errorf(
-        errUtils.ErrStringWrappingFormat,
-        errUtils.ErrIdentityNotFound,
-        fmt.Sprintf(backtickedQuotedFmt, identityName),
-    )
-}
+	if identityName == "" {
+		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrNilParam, identityNameKey)
+	}
+	if _, exists := m.identities[identityName]; !exists {
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
+		return nil, fmt.Errorf(
+			errUtils.ErrStringWrappingFormat,
+			errUtils.ErrIdentityNotFound,
+			fmt.Sprintf(backtickedQuotedFmt, identityName),
+		)
+	}
 
 	// Build the complete authentication chain.
-    chain, err := m.buildAuthenticationChain(identityName)
-    if err != nil {
-        errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "Check your atmos.yaml.")
-        return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
-    }
+	chain, err := m.buildAuthenticationChain(identityName)
+	if err != nil {
+		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "Check your atmos.yaml.")
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
+	}
 	// Persist the chain for later retrieval by providers or callers.
 	m.chain = chain
 	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
 	// Perform hierarchical credential validation (bottom-up).
-    finalCreds, err := m.authenticateHierarchical(ctx, identityName)
-    if err != nil {
-        errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateHierarchical", "")
-        return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
-    }
+	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
+	if err != nil {
+		errUtils.CheckErrorAndPrint(errUtils.ErrAuthenticationFailed, "authenticateHierarchical", "")
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed, err)
+	}
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
 	if identity, exists := m.identities[identityName]; exists {
@@ -397,15 +397,15 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 		return false, nil
 	}
 
-    if expTime, err := cachedCreds.GetExpiration(); err == nil && expTime != nil {
-        if expTime.After(time.Now().Add(5 * time.Minute)) {
-            return true, expTime
-        }
-        // Expiration exists but is too close or already expired -> treat as invalid.
-        return false, expTime
-    }
-    // Non-expiring credentials (no expiration info).
-    return true, nil
+	if expTime, err := cachedCreds.GetExpiration(); err == nil && expTime != nil {
+		if expTime.After(time.Now().Add(5 * time.Minute)) {
+			return true, expTime
+		}
+		// Expiration exists but is too close or already expired -> treat as invalid.
+		return false, expTime
+	}
+	// Non-expiring credentials (no expiration info).
+	return true, nil
 }
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
