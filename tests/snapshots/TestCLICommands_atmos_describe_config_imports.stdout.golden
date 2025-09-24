@@ -122,9 +122,9 @@ settings:
       lexer: ""
       formatter: terminal
       theme: dracula
-      pager: false
       line_numbers: true
       wrap: false
+    color: true
     no_color: false
   markdown:
     document:

@@ -54,12 +54,7 @@ func getRunnableDescribeDependentsCmd(
 			return err
 		}
 
-		if cmd.Flags().Changed("pager") {
-			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			if err != nil {
-				return err
-			}
-		}
+		// Global --pager flag is now handled in cfg.InitCliConfig
 
 		describe.Component = args[0]
 		err = newDescribeDependentsExec(&atmosConfig).Execute(describe)

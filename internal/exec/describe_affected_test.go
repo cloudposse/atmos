@@ -20,7 +20,13 @@ import (
 )
 
 func TestDescribeAffected(t *testing.T) {
-	d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{}}
+	d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				Pager: "false", // Initially disabled
+			},
+		},
+	}}
 	d.IsTTYSupportForStdout = func() bool {
 		return false
 	}
@@ -64,6 +70,8 @@ func TestDescribeAffected(t *testing.T) {
 	d.IsTTYSupportForStdout = func() bool {
 		return true
 	}
+	// Enable pager for the tests that expect it to be called
+	d.atmosConfig.Settings.Terminal.Pager = "true"
 	ctrl := gomock.NewController(t)
 	mockPager := pager.NewMockPageCreator(ctrl)
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
