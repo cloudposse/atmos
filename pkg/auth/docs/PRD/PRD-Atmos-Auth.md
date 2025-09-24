@@ -580,7 +580,7 @@ auth:
 
 Atmos Auth uses a unified credential interface to standardize provider/identity behavior:
 
-```
+```go
 type ICredentials interface {
     IsExpired() bool
     GetExpiration() (*time.Time, error)
@@ -1024,13 +1024,11 @@ identities:
       mfa_arn: !env AWS_MFA_ARN
       region: !env AWS_DEFAULT_REGION
 
-
   emergency-admin:
     kind: aws/user
     credentials:
       # If not defined, the credentials will try to be pulled from the keyring.
       region: us-east-1
-
 ```
 
 **Key Characteristics:**
@@ -1053,7 +1051,6 @@ identities:
     principal:
       role_definition_id: b24988ac-6180-42a0-ab88-20f7382dd24c
       scope: /subscriptions/12345678-1234-1234-1234-123456789012
-
 ```
 
 #### GCP Service Account Impersonation (Not Implemented)
@@ -1066,7 +1063,6 @@ identities:
     principal:
       service_account: admin@project.iam.gserviceaccount.com
       project: my-project
-
 ```
 
 #### Okta Application (Not Implemented)
@@ -1078,7 +1074,6 @@ identities:
     via: { provider: okta }
     principal:
       app: datadog-admin
-
 ```
 
 ### 5.3 Component-Level Auth Configuration
@@ -1109,7 +1104,6 @@ auth:
         name: IdentityManagersTeamAccess
         account:
           name: core-identity
-
 
     superuser:
       kind: aws/user
@@ -1276,14 +1270,12 @@ identities:
     principal:
       role_arn: arn:aws:iam::123456789012:role/SAMLAdminRole
 
-
   # Chained: SAML → Cross-account role
   prod-deployer:
     kind: aws/assume-role
     via: { identity: saml-admin }
     principal:
       role_arn: arn:aws:iam::987654321098:role/DeployerRole
-
 ```
 
 **Authentication Flow:**
@@ -1754,7 +1746,7 @@ func TestE2EAuthentication(t *testing.T) {
 
 ### 8.2 Code Structure
 
-```
+```text
 pkg/auth/
 ├── providers/           # Authentication providers
 │   ├── aws/

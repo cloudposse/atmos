@@ -1,5 +1,6 @@
 vars:
   stage: no-component-auth
+  
 import:
   - catalog/mock
 components:
