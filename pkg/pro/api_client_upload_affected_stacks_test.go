@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudposse/atmos/pkg/logger"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -25,15 +26,11 @@ func TestUploadAffectedStacks_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
+		HTTPClient:      &http.Client{Timeout: 2 * time.Second},
 	}
 
 	dto := dtos.UploadAffectedStacksRequest{
@@ -53,7 +50,7 @@ func TestUploadAffectedStacks_Success(t *testing.T) {
 		},
 	}
 
-	err = client.UploadAffectedStacks(&dto)
+	err := client.UploadAffectedStacks(&dto)
 	assert.NoError(t, err)
 }
 
@@ -66,22 +63,22 @@ func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
 		{
 			name:          "server returns 400 bad request",
 			statusCode:    http.StatusBadRequest,
-			expectedError: ErrFailedToUploadStacks,
+			expectedError: errUtils.ErrFailedToUploadStacks,
 		},
 		{
 			name:          "server returns 401 unauthorized",
 			statusCode:    http.StatusUnauthorized,
-			expectedError: ErrFailedToUploadStacks,
+			expectedError: errUtils.ErrFailedToUploadStacks,
 		},
 		{
 			name:          "server returns 403 forbidden",
 			statusCode:    http.StatusForbidden,
-			expectedError: ErrFailedToUploadStacks,
+			expectedError: errUtils.ErrFailedToUploadStacks,
 		},
 		{
 			name:          "server returns 500 internal server error",
 			statusCode:    http.StatusInternalServerError,
-			expectedError: ErrFailedToUploadStacks,
+			expectedError: errUtils.ErrFailedToUploadStacks,
 		},
 	}
 
@@ -93,15 +90,11 @@ func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
 			}))
 			defer server.Close()
 
-			mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-			assert.NoError(t, err)
-
 			client := &AtmosProAPIClient{
 				BaseURL:         server.URL,
 				BaseAPIEndpoint: "api",
 				APIToken:        "test-token",
-				HTTPClient:      http.DefaultClient,
-				Logger:          mockLogger,
+				HTTPClient:      &http.Client{Timeout: 2 * time.Second},
 			}
 
 			dto := dtos.UploadAffectedStacksRequest{
@@ -110,7 +103,7 @@ func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
 				Stacks:  []schema.Affected{},
 			}
 
-			err = client.UploadAffectedStacks(&dto)
+			err := client.UploadAffectedStacks(&dto)
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, tc.expectedError)
 		})
@@ -118,15 +111,11 @@ func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
 }
 
 func TestUploadAffectedStacks_NetworkError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         "http://invalid-host-that-does-not-exist:12345",
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
+		HTTPClient:      &http.Client{Timeout: 2 * time.Second},
 	}
 
 	dto := dtos.UploadAffectedStacksRequest{
@@ -135,22 +124,18 @@ func TestUploadAffectedStacks_NetworkError(t *testing.T) {
 		Stacks:  []schema.Affected{},
 	}
 
-	err = client.UploadAffectedStacks(&dto)
+	err := client.UploadAffectedStacks(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToMakeRequest)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToMakeRequest)
 }
 
 func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	// Use an invalid URL that would cause http.NewRequest to fail
 	client := &AtmosProAPIClient{
 		BaseURL:         "://invalid-url", // Malformed URL
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
+		HTTPClient:      &http.Client{Timeout: 2 * time.Second},
 	}
 
 	dto := dtos.UploadAffectedStacksRequest{
@@ -159,7 +144,7 @@ func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
 		Stacks:  []schema.Affected{},
 	}
 
-	err = client.UploadAffectedStacks(&dto)
+	err := client.UploadAffectedStacks(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToCreateAuthRequest)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAuthRequest)
 }
