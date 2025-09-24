@@ -12,11 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestVendorPullWithGlobPatterns tests the vendor pull command with glob patterns
-// matching the issue reported in DEV-3639 where the vendor pull command creates
-// empty directories without pulling the actual content when using glob patterns
-// for included_paths like "**/modules/**", "**/*.tf", etc.
-func TestVendorPullWithGlobPatterns(t *testing.T) {
+// TestVendorPullWithTripleSlashPattern tests the vendor pull command with the triple-slash pattern
+// which indicates vendoring from the root of a repository (e.g., github.com/repo.git///?ref=v1.0).
+// This pattern was broken after go-getter v1.7.9 due to changes in subdirectory path handling.
+func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 	// Check for GitHub access with rate limit check
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {
@@ -62,7 +61,7 @@ func TestVendorPullWithGlobPatterns(t *testing.T) {
 	}()
 
 	// Define the test directory
-	testDir := "../../tests/fixtures/scenarios/vendor-pull-issue-dev-3639"
+	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
 
 	// Change to the test directory
 	err = os.Chdir(testDir)
@@ -176,7 +175,7 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 	}()
 
 	// Define the test directory
-	testDir := "../../tests/fixtures/scenarios/vendor-pull-issue-dev-3639"
+	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
 
 	// Change to the test directory
 	err = os.Chdir(testDir)
