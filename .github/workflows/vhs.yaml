@@ -34,7 +34,7 @@ jobs:
       - name: Get modified .tape files
         id: tapes
         env:
-          GH_TOKEN: ${{ github.token }}        
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "${{ steps.labeled.outputs.labeled }}" == "true" ]]; then
             echo "files=$(find . -path './build-harness' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)" >> $GITHUB_OUTPUT
@@ -51,7 +51,7 @@ jobs:
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
       labeled: ${{ steps.labeled.outputs.labeled }}
-       
+
   vhs:
     needs: [prepare]
     if: needs.prepare.outputs.matrix != '[]'
@@ -63,18 +63,18 @@ jobs:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.file }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4  
+      - uses: actions/checkout@v4
 
       - name: Install atmos
         uses: jaxxstorm/action-install-gh-release@v1.14.0
         with: # Grab the latest version
           repo: cloudposse/atmos
           chmod: 0755
-          extension-matching: disable 
-          rename-to: atmos 
+          extension-matching: disable
+          rename-to: atmos
 
       - uses: charmbracelet/vhs-action@v1
-        with: 
+        with:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ matrix.file }}
           install-fonts: true

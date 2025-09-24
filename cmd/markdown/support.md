@@ -2,7 +2,7 @@
 
 ## Community Resources
 
-Need help? Join the [Atmos community!](https://cloudposse.com/slack)  
+Need help? Join the [Atmos community!](https://cloudposse.com/slack)
 
 - **Slack Community**: Connect with active users in the `#atmos` channel and get help anytime [on slack](https://cloudposse.com/slack).
 - **GitHub Discussions**: Post questions or join conversations with the community and Cloud Posse.
@@ -14,13 +14,13 @@ We hold **office hours every Wednesday at 11:30 AM PST**. Join us for live Q&A s
 
 [](https://cloudposse.com/office-hours)
 
-## Paid Support  
+## Paid Support
 
 We offer priority support to GitHub Sponsors (Enterprise Tier).
 
 [](https://github.com/sponsors/cloudposse)
 
-Included with sponsorship, we host **30-minute workshops twice a week** to:  
+Included with sponsorship, we host **30-minute workshops twice a week** to:
 - Answer your questions.
 - Assist with debugging issues.
 - Discuss architectural decisions.

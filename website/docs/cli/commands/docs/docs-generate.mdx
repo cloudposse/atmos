@@ -6,14 +6,15 @@ description: "Generate documentation artifacts based on a named section under `d
 id: generate
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 
-Use this command to generate one of your documentation artifacts (e.g. a README) as defined by the **named** section under `docs.generate.<KEY>` in `atmos.yaml`.  
+Use this command to generate one of your documentation artifacts (e.g. a README) as defined by the **named** section under `docs.generate.<KEY>` in `atmos.yaml`.
 
 Replace `<KEY>` with the name of the section you want to run (for example, `readme`, `release-notes`, etc.).
 
-:::
+</Intro>
 
 In `atmos.yaml`, you can define **one or more** documentation‐generation blocks under `docs.generate`.  Each top‐level key becomes a CLI argument:
 
@@ -45,7 +46,7 @@ docs:
       output: "./RELEASE_NOTES.md"
 ```
 
-For each CLI argument the command combines all local or remote YAML files specified at `input` and template file then generates the documentation artifact at the respective `output` folder. In case the template contains `terraform_docs` key, e.g.  
+For each CLI argument the command combines all local or remote YAML files specified at `input` and template file then generates the documentation artifact at the respective `output` folder. In case the template contains `terraform_docs` key, e.g.
 
     ```yaml
 {{- $data := (ds "config") -}}
@@ -64,7 +65,7 @@ Extra info: {{ $data.extra_info }}
 {{ end }}
 
     ```
-the resultant file will also have a corresponding section rendered. By default `terraform.format` is set to `markdown table`, and can also be `markdown`, `tfvars hcl`, and `tfvars json`.  
+the resultant file will also have a corresponding section rendered. By default `terraform.format` is set to `markdown table`, and can also be `markdown`, `tfvars hcl`, and `tfvars json`.
 
 ## Dynamic Keys
 
@@ -82,7 +83,7 @@ atmos docs generate release-notes
 
 ```shell
 atmos docs generate readme
-``` 
+```
 
 ## Supported Sources for README.yaml and template
 
@@ -118,7 +119,7 @@ It supports the following local file sources:
     docs:
       generate:
         readme:
-          input: 
+          input:
             - "terraform/README.yaml"
           template: "terraform/README.md.gotmpl"
     ```

@@ -9,6 +9,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestAtlantisGenerateRepoConfig(t *testing.T) {
@@ -74,6 +75,9 @@ func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
+	// Check for Git repository with valid remotes precondition
+	tests.RequireGitRemoteWithValidURL(t)
+
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 

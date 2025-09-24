@@ -1,0 +1,39 @@
+# Test stack that uses imports with deep merging to trigger type mismatches
+# This simulates the scenario where imports and merges cause type conflicts
+
+import:
+  # First import the shared network config (subnets as array)
+  - path: "shared/network.yaml"
+  
+  # Import database config
+  - path: "shared/databases.yaml"
+  
+  # Now import a file that tries to override with different types
+  - path: "override.yaml"
+
+vars:
+  stage: "test"
+  environment: "deep-merge"
+  
+components:
+  terraform:
+    vpc:
+      vars:
+        # Deep merge scenario: trying to change nested array to string
+        network_config:
+          availability_zones: "us-east-1a,us-east-1b"  # String instead of array
+        
+        # Another type mismatch: trying to override array with object
+        subnets:
+          public: "10.0.10.0/24"
+          private: "10.0.20.0/24"
+          
+    rds:
+      vars:
+        # Try to change connections array to a string
+        connections: "primary.db.local:5432"
+        
+        # Deep nested override
+        instances:
+          primary:
+            instance_class: ["db.t3.medium", "db.t3.large"]  # Array instead of string
