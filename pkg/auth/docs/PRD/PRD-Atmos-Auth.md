@@ -1748,60 +1748,52 @@ func TestE2EAuthentication(t *testing.T) {
 
 ```text
 pkg/auth/
-├── providers/           # Authentication providers
+├── cloud/                      # Cloud-specific integrations (current)
+│   └── aws/
+│       ├── files.go            # AWS credentials/config file management (INI)
+│       └── setup.go            # AWS file setup during prehook
+├── credentials/                # Credential storage (current)
+│   └── store.go                # Secure keyring-backed store
+├── identities/                 # Identity implementations (current)
+│   └── aws/
+│       ├── permission_set.go   # AWS SSO Permission Set identity
+│       ├── assume_role.go      # AWS STS AssumeRole identity
+│       └── user.go             # AWS User (break-glass) identity
+├── providers/                  # Authentication providers (current)
 │   ├── aws/
-│   │   ├── sso.go      # IAM Identity Center
-│   │   ├── saml.go     # SAML provider
-│   │   └── user.go     # AWS user credentials
-│   ├── azure/
-│   │   └── entra.go    # Azure Entra ID
-│   ├── gcp/
-│   │   └── oidc.go     # GCP OIDC
-│   ├── oidc/
-│   │   └── github.go   # GitHub Actions OIDC
-│   ├── okta/
-│   │   └── oidc.go     # Okta OIDC
-│   └── interface.go    # Provider interface
-├── identities/         # Identity implementations
-│   ├── aws/
-│   │   ├── permission_set.go
-│   │   ├── assume_role.go
-│   │   └── user.go
-│   ├── azure/
-│   │   └── role.go
-│   ├── gcp/
-│   │   └── impersonate.go
-│   ├── okta/
-│   │   └── app.go
-│   └── interface.go    # Identity interface
-├── config/             # Configuration management
-│   ├── parser.go       # YAML parsing
-│   ├── validator.go    # Schema validation
-│   ├── merger.go       # Component config merging
-│   └── schema.json     # JSON Schema
-├── credentials/        # Credential management
-│   ├── store.go        # Credential storage
-│   ├── cache.go        # Caching logic
-│   └── crypto.go       # Encryption/decryption
-├── hooks/             # Integration hooks
-│   ├── terraform.go   # Terraform prehook
-│   ├── aws_setup.go   # AWS file setup during prehook
-│   └── interface.go   # Hook interface
-├── environment/       # Environment variable management
-│   ├── injector.go    # Environment variable injection
-│   ├── merger.go      # Environment merging logic
-│   └── aws_files.go   # AWS credentials/config file management
-├── ui/                # User interface components
-│   ├── picker.go      # huh-based pickers
-│   ├── prompts.go     # Interactive prompts
-│   └── logger.go      # Charm logging setup
-├── cli/               # CLI commands
-│   ├── login.go
-│   ├── whoami.go
-│   ├── env.go
-│   ├── exec.go
-│   └── validate.go
-└── manager.go         # Main auth manager
+│   │   ├── sso.go              # AWS IAM Identity Center (SSO)
+│   │   └── saml.go             # AWS SAML provider (saml2aws + Playwright)
+│   └── github/
+│       └── oidc.go             # GitHub Actions OIDC provider
+├── types/                      # Core interfaces and credential types (current)
+│   ├── interfaces.go           # AuthManager, Provider, Identity, CredentialStore, Validator
+│   ├── whoami.go               # WhoamiInfo model/builder
+│   ├── aws_credentials.go      # AWS credential type + helpers
+│   └── github_oidc_credentials.go
+├── utils/                      # Utilities (current)
+│   └── env.go                  # Env helpers and injection utilities
+├── validation/                 # Validation (current)
+│   └── validator.go            # Config validation logic
+├── factory.go                  # Provider/Identity factories (current)
+├── hooks.go                    # Terraform prehook + auth logging scope (current)
+├── manager.go                  # Main auth manager (current)
+└── docs/                       # PRD and supplemental docs (current)
+
+# Planned modules (future phases)
+# These directories are not yet present but are planned and referenced by the PRD.
+pkg/auth/
+├── providers/
+│   ├── azure/                  # Azure Entra ID provider (planned)
+│   ├── gcp/                    # GCP OIDC provider (planned)
+│   ├── okta/                   # Okta OIDC provider (planned)
+│   └── oidc/                   # Additional generic OIDC providers (planned)
+├── identities/
+│   ├── azure/                  # Azure role identities (planned)
+│   ├── gcp/                    # GCP service account impersonation (planned)
+│   └── okta/                   # Okta app identities (planned)
+├── ui/                         # Interactive UI (Charm) for pickers/prompts (planned)
+├── cli/                        # Dedicated CLI command package (planned)
+└── environment/                # Generic env merging/injection helpers (planned)
 ```
 
 ### 8.3 Interface Definitions
