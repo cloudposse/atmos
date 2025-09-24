@@ -15,7 +15,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
