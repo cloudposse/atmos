@@ -13,7 +13,7 @@ import (
 )
 
 // TestVendorPullWithTripleSlashPattern tests the vendor pull command with the triple-slash pattern
-// which indicates vendoring from the root of a repository (e.g., github.com/repo.git///?ref=v1.0).
+// which indicates cloning from the root of a repository (e.g., github.com/repo.git///?ref=v1.0).
 // This pattern was broken after go-getter v1.7.9 due to changes in subdirectory path handling.
 func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 	// Check for GitHub access with rate limit check

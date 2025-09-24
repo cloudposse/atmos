@@ -275,9 +275,9 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 			return nil, err
 		}
 
-		// Normalize the URI to handle triple-slash pattern (///), which indicates an empty subdirectory
-		// path after the // delimiter (meaning vendor from repository root). This pattern broke in
-		// go-getter v1.7.9 due to CVE-2025-8959 security fixes.
+		// Normalize the URI to handle triple-slash pattern (///), which indicates cloning from
+		// the root of the repository. This pattern broke in go-getter v1.7.9 due to CVE-2025-8959
+		// security fixes.
 		uri = normalizeVendorURI(uri)
 
 		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
@@ -431,8 +431,8 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 
 // normalizeVendorURI normalizes vendor source URIs to handle legacy patterns.
 // In go-getter syntax, the double-slash (//) is a delimiter between the repository URL
-// and the subdirectory path within that repository. A triple-slash (///) indicates
-// an empty subdirectory path (root of the repository).
+// and the subdirectory path within that repository. A triple-slash (///) indicates that
+// the content should be pulled from the root of the repository.
 //
 // The triple-slash pattern (e.g., "github.com/repo.git///?ref=v1.0.0") was a documented
 // way to explicitly vendor from the root of a Git repository. After go-getter v1.7.9
@@ -440,7 +440,7 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 // for CVE-2025-8959 that changed subdirectory path handling.
 //
 // This function converts:
-//   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git?ref=v1.0.0"
+//   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git?ref=v1.0.0" (root of repository)
 //   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
 func normalizeVendorURI(uri string) string {
 	// Don't modify file:/// URIs (valid file scheme with empty host)
@@ -468,9 +468,9 @@ func normalizeVendorURI(uri string) string {
 
 	// Check what comes after the triple slash
 	if afterPattern == "" || strings.HasPrefix(afterPattern, "?") {
-		// Empty subdirectory case: .git///? or .git///
+		// Root of repository case: .git///? or .git///
 		normalized := beforePattern + afterPattern
-		log.Debug("Normalized vendor URI: removed empty subdirectory indicator (///)",
+		log.Debug("Normalized vendor URI: removed root repository indicator (///) to clone from repository root",
 			"original", uri, "normalized", normalized)
 		return normalized
 	}
