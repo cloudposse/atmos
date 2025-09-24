@@ -295,11 +295,11 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 // GetProviderForIdentity returns the provider name for the given identity.
 // Recursively resolves through identity chains to find the root provider.
 func (m *manager) GetProviderForIdentity(identityName string) string {
-  chain, err := m.buildAuthenticationChain(identityName)
-  if err != nil || len(chain) == 0 {
-    return ""
-  }
-  return chain[0]
+	chain, err := m.buildAuthenticationChain(identityName)
+	if err != nil || len(chain) == 0 {
+		return ""
+	}
+	return chain[0]
 }
 
 // GetProviderKindForIdentity returns the provider kind for the given identity. By building the authentication chain and getting the root provider's kind.
@@ -543,11 +543,11 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		log.Debug("Authenticating identity step", "step", i, logKeyIdentity, identityStep, "kind", identity.Kind())
 
 		// Each identity receives credentials from the previous step.
-        nextCreds, err := identity.Authenticate(ctx, currentCreds)
-        if err != nil {
-            return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed,
-                fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err))
-        }
+		nextCreds, err := identity.Authenticate(ctx, currentCreds)
+		if err != nil {
+			return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed,
+				fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err))
+		}
 
 		currentCreds = nextCreds
 
