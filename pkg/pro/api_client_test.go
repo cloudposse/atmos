@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -25,9 +24,6 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	// Save original env vars
 	originalEnvVars := map[string]string{
 		"ACTIONS_ID_TOKEN_REQUEST_URL":   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
@@ -79,7 +75,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 			},
 		}
 
-		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		client, err := NewAtmosProAPIClientFromEnv(&atmosConfig)
 		assert.NoError(t, err)
 		assert.NotNil(t, client)
 		assert.Equal(t, "direct-api-token", client.APIToken)
@@ -119,7 +115,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 			},
 		}
 
-		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		client, err := NewAtmosProAPIClientFromEnv(&atmosConfig)
 		assert.NoError(t, err)
 		assert.NotNil(t, client)
 		assert.Equal(t, "direct-api-token", client.APIToken)
@@ -174,7 +170,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 			},
 		}
 
-		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		client, err := NewAtmosProAPIClientFromEnv(&atmosConfig)
 		assert.NoError(t, err)
 		assert.NotNil(t, client)
 		assert.Equal(t, "atmos-pro-token-456", client.APIToken)
@@ -217,7 +213,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 			},
 		}
 
-		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		client, err := NewAtmosProAPIClientFromEnv(&atmosConfig)
 		assert.Error(t, err)
 		assert.Nil(t, client)
 		assert.Contains(t, err.Error(), "workspace ID environment variable is required")
@@ -253,7 +249,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 			},
 		}
 
-		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		client, err := NewAtmosProAPIClientFromEnv(&atmosConfig)
 		assert.Error(t, err)
 		assert.Nil(t, client)
 		assert.Contains(t, err.Error(), "not running in GitHub Actions")
@@ -304,7 +300,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 			},
 		}
 
-		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		client, err := NewAtmosProAPIClientFromEnv(&atmosConfig)
 		assert.Error(t, err)
 		assert.Nil(t, client)
 		assert.Contains(t, err.Error(), "failed to exchange OIDC token")
@@ -339,7 +335,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 			},
 		}
 
-		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		client, err := NewAtmosProAPIClientFromEnv(&atmosConfig)
 		assert.Error(t, err)
 		assert.Nil(t, client)
 		assert.Contains(t, err.Error(), "not running in GitHub Actions")
