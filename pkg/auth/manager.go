@@ -295,7 +295,11 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 // GetProviderForIdentity returns the provider name for the given identity.
 // Recursively resolves through identity chains to find the root provider.
 func (m *manager) GetProviderForIdentity(identityName string) string {
-	return m.getProviderForIdentity(identityName)
+  chain, err := m.buildAuthenticationChain(identityName)
+  if err != nil || len(chain) == 0 {
+    return ""
+  }
+  return chain[0]
 }
 
 // GetProviderKindForIdentity returns the provider kind for the given identity. By building the authentication chain and getting the root provider's kind.
