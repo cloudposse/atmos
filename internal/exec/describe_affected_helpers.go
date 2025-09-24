@@ -9,6 +9,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	cp "github.com/otiai10/copy"
@@ -22,9 +23,10 @@ import (
 var RemoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 
 const (
-	shaString = "SHA"
-	refString = "ref"
-	dirLogKey = "dir"
+	shaString        = "SHA"
+	refString        = "ref"
+	dirLogKey        = "dir"
+	originRemoteName = "origin"
 )
 
 // isGitWorktree checks if the given path contains a Git worktree.
@@ -226,6 +228,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	var remoteRepo *git.Repository
 
 	// Check if we're in a worktree
+	//nolint:nestif // This complexity is necessary for proper worktree handling
 	if isGitWorktree(localRepoInfo.LocalWorktreePath) {
 		// If in a worktree, we need to get the main repository path for cloning
 		log.Debug("Detected Git worktree, finding main repository", "worktree", localRepoInfo.LocalWorktreePath)
@@ -262,7 +265,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			NoCheckout:   false,
 			SingleBranch: false,
 			Tags:         git.AllTags,
-			RemoteName:   "origin",
+			RemoteName:   originRemoteName,
 		}
 
 		remoteRepo, err = git.PlainClone(tempDir, false, cloneOptions)
@@ -270,28 +273,94 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", fmt.Errorf("failed to clone repository: %w", err)
 		}
 
+		// After cloning from local, we need to fetch from the actual remote to get proper refs
+		// The main repository should have an 'origin' remote configured
+		mainRepo, err := git.PlainOpen(mainRepoPath)
+		if err == nil {
+			// Get the actual remote URL from the main repository
+			mainRemote, err := mainRepo.Remote(originRemoteName)
+			if err == nil && mainRemote != nil && len(mainRemote.Config().URLs) > 0 {
+				actualRemoteURL := mainRemote.Config().URLs[0]
+				log.Debug("Fetching from actual remote", "url", actualRemoteURL)
+
+				// Update the remote in our cloned repo to point to the actual remote
+				err = remoteRepo.DeleteRemote(originRemoteName)
+				if err != nil {
+					log.Debug("Failed to delete origin remote", "error", err)
+				}
+
+				_, err = remoteRepo.CreateRemote(&config.RemoteConfig{
+					Name: originRemoteName,
+					URLs: []string{actualRemoteURL},
+				})
+				if err != nil {
+					log.Debug("Failed to create new origin remote", "error", err)
+				} else {
+					// Fetch from the actual remote to get all refs
+					remote, _ := remoteRepo.Remote(originRemoteName)
+					if remote != nil {
+						fetchOptions := &git.FetchOptions{
+							RemoteName: originRemoteName,
+							RefSpecs: []config.RefSpec{
+								config.RefSpec("+refs/heads/*:refs/remotes/" + originRemoteName + "/*"),
+							},
+							Tags: git.AllTags,
+						}
+						if atmosConfig.Logs.Level == u.LogLevelDebug {
+							fetchOptions.Progress = os.Stdout
+						}
+						err = remote.Fetch(fetchOptions)
+						if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+							log.Debug("Failed to fetch from remote", "error", err)
+						} else {
+							log.Debug("Successfully fetched from remote")
+						}
+					}
+				}
+			}
+		}
+
 		// After cloning, set up refs/remotes/origin/HEAD if it doesn't exist
-		remoteConfig, _ := remoteRepo.Remote("origin")
+		remoteConfig, _ := remoteRepo.Remote(originRemoteName)
 		if remoteConfig != nil {
 			refs, _ := remoteRepo.References()
 			hasOriginHead := false
+			var originHeadRef *plumbing.Reference
 			_ = refs.ForEach(func(ref *plumbing.Reference) error {
 				if ref.Name().String() == "refs/remotes/origin/HEAD" {
 					hasOriginHead = true
+					originHeadRef = ref
 				}
 				return nil
 			})
 
+			if hasOriginHead && originHeadRef != nil {
+				log.Debug("Found existing refs/remotes/origin/HEAD", "target", originHeadRef.Target())
+			}
+
 			if !hasOriginHead {
-				// Try to set refs/remotes/origin/HEAD to refs/remotes/origin/main
-				mainRef, err := remoteRepo.Reference(plumbing.NewRemoteReferenceName("origin", "main"), false)
+				// Try to determine the default branch from the main repository
+				// First check for refs/heads/main
+				mainRef, err := remoteRepo.Reference(plumbing.NewRemoteReferenceName(originRemoteName, "main"), false)
 				if err == nil && mainRef != nil {
+					log.Debug("Setting refs/remotes/origin/HEAD to refs/remotes/origin/main")
 					// Create a symbolic reference
 					symbolic := plumbing.NewSymbolicReference(
 						plumbing.ReferenceName("refs/remotes/origin/HEAD"),
 						plumbing.ReferenceName("refs/remotes/origin/main"),
 					)
 					_ = remoteRepo.Storer.SetReference(symbolic)
+				} else {
+					// Try master if main doesn't exist
+					masterRef, err := remoteRepo.Reference(plumbing.NewRemoteReferenceName(originRemoteName, "master"), false)
+					if err == nil && masterRef != nil {
+						log.Debug("Setting refs/remotes/origin/HEAD to refs/remotes/origin/master")
+						symbolic := plumbing.NewSymbolicReference(
+							plumbing.ReferenceName("refs/remotes/origin/HEAD"),
+							plumbing.ReferenceName("refs/remotes/origin/master"),
+						)
+						_ = remoteRepo.Storer.SetReference(symbolic)
+					}
 				}
 			}
 		}
@@ -369,6 +438,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		// If `ref` is not provided, use the HEAD of the remote origin
 		if ref == "" {
 			ref = "refs/remotes/origin/HEAD"
+			log.Debug("No ref specified, defaulting to refs/remotes/origin/HEAD")
 		}
 
 		log.Debug("Checking out Git", refString, ref)
@@ -376,6 +446,14 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		w, err := remoteRepo.Worktree()
 		if err != nil {
 			return nil, nil, nil, "", err
+		}
+
+		// Before checking out, let's log what we're trying to checkout
+		targetRef, err := remoteRepo.Reference(plumbing.ReferenceName(ref), true)
+		if err != nil {
+			log.Debug("Failed to resolve reference", refString, ref, "error", err)
+		} else {
+			log.Debug("Resolved reference", refString, ref, "hash", targetRef.Hash())
 		}
 
 		checkoutOptions := git.CheckoutOptions{

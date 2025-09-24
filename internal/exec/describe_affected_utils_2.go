@@ -116,20 +116,42 @@ func isEqual(
 	localSection map[string]any,
 	sectionName string,
 ) bool {
-	if remoteStackSection, ok := (*remoteStacks)[localStackName].(map[string]any); ok {
-		if remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any); ok {
-			if remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any); ok {
-				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
-					if remoteSection, ok := remoteComponentSection[sectionName].(map[string]any); ok {
-						if reflect.DeepEqual(localSection, remoteSection) {
-							return true
-						}
-					}
-				}
-			}
-		}
+	remoteStackSection, ok := (*remoteStacks)[localStackName].(map[string]any)
+	if !ok {
+		// Stack doesn't exist in remote - this is a new stack
+		return false
 	}
-	return false
+
+	remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any)
+	if !ok {
+		// No components section in remote stack
+		return false
+	}
+
+	remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
+	if !ok {
+		// Component type doesn't exist in remote stack
+		return false
+	}
+
+	remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any)
+	if !ok {
+		// Component doesn't exist in remote stack - this is a new component
+		return false
+	}
+
+	remoteSection, ok := remoteComponentSection[sectionName].(map[string]any)
+	if !ok {
+		// Section doesn't exist in remote component
+		// If local section is empty, they're equal
+		if len(localSection) == 0 {
+			return true
+		}
+		return false
+	}
+
+	// Compare the sections
+	return reflect.DeepEqual(localSection, remoteSection)
 }
 
 // isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed.
