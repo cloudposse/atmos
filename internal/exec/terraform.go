@@ -13,6 +13,8 @@ import (
 	log "github.com/charmbracelet/log"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	git "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -25,7 +27,31 @@ const (
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
+	detailedExitCodeFlag      = "--detailed-exitcode"
 )
+
+// parseUploadStatusFlag parses the upload status flag from the arguments.
+// It supports --flag, --flag=true, and --flag=false forms.
+// Returns true if the flag is present and not explicitly set to false.
+func parseUploadStatusFlag(args []string, flagName string) bool {
+	flagPrefix := "--" + flagName + "="
+
+	// Check for --flag (without value, defaults to true)
+	if u.SliceContainsString(args, "--"+flagName) {
+		return true
+	}
+
+	// Check for --flag=value forms
+	for _, arg := range args {
+		if strings.HasPrefix(arg, flagPrefix) {
+			value := strings.TrimPrefix(arg, flagPrefix)
+			// Parse boolean value, default to true if not a valid boolean
+			return value != "false"
+		}
+	}
+
+	return false
+}
 
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
 var (
@@ -394,6 +420,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Prepare the terraform command
 	allArgsAndFlags := strings.Fields(info.SubCommand)
+	uploadStatusFlag := false
 
 	switch info.SubCommand {
 	case "plan":
@@ -404,6 +431,17 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			!u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, outFlag+"=") &&
 			!atmosConfig.Components.Terraform.Plan.SkipPlanfile {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
+		}
+		// Check if the upload flag is present and parse its value (supports --flag, --flag=true, --flag=false forms).
+		uploadStatusFlag = parseUploadStatusFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
+
+		// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by atmos
+		info.AdditionalArgsAndFlags = u.SliceRemoveFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
+
+		if uploadStatusFlag {
+			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
+				allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
+			}
 		}
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
@@ -550,6 +588,35 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.DryRun,
 			info.RedirectStdErr,
 		)
+		// Compute exitCode for upload, whether or not err is set.
+		var exitCode int
+		if err != nil {
+			var osErr *osexec.ExitError
+			if errors.As(err, &osErr) {
+				exitCode = osErr.ExitCode()
+			} else {
+				exitCode = 1
+			}
+		} else {
+			exitCode = 0
+		}
+
+		// Upload plan status if requested.
+		if uploadStatusFlag && shouldUploadStatus(&info) {
+			client, cerr := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
+			if cerr != nil {
+				return cerr
+			}
+			gitRepo := &git.DefaultGitRepo{}
+			if uerr := uploadStatus(&info, exitCode, client, gitRepo); uerr != nil {
+				return uerr
+			}
+			// Treat 0 and 2 as success for plan uploads.
+			if exitCode == 0 || exitCode == 2 {
+				return nil
+			}
+		}
+		// For other commands or failure, return the original error.
 		if err != nil {
 			return err
 		}

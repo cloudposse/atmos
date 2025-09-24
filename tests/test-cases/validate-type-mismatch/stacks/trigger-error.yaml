@@ -1,0 +1,8 @@
+# This file imports both configs to trigger type mismatch
+import:
+  - config1
+  - config2
+
+vars:
+  stage: "test"
+  environment: "demo"

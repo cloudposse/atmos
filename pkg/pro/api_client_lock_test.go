@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/cloudposse/atmos/pkg/logger"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
@@ -38,15 +38,11 @@ func TestLockStack_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{
@@ -55,7 +51,7 @@ func TestLockStack_Success(t *testing.T) {
 		LockMessage: "Test lock",
 	}
 
-	response, err := client.LockStack(dto)
+	response, err := client.LockStack(&dto)
 	assert.NoError(t, err)
 	assert.True(t, response.Success)
 }
@@ -71,19 +67,19 @@ func TestLockStack_HTTPErrors(t *testing.T) {
 			name:          "server returns 400 bad request",
 			statusCode:    http.StatusBadRequest,
 			responseBody:  `{"success": false, "errorMessage": "Bad request"}`,
-			expectedError: ErrFailedToLockStack,
+			expectedError: errUtils.ErrFailedToLockStack,
 		},
 		{
 			name:          "server returns 401 unauthorized",
 			statusCode:    http.StatusUnauthorized,
 			responseBody:  `{"success": false, "errorMessage": "Unauthorized"}`,
-			expectedError: ErrFailedToLockStack,
+			expectedError: errUtils.ErrFailedToLockStack,
 		},
 		{
 			name:          "server returns 500 internal server error",
 			statusCode:    http.StatusInternalServerError,
 			responseBody:  `{"success": false, "errorMessage": "Internal Server Error"}`,
-			expectedError: ErrFailedToLockStack,
+			expectedError: errUtils.ErrFailedToLockStack,
 		},
 	}
 
@@ -95,20 +91,16 @@ func TestLockStack_HTTPErrors(t *testing.T) {
 			}))
 			defer server.Close()
 
-			mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-			assert.NoError(t, err)
-
 			client := &AtmosProAPIClient{
 				BaseURL:         server.URL,
 				BaseAPIEndpoint: "api",
 				APIToken:        "test-token",
 				HTTPClient:      http.DefaultClient,
-				Logger:          mockLogger,
 			}
 
 			dto := dtos.LockStackRequest{Key: "test-key"}
 
-			response, err := client.LockStack(dto)
+			response, err := client.LockStack(&dto)
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, tc.expectedError)
 			assert.False(t, response.Success)
@@ -117,22 +109,18 @@ func TestLockStack_HTTPErrors(t *testing.T) {
 }
 
 func TestLockStack_NetworkError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         "http://invalid-host-that-does-not-exist:12345",
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{Key: "test-key"}
 
-	response, err := client.LockStack(dto)
+	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToMakeRequest)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToMakeRequest)
 	assert.False(t, response.Success)
 }
 
@@ -143,29 +131,22 @@ func TestLockStack_InvalidJSONResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{Key: "test-key"}
 
-	response, err := client.LockStack(dto)
+	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToUnmarshalJSON)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToUnmarshalAPIResponse)
 	assert.False(t, response.Success)
 }
 
 func TestLockStack_ReadBodyError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 
@@ -174,7 +155,6 @@ func TestLockStack_ReadBodyError(t *testing.T) {
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      httpClient,
-		Logger:          mockLogger,
 	}
 
 	// Mock response with body that will fail to read
@@ -188,32 +168,28 @@ func TestLockStack_ReadBodyError(t *testing.T) {
 
 	dto := dtos.LockStackRequest{Key: "test-key"}
 
-	response, err := client.LockStack(dto)
+	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToReadResponseBody)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToReadResponseBody)
 	assert.False(t, response.Success)
 
 	mockRoundTripper.AssertExpectations(t)
 }
 
 func TestLockStack_RequestCreationError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	// Use an invalid URL that would cause http.NewRequest to fail
 	client := &AtmosProAPIClient{
 		BaseURL:         "://invalid-url", // Malformed URL
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{Key: "test-key"}
 
-	response, err := client.LockStack(dto)
+	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToCreateAuthRequest)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAuthRequest)
 	assert.False(t, response.Success)
 }
 
@@ -231,22 +207,18 @@ func TestLockStack_SuccessFalseWithContext(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{Key: "test-key"}
 
-	response, err := client.LockStack(dto)
+	response, err := client.LockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToLockStack)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToLockStack)
 	assert.Contains(t, err.Error(), "Stack is already locked")
 	assert.False(t, response.Success)
 }

@@ -3,6 +3,12 @@ codecov:
 
 coverage:
   status:
+    project:
+      default:
+        target: auto      # Automatically use the base branch's coverage
+        threshold: 1%     # Allow up to 1% drop in overall project coverage
+        base: auto
+        if_not_found: success  # Don't fail if base coverage is missing
     patch:
       default:
         target: 80% # Require at least 80% test coverage on new/changed lines

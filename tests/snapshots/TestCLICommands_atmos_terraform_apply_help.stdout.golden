@@ -1,7 +1,7 @@
 
 Notice: Atmos now collects completely anonymous telemetry regarding usage.
 This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
 by visiting the following URL: https://atmos.tools/cli/telemetry
 
 Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
@@ -90,6 +90,11 @@ Global Flags:
                                       log any messages (default Info)
 
         --no-color                    Disable color output (default false)
+
+        --pager string                Enable pager for output (--pager or
+                                      --pager=true to enable, --pager=false to
+                                      disable, --pager=less to use specific
+                                      pager)
 
         --process-functions           Enable/disable YAML functions processing
                                       in Atmos stack manifests when executing

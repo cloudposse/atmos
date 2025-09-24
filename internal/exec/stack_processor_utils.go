@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -74,7 +75,7 @@ func ProcessYAMLConfigFiles(
 				".yml",
 			)
 
-			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, err := ProcessYAMLConfigFile(
+			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				stackBasePath,
 				p,
@@ -89,6 +90,7 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				map[string]any{},
 				"",
+				m.NewMergeContext(), // Add merge context for enhanced error reporting
 			)
 			if err != nil {
 				errorResult = err
@@ -181,8 +183,65 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	error,
 ) {
+	// Call the context-aware version with a nil context for backward compatibility
+	return ProcessYAMLConfigFileWithContext(
+		atmosConfig,
+		basePath,
+		filePath,
+		importsConfig,
+		context,
+		ignoreMissingFiles,
+		skipTemplatesProcessingInImports,
+		ignoreMissingTemplateValues,
+		skipIfMissing,
+		parentTerraformOverridesInline,
+		parentTerraformOverridesImports,
+		parentHelmfileOverridesInline,
+		parentHelmfileOverridesImports,
+		atmosManifestJsonSchemaFilePath,
+		nil, // mergeContext
+	)
+}
+
+// ProcessYAMLConfigFileWithContext takes a path to a YAML stack manifest,
+// recursively processes and deep-merges all the imports with context tracking,
+// and returns the final stack config.
+//
+//nolint:gocognit,revive,cyclop,funlen
+func ProcessYAMLConfigFileWithContext(
+	atmosConfig *schema.AtmosConfiguration,
+	basePath string,
+	filePath string,
+	importsConfig map[string]map[string]any,
+	context map[string]any,
+	ignoreMissingFiles bool,
+	skipTemplatesProcessingInImports bool,
+	ignoreMissingTemplateValues bool,
+	skipIfMissing bool,
+	parentTerraformOverridesInline map[string]any,
+	parentTerraformOverridesImports map[string]any,
+	parentHelmfileOverridesInline map[string]any,
+	parentHelmfileOverridesImports map[string]any,
+	atmosManifestJsonSchemaFilePath string,
+	mergeContext *m.MergeContext,
+) (
+	map[string]any,
+	map[string]map[string]any,
+	map[string]any,
+	map[string]any,
+	map[string]any,
+	map[string]any,
+	map[string]any,
+	error,
+) {
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
+
+	// Initialize or update merge context with current file
+	if mergeContext == nil {
+		mergeContext = m.NewMergeContext()
+	}
+	mergeContext = mergeContext.WithFile(relativeFilePath)
 
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
@@ -224,8 +283,17 @@ func ProcessYAMLConfigFile(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
-			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
-			return nil, nil, nil, nil, nil, nil, nil, e
+			// Check if we have merge context to provide enhanced error formatting
+			if mergeContext != nil {
+				// Wrap the error with the sentinel first to preserve it
+				wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
+				// Then format it with context information
+				e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+				return nil, nil, nil, nil, nil, nil, nil, e
+			} else {
+				e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
+				return nil, nil, nil, nil, nil, nil, nil, e
+			}
 		}
 	}
 
@@ -234,8 +302,17 @@ func ProcessYAMLConfigFile(
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 		}
-		e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
-		return nil, nil, nil, nil, nil, nil, nil, e
+		// Check if we have merge context to provide enhanced error formatting
+		if mergeContext != nil {
+			// Wrap the error with the sentinel first to preserve it
+			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
+			// Then format it with context information
+			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+			return nil, nil, nil, nil, nil, nil, nil, e
+		} else {
+			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			return nil, nil, nil, nil, nil, nil, nil, e
+		}
 	}
 
 	// If the path to the Atmos manifest JSON Schema is provided, validate the stack manifest against it
@@ -321,17 +398,19 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	parentTerraformOverridesInline, err = m.Merge(
+	parentTerraformOverridesInline, err = m.MergeWithContext(
 		atmosConfig,
 		[]map[string]any{globalOverrides, terraformOverrides, parentTerraformOverridesInline},
+		mergeContext,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 
-	parentHelmfileOverridesInline, err = m.Merge(
+	parentHelmfileOverridesInline, err = m.MergeWithContext(
 		atmosConfig,
 		[]map[string]any{globalOverrides, helmfileOverrides, parentHelmfileOverridesInline},
+		mergeContext,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
@@ -431,7 +510,7 @@ func ProcessYAMLConfigFile(
 		// The parent `context` takes precedence over the current (imported) `context` and will override items with the same keys.
 		// TODO: instead of calling the conversion functions, we need to switch to generics and update everything to support it
 		listOfMaps := []map[string]any{importStruct.Context, context}
-		mergedContext, err := m.Merge(atmosConfig, listOfMaps)
+		mergedContext, err := m.MergeWithContext(atmosConfig, listOfMaps, mergeContext)
 		if err != nil {
 			return nil, nil, nil, nil, nil, nil, nil, err
 		}
@@ -444,7 +523,7 @@ func ProcessYAMLConfigFile(
 				terraformOverridesInline,
 				terraformOverridesImports,
 				helmfileOverridesInline,
-				helmfileOverridesImports, err2 := ProcessYAMLConfigFile(
+				helmfileOverridesImports, err2 := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				basePath,
 				importFile,
@@ -459,6 +538,7 @@ func ProcessYAMLConfigFile(
 				parentHelmfileOverridesInline,
 				parentHelmfileOverridesImports,
 				"",
+				mergeContext,
 			)
 			if err2 != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err2
@@ -466,9 +546,10 @@ func ProcessYAMLConfigFile(
 
 			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
 			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
-			parentTerraformOverridesImports, err = m.Merge(
+			parentTerraformOverridesImports, err = m.MergeWithContext(
 				atmosConfig,
 				[]map[string]any{parentTerraformOverridesImports, terraformOverridesImports, terraformOverridesInline},
+				mergeContext,
 			)
 			if err != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err
@@ -476,9 +557,10 @@ func ProcessYAMLConfigFile(
 
 			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
 			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
-			parentHelmfileOverridesImports, err = m.Merge(
+			parentHelmfileOverridesImports, err = m.MergeWithContext(
 				atmosConfig,
 				[]map[string]any{parentHelmfileOverridesImports, helmfileOverridesImports, helmfileOverridesInline},
+				mergeContext,
 			)
 			if err != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err
@@ -498,18 +580,20 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Terraform `overrides`
-	finalTerraformOverrides, err = m.Merge(
+	finalTerraformOverrides, err = m.MergeWithContext(
 		atmosConfig,
 		[]map[string]any{parentTerraformOverridesImports, parentTerraformOverridesInline},
+		mergeContext,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// Helmfile `overrides`
-	finalHelmfileOverrides, err = m.Merge(
+	finalHelmfileOverrides, err = m.MergeWithContext(
 		atmosConfig,
 		[]map[string]any{parentHelmfileOverridesImports, parentHelmfileOverridesInline},
+		mergeContext,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
@@ -547,10 +631,10 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Deep-merge the stack manifest and all the imports
-	stackConfigsDeepMerged, err := m.Merge(atmosConfig, stackConfigs)
+	stackConfigsDeepMerged, err := m.MergeWithContext(atmosConfig, stackConfigs, mergeContext)
 	if err != nil {
-		err2 := fmt.Errorf("ProcessYAMLConfigFile: Merge: Deep-merge the stack manifest and all the imports: Error: %v", err)
-		return nil, nil, nil, nil, nil, nil, nil, err2
+		// The error already contains context information from MergeWithContext
+		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	return stackConfigsDeepMerged,

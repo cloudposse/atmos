@@ -20,11 +20,22 @@ func TestPackerValidateCmd(t *testing.T) {
 	workDir := "../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
-	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
-	log.SetLevel(log.InfoLevel)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 
+	// Set logger level to match environment variable and capture original settings
+	originalLevel := log.GetLevel()
+	defer func() {
+		log.SetLevel(originalLevel)
+		log.SetOutput(os.Stderr)
+	}()
+	log.SetLevel(log.WarnLevel) // Match ATMOS_LOGS_LEVEL=Warning
+
+	// Capture stdout and logger output
 	oldStd := os.Stdout
 	r, w, _ := os.Pipe()
+	defer func() {
+		os.Stdout = oldStd
+	}()
 	os.Stdout = w
 	log.SetOutput(w)
 
@@ -32,7 +43,7 @@ func TestPackerValidateCmd(t *testing.T) {
 	err := Execute()
 	assert.NoError(t, err, "'TestPackerValidateCmd' should execute without error")
 
-	// Restore std
+	// Close write end and restore stdout before reading
 	err = w.Close()
 	assert.NoError(t, err)
 	os.Stdout = oldStd
