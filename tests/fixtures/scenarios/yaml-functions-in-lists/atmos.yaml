@@ -1,13 +1,13 @@
-base_path: "."
+base_path: "../.."
 
 components:
   terraform:
     base_path: "components/terraform"
 
 stacks:
-  base_path: "stacks"
+  base_path: "scenarios/yaml-functions-in-lists/stacks"
   included_paths:
-    - "deploy/**/*"
+    - "**/*"
   excluded_paths:
     - "workflows/**/*"
   name_pattern: "{stage}"
