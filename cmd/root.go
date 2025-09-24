@@ -95,10 +95,10 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	case "Off":
 		log.SetLevel(math.MaxInt32)
 	default:
-		log.SetLevel(log.InfoLevel)
+		log.SetLevel(log.WarnLevel)
 	}
 
-	if atmosConfig.Settings.Terminal.NoColor {
+	if !atmosConfig.Settings.Terminal.IsColorEnabled() {
 		stylesDefault := log.DefaultStyles()
 		// Clear colors for levels
 		styles := &log.Styles{}
@@ -209,6 +209,9 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
+	// Set NoOptDefVal so --pager without value means "true"
+	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
@@ -266,7 +269,25 @@ func initCobraConfig() {
 			if err := oldUsageFunc(command); err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
-			pager := pager.NewWithAtmosConfig(atmosConfig.Settings.Terminal.IsPagerEnabled())
+
+			// Check if pager should be enabled based on flag, env var, or config
+			pagerEnabled := atmosConfig.Settings.Terminal.IsPagerEnabled()
+
+			// Check if --pager flag was explicitly set
+			if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
+				// Handle --pager flag values using switch for better readability
+				switch pagerFlag {
+				case "true", "on", "yes", "1":
+					pagerEnabled = true
+				case "false", "off", "no", "0":
+					pagerEnabled = false
+				default:
+					// Assume it's a pager command like "less" or "more"
+					pagerEnabled = true
+				}
+			}
+
+			pager := pager.NewWithAtmosConfig(pagerEnabled)
 			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
 				log.Error("Failed to run pager", "error", err)
 				utils.OsExit(1)
