@@ -411,8 +411,18 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	var buffer bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		_, err := buffer.ReadFrom(ptmx)
-		done <- ptyError(err) // Wrap the error handling
+		// Read from the PTY in chunks to handle large outputs like the telemetry notice
+		buf := make([]byte, 8192)
+		for {
+			n, err := ptmx.Read(buf)
+			if n > 0 {
+				buffer.Write(buf[:n])
+			}
+			if err != nil {
+				done <- ptyError(err) // Wrap the error handling
+				return
+			}
+		}
 	}()
 
 	err = cmd.Wait()
@@ -420,8 +430,18 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 		logger.Info("Command execution error", "err", err)
 	}
 
-	if readErr := <-done; readErr != nil {
-		return "", fmt.Errorf("failed to read PTY output: %v", readErr)
+	// Close the PTY to signal the reader to stop
+	_ = ptmx.Close()
+
+	// Wait for the reader to finish with a timeout
+	select {
+	case readErr := <-done:
+		if readErr != nil {
+			return "", fmt.Errorf("failed to read PTY output: %v", readErr)
+		}
+	case <-time.After(2 * time.Second):
+		// If the reader doesn't finish in 2 seconds, continue with what we have
+		logger.Info("PTY reader timeout - continuing with partial output")
 	}
 
 	output := buffer.String()

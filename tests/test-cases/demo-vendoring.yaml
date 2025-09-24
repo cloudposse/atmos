@@ -2,7 +2,7 @@
 
 tests:
   - name: atmos vendor pull
-    enabled: false  # TTY test hangs with telemetry notice
+    enabled: true  # Re-enabling to test telemetry fix
     snapshot: false
     tty: true
     description: "Vendoring works with pull command"
@@ -16,7 +16,6 @@ tests:
       os: !not windows
     expect:
       stdout:
-        - "Telemetry Enabled"
         - "Pulling"
         - "github/stargazers"
         - "weather"

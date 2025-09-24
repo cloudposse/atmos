@@ -35,10 +35,27 @@ func GetCacheFilePath() (string, error) {
 
 func withCacheFileLock(cacheFile string, fn func() error) error {
 	lock := flock.New(cacheFile)
-	err := lock.Lock()
-	if err != nil {
-		return errors.Wrap(err, "error acquiring file lock")
+	// Try to acquire lock with retries to avoid blocking indefinitely
+	const maxRetries = 50 // 5 seconds total with 100ms between retries
+	var locked bool
+	var err error
+
+	for i := 0; i < maxRetries; i++ {
+		locked, err = lock.TryLock()
+		if err != nil {
+			return errors.Wrap(err, "error trying to acquire file lock")
+		}
+		if locked {
+			break
+		}
+		// Wait a bit before retrying
+		time.Sleep(100 * time.Millisecond)
 	}
+
+	if !locked {
+		return errors.New("timeout acquiring file lock")
+	}
+
 	defer lock.Unlock()
 	return fn()
 }
@@ -56,10 +73,16 @@ func LoadCache() (CacheConfig, error) {
 	}
 
 	// Use file locking to prevent reading while another process is writing
+	// Use TryRLock to avoid blocking indefinitely which can cause deadlocks in PTY tests
 	lock := flock.New(cacheFile)
-	err = lock.RLock() // Use read lock to allow concurrent reads
+	locked, err := lock.TryRLock()
 	if err != nil {
-		return cfg, errors.Wrap(err, "error acquiring read lock")
+		return cfg, errors.Wrap(err, "error trying to acquire read lock")
+	}
+	if !locked {
+		// If we can't get the lock immediately, return empty config
+		// This prevents deadlocks during concurrent access
+		return cfg, nil
 	}
 	defer func() {
 		_ = lock.Unlock()
@@ -84,6 +107,46 @@ func SaveCache(cfg CacheConfig) error {
 
 	// Use file locking to prevent concurrent writes
 	return withCacheFileLock(cacheFile, func() error {
+		v := viper.New()
+		v.Set("last_checked", cfg.LastChecked)
+		v.Set("installation_id", cfg.InstallationId)
+		v.Set("telemetry_disclosure_shown", cfg.TelemetryDisclosureShown)
+		if err := v.WriteConfigAs(cacheFile); err != nil {
+			return errors.Wrap(err, "failed to write cache file")
+		}
+		return nil
+	})
+}
+
+// UpdateCache atomically updates the cache file by acquiring a lock,
+// loading the current configuration, applying the update function,
+// and saving the result. This prevents race conditions when multiple
+// processes try to update different fields simultaneously.
+func UpdateCache(update func(*CacheConfig)) error {
+	cacheFile, err := GetCacheFilePath()
+	if err != nil {
+		return err
+	}
+
+	// Use file locking to prevent concurrent updates
+	return withCacheFileLock(cacheFile, func() error {
+		// Load current configuration
+		var cfg CacheConfig
+		if _, err := os.Stat(cacheFile); err == nil {
+			v := viper.New()
+			v.SetConfigFile(cacheFile)
+			if err := v.ReadInConfig(); err != nil {
+				return errors.Wrap(err, "failed to read cache file")
+			}
+			if err := v.Unmarshal(&cfg); err != nil {
+				return errors.Wrap(err, "failed to unmarshal cache file")
+			}
+		}
+
+		// Apply the update
+		update(&cfg)
+
+		// Save the updated configuration
 		v := viper.New()
 		v.Set("last_checked", cfg.LastChecked)
 		v.Set("installation_id", cfg.InstallationId)

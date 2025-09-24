@@ -11,15 +11,15 @@ import (
 )
 
 func TestGetCacheFilePathWithXDGCacheHome(t *testing.T) {
-	// Save original XDG_CACHE_HOME
+	// Save original XDG_CACHE_HOME.
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 
-	// Test with XDG_CACHE_HOME set
+	// Test with XDG_CACHE_HOME set.
 	testDir := t.TempDir()
 	os.Setenv("XDG_CACHE_HOME", testDir)
 
-	// Reload XDG to pick up the environment change
+	// Reload XDG to pick up the environment change.
 	xdg.Reload()
 
 	path, err := GetCacheFilePath()
@@ -29,23 +29,23 @@ func TestGetCacheFilePathWithXDGCacheHome(t *testing.T) {
 }
 
 func TestGetCacheFilePathWithoutXDGCacheHome(t *testing.T) {
-	// Save original XDG_CACHE_HOME
+	// Save original XDG_CACHE_HOME.
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 
-	// Clear XDG_CACHE_HOME to test default behavior
+	// Clear XDG_CACHE_HOME to test default behavior.
 	os.Unsetenv("XDG_CACHE_HOME")
 
-	// Reload XDG to pick up the environment change
+	// Reload XDG to pick up the environment change.
 	xdg.Reload()
 
 	path, err := GetCacheFilePath()
 	assert.NoError(t, err)
 
-	// The XDG library will use the appropriate default for the OS
-	// On Unix-like systems: $HOME/.cache/atmos/cache.yaml
-	// On Windows: %LOCALAPPDATA%/atmos/cache.yaml
-	// On macOS: $HOME/Library/Caches/atmos/cache.yaml
+	// The XDG library will use the appropriate default for the OS.
+	// On Unix-like systems: $HOME/.cache/atmos/cache.yaml.
+	// On Windows: %LOCALAPPDATA%/atmos/cache.yaml.
+	// On macOS: $HOME/Library/Caches/atmos/cache.yaml.
 	expectedPath := filepath.Join(xdg.CacheHome, "atmos", "cache.yaml")
 	assert.Equal(t, expectedPath, path)
 }
@@ -53,49 +53,49 @@ func TestGetCacheFilePathWithoutXDGCacheHome(t *testing.T) {
 func TestCacheSharedBetweenVersionAndTelemetry(t *testing.T) {
 	// This test verifies that the cache structure supports both
 	// version checking (LastChecked) and telemetry disclosure
-	// (TelemetryDisclosureShown) in the same cache file
+	// (TelemetryDisclosureShown) in the same cache file.
 
-	// Create a test cache directory
+	// Create a test cache directory.
 	testDir := t.TempDir()
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
 
-	// Reload XDG to pick up the environment change
+	// Reload XDG to pick up the environment change.
 	xdg.Reload()
 
-	// Create a cache with both fields set
+	// Create a cache with both fields set.
 	cache := CacheConfig{
 		LastChecked:              1234567890,
 		InstallationId:           "test-id",
 		TelemetryDisclosureShown: true,
 	}
 
-	// Save the cache
+	// Save the cache.
 	err := SaveCache(cache)
 	assert.NoError(t, err)
 
-	// Load it back
+	// Load it back.
 	loadedCache, err := LoadCache()
 	assert.NoError(t, err)
 
-	// Verify both fields are preserved
+	// Verify both fields are preserved.
 	assert.Equal(t, int64(1234567890), loadedCache.LastChecked)
 	assert.Equal(t, "test-id", loadedCache.InstallationId)
 	assert.True(t, loadedCache.TelemetryDisclosureShown)
 }
 
 func TestLoadCacheNonExistent(t *testing.T) {
-	// Test loading a cache when file doesn't exist
+	// Test loading a cache when file doesn't exist.
 	testDir := t.TempDir()
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
 
-	// Reload XDG to pick up the environment change
+	// Reload XDG to pick up the environment change.
 	xdg.Reload()
 
-	// Load non-existent cache should return empty config without error
+	// Load non-existent cache should return empty config without error.
 	cache, err := LoadCache()
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), cache.LastChecked)
@@ -104,15 +104,15 @@ func TestLoadCacheNonExistent(t *testing.T) {
 }
 
 func TestSaveCacheCreatesDirectory(t *testing.T) {
-	// Test that SaveCache creates the directory if it doesn't exist
+	// Test that SaveCache creates the directory if it doesn't exist.
 	testDir := t.TempDir()
-	// Use a subdirectory that doesn't exist yet
+	// Use a subdirectory that doesn't exist yet.
 	cacheDir := filepath.Join(testDir, "subdir")
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", cacheDir)
 
-	// Reload XDG to pick up the environment change
+	// Reload XDG to pick up the environment change.
 	xdg.Reload()
 
 	cache := CacheConfig{
@@ -121,30 +121,30 @@ func TestSaveCacheCreatesDirectory(t *testing.T) {
 		TelemetryDisclosureShown: true,
 	}
 
-	// Save should create the directory
+	// Save should create the directory.
 	err := SaveCache(cache)
 	assert.NoError(t, err)
 
-	// Verify directory was created
+	// Verify directory was created.
 	expectedDir := filepath.Join(cacheDir, "atmos")
 	assert.DirExists(t, expectedDir)
 
-	// Verify cache file was created
+	// Verify cache file was created.
 	expectedFile := filepath.Join(expectedDir, "cache.yaml")
 	assert.FileExists(t, expectedFile)
 }
 
 func TestConcurrentCacheAccess(t *testing.T) {
-	// Test concurrent reads and writes to the cache
+	// Test concurrent reads and writes to the cache.
 	testDir := t.TempDir()
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
 
-	// Reload XDG to pick up the environment change
+	// Reload XDG to pick up the environment change..
 	xdg.Reload()
 
-	// Create initial cache
+	// Create initial cache.
 	initialCache := CacheConfig{
 		LastChecked:              1000,
 		InstallationId:           "concurrent-test",
@@ -153,46 +153,38 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	err := SaveCache(initialCache)
 	assert.NoError(t, err)
 
-	// Run concurrent operations
+	// Run concurrent operations.
 	done := make(chan bool, 3)
-	errors := make(chan error, 3)
+	errsChannel := make(chan error, 3)
 
-	// Writer 1: Update LastChecked
+	// Writer 1: Update LastChecked.
 	go func() {
-		cache, err := LoadCache()
+		err := UpdateCache(func(cache *CacheConfig) {
+			cache.LastChecked = 2000
+		})
 		if err != nil {
-			errors <- err
-			done <- true
-			return
-		}
-		cache.LastChecked = 2000
-		if err := SaveCache(cache); err != nil {
-			errors <- err
+			errsChannel <- err
 		}
 		done <- true
 	}()
 
-	// Writer 2: Update TelemetryDisclosureShown
+	// Writer 2: Update TelemetryDisclosureShown.
 	go func() {
-		cache, err := LoadCache()
+		err := UpdateCache(func(cache *CacheConfig) {
+			cache.TelemetryDisclosureShown = true
+		})
 		if err != nil {
-			errors <- err
-			done <- true
-			return
-		}
-		cache.TelemetryDisclosureShown = true
-		if err := SaveCache(cache); err != nil {
-			errors <- err
+			errsChannel <- err
 		}
 		done <- true
 	}()
 
-	// Reader: Read multiple times
+	// Reader: Read multiple times.
 	go func() {
 		for i := 0; i < 5; i++ {
 			_, err := LoadCache()
 			if err != nil {
-				errors <- err
+				errsChannel <- err
 				done <- true
 				return
 			}
@@ -200,24 +192,24 @@ func TestConcurrentCacheAccess(t *testing.T) {
 		done <- true
 	}()
 
-	// Wait for all goroutines
+	// Wait for all goroutines.
 	for i := 0; i < 3; i++ {
 		<-done
 	}
 
-	// Check for errors
-	close(errors)
-	for err := range errors {
+	// Check for errors.
+	close(errsChannel)
+	for err := range errsChannel {
 		assert.NoError(t, err)
 	}
 
-	// Final cache should have both updates
+	// Final cache should have both updates.
 	finalCache, err := LoadCache()
 	assert.NoError(t, err)
 	assert.Equal(t, "concurrent-test", finalCache.InstallationId)
-	// We can't assert exact values for LastChecked and TelemetryDisclosureShown
-	// due to race conditions, but they should be set
-	assert.True(t, finalCache.LastChecked >= 1000)
+	// Both updates should be applied when using UpdateCache.
+	assert.Equal(t, int64(2000), finalCache.LastChecked)
+	assert.True(t, finalCache.TelemetryDisclosureShown)
 }
 
 func TestShouldCheckForUpdates(t *testing.T) {

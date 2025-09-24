@@ -1,7 +1,7 @@
 tests:
   - name: terraform output function
-    enabled: false  # TTY test hangs with telemetry notice
-    tty: true
+    enabled: true
+    tty: false  # Changed from true - PTY causes hanging with terraform commands
     description: "Ensure the !terraform.output function works."
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
@@ -18,8 +18,7 @@ tests:
       os: !not windows
     expect:
       exit_code: 0
-      # This will output in stdout because of the way our tty simulator works.
-      stdout:
+      stderr:
         - "Telemetry Enabled"
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"

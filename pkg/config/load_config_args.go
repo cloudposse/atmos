@@ -42,7 +42,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	// Check if any config files were found from command line arguments
 	if len(configPaths) == 0 {
 		log.Debug("no config files found from command line arguments")
-		return errUtils.ErrAtmosArgConfigNotFound
+		return fmt.Errorf("%w: no config files found from command line arguments (--config or --config-path)", errUtils.ErrAtmosArgConfigNotFound)
 	}
 
 	if err := v.Unmarshal(atmosConfig); err != nil {
@@ -118,7 +118,7 @@ func validatedIsDirs(dirPaths []string) error {
 		}
 		if !stat.IsDir() {
 			log.Debug("--config-path expected directory found file", "path", dirPath)
-			return errUtils.ErrAtmosDirConfigNotFound
+			return fmt.Errorf("%w: --config-path requires a directory but found a file at '%s'", errUtils.ErrAtmosDirConfigNotFound, dirPath)
 		}
 	}
 	return nil

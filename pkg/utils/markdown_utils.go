@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
+
+	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -15,9 +18,20 @@ import (
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
+// renderStderr is a separate renderer specifically for stderr output with proper width detection.
+var renderStderr *markdown.Renderer
+
 // printfMarkdownTo prints a message in Markdown format to the specified writer.
 func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
-	if render == nil {
+	// Choose the appropriate renderer based on the output writer
+	var renderer *markdown.Renderer
+	if w == os.Stderr && renderStderr != nil {
+		renderer = renderStderr
+	} else if render != nil {
+		renderer = render
+	}
+
+	if renderer == nil {
 		_, err := fmt.Fprintf(w, format, a...)
 		errUtils.CheckErrorAndPrint(err, "", "")
 		return
@@ -25,10 +39,26 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 	message := fmt.Sprintf(format, a...)
 	var md string
 	var renderErr error
-	md, renderErr = render.Render(message)
+	md, renderErr = renderer.Render(message)
 	if renderErr != nil {
 		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
 	}
+
+	// Check if output is to a terminal
+	isTerminal := false
+	if file, ok := w.(*os.File); ok {
+		isTerminal = term.IsTerminal(int(file.Fd()))
+	}
+
+	// Trim trailing spaces from each line when not outputting to a terminal
+	if !isTerminal {
+		lines := strings.Split(md, "\n")
+		for i, line := range lines {
+			lines[i] = strings.TrimRight(line, " \t")
+		}
+		md = strings.Join(lines, "\n")
+	}
+
 	_, err := fmt.Fprint(w, md+"\n")
 	errUtils.CheckErrorAndPrint(err, "", "")
 }
@@ -51,5 +81,10 @@ func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
+	}
+	// Initialize a separate renderer for stderr with proper width detection
+	renderStderr, err = markdown.NewTerminalMarkdownRendererForStderr(&atmosConfig)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize stderr markdown renderer: %w", err), "", "")
 	}
 }

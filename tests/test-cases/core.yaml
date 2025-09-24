@@ -2,7 +2,7 @@
 
 tests:
   - name: "test tty"
-    enabled: false  # TTY test hangs with telemetry notice
+    enabled: true
     snapshot: false
     tty: true
     description: "Ensure tty is enabled."
@@ -60,6 +60,8 @@ tests:
       stdout:
         - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
         - "but the directory does not exist."
+      stderr:
+        - "^$"
       exit_code: 1
 
   - name: atmos docs
@@ -75,3 +77,5 @@ tests:
       exit_code: 0
       stdout:
         - "Opening default browser to 'https://atmos.tools'."
+      stderr:
+        - "^$"

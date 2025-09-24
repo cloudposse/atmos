@@ -239,24 +239,65 @@ func WithWidth(width uint) Option {
 }
 
 func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
-	maxWidth := atmosConfig.Settings.Docs.MaxWidth
+	maxWidth := atmosConfig.Settings.Terminal.MaxWidth
 	// Create a terminal writer to get the optimal width
 	termWriter := term.NewResponsiveWriter(os.Stdout)
 	var wr *term.TerminalWriter
 	var ok bool
-	// Use a more reasonable default width to avoid excessive padding
+	// Use a more reasonable default width to avoid excessive padding.
 	var screenWidth uint = 120
 	if wr, ok = termWriter.(*term.TerminalWriter); ok {
 		screenWidth = wr.GetWidth()
 	}
 	if maxWidth > 0 && ok {
-		screenWidth = uint(min(maxWidth, int(wr.GetWidth())))
+		termWidth := wr.GetWidth()
+		// Safe conversion: maxWidth is already checked to be > 0
+		maxWidthUint := uint(maxWidth) //nolint:gosec // maxWidth > 0 check ensures no overflow
+		if maxWidthUint < termWidth {
+			screenWidth = maxWidthUint
+		} else {
+			screenWidth = termWidth
+		}
 	} else if maxWidth > 0 {
 		// Fallback: if type assertion fails, use maxWidth as the screen width.
+		// Safe conversion: maxWidth is already checked to be > 0
 		screenWidth = uint(maxWidth)
 	}
 	return NewRenderer(
 		atmosConfig,
+		WithWidth(screenWidth),
+	)
+}
+
+// NewTerminalMarkdownRendererForStderr creates a new Markdown renderer specifically for stderr output.
+// It uses stderr to detect terminal width instead of stdout, ensuring proper formatting for TUI messages.
+func NewTerminalMarkdownRendererForStderr(atmosConfig *schema.AtmosConfiguration) (*Renderer, error) {
+	maxWidth := atmosConfig.Settings.Terminal.MaxWidth
+	// Create a terminal writer to get the optimal width from stderr
+	termWriter := term.NewResponsiveWriter(os.Stderr)
+	var wr *term.TerminalWriter
+	var ok bool
+	// Use a more reasonable default width to avoid excessive padding.
+	var screenWidth uint = 120
+	if wr, ok = termWriter.(*term.TerminalWriter); ok {
+		screenWidth = wr.GetWidth()
+	}
+	if maxWidth > 0 && ok {
+		termWidth := wr.GetWidth()
+		// Safe conversion: maxWidth is already checked to be > 0
+		maxWidthUint := uint(maxWidth) //nolint:gosec // maxWidth > 0 check ensures no overflow
+		if maxWidthUint < termWidth {
+			screenWidth = maxWidthUint
+		} else {
+			screenWidth = termWidth
+		}
+	} else if maxWidth > 0 {
+		// Fallback: if type assertion fails, use maxWidth as the screen width.
+		// Safe conversion: maxWidth is already checked to be > 0
+		screenWidth = uint(maxWidth)
+	}
+	return NewRenderer(
+		*atmosConfig,
 		WithWidth(screenWidth),
 	)
 }

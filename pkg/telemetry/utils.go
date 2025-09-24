@@ -157,9 +157,11 @@ func disclosureMessage() string {
 		return ""
 	}
 
-	// Mark disclosure as shown for future runs
-	cacheCfg.TelemetryDisclosureShown = true
-	if err := cfg.SaveCache(cacheCfg); err != nil {
+	// Mark disclosure as shown for future runs using atomic update
+	// This prevents deadlocks when multiple processes access the cache concurrently
+	if err := cfg.UpdateCache(func(cache *cfg.CacheConfig) {
+		cache.TelemetryDisclosureShown = true
+	}); err != nil {
 		log.Warn("Could not save telemetry disclosure state to cache", "error", err)
 	}
 
@@ -195,8 +197,10 @@ func getOrInitializeCacheValue[T comparable](getter func(cfg *cfg.CacheConfig) T
 	}
 
 	if canCreateCache {
-		initializer(&cacheCfg, defaultValue)
-		if err := cfg.SaveCache(cacheCfg); err != nil {
+		// Use UpdateCache for atomic updates to prevent deadlocks
+		if err := cfg.UpdateCache(func(cache *cfg.CacheConfig) {
+			initializer(cache, defaultValue)
+		}); err != nil {
 			log.Warn("Could not save cache", "error", err)
 		}
 	}
