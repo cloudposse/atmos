@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // validateComponentCmd validates atmos components
@@ -25,7 +28,9 @@ var validateComponentCmd = &cobra.Command{
 			return err
 		}
 
-		u.PrintfMessageToTUI("✓ Validated successfully: component=%s stack=%s\n", component, stack)
+		// Print success message with color to stderr
+		successMsg := fmt.Sprintf("✓ Validated successfully: component=%s stack=%s\n", component, stack)
+		theme.Colors.Success.Fprint(os.Stderr, successMsg)
 		return nil
 	},
 }

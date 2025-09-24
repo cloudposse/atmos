@@ -2,17 +2,18 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 func TestValidateComponentCmd(t *testing.T) {
-	// Test the success message output format
-	t.Run("successful validation message format", func(t *testing.T) {
+	// Test the success message output format with color
+	t.Run("successful validation message format with color", func(t *testing.T) {
 		// Capture stderr output
 		oldStderr := os.Stderr
 		r, w, _ := os.Pipe()
@@ -24,7 +25,8 @@ func TestValidateComponentCmd(t *testing.T) {
 		// Call the output function directly (simulating what RunE does on success)
 		component := "test-component"
 		stack := "test-stack"
-		u.PrintfMessageToTUI("✓ Validated successfully: component=%s stack=%s\n", component, stack)
+		successMsg := fmt.Sprintf("✓ Validated successfully: component=%s stack=%s\n", component, stack)
+		theme.Colors.Success.Fprint(os.Stderr, successMsg)
 
 		// Close writer and read output
 		w.Close()
@@ -32,7 +34,7 @@ func TestValidateComponentCmd(t *testing.T) {
 		buf.ReadFrom(r)
 		output := buf.String()
 
-		// Verify the output format
+		// Verify the output contains the success message
 		assert.Contains(t, output, "✓ Validated successfully: component=test-component stack=test-stack")
 	})
 }

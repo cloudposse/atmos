@@ -2,16 +2,17 @@ package exec
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 func TestExecuteAtmosCmd_ValidateComponent(t *testing.T) {
-	t.Run("validate component success message format", func(t *testing.T) {
+	t.Run("validate component success message format with color", func(t *testing.T) {
 		// Capture stderr output
 		oldStderr := os.Stderr
 		r, w, _ := os.Pipe()
@@ -23,7 +24,8 @@ func TestExecuteAtmosCmd_ValidateComponent(t *testing.T) {
 		// Test the output message format (simulating what ExecuteAtmosCmd does on success)
 		selectedComponent := "test-component"
 		selectedStack := "test-stack"
-		u.PrintfMessageToTUI("✓ Validated successfully: component=%s stack=%s\n", selectedComponent, selectedStack)
+		successMsg := fmt.Sprintf("✓ Validated successfully: component=%s stack=%s\n", selectedComponent, selectedStack)
+		theme.Colors.Success.Fprint(os.Stderr, successMsg)
 
 		// Close writer and read output
 		w.Close()
@@ -31,7 +33,7 @@ func TestExecuteAtmosCmd_ValidateComponent(t *testing.T) {
 		buf.ReadFrom(r)
 		output := buf.String()
 
-		// Verify the output format
+		// Verify the output contains the success message
 		assert.Contains(t, output, "✓ Validated successfully: component=test-component stack=test-stack")
 	})
 }
