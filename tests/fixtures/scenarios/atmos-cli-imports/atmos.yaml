@@ -4,6 +4,6 @@
 # The configurations are loaded in the order they are defined in the import section.
 base_path: "./"
 import:
-  - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"  # Load from a remote URL
+  - "http://localhost:8080/atmos.yaml"  # Load from mock server
   - "configs.d/**/*"                                                                 # Recursively load configurations from a directory
   - "./logs.yaml"                                                                    # Load a specific file

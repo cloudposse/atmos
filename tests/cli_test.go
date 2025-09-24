@@ -511,6 +511,12 @@ func TestMain(m *testing.M) {
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
+	// Start mock HTTP server for remote imports
+	mockServerURL := StartMockHTTPServer()
+	defer StopMockHTTPServer()
+	os.Setenv("ATMOS_TEST_MOCK_SERVER_URL", mockServerURL)
+	logger.Info("Mock HTTP server started", "url", mockServerURL)
+
 	flag.Parse()        // Parse command-line flags
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
 	errUtils.Exit(exitCode)

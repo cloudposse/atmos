@@ -59,7 +59,7 @@ spec:
         - test
         - storage
     - component: "vpc-mixin-1"
-      source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf"
+      source: "http://localhost:8080/vendor/terraform-null-label/context.tf"
       targets:
         - "components/terraform/infra/vpc3"
       # Tags can be used to vendor component that have the specific tags

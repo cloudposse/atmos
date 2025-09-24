@@ -1,0 +1,11 @@
+# Mock README.yaml for documentation generation tests
+name: atmos
+license: APACHE2
+github_repo: cloudposse/atmos
+
+description: |-
+  Atmos is a tool for managing infrastructure as code
+
+categories:
+  - terraform
+  - infrastructure

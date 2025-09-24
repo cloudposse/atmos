@@ -1,0 +1,12 @@
+components:
+  terraform:
+    vpc-flow-logs-bucket:
+      metadata:
+        # Point to the Terraform component
+        component: vpc-flow-logs-bucket
+      vars:
+        enabled: true
+        name: "vpc-flow-logs"
+        traffic_type: "ALL"
+        force_destroy: true
+        lifecycle_rule_enabled: false
