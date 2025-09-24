@@ -429,7 +429,7 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
-// Normalizes vendor source URIs to handle all patterns consistently.
+// Helper function to normalize vendor source URIs to handle all patterns consistently.
 // In go-getter syntax, the double-slash (//) is a delimiter between the repository URL
 // and the subdirectory path within that repository. The dot (.) indicates the current
 // directory (root of the repository).
