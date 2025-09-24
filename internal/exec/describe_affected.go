@@ -356,7 +356,7 @@ func viewWithScroll(v *viewWithScrollProps) error {
 		case nil:
 			return nil
 		default:
-			log.Debug("Failed to use pager")
+			log.Debug("Failed to use pager", "error", err)
 		}
 	}
 

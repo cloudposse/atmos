@@ -93,7 +93,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		case nil:
 			return nil
 		default:
-			log.Debug("Failed to use pager")
+			log.Debug("Failed to use pager", "error", err)
 		}
 	}
 
