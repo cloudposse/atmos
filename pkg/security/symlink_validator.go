@@ -28,6 +28,7 @@ const (
 	// Log field constants.
 	logFieldSrc      = "src"
 	logFieldBoundary = "boundary"
+	logFieldPolicy   = "policy"
 )
 
 // CreateSymlinkHandler creates an OnSymlink callback based on the security policy.
@@ -36,11 +37,11 @@ func CreateSymlinkHandler(baseDir string, policy SymlinkPolicy) func(string) cp.
 	return func(src string) cp.SymlinkAction {
 		switch policy {
 		case PolicyRejectAll:
-			log.Debug("Symlink rejected by policy", logFieldSrc, src, "policy", "reject_all")
+			log.Debug("Symlink rejected by policy", logFieldSrc, src, logFieldPolicy, "reject_all")
 			return cp.Skip
 
 		case PolicyAllowAll:
-			log.Debug("Symlink allowed without validation", logFieldSrc, src, "policy", "allow_all")
+			log.Debug("Symlink allowed without validation", logFieldSrc, src, logFieldPolicy, "allow_all")
 			return cp.Deep
 
 		case PolicyAllowSafe:
@@ -153,7 +154,7 @@ func handleSymlink(path, root string, policy SymlinkPolicy) error {
 	default:
 		// For unknown policies, default to safe behavior.
 		if !IsSymlinkSafe(path, root) {
-			log.Warn("Removing unsafe symlink (unknown policy, defaulting to safe)", "path", path, "policy", policy)
+			log.Warn("Removing unsafe symlink (unknown policy, defaulting to safe)", "path", path, logFieldPolicy, policy)
 			if err := os.Remove(path); err != nil {
 				return fmt.Errorf("removing unsafe symlink %s (unknown policy %s): %w", path, policy, err)
 			}
@@ -174,7 +175,7 @@ func ParsePolicy(policy string) SymlinkPolicy {
 	case string(PolicyAllowSafe), "allow-safe", "":
 		return PolicyAllowSafe
 	default:
-		log.Warn("Unknown symlink policy, defaulting to allow_safe", "policy", policy)
+		log.Warn("Unknown symlink policy, defaulting to allow_safe", logFieldPolicy, policy)
 		return PolicyAllowSafe
 	}
 }
