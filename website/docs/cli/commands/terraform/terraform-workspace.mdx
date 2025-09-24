@@ -31,6 +31,29 @@ If the workspace does not exist, the command creates it by executing the `terraf
 Run `atmos terraform workspace --help` to see all the available options
 :::
 
+## Configuration
+
+Configure workspace behavior in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Run 'terraform init -reconfigure' when selecting workspace
+    init_run_reconfigure: true
+
+    # Workspace key prefix template
+    workspace_key_prefix: "{namespace}-{tenant}-{environment}-{stage}"
+
+    # Enable workspace management
+    workspace_enabled: true
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
+export ATMOS_COMPONENTS_TERRAFORM_WORKSPACE_ENABLED=true
+```
+
 ## Examples
 
 ```shell

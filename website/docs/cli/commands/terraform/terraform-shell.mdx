@@ -47,6 +47,38 @@ The command does the following:
 Run `atmos terraform shell --help` to see all the available options
 :::
 
+## Configuration
+
+Configure shell behavior in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Auto-generate backend configuration
+    auto_generate_backend_file: true
+
+    # Run 'terraform init' when entering shell
+    init_run_reconfigure: true
+
+    # Process Go templates in stack manifests
+    process_templates: true
+
+    # Process YAML functions in stack manifests
+    process_functions: true
+
+    # Workspace configuration
+    workspace_enabled: true
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
+export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
+export ATMOS_COMPONENTS_TERRAFORM_PROCESS_TEMPLATES=true
+export ATMOS_COMPONENTS_TERRAFORM_PROCESS_FUNCTIONS=true
+export ATMOS_COMPONENTS_TERRAFORM_WORKSPACE_ENABLED=true
+```
+
 ## Examples
 
 ```shell
