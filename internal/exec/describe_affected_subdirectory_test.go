@@ -214,6 +214,40 @@ components:
 		// Note: In a real integration test, we'd need to set up proper mocking or use the actual function
 		// This test serves as a regression test template to ensure the fix is maintained
 		// The key fix was in executeDescribeAffected to properly calculate paths when running from subdirectories
+
+		// Create a minimal atmos config
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: ".",
+			Stacks: schema.Stacks{
+				BasePath: "stacks",
+			},
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+			Logs: schema.Logs{
+				Level: "error",
+			},
+		}
+
+		// Execute describe affected - should detect changes
+		affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckout(
+			atmosConfig,
+			"",    // Use default ref (origin/HEAD)
+			"",    // No specific SHA
+			false, // includeSpaceliftAdminStacks
+			false, // includeSettings
+			"",    // stack filter
+			false, // processTemplates
+			false, // processYamlFunctions
+			nil,   // skip
+			false, // excludeLocked
+		)
+
+		// Should succeed and detect the modified stack
+		assert.NoError(t, err)
+		assert.NotEmpty(t, affected, "Should have affected components when changes exist")
 	})
 }
 

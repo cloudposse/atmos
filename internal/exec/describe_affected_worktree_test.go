@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"testing"
 
@@ -17,9 +18,9 @@ import (
 )
 
 func TestDescribeAffectedWithGitWorktree(t *testing.T) {
-	// Skip if we don't have git
-	if _, err := os.Stat(".git"); os.IsNotExist(err) {
-		t.Skipf("Skipping test: not in a git repository")
+	// Skip if git command is not available
+	if _, err := osexec.LookPath("git"); err != nil {
+		t.Skipf("Skipping test: git command not available")
 	}
 
 	// Create a temporary directory for our test repository
@@ -93,10 +94,15 @@ func TestDescribeAffectedWithGitWorktree(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Create a worktree
+	// Create a worktree using git command (go-git doesn't have native worktree creation)
 	worktreePath := filepath.Join(tempDir, "test-worktree")
-	_, err = worktree.Add(worktreePath)
-	require.NoError(t, err)
+	cmd := osexec.Command("git", "worktree", "add", worktreePath, branchRef.String())
+	cmd.Dir = mainRepoPath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Failed to create worktree: %s", output)
+		require.NoError(t, err)
+	}
 
 	// Open the worktree as a repository
 	worktreeRepo, err := git.PlainOpenWithOptions(worktreePath, &git.PlainOpenOptions{
