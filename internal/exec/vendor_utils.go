@@ -275,6 +275,10 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 			return nil, err
 		}
 
+		// Normalize the URI to handle triple slash pattern (///) which means "root of the repository"
+		// go-getter v1.7.9 no longer supports the triple slash pattern, so we need to convert it
+		uri = normalizeVendorURI(uri)
+
 		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
 		if err != nil {
 			return nil, err
@@ -422,6 +426,39 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	// If `--component` is specified, and it's not equal to this component, skip this component
 	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
+}
+
+// normalizeVendorURI normalizes vendor source URIs to handle legacy patterns.
+// Specifically, it converts the triple slash pattern (///) which was used to indicate
+// "root of the repository" to a format compatible with go-getter v1.7.9+.
+//
+// The triple slash pattern (e.g., "github.com/repo.git///?ref=v1.0.0") was a documented
+// way to vendor from the root of a Git repository. After go-getter v1.7.9, this pattern
+// no longer works as expected due to changes in subdirectory path handling.
+//
+// This function converts:
+//   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git?ref=v1.0.0"
+//   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
+func normalizeVendorURI(uri string) string {
+	// Check if the URI contains the triple slash pattern
+	if strings.Contains(uri, "///") {
+		// Replace "///" with "//" first to handle any path after the triple slash
+		normalized := strings.Replace(uri, "///", "//", 1)
+
+		// If the result has "//" followed immediately by "?" (empty subdir), remove the "//"
+		if strings.Contains(normalized, "//?") {
+			normalized = strings.Replace(normalized, "//?", "?", 1)
+			log.Debug("Normalized vendor URI: removed empty subdirectory indicator (///)",
+				"original", uri, "normalized", normalized)
+		} else {
+			log.Debug("Normalized vendor URI: converted triple slash to double slash",
+				"original", uri, "normalized", normalized)
+		}
+
+		return normalized
+	}
+
+	return uri
 }
 
 func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
