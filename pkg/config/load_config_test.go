@@ -28,7 +28,7 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 	content := []string{
 		"logs:\n",
 		"  file: /dev/stderr\n",
-		"  level: Info",
+		"  level: Warning",
 	}
 
 	for _, line := range content {
@@ -80,7 +80,7 @@ func TestLoadConfigFromCLIArgs(t *testing.T) {
 	validConfig := `
 logs:
   file: /dev/stderr
-  level: Info
+  level: Warning
 `
 	validPath := filepath.Join(validDir, "atmos.yaml")
 	if err := os.WriteFile(validPath, []byte(validConfig), 0o644); err != nil {
@@ -99,7 +99,7 @@ logs:
 			files:         []string{validPath},
 			dirs:          []string{validDir},
 			expectError:   false,
-			expectedLevel: "Info",
+			expectedLevel: "Warning",
 		},
 		{
 			name:        "invalid config file path",

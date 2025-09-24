@@ -37,13 +37,37 @@ schemas:
 	assert.Equal(t, []string{"hello", "world"}, schemas.Matches)
 }
 
+func TestIsColorEnabled(t *testing.T) {
+	tests := []struct {
+		name    string
+		color   bool
+		noColor bool
+		expect  bool
+	}{
+		{"Color true, NoColor false should enable color", true, false, true},
+		{"Color false, NoColor false should disable color", false, false, false},
+		{"Color true, NoColor true should disable color (NoColor takes precedence)", true, true, false},
+		{"Color false, NoColor true should disable color", false, true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			term := &Terminal{Color: tt.color, NoColor: tt.noColor}
+			result := term.IsColorEnabled()
+			if result != tt.expect {
+				t.Errorf("IsColorEnabled() for Color=%v, NoColor=%v: expected %v, got %v", tt.color, tt.noColor, tt.expect, result)
+			}
+		})
+	}
+}
+
 func TestIsPagerEnabled(t *testing.T) {
 	tests := []struct {
 		name   string
 		pager  string
 		expect bool
 	}{
-		{"Empty string should enable pager", "", true},
+		{"Empty string should disable pager (new default)", "", false},
 		{"'on' should enable pager", "on", true},
 		{"'less' should enable pager", "less", true},
 		{"'true' should enable pager", "true", true},
@@ -55,8 +79,10 @@ func TestIsPagerEnabled(t *testing.T) {
 		{"'no' should disable pager", "no", false},
 		{"'n' should disable pager", "n", false},
 		{"'0' should disable pager", "0", false},
-		{"Random string should disable pager", "random", false},
-		{"Capitalized 'ON' should disable pager (case sensitive)", "ON", false},
+		{"'more' should enable pager (pager command)", "more", true},
+		{"'cat' should enable pager (any command)", "cat", true},
+		{"Capitalized 'ON' should enable pager", "ON", true},
+		{"Capitalized 'TRUE' should enable pager", "TRUE", true},
 	}
 
 	for _, tt := range tests {

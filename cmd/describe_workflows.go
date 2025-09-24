@@ -52,12 +52,7 @@ func getRunnableDescribeWorkflowsCmd(
 			return err
 		}
 
-		pager, err := cmd.Flags().GetString("pager")
-		if err != nil {
-			return err
-		}
-
-		atmosConfig.Settings.Terminal.Pager = pager
+		// Global --pager flag is now handled in cfg.InitCliConfig
 		err = describeWorkflowsExec.Execute(&atmosConfig, describeWorkflowArgs)
 		return err
 	}
