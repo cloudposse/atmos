@@ -33,7 +33,7 @@ type describeConfigExec struct {
 func NewDescribeConfig(atmosConfig *schema.AtmosConfiguration) *describeConfigExec {
 	return &describeConfigExec{
 		atmosConfig:           atmosConfig,
-		pageCreator:           pager.New(),
+		pageCreator:           pager.NewFromAtmosConfig(atmosConfig),
 		printOrWriteToFile:    printOrWriteToFile,
 		IsTTYSupportForStdout: term.IsTTYSupportForStdout,
 	}

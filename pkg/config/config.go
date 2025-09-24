@@ -93,6 +93,7 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	// Handle --pager global flag
 	if v, ok := flagKeyValue["pager"]; ok {
 		atmosConfig.Settings.Terminal.Pager = v
+		atmosConfig.Settings.Terminal.PagerFlagExplicit = true
 	}
 
 	// Handle NO_PAGER environment variable (standard CLI convention)

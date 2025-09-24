@@ -214,6 +214,9 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 
 // Execute executes `describe affected` command.
 func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
+	// Update pageCreator with the loaded atmosConfig settings
+	d.pageCreator = pager.NewFromAtmosConfig(a.CLIConfig)
+
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
