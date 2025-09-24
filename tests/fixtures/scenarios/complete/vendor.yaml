@@ -1,5 +1,4 @@
 # atmos vendor pull
-# atmos vendor pull --component vpc-mixin-1
 # atmos vendor pull -c vpc-mixin-2
 # atmos vendor pull -c vpc-mixin-3
 # atmos vendor pull -c vpc-mixin-4
@@ -58,15 +57,8 @@ spec:
       tags:
         - test
         - storage
-    - component: "vpc-mixin-1"
-      source: "http://localhost:8080/vendor/terraform-null-label/context.tf"
-      targets:
-        - "components/terraform/infra/vpc3"
-      # Tags can be used to vendor component that have the specific tags
-      # `atmos vendor pull --tags test`
-      # Refer to https://atmos.tools/cli/commands/vendor/pull
-      tags:
-        - test
+    # vpc-mixin-1 removed: depends on localhost:8080 which isn't available in CI
+    # Tests requiring a mock server should be run in smoke tests instead
     - component: "vpc-mixin-2"
       # Copy a local file into a local folder (keeping the same file name)
       # This `source` is relative to the current folder
