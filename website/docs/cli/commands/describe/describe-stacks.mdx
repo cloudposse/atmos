@@ -74,7 +74,7 @@ Use the `--query` flag (shorthand `-q`) to filter the output.
   <dd>Filter by specific component types: `terraform` or `helmfile`.</dd>
 
   <dt>`--sections` <em>(optional)</em></dt>
-  <dd>Output only the specified component sections.<br/>Available component sections: `backend`, `backend_type`, `deps`, `env`,<br/>`inheritance`, `metadata`, `remote_state_backend`,<br/>`remote_state_backend_type`, `settings`, `vars`.</dd>
+  <dd>Output only the specified component sections.<br/>Available component sections: `backend`, `backend_type`, `component`, `deps`,<br/>`env`, `inheritance`, `metadata`, `remote_state_backend`,<br/>`remote_state_backend_type`, `settings`, `vars`.</dd>
 
   <dt>`--process-templates` <em>(optional)</em></dt>
   <dd>Enable/disable processing of all `Go` templates<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the stack configurations<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe stacks --process-templates=false`.</dd>
