@@ -57,8 +57,17 @@ spec:
       tags:
         - test
         - storage
-    # vpc-mixin-1 removed: depends on localhost:8080 which isn't available in CI
-    # Tests requiring a mock server should be run in smoke tests instead
+    - component: "vpc-mixin-1"
+      # Using CloudPosse's terraform-null-label repository instead of localhost
+      # This component validates vendoring of a single file from a GitHub repository
+      source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/variables.tf"
+      targets:
+        - "components/terraform/infra/vpc2/variables_from_github.tf"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
     - component: "vpc-mixin-2"
       # Copy a local file into a local folder (keeping the same file name)
       # This `source` is relative to the current folder
