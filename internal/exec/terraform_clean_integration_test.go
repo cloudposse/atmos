@@ -42,7 +42,7 @@ func TestCollectComponentsDirectoryObjects_NoDuplicateFiles(t *testing.T) {
 
 	// Simulate multiple stacks referencing the same components.
 	// This would happen when getAllStacksComponentsPaths returns duplicate paths.
-	componentPaths := []string{"component1", "component1", "component2", "component1"} // component1 appears 3 times
+	componentPaths := []string{"component1", "component1", "component2", "component1"} // component1 appears 3 times.
 
 	// Before the fix, this would collect duplicate files.
 	folders, err := CollectComponentsDirectoryObjects(tempDir, componentPaths, patterns)

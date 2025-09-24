@@ -26,7 +26,7 @@ func TestGetAllStacksComponentsPaths_DuplicateComponents(t *testing.T) {
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"vnet-elements": map[string]any{
-						"component": "vnet-elements", // Same component as stack1
+						"component": "vnet-elements", // Same component as stack1.
 					},
 					"app": map[string]any{
 						"component": "app",
@@ -38,7 +38,7 @@ func TestGetAllStacksComponentsPaths_DuplicateComponents(t *testing.T) {
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"vnet-elements": map[string]any{
-						"component": "vnet-elements", // Same component again
+						"component": "vnet-elements", // Same component again.
 					},
 				},
 			},

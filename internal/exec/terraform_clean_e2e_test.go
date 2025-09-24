@@ -50,7 +50,7 @@ func TestTerraformClean_EndToEnd_NoDuplicateDeletions(t *testing.T) {
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"vnet-elements-dev": map[string]any{
-						"component": "vnet-elements", // References vnet-elements
+						"component": "vnet-elements", // References vnet-elements.
 					},
 					"database-dev": map[string]any{
 						"component": "database",
@@ -62,7 +62,7 @@ func TestTerraformClean_EndToEnd_NoDuplicateDeletions(t *testing.T) {
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"vnet-elements-staging": map[string]any{
-						"component": "vnet-elements", // Also references vnet-elements
+						"component": "vnet-elements", // Also references vnet-elements.
 					},
 				},
 			},
@@ -71,7 +71,7 @@ func TestTerraformClean_EndToEnd_NoDuplicateDeletions(t *testing.T) {
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"vnet-elements-prod": map[string]any{
-						"component": "vnet-elements", // Also references vnet-elements
+						"component": "vnet-elements", // Also references vnet-elements.
 					},
 					"database-prod": map[string]any{
 						"component": "database",
