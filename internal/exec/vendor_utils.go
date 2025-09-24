@@ -275,8 +275,9 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 			return nil, err
 		}
 
-		// Normalize the URI to handle triple slash pattern (///) which means "root of the repository"
-		// go-getter v1.7.9 no longer supports the triple slash pattern, so we need to convert it
+		// Normalize the URI to handle triple-slash pattern (///), which indicates an empty subdirectory
+		// path after the // delimiter (meaning vendor from repository root). This pattern broke in
+		// go-getter v1.7.9 due to CVE-2025-8959 security fixes.
 		uri = normalizeVendorURI(uri)
 
 		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
@@ -429,12 +430,14 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 }
 
 // normalizeVendorURI normalizes vendor source URIs to handle legacy patterns.
-// Specifically, it converts the triple slash pattern (///) which was used to indicate
-// "root of the repository" to a format compatible with go-getter v1.7.9+.
+// In go-getter syntax, the double-slash (//) is a delimiter between the repository URL
+// and the subdirectory path within that repository. A triple-slash (///) indicates
+// an empty subdirectory path (root of the repository).
 //
-// The triple slash pattern (e.g., "github.com/repo.git///?ref=v1.0.0") was a documented
-// way to vendor from the root of a Git repository. After go-getter v1.7.9, this pattern
-// no longer works as expected due to changes in subdirectory path handling.
+// The triple-slash pattern (e.g., "github.com/repo.git///?ref=v1.0.0") was a documented
+// way to explicitly vendor from the root of a Git repository. After go-getter v1.7.9
+// (introduced in Atmos v1.189.0), this pattern no longer works due to security fixes
+// for CVE-2025-8959 that changed subdirectory path handling.
 //
 // This function converts:
 //   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git?ref=v1.0.0"
