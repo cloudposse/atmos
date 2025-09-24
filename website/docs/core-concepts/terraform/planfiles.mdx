@@ -92,20 +92,14 @@ Terraform backends fall into two categories regarding planfile support:
 
 ### Backends That DO NOT Support Local Planfiles
 
-These backends manage the entire plan lifecycle remotely and cannot save planfiles locally:
+The following backends have limitations with `terraform plan -out=<file>`:
 
-| Backend | Type | Why Planfiles Aren't Supported | Recommended Approach |
-|---------|------|--------------------------------|---------------------|
-| **Remote Backend** | Enhanced | Plans execute and are stored in Terraform Cloud/Enterprise | Use remote workflow or migrate to standard backend |
-| **Terraform Cloud** | Enhanced | All operations happen in cloud workspaces | Configure `skip_planfile: true` in Atmos |
-| **Terraform Enterprise** | Enhanced | Enterprise manages complete workflow | Configure `skip_planfile: true` in Atmos |
-
-#### Special Cases
-
-| Backend/Platform | Issue | Details | Solution |
-|-----------------|--------|---------|----------|
-| **HTTP Backend** | Credential Storage | Credentials are embedded in planfiles, causing issues with job-specific tokens in CI/CD | Use consistent credentials or environment variables |
-| **GitLab-managed State** | Platform Integration | GitLab CI/CD manages its own plan/apply workflow | Use GitLab's native terraform integration, not planfiles |
+| Backend | Type | Actual Limitation | Recommended Approach |
+|---------|------|------------------|---------------------|
+| **Remote Backend** | Enhanced | Does not support saving execution plans locally. Returns error: "The 'remote' backend does not support saving the generated execution plan locally" | Use remote execution mode or migrate to standard backend with `skip_planfile: true` in Atmos |
+| **Terraform Cloud** | Enhanced | Remote execution mode doesn't allow local plan output | Use VCS-driven workflow or configure `skip_planfile: true` in Atmos |
+| **Terraform Enterprise** | Enhanced | Same as Terraform Cloud - remote execution limitation | Use VCS-driven workflow or configure `skip_planfile: true` in Atmos |
+| **HTTP Backend** | Standard | While technically supports `-out`, credentials are embedded in planfiles which breaks CI/CD with rotating tokens | Use `atmos terraform generate planfile` for JSON/YAML output instead |
 
 ### Backends That Support Planfiles
 
@@ -260,6 +254,44 @@ This automatic naming ensures:
 Planfiles are stored in the component's working directory:
 
 ```
+
+## Alternative: JSON/YAML Planfiles
+
+For backends that don't support binary planfiles or when you need human-readable plan output, use:
+
+### `atmos terraform generate planfile`
+
+This command generates a planfile in JSON or YAML format instead of Terraform's binary format:
+
+```bash
+# Generate JSON planfile
+atmos terraform generate planfile vpc -s dev --file-template plan-{{.stack}}-{{.component}}.json
+
+# Generate YAML planfile
+atmos terraform generate planfile vpc -s dev --file-template plan-{{.stack}}-{{.component}}.yaml
+```
+
+Benefits of JSON/YAML planfiles:
+- Human-readable format for review
+- Works with any backend (including HTTP, Remote)
+- Can be stored in version control
+- Suitable for compliance and audit requirements
+- Can be compared using standard diff tools
+
+### `atmos terraform plan-diff`
+
+Compare two planfiles to understand changes between them:
+
+```bash
+# Compare two planfiles
+atmos terraform plan-diff --file plan1.json --file2 plan2.json
+
+# Compare with different formats
+atmos terraform plan-diff --file plan1.yaml --file2 plan2.json --format yaml
+```
+
+This performs a semantic comparison of the plan data structures, not a naive text diff.
+
 components/
 └── terraform/
     └── vpc/
@@ -338,56 +370,6 @@ components:
 | `--planfile FILE` | Use specific planfile | `atmos terraform apply vpc -s dev --planfile my.plan` |
 
 ## CI/CD Integration
-
-### GitHub Actions Example
-
-Planfiles are essential for safe CI/CD deployments. Here's a typical workflow:
-
-```yaml title=".github/workflows/terraform.yml"
-name: Terraform Deployment
-
-on:
-  pull_request:
-    types: [opened, synchronize]
-  push:
-    branches: [main]
-
-jobs:
-  plan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Atmos
-        uses: cloudposse/github-action-setup-atmos@v2
-
-      - name: Generate Plan
-        run: |
-          atmos terraform plan vpc -s prod -out=vpc-prod.plan
-
-      - name: Upload Planfile
-        uses: actions/upload-artifact@v3
-        with:
-          name: terraform-plan
-          path: components/terraform/vpc/vpc-prod.plan
-
-  apply:
-    needs: plan
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Download Planfile
-        uses: actions/download-artifact@v3
-        with:
-          name: terraform-plan
-          path: components/terraform/vpc/
-
-      - name: Apply Plan
-        run: |
-          atmos terraform apply vpc -s prod --planfile vpc-prod.plan
-```
 
 ### GitLab CI Example
 
@@ -542,8 +524,6 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
   done
 fi
 ```
-
-## Real-World Examples
 
 ### Example 1: Multi-Environment Deployment
 
