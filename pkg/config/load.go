@@ -104,6 +104,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.atmos_gitlab_token", "ATMOS_GITLAB_TOKEN")
 
 	bindEnv(v, "settings.terminal.pager", "ATMOS_PAGER", "PAGER")
+	bindEnv(v, "settings.terminal.color", "ATMOS_COLOR", "COLOR")
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME")
 
@@ -137,8 +138,9 @@ func setDefaultConfiguration(v *viper.Viper) {
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
-	v.SetDefault("logs.level", "Info")
+	v.SetDefault("logs.level", "Warning")
 
+	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", true)
 	v.SetDefault("docs.generate.readme.output", "./README.md")

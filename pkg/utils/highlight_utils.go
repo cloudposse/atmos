@@ -23,12 +23,11 @@ import (
 // DefaultHighlightSettings returns the default syntax highlighting settings.
 func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	return &schema.SyntaxHighlighting{
-		Enabled:                true,
-		Formatter:              "terminal",
-		Theme:                  "dracula",
-		HighlightedOutputPager: true,
-		LineNumbers:            true,
-		Wrap:                   false,
+		Enabled:     true,
+		Formatter:   "terminal",
+		Theme:       "dracula",
+		LineNumbers: true,
+		Wrap:        false,
 	}
 }
 
@@ -87,7 +86,6 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 		// Use theme-aware Chroma theme if not explicitly set
 		settings.Theme = getThemeAwareChromaTheme(config)
 	}
-
 	// For boolean fields, we check if the user explicitly set them using viper
 	// This is a better approach than guessing based on other fields
 	// NOTE: Long-term fix would be to use *bool in the schema for proper tri-state handling
@@ -96,9 +94,6 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 	// Check if each boolean field was explicitly set
 	if !settings.Enabled && !viper.IsSet("settings.terminal.syntax_highlighting.enabled") {
 		settings.Enabled = defaults.Enabled
-	}
-	if !settings.HighlightedOutputPager && !viper.IsSet("settings.terminal.syntax_highlighting.pager") {
-		settings.HighlightedOutputPager = defaults.HighlightedOutputPager
 	}
 	if !settings.LineNumbers && !viper.IsSet("settings.terminal.syntax_highlighting.line_numbers") {
 		settings.LineNumbers = defaults.LineNumbers

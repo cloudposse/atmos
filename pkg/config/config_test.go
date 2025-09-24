@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -485,4 +486,394 @@ func changeWorkingDir(t *testing.T, dir string) {
 
 	err = os.Chdir(dir)
 	require.NoError(t, err, "Failed to change working directory")
+}
+
+func TestParseFlagsForPager(t *testing.T) {
+	tests := []struct {
+		name            string
+		args            []string
+		expectedPager   string
+		expectedNoColor bool
+	}{
+		{
+			name:            "no pager flag",
+			args:            []string{"atmos", "describe", "config"},
+			expectedPager:   "",
+			expectedNoColor: false,
+		},
+		{
+			name:            "pager flag without value",
+			args:            []string{"atmos", "describe", "config", "--pager"},
+			expectedPager:   "true",
+			expectedNoColor: false,
+		},
+		{
+			name:            "pager flag with true",
+			args:            []string{"atmos", "describe", "config", "--pager=true"},
+			expectedPager:   "true",
+			expectedNoColor: false,
+		},
+		{
+			name:            "pager flag with false",
+			args:            []string{"atmos", "describe", "config", "--pager=false"},
+			expectedPager:   "false",
+			expectedNoColor: false,
+		},
+		{
+			name:            "pager flag with less",
+			args:            []string{"atmos", "describe", "config", "--pager=less"},
+			expectedPager:   "less",
+			expectedNoColor: false,
+		},
+		{
+			name:            "no-color flag",
+			args:            []string{"atmos", "describe", "config", "--no-color"},
+			expectedPager:   "",
+			expectedNoColor: true,
+		},
+		{
+			name:            "both pager and no-color flags",
+			args:            []string{"atmos", "describe", "config", "--pager=more", "--no-color"},
+			expectedPager:   "more",
+			expectedNoColor: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original args
+			originalArgs := os.Args
+			defer func() { os.Args = originalArgs }()
+
+			// Set test args
+			os.Args = tt.args
+
+			// Parse flags
+			flags := parseFlags()
+
+			// Check pager flag
+			if tt.expectedPager != "" {
+				assert.Equal(t, tt.expectedPager, flags["pager"])
+			} else {
+				assert.Empty(t, flags["pager"])
+			}
+
+			// Check no-color flag
+			if tt.expectedNoColor {
+				assert.Equal(t, "true", flags["no-color"])
+			} else {
+				_, hasNoColor := flags["no-color"]
+				assert.False(t, hasNoColor)
+			}
+		})
+	}
+}
+
+func TestSetLogConfigWithPager(t *testing.T) {
+	tests := []struct {
+		name            string
+		args            []string
+		expectedPager   string
+		expectedNoColor bool
+		expectedColor   bool
+	}{
+		{
+			name:            "pager from flag",
+			args:            []string{"atmos", "--pager=less"},
+			expectedPager:   "less",
+			expectedNoColor: false,
+		},
+		{
+			name:            "no-color flag sets both NoColor and Color",
+			args:            []string{"atmos", "--no-color"},
+			expectedPager:   "",
+			expectedNoColor: true,
+			expectedColor:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original state
+			originalArgs := os.Args
+			defer func() { os.Args = originalArgs }()
+
+			// Set test args
+			if tt.args != nil {
+				os.Args = tt.args
+			}
+
+			// Create a test config
+			atmosConfig := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{},
+				},
+			}
+
+			// Apply config
+			setLogConfig(atmosConfig)
+
+			// Verify results
+			if tt.expectedPager != "" {
+				assert.Equal(t, tt.expectedPager, atmosConfig.Settings.Terminal.Pager)
+			}
+			assert.Equal(t, tt.expectedNoColor, atmosConfig.Settings.Terminal.NoColor)
+			if tt.expectedNoColor {
+				assert.Equal(t, false, atmosConfig.Settings.Terminal.Color)
+			}
+		})
+	}
+}
+
+func TestEnvironmentVariableHandling(t *testing.T) {
+	tests := []struct {
+		name            string
+		envVars         map[string]string
+		args            []string
+		expectedPager   string
+		expectedNoColor bool
+		expectedColor   bool
+	}{
+		{
+			name: "ATMOS_PAGER environment variable",
+			envVars: map[string]string{
+				"ATMOS_PAGER": "more",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "more",
+		},
+		{
+			name: "NO_COLOR environment variable",
+			envVars: map[string]string{
+				"NO_COLOR": "1",
+			},
+			args:            []string{"atmos", "describe", "config"},
+			expectedNoColor: true,
+			expectedColor:   false,
+		},
+		{
+			name: "ATMOS_NO_COLOR environment variable",
+			envVars: map[string]string{
+				"ATMOS_NO_COLOR": "true",
+			},
+			args:            []string{"atmos", "describe", "config"},
+			expectedNoColor: true,
+			expectedColor:   false,
+		},
+		{
+			name: "COLOR environment variable",
+			envVars: map[string]string{
+				"COLOR": "true",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedColor: true,
+		},
+		{
+			name: "ATMOS_COLOR environment variable",
+			envVars: map[string]string{
+				"ATMOS_COLOR": "true",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedColor: true,
+		},
+		{
+			name: "CLI flag overrides environment variable",
+			envVars: map[string]string{
+				"ATMOS_PAGER": "more",
+			},
+			args:          []string{"atmos", "--pager=less", "describe", "config"},
+			expectedPager: "less",
+		},
+		{
+			name: "Multiple environment variables with precedence",
+			envVars: map[string]string{
+				"COLOR":       "true",
+				"NO_COLOR":    "1",
+				"ATMOS_PAGER": "cat",
+			},
+			args:            []string{"atmos", "describe", "config"},
+			expectedPager:   "cat",
+			expectedNoColor: true,
+			expectedColor:   false, // NO_COLOR takes precedence
+		},
+		{
+			name: "PAGER environment variable fallback",
+			envVars: map[string]string{
+				"PAGER": "less -R",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "less -R",
+		},
+		{
+			name: "ATMOS_PAGER takes precedence over PAGER",
+			envVars: map[string]string{
+				"PAGER":       "less",
+				"ATMOS_PAGER": "more",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "more",
+		},
+		{
+			name: "CLI flag --no-color=false overrides NO_COLOR env var",
+			envVars: map[string]string{
+				"NO_COLOR": "1",
+			},
+			args:            []string{"atmos", "--no-color=false", "describe", "config"},
+			expectedNoColor: false,
+			expectedColor:   true,
+		},
+		{
+			name: "--pager=false overrides PAGER env var",
+			envVars: map[string]string{
+				"PAGER": "less",
+			},
+			args:          []string{"atmos", "--pager=false", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "--no-color=true explicitly sets NoColor",
+			envVars: map[string]string{
+				"COLOR": "true",
+			},
+			args:            []string{"atmos", "--no-color=true", "describe", "config"},
+			expectedNoColor: true,
+			expectedColor:   false,
+		},
+		{
+			name: "NO_PAGER environment variable disables pager",
+			envVars: map[string]string{
+				"NO_PAGER": "1",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "NO_PAGER=true disables pager",
+			envVars: map[string]string{
+				"NO_PAGER": "true",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "NO_PAGER=any_value disables pager",
+			envVars: map[string]string{
+				"NO_PAGER": "yes",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "--pager flag overrides NO_PAGER env var",
+			envVars: map[string]string{
+				"NO_PAGER": "1",
+			},
+			args:          []string{"atmos", "--pager=less", "describe", "config"},
+			expectedPager: "less",
+		},
+		{
+			name: "NO_PAGER takes precedence over PAGER env var",
+			envVars: map[string]string{
+				"PAGER":    "more",
+				"NO_PAGER": "1",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
+		{
+			name: "NO_PAGER takes precedence over ATMOS_PAGER env var",
+			envVars: map[string]string{
+				"ATMOS_PAGER": "less",
+				"NO_PAGER":    "1",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedPager: "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original state
+			originalArgs := os.Args
+			originalEnvVars := make(map[string]string)
+
+			// Clear and save relevant environment variables
+			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR"}
+			for _, envVar := range envVarsToCheck {
+				if val, exists := os.LookupEnv(envVar); exists {
+					originalEnvVars[envVar] = val
+				}
+				os.Unsetenv(envVar)
+			}
+
+			defer func() {
+				// Restore original state
+				os.Args = originalArgs
+				// Restore environment variables
+				for _, envVar := range envVarsToCheck {
+					os.Unsetenv(envVar)
+				}
+				for envVar, val := range originalEnvVars {
+					os.Setenv(envVar, val)
+				}
+			}()
+
+			// Set test environment variables
+			for envVar, val := range tt.envVars {
+				os.Setenv(envVar, val)
+			}
+
+			// Set test args
+			if tt.args != nil {
+				os.Args = tt.args
+			}
+
+			// Create a test viper instance and bind environment variables
+			v := viper.New()
+			v.SetEnvPrefix("ATMOS")
+			v.AutomaticEnv()
+
+			// Bind specific environment variables
+			v.BindEnv("settings.terminal.pager", "ATMOS_PAGER", "PAGER")
+			v.BindEnv("settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
+			v.BindEnv("settings.terminal.color", "ATMOS_COLOR", "COLOR")
+
+			// Create a test config
+			atmosConfig := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{},
+				},
+			}
+
+			// Apply environment variables to config
+			if envPager := v.GetString("settings.terminal.pager"); envPager != "" {
+				atmosConfig.Settings.Terminal.Pager = envPager
+			}
+			if v.IsSet("settings.terminal.no_color") {
+				atmosConfig.Settings.Terminal.NoColor = v.GetBool("settings.terminal.no_color")
+				// When NoColor is set, Color should be false
+				if atmosConfig.Settings.Terminal.NoColor {
+					atmosConfig.Settings.Terminal.Color = false
+				}
+			}
+			if v.IsSet("settings.terminal.color") && !atmosConfig.Settings.Terminal.NoColor {
+				// Only set Color if NoColor is not true
+				atmosConfig.Settings.Terminal.Color = v.GetBool("settings.terminal.color")
+			}
+
+			// Apply CLI flags (simulating what setLogConfig does)
+			setLogConfig(atmosConfig)
+
+			// Verify results
+			if tt.expectedPager != "" {
+				assert.Equal(t, tt.expectedPager, atmosConfig.Settings.Terminal.Pager, "Pager setting mismatch")
+			}
+			assert.Equal(t, tt.expectedNoColor, atmosConfig.Settings.Terminal.NoColor, "NoColor setting mismatch")
+			if tt.expectedColor || tt.expectedNoColor {
+				// Only check Color field if we expect it to be set
+				expectedColorValue := tt.expectedColor && !tt.expectedNoColor
+				assert.Equal(t, expectedColorValue, atmosConfig.Settings.Terminal.Color, "Color setting mismatch")
+			}
+		})
+	}
 }

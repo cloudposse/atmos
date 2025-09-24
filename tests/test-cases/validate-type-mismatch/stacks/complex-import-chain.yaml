@@ -1,0 +1,37 @@
+# Complex import chain that tests error reporting through multiple levels
+import:
+  # Start with base configuration
+  - path: "base.yaml"
+  
+  # Import the deep merge test which itself has imports
+  - path: "deep-merge-test.yaml"
+
+vars:
+  stage: "complex"
+  environment: "test"
+  
+components:
+  terraform:
+    vpc:
+      metadata:
+        # This tests if metadata merging also tracks context
+        inherits:
+          - "base"
+          - "override"
+      vars:
+        # Final override attempt with yet another type
+        subnets: 12345  # Number instead of array/string/object
+        
+    # New component with nested structure
+    eks:
+      vars:
+        node_groups:
+          - name: "workers"
+            instance_types: ["t3.medium", "t3.large"]
+            min_size: 1
+            max_size: 10
+            
+        # This will conflict if another import tries to make it a string
+        security_groups:
+          - "sg-12345"
+          - "sg-67890"

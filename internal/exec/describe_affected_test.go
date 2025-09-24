@@ -16,10 +16,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestDescribeAffected(t *testing.T) {
-	d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{}}
+	d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				Pager: "false", // Initially disabled
+			},
+		},
+	}}
 	d.IsTTYSupportForStdout = func() bool {
 		return false
 	}
@@ -63,6 +70,8 @@ func TestDescribeAffected(t *testing.T) {
 	d.IsTTYSupportForStdout = func() bool {
 		return true
 	}
+	// Enable pager for the tests that expect it to be called
+	d.atmosConfig.Settings.Terminal.Pager = "true"
 	ctrl := gomock.NewController(t)
 	mockPager := pager.NewMockPageCreator(ctrl)
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
@@ -93,6 +102,9 @@ func TestDescribeAffected(t *testing.T) {
 }
 
 func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
+	// Check for Git repository with valid remotes precondition
+	tests.RequireGitRemoteWithValidURL(t)
+
 	stacksPath := "../../tests/fixtures/scenarios/atmos-describe-affected"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
@@ -127,6 +139,9 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 }
 
 func TestDescribeAffectedScenarios(t *testing.T) {
+	// Check for valid Git remote URL before running test
+	tests.RequireGitRemoteWithValidURL(t)
+
 	basePath := "tests/fixtures/scenarios/atmos-describe-affected-with-dependents-and-locked"
 	pathPrefix := "../../"
 

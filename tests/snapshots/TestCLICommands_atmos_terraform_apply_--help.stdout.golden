@@ -92,6 +92,11 @@ GLOBAL FLAGS
 
         --no-color                    Disable color output (default false)
 
+        --pager string                Enable pager for output (--pager or
+                                      --pager=true to enable, --pager=false to
+                                      disable, --pager=less to use specific
+                                      pager)
+
         --process-functions           Enable/disable YAML functions processing
                                       in Atmos stack manifests when executing
                                       terraform commands (default true)

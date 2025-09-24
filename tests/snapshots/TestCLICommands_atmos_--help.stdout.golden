@@ -76,6 +76,11 @@ FLAGS
 
         --no-color                   Disable color output (default false)
 
+        --pager string               Enable pager for output (--pager or
+                                     --pager=true to enable, --pager=false to
+                                     disable, --pager=less to use specific
+                                     pager)
+
         --redirect-stderr string     File descriptor to redirect stderr to.
                                      Errors can be redirected to any file or any
                                      standard file descriptor (including

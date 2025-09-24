@@ -80,6 +80,7 @@ var (
 	ErrThemeNotFound            = errors.New("theme not found")
 	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
 	ErrMerge                    = errors.New("merge error")
+	ErrInvalidStackManifest     = errors.New("invalid stack manifest")
 
 	// Command errors.
 	ErrSubcommandNotFound   = errors.New("subcommand not found")
