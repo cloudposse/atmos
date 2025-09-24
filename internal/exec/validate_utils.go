@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
-	atmosErrors "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -138,7 +138,7 @@ func ValidateWithOpa(
 		return false, errors.New(invalidRegoPolicyErrorMessage)
 	}
 	if len(ers) > 0 {
-		return false, fmt.Errorf(atmosErrors.ErrStringWrappingFormat, atmosErrors.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
 	}
 
 	return true, nil
@@ -229,7 +229,7 @@ func ValidateWithOpaLegacy(
 
 	ers, ok := result.Result.([]any)
 	if ok && len(ers) > 0 {
-		return false, fmt.Errorf(atmosErrors.ErrStringWrappingFormat, atmosErrors.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
 	}
 
 	return true, nil

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	log "github.com/charmbracelet/log"
-	atmosErrors "github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
 	l "github.com/cloudposse/atmos/pkg/logger"
@@ -35,35 +35,35 @@ type ProUnlockCmdArgs struct {
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToProcessArgs, err)
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToProcessArgs, err)
 	}
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToInitConfig, err)
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 
 	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToCreateLogger, err)
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateLogger, err)
 	}
 
 	flags := cmd.Flags()
 
 	component, err := flags.GetString("component")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToGetComponentFlag, err)
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetComponentFlag, err)
 	}
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToGetStackFlag, err)
+		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetStackFlag, err)
 	}
 
 	if component == "" || stack == "" {
-		return ProLockUnlockCmdArgs{}, atmosErrors.ErrComponentAndStackRequired
+		return ProLockUnlockCmdArgs{}, errUtils.ErrComponentAndStackRequired
 	}
 
 	result := ProLockUnlockCmdArgs{
@@ -133,12 +133,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToGetLocalRepo, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToGetRepoInfo, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -153,12 +153,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToCreateAPIClient, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
 	lock, err := apiClient.LockStack(&dto)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToLockStack, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToLockStack, err)
 	}
 
 	a.Logger.Info("Stack successfully locked.\n")
@@ -178,12 +178,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToGetLocalRepo, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToGetRepoInfo, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -195,12 +195,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToCreateAPIClient, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
 	_, err = apiClient.UnlockStack(&dto)
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToUnlockStack, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUnlockStack, err)
 	}
 
 	a.Logger.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
@@ -218,7 +218,7 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 	// Get the git repository info
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToGetLocalRepo, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	// Get current git SHA
@@ -250,7 +250,7 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 
 	// Upload the status
 	if err := client.UploadInstanceStatus(&dto); err != nil {
-		return fmt.Errorf(atmosErrors.ErrWrappingFormat, atmosErrors.ErrFailedToUploadInstanceStatus, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadInstanceStatus, err)
 	}
 
 	return nil
