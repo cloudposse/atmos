@@ -258,9 +258,19 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 
 ## Flags
 
-| Flag          | Description                                                                                                  | Alias | Required |
-|:--------------|:-------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--component` | Atmos component to pull                                                                                      | `-c`  | no       |
-| `--tags`      | Only vendor the components that have the specified tags.<br/>`tags` is a comma-separated values (CSV) string |       | no       |
-| `--type`      | Component type: `terraform` or `helmfile` (`terraform` is default)                                           | `-t`  | no       |
-| `--dry-run`   | Dry run                                                                                                      |       | no       |
+<dl>
+  <dt>`--component` / `-c` <em>(optional)</em></dt>
+  <dd>Atmos component to pull.</dd>
+
+  <dt>`--everything` <em>(optional)</em></dt>
+  <dd>Vendor all components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Only vendor the components that have the specified tags.<br/>`tags` is a comma-separated values (CSV) string.</dd>
+
+  <dt>`--type` / `-t` <em>(optional)</em></dt>
+  <dd>Component type: `terraform` or `helmfile` (`terraform` is default).</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Dry run.</dd>
+</dl>
