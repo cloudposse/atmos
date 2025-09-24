@@ -543,10 +543,11 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		log.Debug("Authenticating identity step", "step", i, logKeyIdentity, identityStep, "kind", identity.Kind())
 
 		// Each identity receives credentials from the previous step.
-		nextCreds, err := identity.Authenticate(ctx, currentCreds)
-		if err != nil {
-			return nil, fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err)
-		}
+        nextCreds, err := identity.Authenticate(ctx, currentCreds)
+        if err != nil {
+            return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrAuthenticationFailed,
+                fmt.Errorf("identity %q authentication failed at chain step %d: %w", identityStep, i, err))
+        }
 
 		currentCreds = nextCreds
 
