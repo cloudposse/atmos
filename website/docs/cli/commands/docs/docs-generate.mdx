@@ -6,14 +6,15 @@ description: "Generate documentation artifacts based on a named section under `d
 id: generate
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 
 Use this command to generate one of your documentation artifacts (e.g. a README) as defined by the **named** section under `docs.generate.<KEY>` in `atmos.yaml`.
 
 Replace `<KEY>` with the name of the section you want to run (for example, `readme`, `release-notes`, etc.).
 
-:::
+</Intro>
 
 In `atmos.yaml`, you can define **one or more** documentation‐generation blocks under `docs.generate`.  Each top‐level key becomes a CLI argument:
 
