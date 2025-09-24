@@ -358,6 +358,11 @@ func sanitizeOutput(output string) (string, error) {
 	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
+	// 9. Normalize pager value for consistent test output.
+	// The pager can be different on different systems (e.g., "more", "less", "1", etc.)
+	pagerRegex := regexp.MustCompile(`(\s+pager:\s+)(\S+)`)
+	result = pagerRegex.ReplaceAllString(result, `${1}"1"`)
+
 	return result, nil
 }
 
@@ -1309,7 +1314,21 @@ func executeAtmosTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) (st
 		wg.Done()
 	}()
 	errChan := make(chan error, 1)
-	go func() { errChan <- rootCmd.Execute() }()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Check if it's our test exit panic
+				if str, ok := r.(string); ok && strings.HasPrefix(str, "exit:") {
+					// Expected exit, send nil error to indicate normal completion
+					errChan <- nil
+					return
+				}
+				// Re-panic if it's a different panic
+				panic(r)
+			}
+		}()
+		errChan <- rootCmd.Execute()
+	}()
 	select {
 	case <-ctx.Done():
 		t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
@@ -1370,7 +1389,21 @@ func executeAtmosNonTtyCommand(ctx context.Context, t *testing.T, tc *TestCase) 
 	go func() { _, _ = io.Copy(&stdoutBuf, outR); wg.Done() }()
 	go func() { _, _ = io.Copy(&stderrBuf, errR); wg.Done() }()
 	errChan := make(chan error, 1)
-	go func() { errChan <- rootCmd.Execute() }()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Check if it's our test exit panic
+				if str, ok := r.(string); ok && strings.HasPrefix(str, "exit:") {
+					// Expected exit, send nil error to indicate normal completion
+					errChan <- nil
+					return
+				}
+				// Re-panic if it's a different panic
+				panic(r)
+			}
+		}()
+		errChan <- rootCmd.Execute()
+	}()
 	select {
 	case <-ctx.Done():
 		t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
