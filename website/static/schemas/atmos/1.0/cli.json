@@ -185,13 +185,14 @@
               "type": "string"
             }
           },
-          "name_template": {
+          "name_pattern": {
             "type": "string",
-            "description": "Pattern for stack names (legacy)"
+            "description": "Deprecated: Use name_template instead",
+            "deprecated": true
           },
           "name_template": {
             "type": "string",
-            "description": "Go template for stack names (preferred over name_template)"
+            "description": "Go template for stack names"
           }
         }
       },

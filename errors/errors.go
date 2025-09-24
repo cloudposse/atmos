@@ -33,7 +33,7 @@ var (
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
-	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_template' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_template' or 'stacks.name_pattern' needs to be specified in 'atmos.yaml' CLI config")
 	ErrMissingStackNameTemplateAndEnv        = errors.New("stack name pattern must be provided in 'stacks.name_template' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	ErrMissingStackNameTemplateCliConfig     = errors.New("stack name pattern must be provided in 'stacks.name_template' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 	ErrMissingStackBasePath                  = errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")

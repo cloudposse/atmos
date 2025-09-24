@@ -288,7 +288,7 @@ terraform:
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
-				assert.Equal(t, "{dev}", cfg.Stacks.NamePattern)
+				assert.Equal(t, "{stage}", cfg.Stacks.NameTemplate)
 			},
 		},
 		{
