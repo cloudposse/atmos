@@ -1,0 +1,12 @@
+# Override configuration that tries to change subnets to a string
+vars:
+  stage: "test"
+  environment: "override"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Try to override subnets with a string (type mismatch!)
+        subnets: "10.0.100.0/24"
+        additional_setting: "some value"
