@@ -65,12 +65,11 @@ var (
 				Pager:    "less",
 				Unicode:  true,
 				SyntaxHighlighting: schema.SyntaxHighlighting{
-					Enabled:                true,
-					Formatter:              "terminal",
-					Theme:                  "dracula",
-					HighlightedOutputPager: true,
-					LineNumbers:            true,
-					Wrap:                   false,
+					Enabled:     true,
+					Formatter:   "terminal",
+					Theme:       "dracula",
+					LineNumbers: true,
+					Wrap:        false,
 				},
 			},
 		},
@@ -79,7 +78,7 @@ var (
 		},
 		Logs: schema.Logs{
 			File:  "/dev/stderr",
-			Level: "Info",
+			Level: "Warning",
 		},
 		Schemas: map[string]interface{}{
 			"jsonschema": schema.ResourcePath{

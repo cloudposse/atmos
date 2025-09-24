@@ -21,12 +21,11 @@ func TestPrintAsJson(t *testing.T) {
 				Settings: schema.AtmosSettings{
 					Terminal: schema.Terminal{
 						SyntaxHighlighting: schema.SyntaxHighlighting{
-							Enabled:                true,
-							Formatter:              "terminal",
-							Theme:                  "dracula",
-							HighlightedOutputPager: true,
-							LineNumbers:            true,
-							Wrap:                   false,
+							Enabled:     true,
+							Formatter:   "terminal",
+							Theme:       "dracula",
+							LineNumbers: true,
+							Wrap:        false,
 						},
 					},
 				},
