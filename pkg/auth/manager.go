@@ -298,8 +298,7 @@ func (m *manager) GetProviderForIdentity(identityName string) string {
 	return m.getProviderForIdentity(identityName)
 }
 
-// GetProviderKindForIdentity returns the provider kind for the given identity.
-// by building the authentication chain and getting the root provider's kind.
+// GetProviderKindForIdentity returns the provider kind for the given identity. By building the authentication chain and getting the root provider's kind.
 func (m *manager) GetProviderKindForIdentity(identityName string) (string, error) {
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)

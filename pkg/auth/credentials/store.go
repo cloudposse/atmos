@@ -17,8 +17,7 @@ var ErrCredentialStore = errors.New("credential store")
 var ErrNotSupported = errors.New("not supported")
 
 const (
-	// KeyringUser is the "account" used to store credentials in the keyring.
-	// here we use atmos-auth to provide a consistent way to search for atmos credentials.
+	// KeyringUser is the "account" used to store credentials in the keyring. Here we use atmos-auth to provide a consistent way to search for atmos credentials.
 	KeyringUser = "atmos-auth"
 )
 
@@ -30,8 +29,7 @@ func NewCredentialStore() types.CredentialStore {
 	return &keyringStore{}
 }
 
-// Store stores credentials for the given alias.
-// envelope used to persist interface credentials.
+// Store stores credentials for the given alias. Envelope used to persist interface credentials.
 type credentialEnvelope struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`
