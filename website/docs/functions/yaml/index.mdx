@@ -12,16 +12,25 @@ import PillBox from '@site/src/components/PillBox'
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
 
-<PillBox>Advanced</PillBox>
+<PillBox>Recommended</PillBox>
 
 <Intro>
-    Atmos [YAML](https://en.wikipedia.org/wiki/YAML) Functions are a crucial part of Atmos stack manifests. They allow
-    you to manipulate data and perform operations on the data to customize the stack configurations.
+    **YAML Functions are the recommended way to add dynamic behavior to your Atmos configurations.** They are native YAML features that work with the YAML parser, making them type-safe, predictable, and error-resistant. Unlike template functions which manipulate raw text, YAML functions operate on structured data after parsing.
 </Intro>
 
-Atmos YAML functions are based on [YAML Explicit typing](https://yaml.org/spec/1.2.2/)
+## Why YAML Functions Are Safer
+
+YAML functions are based on [YAML Explicit typing](https://yaml.org/spec/1.2.2/)
 and user-defined [Explicit Tags](https://yaml.org/spec/1.2.2/#tags) (local data types).
 Explicit tags are denoted by the exclamation point (__"!"__) symbol.
+
+**Key advantages over template functions:**
+- **Cannot break YAML syntax** - Functions execute after YAML parsing, not before
+- **Type-safe** - Work with actual YAML types, not raw strings
+- **No indentation issues** - The YAML structure is already established
+- **Clear error messages** - Errors point to specific YAML nodes, not parsing failures
+- **Predictable behavior** - Always return valid YAML data structures
+
 Atmos detects the tags in the stack manifests and executes the corresponding functions.
 
 :::info
