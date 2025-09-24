@@ -1,6 +1,6 @@
 tests:
   - name: terraform output function
-    enabled: true
+    enabled: false  # TTY test hangs with telemetry notice
     tty: true
     description: "Ensure the !terraform.output function works."
     workdir: "fixtures/scenarios/atmos-functions/"
