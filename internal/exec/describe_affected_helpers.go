@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	log "github.com/charmbracelet/log"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	cp "github.com/otiai10/copy"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	g "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -22,7 +24,19 @@ var RemoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Gi
 const (
 	shaString = "SHA"
 	refString = "ref"
+	dirLogKey = "dir"
 )
+
+// isGitWorktree checks if the given path contains a Git worktree.
+func isGitWorktree(path string) bool {
+	gitPath := filepath.Join(path, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		return false
+	}
+	// In a worktree, .git is a file, not a directory
+	return !info.IsDir()
+}
 
 // ExecuteDescribeAffectedWithTargetRefClone clones the remote reference,
 // processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
@@ -209,43 +223,119 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
-	// Copy the local repo into the temp directory
-	log.Debug("Copying the local repo into temp directory", "dir", tempDir)
+	var remoteRepo *git.Repository
 
-	copyOptions := cp.Options{
-		PreserveTimes: false,
-		PreserveOwner: false,
-		// Skip specifies which files should be skipped
-		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-			if strings.Contains(src, "node_modules") {
-				return true, nil
+	// Check if we're in a worktree
+	if isGitWorktree(localRepoInfo.LocalWorktreePath) {
+		// If in a worktree, we need to get the main repository path for cloning
+		log.Debug("Detected Git worktree, finding main repository", "worktree", localRepoInfo.LocalWorktreePath)
+
+		// Read the .git file to find the actual git directory
+		gitFile := filepath.Join(localRepoInfo.LocalWorktreePath, ".git")
+		gitFileContent, err := os.ReadFile(gitFile)
+		if err != nil {
+			return nil, nil, nil, "", fmt.Errorf("failed to read .git file: %w", err)
+		}
+
+		// Parse the gitdir path from the .git file
+		// Format is: "gitdir: /path/to/repo/.git/worktrees/worktree-name"
+		gitDirLine := strings.TrimSpace(string(gitFileContent))
+		if !strings.HasPrefix(gitDirLine, "gitdir: ") {
+			return nil, nil, nil, "", fmt.Errorf("%w: %s", errUtils.ErrInvalidGitFileFormat, gitDirLine)
+		}
+
+		gitDir := strings.TrimPrefix(gitDirLine, "gitdir: ")
+		// Get the main repository path (remove /worktrees/... part)
+		mainGitDir := gitDir
+		if idx := strings.Index(gitDir, "/worktrees/"); idx != -1 {
+			mainGitDir = gitDir[:idx]
+		}
+
+		// Get the parent directory of .git to get the main repository path
+		mainRepoPath := filepath.Dir(mainGitDir)
+
+		log.Debug("Cloning from main repository into temp directory", "main_repo", mainRepoPath, "temp_dir", tempDir)
+
+		// Clone from the main repository to get all refs
+		cloneOptions := &git.CloneOptions{
+			URL:          "file://" + mainRepoPath,
+			NoCheckout:   false,
+			SingleBranch: false,
+			Tags:         git.AllTags,
+			RemoteName:   "origin",
+		}
+
+		remoteRepo, err = git.PlainClone(tempDir, false, cloneOptions)
+		if err != nil {
+			return nil, nil, nil, "", fmt.Errorf("failed to clone repository: %w", err)
+		}
+
+		// After cloning, set up refs/remotes/origin/HEAD if it doesn't exist
+		remoteConfig, _ := remoteRepo.Remote("origin")
+		if remoteConfig != nil {
+			refs, _ := remoteRepo.References()
+			hasOriginHead := false
+			_ = refs.ForEach(func(ref *plumbing.Reference) error {
+				if ref.Name().String() == "refs/remotes/origin/HEAD" {
+					hasOriginHead = true
+				}
+				return nil
+			})
+
+			if !hasOriginHead {
+				// Try to set refs/remotes/origin/HEAD to refs/remotes/origin/main
+				mainRef, err := remoteRepo.Reference(plumbing.NewRemoteReferenceName("origin", "main"), false)
+				if err == nil && mainRef != nil {
+					// Create a symbolic reference
+					symbolic := plumbing.NewSymbolicReference(
+						plumbing.ReferenceName("refs/remotes/origin/HEAD"),
+						plumbing.ReferenceName("refs/remotes/origin/main"),
+					)
+					_ = remoteRepo.Storer.SetReference(symbolic)
+				}
 			}
+		}
 
-			// Check if the file is a socket and skip it
-			isSocket, err := u.IsSocket(src)
-			if err != nil {
-				return true, err
-			}
-			if isSocket {
-				return true, nil
-			}
+		log.Debug("Cloned repository into temp directory", dirLogKey, tempDir)
+	} else {
+		// Not in a worktree, use the original copy approach
+		log.Debug("Copying the local repo into temp directory", dirLogKey, tempDir)
 
-			return false, nil
-		},
-	}
+		copyOptions := cp.Options{
+			PreserveTimes: false,
+			PreserveOwner: false,
+			// Skip specifies which files should be skipped
+			Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+				if strings.Contains(src, "node_modules") {
+					return true, nil
+				}
 
-	if err = cp.Copy(localRepoInfo.LocalWorktreePath, tempDir, copyOptions); err != nil {
-		return nil, nil, nil, "", err
-	}
+				// Check if the file is a socket and skip it
+				isSocket, err := u.IsSocket(src)
+				if err != nil {
+					return true, err
+				}
+				if isSocket {
+					return true, nil
+				}
 
-	log.Debug("Copied the local repo into temp directory", "dir", tempDir)
+				return false, nil
+			},
+		}
 
-	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
-		DetectDotGit:          false,
-		EnableDotGitCommonDir: false,
-	})
-	if err != nil {
-		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
+		if err = cp.Copy(localRepoInfo.LocalWorktreePath, tempDir, copyOptions); err != nil {
+			return nil, nil, nil, "", err
+		}
+
+		log.Debug("Copied the local repo into temp directory", dirLogKey, tempDir)
+
+		remoteRepo, err = git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
+			DetectDotGit:          false,
+			EnableDotGitCommonDir: false,
+		})
+		if err != nil {
+			return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
+		}
 	}
 
 	// Check the Git config of the target ref

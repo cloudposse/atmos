@@ -137,57 +137,77 @@ func isComponentDependentFolderOrFileChanged(
 	changedFiles []string,
 	deps schema.DependsOn,
 ) (bool, string, string, error) {
-	hasDependencies := false
-	isChanged := false
-	changedType := ""
-	changedFileOrFolder := ""
-	pathPatternSuffix := ""
+	// Variables to track the overall result
+	var resultIsChanged bool
+	var resultChangedType string
+	var resultChangedFileOrFolder string
 
 	for _, dep := range deps {
-		if isChanged {
-			break
-		}
+		// Reset variables for each dependency entry
+		var currentType string
+		var currentFileOrFolder string
+		var pathPatternSuffix string
+		hasDependency := false
 
+		// Check if this dependency has a file or folder to check
 		if dep.File != "" {
-			changedType = "file"
-			changedFileOrFolder = dep.File
+			currentType = "file"
+			currentFileOrFolder = dep.File
 			pathPatternSuffix = ""
-			hasDependencies = true
+			hasDependency = true
 		} else if dep.Folder != "" {
-			changedType = "folder"
-			changedFileOrFolder = dep.Folder
+			currentType = "folder"
+			currentFileOrFolder = dep.Folder
 			pathPatternSuffix = "/**"
-			hasDependencies = true
+			hasDependency = true
 		}
 
-		if hasDependencies {
-			changedFileOrFolderAbs, err := filepath.Abs(changedFileOrFolder)
+		// Skip this dependency if it doesn't have a file or folder
+		// (it might only have a component field, which we don't check here)
+		if !hasDependency {
+			continue
+		}
+
+		// Additional defensive check (should never happen now, but good practice)
+		if currentFileOrFolder == "" {
+			continue
+		}
+
+		// Get absolute path
+		changedFileOrFolderAbs, err := filepath.Abs(currentFileOrFolder)
+		if err != nil {
+			return false, "", "", fmt.Errorf("failed to get absolute path for %s '%s': %w",
+				currentType, currentFileOrFolder, err)
+		}
+
+		pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+
+		// Check if any changed file matches this dependency
+		for _, changedFile := range changedFiles {
+			changedFileAbs, err := filepath.Abs(changedFile)
 			if err != nil {
-				return false, "", "", err
+				return false, "", "", fmt.Errorf("failed to get absolute path for changed file '%s': %w",
+					changedFile, err)
 			}
 
-			pathPattern := changedFileOrFolderAbs + pathPatternSuffix
+			match, err := u.PathMatch(pathPattern, changedFileAbs)
+			if err != nil {
+				return false, "", "", fmt.Errorf("failed to match pattern '%s' against '%s': %w",
+					pathPattern, changedFileAbs, err)
+			}
 
-			for _, changedFile := range changedFiles {
-				changedFileAbs, err := filepath.Abs(changedFile)
-				if err != nil {
-					return false, "", "", err
-				}
-
-				match, err := u.PathMatch(pathPattern, changedFileAbs)
-				if err != nil {
-					return false, "", "", err
-				}
-
-				if match {
-					isChanged = true
-					break
-				}
+			if match {
+				// Found a match - save the result and return immediately
+				resultIsChanged = true
+				resultChangedType = currentType
+				resultChangedFileOrFolder = currentFileOrFolder
+				return resultIsChanged, resultChangedType, resultChangedFileOrFolder, nil
 			}
 		}
 	}
 
-	return isChanged, changedType, changedFileOrFolder, nil
+	// No matches found
+	return resultIsChanged, resultChangedType, resultChangedFileOrFolder, nil
 }
 
 // isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its subfolders).

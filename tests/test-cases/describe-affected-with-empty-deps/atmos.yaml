@@ -1,0 +1,17 @@
+# Test configuration for describe affected with empty dependency fields
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Warning
