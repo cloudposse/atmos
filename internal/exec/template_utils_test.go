@@ -2,6 +2,7 @@ package exec
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -62,8 +63,17 @@ func TestWriteMergedDataToFile(t *testing.T) {
 	}
 
 	// Read the file from the URL.
-	// Remove the "file://" prefix.
-	filePath := strings.TrimPrefix(urlStr, "file://")
+	// Parse the URL properly to handle both Windows and Unix paths.
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		t.Fatalf("failed to parse URL %s: %v", urlStr, err)
+	}
+	// Convert the URL to a file path.
+	filePath := parsedURL.Path
+	if runtime.GOOS == "windows" && len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
+		// On Windows, remove the leading slash from paths like "/D:/temp/file.json".
+		filePath = strings.TrimPrefix(filePath, "/")
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read file: %v", err)
@@ -99,7 +109,17 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 	}
 
 	// Verify that the file contains the dummyFileURL.
-	filePath := strings.TrimPrefix(urlStr, "file://")
+	// Parse the URL properly to handle both Windows and Unix paths.
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		t.Fatalf("failed to parse URL %s: %v", urlStr, err)
+	}
+	// Convert the URL to a file path.
+	filePath := parsedURL.Path
+	if runtime.GOOS == "windows" && len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
+		// On Windows, remove the leading slash from paths like "/D:/temp/file.json".
+		filePath = strings.TrimPrefix(filePath, "/")
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read file: %v", err)
