@@ -231,10 +231,10 @@ components:
 </File>
 
 This is one advantage of using the `atmos.Store` template function over the
-[`!store` YAML function](/core-concepts/stacks/yaml-functions/store).
+[`!store` YAML function](/functions/yaml/store).
 
 :::tip
-The [`!store` YAML function](/core-concepts/stacks/yaml-functions/store) is generally preferred for its simpler, more readable syntax and for avoiding the complexity of `Go` templates. However, it is less flexible than the `{{ atmos.Store }}` template function. Template functions can reduce readability and are more prone to misuse, potentially resulting in malformed YAML.
+The [`!store` YAML function](/functions/yaml/store) is generally preferred for its simpler, more readable syntax and for avoiding the complexity of `Go` templates. However, it is less flexible than the `{{ atmos.Store }}` template function. Template functions can reduce readability and are more prone to misuse, potentially resulting in malformed YAML.
 :::
 
 ## Caching the result of `atmos.Store` function

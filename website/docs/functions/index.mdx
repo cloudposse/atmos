@@ -1,0 +1,69 @@
+---
+title: Atmos Functions Reference
+sidebar_position: 1
+sidebar_label: Functions
+id: index
+description: Complete reference for all Atmos functions including YAML and Template functions
+---
+
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Atmos provides powerful functions for manipulating data and performing operations in your stack configurations. These functions are divided into two categories: YAML Functions for use directly in YAML configurations, and Template Functions for use within Go template expressions.
+</Intro>
+
+## Function Categories
+
+### YAML Functions
+
+YAML functions use explicit typing with tags denoted by the exclamation point (`!`) symbol. They are processed when Atmos loads and parses stack manifests.
+
+Common YAML functions include:
+- [`!terraform.output`](/functions/yaml/terraform.output) - Access Terraform outputs
+- [`!terraform.state`](/functions/yaml/terraform.state) - Read state directly from backends
+- [`!store`](/functions/yaml/store) - Read values from external stores
+- [`!include`](/functions/yaml/include) - Include external files
+- [`!template`](/functions/yaml/template) - Process Go templates
+- [`!env`](/functions/yaml/env) - Access environment variables
+
+[View all YAML Functions →](/functions/yaml)
+
+### Template Functions
+
+Template functions are used within Go template expressions (enclosed in `{{ }}`) and provide programmatic access to Atmos data and operations.
+
+Key template functions include:
+- [`atmos.Component`](/functions/template/atmos.Component) - Access component configurations
+- [`atmos.Store`](/functions/template/atmos.Store) - Read from external stores
+- [`atmos.GomplateDatasource`](/functions/template/atmos.GomplateDatasource) - Access Gomplate datasources
+
+[View all Template Functions →](/functions/template)
+
+## When to Use Each Type
+
+**Use YAML Functions when:**
+- You need to inject external data directly into YAML configurations
+- The operation should happen during YAML parsing
+- You want simple, declarative syntax
+- Working with stack manifests and component configurations
+
+**Use Template Functions when:**
+- You need complex logic or transformations
+- Working with Go template expressions
+- You need to combine multiple operations
+- Creating dynamic configurations based on conditions
+
+## Performance Considerations
+
+- **`!terraform.state`** is faster than `!terraform.output` as it reads directly from backends without initializing Terraform
+- **`!store`** functions cache results for better performance
+- Template functions may add latency when accessing remote resources
+- Consider using `!store` for frequently accessed values
+
+## See Also
+
+- [Stack Configuration](/core-concepts/stacks)
+- [Templates and Templating](/core-concepts/stacks/templates)
+- [Sharing Data Between Components](/core-concepts/share-data)
+- [Remote State](/core-concepts/share-data/remote-state)
