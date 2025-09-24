@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -70,9 +71,14 @@ func TestWriteMergedDataToFile(t *testing.T) {
 	}
 	// Convert the URL to a file path.
 	filePath := parsedURL.Path
-	if runtime.GOOS == "windows" && len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
-		// On Windows, remove the leading slash from paths like "/D:/temp/file.json".
-		filePath = strings.TrimPrefix(filePath, "/")
+	if runtime.GOOS == "windows" {
+		// On Windows, URLs may have paths like "/C:/temp/file.json"
+		// Remove the leading slash if it's followed by a drive letter
+		if len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
+			filePath = filePath[1:]
+		}
+		// Convert forward slashes to backslashes for Windows
+		filePath = filepath.FromSlash(filePath)
 	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -116,9 +122,14 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 	}
 	// Convert the URL to a file path.
 	filePath := parsedURL.Path
-	if runtime.GOOS == "windows" && len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
-		// On Windows, remove the leading slash from paths like "/D:/temp/file.json".
-		filePath = strings.TrimPrefix(filePath, "/")
+	if runtime.GOOS == "windows" {
+		// On Windows, URLs may have paths like "/C:/temp/file.json"
+		// Remove the leading slash if it's followed by a drive letter
+		if len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
+			filePath = filePath[1:]
+		}
+		// Convert forward slashes to backslashes for Windows
+		filePath = filepath.FromSlash(filePath)
 	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
