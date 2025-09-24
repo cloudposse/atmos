@@ -17,9 +17,9 @@ func TestWindowsFileDelay(t *testing.T) {
 	windowsFileDelay()
 	elapsed := time.Since(start)
 
-	// Should have at least 100ms delay on Windows.
-	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(90), "Expected at least 90ms delay on Windows")
-	assert.LessOrEqual(t, elapsed.Milliseconds(), int64(150), "Expected no more than 150ms delay on Windows")
+	// Should have at least 200ms delay on Windows.
+	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(180), "Expected at least 180ms delay on Windows")
+	assert.LessOrEqual(t, elapsed.Milliseconds(), int64(250), "Expected no more than 250ms delay on Windows")
 }
 
 func TestRetryOnWindows_Success(t *testing.T) {
@@ -51,8 +51,8 @@ func TestRetryOnWindows_RetryThenSuccess(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, 3, callCount, "Function should be called 3 times (2 failures + 1 success)")
-	// Should have delays: 100ms after first failure, 200ms after second failure.
-	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(250), "Expected at least 250ms total delay for 2 retries")
+	// Should have delays: 200ms after first failure, 500ms after second failure.
+	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(650), "Expected at least 650ms total delay for 2 retries")
 }
 
 func TestRetryOnWindows_AllFailures(t *testing.T) {
@@ -70,8 +70,8 @@ func TestRetryOnWindows_AllFailures(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, testErr, err, "Should return the last error")
 	assert.Equal(t, 3, callCount, "Function should be called 3 times (max retries)")
-	// Should have delays: 100ms + 200ms = 300ms minimum.
-	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(250), "Expected at least 250ms total delay for all retries")
+	// Should have delays: 200ms + 500ms = 700ms minimum.
+	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(650), "Expected at least 650ms total delay for all retries")
 }
 
 func TestRetryOnWindows_DifferentErrors(t *testing.T) {

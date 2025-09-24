@@ -59,9 +59,9 @@ settings:
       lexer: ""
       formatter: ""
       theme: ""
-      pager: false
       line_numbers: false
       wrap: false
+    color: true
     no_color: false
   inject_github_token: true
   pro:
