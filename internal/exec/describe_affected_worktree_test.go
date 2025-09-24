@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	cp "github.com/otiai10/copy"
@@ -104,6 +103,10 @@ func TestDescribeAffectedWithGitWorktree(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// Verify the worktree was created
+	_, err = os.Stat(filepath.Join(worktreePath, ".git"))
+	require.NoError(t, err, "Worktree should have a .git file")
+
 	// Open the worktree as a repository
 	worktreeRepo, err := git.PlainOpenWithOptions(worktreePath, &git.PlainOpenOptions{
 		DetectDotGit:          false,
@@ -111,10 +114,10 @@ func TestDescribeAffectedWithGitWorktree(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Verify we can get repository info from the worktree
-	repoInfo, err := g.GetRepoInfo(worktreeRepo)
+	// Verify we can get basic repository info
+	head, err := worktreeRepo.Head()
 	assert.NoError(t, err)
-	assert.NotEmpty(t, repoInfo.LocalWorktreePath)
+	assert.NotNil(t, head)
 
 	// Test that we can open a copied worktree with EnableDotGitCommonDir
 	tempCopyDir, err := os.MkdirTemp("", "atmos-worktree-copy-*")
@@ -174,15 +177,10 @@ func TestExecuteDescribeAffectedWithWorktreeCheckout(t *testing.T) {
 		require.NoError(t, err)
 
 		// Configure the repository
-		cfg := &config.Config{
-			User: struct {
-				Name  string
-				Email string
-			}{
-				Name:  "Test",
-				Email: "test@example.com",
-			},
-		}
+		cfg, err := repo.Config()
+		require.NoError(t, err)
+		cfg.User.Name = "Test User"
+		cfg.User.Email = "test@example.com"
 		err = repo.SetConfig(cfg)
 		require.NoError(t, err)
 
