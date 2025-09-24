@@ -25,9 +25,11 @@ func TestYAMLToMapOfInterfacesRedPath(t *testing.T) {
 }
 
 func TestUnmarshalYAMLFromFile(t *testing.T) {
-	// Skip this test if localhost:8080 is not available (e.g., in CI environments)
-	// The test fixture at stacks/deploy/nonprod.yaml includes a remote file from http://localhost:8080
-	t.Skipf("Skipping test: requires localhost:8080 server which is not available in CI environment")
+	// This test requires a mock HTTP server to serve the remote file referenced in the test fixture.
+	// The fixture at stacks/deploy/nonprod.yaml includes: http://localhost:8080/stacks/deploy/nonprod.yaml
+	// Since this is a unit test without the CLI test infrastructure, we skip it.
+	// The functionality is tested in the CLI integration tests which have the mock server.
+	t.Skipf("Skipping test: requires mock HTTP server infrastructure from CLI tests")
 
 	stacksPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-include-yaml-function")
 	file := filepath.Join(stacksPath, "stacks", "deploy", "nonprod.yaml")
