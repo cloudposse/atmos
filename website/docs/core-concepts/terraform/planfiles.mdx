@@ -90,6 +90,19 @@ Terraform backends fall into two categories regarding planfile support:
 1. **Standard Backends**: Store state only, support local planfile generation
 2. **Enhanced Backends**: Manage both state and operations remotely, don't support local planfiles
 
+:::danger Security Warning: Not All Backends Are Created Equal
+
+When using `-backend-config` or hardcoding backend credentials in your configuration, **Terraform embeds these values in plan files**. This creates serious security risks:
+
+- **Credentials Exposed**: Sensitive data like usernames, passwords, and tokens are stored in plaintext within the planfile
+- **CI/CD Breakage**: Job-specific or time-limited tokens become invalid between plan and apply stages
+- **Compliance Violations**: Planfiles containing secrets cannot be safely stored, shared, or committed to version control
+
+**The HTTP backend is particularly problematic**: While it technically supports `terraform plan -out`, the embedded credentials make it effectively unusable in any production or CI/CD environment. For all practical purposes, treat the HTTP backend as not supporting planfiles.
+
+**Best Practice**: Use environment variables for backend authentication or choose backends that support secure credential management.
+:::
+
 ### Backends That DO NOT Support Local Planfiles
 
 The following backends have limitations with `terraform plan -out=<file>`:
@@ -99,7 +112,7 @@ The following backends have limitations with `terraform plan -out=<file>`:
 | **Remote Backend** | Enhanced | Does not support saving execution plans locally. Returns error: "The 'remote' backend does not support saving the generated execution plan locally" | Use remote execution mode or migrate to standard backend with `skip_planfile: true` in Atmos |
 | **Terraform Cloud** | Enhanced | Remote execution mode doesn't allow local plan output | Use VCS-driven workflow or configure `skip_planfile: true` in Atmos |
 | **Terraform Enterprise** | Enhanced | Same as Terraform Cloud - remote execution limitation | Use VCS-driven workflow or configure `skip_planfile: true` in Atmos |
-| **HTTP Backend** | Standard | While technically supports `-out`, credentials are embedded in planfiles which breaks CI/CD with rotating tokens | Use `atmos terraform generate planfile` for JSON/YAML output instead |
+| **HTTP Backend** | Standard | ⚠️ **Security Risk**: While technically supports `-out`, backend credentials are embedded in planfiles making it effectively unusable | Do not use planfiles with HTTP backend. Use environment variables for auth or switch backends |
 
 ### Backends That Support Planfiles
 
