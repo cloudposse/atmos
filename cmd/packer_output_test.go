@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -12,11 +11,6 @@ import (
 )
 
 func TestPackerOutputCmd(t *testing.T) {
-	// Skip test if packer binary is not available
-	if _, err := exec.LookPath("packer"); err != nil {
-		t.Skipf("Skipping test because packer binary is not found in PATH: %v", err)
-	}
-
 	workDir := "../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
