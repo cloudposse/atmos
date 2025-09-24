@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -86,19 +85,11 @@ func processCustomCommands(
 					executeCustomCommand(atmosConfig, cmd, args, parentCommand, commandConfig)
 				},
 			}
-			// TODO: we need to update this post https://github.com/cloudposse/atmos/pull/959 gets merged
 			customCommand.PersistentFlags().Bool("", false, doubleDashHint)
 			// Process and add flags to the command
 			for _, flag := range commandConfig.Flags {
 				if flag.Type == "bool" {
 					defaultVal := false
-					if flag.Default != "" {
-						// Accept "true"/"false" as string for bool default
-						parsed, err := strconv.ParseBool(flag.Default)
-						if err == nil {
-							defaultVal = parsed
-						}
-					}
 					if flag.Shorthand != "" {
 						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
@@ -106,9 +97,6 @@ func processCustomCommands(
 					}
 				} else {
 					defaultVal := ""
-					if flag.Default != "" {
-						defaultVal = flag.Default
-					}
 					if flag.Shorthand != "" {
 						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
