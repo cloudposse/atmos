@@ -61,11 +61,6 @@ var describeComponentCmd = &cobra.Command{
 			return err
 		}
 
-		pager, err := flags.GetString("pager")
-		if err != nil {
-			return err
-		}
-
 		component := args[0]
 
 		err = e.NewDescribeComponentExec().ExecuteDescribeComponentCmd(e.DescribeComponentParams{
@@ -75,7 +70,6 @@ var describeComponentCmd = &cobra.Command{
 			ProcessYamlFunctions: processYamlFunctions,
 			Skip:                 skip,
 			Query:                query,
-			Pager:                pager,
 			Format:               format,
 			File:                 file,
 		})

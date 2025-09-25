@@ -33,13 +33,7 @@ var describeConfigCmd = &cobra.Command{
 			return err
 		}
 
-		if cmd.Flags().Changed("pager") {
-			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
-			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			if err != nil {
-				return err
-			}
-		}
+		// Global --pager flag is now handled in cfg.InitCliConfig
 
 		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(query, format, "")
 		return err

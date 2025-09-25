@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/cloudposse/atmos/pkg/logger"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
@@ -35,22 +36,20 @@ func TestUnlockStack_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{
 		Key: "test-owner/test-repo/test-stack/test-component",
 	}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.NoError(t, err)
 	assert.True(t, response.Success)
 }
@@ -66,25 +65,25 @@ func TestUnlockStack_HTTPErrors(t *testing.T) {
 			name:          "server returns 400 bad request",
 			statusCode:    http.StatusBadRequest,
 			responseBody:  `{"success": false, "errorMessage": "Bad request"}`,
-			expectedError: ErrFailedToUnlockStack,
+			expectedError: errUtils.ErrFailedToUnlockStack,
 		},
 		{
 			name:          "server returns 401 unauthorized",
 			statusCode:    http.StatusUnauthorized,
 			responseBody:  `{"success": false, "errorMessage": "Unauthorized"}`,
-			expectedError: ErrFailedToUnlockStack,
+			expectedError: errUtils.ErrFailedToUnlockStack,
 		},
 		{
 			name:          "server returns 404 not found",
 			statusCode:    http.StatusNotFound,
 			responseBody:  `{"success": false, "errorMessage": "Lock not found"}`,
-			expectedError: ErrFailedToUnlockStack,
+			expectedError: errUtils.ErrFailedToUnlockStack,
 		},
 		{
 			name:          "server returns 500 internal server error",
 			statusCode:    http.StatusInternalServerError,
 			responseBody:  `{"success": false, "errorMessage": "Internal Server Error"}`,
-			expectedError: ErrFailedToUnlockStack,
+			expectedError: errUtils.ErrFailedToUnlockStack,
 		},
 	}
 
@@ -96,20 +95,18 @@ func TestUnlockStack_HTTPErrors(t *testing.T) {
 			}))
 			defer server.Close()
 
-			mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-			assert.NoError(t, err)
-
 			client := &AtmosProAPIClient{
 				BaseURL:         server.URL,
 				BaseAPIEndpoint: "api",
 				APIToken:        "test-token",
-				HTTPClient:      http.DefaultClient,
-				Logger:          mockLogger,
+				HTTPClient: &http.Client{
+					Timeout: time.Second * 5,
+				},
 			}
 
 			dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-			response, err := client.UnlockStack(dto)
+			response, err := client.UnlockStack(&dto)
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, tc.expectedError)
 			assert.False(t, response.Success)
@@ -118,22 +115,20 @@ func TestUnlockStack_HTTPErrors(t *testing.T) {
 }
 
 func TestUnlockStack_NetworkError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         "http://invalid-host-that-does-not-exist:12345",
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToMakeRequest)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToMakeRequest)
 	assert.False(t, response.Success)
 }
 
@@ -144,29 +139,24 @@ func TestUnlockStack_InvalidJSONResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToUnmarshalJSON)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToUnmarshalAPIResponse)
 	assert.False(t, response.Success)
 }
 
 func TestUnlockStack_ReadBodyError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 
@@ -175,7 +165,6 @@ func TestUnlockStack_ReadBodyError(t *testing.T) {
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      httpClient,
-		Logger:          mockLogger,
 	}
 
 	// Mock response with body that will fail to read
@@ -189,32 +178,30 @@ func TestUnlockStack_ReadBodyError(t *testing.T) {
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToReadResponseBody)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToReadResponseBody)
 	assert.False(t, response.Success)
 
 	mockRoundTripper.AssertExpectations(t)
 }
 
 func TestUnlockStack_RequestCreationError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	// Use an invalid URL that would cause http.NewRequest to fail
 	client := &AtmosProAPIClient{
 		BaseURL:         "://invalid-url", // Malformed URL
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToCreateAuthRequest)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAuthRequest)
 	assert.False(t, response.Success)
 }
 
@@ -232,22 +219,20 @@ func TestUnlockStack_SuccessFalseWithContext(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
-		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
+		HTTPClient: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	dto := dtos.UnlockStackRequest{Key: "test-key"}
 
-	response, err := client.UnlockStack(dto)
+	response, err := client.UnlockStack(&dto)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrFailedToUnlockStack)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToUnlockStack)
 	assert.Contains(t, err.Error(), "Lock not found or already expired")
 	assert.False(t, response.Success)
 }

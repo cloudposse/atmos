@@ -1,0 +1,280 @@
+---
+title: atmos.Store
+sidebar_position: 3
+sidebar_label: atmos.Store
+sidebar_class_name: command
+description: Read a value from a store
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+The `atmos.Store` template function allows reading the values from a remote [store](/core-concepts/projects/configuration/stores)
+(e.g. SSM Parameter Store, Artifactory, Redis, etc.) into Atmos stack manifests.
+</Intro>
+
+## Usage
+
+The `atmos.Store` template function accepts four parameters:
+
+```yaml
+# Read a simple value (string, number, boolean) from the store
+var1: '{{ atmos.Store "<store_name>" "<stack>" "<component>" "<key>" }}'
+
+# Read a complex object (e.g. map) from the store and get an individual value (attribute) from the result
+var2: '{{ (atmos.Store "<store_name>" "<stack>" "<component>" "<key>").<attribute> }}'
+```
+
+## Arguments
+
+<dl>
+    <dt>`store_name`</dt>
+    <dd>The name of the store to read from (as defined in the `atmos.yaml` file)</dd>
+
+    <dt>`stack`</dt>
+    <dd>Atmos stack name</dd>
+
+    <dt>`component`</dt>
+    <dd>Atmos component name</dd>
+
+    <dt>`key`</dt>
+    <dd>The key to read from the store</dd>
+</dl>
+
+
+## Specifying Atmos `stack`
+
+There are multiple ways you can specify the Atmos stack parameter in the `atmos.Store` function.
+
+The `stack` argument is the second argument of the `atmos.Store` function, and it can be specified in a few different ways:
+
+### Hardcoded Stack Name
+
+Use it if you want to get a value from the store for a component from a different (well-known and static) stack.
+For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` key from the `vpc` component from the stack `plat-ue2-prod`:
+
+```yaml title="plat-ue2-dev"
+  components:
+    terraform:
+      tgw:
+        vars:
+          vpc_id: '{{ atmos.Store "prod/ssm" "plat-ue2-prod" "vpc" "vpc_id" }}'
+```
+
+### Reference the Current Stack Name
+
+Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component is in
+(for which the `atmos.Store` function is executed):
+
+```yaml
+{{ atmos.Store "<store_name>" .stack "<component>" "<key>" }}
+{{ atmos.Store "<store_name>" .atmos_stack "<component>" "<key>" }}
+```
+
+For example, you have a `tgw` component that requires the `vpc_id` key from the store for the `vpc` component in the same stack:
+
+```yaml
+  components:
+    terraform:
+      tgw:
+        vars:
+          vpc_id: '{{ atmos.Store "prod/ssm" .stack "vpc" "vpc_id" }}'
+```
+
+### Use a Format Function
+
+Use the `printf` template function to construct stack names using static strings and dynamic identifiers.
+This is convenient when you want to override some identifiers in the stack name:
+
+```yaml
+{{ atmos.Store "<store_name>" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage) "<component>" "<key>" }}
+
+{{ atmos.Store "<store_name>" (printf "plat-%s-prod" .vars.environment) "<component>" "<key>" }}
+
+{{ atmos.Store "<store_name>" (printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account) "<component>" "<key>" }}
+```
+
+For example, you have a `tgw` component deployed in the stack `plat-ue2-dev`. The `tgw` component requires the
+`vpc_id` key from the store for the `vpc` component from the same environment (`ue2`) and same stage (`dev`), but from a different
+tenant `net` (instead of `plat`):
+
+```yaml title="plat-ue2-dev"
+  components:
+    terraform:
+      tgw:
+        vars:
+          vpc_id: '{{ atmos.Store "prod/ssm" (printf "net-%s-%s" .vars.environment .vars.stage) "vpc" "vpc_id" }}'
+```
+
+:::tip Important
+By using the `printf "%s-%s-%s"` function, you are constructing stack names using the stack context variables/identifiers.
+
+For more information on Atmos stack names and how to define them, refer to `stacks.name_pattern` and `stacks.name_template`
+sections in [`atmos.yaml` CLI config file](/cli/configuration/)
+:::
+
+## Examples
+
+The following configuration shows different ways of using the `atmos.Store` template function to read values from
+a Redis store:
+
+### Configure Redis store in `atmos.yaml`
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# `Go` templates in Atmos manifests
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+
+stores:
+  redis:
+    type: redis
+    # The ATMOS_REDIS_URL environment variable will be used if
+    # no URL is specified in the options
+```
+</File>
+
+### Configure Atmos stacks and components
+
+<File>
+```yaml
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    component-1:
+      vars:
+        # Use the static (hardcoded) stack name `prod`
+        cidr: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
+        # Using the template identifier `.stack` allows specifying the current stack name `nonprod` w/o hardcoding it
+        instance_count: '{{ (atmos.Store "redis" .stack "config" "config_map").instance_count }}'
+        # Use the Atmos section `.vars.stage` for the stack name
+        subnets_count: '{{ (atmos.Store "redis" .vars.stage "config" "config_map").vpc_config.subnets_count }}'
+        # The `!template` YAML function converts the JSON-encoded string into a map
+        defaults: !template '{{ (atmos.Store "redis" .stack "config" "config_map").defaults | toJSON }}'
+        lambda_environment:
+          # Example of using the `atmos.Store` template function in a multi-line string
+          ENGINE_CONFIG_JSON: |
+            {
+              "cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" | quote }},
+              "defaults": {{ (atmos.Store "redis" .stack "config" "config_map").defaults | toJSON }},
+              "subnets_count": {{ (atmos.Store "redis" .stack "config" "config_map").vpc_config.subnets_count }}
+            }
+```
+</File>
+
+Execute the `atmos describe component component-1 -s nonprod` command.
+It will read the values from the store and assign to the component variables:
+
+<Terminal title="atmos describe component component-1 -s nonprod">
+```yaml
+vars:
+  cidr: 172.16.0.0/16
+  defaults:
+    account_id: 987654321
+    team: networking
+  instance_count: 2
+  lambda_environment:
+    ENGINE_CONFIG_JSON: |
+      {
+        "cidr": "172.16.0.0/16",
+        "defaults": {"account_id":987654321,"team":"networking"},
+        "subnets_count": 3
+      }
+  subnets_count: 3
+  stage: nonprod
+```
+</Terminal>
+
+## Using `atmos.Store` function in YAML multi-line strings
+
+You can use the `atmos.Store` template function in [YAML multi-line strings](https://yaml-multiline.info/)
+at any position inside a string. For example, to encode the results from the `atmos.Store` template function as JSON, we could do the following:
+
+<File>
+```yaml
+components:
+  terraform:
+    component-1:
+      vars:
+        lambda_environment:
+          ENGINE_CONFIG_JSON: |
+            {
+                "cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" | quote }},
+                "defaults": {{ (atmos.Store "redis" .stack "config" "config_map").defaults | toJSON }},
+                "subnets_count": {{ (atmos.Store "redis" .stack "config" "config_map").vpc_config.subnets_count }}
+            }
+```
+</File>
+
+This is one advantage of using the `atmos.Store` template function over the
+[`!store` YAML function](/functions/yaml/store).
+
+:::tip
+The [`!store` YAML function](/functions/yaml/store) is generally preferred for its simpler, more readable syntax and for avoiding the complexity of `Go` templates. However, it is less flexible than the `{{ atmos.Store }}` template function. Template functions can reduce readability and are more prone to misuse, potentially resulting in malformed YAML.
+:::
+
+## Caching the result of `atmos.Store` function
+
+Atmos caches (in memory) the results of `atmos.Store` template functions when executing any Atmos command that processes stacks
+(e.g. `atmos describe component` or `atmos terraform apply`).
+
+If you call the function for the same store, stack, component and key more than once, the first call will produce the result
+and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
+`atmos.Store` function for the same store, stack, component and key in multiple places in Atmos stack manifests.
+It will speed up the function execution and stack processing.
+
+For example:
+
+<File>
+```yaml
+components:
+  terraform:
+    test2:
+      vars:
+        tags:
+          test: '{{ atmos.Store "prod/ssm" .stack "vpc" "vpc_id" }}'
+          test2: '{{ atmos.Store "prod/ssm" .stack "vpc" "vpc_id" }}'
+          test3: '{{ atmos.Store "prod/ssm" .stack "vpc" "vpc_id" }}'
+```
+</File>
+
+In the example, the `atmos.Store` template function is executed three times (once for each tag) for the same store, stack, component and key.
+
+After the first execution, Atmos caches the result in memory,
+and reuses it in the next two calls to the function. The caching makes the stack processing faster.
+
+## Considerations
+
+- Using `atmos.Store` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
+- When using `atmos.Store` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced stores.
+If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
+- Be mindful of disaster recovery (DR) implications when using it across regions.
+- Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not
+yet be available and the `atmos.Store` function call will fail unless you provide a default value
+using the `Go` template `or` or `if-else` expressions, the [Sprig `default` function](https://masterminds.github.io/sprig/defaults.html),
+or the [Gomplate `default` function](https://docs.gomplate.ca/functions/conv/#convdefault).

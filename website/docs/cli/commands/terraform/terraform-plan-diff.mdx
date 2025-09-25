@@ -24,18 +24,26 @@ atmos terraform plan-diff <component> -s <stack> --orig=<original-plan-file> [--
 
 ## Arguments
 
-| Argument    | Description                                          |
-| ----------- | ---------------------------------------------------- |
-| `component` | The name of the component to run the command against |
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>The name of the component to run the command against.</dd>
+</dl>
 
 ## Flags
 
-| Flag          | Description                                                |
-| ------------- | ---------------------------------------------------------- |
-| `-s, --stack` | The stack name to use (required)                           |
-| `--orig`      | Path to the original Terraform plan file (required)        |
-| `--new`       | Path to the new Terraform plan file (optional)             |
-| `--skip-init` | Skip running `terraform init` before executing the command |
+<dl>
+  <dt>`-s` / `--stack` <em>(required)</em></dt>
+  <dd>The stack name to use.</dd>
+
+  <dt>`--orig` <em>(required)</em></dt>
+  <dd>Path to the original Terraform plan file.</dd>
+
+  <dt>`--new` <em>(optional)</em></dt>
+  <dd>Path to the new Terraform plan file.</dd>
+
+  <dt>`--skip-init` <em>(optional)</em></dt>
+  <dd>Skip running `terraform init` before executing the command.</dd>
+</dl>
 
 You can also pass any additional flags and arguments that are supported by the `terraform plan` command when generating a new plan.
 
