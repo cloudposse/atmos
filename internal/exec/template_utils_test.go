@@ -72,10 +72,18 @@ func TestWriteMergedDataToFile(t *testing.T) {
 	// Convert the URL to a file path.
 	filePath := parsedURL.Path
 	if runtime.GOOS == "windows" {
-		// On Windows, URLs may have paths like "/C:/temp/file.json"
-		// Remove the leading slash if it's followed by a drive letter
+		// On Windows, file URLs can have two forms:
+		// 1. file://C:/temp/file.json (no leading slash in Path)
+		// 2. file:///C:/temp/file.json (leading slash in Path)
+		// If there's a leading slash followed by a drive letter, remove the slash.
 		if len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
 			filePath = filePath[1:]
+		}
+		// If the path doesn't have a drive letter, it's likely the URL was
+		// constructed incorrectly. Check if Host contains the drive letter.
+		if parsedURL.Host != "" && (len(filePath) < 2 || filePath[1] != ':') {
+			// Combine host and path for Windows file URLs
+			filePath = parsedURL.Host + filePath
 		}
 		// Convert forward slashes to backslashes for Windows
 		filePath = filepath.FromSlash(filePath)
@@ -123,10 +131,18 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 	// Convert the URL to a file path.
 	filePath := parsedURL.Path
 	if runtime.GOOS == "windows" {
-		// On Windows, URLs may have paths like "/C:/temp/file.json"
-		// Remove the leading slash if it's followed by a drive letter
+		// On Windows, file URLs can have two forms:
+		// 1. file://C:/temp/file.json (no leading slash in Path)
+		// 2. file:///C:/temp/file.json (leading slash in Path)
+		// If there's a leading slash followed by a drive letter, remove the slash.
 		if len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
 			filePath = filePath[1:]
+		}
+		// If the path doesn't have a drive letter, it's likely the URL was
+		// constructed incorrectly. Check if Host contains the drive letter.
+		if parsedURL.Host != "" && (len(filePath) < 2 || filePath[1] != ':') {
+			// Combine host and path for Windows file URLs
+			filePath = parsedURL.Host + filePath
 		}
 		// Convert forward slashes to backslashes for Windows
 		filePath = filepath.FromSlash(filePath)
