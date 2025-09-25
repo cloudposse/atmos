@@ -238,6 +238,34 @@ If you need to migrate away from strict pinning:
 3. Update stack references to point to folders
 4. Manage versions through folder selection
 
+## Drawbacks and Trade-offs
+
+While Strict Version Pinning provides strong reproducibility, it comes with significant trade-offs:
+
+### Operational Overhead
+- **Manual version management** for each environment
+- **Promotion fatigue** from constant version updates
+- **Coordination complexity** across teams and environments
+- **Documentation burden** to track version decisions
+
+### Environment Divergence
+- **Version drift** leads to "snowflake" environments
+- **Late feedback** - issues discovered only when promoting to production
+- **Difficult debugging** when environments behave differently
+- **Testing limitations** - can't test against production-like configurations early
+
+### Scaling Challenges
+- **Exponential complexity** as environment count grows
+- **Bottlenecks** in promotion processes
+- **Increased risk** of human error in version management
+- **Time-consuming** rollback coordination across environments
+
+### Innovation Impedance
+- **Slow adoption** of improvements and fixes
+- **Conservative bias** against making changes
+- **Delayed security patches** due to promotion overhead
+- **Reduced experimentation** due to high change cost
+
 ## Summary
 
 Strict Version Pinning provides maximum control and reproducibility at the cost of operational overhead and environment divergence. It's best suited for small, carefully managed environment sets with strong regulatory requirements. For larger scales or teams preferring rapid iteration, consider patterns that promote convergence like [Release Tracks/Channels](./release-tracks-channels) or [Folder-Based Versioning](./folder-based-versioning).

@@ -119,9 +119,15 @@ This pattern adds complexity but provides the strongest guarantees for regulated
 #### 4. [Vendoring Components](#vendoring-components)
 **Trunk-based**: Copy upstream code locally into the main branch with a manifest tracking origin and lineage. Update locally in bulk; diverge intentionally when needed. Provides strong local control with predictable update windows.
 
+#### 5. Component Pinning with Automation (Recommended Default)
+**Trunk-based**: All environments pin to the same component version on the main branch, with automated testing and deployment pipelines. Decouples release from deploy using automation rather than VCS strategies. Promotes strong convergence, embraces trunk-based development, and allows easy preview of change impact across all dependent environments. This is the recommended default for most teams.
+
+#### 6. Immutable Release Artifacts
+**Artifact-based**: Generate immutable release artifacts (e.g., tarballs, container images) for each environment separate from Git. These artifacts represent an exact, reproducible record of what was deployed, including all dependencies and configurations frozen at a point in time. Provides the strongest guarantee of reproducibility but requires sophisticated artifact management infrastructure.
+
 ### Git Flow Pattern
 
-#### 5. [Git Flow: Branches as Channels](#git-flow-branches-as-channels)
+#### 7. [Git Flow: Branches as Channels](#git-flow-branches-as-channels)
 **Branch-based**: Long-lived branches map to release channels. Environments track branches; promotions happen via merges between branches. This is the only pattern that diverges from trunk-based development, using Git Flow's branching model instead.
 
 ## Quick Comparison
@@ -132,6 +138,8 @@ This pattern adds complexity but provides the strongest guarantees for regulated
 | Release Tracks/Channels  | Trunk-based      | High        | Strong              | Medium        | Medium           | Lower Risk           |
 | Folder-Based Versioning  | Trunk-based      | Medium      | Strong (explicit)   | Medium        | Medium           | Lower Risk           |
 | Vendoring                | Trunk-based      | Medium–High | Strong (local)      | Medium        | Medium           | Lower Risk           |
+| **Component Pinning**    | **Trunk-based**  | **Very High** | **Strong**        | **Easy**      | **Low**          | **Minimal Risk**     |
+| Immutable Artifacts      | Artifact-based   | High        | Strong              | Strong        | High             | Lower Risk           |
 | Git Flow (per channel)   | Branch-based     | Medium      | Medium              | Medium        | Medium–High      | High if skipped      |
 
 ## Choosing a Pattern

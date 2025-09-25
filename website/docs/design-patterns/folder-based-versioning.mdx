@@ -445,6 +445,35 @@ atmos terraform apply vpc --stack prod-us-east-1 --auto-approve=false
 3. Remove track abstraction layer
 4. Implement direct folder references
 
+## Drawbacks and Trade-offs
+
+While Folder-Based Versioning provides clear benefits, consider these trade-offs:
+
+### Increased Repository Size
+- **Multiple copies** of similar code across version folders
+- **Larger clone operations** as repository grows with versions
+- **Storage overhead** for maintaining parallel implementations
+
+### Maintenance Complexity
+- **Multiple locations** to apply security patches and bug fixes
+- **Divergence risk** as versions evolve independently
+- **Documentation burden** for each version's specifics
+
+### Limited Version Discovery
+- **Manual tracking** of which environments use which versions
+- **No automatic convergence** - requires active management
+- **Potential for version sprawl** without governance
+
+### Migration Challenges
+- **Testing overhead** for each version transition
+- **Rollback complexity** after extended periods on new versions
+- **State management** requires careful workspace key planning
+
+### Development Workflow Impact
+- **Parallel development** can lead to duplicated effort
+- **Cherry-picking fixes** between versions adds complexity
+- **Code review challenges** when changes span multiple versions
+
 ## Summary
 
 Folder-Based Versioning provides explicit, visible version management through repository structure. It excels when you need to maintain multiple versions in parallel, make breaking changes safely, or provide clear migration paths. While it can increase repository size and maintenance overhead, the clarity and safety it provides often outweigh these costs, especially for critical infrastructure components.
