@@ -4,17 +4,28 @@ import (
 	"fmt"
 	"path/filepath"
 
+	log "github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack.
 func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	return filepath.Join(
-		atmosConfig.BasePath,
-		atmosConfig.Components.Terraform.BasePath,
-		info.ComponentFolderPrefix,
-		info.FinalComponent,
-	)
+	// Use the central function that respects all overrides and custom paths.
+	path, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		// Log error but still try to return something.
+		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
+		// Fallback that still respects the configured path.
+		return filepath.Join(
+			atmosConfig.BasePath,
+			atmosConfig.Components.Terraform.BasePath,
+			info.ComponentFolderPrefix,
+			info.FinalComponent,
+		)
+	}
+	return path
 }
 
 // constructTerraformComponentPlanfileName constructs the planfile name for a terraform component in a stack.
@@ -59,12 +70,20 @@ func constructTerraformComponentPlanfilePath(atmosConfig *schema.AtmosConfigurat
 
 // constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack.
 func constructHelmfileComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	return filepath.Join(
-		atmosConfig.BasePath,
-		atmosConfig.Components.Helmfile.BasePath,
-		info.ComponentFolderPrefix,
-		info.FinalComponent,
-	)
+	// Use the central function that respects all overrides and custom paths.
+	path, err := u.GetComponentPath(atmosConfig, "helmfile", info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		// Log error but still try to return something.
+		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
+		// Fallback that still respects the configured path.
+		return filepath.Join(
+			atmosConfig.BasePath,
+			atmosConfig.Components.Helmfile.BasePath,
+			info.ComponentFolderPrefix,
+			info.FinalComponent,
+		)
+	}
+	return path
 }
 
 // constructHelmfileComponentVarfileName constructs the varfile name for a helmfile component in a stack.
@@ -107,10 +126,18 @@ func constructPackerComponentVarfilePath(atmosConfig *schema.AtmosConfiguration,
 
 // constructPackerComponentWorkingDir constructs the working dir for a Packer component in a stack.
 func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	return filepath.Join(
-		atmosConfig.BasePath,
-		atmosConfig.Components.Packer.BasePath,
-		info.ComponentFolderPrefix,
-		info.FinalComponent,
-	)
+	// Use the central function that respects all overrides and custom paths.
+	path, err := u.GetComponentPath(atmosConfig, "packer", info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		// Log error but still try to return something.
+		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
+		// Fallback that still respects the configured path.
+		return filepath.Join(
+			atmosConfig.BasePath,
+			atmosConfig.Components.Packer.BasePath,
+			info.ComponentFolderPrefix,
+			info.FinalComponent,
+		)
+	}
+	return path
 }
