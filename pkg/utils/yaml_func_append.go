@@ -12,9 +12,9 @@ import (
 func ProcessAppendTag(node any) error {
 	log.Debug("Processing !append tag", "node_type", fmt.Sprintf("%T", node))
 
-	// The !append tag should only be used on sequence nodes (lists)
-	// This validation will be done at the YAML parsing level
-	// This function serves as a marker for the merge logic
+	// The !append tag should only be used on sequence nodes (lists).
+	// This validation will be done at the YAML parsing level.
+	// This function serves as a marker for the merge logic.
 	return nil
 }
 
