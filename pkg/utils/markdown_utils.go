@@ -18,20 +18,9 @@ import (
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
-// renderStderr is a separate renderer specifically for stderr output with proper width detection.
-var renderStderr *markdown.Renderer
-
 // printfMarkdownTo prints a message in Markdown format to the specified writer.
 func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
-	// Choose the appropriate renderer based on the output writer
-	var renderer *markdown.Renderer
-	if w == os.Stderr && renderStderr != nil {
-		renderer = renderStderr
-	} else if render != nil {
-		renderer = render
-	}
-
-	if renderer == nil {
+	if render == nil {
 		_, err := fmt.Fprintf(w, format, a...)
 		errUtils.CheckErrorAndPrint(err, "", "")
 		return
@@ -39,7 +28,7 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 	message := fmt.Sprintf(format, a...)
 	var md string
 	var renderErr error
-	md, renderErr = renderer.Render(message)
+	md, renderErr = render.Render(message)
 	if renderErr != nil {
 		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
 	}
@@ -81,10 +70,5 @@ func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
-	}
-	// Initialize a separate renderer for stderr with proper width detection
-	renderStderr, err = markdown.NewTerminalMarkdownRendererForStderr(&atmosConfig)
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize stderr markdown renderer: %w", err), "", "")
 	}
 }

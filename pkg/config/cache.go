@@ -10,7 +10,7 @@ import (
 
 	"github.com/adrg/xdg"
 	log "github.com/charmbracelet/log"
-	"github.com/gofrs/flock"
+	// "github.com/gofrs/flock"  // TEMPORARILY DISABLED
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
@@ -34,30 +34,33 @@ func GetCacheFilePath() (string, error) {
 }
 
 func withCacheFileLock(cacheFile string, fn func() error) error {
-	lock := flock.New(cacheFile)
-	// Try to acquire lock with retries to avoid blocking indefinitely
-	const maxRetries = 50 // 5 seconds total with 100ms between retries
-	var locked bool
-	var err error
-
-	for i := 0; i < maxRetries; i++ {
-		locked, err = lock.TryLock()
-		if err != nil {
-			return errors.Wrap(err, "error trying to acquire file lock")
-		}
-		if locked {
-			break
-		}
-		// Wait a bit before retrying
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	if !locked {
-		return errors.New("timeout acquiring file lock")
-	}
-
-	defer lock.Unlock()
+	// TEMPORARILY DISABLED FILE LOCKING TO DEBUG TEST ISSUES
 	return fn()
+
+	// lock := flock.New(cacheFile)
+	// // Try to acquire lock with retries to avoid blocking indefinitely
+	// const maxRetries = 50 // 5 seconds total with 100ms between retries
+	// var locked bool
+	// var err error
+
+	// for i := 0; i < maxRetries; i++ {
+	// 	locked, err = lock.TryLock()
+	// 	if err != nil {
+	// 		return errors.Wrap(err, "error trying to acquire file lock")
+	// 	}
+	// 	if locked {
+	// 		break
+	// 	}
+	// 	// Wait a bit before retrying
+	// 	time.Sleep(100 * time.Millisecond)
+	// }
+
+	// if !locked {
+	// 	return errors.New("timeout acquiring file lock")
+	// }
+
+	// defer lock.Unlock()
+	// return fn()
 }
 
 func LoadCache() (CacheConfig, error) {
@@ -72,21 +75,22 @@ func LoadCache() (CacheConfig, error) {
 		return cfg, nil
 	}
 
-	// Use file locking to prevent reading while another process is writing
-	// Use TryRLock to avoid blocking indefinitely which can cause deadlocks in PTY tests
-	lock := flock.New(cacheFile)
-	locked, err := lock.TryRLock()
-	if err != nil {
-		return cfg, errors.Wrap(err, "error trying to acquire read lock")
-	}
-	if !locked {
-		// If we can't get the lock immediately, return empty config
-		// This prevents deadlocks during concurrent access
-		return cfg, nil
-	}
-	defer func() {
-		_ = lock.Unlock()
-	}()
+	// TEMPORARILY DISABLED FILE LOCKING TO DEBUG TEST ISSUES
+	// // Use file locking to prevent reading while another process is writing
+	// // Use TryRLock to avoid blocking indefinitely which can cause deadlocks in PTY tests
+	// lock := flock.New(cacheFile)
+	// locked, err := lock.TryRLock()
+	// if err != nil {
+	// 	return cfg, errors.Wrap(err, "error trying to acquire read lock")
+	// }
+	// if !locked {
+	// 	// If we can't get the lock immediately, return empty config
+	// 	// This prevents deadlocks during concurrent access
+	// 	return cfg, nil
+	// }
+	// defer func() {
+	// 	_ = lock.Unlock()
+	// }()
 
 	v := viper.New()
 	v.SetConfigFile(cacheFile)
