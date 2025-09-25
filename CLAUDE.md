@@ -718,3 +718,11 @@ The project includes Cursor rules in `.cursor/rules/atmos-rules.mdc` covering:
 - **Use build-and-test pattern**: `go build -o binary . && go test ./... 2>&1`
 - **Fix compilation errors immediately** - Do not proceed with additional changes until compilation succeeds
 - **This prevents undefined function/variable errors** that waste time and create broken commits
+
+### Pre-commit Checks (MANDATORY)
+- **NEVER use `--no-verify` flag** when committing - pre-commit hooks must always run
+- **Fix all linting errors** before committing - run `make lint` to check
+- **Pre-commit hooks ensure code quality** - they run go-fumpt, golangci-lint, and go mod tidy
+- **If pre-commit fails, fix the issues** - do not bypass with --no-verify
+- **Run `make lint` before committing** to catch issues early
+- **All commits must pass pre-commit checks** to maintain code standards
