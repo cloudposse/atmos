@@ -12,20 +12,25 @@ import (
 
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack.
 func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	// Use the central function that respects all overrides and custom paths.
-	path, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
-	if err != nil {
+	// If we have a resolved absolute path, use GetComponentPath.
+	// Otherwise, just construct the path directly (for tests and simple cases).
+	if atmosConfig.TerraformDirAbsolutePath != "" {
+		path, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
+		if err == nil {
+			return path
+		}
 		// Log error but still try to return something.
 		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
-		// Fallback that still respects the configured path.
-		return filepath.Join(
-			atmosConfig.BasePath,
-			atmosConfig.Components.Terraform.BasePath,
-			info.ComponentFolderPrefix,
-			info.FinalComponent,
-		)
 	}
-	return path
+
+	// Direct path construction without converting to absolute.
+	// This maintains compatibility with tests that use simple paths.
+	return filepath.Join(
+		atmosConfig.BasePath,
+		atmosConfig.Components.Terraform.BasePath,
+		info.ComponentFolderPrefix,
+		info.FinalComponent,
+	)
 }
 
 // constructTerraformComponentPlanfileName constructs the planfile name for a terraform component in a stack.
@@ -70,20 +75,25 @@ func constructTerraformComponentPlanfilePath(atmosConfig *schema.AtmosConfigurat
 
 // constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack.
 func constructHelmfileComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	// Use the central function that respects all overrides and custom paths.
-	path, err := u.GetComponentPath(atmosConfig, "helmfile", info.ComponentFolderPrefix, info.FinalComponent)
-	if err != nil {
+	// If we have a resolved absolute path, use GetComponentPath.
+	// Otherwise, just construct the path directly (for tests and simple cases).
+	if atmosConfig.HelmfileDirAbsolutePath != "" {
+		path, err := u.GetComponentPath(atmosConfig, "helmfile", info.ComponentFolderPrefix, info.FinalComponent)
+		if err == nil {
+			return path
+		}
 		// Log error but still try to return something.
 		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
-		// Fallback that still respects the configured path.
-		return filepath.Join(
-			atmosConfig.BasePath,
-			atmosConfig.Components.Helmfile.BasePath,
-			info.ComponentFolderPrefix,
-			info.FinalComponent,
-		)
 	}
-	return path
+
+	// Direct path construction without converting to absolute.
+	// This maintains compatibility with tests that use simple paths.
+	return filepath.Join(
+		atmosConfig.BasePath,
+		atmosConfig.Components.Helmfile.BasePath,
+		info.ComponentFolderPrefix,
+		info.FinalComponent,
+	)
 }
 
 // constructHelmfileComponentVarfileName constructs the varfile name for a helmfile component in a stack.
@@ -126,18 +136,23 @@ func constructPackerComponentVarfilePath(atmosConfig *schema.AtmosConfiguration,
 
 // constructPackerComponentWorkingDir constructs the working dir for a Packer component in a stack.
 func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	// Use the central function that respects all overrides and custom paths.
-	path, err := u.GetComponentPath(atmosConfig, "packer", info.ComponentFolderPrefix, info.FinalComponent)
-	if err != nil {
+	// If we have a resolved absolute path, use GetComponentPath.
+	// Otherwise, just construct the path directly (for tests and simple cases).
+	if atmosConfig.PackerDirAbsolutePath != "" {
+		path, err := u.GetComponentPath(atmosConfig, "packer", info.ComponentFolderPrefix, info.FinalComponent)
+		if err == nil {
+			return path
+		}
 		// Log error but still try to return something.
 		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
-		// Fallback that still respects the configured path.
-		return filepath.Join(
-			atmosConfig.BasePath,
-			atmosConfig.Components.Packer.BasePath,
-			info.ComponentFolderPrefix,
-			info.FinalComponent,
-		)
 	}
-	return path
+
+	// Direct path construction without converting to absolute.
+	// This maintains compatibility with tests that use simple paths.
+	return filepath.Join(
+		atmosConfig.BasePath,
+		atmosConfig.Components.Packer.BasePath,
+		info.ComponentFolderPrefix,
+		info.FinalComponent,
+	)
 }

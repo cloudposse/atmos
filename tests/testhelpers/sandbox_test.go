@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -484,17 +485,28 @@ components:
 	require.NoError(t, err)
 	defer sandbox.Cleanup()
 
-	// Check permissions are preserved.
-	sandboxScript := filepath.Join(sandbox.ComponentsPath, "terraform", "test", "script.sh")
-	if info, err := os.Stat(sandboxScript); err == nil {
-		// Check if executable bit is set (at least for owner).
-		assert.True(t, info.Mode()&0o100 != 0, "Script should remain executable")
-	}
+	// Check permissions are preserved (Unix-only, Windows handles permissions differently).
+	if runtime.GOOS != "windows" {
+		sandboxScript := filepath.Join(sandbox.ComponentsPath, "terraform", "test", "script.sh")
+		if info, err := os.Stat(sandboxScript); err == nil {
+			// Check if executable bit is set (at least for owner).
+			assert.True(t, info.Mode()&0o100 != 0, "Script should remain executable")
+		}
 
-	sandboxReadonly := filepath.Join(sandbox.ComponentsPath, "terraform", "test", "readonly.tf")
-	if info, err := os.Stat(sandboxReadonly); err == nil {
-		// File should exist and be readable.
-		assert.True(t, info.Mode()&0o400 != 0, "File should be readable")
+		sandboxReadonly := filepath.Join(sandbox.ComponentsPath, "terraform", "test", "readonly.tf")
+		if info, err := os.Stat(sandboxReadonly); err == nil {
+			// File should exist and be readable.
+			assert.True(t, info.Mode()&0o400 != 0, "File should be readable")
+		}
+	} else {
+		// On Windows, just verify the files exist.
+		sandboxScript := filepath.Join(sandbox.ComponentsPath, "terraform", "test", "script.sh")
+		_, err := os.Stat(sandboxScript)
+		assert.NoError(t, err, "Script should exist in sandbox")
+
+		sandboxReadonly := filepath.Join(sandbox.ComponentsPath, "terraform", "test", "readonly.tf")
+		_, err = os.Stat(sandboxReadonly)
+		assert.NoError(t, err, "Readonly file should exist in sandbox")
 	}
 }
 
