@@ -308,6 +308,9 @@ func (m *manager) GetProviderForIdentity(identityName string) string {
 	if err != nil || len(chain) == 0 {
 		return ""
 	}
+	if aws.IsStandaloneAWSUserChain(chain, m.config.Identities) {
+		return "aws-user"
+	}
 	return chain[0]
 }
 
@@ -585,7 +588,7 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 	err := m.buildChainRecursive(identityName, &chain, visited)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, fmt.Sprintf("failed to build authentication chain for identity %q: %v", identityName, err))
-		return nil, errUtils.ErrInvalidAuthConfig
+		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Reverse the chain so provider is first, then identities in authentication order.
@@ -602,7 +605,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	// Check for circular dependencies.
 	if visited[identityName] {
 		errUtils.CheckErrorAndPrint(errUtils.ErrCircularDependency, buildChainRecursive, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
-		return errUtils.ErrCircularDependency
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrCircularDependency, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
 	}
 	visited[identityName] = true
 
@@ -611,7 +614,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 
 	if !exists {
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildChainRecursive, fmt.Sprintf("identity %q not found", identityName))
-		return errUtils.ErrInvalidAuthConfig
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidAuthConfig, fmt.Sprintf("identity %q not found", identityName))
 	}
 
 	// AWS User identities don't require via configuration - they are standalone.
@@ -622,7 +625,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 			return nil
 		}
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has no via configuration", identityName))
-		return errUtils.ErrInvalidIdentityConfig
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidIdentityConfig, fmt.Sprintf("identity %q has no via configuration", identityName))
 	}
 
 	// Add current identity to chain.
@@ -640,7 +643,7 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	}
 
 	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has invalid via configuration", identityName))
-	return errUtils.ErrInvalidIdentityConfig
+	return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidIdentityConfig, fmt.Sprintf("identity %q has invalid via configuration", identityName))
 }
 
 // buildWhoamiInfo creates a WhoamiInfo struct from identity and credentials.
