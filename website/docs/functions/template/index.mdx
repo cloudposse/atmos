@@ -1,0 +1,117 @@
+---
+title: Atmos Template Functions
+sidebar_position: 1
+sidebar_label: Template Functions
+sidebar_class_name: hidden
+description: Atmos functions for the Go's template language.
+id: index
+---
+
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import PillBox from '@site/src/components/PillBox'
+
+<PillBox>Use with Caution</PillBox>
+
+<Intro>
+    Template functions provide powerful text manipulation capabilities using Go's template language, but they operate on raw text **before** YAML parsing. This makes them error-prone and should only be used when YAML functions cannot achieve the required functionality.
+</Intro>
+
+:::warning Important
+**Template functions manipulate the document as raw text before YAML parsing.** This means:
+- They can easily break YAML syntax with incorrect indentation or special characters
+- Errors appear as cryptic YAML parsing failures, not clear function errors
+- Debugging is difficult because you're debugging generated text, not data structures
+- Small changes can have unintended side effects on document structure
+
+**Always prefer [YAML Functions](/functions/yaml) when possible.** They are safer, more predictable, and easier to debug.
+:::
+
+## When to Use Template Functions
+
+Template functions should **only** be used for scenarios that YAML functions cannot handle:
+
+1. **Complex conditional logic** - When you need if/else branching
+2. **Loops and iteration** - When generating repeated structures dynamically
+3. **Advanced string manipulation** - Complex transformations not available in YAML
+4. **Dynamic key generation** - When YAML keys themselves need to be computed
+
+## Common Pitfalls and How to Avoid Them
+
+### 1. Indentation Issues
+```yaml
+# WRONG - Template output may break indentation
+vars:
+  config: {{ atmos.Component "vpc" .stack }}  # Multi-line output breaks YAML
+
+# BETTER - Use YAML function
+vars:
+  config: !terraform.output vpc
+```
+
+### 2. Special Characters
+```yaml
+# WRONG - Colons and quotes in output break YAML
+description: {{ .vars.description }}  # Fails if description contains ": " or quotes
+
+# BETTER - Use proper quoting or YAML functions
+description: "{{ .vars.description }}"  # Quote the entire expression
+```
+
+### 3. Type Confusion
+```yaml
+# WRONG - Template always returns strings
+count: {{ .vars.instance_count }}  # Returns "3" not 3
+
+# BETTER - Use YAML for proper types
+count: 3  # Or use a YAML function that preserves types
+```
+
+## Safety Guidelines
+
+If you must use template functions:
+
+1. **Always quote template expressions** in YAML values to prevent syntax breaks
+2. **Test with various inputs** including special characters, multi-line text, and empty values
+3. **Use template pipelines** for escaping: `{{ .value | quote }}`, `{{ .value | toJson }}`
+4. **Keep templates simple** - Complex templates are maintenance nightmares
+5. **Document why** you're using templates instead of YAML functions
+6. **Validate generated YAML** using a YAML linter in your CI/CD pipeline
+
+## Supported Functions
+
+Atmos supports an exhaustive list of functions that can be used in [`Go` templates in Atmos stack manifests](/core-concepts/stacks/templates).
+
+You can use the following functions and data sources:
+
+ - [Go `text/template` functions](https://pkg.go.dev/text/template#hdr-Functions)
+ - [Sprig Functions](https://masterminds.github.io/sprig/)
+ - [Gomplate Functions](https://docs.gomplate.ca/functions/)
+ - [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
+ - [Atmos Template Functions](/functions/template)
+
+## Native Functions
+
+Atmos also provides template functions that are native to Atmos. Use these with the same caution as other template functions.
+
+<DocCardList/>
+
+## Migration Strategy
+
+Consider migrating template functions to YAML functions:
+
+| Template Function Use Case | YAML Function Alternative |
+|---------------------------|---------------------------|
+| `{{ exec "terraform output" }}` | `!terraform.output` or `!terraform.state` |
+| `{{ env "VAR_NAME" }}` | `!env VAR_NAME` |
+| Including external data | `!include file.yaml` |
+| Reading from stores | `!store secret_name` |
+| Simple value lookups | Direct YAML references |
+
+## Best Practices
+
+1. **Isolate template logic** - Keep templates in separate sections when possible
+2. **Use YAML functions for data** - Reserve templates only for control flow
+3. **Validate early and often** - Catch template errors before production
+4. **Provide fallbacks** - Use template conditionals to handle missing data gracefully
+5. **Consider restructuring** - Sometimes changing your YAML structure eliminates the need for templates

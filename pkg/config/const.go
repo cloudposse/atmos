@@ -105,8 +105,10 @@ const (
 	AtmosProEndpointEnvVarName    = "ATMOS_PRO_ENDPOINT"
 	AtmosProTokenEnvVarName       = "ATMOS_PRO_TOKEN"
 	AtmosProWorkspaceIDEnvVarName = "ATMOS_PRO_WORKSPACE_ID"
+	AtmosProRunIDEnvVarName       = "ATMOS_PRO_RUN_ID"
 	AtmosProDefaultBaseUrl        = "https://atmos-pro.com"
 	AtmosProDefaultEndpoint       = "api/v1"
+	UploadStatusFlag              = "upload-status"
 
 	TerraformDefaultWorkspace = "default"
 
