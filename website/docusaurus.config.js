@@ -65,44 +65,49 @@ const config = {
                     },
                     // Redirects for YAML functions moved to /functions/yaml/
                     {
-                        from: '/core-concepts/stacks/templates/functions/env',
+                        from: '/core-concepts/stacks/yaml-functions/env',
                         to: '/functions/yaml/env'
                     },
                     {
-                        from: '/core-concepts/stacks/templates/functions/exec',
+                        from: '/core-concepts/stacks/yaml-functions/exec',
                         to: '/functions/yaml/exec'
                     },
                     {
-                        from: '/core-concepts/stacks/templates/functions/include',
+                        from: '/core-concepts/stacks/yaml-functions/include',
                         to: '/functions/yaml/include'
                     },
                     {
-                        from: '/core-concepts/stacks/templates/functions/include.raw',
+                        from: '/core-concepts/stacks/yaml-functions/include.raw',
                         to: '/functions/yaml/include.raw'
                     },
                     {
-                        from: '/core-concepts/stacks/templates/functions/repo-root',
+                        from: '/core-concepts/stacks/yaml-functions/repo-root',
                         to: '/functions/yaml/repo-root'
                     },
                     {
-                        from: '/core-concepts/stacks/templates/functions/store.get',
+                        from: '/core-concepts/stacks/yaml-functions/store.get',
                         to: '/functions/yaml/store.get'
                     },
                     {
-                        from: '/core-concepts/stacks/templates/functions/store',
+                        from: '/core-concepts/stacks/yaml-functions/store',
                         to: '/functions/yaml/store'
                     },
                     {
-                        from: '/core-concepts/stacks/templates/functions/template',
+                        from: '/core-concepts/stacks/yaml-functions/template',
                         to: '/functions/yaml/template'
                     },
                     {
-                        from: '/core-concepts/stacks/templates/functions/terraform.output',
+                        from: '/core-concepts/stacks/yaml-functions/terraform.output',
                         to: '/functions/yaml/terraform.output'
                     },
                     {
-                        from: '/core-concepts/stacks/templates/functions/terraform.state',
+                        from: '/core-concepts/stacks/yaml-functions/terraform.state',
                         to: '/functions/yaml/terraform.state'
+                    },
+                    // Redirect for the YAML functions index page
+                    {
+                        from: '/core-concepts/stacks/yaml-functions',
+                        to: '/functions'
                     },
                     // Redirect for the main functions index page
                     {
