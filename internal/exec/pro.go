@@ -63,7 +63,7 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 	}
 
 	if component == "" || stack == "" {
-		return ProLockUnlockCmdArgs{}, errUtils.ErrComponentAndStackRequired
+		return ProLockUnlockCmdArgs{}, fmt.Errorf("%w: both '--component' and '--stack' flag must be provided", errUtils.ErrInvalidArguments)
 	}
 
 	result := ProLockUnlockCmdArgs{
@@ -169,7 +169,7 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteProUnlockCommand executes `atmos pro unlock` command
+// ExecuteProUnlockCommand executes `atmos pro unlock` command.
 func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	a, err := parseUnlockCliArgs(cmd, args)
 	if err != nil {

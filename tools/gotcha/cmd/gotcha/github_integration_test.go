@@ -1,0 +1,245 @@
+package cmd
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/types"
+)
+
+func TestDetectProjectContext(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T) string // Setup function that returns the test directory
+		expected string
+	}{
+		{
+			name: "tools subdirectory - gotcha",
+			setup: func(t *testing.T) string {
+				// Create a temp directory structure simulating /path/to/project/tools/gotcha
+				tempDir := t.TempDir()
+				toolDir := filepath.Join(tempDir, "project", "tools", "gotcha")
+				require.NoError(t, os.MkdirAll(toolDir, 0o755))
+
+				// Create a .git directory at the project root
+				gitDir := filepath.Join(tempDir, "project", ".git")
+				require.NoError(t, os.MkdirAll(gitDir, 0o755))
+
+				return toolDir
+			},
+			expected: "gotcha",
+		},
+		{
+			name: "tools subdirectory - other tool",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				toolDir := filepath.Join(tempDir, "myrepo", "tools", "mytool", "subdir")
+				require.NoError(t, os.MkdirAll(toolDir, 0o755))
+
+				// Create a .git directory at the repo root
+				gitDir := filepath.Join(tempDir, "myrepo", ".git")
+				require.NoError(t, os.MkdirAll(gitDir, 0o755))
+
+				return toolDir
+			},
+			expected: "mytool",
+		},
+		{
+			name: "project root directory",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				projectDir := filepath.Join(tempDir, "atmos")
+				require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+				// Create a .git directory
+				gitDir := filepath.Join(projectDir, ".git")
+				require.NoError(t, os.MkdirAll(gitDir, 0o755))
+
+				return projectDir
+			},
+			expected: "atmos",
+		},
+		{
+			name: "project subdirectory (not tools)",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				subDir := filepath.Join(tempDir, "myproject", "pkg", "config")
+				require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+				// Create a .git directory at the project root
+				gitDir := filepath.Join(tempDir, "myproject", ".git")
+				require.NoError(t, os.MkdirAll(gitDir, 0o755))
+
+				return subDir
+			},
+			expected: "myproject",
+		},
+		{
+			name: "no git directory - fallback to current dir name",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				workDir := filepath.Join(tempDir, "workspace")
+				require.NoError(t, os.MkdirAll(workDir, 0o755))
+				return workDir
+			},
+			expected: "workspace",
+		},
+		{
+			name: "GitHub Actions workspace with numeric identifier",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				// Simulate /home/runner/work/001/tools/gotcha structure
+				toolDir := filepath.Join(tempDir, "runner", "work", "001", "tools", "gotcha")
+				require.NoError(t, os.MkdirAll(toolDir, 0o755))
+
+				// Create a .git directory at what would be the repo root (001)
+				gitDir := filepath.Join(tempDir, "runner", "work", "001", ".git")
+				require.NoError(t, os.MkdirAll(gitDir, 0o755))
+
+				return toolDir
+			},
+			expected: "gotcha", // Should skip numeric "001" and extract "gotcha" from tools/gotcha
+		},
+		{
+			name: "GitHub Actions - numeric workspace but git at higher level",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				// Simulate /home/runner/work/atmos/atmos/tools/gotcha structure
+				// where the repo is checked out twice (common in GitHub Actions)
+				toolDir := filepath.Join(tempDir, "runner", "work", "atmos", "atmos", "tools", "gotcha")
+				require.NoError(t, os.MkdirAll(toolDir, 0o755))
+
+				// Create a .git directory at the inner atmos directory
+				gitDir := filepath.Join(tempDir, "runner", "work", "atmos", "atmos", ".git")
+				require.NoError(t, os.MkdirAll(gitDir, 0o755))
+
+				return toolDir
+			},
+			expected: "gotcha", // Should extract gotcha from tools/gotcha
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save current directory and restore after test
+			originalDir, err := os.Getwd()
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, os.Chdir(originalDir))
+			}()
+
+			// Setup test directory and change to it
+			testDir := tt.setup(t)
+			require.NoError(t, os.Chdir(testDir))
+
+			// Test the function
+			result := detectProjectContext()
+			assert.Equal(t, tt.expected, result, "Project context mismatch for directory: %s", testDir)
+		})
+	}
+}
+
+func TestSetupGitHubToken(t *testing.T) {
+	// Reset viper before test
+	viper.Reset()
+	defer viper.Reset()
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String(FlagGithubToken, "", "GitHub token")
+
+	// Test that the function binds the flag
+	setupGitHubToken(cmd)
+
+	// Set a value via the flag
+	cmd.Flags().Set(FlagGithubToken, "test-token")
+
+	// The binding should be set up (we can't easily test the actual binding without more complex setup)
+	// This test mainly ensures the function doesn't panic
+	assert.NotPanics(t, func() {
+		setupGitHubToken(cmd)
+	})
+}
+
+func TestLogTestSummary(t *testing.T) {
+	logger := log.New(os.Stderr)
+	logger.SetLevel(log.DebugLevel)
+
+	tests := []struct {
+		name    string
+		summary *types.TestSummary
+	}{
+		{
+			name: "empty summary",
+			summary: &types.TestSummary{
+				Passed:  []types.TestResult{},
+				Failed:  []types.TestResult{},
+				Skipped: []types.TestResult{},
+			},
+		},
+		{
+			name: "summary with tests",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{
+					{Test: "TestFoo", Package: "pkg1"},
+					{Test: "TestBar", Package: "pkg1"},
+				},
+				Failed: []types.TestResult{
+					{Test: "TestBaz", Package: "pkg2"},
+				},
+				Skipped: []types.TestResult{
+					{Test: "TestSkip", Package: "pkg3"},
+				},
+			},
+		},
+		{
+			name: "summary with coverage",
+			summary: &types.TestSummary{
+				Passed: []types.TestResult{
+					{Test: "TestFoo", Package: "pkg1"},
+				},
+				Failed:   []types.TestResult{},
+				Skipped:  []types.TestResult{},
+				Coverage: "80.5%",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This test ensures the function doesn't panic and completes
+			assert.NotPanics(t, func() {
+				logTestSummary(tt.summary, logger)
+			})
+		})
+	}
+}
+
+func TestDetectCIProvider(t *testing.T) {
+	logger := log.New(os.Stderr)
+	logger.SetLevel(log.DebugLevel)
+
+	// Reset viper before test
+	viper.Reset()
+	defer viper.Reset()
+
+	// Test when no CI provider is available
+	provider := detectCIProvider(logger)
+
+	// In a non-CI environment, this should return nil
+	// The function should not panic
+	assert.NotPanics(t, func() {
+		_ = detectCIProvider(logger)
+	})
+
+	// Additional assertion depends on environment
+	if provider != nil {
+		assert.NotEmpty(t, provider.Provider())
+	}
+}

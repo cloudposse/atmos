@@ -1,6 +1,10 @@
 module github.com/cloudposse/atmos
 
-go 1.24.6
+go 1.25.0
+
+// Map the gotcha module to its local directory to prevent Go from trying
+// to fetch it as an external dependency
+replace github.com/cloudposse/atmos/tools/gotcha => ./tools/gotcha
 
 require (
 	cloud.google.com/go/secretmanager v1.15.0
@@ -37,7 +41,7 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-yaml v1.18.0
 	github.com/gofrs/flock v0.12.1
-	github.com/golang/mock v1.6.0
+	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.20.6
 	github.com/google/go-github/v59 v59.0.0
@@ -93,13 +97,13 @@ require (
 
 require (
 	cel.dev/expr v0.24.0 // indirect
-	cloud.google.com/go v0.120.0 // indirect
+	cloud.google.com/go v0.121.1 // indirect
 	cloud.google.com/go/auth v0.16.5 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.8.0 // indirect
 	cloud.google.com/go/iam v1.5.2 // indirect
 	cloud.google.com/go/monitoring v1.24.2 // indirect
-	cloud.google.com/go/storage v1.51.0 // indirect
+	cloud.google.com/go/storage v1.53.0 // indirect
 	cuelang.org/go v0.13.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal v1.2.0 // indirect
@@ -142,6 +146,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.27.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.32.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/aymanbagabas/go-udiff v0.3.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/baulk/chardet v0.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -151,9 +156,9 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chainguard-dev/git-urls v1.0.2 // indirect
-	github.com/charmbracelet/colorprofile v0.3.1 // indirect
+	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
-	github.com/charmbracelet/x/ansi v0.9.3 // indirect
+	github.com/charmbracelet/x/ansi v0.10.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
 	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect

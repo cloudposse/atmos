@@ -41,6 +41,7 @@
 # Ignore cache files
 **/.atmos/cache.yaml
 **/cache.*.txt
+.gotcha/cache.yaml
 
 # Development configs - track only specific files
 .atmos.d/*
@@ -56,4 +57,45 @@ internal/exec/output.*
 # Coverage files
 coverage.out
 coverage.html
+coverage.out.tmp
 tests.test
+
+# Test artifacts
+test-results.json
+test-summary.md
+gotcha-results.json
+test.json
+test-output.json
+test-output.md
+**/test-output.json
+**/test-output.md
+**/output.json
+tools/test-output.json
+
+# Gotcha binaries and test artifacts
+/gotcha
+gotcha-test*
+/tools/gotcha/gotcha
+/tools/gotcha/gotcha-simple
+/tools/gotcha/gotcha_test
+/tools/gotcha/build/
+gotcha-binary
+gotcha-test
+/tools/gotcha/gotcha-test
+/tools/gotcha/gotcha-binary
+/tools/gotcha/test-output.json
+/tools/gotcha/test-output.md
+/tools/gotcha/test/output.json
+/tools/gotcha/test/test-output.json
+
+# Test scripts
+/tools/gotcha/test*.sh
+/tools/gotcha/test/test-summary.md
+
+# Debug and log files
+**/*debug*.log
+**/debug.log
+**/full-test.log
+exec.test
+simple_test.go
+atmos
