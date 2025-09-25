@@ -59,58 +59,13 @@ testacc: get
 	@echo "Running acceptance tests"
 	go test $(TEST) -v $(TESTARGS) -timeout 40m
 
-# Directory for subprocess coverage data
-COVERAGE_DIR ?= coverage
-
 # Run tests with subprocess coverage collection (Go 1.20+)
 testacc-cover: get
-	@echo "Running tests with subprocess coverage collection"
-	@rm -rf $(COVERAGE_DIR)
-	@mkdir -p $(COVERAGE_DIR)/unit $(COVERAGE_DIR)/integration
-	# Run tests with coverage enabled - subprocesses will write to GOCOVERDIR
-	GOCOVERDIR=$$(pwd)/$(COVERAGE_DIR)/integration go test $(TEST) -v \
-		-cover -coverpkg=./... $(TESTARGS) -timeout 40m \
-		-coverprofile=$(COVERAGE_DIR)/unit.txt
-	# Convert subprocess binary coverage to text format
-	@if [ -d "$(COVERAGE_DIR)/integration" ] && [ "$$(ls -A $(COVERAGE_DIR)/integration 2>/dev/null)" ]; then \
-		go tool covdata textfmt -i=$(COVERAGE_DIR)/integration -o=$(COVERAGE_DIR)/subprocess.txt 2>/dev/null || true; \
-	fi
-	# Merge unit test coverage with subprocess coverage
-	@if [ -f "$(COVERAGE_DIR)/subprocess.txt" ]; then \
-		go run github.com/wadey/gocovmerge@latest $(COVERAGE_DIR)/unit.txt $(COVERAGE_DIR)/subprocess.txt > coverage.raw 2>/dev/null || \
-		cp $(COVERAGE_DIR)/unit.txt coverage.raw; \
-	else \
-		cp $(COVERAGE_DIR)/unit.txt coverage.raw; \
-	fi
-	# Filter out mock files
-	@grep -v "mock_" coverage.raw > coverage.out || cp coverage.raw coverage.out
-	@rm -f coverage.raw
-	@echo "Coverage report generated: coverage.out"
-
-# Legacy coverage mode (without subprocess coverage)
-testacc-cover-legacy: get
-	@echo "Running tests with coverage (legacy mode, no subprocess coverage)"
-	go test $(TEST) -v -coverpkg=./... $(TESTARGS) -timeout 40m -coverprofile=coverage.out.tmp
-	cat coverage.out.tmp | grep -v "mock_" > coverage.out
-	@rm -f coverage.out.tmp
+	@scripts/collect-coverage.sh "$(TEST)" "$(TESTARGS)"
 
 # Run acceptance tests with coverage report
 testacc-coverage: testacc-cover
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
-# View coverage percentage from binary coverage data
-coverage-percent:
-	@if [ -d "$(COVERAGE_DIR)" ]; then \
-		go tool covdata percent -i=$(COVERAGE_DIR)/unit,$(COVERAGE_DIR)/integration 2>/dev/null || \
-		go tool covdata percent -i=$(COVERAGE_DIR)/integration 2>/dev/null || \
-		echo "No coverage data found"; \
-	else \
-		echo "No coverage directory found. Run 'make testacc-cover' first."; \
-	fi
-
-# Clean coverage data
-clean-coverage:
-	@rm -rf $(COVERAGE_DIR) coverage.out coverage.html coverage.*.tmp
-
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-cover-legacy testacc-coverage coverage-percent clean-coverage
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage
