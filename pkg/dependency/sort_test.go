@@ -15,12 +15,12 @@ func TestGraph_TopologicalSort(t *testing.T) {
 		node2 := &Node{ID: "node2", Component: "comp2", Stack: "dev"}
 		node3 := &Node{ID: "node3", Component: "comp3", Stack: "dev"}
 
-		_ = graph.AddNode(node1)
-		_ = graph.AddNode(node2)
-		_ = graph.AddNode(node3)
+		assert.NoError(t, graph.AddNode(node1))
+		assert.NoError(t, graph.AddNode(node2))
+		assert.NoError(t, graph.AddNode(node3))
 
-		_ = graph.AddDependency("node2", "node1")
-		_ = graph.AddDependency("node3", "node2")
+		assert.NoError(t, graph.AddDependency("node2", "node1"))
+		assert.NoError(t, graph.AddDependency("node3", "node2"))
 
 		order, err := graph.TopologicalSort()
 
@@ -40,15 +40,15 @@ func TestGraph_TopologicalSort(t *testing.T) {
 		nodeC := &Node{ID: "C"}
 		nodeD := &Node{ID: "D"}
 
-		_ = graph.AddNode(nodeA)
-		_ = graph.AddNode(nodeB)
-		_ = graph.AddNode(nodeC)
-		_ = graph.AddNode(nodeD)
+		assert.NoError(t, graph.AddNode(nodeA))
+		assert.NoError(t, graph.AddNode(nodeB))
+		assert.NoError(t, graph.AddNode(nodeC))
+		assert.NoError(t, graph.AddNode(nodeD))
 
-		_ = graph.AddDependency("B", "A")
-		_ = graph.AddDependency("C", "A")
-		_ = graph.AddDependency("D", "B")
-		_ = graph.AddDependency("D", "C")
+		assert.NoError(t, graph.AddDependency("B", "A"))
+		assert.NoError(t, graph.AddDependency("C", "A"))
+		assert.NoError(t, graph.AddDependency("D", "B"))
+		assert.NoError(t, graph.AddDependency("D", "C"))
 
 		order, err := graph.TopologicalSort()
 
@@ -70,13 +70,13 @@ func TestGraph_TopologicalSort(t *testing.T) {
 		node3 := &Node{ID: "node3"}
 		node4 := &Node{ID: "node4"}
 
-		_ = graph.AddNode(node1)
-		_ = graph.AddNode(node2)
-		_ = graph.AddNode(node3)
-		_ = graph.AddNode(node4)
+		assert.NoError(t, graph.AddNode(node1))
+		assert.NoError(t, graph.AddNode(node2))
+		assert.NoError(t, graph.AddNode(node3))
+		assert.NoError(t, graph.AddNode(node4))
 
-		_ = graph.AddDependency("node2", "node1")
-		_ = graph.AddDependency("node4", "node3")
+		assert.NoError(t, graph.AddDependency("node2", "node1"))
+		assert.NoError(t, graph.AddDependency("node4", "node3"))
 
 		order, err := graph.TopologicalSort()
 
@@ -102,13 +102,13 @@ func TestGraph_TopologicalSort(t *testing.T) {
 		node2 := &Node{ID: "node2"}
 		node3 := &Node{ID: "node3"}
 
-		_ = graph.AddNode(node1)
-		_ = graph.AddNode(node2)
-		_ = graph.AddNode(node3)
+		assert.NoError(t, graph.AddNode(node1))
+		assert.NoError(t, graph.AddNode(node2))
+		assert.NoError(t, graph.AddNode(node3))
 
-		_ = graph.AddDependency("node1", "node2")
-		_ = graph.AddDependency("node2", "node3")
-		_ = graph.AddDependency("node3", "node1") // Creates cycle
+		assert.NoError(t, graph.AddDependency("node1", "node2"))
+		assert.NoError(t, graph.AddDependency("node2", "node3"))
+		assert.NoError(t, graph.AddDependency("node3", "node1")) // Creates cycle
 
 		order, err := graph.TopologicalSort()
 
@@ -135,12 +135,12 @@ func TestGraph_ReverseTopologicalSort(t *testing.T) {
 	node2 := &Node{ID: "node2"}
 	node3 := &Node{ID: "node3"}
 
-	_ = graph.AddNode(node1)
-	_ = graph.AddNode(node2)
-	_ = graph.AddNode(node3)
+	assert.NoError(t, graph.AddNode(node1))
+	assert.NoError(t, graph.AddNode(node2))
+	assert.NoError(t, graph.AddNode(node3))
 
-	_ = graph.AddDependency("node2", "node1")
-	_ = graph.AddDependency("node3", "node2")
+	assert.NoError(t, graph.AddDependency("node2", "node1"))
+	assert.NoError(t, graph.AddDependency("node3", "node2"))
 
 	order, err := graph.ReverseTopologicalSort()
 
@@ -161,17 +161,17 @@ func TestGraph_GetExecutionLevels(t *testing.T) {
 	node4 := &Node{ID: "node4"}
 	node5 := &Node{ID: "node5"}
 
-	_ = graph.AddNode(node1)
-	_ = graph.AddNode(node2)
-	_ = graph.AddNode(node3)
-	_ = graph.AddNode(node4)
-	_ = graph.AddNode(node5)
+	assert.NoError(t, graph.AddNode(node1))
+	assert.NoError(t, graph.AddNode(node2))
+	assert.NoError(t, graph.AddNode(node3))
+	assert.NoError(t, graph.AddNode(node4))
+	assert.NoError(t, graph.AddNode(node5))
 
-	_ = graph.AddDependency("node2", "node1")
-	_ = graph.AddDependency("node3", "node1")
-	_ = graph.AddDependency("node4", "node2")
-	_ = graph.AddDependency("node4", "node3")
-	_ = graph.AddDependency("node5", "node4")
+	assert.NoError(t, graph.AddDependency("node2", "node1"))
+	assert.NoError(t, graph.AddDependency("node3", "node1"))
+	assert.NoError(t, graph.AddDependency("node4", "node2"))
+	assert.NoError(t, graph.AddDependency("node4", "node3"))
+	assert.NoError(t, graph.AddDependency("node5", "node4"))
 
 	levels, err := graph.GetExecutionLevels()
 
@@ -205,12 +205,12 @@ func TestGraph_FindPath(t *testing.T) {
 	node2 := &Node{ID: "node2"}
 	node3 := &Node{ID: "node3"}
 
-	_ = graph.AddNode(node1)
-	_ = graph.AddNode(node2)
-	_ = graph.AddNode(node3)
+	assert.NoError(t, graph.AddNode(node1))
+	assert.NoError(t, graph.AddNode(node2))
+	assert.NoError(t, graph.AddNode(node3))
 
-	_ = graph.AddDependency("node2", "node1")
-	_ = graph.AddDependency("node3", "node2")
+	assert.NoError(t, graph.AddDependency("node2", "node1"))
+	assert.NoError(t, graph.AddDependency("node3", "node2"))
 
 	// Test finding existing path
 	path, found := graph.FindPath("node3", "node1")
@@ -239,12 +239,12 @@ func TestGraph_IsReachable(t *testing.T) {
 	node2 := &Node{ID: "node2"}
 	node3 := &Node{ID: "node3"}
 
-	_ = graph.AddNode(node1)
-	_ = graph.AddNode(node2)
-	_ = graph.AddNode(node3)
+	assert.NoError(t, graph.AddNode(node1))
+	assert.NoError(t, graph.AddNode(node2))
+	assert.NoError(t, graph.AddNode(node3))
 
-	_ = graph.AddDependency("node2", "node1")
-	_ = graph.AddDependency("node3", "node2")
+	assert.NoError(t, graph.AddDependency("node2", "node1"))
+	assert.NoError(t, graph.AddDependency("node3", "node2"))
 
 	// Test reachability
 	assert.True(t, graph.IsReachable("node3", "node1"))

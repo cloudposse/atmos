@@ -52,13 +52,27 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		graph = applyFiltersToGraph(graph, stacks, info)
 	}
 
+	// Execute components in dependency order
+	return executeInDependencyOrder(graph, info)
+}
+
+// executeInDependencyOrder executes terraform commands in dependency order.
+func executeInDependencyOrder(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) error {
 	// Get execution order
 	executionOrder, err := graph.TopologicalSort()
 	if err != nil {
 		return fmt.Errorf("error determining execution order: %w", err)
 	}
 
-	log.Info("Processing components in dependency order", "count", len(executionOrder))
+	// For destroy command, reverse the execution order to destroy dependents before dependencies
+	if info.SubCommand == "destroy" {
+		for i, j := 0, len(executionOrder)-1; i < j; i, j = i+1, j-1 {
+			executionOrder[i], executionOrder[j] = executionOrder[j], executionOrder[i]
+		}
+		log.Info("Processing components in reverse dependency order for destroy", "count", len(executionOrder))
+	} else {
+		log.Info("Processing components in dependency order", "count", len(executionOrder))
+	}
 
 	// Execute components in order
 	for i := range executionOrder {
