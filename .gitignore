@@ -42,6 +42,10 @@
 **/.atmos/cache.yaml
 **/cache.*.txt
 
+# Ignore coverage files
+*.out
+coverage.html
+
 # Development configs - track only specific files
 .atmos.d/*
 !.atmos.d/dev.yaml
