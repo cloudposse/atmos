@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -552,17 +553,18 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
 
+	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
+	// This ensures every test has its own cache and prevents interference
+	tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
+
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
 		logger.Info("skipping empty home dir on macOS in CI", "GOOS", runtime.GOOS)
-		// But still isolate the cache to prevent test interference
-		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 	} else {
 		// Set environment variables for the test case
 		tc.Env["HOME"] = tempDir
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
-		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
 		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
@@ -992,6 +994,40 @@ func colorizeDiffWithThreshold(actual, expected string, threshold int) string {
 	}
 
 	return sb.String()
+}
+
+// verifyJSONFormat checks if the provided string is valid JSON.
+func verifyJSONFormat(_ *testing.T, input string) bool {
+	var js json.RawMessage
+	err := json.Unmarshal([]byte(input), &js)
+	return err == nil
+}
+
+// verifyYAMLFormat checks if the provided string is valid YAML.
+func verifyYAMLFormat(_ *testing.T, input string) bool {
+	var y interface{}
+	err := yaml.Unmarshal([]byte(input), &y)
+	return err == nil
+}
+
+// verifyFormatValidation is a generic format validation function that accepts multiple formats.
+func verifyFormatValidation(t *testing.T, input string, formats []string) bool {
+	for _, format := range formats {
+		switch format {
+		case "json":
+			if !verifyJSONFormat(t, input) {
+				return false
+			}
+		case "yaml":
+			if !verifyYAMLFormat(t, input) {
+				return false
+			}
+		default:
+			t.Errorf("Unknown format: %s", format)
+			return false
+		}
+	}
+	return true
 }
 
 func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string, regenerate bool) bool {
