@@ -2,6 +2,7 @@ package dependency
 
 import (
 	"fmt"
+	"sort"
 )
 
 // TopologicalSort returns nodes in dependency order using Kahn's algorithm.
@@ -23,6 +24,8 @@ func (g *Graph) TopologicalSort() (ExecutionOrder, error) {
 			queue = append(queue, id)
 		}
 	}
+	// Sort the initial queue for deterministic ordering
+	sort.Strings(queue)
 
 	// Process nodes in topological order
 	result := ExecutionOrder{}
@@ -39,12 +42,16 @@ func (g *Graph) TopologicalSort() (ExecutionOrder, error) {
 		processedCount++
 
 		// Process all dependents of the current node
+		readyNodes := []string{}
 		for _, dependentID := range currentNode.Dependents {
 			inDegree[dependentID]--
 			if inDegree[dependentID] == 0 {
-				queue = append(queue, dependentID)
+				readyNodes = append(readyNodes, dependentID)
 			}
 		}
+		// Sort ready nodes before adding to queue for deterministic ordering
+		sort.Strings(readyNodes)
+		queue = append(queue, readyNodes...)
 	}
 
 	// Check if all nodes were processed
@@ -132,6 +139,13 @@ func (g *Graph) GetExecutionLevels() ([][]Node, error) {
 		level := nodeLevel[id]
 		levels[level] = append(levels[level], *node)
 		processed[id] = true
+	}
+
+	// Sort nodes within each level for deterministic ordering
+	for i := range levels {
+		sort.Slice(levels[i], func(a, b int) bool {
+			return levels[i][a].ID < levels[i][b].ID
+		})
 	}
 
 	return levels, nil

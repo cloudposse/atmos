@@ -5,7 +5,7 @@ vars:
 
 components:
   terraform:
-    # Test cross-stack dependencies with 'terraform apply --all'
+    # Test intra-stack dependencies with 'terraform apply --all'
     # Expected execution order: shared-vpc, monitoring -> prod components
 
     shared-vpc:

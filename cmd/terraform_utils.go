@@ -103,8 +103,8 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// `--query <yq-expression>`
 	// `--stack` (and the `component` argument is not passed)
 	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "") {
-		// For commands that need dependency order with --all flag (apply, destroy, deploy)
-		if info.All && (info.SubCommand == "apply" || info.SubCommand == "destroy" || info.SubCommand == "deploy") {
+		// For commands that need dependency order with --all flag (plan, apply, destroy, deploy)
+		if info.All && (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "destroy" || info.SubCommand == "deploy") {
 			err = e.ExecuteTerraformAll(&info)
 		} else {
 			// For other commands or when not using --all, use existing query logic

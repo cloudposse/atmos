@@ -44,7 +44,7 @@ Create a generalized dependency graph package that can:
 
 ### Architecture
 
-```
+```text
 pkg/dependency/          # Reusable dependency graph logic
 ├── types.go            # Core types and interfaces
 ├── graph.go            # Graph structure and operations
