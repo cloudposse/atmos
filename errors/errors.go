@@ -128,4 +128,9 @@ var (
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+
+	// Dependency errors.
+	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
+	ErrMissingDependencyField    = errors.New("dependency missing required field")
+	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
 )

@@ -4,6 +4,11 @@ import (
 	"fmt"
 )
 
+// Constants for common error formats.
+const (
+	errWithContextFormat = "%w: %s"
+)
+
 // NewGraph creates a new dependency graph.
 func NewGraph() *Graph {
 	return &Graph{
@@ -15,15 +20,15 @@ func NewGraph() *Graph {
 // AddNode adds a node to the graph.
 func (g *Graph) AddNode(node *Node) error {
 	if node == nil {
-		return fmt.Errorf("cannot add nil node to graph")
+		return ErrNilNode
 	}
 
 	if node.ID == "" {
-		return fmt.Errorf("node ID cannot be empty")
+		return ErrEmptyNodeID
 	}
 
 	if _, exists := g.Nodes[node.ID]; exists {
-		return fmt.Errorf("node %s already exists in graph", node.ID)
+		return fmt.Errorf(errWithContextFormat, ErrNodeExists, node.ID)
 	}
 
 	// Initialize slices if nil
@@ -39,24 +44,24 @@ func (g *Graph) AddNode(node *Node) error {
 }
 
 // AddDependency creates a dependency relationship between two nodes.
-// fromID depends on toID (fromID -> toID).
+// The fromID depends on toID (fromID -> toID).
 func (g *Graph) AddDependency(fromID, toID string) error {
 	if fromID == "" || toID == "" {
-		return fmt.Errorf("dependency IDs cannot be empty")
+		return ErrEmptyDependencyID
 	}
 
 	if fromID == toID {
-		return fmt.Errorf("node %s cannot depend on itself", fromID)
+		return fmt.Errorf(errWithContextFormat, ErrSelfDependency, fromID)
 	}
 
 	fromNode, fromExists := g.Nodes[fromID]
 	if !fromExists {
-		return fmt.Errorf("node %s does not exist in graph", fromID)
+		return fmt.Errorf(errWithContextFormat, ErrNodeNotFound, fromID)
 	}
 
 	toNode, toExists := g.Nodes[toID]
 	if !toExists {
-		return fmt.Errorf("node %s does not exist in graph", toID)
+		return fmt.Errorf(errWithContextFormat, ErrNodeNotFound, toID)
 	}
 
 	// Check if dependency already exists
