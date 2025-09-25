@@ -49,6 +49,15 @@ func extractValueKeys(data map[string]interface{}, stackKeys []string) []string 
 
 		switch typedData := stackData.(type) {
 		case map[string]interface{}:
+			// Check if this is a vars map
+			if varsData, ok := typedData["vars"].(map[string]interface{}); ok {
+				for k := range varsData {
+					valueKeys = append(valueKeys, k)
+				}
+				break
+			}
+
+			// Otherwise, use top-level keys
 			for k := range typedData {
 				valueKeys = append(valueKeys, k)
 			}
@@ -99,7 +108,12 @@ func createRows(data map[string]interface{}, valueKeys, stackKeys []string) [][]
 		for _, stackName := range stackKeys {
 			value := ""
 			if stackData, ok := data[stackName].(map[string]interface{}); ok {
-				if val, ok := stackData[valueKey]; ok {
+				// First check if this is a vars map
+				if varsData, ok := stackData["vars"].(map[string]interface{}); ok {
+					if val, ok := varsData[valueKey]; ok {
+						value = formatTableCellValue(val)
+					}
+				} else if val, ok := stackData[valueKey]; ok {
 					value = formatTableCellValue(val)
 				}
 			}
