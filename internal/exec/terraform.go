@@ -118,14 +118,20 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if the component (or base component) exists as a Terraform component.
-	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component path: %w", err)
+	}
+
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
+		// Get the base path for error message, respecting user's actual config
+		basePath, _ := u.GetComponentBasePath(&atmosConfig, "terraform")
 		return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
 			ErrInvalidTerraformComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,
-			filepath.Join(atmosConfig.Components.Terraform.BasePath, info.ComponentFolderPrefix),
+			basePath,
 		)
 	}
 

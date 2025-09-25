@@ -39,7 +39,7 @@ backend type in the `terraformBackends` registry:
 Update the corresponding documentation at:
 
 ```text
-website/docs/core-concepts/stacks/yaml-functions/terraform.state.mdx
+website/docs/functions/yaml/terraform.state.mdx
 ```
 
 Include usage details and any backend-specific requirements or limitations.

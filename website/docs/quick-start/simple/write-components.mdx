@@ -109,7 +109,7 @@ The `versions.tf` file is where provider pinning is typically defined. Provider 
 
 ### Implement `outputs.tf`
 
-The `outputs.tf` file is where, by convention in Terraform, you place any outputs you want to expose from your root module. Outputs are essential for passing state between your root modules and can be used in conjunction with [remote state](/core-concepts/share-data/remote-state) or the [Atmos function to retrieve the state](/core-concepts/stacks/templates/functions) of any other component.
+The `outputs.tf` file is where, by convention in Terraform, you place any outputs you want to expose from your root module. Outputs are essential for passing state between your root modules and can be used in conjunction with [remote state](/core-concepts/share-data/remote-state) or the [Atmos function to retrieve the state](/functions/template) of any other component.
 In object-oriented parlance, think of your outputs as the “public” attributes of the module that are intended to be accessed by other modules. This convention helps maintain clarity and organization within your Terraform configurations.
 
 <EmbedFile filePath="examples/quick-start-simple/components/terraform/weather/outputs.tf" />

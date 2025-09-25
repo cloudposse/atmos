@@ -2,6 +2,7 @@
 title: atmos.Component
 sidebar_position: 1
 sidebar_label: atmos.Component
+sidebar_class_name: command
 description: Read the remote state or configuration of any Atmos component
 ---
 import File from '@site/src/components/File'
@@ -139,7 +140,7 @@ There are a few ways to handle the complex output types (maps and lists) from th
 
 ### Using the `!template` Atmos YAML Function and `toRawJson` or `toJson` template functions
 
-You can use the [`!template`](/core-concepts/stacks/yaml-functions/template) Atmos YAML function to handle the outputs containing maps or lists.
+You can use the [`!template`](/functions/yaml/template) Atmos YAML function to handle the outputs containing maps or lists.
 
 The __`!template`__ YAML function  correctly handles the JSON returned from the
 [`toRawJson` or `toJson`](https://masterminds.github.io/sprig/defaults.html) functions and converts the result into the list or map YAML types.

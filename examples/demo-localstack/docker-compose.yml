@@ -1,7 +1,7 @@
 services:
   localstack:
     container_name: localstack
-    image: localstack/localstack:1.4.0
+    image: public.ecr.aws/localstack/localstack:1.4.0
     ports:
       - "0.0.0.0:4566:4566"            # LocalStack Gateway
       - "0.0.0.0:4510-4559:4510-4559"  # external services port range
