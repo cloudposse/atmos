@@ -75,6 +75,5 @@ func createAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) 
 }
 
 func init() {
-	AddStackCompletion(authLoginCmd)
 	authCmd.AddCommand(authLoginCmd)
 }

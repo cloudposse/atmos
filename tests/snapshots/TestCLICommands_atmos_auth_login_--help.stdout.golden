@@ -13,10 +13,7 @@ Usage:
 
 Flags:
 
-    -h, --help            help for login
-
-    -s, --stack string    The stack flag specifies the environment or
-                          configuration set for deployment in Atmos CLI.
+    -h, --help    help for login
 
 
 Global Flags:
