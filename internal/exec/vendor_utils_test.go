@@ -53,6 +53,26 @@ func TestNormalizeVendorURI(t *testing.T) {
 			expected: "github.com/repo.git//path///subpath?ref=v1.0",
 		},
 		{
+			name:     "https scheme with triple-slash at root",
+			input:    "https://github.com/terraform-aws-modules/terraform-aws-s3-bucket.git///?ref=v5.7.0",
+			expected: "https://github.com/terraform-aws-modules/terraform-aws-s3-bucket.git//.?ref=v5.7.0",
+		},
+		{
+			name:     "https scheme without subdirectory",
+			input:    "https://github.com/cloudposse/terraform-aws-components.git?ref=v1.0.0",
+			expected: "https://github.com/cloudposse/terraform-aws-components.git//.?ref=v1.0.0",
+		},
+		{
+			name:     "git protocol with triple-slash",
+			input:    "git::https://github.com/example/repo.git///?ref=main",
+			expected: "git::https://github.com/example/repo.git//.?ref=main",
+		},
+		{
+			name:     "SCP-style Git URL",
+			input:    "git@github.com:cloudposse/atmos.git",
+			expected: "git@github.com:cloudposse/atmos.git//.",
+		},
+		{
 			name:     "git URL without .git extension and no subdir",
 			input:    "github.com/terraform-aws-modules/terraform-aws-s3-bucket?ref=v5.7.0",
 			expected: "github.com/terraform-aws-modules/terraform-aws-s3-bucket//.?ref=v5.7.0",

@@ -57,9 +57,11 @@ func TestCLITerraformClean(t *testing.T) {
 		"../../components/terraform/mock-subcomponents/component-1/component-2/.terraform",
 		"../../components/terraform/mock-subcomponents/component-1/component-2/terraform.tfstate.d/staging-component-2/terraform.tfstate",
 	}
-	success, file := verifyFileExists(t, files)
-	if !success {
-		t.Fatalf("File %s does not exist", file)
+	// Verify that expected files exist after apply
+	for _, file := range files {
+		if _, err := os.Stat(file); err != nil {
+			t.Fatalf("Expected file %s does not exist: %v", file, err)
+		}
 	}
 	var cleanInfo schema.ConfigAndStacksInfo
 	cleanInfo.SubCommand = "clean"
@@ -67,31 +69,12 @@ func TestCLITerraformClean(t *testing.T) {
 	cleanInfo.AdditionalArgsAndFlags = []string{"--force"}
 	err = ExecuteTerraform(cleanInfo)
 	require.NoError(t, err)
-	success, file = verifyFileDeleted(t, files)
-	if !success {
-		t.Fatalf("File %s should not exist", file)
-	}
-}
-
-func verifyFileExists(t *testing.T, files []string) (bool, string) {
+	// Verify that files were deleted after clean
 	for _, file := range files {
-		if _, err := os.Stat(file); err != nil {
-			t.Errorf("Reason: Expected file does not exist: %q", file)
-			return false, file
+		if _, err := os.Stat(file); !os.IsNotExist(err) {
+			t.Fatalf("File %s should have been deleted but still exists", file)
 		}
 	}
-	return true, ""
-}
-
-func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
-	for _, file := range files {
-		fileAbs, err := os.Stat(file)
-		if err == nil {
-			t.Errorf("Reason: File still exists: %q", file)
-			return false, fileAbs.Name()
-		}
-	}
-	return true, ""
 }
 
 func TestFindFoldersNamesWithPrefix(t *testing.T) {
