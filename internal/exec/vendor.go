@@ -338,13 +338,15 @@ func filterSources(sources []schema.AtmosVendorSource, component string, tags []
 
 // compareAndDisplayVendorDiffs compares local and remote versions and displays differences
 func compareAndDisplayVendorDiffs(sources []schema.AtmosVendorSource, updateVendorFile bool, outdatedOnly bool, vendorConfigFile string) error {
+	// Print header immediately
 	fmt.Println("Checking for vendor updates...")
 	fmt.Println()
 
-	hasUpdates := false
-	updatesAvailable := []string{}
-	updatedVersions := make(map[string]string) // Map to track component names and their latest versions
+	// For --outdated, we'll check all components but only display the outdated ones
+	// This allows us to show the progress bar correctly
 
+	// Convert sources to pkgVendorDiff packages for the reused vendor system
+	diffPackages := make([]pkgVendorDiff, 0, len(sources))
 	for _, source := range sources {
 		componentName := source.Component
 		if componentName == "" {
@@ -356,61 +358,66 @@ func compareAndDisplayVendorDiffs(sources []schema.AtmosVendorSource, updateVend
 			currentVersion = "latest"
 		}
 
-		// Check for updates (always dry-run for diff - we never download)
-		updateAvailable, latestInfo, err := checkForVendorUpdates(source, true)
-		if err != nil {
-			fmt.Printf("❌ %s: Error checking for updates - %v\n", componentName, err)
-			continue
-		}
-
-		if updateAvailable && latestInfo != "" {
-			hasUpdates = true
-			fmt.Printf("📦 %s: %s → %s\n", componentName, currentVersion, latestInfo)
-
-			// Track all available updates and their versions
-			updatesAvailable = append(updatesAvailable, componentName)
-			updatedVersions[componentName] = latestInfo
-		} else if !outdatedOnly {
-			// Only show up-to-date components if outdated-only flag is not set
-			fmt.Printf("✅ %s: %s (up to date)\n", componentName, currentVersion)
-		}
+		// Create the diff package
+		diffPackages = append(diffPackages, pkgVendorDiff{
+			name:           componentName,
+			currentVersion: currentVersion,
+			source:         source,
+			outdatedOnly:   outdatedOnly, // Pass the outdatedOnly flag through to each component
+		})
 	}
 
-	fmt.Println()
-
-	if !hasUpdates {
-		if outdatedOnly {
-			fmt.Println("No outdated vendor dependencies found.")
-		} else {
-			fmt.Println("All vendor dependencies are up to date!")
-		}
-		return nil
+	// Use the existing vendor model infrastructure with our diff packages
+	// This gives us the same progress bar, spinner, and TUI system as vendor pull
+	err := executeVendorModel(diffPackages, true, &schema.AtmosConfiguration{})
+	if err != nil {
+		return fmt.Errorf("failed to check vendor updates: %w", err)
 	}
 
-	updateCount := len(updatesAvailable)
-
-	// Get the original vendor configuration file path
-	if vendorConfigFile == "" && len(sources) > 0 && sources[0].File != "" {
-		vendorConfigFile = sources[0].File
-	}
-
+	// If --update flag was used, we need to collect results and update the vendor file
 	if updateVendorFile {
 		if vendorConfigFile == "" {
-			fmt.Println("Warning: Cannot update vendor configuration - file path unknown")
+			fmt.Println("\nWarning: Cannot update vendor configuration - file path unknown")
 			return nil
 		}
 
-		fmt.Printf("Found %d updates. Updating the vendor configuration file...\n", updateCount)
+		// Collect update information
+		updatedVersions := make(map[string]string)
+		updateCount := 0
 
-		// Update the vendor configuration file with the latest versions
-		if err := updateVendorConfigFile(sources, updatedVersions, vendorConfigFile); err != nil {
-			fmt.Printf("Error updating vendor configuration file: %v\n", err)
-			return err
+		fmt.Println("\nCollecting update information...")
+
+		for _, source := range sources {
+			componentName := source.Component
+			if componentName == "" {
+				componentName = extractComponentNameFromSource(source.Source)
+			}
+
+			// Check for updates using the existing logic
+			updateAvailable, latestInfo, err := checkForVendorUpdates(source, true)
+			if err != nil {
+				continue // Skip components with errors
+			}
+
+			if updateAvailable && latestInfo != "" {
+				updatedVersions[componentName] = latestInfo
+				updateCount++
+			}
 		}
 
-		fmt.Printf("Successfully updated %d components in %s\n", updateCount, vendorConfigFile)
-	} else {
-		fmt.Printf("Found %d updates. Use --update flag to update the vendor configuration file.\n", updateCount)
+		if updateCount > 0 {
+			fmt.Printf("Updating the vendor configuration file with %d updates...\n", updateCount)
+
+			// Update the vendor configuration file with the latest versions
+			if err := updateVendorConfigFile(sources, updatedVersions, vendorConfigFile); err != nil {
+				fmt.Printf("Error updating vendor configuration file: %v\n", err)
+				return err
+			}
+
+			fmt.Printf("Successfully updated %d components in %s\n", updateCount, vendorConfigFile)
+		} else {
+			fmt.Println("No updates to apply to the vendor configuration file.")
+		}
 	}
 
 	return nil

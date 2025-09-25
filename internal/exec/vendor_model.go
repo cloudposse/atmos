@@ -56,11 +56,20 @@ func (p pkgType) String() string {
 	return names[p]
 }
 
+type pkgVendorDiff struct {
+	name           string
+	currentVersion string
+	latestVersion  string // Add field to store latest version from pre-check
+	source         schema.AtmosVendorSource
+	outdatedOnly   bool
+}
+
 type pkgVendor struct {
 	name             string
 	version          string
 	atmosPackage     *pkgAtmosVendor
 	componentPackage *pkgComponentVendor
+	diffPackage      *pkgVendorDiff // Add diff package type
 }
 
 type pkgAtmosVendor struct {
@@ -99,7 +108,7 @@ type modelVendor struct {
 	isTTY       bool
 }
 
-func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
+func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor | pkgVendorDiff](
 	packages []T,
 	dryRun bool,
 	atmosConfig *schema.AtmosConfiguration,
@@ -129,7 +138,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	return nil
 }
 
-func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
+func newModelVendor[T pkgComponentVendor | pkgAtmosVendor | pkgVendorDiff](
 	pkgs []T,
 	dryRun bool,
 	atmosConfig *schema.AtmosConfiguration,
@@ -167,6 +176,15 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 				name:         ap.name,
 				version:      ap.version,
 				atmosPackage: &ap,
+			}
+		}
+	case pkgVendorDiff:
+		for i := range pkgs {
+			dp := any(pkgs[i]).(pkgVendorDiff)
+			vendorPks[i] = pkgVendor{
+				name:        dp.name,
+				version:     dp.currentVersion,
+				diffPackage: &dp,
 			}
 		}
 	}
@@ -247,28 +265,63 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	if pkg.version != "" {
 		version = fmt.Sprintf("(%s)", pkg.version)
 	}
+
+	// Skip empty messages (for outdated filtered items)
+	if msg.name == "" {
+		if m.index >= len(m.packages)-1 {
+			m.done = true
+			return m, tea.Quit
+		}
+		m.index++
+		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
+		return m, tea.Batch(
+			progressCmd,
+			ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig),
+		)
+	}
+
 	if m.index >= len(m.packages)-1 {
 		// Everything's been installed. We're done!
 		m.done = true
 		m.logNonNTYFinalStatus(pkg, &mark)
+
+		// For diff packages, use the exact message
+		if pkg.diffPackage != nil {
+			return m, tea.Sequence(
+				tea.Printf("%s", msg.name),
+				tea.Quit,
+			)
+		}
+
 		version := grayColor.Render(version)
 		return m, tea.Sequence(
 			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
 			tea.Quit,
 		)
 	}
+
 	if !m.isTTY {
 		log.Info(mark, "package", pkg.name, "version", version)
 	}
+
 	m.index++
 	// Update progress bar
 	progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
 
+	// For diff packages, use the exact message
+	if pkg.diffPackage != nil {
+		return m, tea.Batch(
+			progressCmd,
+			tea.Printf("%s", msg.name),
+			ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig),
+		)
+	}
+
 	version = grayColor.Render(version)
 	return m, tea.Batch(
 		progressCmd,
-		tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),   // print message above our program
-		ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig), // download the next package
+		tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
+		ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig),
 	)
 }
 
@@ -298,6 +351,28 @@ func (m *modelVendor) View() string {
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
+		// Special handling for diff packages
+		if len(m.packages) > 0 && m.packages[0].diffPackage != nil {
+			// For vendor diff, show more appropriate message
+			updateCount := 0
+			for _, pkg := range m.packages {
+				if pkg.diffPackage != nil && pkg.diffPackage.latestVersion != "" {
+					updateCount++
+				}
+			}
+
+			if updateCount > 0 {
+				return doneStyle.Render(fmt.Sprintf("Found %d updates. Use --update flag to update the vendor configuration file.\n", updateCount))
+			} else if m.packages[0].diffPackage.outdatedOnly {
+				// For --outdated mode with no updates, this shouldn't normally be shown
+				// (pre-filter should have caught it), but just in case
+				return doneStyle.Render("No outdated vendor dependencies found.\n")
+			} else {
+				return doneStyle.Render("All vendor dependencies are up to date!\n")
+			}
+		}
+
+		// Standard completion messages for non-diff operations
 		if m.dryRun {
 			return doneStyle.Render("Done! Dry run completed. No components vendored.\n")
 		}
@@ -307,16 +382,27 @@ func (m *modelVendor) View() string {
 		return doneStyle.Render(fmt.Sprintf("Vendored %d components.\n", n))
 	}
 
-	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.index, w, n)
+	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.index+1, w, n)
 	spin := m.spinner.View() + " "
-	prog := m.progress.View()
+
+	// Calculate progress percentage
+	progressPercent := float64(m.index) / float64(n)
+	prog := m.progress.ViewAs(progressPercent)
+
 	cellsAvail := max(0, m.width-lipgloss.Width(spin+prog+pkgCount))
+
 	if m.index >= len(m.packages) {
 		return ""
 	}
 	pkgName := currentPkgNameStyle.Render(m.packages[m.index].name)
 
-	info := lipgloss.NewStyle().MaxWidth(cellsAvail).Render("Pulling " + pkgName)
+	// Determine action text based on package type
+	actionText := "Pulling"
+	if m.packages[m.index].diffPackage != nil {
+		actionText = "Checking"
+	}
+
+	info := lipgloss.NewStyle().MaxWidth(cellsAvail).Render(actionText + " " + pkgName)
 
 	cellsRemaining := max(0, m.width-lipgloss.Width(spin+info+prog+pkgCount))
 	gap := strings.Repeat(" ", cellsRemaining)
@@ -492,12 +578,59 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosC
 		return downloadComponentAndInstall(installer.componentPackage, dryRun, atmosConfig)
 	}
 
+	if installer.diffPackage != nil {
+		return executeDiffCheck(installer.diffPackage, atmosConfig)
+	}
+
 	// No valid package provided
 	return func() tea.Msg {
 		err := fmt.Errorf("%w: %s", errUtils.ErrValidPackage, installer.name)
 		return installedPkgMsg{
 			err:  err,
 			name: installer.name,
+		}
+	}
+}
+
+// executeDiffCheck performs the version diff check for a component
+func executeDiffCheck(p *pkgVendorDiff, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
+	return func() tea.Msg {
+		// If we already have the latest version from pre-check, use that directly
+		if p.outdatedOnly && p.latestVersion != "" {
+			// Format the result to show the update with pre-filled latest version
+			return installedPkgMsg{
+				err:  nil,
+				name: fmt.Sprintf("📦 %s: %s → %s", p.name, p.currentVersion, p.latestVersion),
+			}
+		}
+
+		// Otherwise, check for updates using the existing logic
+		updateAvailable, latestInfo, err := checkForVendorUpdates(p.source, true)
+
+		if err != nil {
+			return installedPkgMsg{
+				err:  fmt.Errorf("Error checking for updates - %v", err),
+				name: p.name,
+			}
+		}
+
+		if updateAvailable && latestInfo != "" {
+			// Format the result to show the update
+			return installedPkgMsg{
+				err:  nil,
+				name: fmt.Sprintf("📦 %s: %s → %s", p.name, p.currentVersion, latestInfo),
+			}
+		} else if !p.outdatedOnly {
+			return installedPkgMsg{
+				err:  nil,
+				name: fmt.Sprintf("%s %s: %s (up to date)", checkMark, p.name, p.currentVersion),
+			}
+		}
+
+		// For outdatedOnly mode, don't show up-to-date components
+		return installedPkgMsg{
+			err:  nil,
+			name: "", // Empty name means don't display
 		}
 	}
 }
