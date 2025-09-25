@@ -65,14 +65,20 @@ stacks:
   contain the top-level stack manifests, but just define the default values that get imported into top-level stack manifests
 
   :::note
-  The `_defaults.yaml` files is the recommended way to define the stack manifests with the
-  default configurations for organizations, OUs/tenants, accounts and regions. The `_defaults.yaml` files themselves are not top-level Atmos stacks,
-  they just contain the default values for the organizations, OUs/tenants, accounts and regions (to make the entire configuration reusable and DRY)
+  The `_defaults.yaml` naming convention is the recommended way to define stack manifests with
+  default configurations for organizations, OUs/tenants, accounts and regions. This is a naming convention, not an Atmos feature.
+  The `_defaults.yaml` files themselves are not top-level Atmos stacks—they just contain default values
+  to make the entire configuration reusable and DRY. The underscore prefix ensures these files sort to the top
+  of directory listings and are visually distinct from actual stack configurations.
   :::
 
   :::info
   The `_defaults.yaml` stack manifests are not imported into other Atmos manifests automatically.
-  You need to explicitly import them using [imports](/core-concepts/stacks/imports).
+  You must explicitly import them using [imports](/core-concepts/stacks/imports). Atmos has no special
+  knowledge of this naming pattern—these files are only excluded from stack discovery because they match
+  the `**/_defaults.yaml` pattern in the `excluded_paths` configuration.
+
+  See the [_defaults.yaml Design Pattern](/design-patterns/defaults-pattern) for a complete explanation of this convention.
   :::
 
 - `stacks.name_pattern` configures the name pattern for the top-level Atmos stacks using the context variables `namespace`, `tenant`, `environment`
@@ -106,7 +112,7 @@ stacks:
 
 - `stacks.name_template` serves the same purpose as `stacks.name_pattern` (defines the naming convention for the top-level Atmos stacks), but
   provides much more functionality. Instead of using the predefined context variables as tokens, it uses [Go templates](https://pkg.go.dev/text/template).
-  [Atmos Template Functions](/core-concepts/stacks/templates/functions),
+  [Atmos Template Functions](/functions/template),
   [Sprig Functions](https://masterminds.github.io/sprig/),
   [Gomplate Functions](https://docs.gomplate.ca/functions/),
   and [Gomplate Datasources](https://docs.gomplate.ca/datasources/) are supported as well

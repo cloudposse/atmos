@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -61,6 +63,7 @@ type Expectation struct {
 	FileContains  map[string][]MatchPattern `yaml:"file_contains"`   // File contents to validate (file to patterns map)
 	Diff          []string                  `yaml:"diff"`            // Acceptable differences in snapshot
 	Timeout       string                    `yaml:"timeout"`         // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
+	Valid         []string                  `yaml:"valid"`           // Format validations: "yaml", "json"
 }
 type TestCase struct {
 	Name        string            `yaml:"name"`        // Name of the test
@@ -74,6 +77,7 @@ type TestCase struct {
 	Tty         bool              `yaml:"tty"`         // Enable TTY simulation
 	Snapshot    bool              `yaml:"snapshot"`    // Enable snapshot comparison
 	Clean       bool              `yaml:"clean"`       // Removes untracked files in work directory
+	Sandbox     bool              `yaml:"sandbox"`     // Run in sandboxed environment with isolated components
 	Skip        struct {
 		OS MatchPattern `yaml:"os"`
 	} `yaml:"skip"`
@@ -600,6 +604,33 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
 		}
 
+		// Setup sandbox environment if enabled
+		var sandboxEnv *testhelpers.SandboxEnvironment
+		if tc.Sandbox {
+			logger.Info("Setting up sandbox environment", "workdir", tc.Workdir)
+
+			env, err := testhelpers.SetupSandbox(t, absoluteWorkdir)
+			if err != nil {
+				t.Fatalf("Failed to setup sandbox for test %q: %v", tc.Name, err)
+			}
+			sandboxEnv = env
+
+			// Add sandbox environment variables to override component paths
+			if tc.Env == nil {
+				tc.Env = make(map[string]string)
+			}
+			for k, v := range sandboxEnv.GetEnvironmentVariables() {
+				logger.Debug("Setting sandbox env var", "key", k, "value", v)
+				tc.Env[k] = v
+			}
+
+			// Ensure sandbox is cleaned up after test
+			defer func() {
+				logger.Debug("Cleaning up sandbox", "tempdir", sandboxEnv.TempDir)
+				sandboxEnv.Cleanup()
+			}()
+		}
+
 		// Clean the directory if enabled
 		if tc.Clean {
 			logger.Info("Cleaning directory", "workdir", tc.Workdir)
@@ -737,6 +768,14 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate stderr
 	if !verifyOutput(t, "stderr", stderr.String(), tc.Expect.Stderr) {
 		t.Errorf("Stderr mismatch for test: %s", tc.Name)
+	}
+
+	// Validate format (YAML/JSON)
+	if len(tc.Expect.Valid) > 0 {
+		if !verifyFormatValidation(t, stdout.String(), tc.Expect.Valid) {
+			t.Errorf("Format validation failed for test: %s", tc.Name)
+			t.Errorf("Description: %s", tc.Description)
+		}
 	}
 
 	// Validate file existence
@@ -925,6 +964,76 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bo
 		}
 	}
 	return success
+}
+
+func verifyFormatValidation(t *testing.T, output string, formats []string) bool {
+	success := true
+	for _, format := range formats {
+		switch format {
+		case "yaml":
+			if !verifyYAMLFormat(t, output) {
+				success = false
+			}
+		case "json":
+			if !verifyJSONFormat(t, output) {
+				success = false
+			}
+		default:
+			t.Logf("Unknown validation format: %s", format)
+			success = false
+		}
+	}
+	return success
+}
+
+func verifyYAMLFormat(t *testing.T, output string) bool {
+	var data interface{}
+	err := yaml.Unmarshal([]byte(output), &data)
+	if err != nil {
+		t.Logf("YAML validation failed: %v", err)
+		// Show context around the error if possible.
+		lines := strings.Split(output, "\n")
+		preview := strings.Join(lines[:min(10, len(lines))], "\n")
+		if len(preview) > 500 {
+			preview = preview[:500] + "..."
+		}
+		t.Logf("Output preview:\n%s", preview)
+		return false
+	}
+	return true
+}
+
+func verifyJSONFormat(t *testing.T, output string) bool {
+	var data interface{}
+	err := json.Unmarshal([]byte(output), &data)
+	if err != nil {
+		t.Logf("JSON validation failed: %v", err)
+		// Try to provide context about where the error occurred.
+		if syntaxErr, ok := err.(*json.SyntaxError); ok {
+			offset := syntaxErr.Offset
+			// Show a snippet around the error location.
+			start := max(0, int(offset)-50)
+			end := min(len(output), int(offset)+50)
+			snippet := output[start:end]
+			t.Logf("Error at offset %d, context: ...%s...", offset, snippet)
+		}
+		return false
+	}
+	return true
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func updateSnapshot(fullPath, output string) {
