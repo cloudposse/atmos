@@ -132,7 +132,12 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
+	// Use the string value directly instead of log.GetLevel() to handle custom trace level
+	logLevelStr := strings.ToLower(atmosConfig.Logs.Level)
+	if logLevelStr == "" {
+		logLevelStr = "info" // default
+	}
+	log.Debug("Set", "logs-level", logLevelStr, "logs-file", atmosConfig.Logs.File)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
