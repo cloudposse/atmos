@@ -76,12 +76,16 @@ func processIncludeTagInternal(
 		if err != nil {
 			return err
 		}
-	} else {
-		// Process remote file
+	} else if isRemoteURL(includeFile) {
+		// Only process as remote if it's actually a remote URL
 		res, err = processRemoteFile(atmosConfig, includeFile, forceRaw)
 		if err != nil {
 			return err
 		}
+	} else {
+		// Local file not found - provide helpful error message
+		return fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
+			ErrIncludeYamlFunctionInvalidFile, includeFile, file, atmosConfig.BasePath)
 	}
 
 	// Apply YQ expression if provided
