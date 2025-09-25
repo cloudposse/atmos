@@ -25,11 +25,14 @@ var vendorDiffCmd = &cobra.Command{
 }
 
 func init() {
-	vendorDiffCmd.PersistentFlags().StringP("component", "c", "", "Compare the differences between the local and vendored versions of the specified component.")
+	vendorDiffCmd.PersistentFlags().StringP("component", "c", "", "Check for updates for the specified component name from the vendor configuration.")
+	vendorDiffCmd.PersistentFlags().String("tags", "", "Check for updates for components with the specified tags (comma-separated).")
+	vendorDiffCmd.PersistentFlags().Bool("everything", false, "Check for updates for all configured vendor components.")
+	vendorDiffCmd.PersistentFlags().Bool("update", false, "Update the vendor configuration file with the latest versions found.")
+	vendorDiffCmd.PersistentFlags().Bool("outdated", false, "Only show components that have updates available.")
 	AddStackCompletion(vendorDiffCmd)
-	vendorDiffCmd.PersistentFlags().StringP("type", "t", "terraform", "Compare the differences between the local and vendored versions of the specified component, filtering by type (terraform or helmfile).")
-	vendorDiffCmd.PersistentFlags().Bool("dry-run", false, "Simulate the comparison of differences between the local and vendored versions of the specified component without making any changes.")
+	vendorDiffCmd.PersistentFlags().StringP("type", "t", "terraform", "Filter components by type (terraform or helmfile).")
 
-	// Since this command is not implemented yet, exclude it from `atmos help`
-	// vendorCmd.AddCommand(vendorDiffCmd)
+	// Register the vendor diff command
+	vendorCmd.AddCommand(vendorDiffCmd)
 }
