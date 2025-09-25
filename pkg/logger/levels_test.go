@@ -2,6 +2,7 @@ package logger
 
 import (
 	"bytes"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -257,4 +258,32 @@ func TestTraceLevelIsLowest(t *testing.T) {
 
 	assert.Equal(t, TraceLevel, minLevel,
 		"Trace should be the most verbose (lowest value) level")
+}
+
+func TestGetLevelString(t *testing.T) {
+	// Save original state.
+	originalLevel := log.GetLevel()
+	defer log.SetLevel(originalLevel)
+
+	tests := []struct {
+		name     string
+		setLevel log.Level
+		expected string
+	}{
+		{"Trace level", TraceLevel, "trace"},
+		{"Debug level", log.DebugLevel, "debug"},
+		{"Info level", log.InfoLevel, "info"},
+		{"Warn level", log.WarnLevel, "warn"},
+		{"Error level", log.ErrorLevel, "error"},
+		{"Off level", log.Level(math.MaxInt32), "off"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			log.SetLevel(tt.setLevel)
+			result := GetLevelString()
+			assert.Equal(t, tt.expected, result,
+				"GetLevelString() should return %q for level %v", tt.expected, tt.setLevel)
+		})
+	}
 }

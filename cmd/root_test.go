@@ -218,7 +218,7 @@ func TestSetupLogger_TraceVisibility(t *testing.T) {
 			cfg := &schema.AtmosConfiguration{
 				Logs: schema.Logs{
 					Level: tt.configLevel,
-					File:  "/dev/stderr", // Default log file
+					File:  "", // No file so it uses the pre-set buffer
 				},
 				Settings: schema.AtmosSettings{
 					Terminal: schema.Terminal{},

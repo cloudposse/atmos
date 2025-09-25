@@ -28,6 +28,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// LogFileMode is the file mode for log files.
+	logFileMode = 0o644
+)
+
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
 
@@ -112,32 +117,30 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		}
 		log.SetStyles(styles)
 	}
-	var output io.Writer
+	// Only set output if a log file is configured
+	if atmosConfig.Logs.File != "" {
+		var output io.Writer
 
-	switch atmosConfig.Logs.File {
-	case "/dev/stderr":
-		output = os.Stderr
-	case "/dev/stdout":
-		output = os.Stdout
-	case "/dev/null":
-		output = io.Discard // More efficient than opening os.DevNull
-	default:
-		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
-		defer logFile.Close()
-		output = logFile
+		switch atmosConfig.Logs.File {
+		case "/dev/stderr":
+			output = os.Stderr
+		case "/dev/stdout":
+			output = os.Stdout
+		case "/dev/null":
+			output = io.Discard // More efficient than opening os.DevNull
+		default:
+			logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFileMode)
+			errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
+			defer logFile.Close()
+			output = logFile
+		}
+
+		log.SetOutput(output)
 	}
-
-	log.SetOutput(output)
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-	// Use the string value directly instead of log.GetLevel() to handle custom trace level
-	logLevelStr := strings.ToLower(atmosConfig.Logs.Level)
-	if logLevelStr == "" {
-		logLevelStr = "info" // default
-	}
-	log.Debug("Set", "logs-level", logLevelStr, "logs-file", atmosConfig.Logs.File)
+	log.Debug("Set", "logs-level", logger.GetLevelString(), "logs-file", atmosConfig.Logs.File)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
