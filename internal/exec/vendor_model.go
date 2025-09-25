@@ -615,6 +615,7 @@ func executeDiffCheck(p *pkgVendorDiff, atmosConfig *schema.AtmosConfiguration) 
 		}
 
 		if updateAvailable && latestInfo != "" {
+			p.latestVersion = latestInfo
 			// Format the result to show the update
 			return installedPkgMsg{
 				err:  nil,
