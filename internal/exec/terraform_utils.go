@@ -179,6 +179,103 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	return true
 }
 
+// ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
+// Deprecated: Use ExecuteTerraformAffectedWithGraph instead, which uses the generalized dependency graph.
+func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
+	var affectedList []schema.Affected
+	var err error
+
+	switch {
+	case args.RepoPath != "":
+		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+			args.CLIConfig,
+			args.RepoPath,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.ExcludeLocked,
+		)
+	case args.CloneTargetRef:
+		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
+			args.CLIConfig,
+			args.Ref,
+			args.SHA,
+			args.SSHKeyPath,
+			args.SSHKeyPassword,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.ExcludeLocked,
+		)
+	default:
+		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
+			args.CLIConfig,
+			args.Ref,
+			args.SHA,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.ExcludeLocked,
+		)
+	}
+	if err != nil {
+		return err
+	}
+
+	// Add dependent components for each directly affected component.
+	if len(affectedList) > 0 {
+		err = addDependentsToAffected(
+			args.CLIConfig,
+			&affectedList,
+			args.IncludeSettings,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	affectedYaml, err := u.ConvertToYAML(affectedList)
+	if err != nil {
+		return err
+	}
+	log.Debug("Affected", "components", affectedYaml)
+
+	for i := 0; i < len(affectedList); i++ {
+		affected := &affectedList[i]
+		// If the affected component is included in the dependencies of any other component, don't process it now;
+		// it will be processed in the dependency order.
+		if !affected.IncludedInDependents {
+			err = executeTerraformAffectedComponentInDepOrder(
+				info,
+				affectedList,
+				affected.Component,
+				affected.Stack,
+				"",
+				"",
+				affected.Dependents,
+				args,
+			)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
 func executeTerraformAffectedComponentInDepOrder(
 	info *schema.ConfigAndStacksInfo,
