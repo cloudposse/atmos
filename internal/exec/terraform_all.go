@@ -5,6 +5,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -13,6 +14,14 @@ import (
 
 // ExecuteTerraformAll executes terraform commands for all components in dependency order.
 func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
+	// Validate inputs for --all flag usage
+	if info.Stack == "" {
+		return errUtils.ErrStackRequiredWithAllFlag
+	}
+	if info.ComponentFromArg != "" {
+		return errUtils.ErrComponentWithAllFlagConflict
+	}
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return fmt.Errorf("error initializing CLI config: %w", err)

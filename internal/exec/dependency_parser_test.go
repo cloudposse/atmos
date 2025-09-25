@@ -313,8 +313,17 @@ func TestDependencyParser_ParseSingleDependency(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			nodeMap := map[string]string{
 				"vpc-dev": "vpc-dev",
+				"app-dev": "app-dev",
 			}
 			builder := dependency.NewBuilder()
+
+			// Add nodes to builder
+			for nodeID := range nodeMap {
+				_ = builder.AddNode(&dependency.Node{
+					ID: nodeID,
+				})
+			}
+
 			parser := NewDependencyParser(builder, nodeMap)
 
 			err := parser.parseSingleDependency("app-dev", "dev", tt.dep)
@@ -404,6 +413,21 @@ func TestDependencyParser_ParseDependencyMapEntry(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			builder := dependency.NewBuilder()
+
+			// Add source node
+			_ = builder.AddNode(&dependency.Node{
+				ID: "app-dev",
+			})
+
+			// Add nodes from nodeMap
+			for nodeID := range tt.nodeMap {
+				if nodeID != "app-dev" {
+					_ = builder.AddNode(&dependency.Node{
+						ID: nodeID,
+					})
+				}
+			}
+
 			parser := NewDependencyParser(builder, tt.nodeMap)
 
 			err := parser.parseDependencyMapEntry("app-dev", tt.defaultStack, tt.depMap)
@@ -448,13 +472,13 @@ func TestDependencyParser_AddDependencyIfExists(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:   "self dependency allowed",
+			name:   "self dependency not allowed",
 			fromID: "app-dev",
 			toID:   "app-dev",
 			nodeMap: map[string]string{
 				"app-dev": "app-dev",
 			},
-			expectError: false,
+			expectError: true,
 		},
 	}
 

@@ -789,6 +789,10 @@ var (
 	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
 	ErrMissingDependencyField    = errors.New("dependency missing required field")
 	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
+
+	// Terraform --all flag errors.
+	ErrStackRequiredWithAllFlag     = errors.New("stack is required when using --all flag")
+	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
