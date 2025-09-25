@@ -9,6 +9,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// UnsetMarker is a special type to mark values that should be deleted from the configuration.
+type UnsetMarker struct {
+	IsUnset bool
+}
+
 func ProcessCustomYamlTags(
 	atmosConfig *schema.AtmosConfiguration,
 	input schema.AtmosSectionMapType,
@@ -35,14 +40,36 @@ func processNodes(
 		case map[string]any:
 			newNestedMap := make(map[string]any)
 			for k, val := range v {
-				newNestedMap[k] = recurse(val)
+				// Check if the value is a string with !unset tag and it's not skipped.
+				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+					// Skip adding this key to the map - effectively deleting it.
+					continue
+				}
+				processed := recurse(val)
+				// Check if the processed value is the unset marker.
+				if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
+					// Skip adding this key to the map - effectively deleting it.
+					continue
+				}
+				newNestedMap[k] = processed
 			}
 			return newNestedMap
 
 		case []any:
-			newSlice := make([]any, len(v))
-			for i, val := range v {
-				newSlice[i] = recurse(val)
+			var newSlice []any
+			for _, val := range v {
+				// Check if the value is a string with !unset tag and it's not skipped.
+				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+					// Skip adding this item to the slice - effectively deleting it.
+					continue
+				}
+				processed := recurse(val)
+				// Check if the processed value is the unset marker.
+				if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
+					// Skip adding this item to the slice - effectively deleting it.
+					continue
+				}
+				newSlice = append(newSlice, processed)
 			}
 			return newSlice
 
@@ -52,7 +79,18 @@ func processNodes(
 	}
 
 	for k, v := range data {
-		newMap[k] = recurse(v)
+		// Check if the value is a string with !unset tag and it's not skipped.
+		if strVal, ok := v.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+			// Skip adding this key to the map - effectively deleting it.
+			continue
+		}
+		processed := recurse(v)
+		// Check if the processed value is the unset marker.
+		if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
+			// Skip adding this key to the map - effectively deleting it.
+			continue
+		}
+		newMap[k] = processed
 	}
 
 	return newMap
@@ -65,6 +103,9 @@ func processCustomTags(
 	skip []string,
 ) any {
 	switch {
+	case strings.HasPrefix(input, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset):
+		// Return the unset marker to indicate this value should be deleted.
+		return UnsetMarker{IsUnset: true}
 	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate) && !skipFunc(skip, u.AtmosYamlFuncTemplate):
 		return processTagTemplate(input)
 	case strings.HasPrefix(input, u.AtmosYamlFuncExec) && !skipFunc(skip, u.AtmosYamlFuncExec):

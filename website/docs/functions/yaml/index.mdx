@@ -75,6 +75,11 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!repo-root`__](/functions/yaml/repo-root) YAML function is used to retrieve the
    root directory of the Atmos repository
 
+ - The [__`!unset`__](/functions/yaml/unset) YAML function is used to delete or remove keys from
+   the configuration during inheritance and merging. This allows you to explicitly remove values
+   that were defined in parent configurations or imports, providing fine-grained control over
+   configuration inheritance
+
 :::tip
 You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) with Atmos YAML functions within the same stack configuration.
 Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.
@@ -148,6 +153,13 @@ components:
         # Download a remote JSON file with .json extension and query data using YQ
         # Note: URLs without extensions are treated as text, so use URLs with appropriate extensions
         github_data: !include ./github-meta.json .api
+
+        # Remove a key that was defined in a parent configuration or import
+        deprecated_setting: !unset
+
+        # Remove specific nested configuration
+        legacy:
+          old_feature: !unset
 ```
 </File>
 

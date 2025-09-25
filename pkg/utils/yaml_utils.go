@@ -24,6 +24,7 @@ const (
 	AtmosYamlFuncInclude         = "!include"
 	AtmosYamlFuncIncludeRaw      = "!include.raw"
 	AtmosYamlFuncGitRoot         = "!repo-root"
+	AtmosYamlFuncUnset           = "!unset"
 
 	DefaultYAMLIndent = 2
 )
@@ -37,6 +38,7 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncUnset,
 	}
 
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
