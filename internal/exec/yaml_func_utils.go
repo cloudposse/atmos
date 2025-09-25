@@ -123,6 +123,20 @@ func matchesPrefix(input, prefix string, skip []string) bool {
 	return strings.HasPrefix(input, prefix) && !skipFunc(skip, prefix)
 }
 
+// matchesPrefixOrSkipped checks if input matches a tag prefix.
+// Returns (shouldProcess, isHandled) - if isHandled is true, no further processing needed.
+// This prevents skipped tags like !store.get from falling through to match !store.
+func matchesPrefixOrSkipped(input, prefix string, skip []string) (shouldProcess, isHandled bool) {
+	if !strings.HasPrefix(input, prefix) {
+		return false, false // Not this tag, continue checking other tags.
+	}
+	// Input matches this prefix. Check if it should be skipped.
+	if skipFunc(skip, prefix) {
+		return false, true // Tag is skipped, return input unchanged.
+	}
+	return true, true // Tag should be processed.
+}
+
 // processContextAwareTags processes tags that support cycle detection.
 // Returns (result, handled, error) where handled indicates if a matching tag was found.
 func processContextAwareTags(
