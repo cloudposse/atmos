@@ -49,6 +49,70 @@ const config = {
                     {
                         from: '/reference/terraform-limitations',
                         to: '/introduction/why-atmos'
+                    },
+                    // Redirects for template functions moved to /functions/template/
+                    {
+                        from: '/core-concepts/stacks/templates/functions/atmos.Component',
+                        to: '/functions/template/atmos.Component'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/atmos.GomplateDatasource',
+                        to: '/functions/template/atmos.GomplateDatasource'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/atmos.Store',
+                        to: '/functions/template/atmos.Store'
+                    },
+                    // Redirects for YAML functions moved to /functions/yaml/
+                    {
+                        from: '/core-concepts/stacks/templates/functions/env',
+                        to: '/functions/yaml/env'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/exec',
+                        to: '/functions/yaml/exec'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/include',
+                        to: '/functions/yaml/include'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/include.raw',
+                        to: '/functions/yaml/include.raw'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/repo-root',
+                        to: '/functions/yaml/repo-root'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/store.get',
+                        to: '/functions/yaml/store.get'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/store',
+                        to: '/functions/yaml/store'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/template',
+                        to: '/functions/yaml/template'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/terraform.output',
+                        to: '/functions/yaml/terraform.output'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/terraform.state',
+                        to: '/functions/yaml/terraform.state'
+                    },
+                    // Redirect for the main functions index page
+                    {
+                        from: '/core-concepts/stacks/templates/functions',
+                        to: '/functions'
+                    },
+                    // Alternative paths that might have been used
+                    {
+                        from: '/core-concepts/template-functions',
+                        to: '/functions'
                     }
                 ],
             },
