@@ -92,7 +92,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		a.Upload = false
 		a.OutputFile = ""
 
-		err = e.ExecuteTerraformAffected(&a, &info)
+		err = e.ExecuteTerraformAffectedWithGraph(&a, &info)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
@@ -103,7 +103,13 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// `--query <yq-expression>`
 	// `--stack` (and the `component` argument is not passed)
 	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "") {
-		err = e.ExecuteTerraformQuery(&info)
+		// For commands that need dependency order with --all flag (apply, destroy, deploy)
+		if info.All && (info.SubCommand == "apply" || info.SubCommand == "destroy" || info.SubCommand == "deploy") {
+			err = e.ExecuteTerraformAll(&info)
+		} else {
+			// For other commands or when not using --all, use existing query logic
+			err = e.ExecuteTerraformQuery(&info)
+		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
