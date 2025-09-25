@@ -78,11 +78,45 @@ This means:
 - You don't need to explicitly specify template extensions - Atmos will find them automatically
 :::
 
+## Import Path Resolution
+
+Atmos supports two types of import paths:
+
+### Base-Relative Paths (Default)
+Most imports use paths relative to the `stacks.base_path` configured in `atmos.yaml`:
+- `catalog/vpc/defaults`
+- `mixins/region/us-east-2`
+- `orgs/acme/_defaults`
+
+These paths are resolved from the base stacks directory, regardless of where the importing file is located.
+
+### File-Relative Paths
+Imports starting with `.` or `..` are relative to the current file's directory:
+- `./_defaults` - imports from the same directory as the current file
+- `../shared/_defaults` - imports from a sibling `shared` directory
+
+This is useful when you want to import files that are co-located with the current configuration.
+
 ## Conventions
 
 We recommend placing all baseline "imports" in the `stacks/catalog` folder, however, they can exist anywhere.
 
 Use [mixins](/core-concepts/stacks/inheritance/mixins) for reusable snippets of configurations that alter the behavior of Stacks in some way.
+
+### The _defaults.yaml Pattern
+
+Many Atmos projects use `_defaults.yaml` as a naming convention for default configurations at each level of the hierarchy. This is purely a convention—Atmos has no special handling for these files. They must be explicitly imported like any other file.
+
+The underscore prefix ensures they:
+- Sort to the top of directory listings (lexicographic sorting)
+- Are visually distinct from actual stack configurations
+- Are excluded from stack discovery (via `excluded_paths` configuration)
+
+:::info
+The `_defaults.yaml` pattern is a common convention, not an Atmos feature. These files are only excluded from stack discovery because they match the pattern in `excluded_paths` configuration. They must always be explicitly imported to take effect.
+:::
+
+For a complete explanation of this pattern, see the [_defaults.yaml Design Pattern](/design-patterns/defaults-pattern) documentation.
 
 ## Imports Schema
 
