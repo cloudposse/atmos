@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hashicorp/go-getter"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -76,8 +77,8 @@ func processIncludeTagInternal(
 		if err != nil {
 			return err
 		}
-	} else if isRemoteURL(includeFile) {
-		// Only process as remote if it's actually a remote URL
+	} else if shouldFetchRemote(includeFile) {
+		// Process as remote if it's a URL or go-getter detects it as remote
 		res, err = processRemoteFile(atmosConfig, includeFile, forceRaw)
 		if err != nil {
 			return err
@@ -109,6 +110,41 @@ func isRemoteURL(path string) bool {
 		}
 	}
 	return strings.Contains(path, "::")
+}
+
+// shouldFetchRemote checks if the path should be processed as a remote resource.
+// It first checks for explicit URL protocols, then uses go-getter's detection
+// to handle shorthand formats like "github.com/org/repo".
+func shouldFetchRemote(path string) bool {
+	// First check for explicit URL protocols
+	if isRemoteURL(path) {
+		return true
+	}
+
+	// Use go-getter to detect if this is a remote source
+	// This handles shorthands like "github.com/org/repo"
+	detectors := []getter.Detector{
+		&getter.GitDetector{},
+		&getter.GitHubDetector{},
+		&getter.GitLabDetector{},
+		&getter.BitBucketDetector{},
+		&getter.S3Detector{},
+		&getter.GCSDetector{},
+		&getter.FileDetector{},
+	}
+
+	for _, detector := range detectors {
+		src, ok, err := detector.Detect(path, "")
+		if err != nil || !ok {
+			continue
+		}
+		// If any non-file detector matched, treat it as remote
+		if _, isFile := detector.(*getter.FileDetector); !isFile && src != "" {
+			return true
+		}
+	}
+
+	return false
 }
 
 // resolveAbsolutePath checks if a file exists and returns its absolute path.
