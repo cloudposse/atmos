@@ -29,10 +29,15 @@ func TestShouldFetchRemoteComprehensive(t *testing.T) {
 		{"gitlab.com/myorg/myrepo", true, "GitLab shorthand"},
 		{"https://gitlab.com/myorg/myrepo", true, "GitLab HTTPS"},
 		{"git::https://gitlab.com/myorg/myrepo.git", true, "GitLab with git protocol"},
+		{"git@gitlab.com:myorg/myrepo.git", true, "GitLab SSH format"},
+		{"git::ssh://git@gitlab.com/myorg/myrepo.git", true, "GitLab SSH protocol"},
 
-		// Bitbucket formats (with protocol - shorthand not supported)
+		// Bitbucket formats
 		{"https://bitbucket.org/myorg/myrepo", true, "Bitbucket HTTPS"},
 		{"git::https://bitbucket.org/myorg/myrepo.git", true, "Bitbucket with git protocol"},
+		{"git@bitbucket.org:myorg/myrepo.git", true, "Bitbucket SSH format"},
+		{"git::ssh://git@bitbucket.org/myorg/myrepo.git", true, "Bitbucket SSH protocol"},
+		{"bitbucket.org/myorg/myrepo", false, "Bitbucket shorthand (not supported without protocol)"},
 
 		// S3 formats
 		{"s3::https://s3.amazonaws.com/bucket/key", true, "S3 HTTPS"},
