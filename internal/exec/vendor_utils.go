@@ -425,7 +425,7 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []string) bool {
 	// Skip if component or tags do not match
 	// If `--component` is specified, and it's not equal to this component, skip this component
-	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component
+	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component.
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
