@@ -3,60 +3,71 @@ package dependency
 // Filter creates a new graph containing only the specified nodes and their relationships.
 func (g *Graph) Filter(filter Filter) *Graph {
 	filtered := NewGraph()
+	toInclude := g.collectNodesToInclude(filter)
+	g.copyNodesToFilteredGraph(filtered, toInclude)
+	filtered.IdentifyRoots()
+	return filtered
+}
+
+// collectNodesToInclude determines which nodes should be included based on the filter.
+func (g *Graph) collectNodesToInclude(filter Filter) map[string]bool {
 	toInclude := make(map[string]bool)
 
-	// Mark nodes to include based on filter
 	for _, id := range filter.NodeIDs {
-		if _, exists := g.Nodes[id]; exists {
-			toInclude[id] = true
+		if _, exists := g.Nodes[id]; !exists {
+			continue
+		}
 
-			// Include dependencies if requested
-			if filter.IncludeDependencies {
-				g.markDependencies(id, toInclude)
-			}
+		toInclude[id] = true
 
-			// Include dependents if requested
-			if filter.IncludeDependents {
-				g.markDependents(id, toInclude)
-			}
+		if filter.IncludeDependencies {
+			g.markDependencies(id, toInclude)
+		}
+
+		if filter.IncludeDependents {
+			g.markDependents(id, toInclude)
 		}
 	}
 
-	// Copy included nodes to the filtered graph
+	return toInclude
+}
+
+// copyNodesToFilteredGraph copies the included nodes to the filtered graph.
+func (g *Graph) copyNodesToFilteredGraph(filtered *Graph, toInclude map[string]bool) {
 	for id := range toInclude {
-		if node, exists := g.Nodes[id]; exists {
-			// Create a new node with the same data
-			newNode := &Node{
-				ID:           node.ID,
-				Component:    node.Component,
-				Stack:        node.Stack,
-				Type:         node.Type,
-				Dependencies: []string{},
-				Dependents:   []string{},
-				Metadata:     node.Metadata,
-				Processed:    node.Processed,
-			}
+		node, exists := g.Nodes[id]
+		if !exists {
+			continue
+		}
 
-			// Only include dependencies/dependents that are also in the filtered set
-			for _, depID := range node.Dependencies {
-				if toInclude[depID] {
-					newNode.Dependencies = append(newNode.Dependencies, depID)
-				}
-			}
+		newNode := g.cloneNodeForFilter(node, toInclude)
+		filtered.Nodes[id] = newNode
+	}
+}
 
-			for _, depID := range node.Dependents {
-				if toInclude[depID] {
-					newNode.Dependents = append(newNode.Dependents, depID)
-				}
-			}
+// cloneNodeForFilter creates a copy of a node with filtered relationships.
+func (g *Graph) cloneNodeForFilter(node *Node, toInclude map[string]bool) *Node {
+	newNode := &Node{
+		ID:           node.ID,
+		Component:    node.Component,
+		Stack:        node.Stack,
+		Type:         node.Type,
+		Dependencies: filterNodeIDs(node.Dependencies, toInclude),
+		Dependents:   filterNodeIDs(node.Dependents, toInclude),
+		Metadata:     node.Metadata,
+		Processed:    node.Processed,
+	}
+	return newNode
+}
 
-			filtered.Nodes[id] = newNode
+// filterNodeIDs returns only the IDs that are in the toInclude set.
+func filterNodeIDs(ids []string, toInclude map[string]bool) []string {
+	filtered := []string{}
+	for _, id := range ids {
+		if toInclude[id] {
+			filtered = append(filtered, id)
 		}
 	}
-
-	// Identify roots in the filtered graph
-	filtered.IdentifyRoots()
-
 	return filtered
 }
 
@@ -181,40 +192,47 @@ func (g *Graph) GetConnectedComponents() []*Graph {
 func (g *Graph) RemoveNode(nodeID string) error {
 	node, exists := g.Nodes[nodeID]
 	if !exists {
-		return nil // Node doesn't exist, nothing to remove
+		return nil // Node doesn't exist, nothing to remove.
 	}
 
-	// Remove this node from its dependencies' dependents lists
-	for _, depID := range node.Dependencies {
-		if depNode, exists := g.Nodes[depID]; exists {
-			newDependents := []string{}
-			for _, dependent := range depNode.Dependents {
-				if dependent != nodeID {
-					newDependents = append(newDependents, dependent)
-				}
-			}
-			depNode.Dependents = newDependents
-		}
-	}
+	g.removeNodeFromDependencies(nodeID, node)
+	g.removeNodeFromDependents(nodeID, node)
 
-	// Remove this node from its dependents' dependencies lists
-	for _, depID := range node.Dependents {
-		if depNode, exists := g.Nodes[depID]; exists {
-			newDependencies := []string{}
-			for _, dependency := range depNode.Dependencies {
-				if dependency != nodeID {
-					newDependencies = append(newDependencies, dependency)
-				}
-			}
-			depNode.Dependencies = newDependencies
-		}
-	}
-
-	// Remove the node from the graph
 	delete(g.Nodes, nodeID)
-
-	// Update roots
 	g.IdentifyRoots()
 
 	return nil
+}
+
+// removeNodeFromDependencies removes the node from its dependencies' dependents lists.
+func (g *Graph) removeNodeFromDependencies(nodeID string, node *Node) {
+	for _, depID := range node.Dependencies {
+		depNode, exists := g.Nodes[depID]
+		if !exists {
+			continue
+		}
+		depNode.Dependents = removeStringFromSlice(depNode.Dependents, nodeID)
+	}
+}
+
+// removeNodeFromDependents removes the node from its dependents' dependencies lists.
+func (g *Graph) removeNodeFromDependents(nodeID string, node *Node) {
+	for _, depID := range node.Dependents {
+		depNode, exists := g.Nodes[depID]
+		if !exists {
+			continue
+		}
+		depNode.Dependencies = removeStringFromSlice(depNode.Dependencies, nodeID)
+	}
+}
+
+// removeStringFromSlice removes a specific string from a slice.
+func removeStringFromSlice(slice []string, toRemove string) []string {
+	result := []string{}
+	for _, item := range slice {
+		if item != toRemove {
+			result = append(result, item)
+		}
+	}
+	return result
 }

@@ -665,6 +665,11 @@ var (
 	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
 	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
 	ErrLocalsResolution        = errors.New("failed to resolve local")
+
+	// Dependency errors.
+	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
+	ErrMissingDependencyField    = errors.New("dependency missing required field")
+	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
