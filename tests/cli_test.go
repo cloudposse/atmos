@@ -45,7 +45,8 @@ var (
 	snapshotBaseDir     string
 	repoRoot            string                   // Repository root directory for path normalization
 	skipReason          string                   // Package-level variable to track why tests should be skipped
-	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support
+	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
+	coverDir            string                   // GOCOVERDIR environment variable value
 )
 
 // Define styles using lipgloss.
@@ -439,20 +440,9 @@ func TestMain(m *testing.M) {
 	}
 
 	// Check if we should collect coverage
-	coverDir := os.Getenv("GOCOVERDIR")
+	coverDir = os.Getenv("GOCOVERDIR")
 	if coverDir != "" {
 		logger.Info("Coverage collection enabled", "GOCOVERDIR", coverDir)
-	}
-
-	// Initialize AtmosRunner (will use coverage if GOCOVERDIR is set)
-	atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-
-	// Build/find binary
-	if err := atmosRunner.Build(); err != nil {
-		skipReason = fmt.Sprintf("Failed to initialize Atmos: %v", err)
-		logger.Info("Tests will be skipped", "reason", skipReason)
-	} else {
-		logger.Info("Atmos binary for tests", "binary", atmosRunner.BinaryPath())
 	}
 
 	logger.Info("Starting directory", "dir", startingDir)
@@ -468,6 +458,19 @@ func TestMain(m *testing.M) {
 	}
 
 	errUtils.Exit(exitCode)
+}
+
+// prepareAtmosCommand prepares an atmos command with coverage support if enabled.
+func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exec.Cmd {
+	// Lazy initialize atmosRunner only when needed for atmos commands
+	if atmosRunner == nil {
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		if err := atmosRunner.Build(); err != nil {
+			t.Skipf("Failed to initialize Atmos: %v", err)
+		}
+		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+	}
+	return atmosRunner.CommandContext(ctx, args...)
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
@@ -579,11 +582,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	// Skip if atmosRunner is not initialized
-	if atmosRunner == nil || skipReason != "" {
-		t.Skipf("Skipping test: %s", skipReason)
-	}
-
 	// Include the system PATH in the test environment
 	tc.Env["PATH"] = os.Getenv("PATH")
 
@@ -610,8 +608,18 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	currentEnvVars := telemetry.PreserveCIEnvVars()
 	defer telemetry.RestoreCIEnvVars(currentEnvVars)
 
-	// Prepare the command using the context and atmosRunner
-	cmd := atmosRunner.CommandContext(ctx, tc.Args...)
+	// Prepare the command based on what's being tested
+	var cmd *exec.Cmd
+	if tc.Command == "atmos" {
+		cmd = prepareAtmosCommand(t, ctx, tc.Args...)
+	} else {
+		// For non-atmos commands, use regular exec
+		binaryPath, err := exec.LookPath(tc.Command)
+		if err != nil {
+			t.Fatalf("Binary not found: %s", tc.Command)
+		}
+		cmd = exec.CommandContext(ctx, binaryPath, tc.Args...)
+	}
 
 	// Preserve GOCOVERDIR if it's already set by atmosRunner
 	existingEnv := cmd.Env
