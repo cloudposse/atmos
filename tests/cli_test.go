@@ -19,6 +19,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -74,6 +75,7 @@ type TestCase struct {
 	Tty         bool              `yaml:"tty"`         // Enable TTY simulation
 	Snapshot    bool              `yaml:"snapshot"`    // Enable snapshot comparison
 	Clean       bool              `yaml:"clean"`       // Removes untracked files in work directory
+	Sandbox     bool              `yaml:"sandbox"`     // Run in sandboxed environment with isolated components
 	Skip        struct {
 		OS MatchPattern `yaml:"os"`
 	} `yaml:"skip"`
@@ -587,6 +589,33 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		err = os.Chdir(absoluteWorkdir)
 		if err != nil {
 			t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
+		}
+
+		// Setup sandbox environment if enabled
+		var sandboxEnv *testhelpers.SandboxEnvironment
+		if tc.Sandbox {
+			logger.Info("Setting up sandbox environment", "workdir", tc.Workdir)
+
+			env, err := testhelpers.SetupSandbox(t, absoluteWorkdir)
+			if err != nil {
+				t.Fatalf("Failed to setup sandbox for test %q: %v", tc.Name, err)
+			}
+			sandboxEnv = env
+
+			// Add sandbox environment variables to override component paths
+			if tc.Env == nil {
+				tc.Env = make(map[string]string)
+			}
+			for k, v := range sandboxEnv.GetEnvironmentVariables() {
+				logger.Debug("Setting sandbox env var", "key", k, "value", v)
+				tc.Env[k] = v
+			}
+
+			// Ensure sandbox is cleaned up after test
+			defer func() {
+				logger.Debug("Cleaning up sandbox", "tempdir", sandboxEnv.TempDir)
+				sandboxEnv.Cleanup()
+			}()
 		}
 
 		// Clean the directory if enabled
