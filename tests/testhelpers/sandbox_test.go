@@ -561,3 +561,109 @@ func TestSandboxEnvironmentIsolation(t *testing.T) {
 		assert.Contains(t, tfPath, sandbox.TempDir, "Should use sandbox temp directory")
 	}
 }
+
+func TestSandboxComponentIsolation(t *testing.T) {
+	// This test proves that sandbox actually isolates components by:
+	// 1. Creating a sandbox
+	// 2. Modifying a file in the sandbox
+	// 3. Verifying the original remains unchanged
+
+	workdir := "../fixtures/scenarios/env"
+
+	// Get path to original component file that should exist
+	originalComponentPath := filepath.Join(workdir, "..", "..", "components", "terraform", "env-example", "main.tf")
+	originalAbsPath, err := filepath.Abs(originalComponentPath)
+	require.NoError(t, err, "Should resolve original component path")
+
+	// Read original content
+	originalContent, err := os.ReadFile(originalAbsPath)
+	require.NoError(t, err, "Original component should exist")
+
+	// Create sandbox
+	sandbox, err := SetupSandbox(t, workdir)
+	require.NoError(t, err, "Failed to setup sandbox")
+	defer sandbox.Cleanup()
+
+	// Find the sandboxed component file
+	sandboxComponentPath := filepath.Join(sandbox.ComponentsPath, "terraform", "env-example", "main.tf")
+
+	// Verify sandboxed component exists
+	assert.FileExists(t, sandboxComponentPath, "Sandboxed component should exist")
+
+	// Read sandboxed content
+	sandboxedContent, err := os.ReadFile(sandboxComponentPath)
+	require.NoError(t, err, "Should read sandboxed component")
+
+	// Initially they should be the same
+	assert.Equal(t, string(originalContent), string(sandboxedContent), "Initial content should match")
+
+	// Modify the sandboxed version
+	testMarker := "\n# TEST MARKER: This was modified in sandbox"
+	sandboxedContent = append(sandboxedContent, []byte(testMarker)...)
+	err = os.WriteFile(sandboxComponentPath, sandboxedContent, 0o644)
+	require.NoError(t, err, "Should modify sandboxed component")
+
+	// Verify sandboxed version was modified
+	newSandboxContent, err := os.ReadFile(sandboxComponentPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(newSandboxContent), testMarker, "Sandbox component should be modified")
+
+	// Verify original is unchanged
+	currentOriginalContent, err := os.ReadFile(originalAbsPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(originalContent), string(currentOriginalContent), "Original should remain unchanged")
+	assert.NotContains(t, string(currentOriginalContent), testMarker, "Original should not have test marker")
+
+	// Verify the paths are actually different
+	assert.NotEqual(t, originalAbsPath, sandboxComponentPath, "Paths should be different")
+	assert.Contains(t, sandboxComponentPath, "atmos-sandbox", "Sandbox path should contain sandbox identifier")
+	assert.NotContains(t, originalAbsPath, "atmos-sandbox", "Original path should not contain sandbox identifier")
+}
+
+func TestSandboxActuallyUsedByAtmos(t *testing.T) {
+	// This test proves that when we set sandbox environment variables,
+	// Atmos would actually use the sandboxed components.
+	// We test this by verifying the environment variables point to the sandbox.
+
+	workdir := "../fixtures/scenarios/env"
+
+	sandbox, err := SetupSandbox(t, workdir)
+	require.NoError(t, err, "Failed to setup sandbox")
+	defer sandbox.Cleanup()
+
+	envVars := sandbox.GetEnvironmentVariables()
+
+	// Verify terraform base path points to sandbox
+	if tfPath, exists := envVars["ATMOS_COMPONENTS_TERRAFORM_BASE_PATH"]; exists {
+		// The path should be in the temp directory
+		assert.Contains(t, tfPath, sandbox.TempDir, "Terraform path should be in sandbox temp dir")
+
+		// The path should exist
+		assert.DirExists(t, tfPath, "Terraform sandbox path should exist")
+
+		// It should contain some components (if they were copied)
+		entries, err := os.ReadDir(tfPath)
+		if err == nil && len(entries) > 0 {
+			// List what's in there to prove it's populated
+			t.Logf("Sandbox terraform components directory contains %d items", len(entries))
+			for _, entry := range entries {
+				t.Logf("  - %s", entry.Name())
+			}
+		}
+
+		// Create a marker file in sandbox to prove isolation
+		markerFile := filepath.Join(tfPath, ".sandbox-marker")
+		err = os.WriteFile(markerFile, []byte("sandbox test"), 0o644)
+		require.NoError(t, err, "Should create marker in sandbox")
+
+		// Verify marker exists in sandbox
+		assert.FileExists(t, markerFile, "Marker should exist in sandbox")
+
+		// Verify marker doesn't exist in original location
+		// Parse the original path from the workdir
+		originalTfPath := filepath.Join(workdir, "..", "..", "components", "terraform")
+		originalAbsPath, _ := filepath.Abs(originalTfPath)
+		originalMarker := filepath.Join(originalAbsPath, ".sandbox-marker")
+		assert.NoFileExists(t, originalMarker, "Marker should NOT exist in original location")
+	}
+}
