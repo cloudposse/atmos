@@ -411,18 +411,9 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	var buffer bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		// Read from the PTY in chunks to handle large outputs like the telemetry notice
-		buf := make([]byte, 8192)
-		for {
-			n, err := ptmx.Read(buf)
-			if n > 0 {
-				buffer.Write(buf[:n])
-			}
-			if err != nil {
-				done <- ptyError(err) // Wrap the error handling
-				return
-			}
-		}
+		// Use ReadFrom which properly handles EOF
+		_, err := buffer.ReadFrom(ptmx)
+		done <- ptyError(err) // Wrap the error handling
 	}()
 
 	err = cmd.Wait()
