@@ -153,9 +153,8 @@ section3:
 }
 
 func TestPreprocessInvalidYAML(t *testing.T) {
-	// Test that invalid YAML returns an error
-	invalidYaml := `key1: value1
-  invalid indentation here
+	// Test that invalid YAML returns an error.
+	invalidYaml := `key1: "unclosed string
 key2: !unset`
 
 	v := viper.New()
