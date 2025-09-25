@@ -20,7 +20,11 @@ const (
 	// DisclosureMessage contains the standard telemetry disclosure message shown to users
 	// when telemetry is first enabled. It explains that Atmos collects anonymous
 	// usage data and provides a link for users to learn more or opt out.
-	DisclosureMessage = `**Notice:** Telemetry Enabled - Atmos now collects completely anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting: <https://atmos.tools/cli/telemetry>
+	DisclosureMessage = `Notice: Atmos now collects completely anonymous telemetry regarding usage.
+This information is used to shape Atmos roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
+by visiting the following URL: https://atmos.tools/cli/telemetry
+
 `
 )
 
@@ -48,8 +52,7 @@ func CaptureCmd(cmd *cobra.Command, err ...error) {
 // It calls disclosureMessage() to get the message and prints to stderr with markdown
 // formatting if a message is returned.
 func PrintTelemetryDisclosure() {
-	message := disclosureMessage()
-	if message != "" {
+	if message := disclosureMessage(); message != "" {
 		utils.PrintfMarkdownToTUI("%s", message)
 	}
 }
@@ -150,22 +153,20 @@ func disclosureMessage() string {
 		return ""
 	}
 
-	// Check if disclosure has already been shown
-	cacheCfg, err := cfg.LoadCache()
-	if err == nil && cacheCfg.TelemetryDisclosureShown {
-		// Already shown, don't show again
+	TelemetryDisclosureShown := getOrInitializeCacheValue(
+		func(cfg *cfg.CacheConfig) bool {
+			return cfg.TelemetryDisclosureShown
+		},
+		func(cfg *cfg.CacheConfig, _ bool) {
+			cfg.TelemetryDisclosureShown = true
+		},
+		false,
+	)
+
+	// If disclosure has already been shown, return empty
+	if TelemetryDisclosureShown {
 		return ""
 	}
-
-	// Mark disclosure as shown for future runs using atomic update
-	// This prevents deadlocks when multiple processes access the cache concurrently
-	if err := cfg.UpdateCache(func(cache *cfg.CacheConfig) {
-		cache.TelemetryDisclosureShown = true
-	}); err != nil {
-		log.Warn("Could not save telemetry disclosure state to cache", "error", err)
-	}
-
-	// Show the disclosure message
 	return DisclosureMessage
 }
 
@@ -197,10 +198,8 @@ func getOrInitializeCacheValue[T comparable](getter func(cfg *cfg.CacheConfig) T
 	}
 
 	if canCreateCache {
-		// Use UpdateCache for atomic updates to prevent deadlocks
-		if err := cfg.UpdateCache(func(cache *cfg.CacheConfig) {
-			initializer(cache, defaultValue)
-		}); err != nil {
+		initializer(&cacheCfg, defaultValue)
+		if err := cfg.SaveCache(cacheCfg); err != nil {
 			log.Warn("Could not save cache", "error", err)
 		}
 	}
