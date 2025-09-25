@@ -2,6 +2,7 @@ package tests
 
 import (
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"testing"
 
@@ -17,17 +18,12 @@ import (
 // This test addresses the issue where newlines were being stripped when using
 // terraform.output to reference values from another stack (DEV-2982).
 func TestTerraformOutputPreservesNewlines(t *testing.T) {
-	// Skip if we don't have terraform/tofu
-	// Check if tofu or terraform is available
-	tofuPath := "/opt/homebrew/bin/tofu"
-	terraformPath := "/usr/local/bin/terraform"
-
+	// Skip if we don't have terraform/tofu.
+	// Check if tofu or terraform is available using LookPath.
 	hasTool := false
-	if _, err := os.Stat(tofuPath); err == nil {
+	if p, _ := osexec.LookPath("tofu"); p != "" {
 		hasTool = true
-	} else if _, err := os.Stat(terraformPath); err == nil {
-		hasTool = true
-	} else if _, err := os.Stat("/usr/bin/terraform"); err == nil {
+	} else if p, _ := osexec.LookPath("terraform"); p != "" {
 		hasTool = true
 	}
 

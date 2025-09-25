@@ -177,6 +177,8 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 		if SliceContainsString(AtmosYamlTags, tag) {
 			n.Value = getValueWithTag(n)
+			// Clear the tag to avoid re-processing.
+			n.Tag = ""
 		}
 
 		// For include tags, we need to trim the value as it's a file path

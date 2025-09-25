@@ -303,19 +303,18 @@ func execTerraformOutput(
 			s := string(v.Value)
 			log.Debug("Converting variable from JSON to Go data type",
 				"variable", k,
-				"value", s,
 			)
 
 			d, err2 := u.ConvertFromJSON(s)
 
 			if err2 != nil {
-				log.Error("failed to convert output", outputLogKey, s, "error", err2)
+				log.Error("failed to convert output", outputLogKey, k, "error", err2)
 				return k, nil
 			} else {
-				log.Debug("Converted the variable from JSON to Go data type", "key", k, "value", s, "result", d)
-				// Additional debug logging for multiline strings
+				log.Debug("Converted the variable from JSON to Go data type", "key", k)
+				// Additional debug logging for multiline strings.
 				if str, ok := d.(string); ok && strings.Contains(str, "\n") {
-					log.Debug("Output contains newlines", "key", k, "length", len(str), "bytes", []byte(str))
+					log.Debug("Output contains newlines", "key", k, "length", len(str))
 				}
 			}
 
@@ -414,14 +413,13 @@ func GetTerraformOutput(
 	}
 	u.PrintfMessageToTUI("\r✓ %s\n", message)
 
-	// Debug logging for multiline results
+	// Debug logging for multiline results.
 	if str, ok := result.(string); ok && strings.Contains(str, "\n") {
 		log.Debug("GetTerraformOutput returning multiline string",
 			"component", component,
 			"stack", stack,
 			outputLogKey, output,
-			"length", len(str),
-			"preview", fmt.Sprintf("%q", str))
+			"length", len(str))
 	}
 
 	return result

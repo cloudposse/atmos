@@ -38,21 +38,21 @@ func TestYamlNodeProcessingPreservesNewlines(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a YAML node with a custom tag
+			// Create a YAML node with a custom tag.
 			node := &yaml.Node{
 				Tag:   "!terraform.output",
 				Value: tc.input,
 				Kind:  yaml.ScalarNode,
 			}
 
-			// Test getValueWithTag function
+			// Test getValueWithTag function.
 			result := getValueWithTag(node)
 
-			// The current implementation strips newlines, which is the bug
-			// We expect this test to fail initially, demonstrating the issue
+			// The current implementation strips newlines, which is the bug.
+			// We expect this test to fail initially, demonstrating the issue.
 			expectedWithTag := "!terraform.output " + tc.expected
 
-			// This assertion will likely fail due to the TrimSpace calls
+			// This assertion will likely fail due to the TrimSpace calls.
 			assert.Equal(t, expectedWithTag, result,
 				"getValueWithTag should preserve newlines in the value")
 		})
@@ -74,10 +74,10 @@ components:
 	err := yaml.Unmarshal([]byte(yamlContent), &node)
 	assert.NoError(t, err)
 
-	// Process the custom tags
+	// Process the custom tags.
 	err = processCustomTags(nil, &node, "")
 	assert.NoError(t, err)
 
-	// After processing, check if the values preserve their structure
-	// This will help us understand where the newlines are being stripped
+	// After processing, check if the values preserve their structure.
+	// This will help us understand where the newlines are being stripped.
 }
