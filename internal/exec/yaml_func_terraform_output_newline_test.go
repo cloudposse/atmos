@@ -19,7 +19,7 @@ func TestYamlFuncTerraformOutputWithNewlines(t *testing.T) {
 
 	// Create test Terraform files
 	componentDir := filepath.Join(tempDir, "components", "terraform", "test-newlines")
-	err := os.MkdirAll(componentDir, 0755)
+	err := os.MkdirAll(componentDir, 0o755)
 	assert.NoError(t, err)
 
 	// Create a main.tf with outputs containing newlines
@@ -60,12 +60,12 @@ output "text_with_multiple_newlines" {
   value = var.text_with_multiple_newlines
 }
 `
-	err = os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte(mainTfContent), 0644)
+	err = os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte(mainTfContent), 0o644)
 	assert.NoError(t, err)
 
 	// Create stack configuration
 	stacksDir := filepath.Join(tempDir, "stacks")
-	err = os.MkdirAll(stacksDir, 0755)
+	err = os.MkdirAll(stacksDir, 0o755)
 	assert.NoError(t, err)
 
 	stackConfig := `
@@ -92,7 +92,7 @@ components:
         consumed_leading: !terraform.output test-component text_with_leading_newline
         consumed_multiple: !terraform.output test-component text_with_multiple_newlines
 `
-	err = os.WriteFile(filepath.Join(stacksDir, "test-stack.yaml"), []byte(stackConfig), 0644)
+	err = os.WriteFile(filepath.Join(stacksDir, "test-stack.yaml"), []byte(stackConfig), 0o644)
 	assert.NoError(t, err)
 
 	// Create atmos.yaml configuration
@@ -108,7 +108,7 @@ stacks:
   included_paths:
     - "*.yaml"
 `
-	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0644)
+	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
 	assert.NoError(t, err)
 
 	// Change to temp directory for test
@@ -139,10 +139,10 @@ stacks:
 
 	// Mock the GetTerraformOutput function to return test values
 	// Since we can't actually run terraform in tests, we'll test the processing directly
-	
+
 	// To properly test this, we need to mock or simulate the terraform output
 	// For now, let's test the direct string processing to ensure newlines aren't stripped
-	
+
 	testCases := []struct {
 		name     string
 		input    string
@@ -181,9 +181,9 @@ stacks:
 			// Process through the YAML custom tags processor
 			processed, err := ProcessCustomYamlTags(&atmosCfg, testData, "test-stack", nil)
 			assert.NoError(t, err)
-			
+
 			// Verify the newlines are preserved
-			assert.Equal(t, tc.expected, processed["test_key"], 
+			assert.Equal(t, tc.expected, processed["test_key"],
 				"Newlines should be preserved in terraform.output values")
 		})
 	}
