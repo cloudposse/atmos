@@ -644,6 +644,11 @@ var (
 	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
 	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
 	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
+
+	// Dependency errors.
+	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
+	ErrMissingDependencyField    = errors.New("dependency missing required field")
+	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
