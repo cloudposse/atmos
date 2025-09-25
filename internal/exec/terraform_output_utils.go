@@ -28,6 +28,7 @@ const (
 	logEnvVar                = "TF_LOG"
 	logCoreEnvVar            = "TF_LOG_CORE"
 	logPathEnvVar            = "TF_LOG_PATH"
+	outputLogKey             = "output"
 	logProviderEnvVar        = "TF_LOG_PROVIDER"
 	reattachEnvVar           = "TF_REATTACH_PROVIDERS"
 	appendUserAgentEnvVar    = "TF_APPEND_USER_AGENT"
@@ -293,7 +294,7 @@ func execTerraformOutput(
 					"command", fmt.Sprintf("terraform output %s -s %s", component, stack),
 					cfg.ComponentStr, component,
 					cfg.StackStr, stack,
-					"output", y,
+					outputLogKey, y,
 				)
 			}
 		}
@@ -308,10 +309,14 @@ func execTerraformOutput(
 			d, err2 := u.ConvertFromJSON(s)
 
 			if err2 != nil {
-				log.Error("failed to convert output", "output", s, "error", err2)
+				log.Error("failed to convert output", outputLogKey, s, "error", err2)
 				return k, nil
 			} else {
 				log.Debug("Converted the variable from JSON to Go data type", "key", k, "value", s, "result", d)
+				// Additional debug logging for multiline strings
+				if str, ok := d.(string); ok && strings.Contains(str, "\n") {
+					log.Debug("Output contains newlines", "key", k, "length", len(str), "bytes", []byte(str))
+				}
 			}
 
 			return k, d
@@ -360,7 +365,7 @@ func GetTerraformOutput(
 				"command", fmt.Sprintf("!terraform.output %s %s %s", component, stack, output),
 				cfg.ComponentStr, component,
 				cfg.StackStr, stack,
-				"output", output,
+				outputLogKey, output,
 			)
 			return getTerraformOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
 		}
@@ -409,6 +414,16 @@ func GetTerraformOutput(
 	}
 	u.PrintfMessageToTUI("\r✓ %s\n", message)
 
+	// Debug logging for multiline results
+	if str, ok := result.(string); ok && strings.Contains(str, "\n") {
+		log.Debug("GetTerraformOutput returning multiline string",
+			"component", component,
+			"stack", stack,
+			outputLogKey, output,
+			"length", len(str),
+			"preview", fmt.Sprintf("%q", str))
+	}
+
 	return result
 }
 
@@ -419,6 +434,17 @@ func getTerraformOutputVariable(
 	outputs map[string]any,
 	output string,
 ) any {
+	// For simple output retrieval (no dot-notation), directly return the value
+	// This avoids yq processing which can strip newlines from strings
+	if simpleValue, ok := outputs[output]; ok {
+		log.Debug("Directly returning terraform output without yq processing",
+			"component", component,
+			"stack", stack,
+			outputLogKey, output)
+		return simpleValue
+	}
+
+	// For complex paths, use yq expression
 	val := output
 	if !strings.HasPrefix(output, ".") {
 		val = "." + val
