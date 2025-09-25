@@ -338,7 +338,7 @@ func TestLoadCacheWithCorruptedFile(t *testing.T) {
 	// Load should return an error for corrupted file.
 	_, err = LoadCache()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to unmarshal cache file")
+	assert.Contains(t, err.Error(), "failed to read cache file")
 }
 
 func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
