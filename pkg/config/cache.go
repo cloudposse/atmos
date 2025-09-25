@@ -170,6 +170,8 @@ func shouldCheckForUpdatesAt(lastChecked int64, frequency string, now int64) boo
 	return now-lastChecked >= interval
 }
 
+// ShouldCheckForUpdates determines whether an update check is due based on the
+// configured frequency and the time of the last check.
 func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
 	return shouldCheckForUpdatesAt(lastChecked, frequency, time.Now().Unix())
 }

@@ -142,7 +142,7 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
 
-	// Reload XDG to pick up the environment change..
+	// Reload XDG to pick up the environment change.
 	xdg.Reload()
 
 	// Create initial cache.

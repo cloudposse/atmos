@@ -581,9 +581,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	// Change to the specified working directory
+	// Determine the absolute working directory for the test
+	var absoluteWorkdir string
 	if tc.Workdir != "" {
-		absoluteWorkdir, err := filepath.Abs(tc.Workdir)
+		absoluteWorkdir, err = filepath.Abs(tc.Workdir)
 		if err != nil {
 			t.Fatalf("failed to resolve absolute path of workdir %q: %v", tc.Workdir, err)
 		}
@@ -591,40 +592,46 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if err != nil {
 			t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
 		}
+	} else {
+		// If no workdir specified, use the current directory
+		absoluteWorkdir, err = os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current working directory: %v", err)
+		}
+	}
 
-		// Setup sandbox environment if enabled
-		var sandboxEnv *testhelpers.SandboxEnvironment
-		if tc.Sandbox {
-			logger.Info("Setting up sandbox environment", "workdir", tc.Workdir)
+	// Setup sandbox environment if enabled
+	var sandboxEnv *testhelpers.SandboxEnvironment
+	if tc.Sandbox {
+		logger.Info("Setting up sandbox environment", "workdir", tc.Workdir)
 
-			env, err := testhelpers.SetupSandbox(t, absoluteWorkdir)
-			if err != nil {
-				t.Fatalf("Failed to setup sandbox for test %q: %v", tc.Name, err)
-			}
-			sandboxEnv = env
+		env, err := testhelpers.SetupSandbox(t, absoluteWorkdir)
+		if err != nil {
+			t.Fatalf("Failed to setup sandbox for test %q: %v", tc.Name, err)
+		}
+		sandboxEnv = env
 
-			// Add sandbox environment variables to override component paths
-			if tc.Env == nil {
-				tc.Env = make(map[string]string)
-			}
-			for k, v := range sandboxEnv.GetEnvironmentVariables() {
-				logger.Debug("Setting sandbox env var", "key", k, "value", v)
-				tc.Env[k] = v
-			}
-
-			// Ensure sandbox is cleaned up after test
-			defer func() {
-				logger.Debug("Cleaning up sandbox", "tempdir", sandboxEnv.TempDir)
-				sandboxEnv.Cleanup()
-			}()
+		// Add sandbox environment variables to override component paths
+		if tc.Env == nil {
+			tc.Env = make(map[string]string)
+		}
+		for k, v := range sandboxEnv.GetEnvironmentVariables() {
+			logger.Debug("Setting sandbox env var", "key", k, "value", v)
+			tc.Env[k] = v
 		}
 
-		// Clean the directory if enabled
-		if tc.Clean {
-			logger.Info("Cleaning directory", "workdir", tc.Workdir)
-			if err := cleanDirectory(t, absoluteWorkdir); err != nil {
-				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
-			}
+		// Ensure sandbox is cleaned up after test
+		defer func() {
+			logger.Debug("Cleaning up sandbox", "tempdir", sandboxEnv.TempDir)
+			sandboxEnv.Cleanup()
+		}()
+	}
+
+	// Clean the directory if enabled
+	if tc.Clean {
+		logger.Info("Cleaning directory", "workdir", tc.Workdir)
+		if err := cleanDirectory(t, absoluteWorkdir); err != nil {
+			t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
 		}
 	}
 
@@ -650,14 +657,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// This is needed for tests that change to parent directories
 	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
 
-	// Set XDG_CACHE_HOME to the test's working directory to isolate cache files.
+	// Set XDG_CACHE_HOME to the test's absolute working directory to isolate cache files.
 	// This ensures each test has its own cache location and doesn't interfere with other tests.
 	// This also makes the tests deterministic regardless of the OS (Linux vs macOS).
-	tc.Env["XDG_CACHE_HOME"] = tc.Workdir
+	// Using absolute path prevents cache writes outside the intended test sandbox.
+	tc.Env["XDG_CACHE_HOME"] = absoluteWorkdir
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
-	err = removeCacheFile(tc.Workdir)
+	err = removeCacheFile(absoluteWorkdir)
 	assert.NoError(t, err, "failed to remove cache file")
 
 	// Preserve the CI environment variables.
@@ -788,10 +796,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 }
 
-func removeCacheFile(testWorkdir string) error {
-	// When XDG_CACHE_HOME is set to the test workdir, the cache file
-	// will be at testWorkdir/atmos/cache.yaml
-	cacheFilePath := filepath.Join(testWorkdir, "atmos", "cache.yaml")
+func removeCacheFile(cacheHome string) error {
+	// When XDG_CACHE_HOME is set to cacheHome, the cache file
+	// will be at cacheHome/atmos/cache.yaml
+	if cacheHome == "" {
+		return nil
+	}
+	cacheFilePath := filepath.Join(cacheHome, "atmos", "cache.yaml")
 
 	if _, err := os.Stat(cacheFilePath); os.IsNotExist(err) {
 		return nil
