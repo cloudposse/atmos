@@ -28,6 +28,7 @@ var (
 	ErrFailedToUnmarshalJSON       = errors.New("error unmarshaling JSON")
 	ErrFailedToLockStack           = errors.New("an error occurred while attempting to lock stack")
 	ErrFailedToUnlockStack         = errors.New("an error occurred while attempting to unlock stack")
+	ErrUnknownResponseType         = errors.New("unknown response type")
 	ErrOIDCWorkspaceIDRequired     = errors.New("workspace ID environment variable is required for OIDC authentication")
 	ErrOIDCTokenExchangeFailed     = errors.New("failed to exchange OIDC token for Atmos token")
 	ErrOIDCAuthFailedNoToken       = errors.New("OIDC authentication failed")
@@ -148,98 +149,87 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 	return nil
 }
 
-// LockStack locks a specific stack..
-func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStackResponse, error) {
+// processLockResponse handles the lock response.
+func (c *AtmosProAPIClient) processLockResponse(body []byte) (dtos.LockStackResponse, error) {
+	var responseData dtos.LockStackResponse
+	err := json.Unmarshal(body, &responseData)
+	if err != nil {
+		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
+	}
+	if !responseData.Success {
+		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToLockStack, responseData.ErrorMessage)
+	}
+	return responseData, nil
+}
+
+// processUnlockResponse handles the unlock response.
+func (c *AtmosProAPIClient) processUnlockResponse(body []byte) (dtos.UnlockStackResponse, error) {
+	var responseData dtos.UnlockStackResponse
+	err := json.Unmarshal(body, &responseData)
+	if err != nil {
+		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
+	}
+	if !responseData.Success {
+		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnlockStack, responseData.ErrorMessage)
+	}
+	return responseData, nil
+}
+
+// executeStackLockOperation is a generic method for lock/unlock operations.
+func (c *AtmosProAPIClient) executeStackLockOperation(method string, dto interface{}, responseType string) (interface{}, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
-	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
+		return nil, fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
+	req, err := getAuthenticatedRequest(c, method, url, bytes.NewBuffer(data))
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
+		return nil, fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
+		return nil, fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToReadResponseBody, err)
+		return nil, fmt.Errorf(ErrFormatString, ErrFailedToReadResponseBody, err)
 	}
 
-	// Create an instance of the struct
-	var responseData dtos.LockStackResponse
+	switch responseType {
+	case "lock":
+		return c.processLockResponse(body)
+	case "unlock":
+		return c.processUnlockResponse(body)
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrUnknownResponseType, responseType)
+	}
+}
 
-	// Unmarshal the JSON response into the struct
-	err = json.Unmarshal(body, &responseData)
+// LockStack locks a specific stack.
+func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStackResponse, error) {
+	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s/%s/locks", c.BaseURL, c.BaseAPIEndpoint))
+
+	result, err := c.executeStackLockOperation("POST", dto, "lock")
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
+		return dtos.LockStackResponse{}, err
 	}
-
-	if !responseData.Success {
-		var context string
-		for key, value := range responseData.Context {
-			context += fmt.Sprintf("  %s: %v\n", key, value)
-		}
-
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToLockStack, responseData.ErrorMessage)
-	}
-
-	return responseData, nil
+	return result.(dtos.LockStackResponse), nil
 }
 
 // UnlockStack unlocks a specific stack.
 func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error) {
-	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
-	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
+	c.Logger.Trace(fmt.Sprintf("\nUnlocking stack at %s/%s/locks", c.BaseURL, c.BaseAPIEndpoint))
 
-	data, err := json.Marshal(dto)
+	result, err := c.executeStackLockOperation("DELETE", dto, "unlock")
 	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
+		return dtos.UnlockStackResponse{}, err
 	}
-
-	req, err := getAuthenticatedRequest(c, "DELETE", url, bytes.NewBuffer(data))
-	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToReadResponseBody, err)
-	}
-
-	// Create an instance of the struct
-	var responseData dtos.UnlockStackResponse
-
-	// Unmarshal the JSON response into the struct
-	err = json.Unmarshal(body, &responseData)
-	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
-	}
-
-	if !responseData.Success {
-		var context string
-		for key, value := range responseData.Context {
-			context += fmt.Sprintf("  %s: %v\n", key, value)
-		}
-
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnlockStack, responseData.ErrorMessage)
-	}
-
-	return responseData, nil
+	return result.(dtos.UnlockStackResponse), nil
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.

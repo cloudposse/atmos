@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -223,7 +224,7 @@ func ProcessYAMLConfigFile(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
-			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			e := fmt.Errorf("%w: invalid stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, nil, nil, nil, nil, nil, e
 		}
 	}
@@ -233,7 +234,7 @@ func ProcessYAMLConfigFile(
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 		}
-		e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+		e := fmt.Errorf("%w: invalid stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 		return nil, nil, nil, nil, nil, nil, nil, e
 	}
 
@@ -548,7 +549,7 @@ func ProcessYAMLConfigFile(
 	// Deep-merge the stack manifest and all the imports
 	stackConfigsDeepMerged, err := m.Merge(atmosConfig, stackConfigs)
 	if err != nil {
-		err2 := fmt.Errorf("ProcessYAMLConfigFile: Merge: Deep-merge the stack manifest and all the imports: Error: %v", err)
+		err2 := fmt.Errorf("%w: ProcessYAMLConfigFile: Merge: Deep-merge the stack manifest and all the imports: Error: %v", errUtils.ErrProcessingStackManifest, err)
 		return nil, nil, nil, nil, nil, nil, nil, err2
 	}
 

@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	l "github.com/cloudposse/atmos/pkg/logger"
@@ -60,7 +61,7 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 	}
 
 	if component == "" || stack == "" {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf("both '--component' and '--stack' flag must be provided")
+		return ProLockUnlockCmdArgs{}, fmt.Errorf("%w: both '--component' and '--stack' flag must be provided", errUtils.ErrInvalidArguments)
 	}
 
 	result := ProLockUnlockCmdArgs{
@@ -121,7 +122,7 @@ func parseUnlockCliArgs(cmd *cobra.Command, args []string) (ProUnlockCmdArgs, er
 	return result, nil
 }
 
-// ExecuteProLockCommand executes `atmos pro lock` command
+// ExecuteProLockCommand executes `atmos pro lock` command.
 func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 	a, err := parseLockCliArgs(cmd, args)
 	if err != nil {
@@ -166,7 +167,7 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteProUnlockCommand executes `atmos pro unlock` command
+// ExecuteProUnlockCommand executes `atmos pro unlock` command.
 func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	a, err := parseUnlockCliArgs(cmd, args)
 	if err != nil {
