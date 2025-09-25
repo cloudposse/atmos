@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	yaml "gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -106,6 +108,20 @@ var (
 	}{
 		uniqueFiles:  make(map[string]int),
 		uniqueHashes: make(map[string]int),
+	}
+
+	// AllSupportedYamlTags contains all YAML tags that Atmos supports.
+	AllSupportedYamlTags = []string{
+		AtmosYamlFuncExec,
+		AtmosYamlFuncStore,
+		AtmosYamlFuncStoreGet,
+		AtmosYamlFuncTemplate,
+		AtmosYamlFuncTerraformOutput,
+		AtmosYamlFuncTerraformState,
+		AtmosYamlFuncEnv,
+		AtmosYamlFuncInclude,
+		AtmosYamlFuncIncludeRaw,
+		AtmosYamlFuncGitRoot,
 	}
 
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
@@ -658,6 +674,16 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 			// The value will pass through without any template processing.
 			n.Tag = ""
 			continue
+		}
+
+		// Check if a tag is present and if it's unsupported.
+		// Standard YAML tags (!!str, !!int, etc.) are allowed.
+		if tag != "" && !strings.HasPrefix(tag, "!!") {
+			if !SliceContainsString(AllSupportedYamlTags, tag) {
+				supportedTags := strings.Join(AllSupportedYamlTags, ", ")
+				return fmt.Errorf("%w: '%s' found in file '%s'. Supported tags are: %s",
+					errUtils.ErrUnsupportedYamlTag, tag, file, supportedTags)
+			}
 		}
 
 		// Use O(1) map lookup instead of O(n) slice search for performance.

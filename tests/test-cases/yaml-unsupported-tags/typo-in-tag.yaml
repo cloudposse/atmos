@@ -1,0 +1,8 @@
+# This file contains a typo in a YAML tag
+components:
+  terraform:
+    database:
+      vars:
+        # Typo: !envv instead of !env
+        database_password: !envv DB_PASSWORD
+        database_name: "mydb"

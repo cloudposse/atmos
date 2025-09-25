@@ -94,6 +94,7 @@ var (
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
+	ErrUnsupportedYamlTag               = errors.New("unsupported YAML tag")
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")

@@ -1,0 +1,8 @@
+# This file contains unsupported YAML tags to test error handling
+components:
+  terraform:
+    vpc:
+      vars:
+        # This should cause an error - !invalid is not a supported tag
+        name: !invalid "test-vpc"
+        region: us-east-1
