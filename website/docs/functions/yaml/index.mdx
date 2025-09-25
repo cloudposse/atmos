@@ -43,6 +43,9 @@ YAML supports three types of data: core, defined, and user-defined.
 
 ## Use-cases
 
+ - The [__`!append`__](/functions/yaml/append) YAML function concatenates lists during stack inheritance instead of replacing them,
+   providing fine-grained control over list merging behavior on a per-field basis
+
  - The [__`!terraform.output`__](/functions/yaml/terraform.output) YAML function allows you to
    [access component outputs (remote state) directly within Atmos stack manifests](/stacks/remote-state).
    Note that this requires initializing each component (`terraform/tofu init`), which initializes all Terraform/OpenTofu
@@ -191,6 +194,12 @@ components:
         helm_annotation: !literal "{{ .Values.ingress.class }}"
         terraform_var: !literal "${var.hostname}"
         db_users: [!literal "{{external.email}}", !literal "{{external.admin}}"]
+
+      settings:
+        # Append to an inherited list instead of replacing it
+        depends_on: !append
+          - additional-component-1
+          - additional-component-2
 ```
 </File>
 
