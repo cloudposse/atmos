@@ -85,7 +85,7 @@ var RootCmd = &cobra.Command{
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	switch atmosConfig.Logs.Level {
 	case "Trace":
-		log.SetLevel(log.DebugLevel)
+		log.SetLevel(logger.TraceLevel)
 	case "Debug":
 		log.SetLevel(log.DebugLevel)
 	case "Info":
@@ -105,6 +105,10 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		styles.Levels = make(map[log.Level]lipgloss.Style)
 		for k := range stylesDefault.Levels {
 			styles.Levels[k] = stylesDefault.Levels[k].UnsetForeground().Bold(false)
+		}
+		// Add trace level style (use same style as debug if available)
+		if debugStyle, ok := stylesDefault.Levels[log.DebugLevel]; ok {
+			styles.Levels[logger.TraceLevel] = debugStyle.UnsetForeground().Bold(false)
 		}
 		log.SetStyles(styles)
 	}
