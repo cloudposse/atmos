@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
@@ -195,10 +196,10 @@ func TestApplyFiltersToGraph(t *testing.T) {
 		Type:      config.TerraformComponentType,
 	}
 
-	_ = graph.AddNode(node1)
-	_ = graph.AddNode(node2)
-	_ = graph.AddNode(node3)
-	_ = graph.AddDependency("database-dev", "vpc-dev")
+	require.NoError(t, graph.AddNode(node1))
+	require.NoError(t, graph.AddNode(node2))
+	require.NoError(t, graph.AddNode(node3))
+	require.NoError(t, graph.AddDependency("database-dev", "vpc-dev"))
 
 	t.Run("filter by stack", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
@@ -362,7 +363,7 @@ func TestCollectFilteredNodeIDsRemoved(t *testing.T) {
 	}
 
 	for _, node := range nodes {
-		_ = graph.AddNode(node)
+		require.NoError(t, graph.AddNode(node))
 	}
 
 	tests := []struct {
