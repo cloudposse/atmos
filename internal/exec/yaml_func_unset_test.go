@@ -152,12 +152,12 @@ func TestProcessUnsetWithSkip(t *testing.T) {
 		"key3": "value3",
 	}
 
-	// Test with unset in skip list - should not process !unset
+	// Test with unset in skip list - should not process !unset.
 	result := processNodes(atmosConfig, input, "", []string{"unset"})
 
 	expected := map[string]any{
 		"key1": "value1",
-		"key2": "!unset", // Should remain as is when skipped
+		"key2": "!unset", // Should remain as is when skipped.
 		"key3": "value3",
 	}
 
@@ -165,7 +165,7 @@ func TestProcessUnsetWithSkip(t *testing.T) {
 }
 
 func TestUnsetMarker(t *testing.T) {
-	// Test the UnsetMarker type
+	// Test the UnsetMarker type.
 	marker := UnsetMarker{IsUnset: true}
 	assert.True(t, marker.IsUnset)
 
@@ -176,13 +176,13 @@ func TestUnsetMarker(t *testing.T) {
 func TestProcessCustomTagsWithUnset(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Test that processCustomTags returns UnsetMarker for !unset tag
+	// Test that processCustomTags returns UnsetMarker for !unset tag.
 	result := processCustomTags(atmosConfig, "!unset", "", []string{})
 	marker, ok := result.(UnsetMarker)
 	assert.True(t, ok)
 	assert.True(t, marker.IsUnset)
 
-	// Test that other tags are still processed normally
+	// Test that other tags are still processed normally.
 	result2 := processCustomTags(atmosConfig, "!env HOME", "", []string{})
 	_, isMarker := result2.(UnsetMarker)
 	assert.False(t, isMarker)
@@ -219,7 +219,7 @@ func TestProcessCustomYamlTagsWithUnset(t *testing.T) {
 func TestUnsetInheritanceScenario(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Simulate a parent configuration
+	// Simulate a parent configuration.
 	parent := map[string]any{
 		"vars": map[string]any{
 			"region":            "us-east-1",
@@ -228,31 +228,31 @@ func TestUnsetInheritanceScenario(t *testing.T) {
 		},
 	}
 
-	// Simulate a child configuration that wants to unset a parent value
+	// Simulate a child configuration that wants to unset a parent value.
 	child := map[string]any{
 		"vars": map[string]any{
-			"region":         "us-west-2", // Override
-			"instance_type":  "!unset",    // Remove from configuration
-			"enable_logging": true,        // Add new
+			"region":         "us-west-2", // Override.
+			"instance_type":  "!unset",    // Remove from configuration.
+			"enable_logging": true,        // Add new.
 		},
 	}
 
-	// Process parent (no unset tags)
+	// Process parent (no unset tags).
 	processedParent := processNodes(atmosConfig, parent, "", []string{})
 
-	// Process child (with unset tag)
+	// Process child (with unset tag).
 	processedChild := processNodes(atmosConfig, child, "", []string{})
 
-	// Verify the unset tag removed the key from child
+	// Verify the unset tag removed the key from child.
 	childVars := processedChild["vars"].(map[string]any)
 	_, hasInstanceType := childVars["instance_type"]
 	assert.False(t, hasInstanceType, "instance_type should be removed from child config")
 
-	// Verify other keys are preserved
+	// Verify other keys are preserved.
 	assert.Equal(t, "us-west-2", childVars["region"])
 	assert.Equal(t, true, childVars["enable_logging"])
 
-	// Parent should remain unchanged
+	// Parent should remain unchanged.
 	parentVars := processedParent["vars"].(map[string]any)
 	assert.Equal(t, "t2.micro", parentVars["instance_type"])
 }
@@ -285,10 +285,10 @@ func TestUnsetWithComplexArray(t *testing.T) {
 func TestUnsetEmptyString(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Test that empty string with !unset still works
+	// Test that empty string with !unset still works.
 	input := map[string]any{
 		"key1": "value1",
-		"key2": u.AtmosYamlFuncUnset, // Just the tag without any value
+		"key2": u.AtmosYamlFuncUnset, // Just the tag without any value.
 		"key3": "value3",
 	}
 

@@ -89,8 +89,10 @@ func processMappingNode(node *yaml.Node, v *viper.Viper, currentPath string) err
 
 		// Check if the value node has the !unset tag.
 		if valueNode.Tag == u.AtmosYamlFuncUnset {
-			// Delete the key from viper by setting it to nil.
-			// This effectively removes it from the configuration.
+			// Remove the key from the configuration by setting it to nil.
+			// Note: Viper doesn't have a direct Delete method, so setting to nil
+			// is the conventional approach. When queried, Viper treats nil values
+			// as non-existent keys, returning nil from Get() calls.
 			v.Set(newPath, nil)
 			log.Debug("Unsetting configuration key", "path", newPath)
 			continue
@@ -121,7 +123,8 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	if node.Tag != "" && node.Tag != "!!str" && node.Tag != "!!int" && node.Tag != "!!bool" && node.Tag != "!!float" && node.Tag != "!!null" {
 		switch {
 		case strings.HasPrefix(node.Tag, u.AtmosYamlFuncUnset):
-			// For scalar nodes with !unset tag, set the value to nil to delete it.
+			// Remove the key from the configuration by setting it to nil.
+			// Viper treats nil values as non-existent keys.
 			v.Set(currentPath, nil)
 			log.Debug("Unsetting configuration key", "path", currentPath)
 			node.Tag = "" // Avoid re-processing.
