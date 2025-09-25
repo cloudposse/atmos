@@ -162,6 +162,7 @@ jobs:
           l_label: "size/l"
           l_max_size: "1000"
           xl_label: "size/xl"
+          fail_if_xl: "false"
           files_to_ignore: |
             package-lock.json
             yarn.lock

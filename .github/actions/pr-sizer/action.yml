@@ -37,6 +37,10 @@ inputs:
     description: 'Label for extra large PRs'
     required: false
     default: 'size/xl'
+  fail_if_xl:
+    description: 'Fail the action if the PR is XL'
+    required: false
+    default: 'false'
   files_to_ignore:
     description: 'Files to ignore (newline or space separated)'
     required: false
@@ -70,6 +74,7 @@ runs:
           const l_label = '${{ inputs.l_label }}';
           const l_max_size = parseInt('${{ inputs.l_max_size }}');
           const xl_label = '${{ inputs.xl_label }}';
+          const fail_if_xl = '${{ inputs.fail_if_xl }}' === 'true';
           const ignore_line_deletions = '${{ inputs.ignore_line_deletions }}' === 'true';
           const ignore_file_deletions = '${{ inputs.ignore_file_deletions }}' === 'true';
 
@@ -176,4 +181,9 @@ runs:
               issue_number: prNumber,
               labels: [newLabel]
             });
+          }
+
+          // Fail if XL and configured to do so
+          if (newLabel === xl_label && fail_if_xl) {
+            core.setFailed(`PR is too large (${totalChanges} changes). Please consider breaking it up into smaller PRs.`);
           }
