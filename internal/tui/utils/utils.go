@@ -44,8 +44,13 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 		return "", fmt.Errorf("empty markdown input")
 	}
 
+	// Try to get the actual atmos configuration
+	// For now, we'll use an empty config which will fallback to default styles
+	// TODO: Pass the actual atmosConfig through the component hierarchy
+	atmosConfig := schema.AtmosConfiguration{}
+
 	// Get the custom style from atmos config
-	customStyle, err := mdstyle.GetDefaultStyle(schema.AtmosConfiguration{})
+	customStyle, err := mdstyle.GetDefaultStyle(atmosConfig)
 	if err != nil {
 		return "", fmt.Errorf("failed to get markdown style: %w", err)
 	}

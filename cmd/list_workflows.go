@@ -6,8 +6,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // listWorkflowsCmd lists atmos workflows
@@ -44,7 +42,8 @@ var listWorkflowsCmd = &cobra.Command{
 			return err
 		}
 
-		u.PrintMessageInColor(output, theme.Colors.Success)
+		// Print the formatted output directly (table/json/csv already formatted)
+		cmd.Print(output)
 		return nil
 	},
 }

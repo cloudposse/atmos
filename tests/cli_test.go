@@ -346,7 +346,24 @@ func sanitizeOutput(output string) (string, error) {
 	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
 	result = urlRegex.ReplaceAllStringFunc(result, collapseExtraSlashes)
 
-	// 7. Remove the random number added to file name like `atmos-import-454656846`
+	// 7. Normalize the repository directory name when it appears in specific contexts
+	//    This handles cases where the repo is checked out with a different name (e.g., feature branches)
+	repoName := filepath.Base(repoRoot)
+	if repoName != "atmos" {
+		// Pattern 1: "is set to <repoName>/..." - commonly appears in error messages
+		pattern1 := regexp.MustCompile(`(is set to )` + regexp.QuoteMeta(repoName) + `/`)
+		result = pattern1.ReplaceAllString(result, "${1}atmos/")
+
+		// Pattern 2: After whitespace or at line start, followed by /tests/
+		pattern2 := regexp.MustCompile(`(^|\s)` + regexp.QuoteMeta(repoName) + `/tests/`)
+		result = pattern2.ReplaceAllString(result, "${1}atmos/tests/")
+
+		// Pattern 3: With ./ prefix
+		pattern3 := regexp.MustCompile(`\./` + regexp.QuoteMeta(repoName) + `/`)
+		result = pattern3.ReplaceAllString(result, "./atmos/")
+	}
+
+	// 8. Remove the random number added to file name like `atmos-import-454656846`
 	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
 
@@ -637,6 +654,18 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Include the system PATH in the test environment
 	tc.Env["PATH"] = os.Getenv("PATH")
+
+	// Fix ATMOS_BASE_PATH if it contains hardcoded "atmos" directory name
+	// This allows tests to work when the repo is checked out with a different name
+	if basePath, exists := tc.Env["ATMOS_BASE_PATH"]; exists && strings.Contains(basePath, "./atmos/") {
+		// Get the actual repo directory name
+		repoRoot, err := findGitRepoRoot(startingDir)
+		if err == nil {
+			repoDirName := filepath.Base(repoRoot)
+			// Replace ./atmos/ with ./actual-dir-name/
+			tc.Env["ATMOS_BASE_PATH"] = strings.ReplaceAll(basePath, "./atmos/", "./"+repoDirName+"/")
+		}
+	}
 
 	// Set the test Git root to a clean temporary directory
 	// This makes each test scenario act as if it's its own Git repository
