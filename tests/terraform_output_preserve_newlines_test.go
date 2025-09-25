@@ -12,10 +12,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestDEV2982TerraformOutputNewlineIssue reproduces the exact issue from LINEAR DEV-2982.
-// Issue: If you output a value that has multiple newlines and then attempt to use
-// that value in another stack via terraform.output, the newlines will be stripped.
-func TestDEV2982TerraformOutputNewlineIssue(t *testing.T) {
+// TestTerraformOutputPreservesNewlines verifies that the terraform.output YAML function
+// correctly preserves newlines when passing values between components.
+// This test addresses the issue where newlines were being stripped when using
+// terraform.output to reference values from another stack (DEV-2982).
+func TestTerraformOutputPreservesNewlines(t *testing.T) {
 	// Skip if we don't have terraform/tofu
 	// Check if tofu or terraform is available
 	tofuPath := "/opt/homebrew/bin/tofu"
