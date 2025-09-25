@@ -56,7 +56,7 @@ func (g *Graph) TopologicalSort() (ExecutionOrder, error) {
 				unprocessed = append(unprocessed, id)
 			}
 		}
-		return nil, fmt.Errorf("circular dependency detected involving nodes: %v", unprocessed)
+		return nil, fmt.Errorf("%w involving nodes: %v", ErrCircularDependency, unprocessed)
 	}
 
 	return result, nil
@@ -72,8 +72,8 @@ func (g *Graph) ReverseTopologicalSort() (ExecutionOrder, error) {
 
 	// Reverse the order
 	reversed := make(ExecutionOrder, len(order))
-	for i, node := range order {
-		reversed[len(order)-1-i] = node
+	for i := range order {
+		reversed[len(order)-1-i] = order[i]
 	}
 
 	return reversed, nil
@@ -84,7 +84,7 @@ func (g *Graph) ReverseTopologicalSort() (ExecutionOrder, error) {
 func (g *Graph) GetExecutionLevels() ([][]Node, error) {
 	// Check for cycles first
 	if hasCycle, cyclePath := g.HasCycles(); hasCycle {
-		return nil, fmt.Errorf("circular dependency detected: %v", cyclePath)
+		return nil, fmt.Errorf("%w: %v", ErrCircularDependency, cyclePath)
 	}
 
 	levels := [][]Node{}

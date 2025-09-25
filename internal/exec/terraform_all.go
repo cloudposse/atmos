@@ -61,7 +61,8 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 	log.Info("Processing components in dependency order", "count", len(executionOrder))
 
 	// Execute components in order
-	for i, node := range executionOrder {
+	for i := range executionOrder {
+		node := &executionOrder[i]
 		log.Info("Processing component", "index", i+1, "total", len(executionOrder), "component", node.Component, "stack", node.Stack)
 
 		if err := executeTerraformForNode(node, info); err != nil {
@@ -75,27 +76,42 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 
 // buildTerraformDependencyGraph builds the complete dependency graph from stacks.
 func buildTerraformDependencyGraph(
-	atmosConfig *schema.AtmosConfiguration,
+	_ *schema.AtmosConfiguration,
 	stacks map[string]any,
-	info *schema.ConfigAndStacksInfo,
+	_ *schema.ConfigAndStacksInfo,
 ) (*dependency.Graph, error) {
 	builder := dependency.NewBuilder()
 	nodeMap := make(map[string]string) // Maps component-stack to node ID
 
-	// First pass: add all nodes
-	err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
-		// Skip abstract components
-		if metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
-			if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
-				return nil
-			}
-		}
+	// First pass: add all nodes.
+	if err := addNodesToGraph(stacks, builder, nodeMap); err != nil {
+		return nil, fmt.Errorf("error adding nodes to dependency graph: %w", err)
+	}
 
-		// Skip disabled components
-		if metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
-			if !isComponentEnabled(metadataSection, componentName) {
-				return nil
-			}
+	// Second pass: build dependencies using settings.depends_on.
+	if err := buildGraphDependencies(stacks, builder, nodeMap); err != nil {
+		return nil, fmt.Errorf("error building dependencies: %w", err)
+	}
+
+	// Build the final graph.
+	graph, err := builder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("error finalizing dependency graph: %w", err)
+	}
+
+	log.Debug("Dependency graph built", "nodes", graph.Size(), "roots", len(graph.Roots))
+	return graph, nil
+}
+
+// addNodesToGraph adds all component nodes to the dependency graph.
+func addNodesToGraph(
+	stacks map[string]any,
+	builder *dependency.GraphBuilder,
+	nodeMap map[string]string,
+) error {
+	return walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		if shouldSkipComponentForGraph(componentSection, componentName) {
+			return nil
 		}
 
 		nodeID := fmt.Sprintf("%s-%s", componentName, stackName)
@@ -110,164 +126,157 @@ func buildTerraformDependencyGraph(
 		nodeMap[nodeID] = nodeID
 		return builder.AddNode(node)
 	})
-	if err != nil {
-		return nil, fmt.Errorf("error adding nodes to dependency graph: %w", err)
-	}
+}
 
-	// Second pass: build dependencies using settings.depends_on
-	err = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
-		// Skip abstract components
-		if metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
-			if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
-				return nil
-			}
+// buildGraphDependencies builds dependencies between nodes in the graph.
+func buildGraphDependencies(
+	stacks map[string]any,
+	builder *dependency.GraphBuilder,
+	nodeMap map[string]string,
+) error {
+	parser := NewDependencyParser(builder, nodeMap)
+
+	return walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		if shouldSkipComponentForGraph(componentSection, componentName) {
+			return nil
 		}
 
-		// Skip disabled components
-		if metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
-			if !isComponentEnabled(metadataSection, componentName) {
-				return nil
-			}
-		}
-
-		fromID := fmt.Sprintf("%s-%s", componentName, stackName)
-
-		// Check for dependencies in settings.depends_on
-		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-			if dependsOn, ok := settingsSection["depends_on"].([]any); ok {
-				for _, dep := range dependsOn {
-					if depMap, ok := dep.(map[string]any); ok {
-						if depComponent, ok := depMap["component"].(string); ok {
-							// Default to same stack if not specified
-							depStack := stackName
-							if depStackVal, ok := depMap["stack"].(string); ok {
-								depStack = depStackVal
-							}
-
-							toID := fmt.Sprintf("%s-%s", depComponent, depStack)
-
-							// Only add dependency if the target node exists
-							if _, exists := nodeMap[toID]; exists {
-								if err := builder.AddDependency(fromID, toID); err != nil {
-									log.Warn("Failed to add dependency", "from", fromID, "to", toID, "error", err)
-								}
-							} else {
-								log.Warn("Dependency target not found", "from", fromID, "to", toID)
-							}
-						}
-					} else if depMap, ok := dep.(map[any]any); ok {
-						// Handle map[any]any case
-						if depComponent, ok := depMap["component"].(string); ok {
-							depStack := stackName
-							if depStackVal, ok := depMap["stack"].(string); ok {
-								depStack = depStackVal
-							}
-
-							toID := fmt.Sprintf("%s-%s", depComponent, depStack)
-
-							if _, exists := nodeMap[toID]; exists {
-								if err := builder.AddDependency(fromID, toID); err != nil {
-									log.Warn("Failed to add dependency", "from", fromID, "to", toID, "error", err)
-								}
-							} else {
-								log.Warn("Dependency target not found", "from", fromID, "to", toID)
-							}
-						}
-					}
-				}
-			} else if dependsOn, ok := settingsSection["depends_on"].(map[string]any); ok {
-				// Handle map format: depends_on: { "1": { component: "vpc" } }
-				for _, dep := range dependsOn {
-					if depMap, ok := dep.(map[string]any); ok {
-						if depComponent, ok := depMap["component"].(string); ok {
-							depStack := stackName
-							if depStackVal, ok := depMap["stack"].(string); ok {
-								depStack = depStackVal
-							}
-
-							toID := fmt.Sprintf("%s-%s", depComponent, depStack)
-
-							if _, exists := nodeMap[toID]; exists {
-								if err := builder.AddDependency(fromID, toID); err != nil {
-									log.Warn("Failed to add dependency", "from", fromID, "to", toID, "error", err)
-								}
-							} else {
-								log.Warn("Dependency target not found", "from", fromID, "to", toID)
-							}
-						}
-					}
-				}
-			}
-		}
-
-		return nil
+		return parser.ParseComponentDependencies(stackName, componentName, componentSection)
 	})
-	if err != nil {
-		return nil, fmt.Errorf("error building dependencies: %w", err)
+}
+
+// shouldSkipComponentForGraph determines if a component should be skipped when building the graph.
+func shouldSkipComponentForGraph(componentSection map[string]any, componentName string) bool {
+	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return false
 	}
 
-	// Build the final graph
-	graph, err := builder.Build()
-	if err != nil {
-		return nil, fmt.Errorf("error finalizing dependency graph: %w", err)
+	// Skip abstract components.
+	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
+		return true
 	}
 
-	log.Debug("Dependency graph built", "nodes", graph.Size(), "roots", len(graph.Roots))
-	return graph, nil
+	// Skip disabled components.
+	return !isComponentEnabled(metadataSection, componentName)
 }
 
 // applyFiltersToGraph applies query and component filters to the graph.
-func applyFiltersToGraph(graph *dependency.Graph, stacks map[string]any, info *schema.ConfigAndStacksInfo) *dependency.Graph {
-	nodeIDs := []string{}
+func applyFiltersToGraph(graph *dependency.Graph, _ map[string]any, info *schema.ConfigAndStacksInfo) *dependency.Graph {
+	// Collect node IDs based on filters.
+	nodeIDs := collectFilteredNodeIDs(graph, info)
 
-	// If specific components are specified, filter to those
-	if len(info.Components) > 0 {
-		for _, node := range graph.Nodes {
-			for _, comp := range info.Components {
-				if node.Component == comp {
-					if info.Stack == "" || node.Stack == info.Stack {
-						nodeIDs = append(nodeIDs, node.ID)
-					}
-				}
-			}
-		}
-	} else if info.Stack != "" {
-		// Filter to specific stack
-		for _, node := range graph.Nodes {
-			if node.Stack == info.Stack {
-				nodeIDs = append(nodeIDs, node.ID)
-			}
-		}
-	}
-
-	// Apply YQ query if specified
+	// Apply query filter if specified.
 	if info.Query != "" {
-		filteredNodeIDs := []string{}
-		for _, nodeID := range nodeIDs {
-			node := graph.Nodes[nodeID]
-			if node.Metadata != nil {
-				queryResult, err := u.EvaluateYqExpression(&schema.AtmosConfiguration{}, node.Metadata, info.Query)
-				if err == nil {
-					if queryPassed, ok := queryResult.(bool); ok && queryPassed {
-						filteredNodeIDs = append(filteredNodeIDs, nodeID)
-					}
-				}
-			}
-		}
-		nodeIDs = filteredNodeIDs
+		nodeIDs = filterNodesByQuery(graph, nodeIDs, info.Query)
 	}
 
-	// If no specific filters, include all
-	if len(info.Components) == 0 && info.Stack == "" && info.Query == "" {
-		for id := range graph.Nodes {
-			nodeIDs = append(nodeIDs, id)
-		}
+	// If no filters applied, include all nodes.
+	if !hasFilters(info) {
+		nodeIDs = getAllNodeIDs(graph)
 	}
 
-	// Filter the graph
+	// Filter the graph.
 	return graph.Filter(dependency.Filter{
 		NodeIDs:             nodeIDs,
-		IncludeDependencies: true,  // Include what these components depend on
-		IncludeDependents:   false, // Don't include what depends on these
+		IncludeDependencies: true,  // Include what these components depend on.
+		IncludeDependents:   false, // Don't include what depends on these.
 	})
+}
+
+// collectFilteredNodeIDs collects node IDs based on component and stack filters.
+func collectFilteredNodeIDs(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) []string {
+	if len(info.Components) > 0 {
+		return filterNodesByComponents(graph, info.Components, info.Stack)
+	}
+
+	if info.Stack != "" {
+		return filterNodesByStack(graph, info.Stack)
+	}
+
+	return []string{}
+}
+
+// filterNodesByComponents filters nodes by component names and optionally by stack.
+func filterNodesByComponents(graph *dependency.Graph, components []string, stack string) []string {
+	var nodeIDs []string
+
+	for _, node := range graph.Nodes {
+		if isNodeInComponents(node, components) && isNodeInStack(node, stack) {
+			nodeIDs = append(nodeIDs, node.ID)
+		}
+	}
+
+	return nodeIDs
+}
+
+// filterNodesByStack filters nodes by stack name.
+func filterNodesByStack(graph *dependency.Graph, stack string) []string {
+	var nodeIDs []string
+
+	for _, node := range graph.Nodes {
+		if node.Stack == stack {
+			nodeIDs = append(nodeIDs, node.ID)
+		}
+	}
+
+	return nodeIDs
+}
+
+// filterNodesByQuery filters nodes using a YQ query expression.
+func filterNodesByQuery(graph *dependency.Graph, nodeIDs []string, query string) []string {
+	var filteredNodeIDs []string
+
+	for _, nodeID := range nodeIDs {
+		node := graph.Nodes[nodeID]
+		if evaluateNodeQuery(node, query) {
+			filteredNodeIDs = append(filteredNodeIDs, nodeID)
+		}
+	}
+
+	return filteredNodeIDs
+}
+
+// evaluateNodeQuery evaluates a YQ query expression against a node's metadata.
+func evaluateNodeQuery(node *dependency.Node, query string) bool {
+	if node.Metadata == nil {
+		return false
+	}
+
+	queryResult, err := u.EvaluateYqExpression(&schema.AtmosConfiguration{}, node.Metadata, query)
+	if err != nil {
+		return false
+	}
+
+	queryPassed, ok := queryResult.(bool)
+	return ok && queryPassed
+}
+
+// isNodeInComponents checks if a node's component is in the list of components.
+func isNodeInComponents(node *dependency.Node, components []string) bool {
+	for _, comp := range components {
+		if node.Component == comp {
+			return true
+		}
+	}
+	return false
+}
+
+// isNodeInStack checks if a node is in the specified stack (or if no stack is specified).
+func isNodeInStack(node *dependency.Node, stack string) bool {
+	return stack == "" || node.Stack == stack
+}
+
+// hasFilters checks if any filters are specified.
+func hasFilters(info *schema.ConfigAndStacksInfo) bool {
+	return len(info.Components) > 0 || info.Stack != "" || info.Query != ""
+}
+
+// getAllNodeIDs returns all node IDs from the graph.
+func getAllNodeIDs(graph *dependency.Graph) []string {
+	var nodeIDs []string
+	for id := range graph.Nodes {
+		nodeIDs = append(nodeIDs, id)
+	}
+	return nodeIDs
 }

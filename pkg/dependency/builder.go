@@ -22,17 +22,17 @@ func NewBuilder() *GraphBuilder {
 // AddNode adds a node to the graph being built.
 func (b *GraphBuilder) AddNode(node *Node) error {
 	if b.built {
-		return fmt.Errorf("cannot add node after graph has been built")
+		return ErrGraphAlreadyBuilt
 	}
 
 	return b.graph.AddNode(node)
 }
 
 // AddDependency creates a dependency relationship between two nodes.
-// fromID depends on toID (fromID -> toID).
+// The fromID depends on toID (fromID -> toID).
 func (b *GraphBuilder) AddDependency(fromID, toID string) error {
 	if b.built {
-		return fmt.Errorf("cannot add dependency after graph has been built")
+		return ErrGraphAlreadyBuilt
 	}
 
 	return b.graph.AddDependency(fromID, toID)
@@ -41,12 +41,12 @@ func (b *GraphBuilder) AddDependency(fromID, toID string) error {
 // Build finalizes the graph construction and returns the built graph.
 func (b *GraphBuilder) Build() (*Graph, error) {
 	if b.built {
-		return nil, fmt.Errorf("graph has already been built")
+		return nil, ErrGraphAlreadyBuilt
 	}
 
 	// Validate the graph for cycles
 	if hasCycle, cyclePath := b.graph.HasCycles(); hasCycle {
-		return nil, fmt.Errorf("circular dependency detected: %v", cyclePath)
+		return nil, fmt.Errorf("%w: %v", ErrCircularDependency, cyclePath)
 	}
 
 	// Identify root nodes
@@ -54,7 +54,7 @@ func (b *GraphBuilder) Build() (*Graph, error) {
 
 	// Check if we have at least one root node (unless the graph is empty)
 	if len(b.graph.Nodes) > 0 && len(b.graph.Roots) == 0 {
-		return nil, fmt.Errorf("no root nodes found - possible circular dependency involving all nodes")
+		return nil, ErrNoRootNodes
 	}
 
 	b.built = true
