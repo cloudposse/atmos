@@ -489,34 +489,16 @@ func mergeConfigFile(
 	path string,
 	v *viper.Viper,
 ) error {
-	// Create a temp viper to process the file
-	tempViper := viper.New()
-	tempViper.SetConfigType("yaml")
-
-	// Read the file content
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-
-	// Load content into temp viper
-	if err := tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
-		return err
-	}
-
-	// Process YAML functions in temp viper
-	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return err
-	}
-
-	// Marshal the processed config to YAML
-	yamlBytes, err := marshalViperToYAML(tempViper)
+	err = v.MergeConfig(bytes.NewReader(content))
 	if err != nil {
 		return err
 	}
-
-	// Merge the processed YAML into the main viper
-	if err := v.MergeConfig(bytes.NewReader(yamlBytes)); err != nil {
+	err = preprocessAtmosYamlFunc(content, v)
+	if err != nil {
 		return err
 	}
 

@@ -138,8 +138,10 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
 			return handleGitRoot(node, v, currentPath)
 		}
-	} else {
-		// For regular scalar nodes (without special tags), set their values.
+	} else if !v.IsSet(currentPath) {
+		// For regular scalar nodes (without special tags), only set their values
+		// if they haven't been set yet. This preserves the merge order when
+		// this function is called after MergeConfig.
 		var value any
 		switch node.Tag {
 		case "!!str", "":
