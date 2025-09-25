@@ -97,6 +97,8 @@ tests:
       - "-f"
       - "yaml"
     expect:
+      valid:
+        - "yaml"
       diff:
         - "github_token"
       stdout:
@@ -115,6 +117,8 @@ tests:
       - "describe"
       - "config"
     expect:
+      valid:
+        - "json"
       diff:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
         - "GithubToken"

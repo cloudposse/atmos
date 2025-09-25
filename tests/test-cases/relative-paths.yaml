@@ -10,6 +10,8 @@ tests:
       - "describe"
       - "stacks"
     expect:
+      valid:
+        - "yaml"
       diff: []
       stdout:
         - "acme-platform-dev:"
