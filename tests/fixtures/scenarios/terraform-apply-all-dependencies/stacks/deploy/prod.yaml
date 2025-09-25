@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    # Test cross-stack dependencies with 'terraform apply --all'
+    # Expected execution order: shared-vpc, monitoring -> prod components
+
+    shared-vpc:
+      metadata:
+        component: mock
+      vars:
+        cidr: "10.100.0.0/16"
+        name: "shared-vpc"
+        tags:
+          environment: prod
+          layer: network
+          shared: true
+
+    monitoring:
+      metadata:
+        component: mock
+      vars:
+        retention_days: 90
+        tags:
+          environment: prod
+          layer: observability
+
+    prod-database:
+      metadata:
+        component: mock
+      vars:
+        instance_class: "db.r5.xlarge"
+        engine: "postgres"
+        multi_az: true
+        tags:
+          environment: prod
+          layer: data
+      settings:
+        depends_on:
+          - component: shared-vpc
+          - component: monitoring
+
+    prod-application:
+      metadata:
+        component: mock
+      vars:
+        instance_type: "c5.large"
+        desired_count: 10
+        tags:
+          environment: prod
+          layer: application
+      settings:
+        depends_on:
+          - component: prod-database
