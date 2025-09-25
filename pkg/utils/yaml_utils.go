@@ -29,6 +29,7 @@ const (
 	AtmosYamlFuncInclude                 = "!include"
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
 	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncAppend                  = "!append"
 	AtmosYamlFuncCwd                     = "!cwd"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncLiteral                 = "!literal"

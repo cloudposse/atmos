@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -351,6 +352,9 @@ func MergeWithOptions(
 	for index := range nonEmptyInputs {
 		current := nonEmptyInputs[index]
 
+		// Process !append tagged lists before merging
+		current = processAppendTags(current, merged)
+
 		// Due to a bug in `mergo.Merge`
 		// (Note: in the `for` loop, it DOES modify the source of the previous loop iteration if it's a complex map and `mergo` gets a pointer to it,
 		// not only the destination of the current loop iteration),
@@ -383,6 +387,64 @@ func MergeWithOptions(
 	}
 
 	return merged, nil
+}
+
+// processAppendTags handles special !append tagged lists during merging.
+// It processes any values wrapped with __atmos_append__ metadata and appends them to existing lists.
+func processAppendTags(current map[string]any, merged map[string]any) map[string]any {
+	result := make(map[string]any)
+
+	for key, value := range current {
+		result[key] = processValue(key, value, merged)
+	}
+
+	return result
+}
+
+// processValue processes a single value for append tags.
+func processValue(key string, value any, merged map[string]any) any {
+	// Check if this is an append-tagged list
+	if list, isAppend := u.ExtractAppendListValue(value); isAppend {
+		return processAppendList(key, list, merged)
+	}
+
+	// Check if this is a nested map
+	if nestedMap, ok := value.(map[string]any); ok {
+		return processNestedMap(key, nestedMap, merged)
+	}
+
+	// Regular value, pass through
+	return value
+}
+
+// processAppendList handles appending a list to existing values.
+func processAppendList(key string, list []any, merged map[string]any) []any {
+	var existingList []any
+	if existingValue, exists := merged[key]; exists {
+		if el, ok := existingValue.([]any); ok {
+			existingList = el
+		}
+	}
+
+	// Create a new slice to avoid modifying the original
+	result := make([]any, len(existingList), len(existingList)+len(list))
+	copy(result, existingList)
+	result = append(result, list...)
+	return result
+}
+
+// processNestedMap recursively processes nested maps for append tags.
+func processNestedMap(key string, nestedMap map[string]any, merged map[string]any) map[string]any {
+	var mergedNested map[string]any
+	if existingNested, exists := merged[key]; exists {
+		if mn, ok := existingNested.(map[string]any); ok {
+			mergedNested = mn
+		}
+	}
+	if mergedNested == nil {
+		mergedNested = make(map[string]any)
+	}
+	return processAppendTags(nestedMap, mergedNested)
 }
 
 // Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents.

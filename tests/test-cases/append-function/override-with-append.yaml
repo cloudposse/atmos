@@ -1,0 +1,25 @@
+imports:
+  - base
+
+components:
+  terraform:
+    eks:
+      vars:
+        cluster_name: "production"
+        node_groups: !append
+          - name: "spot"
+            instance_type: "t3.large"
+            min_size: 0
+            max_size: 10
+      settings:
+        depends_on: !append
+          - rds
+          - elasticache
+          - s3-bucket
+    
+    rds:
+      vars:
+        instance_class: "db.r5.large"
+      settings:
+        depends_on: !append
+          - kms-key
