@@ -550,6 +550,34 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, nil, nil, "", err
 	}
 
+	// Check if we're comparing the same repository with itself
+	// If both repositories have the same HEAD commit AND the same path, return empty affected list
+	localHead, err := localRepo.Head()
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+
+	remoteHead, err := remoteRepo.Head()
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+
+	// Resolve absolute paths to compare them properly
+	localAbsPath, err := filepath.Abs(localRepoInfo.LocalWorktreePath)
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+
+	remoteAbsPath, err := filepath.Abs(remoteRepoInfo.LocalWorktreePath)
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+
+	// If we're pointing to the same repository path and have the same HEAD, there can't be any affected items
+	if localHead.Hash() == remoteHead.Hash() && localAbsPath == remoteAbsPath {
+		return []schema.Affected{}, localHead, remoteHead, localRepoInfo.RepoUrl, nil
+	}
+
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
 		atmosConfig,
 		localRepoInfo.LocalWorktreePath,

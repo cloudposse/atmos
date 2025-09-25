@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 
@@ -151,7 +152,18 @@ func isEqual(
 	}
 
 	// Compare the sections
-	return reflect.DeepEqual(localSection, remoteSection)
+	equal := reflect.DeepEqual(localSection, remoteSection)
+
+	// Debug output when sections are not equal
+	if !equal && sectionName == "metadata" {
+		log.Debug("Metadata sections differ",
+			"stack", localStackName,
+			"component", localComponentName,
+			"localSection", localSection,
+			"remoteSection", remoteSection)
+	}
+
+	return equal
 }
 
 // isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed.
