@@ -13,7 +13,7 @@ import (
 
 func TestSandboxCreation(t *testing.T) {
 	// Test creating a sandbox environment.
-	workdir := "fixtures/scenarios/env"
+	workdir := "../fixtures/scenarios/env"
 
 	sandbox, err := SetupSandbox(t, workdir)
 	require.NoError(t, err, "Failed to setup sandbox")
@@ -50,7 +50,7 @@ func TestSandboxCreation(t *testing.T) {
 
 func TestSandboxEnvironmentVariables(t *testing.T) {
 	// Test that sandbox sets correct environment variables.
-	workdir := "fixtures/scenarios/env"
+	workdir := "../fixtures/scenarios/env"
 
 	sandbox, err := SetupSandbox(t, workdir)
 	require.NoError(t, err, "Failed to setup sandbox")
@@ -75,7 +75,7 @@ func TestSandboxEnvironmentVariables(t *testing.T) {
 
 func TestSandboxCleanup(t *testing.T) {
 	// Test that sandbox cleanup removes temporary files.
-	workdir := "fixtures/scenarios/env"
+	workdir := "../fixtures/scenarios/env"
 
 	sandbox, err := SetupSandbox(t, workdir)
 	require.NoError(t, err, "Failed to setup sandbox")
@@ -120,7 +120,7 @@ func TestSandboxMultipleComponentTypes(t *testing.T) {
 	}{
 		{
 			name:    "terraform only",
-			workdir: "fixtures/scenarios/env",
+			workdir: "../fixtures/scenarios/env",
 			expected: map[string]bool{
 				"ATMOS_COMPONENTS_TERRAFORM_BASE_PATH": true,
 			},
@@ -252,7 +252,7 @@ components:
 
 func TestSandboxConcurrent(t *testing.T) {
 	// Test that multiple sandboxes can be created concurrently.
-	workdir := "fixtures/scenarios/env"
+	workdir := "../fixtures/scenarios/env"
 	const numSandboxes = 5
 
 	type result struct {
@@ -396,7 +396,7 @@ func TestSandboxWithInvalidAtmosYAML(t *testing.T) {
 
 func TestSandboxCleanupIdempotency(t *testing.T) {
 	// Test that calling Cleanup multiple times is safe.
-	workdir := "fixtures/scenarios/env"
+	workdir := "../fixtures/scenarios/env"
 
 	sandbox, err := SetupSandbox(t, workdir)
 	require.NoError(t, err)
@@ -543,7 +543,7 @@ components:
 
 func TestSandboxEnvironmentIsolation(t *testing.T) {
 	// Test that sandbox provides proper environment isolation.
-	workdir := "fixtures/scenarios/env"
+	workdir := "../fixtures/scenarios/env"
 
 	// Set an environment variable that might affect tests.
 	originalValue := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
