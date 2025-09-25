@@ -104,13 +104,16 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.atmos_gitlab_token", "ATMOS_GITLAB_TOKEN")
 
 	bindEnv(v, "settings.terminal.pager", "ATMOS_PAGER", "PAGER")
+	bindEnv(v, "settings.terminal.color", "ATMOS_COLOR", "COLOR")
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 
 	// Atmos Pro settings
-	bindEnv(v, "settings.pro.base_url", "ATMOS_PRO_BASE_URL")
-	bindEnv(v, "settings.pro.endpoint", "ATMOS_PRO_ENDPOINT")
-	bindEnv(v, "settings.pro.token", "ATMOS_PRO_TOKEN")
-	bindEnv(v, "settings.pro.workspace_id", "ATMOS_PRO_WORKSPACE_ID")
+	bindEnv(v, "settings.pro.base_url", AtmosProBaseUrlEnvVarName)
+	bindEnv(v, "settings.pro.endpoint", AtmosProEndpointEnvVarName)
+	bindEnv(v, "settings.pro.token", AtmosProTokenEnvVarName)
+	bindEnv(v, "settings.pro.workspace_id", AtmosProWorkspaceIDEnvVarName)
+	bindEnv(v, "settings.pro.github_run_id", "GITHUB_RUN_ID")
+	bindEnv(v, "settings.pro.atmos_pro_run_id", AtmosProRunIDEnvVarName)
 
 	// GitHub OIDC for Atmos Pro
 	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
@@ -136,8 +139,9 @@ func setDefaultConfiguration(v *viper.Viper) {
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
-	v.SetDefault("logs.level", "Info")
+	v.SetDefault("logs.level", "Warning")
 
+	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", true)
 	v.SetDefault("docs.generate.readme.output", "./README.md")

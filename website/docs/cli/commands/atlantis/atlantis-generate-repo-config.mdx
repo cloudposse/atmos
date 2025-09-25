@@ -64,21 +64,46 @@ atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true
 
 ## Flags
 
-| Flag                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                         | Required |
-|:---------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
-| `--config-template`  | Atlantis config template name                                                                                                                                                                                                                                                                                                                                                                                                                       | no       |
-| `--project-template` | Atlantis project template name                                                                                                                                                                                                                                                                                                                                                                                                                      | no       |
-| `--output-path`      | Output path to write `atlantis.yaml` file                                                                                                                                                                                                                                                                                                                                                                                                           | no       |
-| `--stacks`           | Generate Atlantis projects for the specified stacks only (comma-separated values)                                                                                                                                                                                                                                                                                                                                                                   | no       |
-| `--components`       | Generate Atlantis projects for the specified components only (comma-separated values)                                                                                                                                                                                                                                                                                                                                                               | no       |
-| `--affected-only`    | Generate Atlantis projects only for the Atmos components changed<br/>between two Git commits                                                                                                                                                                                                                                                                                                                                                        | no       |
-| `--ref`              | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                                                                                                                                                       | no       |
-| `--sha`              | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                                                                                                                                                     | no       |
-| `--ssh-key`          | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                                                                                                                                                    | no       |
-| `--ssh-key-password` | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                                                                                                                                                          | no       |
-| `--repo-path`        | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                                                                                                                    | no       |
-| `--verbose`          | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                                                                                                                    | no       |
-| `--clone-target-ref` | Clone the target reference with which to compare the current branch.<br/>`atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true`<br/><br/>The flag is only used when `--affected-only=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory | no       |
+<dl>
+  <dt>`--config-template` <em>(optional)</em></dt>
+  <dd>Atlantis config template name.</dd>
+
+  <dt>`--project-template` <em>(optional)</em></dt>
+  <dd>Atlantis project template name.</dd>
+
+  <dt>`--output-path` <em>(optional)</em></dt>
+  <dd>Output path to write `atlantis.yaml` file.</dd>
+
+  <dt>`--stacks` <em>(optional)</em></dt>
+  <dd>Generate Atlantis projects for the specified stacks only (comma-separated values).</dd>
+
+  <dt>`--components` <em>(optional)</em></dt>
+  <dd>Generate Atlantis projects for the specified components only (comma-separated values).</dd>
+
+  <dt>`--affected-only` <em>(optional)</em></dt>
+  <dd>Generate Atlantis projects only for the Atmos components changed<br/>between two Git commits.</dd>
+
+  <dt>`--ref` <em>(optional)</em></dt>
+  <dd>[Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch.</dd>
+
+  <dt>`--sha` <em>(optional)</em></dt>
+  <dd>Git commit SHA with which to compare the current working branch.</dd>
+
+  <dt>`--ssh-key` <em>(optional)</em></dt>
+  <dd>Path to PEM-encoded private key to clone private repos using SSH.</dd>
+
+  <dt>`--ssh-key-password` <em>(optional)</em></dt>
+  <dd>Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block.</dd>
+
+  <dt>`--repo-path` <em>(optional)</em></dt>
+  <dd>Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`.</dd>
+
+  <dt>`--verbose` <em>(optional)</em></dt>
+  <dd>Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result.</dd>
+
+  <dt>`--clone-target-ref` <em>(optional)</em></dt>
+  <dd>Clone the target reference with which to compare the current branch.<br/>`atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true`<br/><br/>The flag is only used when `--affected-only=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory.</dd>
+</dl>
 
 :::info
 

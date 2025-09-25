@@ -7,10 +7,11 @@ description: Use this command to list all Stack configurations or a stack of a s
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Use this command to list Atmos stacks.
-:::
+</Intro>
 
 <Screengrab title="atmos list stacks --help" slug="atmos-list-stacks--help" />
 
@@ -59,6 +60,7 @@ When you run `atmos list stacks`, the output table will have columns titled "Sta
 
 ## Flags
 
-| Flag             | Description                                                                                                                                                                                                                               | Alias | Required |
-|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|----------|
-| `--component`    | Atmos component                                                                                                                                                                                                                         | `-c`  | no       |
+<dl>
+  <dt>`--component` / `-c` <em>(optional)</em></dt>
+  <dd>Atmos component.</dd>
+</dl>
