@@ -42,10 +42,6 @@
 **/.atmos/cache.yaml
 **/cache.*.txt
 
-# Ignore coverage files
-*.out
-coverage.html
-
 # Development configs - track only specific files
 .atmos.d/*
 !.atmos.d/dev.yaml
@@ -58,6 +54,6 @@ tests/fixtures/scenarios/vendor/components/**
 internal/exec/output.*
 
 # Coverage files
-coverage.out
+**.out
 coverage.html
 tests.test
