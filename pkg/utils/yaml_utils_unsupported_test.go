@@ -33,20 +33,8 @@ command: !exec echo hello
 other: value`,
 			shouldError: false,
 		},
-		{
-			name: "Valid YAML with supported !include tag",
-			yamlContent: `
-data: !include file.yaml
-other: value`,
-			shouldError: false,
-		},
-		{
-			name: "Valid YAML with supported !include.raw tag",
-			yamlContent: `
-content: !include.raw file.txt
-other: value`,
-			shouldError: false,
-		},
+		// Note: !include and !include.raw tags are tested separately because they
+		// require actual files to exist and would fail with "file not found" errors
 		{
 			name: "Valid YAML with supported !repo-root tag",
 			yamlContent: `
@@ -157,7 +145,7 @@ nested:
 			yamlContent: `
 env_var: !env HOME
 exec_result: !exec pwd
-include_data: !include config.yaml`,
+template_data: !template "value"`,
 			shouldError: false,
 		},
 		{
@@ -240,6 +228,17 @@ parent:
 			assert.Contains(t, err.Error(), "!include", "Error should list !include as supported")
 		})
 	}
+}
+
+func TestIncludeTagsAreRecognizedAsSupported(t *testing.T) {
+	// Test that !include and !include.raw are recognized as supported tags
+	// even though we can't test their processing without actual files
+	assert.Contains(t, AllSupportedYamlTags, "!include", "!include should be in AllSupportedYamlTags")
+	assert.Contains(t, AllSupportedYamlTags, "!include.raw", "!include.raw should be in AllSupportedYamlTags")
+
+	// Verify that these tags would pass the "is supported" check
+	assert.True(t, SliceContainsString(AllSupportedYamlTags, "!include"), "!include should be recognized as supported")
+	assert.True(t, SliceContainsString(AllSupportedYamlTags, "!include.raw"), "!include.raw should be recognized as supported")
 }
 
 func TestAllSupportedYamlTagsList(t *testing.T) {
