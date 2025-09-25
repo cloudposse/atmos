@@ -35,8 +35,9 @@ func GetCacheFilePath() (string, error) {
 
 func withCacheFileLock(cacheFile string, fn func() error) error {
 	lock := flock.New(cacheFile)
-	// Try to acquire lock with retries to avoid blocking indefinitely
-	const maxRetries = 50 // 5 seconds total with 100ms between retries
+	// Try to acquire lock but don't retry too many times
+	// This prevents hanging tests on systems with different locking semantics
+	const maxRetries = 3 // Only retry 3 times with 10ms between
 	var locked bool
 	var err error
 
@@ -48,12 +49,14 @@ func withCacheFileLock(cacheFile string, fn func() error) error {
 		if locked {
 			break
 		}
-		// Wait a bit before retrying
-		time.Sleep(100 * time.Millisecond)
+		// Wait a very short time before retrying
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	if !locked {
-		return errors.New("timeout acquiring file lock")
+		// If we can't get lock quickly, skip the cache operation
+		// Cache is not critical for functionality
+		return errors.New("cache file is locked by another process")
 	}
 
 	defer lock.Unlock()

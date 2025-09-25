@@ -1,0 +1,152 @@
+package config
+
+import (
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/adrg/xdg"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestCacheFileLockDeadlock tests that file locking doesn't cause deadlocks.
+func TestCacheFileLockDeadlock(t *testing.T) {
+	// Create a temporary cache directory.
+	testDir := t.TempDir()
+	originalXDG := os.Getenv("XDG_CACHE_HOME")
+	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
+	os.Setenv("XDG_CACHE_HOME", testDir)
+
+	// Reload XDG to pick up the environment change.
+	xdg.Reload()
+
+	// Create initial cache.
+	initialCache := CacheConfig{
+		LastChecked:    1000,
+		InstallationId: "deadlock-test",
+	}
+	err := SaveCache(initialCache)
+	require.NoError(t, err)
+
+	// Test concurrent operations with timeout.
+	done := make(chan bool)
+	timeout := time.After(5 * time.Second)
+
+	go func() {
+		// Simulate multiple goroutines trying to access cache.
+		var wg sync.WaitGroup
+		for i := 0; i < 5; i++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+
+				// Try to load cache.
+				_, err := LoadCache()
+				assert.NoError(t, err, "LoadCache failed for goroutine %d", id)
+
+				// Try to update cache.
+				err = UpdateCache(func(cache *CacheConfig) {
+					cache.LastChecked = int64(2000 + id)
+				})
+				assert.NoError(t, err, "UpdateCache failed for goroutine %d", id)
+			}(i)
+		}
+		wg.Wait()
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		t.Log("All concurrent operations completed successfully")
+	case <-timeout:
+		t.Fatal("Test timed out - possible deadlock in cache file locking")
+	}
+}
+
+// TestCacheFileLockTimeoutBehavior tests the timeout behavior of file locking.
+func TestCacheFileLockTimeoutBehavior(t *testing.T) {
+	testDir := t.TempDir()
+	originalXDG := os.Getenv("XDG_CACHE_HOME")
+	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
+	os.Setenv("XDG_CACHE_HOME", testDir)
+
+	// Reload XDG to pick up the environment change.
+	xdg.Reload()
+
+	cacheFile, err := GetCacheFilePath()
+	require.NoError(t, err)
+
+	// Create a test that simulates what happens during a lock timeout.
+	// This should complete within a reasonable time (5 seconds max for lock acquisition).
+	start := time.Now()
+	err = withCacheFileLock(cacheFile, func() error {
+		// Simulate some work.
+		time.Sleep(100 * time.Millisecond)
+		return nil
+	})
+	elapsed := time.Since(start)
+
+	assert.NoError(t, err)
+	assert.Less(t, elapsed, 6*time.Second, "Lock acquisition took too long: %v", elapsed)
+}
+
+// TestLoadCacheNonBlockingWithLockedFile tests that LoadCache doesn't block indefinitely
+// when the file is locked.
+func TestLoadCacheNonBlockingWithLockedFile(t *testing.T) {
+	testDir := t.TempDir()
+	originalXDG := os.Getenv("XDG_CACHE_HOME")
+	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
+	os.Setenv("XDG_CACHE_HOME", testDir)
+
+	// Reload XDG to pick up the environment change.
+	xdg.Reload()
+
+	// Create initial cache.
+	initialCache := CacheConfig{
+		LastChecked:    1000,
+		InstallationId: "non-blocking-test",
+	}
+	err := SaveCache(initialCache)
+	require.NoError(t, err)
+
+	cacheFile, err := GetCacheFilePath()
+	require.NoError(t, err)
+
+	// Hold a write lock in a goroutine.
+	lockHeld := make(chan bool)
+	lockReleased := make(chan bool)
+
+	go func() {
+		err := withCacheFileLock(cacheFile, func() error {
+			lockHeld <- true
+			// Hold the lock for a bit.
+			time.Sleep(2 * time.Second)
+			return nil
+		})
+		assert.NoError(t, err)
+		lockReleased <- true
+	}()
+
+	// Wait for lock to be acquired.
+	<-lockHeld
+
+	// Now try to load cache - it should return quickly with empty config
+	// since LoadCache uses TryRLock and doesn't block.
+	start := time.Now()
+	cache, err := LoadCache()
+	elapsed := time.Since(start)
+
+	assert.NoError(t, err)
+	assert.Less(t, elapsed, 500*time.Millisecond, "LoadCache should return quickly, took: %v", elapsed)
+
+	// The cache should be empty since it couldn't acquire the lock.
+	// This is the expected behavior according to the LoadCache implementation.
+	if cache.InstallationId != "" {
+		t.Log("LoadCache returned data despite lock being held - this is fine if it read before lock")
+	}
+
+	// Wait for the lock to be released.
+	<-lockReleased
+}

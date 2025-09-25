@@ -657,15 +657,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// This is needed for tests that change to parent directories
 	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
 
-	// Set XDG_CACHE_HOME to the test's absolute working directory to isolate cache files.
+	// Set XDG_CACHE_HOME to a subdirectory of the test's working directory to isolate cache files.
 	// This ensures each test has its own cache location and doesn't interfere with other tests.
 	// This also makes the tests deterministic regardless of the OS (Linux vs macOS).
 	// Using absolute path prevents cache writes outside the intended test sandbox.
-	tc.Env["XDG_CACHE_HOME"] = absoluteWorkdir
+	// Using a subdirectory prevents conflicts with test files in the workdir.
+	cacheDir := filepath.Join(absoluteWorkdir, ".test-cache")
+	tc.Env["XDG_CACHE_HOME"] = cacheDir
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
-	err = removeCacheFile(absoluteWorkdir)
+	err = removeCacheFile(cacheDir)
 	assert.NoError(t, err, "failed to remove cache file")
 
 	// Preserve the CI environment variables.
