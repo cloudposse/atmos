@@ -73,6 +73,14 @@
                 "exit_code": {
                   "type": "integer",
                   "description": "Expected exit code of the command."
+                },
+                "valid": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["yaml", "json"]
+                  },
+                  "description": "Format validations for stdout output."
                 }
               },
               "required": ["exit_code"],
