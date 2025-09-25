@@ -81,13 +81,15 @@ runs:
           // Parse files to ignore
           const files_to_ignore = `${{ inputs.files_to_ignore }}`.split(/[\s\n]+/).filter(f => f);
 
-          // Get PR files
-          const { data: files } = await github.rest.pulls.listFiles({
+          // Get all PR files using pagination
+          const files = await github.paginate(github.rest.pulls.listFiles, {
             owner,
             repo,
             pull_number: prNumber,
             per_page: 100
           });
+
+          console.log(`Processing ${files.length} files in PR`);
 
           // Calculate total changes
           let totalChanges = 0;
