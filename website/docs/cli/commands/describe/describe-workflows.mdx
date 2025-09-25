@@ -42,11 +42,16 @@ atmos describe workflows --query <yq-expression>
 
 ## Flags
 
-| Flag       | Description                                                                                                                                                                               | Alias | Required |
-|:-----------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--format` | Specify the output format: `yaml` or `json` (`yaml` is default)                                                                                                                           | `-f`  | no       |
-| `--output` | Specify the output type: `list`, `map` or `all` (`list` is default)                                                                                                                       | `-o`  | no       |
-| `--query`  | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe workflows --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq | `-q`  | no       |
+<dl>
+  <dt>`--format` / `-f` <em>(optional)</em></dt>
+  <dd>Specify the output format: `yaml` or `json` (`yaml` is default).</dd>
+
+  <dt>`--output` / `-o` <em>(optional)</em></dt>
+  <dd>Specify the output type: `list`, `map` or `all` (`list` is default).</dd>
+
+  <dt>`--query` / `-q` <em>(optional)</em></dt>
+  <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe workflows --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
+</dl>
 
 When the `--output list` flag is passed (default), the output of the command is a list of objects. Each object has the
 following schema:
