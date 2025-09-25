@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/adrg/xdg"
 	"github.com/stretchr/testify/assert"
@@ -243,5 +244,206 @@ func TestShouldCheckForUpdates(t *testing.T) {
 					tc.lastChecked, tc.frequency, now, result, tc.expected)
 			}
 		})
+	}
+}
+
+func TestShouldCheckForUpdatesPublicAPI(t *testing.T) {
+	// Test the public ShouldCheckForUpdates function.
+	// This uses the current time, so we need to be careful with our assertions.
+
+	// Check that very old timestamp triggers update check.
+	veryOldTimestamp := int64(0)
+	assert.True(t, ShouldCheckForUpdates(veryOldTimestamp, "daily"))
+	assert.True(t, ShouldCheckForUpdates(veryOldTimestamp, "hourly"))
+	assert.True(t, ShouldCheckForUpdates(veryOldTimestamp, "60")) // 60 seconds
+
+	// Check that very recent timestamp doesn't trigger update.
+	// Use current time minus 1 second.
+	veryRecentTimestamp := time.Now().Unix() - 1
+	assert.False(t, ShouldCheckForUpdates(veryRecentTimestamp, "daily"))
+	assert.False(t, ShouldCheckForUpdates(veryRecentTimestamp, "hourly"))
+	assert.False(t, ShouldCheckForUpdates(veryRecentTimestamp, "60")) // 60 seconds
+}
+
+func TestParseFrequency(t *testing.T) {
+	tests := []struct {
+		name      string
+		frequency string
+		expected  int64
+		hasError  bool
+	}{
+		// Integer seconds
+		{"Integer seconds", "300", 300, false},
+		{"Integer seconds with spaces", "  300  ", 300, false},
+		{"Zero seconds", "0", 0, true},
+		{"Negative seconds", "-100", 0, true},
+
+		// Duration with suffix
+		{"Seconds suffix", "30s", 30, false},
+		{"Minutes suffix", "5m", 300, false},
+		{"Hours suffix", "2h", 7200, false},
+		{"Days suffix", "1d", 86400, false},
+		{"Invalid suffix", "10x", 0, true},
+		{"Invalid number with suffix", "abcm", 0, true},
+		{"Zero with suffix", "0m", 0, true},
+		{"Negative with suffix", "-5m", 0, true},
+
+		// Predefined keywords
+		{"Minute keyword", "minute", 60, false},
+		{"Hourly keyword", "hourly", 3600, false},
+		{"Daily keyword", "daily", 86400, false},
+		{"Weekly keyword", "weekly", 604800, false},
+		{"Monthly keyword", "monthly", 2592000, false},
+		{"Yearly keyword", "yearly", 31536000, false},
+
+		// Invalid inputs
+		{"Invalid keyword", "invalid", 0, true},
+		{"Empty string", "", 0, true},
+		{"Random text", "abc123", 0, true},
+		{"Single character", "d", 0, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := parseFrequency(tc.frequency)
+			if tc.hasError {
+				assert.Error(t, err, "Expected error for frequency %q", tc.frequency)
+			} else {
+				assert.NoError(t, err, "Unexpected error for frequency %q", tc.frequency)
+				assert.Equal(t, tc.expected, result, "Incorrect value for frequency %q", tc.frequency)
+			}
+		})
+	}
+}
+
+func TestLoadCacheWithCorruptedFile(t *testing.T) {
+	// Test loading a cache when the file is corrupted.
+	testDir := t.TempDir()
+	originalXDG := os.Getenv("XDG_CACHE_HOME")
+	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
+	os.Setenv("XDG_CACHE_HOME", testDir)
+
+	// Reload XDG to pick up the environment change.
+	xdg.Reload()
+
+	// Create a corrupted cache file.
+	cacheDir := filepath.Join(testDir, "atmos")
+	err := os.MkdirAll(cacheDir, 0o755)
+	assert.NoError(t, err)
+
+	cacheFile := filepath.Join(cacheDir, "cache.yaml")
+	err = os.WriteFile(cacheFile, []byte("not valid yaml: {[}"), 0o644)
+	assert.NoError(t, err)
+
+	// Load should return an error for corrupted file.
+	_, err = LoadCache()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to unmarshal cache file")
+}
+
+func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
+	// Test GetCacheFilePath when directory creation fails.
+	// This is harder to test without mocking, but we can test with read-only parent.
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping test when running as root")
+	}
+
+	testDir := t.TempDir()
+	originalXDG := os.Getenv("XDG_CACHE_HOME")
+	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
+
+	// Create a read-only directory.
+	readOnlyDir := filepath.Join(testDir, "readonly")
+	err := os.MkdirAll(readOnlyDir, 0o555) // Read and execute only
+	assert.NoError(t, err)
+
+	// Set XDG_CACHE_HOME to a subdirectory of the read-only directory.
+	os.Setenv("XDG_CACHE_HOME", filepath.Join(readOnlyDir, "subdir"))
+
+	// Reload XDG to pick up the environment change.
+	xdg.Reload()
+
+	// GetCacheFilePath should return an error when it can't create the directory.
+	_, err = GetCacheFilePath()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "error creating cache directory")
+}
+
+func TestUpdateCacheWithNonExistentFile(t *testing.T) {
+	// Test UpdateCache when the cache file doesn't exist yet.
+	testDir := t.TempDir()
+	originalXDG := os.Getenv("XDG_CACHE_HOME")
+	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
+	os.Setenv("XDG_CACHE_HOME", testDir)
+
+	// Reload XDG to pick up the environment change.
+	xdg.Reload()
+
+	// Update non-existent cache should create it.
+	err := UpdateCache(func(cache *CacheConfig) {
+		cache.LastChecked = 5000
+		cache.InstallationId = "new-install"
+		cache.TelemetryDisclosureShown = true
+	})
+	assert.NoError(t, err)
+
+	// Verify the cache was created with the correct values.
+	loadedCache, err := LoadCache()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5000), loadedCache.LastChecked)
+	assert.Equal(t, "new-install", loadedCache.InstallationId)
+	assert.True(t, loadedCache.TelemetryDisclosureShown)
+}
+
+func TestWithCacheFileLockTimeout(t *testing.T) {
+	// Test that file lock acquisition times out appropriately.
+	// This test simulates a scenario where the lock is held for a long time.
+	testDir := t.TempDir()
+	originalXDG := os.Getenv("XDG_CACHE_HOME")
+	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
+	os.Setenv("XDG_CACHE_HOME", testDir)
+
+	// Reload XDG to pick up the environment change.
+	xdg.Reload()
+
+	// Create initial cache.
+	initialCache := CacheConfig{
+		LastChecked:    1000,
+		InstallationId: "lock-test",
+	}
+	err := SaveCache(initialCache)
+	assert.NoError(t, err)
+
+	cacheFile, err := GetCacheFilePath()
+	assert.NoError(t, err)
+
+	// We can't easily test the timeout without modifying the withCacheFileLock function,
+	// but we can test that multiple operations work correctly.
+	done := make(chan bool, 2)
+	errors := make(chan error, 2)
+
+	// Start two concurrent operations.
+	for i := 0; i < 2; i++ {
+		go func() {
+			err := withCacheFileLock(cacheFile, func() error {
+				// Simulate some work.
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			})
+			if err != nil {
+				errors <- err
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for both to complete.
+	for i := 0; i < 2; i++ {
+		<-done
+	}
+
+	close(errors)
+	for err := range errors {
+		assert.NoError(t, err)
 	}
 }

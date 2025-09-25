@@ -34,7 +34,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
@@ -651,9 +650,14 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// This is needed for tests that change to parent directories
 	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
 
+	// Set XDG_CACHE_HOME to the test's working directory to isolate cache files.
+	// This ensures each test has its own cache location and doesn't interfere with other tests.
+	// This also makes the tests deterministic regardless of the OS (Linux vs macOS).
+	tc.Env["XDG_CACHE_HOME"] = tc.Workdir
+
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
-	err = removeCacheFile()
+	err = removeCacheFile(tc.Workdir)
 	assert.NoError(t, err, "failed to remove cache file")
 
 	// Preserve the CI environment variables.
@@ -784,16 +788,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 }
 
-func removeCacheFile() error {
-	cacheFilePath, err := config.GetCacheFilePath()
-	if err != nil {
-		return nil
-	}
+func removeCacheFile(testWorkdir string) error {
+	// When XDG_CACHE_HOME is set to the test workdir, the cache file
+	// will be at testWorkdir/atmos/cache.yaml
+	cacheFilePath := filepath.Join(testWorkdir, "atmos", "cache.yaml")
 
 	if _, err := os.Stat(cacheFilePath); os.IsNotExist(err) {
 		return nil
 	}
-	err = os.Remove(cacheFilePath)
+	err := os.Remove(cacheFilePath)
 	if err != nil {
 		return err
 	}
