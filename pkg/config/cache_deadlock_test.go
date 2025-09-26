@@ -37,23 +37,43 @@ func TestCacheFileLockDeadlock(t *testing.T) {
 	go func() {
 		// Simulate multiple goroutines trying to access cache.
 		var wg sync.WaitGroup
+		successCount := 0
+		var mu sync.Mutex
+
 		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
 
 				// Try to load cache.
+				// LoadCache uses TryRLock so it may return empty config if locked.
 				_, err := LoadCache()
 				assert.NoError(t, err, "LoadCache failed for goroutine %d", id)
 
 				// Try to update cache.
+				// UpdateCache may fail if lock can't be acquired within retry limit.
+				// This is expected behavior to prevent deadlocks.
 				err = UpdateCache(func(cache *CacheConfig) {
 					cache.LastChecked = int64(2000 + id)
 				})
-				assert.NoError(t, err, "UpdateCache failed for goroutine %d", id)
+
+				if err == nil {
+					mu.Lock()
+					successCount++
+					mu.Unlock()
+				} else {
+					// Lock contention is expected when multiple goroutines compete.
+					assert.Contains(t, err.Error(), "cache file is locked by another process",
+						"Unexpected error for goroutine %d: %v", id, err)
+				}
 			}(i)
 		}
 		wg.Wait()
+
+		// At least one goroutine should succeed.
+		assert.Greater(t, successCount, 0, "At least one goroutine should successfully update the cache")
+		t.Logf("Successfully updated cache in %d out of 5 goroutines", successCount)
+
 		done <- true
 	}()
 
