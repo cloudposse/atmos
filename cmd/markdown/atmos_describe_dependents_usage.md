@@ -1,4 +1,4 @@
-- Specify the output format 
+- Specify the output format
 
 ```
  $ atmos describe dependents <component> -s <stack> --format=json|yaml

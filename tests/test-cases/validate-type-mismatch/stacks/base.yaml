@@ -1,0 +1,19 @@
+# Base configuration with vars.subnets as an array
+vars:
+  stage: "test"
+  environment: "base"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: "test-vpc"
+        cidr_block: "10.0.0.0/16"
+        # Define subnets as an array (list)
+        subnets:
+          - "10.0.1.0/24"
+          - "10.0.2.0/24"
+          - "10.0.3.0/24"
+        tags:
+          Environment: "test"
+          Purpose: "testing"

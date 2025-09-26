@@ -12,6 +12,8 @@ tests:
       - "-f"
       - "yaml"
     expect:
+      valid:
+        - "yaml"
       exit_code: 0
       diff:
         - "github_token"
@@ -27,6 +29,8 @@ tests:
       - "-f"
       - "yaml"
     expect:
+      valid:
+        - "yaml"
       exit_code: 0
       diff:
         - "github_token"

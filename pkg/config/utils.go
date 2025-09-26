@@ -740,7 +740,7 @@ func ReplaceContextTokens(context schema.Context, pattern string) string {
 		"{stage}", context.Stage,
 		"{workspace}", context.Workspace,
 		"{terraform_workspace}", context.TerraformWorkspace,
-		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOdStrings(context.Attributes), "-"),
+		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOfStrings(context.Attributes), "-"),
 	)
 	return r.Replace(pattern)
 }

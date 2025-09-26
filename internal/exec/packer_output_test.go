@@ -15,7 +15,7 @@ func TestExecutePackerOutput(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
-	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 
 	// Test successful case (original test)
 	t.Run("successful execution", func(t *testing.T) {

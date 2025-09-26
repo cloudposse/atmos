@@ -1,0 +1,18 @@
+# This file demonstrates enhanced error messages with file context
+import:
+  - base
+  - override
+
+vars:
+  stage: "demo"
+  environment: "error-test"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Attempting to merge incompatible types
+        subnets:
+          subnet1: "10.0.200.0/24"  # This is a map
+        # The base has subnets as an array, override has it as a string
+        # This creates a three-way type conflict

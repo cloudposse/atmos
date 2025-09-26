@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -84,7 +85,7 @@ func TestGetGitHubOIDCToken_MissingEnvironmentVariables(t *testing.T) {
 			token, err := getGitHubOIDCToken(tc.githubOIDCSettings)
 			assert.Error(t, err)
 			assert.Equal(t, "", token)
-			assert.ErrorIs(t, err, ErrNotInGitHubActions)
+			assert.ErrorIs(t, err, errUtils.ErrNotInGitHubActions)
 		})
 	}
 }
@@ -114,7 +115,7 @@ func TestGetGitHubOIDCToken_HTTPErrors(t *testing.T) {
 		token, err := getGitHubOIDCToken(githubOIDCSettings)
 		assert.Error(t, err)
 		assert.Equal(t, "", token)
-		assert.ErrorIs(t, err, ErrFailedToGetOIDCToken)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToGetOIDCToken)
 	})
 }
 
@@ -127,5 +128,5 @@ func TestGetGitHubOIDCToken_NetworkError(t *testing.T) {
 	token, err := getGitHubOIDCToken(githubOIDCSettings)
 	assert.Error(t, err)
 	assert.Equal(t, "", token)
-	assert.ErrorIs(t, err, ErrFailedToGetOIDCToken)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToGetOIDCToken)
 }

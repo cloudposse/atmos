@@ -64,6 +64,36 @@ func (mr *MockFileDownloaderMockRecorder) FetchAndAutoParse(src interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAndAutoParse", reflect.TypeOf((*MockFileDownloader)(nil).FetchAndAutoParse), src)
 }
 
+// FetchAndParseByExtension mocks base method.
+func (m *MockFileDownloader) FetchAndParseByExtension(src string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchAndParseByExtension", src)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchAndParseByExtension indicates an expected call of FetchAndParseByExtension.
+func (mr *MockFileDownloaderMockRecorder) FetchAndParseByExtension(src interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAndParseByExtension", reflect.TypeOf((*MockFileDownloader)(nil).FetchAndParseByExtension), src)
+}
+
+// FetchAndParseRaw mocks base method.
+func (m *MockFileDownloader) FetchAndParseRaw(src string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchAndParseRaw", src)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchAndParseRaw indicates an expected call of FetchAndParseRaw.
+func (mr *MockFileDownloaderMockRecorder) FetchAndParseRaw(src interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAndParseRaw", reflect.TypeOf((*MockFileDownloader)(nil).FetchAndParseRaw), src)
+}
+
 // FetchData mocks base method.
 func (m *MockFileDownloader) FetchData(src string) ([]byte, error) {
 	m.ctrl.T.Helper()

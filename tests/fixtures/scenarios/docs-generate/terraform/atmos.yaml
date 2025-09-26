@@ -41,4 +41,4 @@ docs:
         show_outputs: true
         sort_by: "name"
         hide_empty: false
-        indent_level: 2 
+        indent_level: 2

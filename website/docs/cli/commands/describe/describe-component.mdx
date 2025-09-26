@@ -7,11 +7,12 @@ description: Use this command to describe the complete configuration for an Atmo
 ---
 import Terminal from '@site/src/components/Terminal'
 import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Use this command to describe the complete configuration for an [Atmos component](/core-concepts/components) in
 an [Atmos stack](/core-concepts/stacks).
-:::
+</Intro>
 
 <Screengrab title="atmos describe component --help" slug="atmos-describe-component--help" />
 
@@ -61,22 +62,38 @@ atmos describe component vpc -s plat-ue2-prod --pager=more
 
 ## Arguments
 
-| Argument    | Description     | Required |
-|:------------|:----------------|:---------|
-| `component` | Atmos component | yes      |
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>Atmos component.</dd>
+</dl>
 
 ## Flags
 
-| Flag                  | Description                                                                                                                                                                                                                                                                                                                                                                                 | Alias | Required |
-|:----------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`             | Atmos stack                                                                                                                                                                                                                                                                                                                                                                                 | `-s`  | yes      |
-| `--format`            | Output format: `yaml` or `json` (`yaml` is default)                                                                                                                                                                                                                                                                                                                                         | `-f`  | no       |
-| `--file`              | If specified, write the result to the file                                                                                                                                                                                                                                                                                                                                                  |       | no       |
-| `--process-templates` | Enable/disable processing of all `Go` templates<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-templates=false`                                     |       | no       |
-| `--process-functions` | Enable/disable processing of all Atmos YAML functions<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the functions are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-functions=false`                               |       | no       |
-| `--skip`              | Skip processing a specific Atmos YAML function<br/>in Atmos stacks manifests when executing the command.<br/>To specify more than one function,<br/>use multiple `--skip` flags, or separate the functions with a comma:<br/>`atmos describe component <c> -s <stack> --skip=terraform.output --skip=include`<br/>`atmos describe component <c> -s <stack> --skip=terraform.output,include` |       | no       |
-| `--query`             | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                                                                                                                          | `-q`  | no       |
-| `--pager`             | Disable/Enable the paging user experience                                                                                                                                                                                                                                                                                                                                                   |       |          |
+<dl>
+  <dt>`--stack` / `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--format` / `-f` <em>(optional)</em></dt>
+  <dd>Output format: `yaml` or `json` (`yaml` is default).</dd>
+
+  <dt>`--file` <em>(optional)</em></dt>
+  <dd>If specified, write the result to the file.</dd>
+
+  <dt>`--process-templates` <em>(optional)</em></dt>
+  <dd>Enable/disable processing of all `Go` templates<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-templates=false`.</dd>
+
+  <dt>`--process-functions` <em>(optional)</em></dt>
+  <dd>Enable/disable processing of all Atmos YAML functions<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the functions are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-functions=false`.</dd>
+
+  <dt>`--skip` <em>(optional)</em></dt>
+  <dd>Skip processing a specific Atmos YAML function<br/>in Atmos stacks manifests when executing the command.<br/>To specify more than one function,<br/>use multiple `--skip` flags, or separate the functions with a comma:<br/>`atmos describe component <c> -s <stack> --skip=terraform.output --skip=include`<br/>`atmos describe component <c> -s <stack> --skip=terraform.output,include`.</dd>
+
+  <dt>`--query` / `-q` <em>(optional)</em></dt>
+  <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
+
+  <dt>`--pager` <em>(optional)</em></dt>
+  <dd>Disable/Enable the paging user experience.</dd>
+</dl>
 
 ## Output
 

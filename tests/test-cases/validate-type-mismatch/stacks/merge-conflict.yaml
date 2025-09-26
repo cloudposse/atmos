@@ -1,0 +1,7 @@
+import:
+  - example1
+  - example2
+
+vars:
+  stage: "dev"
+  environment: "test"

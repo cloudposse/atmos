@@ -91,4 +91,3 @@ commands:
       steps:
         - find . -type f -name "*.tfstate" -delete
         - echo "Deleted all state files"
-

@@ -1,0 +1,51 @@
+name: Pre-commit
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  # Ensure pre-commit uses the right Python version
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  pre-commit:
+    name: Run pre-commit hooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history for proper diff checking
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Go tools
+        run: |
+          # Install gofumpt for pre-commit
+          go install mvdan.cc/gofumpt@latest
+
+          # Install golangci-lint v2
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
+
+          # Add Go bin to PATH
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run CloudPosse pre-commit action
+        uses: cloudposse/github-action-pre-commit@v4.0.0
+        with:
+          # Run against files changed in the PR only
+          # This prevents formatting/checking unrelated files
+          extra_args: --from-ref ${{ github.event.pull_request.base.sha }} --to-ref HEAD

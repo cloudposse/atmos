@@ -6,11 +6,12 @@ id: pull
 description: Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components and stacks.
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 This command implements [Atmos Vendoring](/core-concepts/vendor/). Use this command to download sources from local and remote
 repositories for Terraform and Helmfile components and stacks.
-:::
+</Intro>
 
 <Screengrab title="atmos vendor pull --help" slug="atmos-vendor-pull--help" />
 
@@ -29,7 +30,7 @@ With Atmos vendoring, you can copy components and other artifacts from the follo
 Execute the `vendor pull` command like this:
 
 ```shell
-atmos vendor pull 
+atmos vendor pull
 atmos vendor pull --everything
 atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
@@ -110,10 +111,10 @@ The following config can be used to download the `vpc` component from an AWS pub
 
 ## Vendoring from SSH
 
-Atmos supports SSH for accessing non-public Git repositories, which is convenient for local development. Atmos will use any installed SSH keys automatically. 
+Atmos supports SSH for accessing non-public Git repositories, which is convenient for local development. Atmos will use any installed SSH keys automatically.
 
-:::tip  
-In automated systems like GitHub Actions, we recommend sticking with the `https://` scheme for vendoring. Atmos will automatically inject the `GITHUB_TOKEN`.  
+:::tip
+In automated systems like GitHub Actions, we recommend sticking with the `https://` scheme for vendoring. Atmos will automatically inject the `GITHUB_TOKEN`.
 :::
 
 There are two primary ways to specify an SSH source.
@@ -222,7 +223,7 @@ When resolving Git sources, Atmos follows these rules:
 
 :::note
 For more details on configuration, refer to [Atmos Configuration](/cli/configuration).
- 
+
 :::
 
 
@@ -233,7 +234,7 @@ Run `atmos vendor pull --help` to see all the available options
 ## Examples
 
 ```shell
-atmos vendor pull 
+atmos vendor pull
 atmos vendor pull --everything
 atmos vendor pull --component vpc
 atmos vendor pull -c vpc-flow-logs-bucket
@@ -257,9 +258,19 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 
 ## Flags
 
-| Flag          | Description                                                                                                  | Alias | Required |
-|:--------------|:-------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--component` | Atmos component to pull                                                                                      | `-c`  | no       |
-| `--tags`      | Only vendor the components that have the specified tags.<br/>`tags` is a comma-separated values (CSV) string |       | no       |
-| `--type`      | Component type: `terraform` or `helmfile` (`terraform` is default)                                           | `-t`  | no       |
-| `--dry-run`   | Dry run                                                                                                      |       | no       |
+<dl>
+  <dt>`--component` / `-c` <em>(optional)</em></dt>
+  <dd>Atmos component to pull.</dd>
+
+  <dt>`--everything` <em>(optional)</em></dt>
+  <dd>Vendor all components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Only vendor the components that have the specified tags.<br/>`tags` is a comma-separated values (CSV) string.</dd>
+
+  <dt>`--type` / `-t` <em>(optional)</em></dt>
+  <dd>Component type: `terraform` or `helmfile` (`terraform` is default).</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Dry run.</dd>
+</dl>

@@ -1,0 +1,10 @@
+vars:
+  stage: "dev"
+  environment: "test"
+
+components:
+  terraform:
+    test:
+      vars:
+        nested_config:
+          database: "single-string-value"

@@ -115,16 +115,16 @@ settings:
   list_merge_strategy: replace
   terminal:
     max_width: 120
-    pager: "1"
+    pager: "0"
     unicode: true
     syntax_highlighting:
       enabled: true
       lexer: ""
       formatter: terminal
       theme: dracula
-      pager: false
       line_numbers: true
       wrap: false
+    color: true
     no_color: false
   markdown:
     document:
@@ -151,7 +151,8 @@ settings:
   telemetry:
     enabled: true
     endpoint: https://us.i.posthog.com
-    token: phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS
+    token: phc_TEST_TOKEN_PLACEHOLDER
+    logging: false
 vendor:
   base_path: ./vendor.yaml
 initialized: true

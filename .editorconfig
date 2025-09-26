@@ -1,6 +1,7 @@
 [*]
 insert_final_newline = true
 end_of_line = lf
+trim_trailing_whitespace = true
 
 # Binary files (override to ensure no text-related rules are applied)
 [*.{png,jpg,gif,svg,pdf,ai,eps,mp4}]
@@ -8,6 +9,7 @@ insert_final_newline = false
 end_of_line = unset
 indent_style = unset
 indent_size = unset
+trim_trailing_whitespace = false
 
 # Override for machine generated binary HTML files in Screengrabs directory
 [website/src/components/Screengrabs/**/*.html]
@@ -15,6 +17,7 @@ insert_final_newline = false
 end_of_line = unset
 indent_style = unset
 indent_size = unset
+trim_trailing_whitespace = false
 
 # Override for machine generated binary files in tests/snapshots directory for golden snapshots
 [test/snapshots/**/*.golden]
@@ -22,6 +25,7 @@ insert_final_newline = false
 end_of_line = unset
 indent_style = unset
 indent_size = unset
+trim_trailing_whitespace = false
 
 # Override for Makefile
 [{Makefile,makefile,GNUmakefile}]
@@ -47,3 +51,8 @@ indent_size = 2
 [*.{tf,tfvars,tpl}]
 indent_style = space
 indent_size = 2
+
+# Go files
+[*.go]
+indent_style = tab
+indent_size = 4

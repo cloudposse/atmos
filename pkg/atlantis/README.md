@@ -14,7 +14,7 @@ atmos atlantis generate repo-config --config-template config-1 --project-templat
 ```
 
 __NOTE:__ All paths, `--file-template` in the `atmos terraform generate varfiles` command, and in the `atlantis` config in `atmos.yaml`,
-should be relative to the root of the repo. 
+should be relative to the root of the repo.
 
 Supported context tokens: `{namespace}`, `{tenant}`, `{environment}`, `{region}`, `{stage}`, `{component}`, `{component-path}`.
 

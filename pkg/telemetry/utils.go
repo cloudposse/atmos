@@ -23,7 +23,7 @@ const (
 	// usage data and provides a link for users to learn more or opt out.
 	DisclosureMessage = `Notice: Atmos now collects completely anonymous telemetry regarding usage.
 This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, 
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
 by visiting the following URL: https://atmos.tools/cli/telemetry
 
 `
@@ -73,6 +73,7 @@ func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 	enabled := atmosConfig.Settings.Telemetry.Enabled
 	token := atmosConfig.Settings.Telemetry.Token
 	endpoint := atmosConfig.Settings.Telemetry.Endpoint
+	logging := atmosConfig.Settings.Telemetry.Logging
 	distinctId := getOrInitializeCacheValue(
 		func(cfg *cfg.CacheConfig) string {
 			return cfg.InstallationId
@@ -89,7 +90,11 @@ func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 		clientProvider = provider[0]
 	}
 
-	return NewTelemetry(enabled, token, endpoint, distinctId, clientProvider)
+	return NewTelemetry(enabled, token, Options{
+		Endpoint:   endpoint,
+		DistinctID: distinctId,
+		Logging:    logging,
+	}, clientProvider)
 }
 
 // atmosProWorkspaceID retrieves the Atmos Pro workspace ID from the configuration.

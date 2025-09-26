@@ -10,4 +10,3 @@ ADD https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh /t
 RUN bash < /tmp/bash.deb.sh && \
     apt-get install atmos terraform helmfile && \
     atmos version
-    

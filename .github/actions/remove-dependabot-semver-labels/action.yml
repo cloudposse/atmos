@@ -15,15 +15,16 @@ runs:
   using: 'composite'
   steps:
     - name: Remove auto-added semver labels
-      uses: actions/github-script@v7
+      uses: actions/github-script@v8
       with:
+        github-token: ${{ github.token }}
         script: |
           // Check if this is a pull request event
           if (!context.payload.pull_request) {
             console.log('Not a pull request event, skipping label cleanup');
             return;
           }
-          
+
           // Check if the PR author is Dependabot
           const prAuthor = context.payload.pull_request.user.login;
           if (prAuthor !== 'dependabot[bot]') {
@@ -79,4 +80,3 @@ runs:
             console.log('⚠️  Warning: no-release label is missing from this Dependabot PR');
             console.log('    This label should be added via .github/dependabot.yml configuration');
           }
-

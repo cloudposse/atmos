@@ -9,7 +9,7 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-Atmos collects **anonymous telemetry** to help improve the product by understanding how it's used. 
+Atmos collects **anonymous telemetry** to help improve the product by understanding how it's used.
 This data helps us identify which features are most valuable and where we can make improvements.
 </Intro>
 
@@ -17,8 +17,8 @@ This data helps us identify which features are most valuable and where we can ma
 
 Atmos collects the following anonymous information:
 
-- **Command Usage**: Tracks which Atmos commands are executed (e.g., `atmos describe`, `atmos terraform`, `atmos helmfile`)  
-- **Error Reports**: Captures anonymized error messages and exit codes to help identify and fix issues  
+- **Command Usage**: Tracks which Atmos commands are executed (e.g., `atmos describe`, `atmos terraform`, `atmos helmfile`)
+- **Error Reports**: Captures anonymized error messages and exit codes to help identify and fix issues
 - **System Details**: Includes OS, CPU architecture, Atmos version, and other diagnostic metadata
 - **CI Provider information**: If Atmos is running as part of CI workflow, CI provider name
 
@@ -57,11 +57,11 @@ settings:
 ```
 </File>
 
-or set environment variable `ATMOS_TELEMETRY_ENABLED` to `false` 
+or set environment variable `ATMOS_TELEMETRY_ENABLED` to `false`
 
 ### Collect your own telemetry
 
-You can switch telemery to your own [PostHog](https://posthog.com/) account:
+You can switch telemetry to your own [PostHog](https://posthog.com/) account:
 
 Add the following to your `atmos.yaml` configuration file:
 
@@ -77,3 +77,20 @@ settings:
 
 or set environment variables `ATMOS_TELEMETRY_TOKEN` and `ATMOS_TELEMETRY_ENDPOINT` to your own values
 
+### Telemetry Logging Configuration
+
+By default, PostHog internal logging messages are suppressed to prevent cluttering your terminal output. If you need to debug telemetry issues, you can enable PostHog internal logging:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  telemetry:
+    logging: true  # Enable PostHog internal debug messages (default: false)
+```
+</File>
+
+or set environment variable `ATMOS_TELEMETRY_LOGGING` to `true`
+
+:::tip
+PostHog logging is useful for debugging telemetry connection issues or when configuring your own PostHog instance. When enabled, PostHog internal messages will be routed through Atmos logging at the DEBUG level.
+:::

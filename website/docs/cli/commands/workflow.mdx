@@ -6,10 +6,11 @@ description: Use this command to perform sequential execution of `atmos` and `sh
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
-:::
+</Intro>
 
 <Screengrab title="atmos workflow --help" slug="atmos-workflow--help" />
 
@@ -87,15 +88,23 @@ Run `atmos workflow --help` to see all the available options
 
 ## Arguments
 
-| Argument         | Description   | Required |
-|:-----------------|:--------------|:---------|
-| `workflow_name ` | Workflow name | yes      |
+<dl>
+  <dt>`workflow_name`</dt>
+  <dd>Workflow name</dd>
+</dl>
 
 ## Flags
 
-| Flag          | Description                                                                                   | Alias | Required |
-|:--------------|:----------------------------------------------------------------------------------------------|:------|:---------|
-| `--file`      | File name where the workflow is defined                                                       | `-f`  | yes      |
-| `--stack`     | Atmos stack<br/>(if provided, will override stacks defined in the workflow or workflow steps) | `-s`  | no       |
-| `--from-step` | Start the workflow from the named step                                                        |       | no       |
-| `--dry-run`   | Dry run. Print information about the executed workflow steps without executing them           |       | no       |
+<dl>
+  <dt>`--file` / `-f` <em>(required)</em></dt>
+  <dd>File name where the workflow is defined.</dd>
+
+  <dt>`--stack` / `-s` <em>(optional)</em></dt>
+  <dd>Atmos stack (if provided, will override stacks defined in the workflow or workflow steps).</dd>
+
+  <dt>`--from-step` <em>(optional)</em></dt>
+  <dd>Start the workflow from the named step.</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Dry run. Print information about the executed workflow steps without executing them.</dd>
+</dl>

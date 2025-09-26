@@ -15,7 +15,7 @@ detect_package_manager() {
     elif command -v apt-get &> /dev/null; then
         echo "deb"
     elif command -v apt &> /dev/null; then
-        echo "alpine"				
+        echo "alpine"
     elif command -v yum &> /dev/null; then
         echo "rpm"
 		elif command -v nix-env &> /dev/null; then
@@ -86,7 +86,7 @@ install_atmos() {
 		auto)
 			echo "Auto-detecting installation method..."
 			package_manager=$(detect_package_manager)
-			
+
 			if [ "$package_manager" == "brew" ]; then
 				install_via_brew
 			elif [ "$package_manager" == "nix" ]; then

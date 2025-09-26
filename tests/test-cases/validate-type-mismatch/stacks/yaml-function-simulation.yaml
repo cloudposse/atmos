@@ -1,0 +1,49 @@
+# Simulates what would happen with YAML functions like !include
+# combined with deep merging that causes type mismatches
+
+import:
+  # First level import - sets up base structure
+  - path: "shared/network.yaml"
+  
+  # Second level import - attempts to override
+  - path: "shared/databases.yaml"
+
+vars:
+  stage: "yaml-func-test"
+  environment: "validation"
+  
+  # This simulates a YAML function result being merged
+  # In a real scenario, this might come from !include or !env
+  dynamic_config:
+    subnets: ["10.0.1.0/24", "10.0.2.0/24"]  # Array form
+    
+components:
+  terraform:
+    vpc:
+      vars:
+        # Merge the dynamic config
+        <<: 
+          subnets: "10.0.50.0/24"  # String form - type mismatch!
+          
+        # Deep merge with conflicting types
+        network_config:
+          availability_zones:
+            # From shared/network.yaml this is an array
+            # Here we try to make it a map
+            primary: "us-east-1a"
+            secondary: "us-east-1b"
+            
+    rds:
+      vars:
+        # From shared/databases.yaml, connections is an array
+        # Try to override with string
+        connections: "primary.db.local:5432,replica.db.local:5432"
+        
+        # Deep nested type mismatch
+        instances:
+          primary:
+            instance_class: 
+              - "db.t3.medium"  # Array instead of string
+              - "db.t3.large"
+          replica:
+            instance_class: true  # Boolean instead of string

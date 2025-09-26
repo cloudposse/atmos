@@ -1,0 +1,405 @@
+commands:
+  - name: dev
+    description: Development workflow commands for Atmos development
+    # Subcommands under 'atmos dev'
+    commands:
+      - name: setup
+        description: Set up local development environment
+        steps:
+          - |
+            echo "🚀 Setting up Atmos development environment..."
+
+            echo "1️⃣  Installing Go dependencies..."
+            go mod download
+
+            echo "2️⃣  Installing pre-commit and golangci-lint..."
+            if ! command -v pre-commit >/dev/null 2>&1; then
+              if command -v brew >/dev/null 2>&1; then
+                echo "Installing pre-commit via Homebrew..."
+                brew install pre-commit
+              elif command -v apt-get >/dev/null 2>&1; then
+                echo "Installing pre-commit via apt..."
+                sudo apt-get update && sudo apt-get install -y pre-commit
+              else
+                echo "Installing pre-commit via pip..."
+                pip install --user pre-commit || pip install pre-commit
+              fi
+            else
+              echo "pre-commit is already installed: $(pre-commit --version)"
+            fi
+
+            if ! command -v golangci-lint >/dev/null 2>&1; then
+              if command -v brew >/dev/null 2>&1; then
+                echo "Installing golangci-lint via Homebrew..."
+                brew install golangci-lint
+              else
+                echo "Installing golangci-lint via curl..."
+                curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+              fi
+            else
+              echo "golangci-lint is already installed: $(golangci-lint --version)"
+            fi
+
+            echo "3️⃣  Installing pre-commit hooks..."
+            pre-commit install
+
+            echo "4️⃣  Installing Go tools..."
+            go install mvdan.cc/gofumpt@latest
+
+            echo "✅ Development environment setup complete!"
+            echo ""
+            echo "Run 'atmos dev check' to check staged files (read-only)"
+            echo "Run 'atmos dev check-pr' to check PR changes (read-only)"
+            echo "Run 'atmos dev format' to auto-format staged files"
+            echo "Run 'atmos dev format-pr' to auto-format PR changes"
+
+      - name: check
+        description: Run pre-commit hooks against staged files
+        steps:
+          - |
+            echo "🔍 Running pre-commit checks on staged files..."
+
+            # Get list of staged files
+            STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+            if [ -z "$STAGED_FILES" ]; then
+              echo "✅ No staged files to check"
+              exit 0
+            fi
+
+            echo "📊 Checking $(echo "$STAGED_FILES" | wc -l | xargs) staged files"
+            echo ""
+
+            # Run pre-commit on staged files only
+            echo "Running pre-commit hooks..."
+            if pre-commit run; then
+              echo ""
+              echo "✅ All pre-commit checks passed!"
+            else
+              EXIT_CODE=$?
+              echo ""
+              echo "❌ Some pre-commit checks failed (exit code: $EXIT_CODE)"
+              echo ""
+              echo "💡 To auto-fix issues, run: atmos dev format"
+              exit $EXIT_CODE
+            fi
+
+      - name: check-pr
+        description: Run pre-commit hooks against PR modified files
+        steps:
+          - |
+            echo "🔍 Running pre-commit checks on PR files..."
+
+            # Determine the base branch
+            BASE_REF="${GITHUB_BASE_REF:-origin/main}"
+
+            # Check if we have the base ref
+            if ! git rev-parse --verify "$BASE_REF" > /dev/null 2>&1; then
+              # Try without origin/ prefix
+              BASE_REF="${BASE_REF#origin/}"
+              if ! git rev-parse --verify "$BASE_REF" > /dev/null 2>&1; then
+                echo "⚠️  Base ref '$BASE_REF' not found. Fetching from origin..."
+                git fetch origin main:main || true
+                BASE_REF="main"
+              fi
+            fi
+
+            echo "📊 Checking files changed from $BASE_REF..."
+
+            # Get list of changed files
+            CHANGED_FILES=$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null || git diff --name-only origin/main...HEAD)
+
+            if [ -z "$CHANGED_FILES" ]; then
+              echo "✅ No files changed in PR"
+              exit 0
+            fi
+
+            echo "Found $(echo "$CHANGED_FILES" | wc -l | xargs) changed files"
+            echo ""
+
+            # Run pre-commit on changed files only
+            echo "Running pre-commit hooks..."
+            if pre-commit run --from-ref "$BASE_REF" --to-ref HEAD; then
+              echo ""
+              echo "✅ All pre-commit checks passed!"
+            else
+              EXIT_CODE=$?
+              echo ""
+              echo "❌ Some pre-commit checks failed (exit code: $EXIT_CODE)"
+              echo ""
+              echo "💡 To auto-fix issues, run: atmos dev format-pr"
+              exit $EXIT_CODE
+            fi
+
+      - name: check-all
+        description: Run pre-commit hooks against all files
+        steps:
+          - |
+            echo "🔍 Running pre-commit checks on all files..."
+            echo "⚠️  This may take a while..."
+            echo ""
+
+            # Count total files that will be checked
+            FILE_COUNT=$(git ls-files | wc -l | xargs)
+            echo "📊 Checking $FILE_COUNT files in the repository"
+            echo ""
+
+            # Run pre-commit on all files
+            echo "Running pre-commit hooks..."
+            if pre-commit run --all-files; then
+              echo ""
+              echo "✅ All pre-commit checks passed!"
+            else
+              EXIT_CODE=$?
+              echo ""
+              echo "❌ Some pre-commit checks failed (exit code: $EXIT_CODE)"
+              echo ""
+              echo "💡 To auto-fix issues, run: atmos dev format-all"
+              echo "⚠️  WARNING: format-all will modify many files!"
+              exit $EXIT_CODE
+            fi
+
+      - name: format
+        description: Auto-format staged files
+        steps:
+          - |
+            echo "🔧 Auto-formatting staged files..."
+            pre-commit run || true
+            echo "✅ Formatting applied to staged files"
+
+      - name: format-pr
+        description: Auto-format PR changes
+        steps:
+          - |
+            echo "🔧 Auto-formatting PR changes..."
+            BASE_REF="${GITHUB_BASE_REF:-main}"
+            pre-commit run --from-ref origin/$BASE_REF --to-ref HEAD || true
+            echo "✅ Formatting applied to PR changes"
+
+      - name: format-all
+        description: ⚠️  DANGEROUS - Auto-format ALL files (excludes golden snapshots)
+        steps:
+          - |
+            echo "⚠️  WARNING: This will modify many files!"
+            echo "   Excludes: vendor/, tests/test-cases/, tests/testdata/, tests/snapshots/"
+            echo "   Golden snapshots and fixtures are protected."
+            echo ""
+            echo "   Press Ctrl+C to cancel, or wait 5 seconds to continue..."
+            sleep 5
+            echo "🔧 Auto-formatting all files..."
+            # Run pre-commit on all files with our exclude patterns
+            pre-commit run --all-files || true
+            echo "✅ Formatting complete. Review changes with: git diff"
+
+      - name: lint
+        description: Run golangci-lint
+        steps:
+          - golangci-lint run --config=.golangci.yml
+
+      - name: test
+        description: Run tests
+        steps:
+          - go test ./... -v
+
+      - name: validate
+        description: Validate code by running build, lint, and tests
+        steps:
+          - |
+            echo "🔨 Building..."
+            go build ./... || { echo "❌ Build failed"; exit 1; }
+
+            echo "🔍 Linting..."
+            if command -v golangci-lint >/dev/null 2>&1; then
+              golangci-lint run --config=.golangci.yml || { echo "❌ Linting failed"; exit 1; }
+            else
+              echo "⚠️ golangci-lint not found, falling back to go vet..."
+              go vet ./... || { echo "❌ go vet failed"; exit 1; }
+            fi
+
+            echo "🧪 Testing..."
+            go test ./... -v || { echo "❌ Tests failed"; exit 1; }
+
+            echo "✅ Validation complete!"
+
+      - name: build
+        description: Build the Atmos binary
+        steps:
+          - make build
+
+      - name: cache-list
+        description: List GitHub Actions cache entries over 1GB
+        steps:
+          - |
+            echo "🔍 Checking GitHub Actions cache for entries over 1GB..."
+
+            # Check if gh CLI is installed
+            if ! command -v gh &> /dev/null; then
+              echo "❌ GitHub CLI (gh) is not installed. Please install it first."
+              echo "   Visit: https://cli.github.com/"
+              exit 1
+            fi
+
+            # Check if authenticated
+            if ! gh auth status &> /dev/null; then
+              echo "❌ Not authenticated with GitHub. Please run: gh auth login"
+              exit 1
+            fi
+
+            # Get cache entries over 1GB
+            CACHE_ENTRIES=$(gh actions-cache list -R cloudposse/atmos | grep GB)
+
+            if [ -z "$CACHE_ENTRIES" ]; then
+              echo "✅ No cache entries over 1GB found."
+              exit 0
+            fi
+
+            echo "Found cache entries over 1GB:"
+            echo ""
+            echo "$CACHE_ENTRIES" | column -t -s$'\t'
+            echo ""
+
+            # Calculate total size and unique keys
+            TOTAL_SIZE=$(echo "$CACHE_ENTRIES" | awk '{print $2}' | grep -o '[0-9.]*' | awk '{s+=$1} END {printf "%.2f", s}')
+            ENTRY_COUNT=$(echo "$CACHE_ENTRIES" | wc -l | xargs)
+            UNIQUE_KEY_COUNT=$(echo "$CACHE_ENTRIES" | awk '{print $1}' | sort -u | wc -l | xargs)
+
+            echo "📊 Summary:"
+            echo "   Total entries: $ENTRY_COUNT"
+            echo "   Unique keys: $UNIQUE_KEY_COUNT"
+            echo "   Total size: ${TOTAL_SIZE} GB"
+            echo ""
+            echo "💡 Note: Each key may have multiple entries across different branches"
+            echo "💡 To delete these caches, run: atmos dev cache-clear"
+
+      - name: cache-clear
+        description: Clear GitHub Actions cache entries over 1GB
+        steps:
+          - |
+            echo "🔍 Checking GitHub Actions cache for entries over 1GB..."
+
+            # Check if gh CLI is installed
+            if ! command -v gh &> /dev/null; then
+              echo "❌ GitHub CLI (gh) is not installed. Please install it first."
+              echo "   Visit: https://cli.github.com/"
+              exit 1
+            fi
+
+            # Check if authenticated
+            if ! gh auth status &> /dev/null; then
+              echo "❌ Not authenticated with GitHub. Please run: gh auth login"
+              exit 1
+            fi
+
+            # Get cache entries over 1GB
+            CACHE_ENTRIES=$(gh actions-cache list -R cloudposse/atmos | grep GB)
+
+            if [ -z "$CACHE_ENTRIES" ]; then
+              echo "✅ No cache entries over 1GB found."
+              exit 0
+            fi
+
+            echo "Found cache entries over 1GB:"
+            echo "$CACHE_ENTRIES"
+            echo ""
+
+            # Count entries
+            ENTRY_COUNT=$(echo "$CACHE_ENTRIES" | wc -l | xargs)
+            echo "📊 Total entries to delete: $ENTRY_COUNT"
+            echo ""
+
+            # Ask for confirmation (portable version for macOS)
+            printf "⚠️  Do you want to delete these cache entries? (y/N): "
+            read -r REPLY
+
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+              echo "❌ Cancelled."
+              exit 0
+            fi
+
+            echo "🗑️  Deleting cache entries..."
+            echo "   Note: Each key may match multiple cache entries across different branches"
+            echo ""
+
+            # Track success/failure
+            FAILED_KEYS=0
+            SUCCESS_KEYS=0
+            TOTAL_DELETED=0
+            FAILED_LIST=""
+
+            # Extract unique cache keys and delete them
+            UNIQUE_KEYS=$(echo "$CACHE_ENTRIES" | awk '{print $1}' | sort -u)
+            UNIQUE_KEY_COUNT=$(echo "$UNIQUE_KEYS" | wc -l | xargs)
+
+            echo "   Found $UNIQUE_KEY_COUNT unique cache key(s) to process"
+            echo ""
+
+            while read -r cache_key; do
+              if [ -n "$cache_key" ]; then
+                echo "  Processing key: ${cache_key:0:50}..."
+
+                # Try deletion and capture output
+                DELETE_OUTPUT=$(gh actions-cache delete "$cache_key" -R cloudposse/atmos --confirm 2>&1)
+                DELETE_EXIT=$?
+
+                if [ $DELETE_EXIT -eq 0 ]; then
+                  # Extract the number of deleted entries from output
+                  DELETED_COUNT=$(echo "$DELETE_OUTPUT" | grep -oE "Deleted [0-9]+ cache" | grep -oE "[0-9]+" || echo "1")
+                  echo "$DELETE_OUTPUT" | head -1
+                  echo "  ✅ Successfully processed key"
+                  SUCCESS_KEYS=$((SUCCESS_KEYS + 1))
+                  TOTAL_DELETED=$((TOTAL_DELETED + DELETED_COUNT))
+                else
+                  echo "  ❌ Failed to delete key"
+                  FAILED_KEYS=$((FAILED_KEYS + 1))
+                  FAILED_LIST="${FAILED_LIST}    ${cache_key:0:50}...\n"
+                fi
+              fi
+            done <<< "$UNIQUE_KEYS"
+
+            echo ""
+            if [ "$FAILED_KEYS" -eq 0 ] && [ "$SUCCESS_KEYS" -gt 0 ]; then
+              echo "✅ Cache cleanup complete!"
+              echo "   Processed $SUCCESS_KEYS unique key(s)"
+              echo "   Total cache entries deleted: $TOTAL_DELETED"
+            elif [ "$SUCCESS_KEYS" -eq 0 ] && [ "$FAILED_KEYS" -gt 0 ]; then
+              echo "❌ Cache cleanup failed! Could not delete any keys."
+              echo ""
+              echo "Failed keys:"
+              printf "$FAILED_LIST"
+              echo ""
+              echo "💡 Try:"
+              echo "   1. Update gh CLI: brew upgrade gh"
+              echo "   2. Re-authenticate: gh auth refresh"
+              echo "   3. Delete manually: gh actions-cache delete <key> -R cloudposse/atmos --confirm"
+            else
+              echo "⚠️  Cache cleanup finished with mixed results."
+              echo "   Successful keys: $SUCCESS_KEYS"
+              echo "   Failed keys: $FAILED_KEYS"
+              echo "   Total cache entries deleted: $TOTAL_DELETED"
+              if [ -n "$FAILED_LIST" ]; then
+                echo ""
+                echo "Failed keys:"
+                printf "$FAILED_LIST"
+              fi
+              echo ""
+              echo "💡 For failed keys, try updating gh CLI: brew upgrade gh"
+            fi
+
+      - name: quick
+        description: Quick build and test
+        steps:
+          - |
+            echo "🏃 Running quick build and test..."
+            go build ./... || { echo "❌ Build failed"; exit 1; }
+            go test ./... -short || { echo "❌ Tests failed"; exit 1; }
+            echo "✅ Quick check complete!"
+
+      - name: coverage
+        description: Run tests with coverage report
+        steps:
+          - |
+            echo "📊 Running tests with coverage..."
+            go test -coverprofile=coverage.out ./...
+            go tool cover -html=coverage.out -o coverage.html
+            echo "✅ Coverage report generated: coverage.html"
+            echo "   Run 'open coverage.html' to view in browser"

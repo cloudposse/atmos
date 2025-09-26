@@ -475,7 +475,7 @@ An Atlantis config template must be defined in one of the following places:
 2. The ` + "`" + `settings.atlantis.config_template` + "`" + ` field in the stack config section.
 3. Passed on the command line using the ` + "`" + `--config-template` + "`" + ` flag.
 
-Ensure that the config template is defined or selected from the collection of templates 
+Ensure that the config template is defined or selected from the collection of templates
 specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` section of ` + "`" + `atmos.yaml` + "`" + `.
 `)
 	}

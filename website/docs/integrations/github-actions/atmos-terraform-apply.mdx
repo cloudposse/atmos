@@ -21,7 +21,7 @@ This GitHub Action incorporates superior GitOps support for Terraform by utilizi
 
 * **Implements Native GitOps** with Atmos and Terraform tightly integrated with GitHub UI
 * **No hardcoded credentials.** Use GitHub OIDC to assume roles.
-* **Compatible with GitHub Cloud & Self-hosted Runners** for maximum flexibility. 
+* **Compatible with GitHub Cloud & Self-hosted Runners** for maximum flexibility.
 * **Beautiful Job Summaries** don't clutter up pull requests with noisy GitHub comments
 * **100% Open Source with Permissive APACHE2 License** means there are no expensive subscriptions or long-term commitments.
 
@@ -33,7 +33,7 @@ In the following screenshot, we see a successful "apply" Job Summary report. The
 
 ## Usage Example
 
-In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "apply" job, the "component" and "stack" are hardcoded (`foobar` and `plat-ue2-sandbox`). In practice, these are usually derived from another action. 
+In this example, the action is triggered when certain events occur, such as a manual workflow dispatch or the opening, synchronization, or reopening of a pull request, specifically on the main branch. It specifies specific permissions related to assuming roles in AWS. Within the "apply" job, the "component" and "stack" are hardcoded (`foobar` and `plat-ue2-sandbox`). In practice, these are usually derived from another action.
 
 :::tip Passing Affected Stacks
 

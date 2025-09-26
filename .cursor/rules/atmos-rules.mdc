@@ -67,7 +67,7 @@ func TestFeature(t *testing.T) {
             wantErr:  true,
         },
     }
-    
+
     for _, tc := range testCases {
         t.Run(tc.name, func(t *testing.T) {
             result, err := Feature(tc.input)
@@ -176,10 +176,10 @@ func initConfig() {
     viper.AddConfigPath("$HOME/.atmos")
     viper.AutomaticEnv()
     viper.SetEnvPrefix("ATMOS")
-    
+
     // Set defaults
     viper.SetDefault("timeout", 30)
-    
+
     if err := viper.ReadInConfig(); err != nil {
         if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
             // Config file was found but another error occurred

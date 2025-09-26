@@ -7,7 +7,7 @@ assignees: ''
 
 ---
 
-Found a bug? Maybe our [Slack Community](https://slack.cloudposse.com) can help. 
+Found a bug? Maybe our [Slack Community](https://slack.cloudposse.com) can help.
 
 [![Slack Community](https://slack.cloudposse.com/badge.svg)](https://slack.cloudposse.com)
 

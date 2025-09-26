@@ -9,8 +9,8 @@ import Intro from '@site/src/components/Intro'
 <Intro>
 Atmos supports the concept of remote stores to facilitate the sharing of values between components or between
 some external process and a component. In Atmos, values are saved to stores via
-[hooks](/core-concepts/stacks/hooks) and are read using the [`!store`](/core-concepts/stacks/yaml-functions/store)
-YAML function and [`atmos.Store`](/core-concepts/stacks/templates/functions/atmos.Store) template function.
+[hooks](/core-concepts/stacks/hooks) and are read using the [`!store`](/functions/yaml/store)
+YAML function and [`atmos.Store`](/functions/template/atmos.Store) template function.
 Values can also be saved to stores from outside of Atmos, for example, from a CI/CD pipeline or a script.
 
 Currently, the following stores are supported:
@@ -23,7 +23,7 @@ Currently, the following stores are supported:
 </Intro>
 
 Atmos stores are configured in the `atmos.yaml` file and available to use in stacks via the
-[store](/core-concepts/stacks/yaml-functions/store) YAML function.
+[store](/functions/yaml/store) YAML function.
 
 ## CLI Configuration
 
@@ -88,7 +88,7 @@ The Artifactory store supports using an access token for authentication. The acc
 It is also possible to specify the access token as `anonymous` to use the anonymous user to access the Artifactory
 repository if the repository is configured to allow anonymous access.
 
-**NOTE:** Storing sensitive access tokens in plain text in `atmos.yaml` is not secure and should be avoided. However, it's recommended for the `anonymous` use case or when managing multiple Artifactory stores with different access tokens. In such cases, use [`!env`](/core-concepts/stacks/yaml-functions/env) function to reference tokens securely.
+**NOTE:** Storing sensitive access tokens in plain text in `atmos.yaml` is not secure and should be avoided. However, it's recommended for the `anonymous` use case or when managing multiple Artifactory stores with different access tokens. In such cases, use [`!env`](/functions/yaml/env) function to reference tokens securely.
 YAML function to set the access token from an environment variable.
 
 ### Azure Key Vault

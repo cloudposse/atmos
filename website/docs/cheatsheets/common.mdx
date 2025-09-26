@@ -74,11 +74,11 @@ import CardGroup from '@site/src/components/CardGroup'
     ```shell
     atmos validate component $component -s $stack
     atmos validate component $component -s $stack --schema-type jsonschema --schema-path $component.json
-    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego 
+    atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego
     atmos validate component $component -s $stack --schema-type opa --schema-path $component.rego  --module-paths catalog
     atmos validate component $component -s $stack --timeout 15
     ```
-    </Card>    
+    </Card>
 </CardGroup>
 
 <CardGroup title="Workflows" className="cheatsheet">
@@ -94,7 +94,7 @@ import CardGroup from '@site/src/components/CardGroup'
     ```shell
     atmos terraform plan
     ```
-    </Card> 
+    </Card>
     <Card title="Apply Root Modules">
     ```shell
     atmos terraform apply $component --stack $stack

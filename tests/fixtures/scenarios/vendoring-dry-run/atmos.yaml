@@ -15,5 +15,3 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_pattern: "{stage}"
-  
-

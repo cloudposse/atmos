@@ -1,0 +1,44 @@
+# This simulates what would happen with !include tags and deep merging
+# The import system in Atmos works similarly to how !include would work
+
+import:
+  # First, import base network configuration
+  - path: "shared/network.yaml"
+  
+  # Import the mixin (simulating !include behavior)
+  - path: "mixins/subnet-config.yaml"
+    # In Atmos, we can specify how to merge
+    context:
+      component_type: "terraform"
+      component: "vpc"
+      type: "vars"
+
+vars:
+  stage: "include-test"
+  environment: "validation"
+  
+components:
+  terraform:
+    vpc:
+      vars:
+        name: "include-test-vpc"
+        cidr_block: "10.0.0.0/16"
+        
+        # This attempts to override the imported subnet array with a string
+        # simulating what might happen with !include and merge conflicts
+        subnets: "10.0.50.0/24,10.0.51.0/24,10.0.52.0/24"
+        
+        # Deep nested merge conflict
+        network_config:
+          availability_zones:
+            # Trying to merge incompatible structure
+            count: 3  # Number when expecting array
+            
+    vpc-secondary:
+      vars:
+        name: "secondary-vpc"
+        # Import the subnet config but try to override with incompatible type
+        subnets:
+          count: 3
+          base_cidr: "10.1.0.0/16"
+          size: "/24"

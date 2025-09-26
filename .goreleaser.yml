@@ -15,7 +15,7 @@ builds:
       - 'darwin'
       - 'freebsd'
       - 'windows'
-    goarch: 
+    goarch:
       - 'amd64'
       - 'arm64'
       - '386'
@@ -44,7 +44,7 @@ release:
   make_latest: false
   name_template: '{{.Tag}}'
   target_commitish: "{{ .Branch }}"
-  prerelease: auto 
+  prerelease: auto
 ## ----- DO NOT CHANGE ----- ##
 
 changelog:

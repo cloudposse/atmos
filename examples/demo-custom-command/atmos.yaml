@@ -56,7 +56,7 @@ commands:
     - name: location
       shorthand: l
       description: >-
-        Fetch the weather for a specific location. Works with airport codes. 
+        Fetch the weather for a specific location. Works with airport codes.
         Make sure to properly URL encode the location, if not using an airport code.
         --location "LAX"
       required: true

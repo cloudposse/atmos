@@ -13,31 +13,31 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-In Atmos, every component is associated with a command. The command is what drives or provisions that component. 
-For example, [Terraform "root modules"](/core-concepts/components/terraform) can be used as components in Atmos. 
+In Atmos, every component is associated with a command. The command is what drives or provisions that component.
+For example, [Terraform "root modules"](/core-concepts/components/terraform) can be used as components in Atmos.
 To instruct Atmos how to interact with that component, we must specify the command to run and and where the code
 for the component is located. Then, depending on the type of component, certain behaviors can be configured.
 </Intro>
 
-The `components` section of the `atmos.yaml` is how we do it. It defines how Atmos locates and executes your components. 
-Think of it as the bootstrapping configuration.  This is where we can define the the `command` to run, 
+The `components` section of the `atmos.yaml` is how we do it. It defines how Atmos locates and executes your components.
+Think of it as the bootstrapping configuration.  This is where we can define the the `command` to run,
 the `base_path` location of the components, and so forth.
 
 
 :::important
-Do not confuse this configuration with [configuring components in stacks](/core-concepts/stacks/define-components). 
-This configuration below is defined in the `atmos.yaml` and meant for specifying default behaviors for components, 
+Do not confuse this configuration with [configuring components in stacks](/core-concepts/stacks/define-components).
+This configuration below is defined in the `atmos.yaml` and meant for specifying default behaviors for components,
 such as what command to use when running Terraform commands, the base path for Terraform, and more.
 :::
 
 ## Terraform Component Behavior
 
-For additional details on configuring Terraform components, refer to the [Terraform](/core-concepts/projects/configuration/terraform) 
+For additional details on configuring Terraform components, refer to the [Terraform](/core-concepts/projects/configuration/terraform)
 and [OpenTofu](/core-concepts/projects/configuration/opentofu) documentation.
 
 
 :::note Disambiguation
-The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the 
+The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
 HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
 :::
 
@@ -166,10 +166,10 @@ components:
 <dl>
   <dt>`command`</dt>
   <dd>
-    Specifies the executable to be called by `atmos` when running Helmfile commands. 
-    If not defined, `helmfile` is used. Can also be set using `ATMOS_COMPONENTS_HELMFILE_COMMAND` ENV var, 
-    or `--helmfile-command` command-line argument. 
-  
+    Specifies the executable to be called by `atmos` when running Helmfile commands.
+    If not defined, `helmfile` is used. Can also be set using `ATMOS_COMPONENTS_HELMFILE_COMMAND` ENV var,
+    or `--helmfile-command` command-line argument.
+
     Example values: `helmfile`, `/usr/local/bin/helmfile`.
   </dd>
 
@@ -177,27 +177,27 @@ components:
   <dd>
     Base path to the Helmfile components.
 
-    Example value: "components/helmfile". Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var, 
-    or `--helmfile-dir` command-line argument. 
+    Example value: "components/helmfile". Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var,
+    or `--helmfile-dir` command-line argument.
     Supports both absolute and relative paths.
   </dd>
 
   <dt>`use_eks`</dt>
   <dd>
-    If not specified, defaults to `true`. 
+    If not specified, defaults to `true`.
     Can also be set using `ATMOS_COMPONENTS_HELMFILE_USE_EKS` ENV var.
   </dd>
 
   <dt>`kubeconfig_path`</dt>
   <dd>
-    Can also be set using `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH` ENV var. 
+    Can also be set using `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH` ENV var.
     Example value: `/dev/shm`.
   </dd>
 
   <dt>`helm_aws_profile_pattern`</dt>
   <dd>
-    Can also be set using `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN` ENV var. 
-    Example value:  
+    Can also be set using `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN` ENV var.
+    Example value:
     ```
     {namespace}-{tenant}-{gbl}-{stage}-helm
     ```
@@ -205,8 +205,8 @@ components:
 
   <dt>`cluster_name_pattern`</dt>
   <dd>
-    Can also be set using   ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN` ENV var. 
-    Example value: 
+    Can also be set using   ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN` ENV var.
+    Example value:
     ```
     {namespace}-{tenant}-{environment}-{stage}-eks-cluster`
     ```
