@@ -1,0 +1,16 @@
+- component: comp1
+  component_type: ""
+  component_path: ""
+  stack: stack1
+  stack_slug: ""
+  dependents: []
+  included_in_dependents: false
+  settings: {}
+- component: comp2
+  component_type: ""
+  component_path: ""
+  stack: stack2
+  stack_slug: ""
+  dependents: []
+  included_in_dependents: false
+  settings: {}
