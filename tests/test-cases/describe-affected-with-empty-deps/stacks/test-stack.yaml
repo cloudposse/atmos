@@ -1,0 +1,30 @@
+vars:
+  stage: test-stack
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      settings:
+        # This depends_on has mixed entries - some with file/folder, some without
+        # This configuration previously caused "lstat : no such file or directory" error
+        depends_on:
+          1:
+            # This entry has a file dependency
+            file: "components/terraform/mixins/common.tf"
+          2:
+            # This entry only has a component dependency (no file or folder)
+            # This is what caused the bug
+            component: "vpc-flow-logs-bucket"
+          3:
+            # Another entry with a folder dependency
+            folder: "components/terraform/shared"
+      vars:
+        name: "test-vpc"
+        
+    vpc-flow-logs-bucket:
+      metadata:
+        component: vpc-flow-logs-bucket
+      vars:
+        name: "test-bucket"

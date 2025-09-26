@@ -310,6 +310,124 @@ func TestIsComponentFolderChanged(t *testing.T) {
 	}
 }
 
+func TestIsComponentDependentFolderOrFileChanged_HandlesEmptyFileAndFolder(t *testing.T) {
+	// Test case where depends_on has multiple entries:
+	// 1st entry has a file field
+	// 2nd entry has only component field (no file/folder) - this causes the bug
+	deps := schema.DependsOn{
+		"1": schema.Context{
+			File: "components/terraform/mixins/test.tf",
+		},
+		"2": schema.Context{
+			Component: "some-component",
+			// File and Folder are empty strings - this is the problematic case
+		},
+	}
+
+	changedFiles := []string{"components/terraform/mixins/test.tf"}
+
+	// This should not panic or return an error about "lstat : no such file or directory"
+	isChanged, changeType, changedItem, err := isComponentDependentFolderOrFileChanged(changedFiles, deps)
+
+	assert.NoError(t, err, "Should handle entries without file/folder gracefully")
+	assert.True(t, isChanged, "Should detect the change in first entry")
+	assert.Equal(t, "file", changeType)
+	assert.Equal(t, "components/terraform/mixins/test.tf", changedItem)
+}
+
+func TestIsComponentDependentFolderOrFileChanged_MixedDependencies(t *testing.T) {
+	// Test with folder in first entry, empty in second, file in third
+	deps := schema.DependsOn{
+		"1": schema.Context{
+			Folder: "components/terraform/vpc",
+		},
+		"2": schema.Context{
+			Component: "only-component",
+			// No file or folder
+		},
+		"3": schema.Context{
+			File: "components/terraform/mixins/common.tf",
+		},
+	}
+
+	testCases := []struct {
+		name               string
+		changedFiles       []string
+		expectedIsChanged  bool
+		expectedChangeType string
+		expectedItem       string
+	}{
+		{
+			name:               "folder changed",
+			changedFiles:       []string{"components/terraform/vpc/main.tf"},
+			expectedIsChanged:  true,
+			expectedChangeType: "folder",
+			expectedItem:       "components/terraform/vpc",
+		},
+		{
+			name:               "file changed",
+			changedFiles:       []string{"components/terraform/mixins/common.tf"},
+			expectedIsChanged:  true,
+			expectedChangeType: "file",
+			expectedItem:       "components/terraform/mixins/common.tf",
+		},
+		{
+			name:               "no relevant changes",
+			changedFiles:       []string{"unrelated/file.tf"},
+			expectedIsChanged:  false,
+			expectedChangeType: "",
+			expectedItem:       "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			isChanged, changeType, changedItem, err := isComponentDependentFolderOrFileChanged(tc.changedFiles, deps)
+
+			assert.NoError(t, err, "Should not return error for mixed dependencies")
+			assert.Equal(t, tc.expectedIsChanged, isChanged)
+			assert.Equal(t, tc.expectedChangeType, changeType)
+			assert.Equal(t, tc.expectedItem, changedItem)
+		})
+	}
+}
+
+func TestIsComponentDependentFolderOrFileChanged_OnlyComponentDependencies(t *testing.T) {
+	// Test where all entries only have component field (no file/folder)
+	deps := schema.DependsOn{
+		"1": schema.Context{
+			Component: "vpc",
+		},
+		"2": schema.Context{
+			Component: "vpc-flow-logs-bucket",
+		},
+	}
+
+	changedFiles := []string{"some/random/file.tf"}
+
+	// Should handle gracefully and return false (no file/folder dependencies to check)
+	isChanged, changeType, changedItem, err := isComponentDependentFolderOrFileChanged(changedFiles, deps)
+
+	assert.NoError(t, err, "Should not error when no file/folder dependencies exist")
+	assert.False(t, isChanged, "Should return false when no file/folder dependencies")
+	assert.Equal(t, "", changeType)
+	assert.Equal(t, "", changedItem)
+}
+
+func TestIsComponentDependentFolderOrFileChanged_EmptyDependsOn(t *testing.T) {
+	// Test with empty DependsOn map
+	deps := schema.DependsOn{}
+
+	changedFiles := []string{"some/file.tf"}
+
+	isChanged, changeType, changedItem, err := isComponentDependentFolderOrFileChanged(changedFiles, deps)
+
+	assert.NoError(t, err, "Should handle empty DependsOn")
+	assert.False(t, isChanged)
+	assert.Equal(t, "", changeType)
+	assert.Equal(t, "", changedItem)
+}
+
 func TestAppendToAffected(t *testing.T) {
 	t.Run("should add new affected component", func(t *testing.T) {
 		// Setup
