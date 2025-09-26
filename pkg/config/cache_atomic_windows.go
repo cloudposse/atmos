@@ -43,6 +43,10 @@ func writeFileAtomicWindows(filename string, data []byte, perm os.FileMode) erro
 	}
 	tmpFile = nil // Mark as closed for defer cleanup.
 
+	// Apply the requested permissions to the temporary file.
+	// This is best-effort on Windows - we ignore chmod errors.
+	_ = os.Chmod(tmpName, perm)
+
 	// On Windows, we need to remove the target file first if it exists.
 	// This is because Windows doesn't allow renaming over an existing file.
 	if _, err := os.Stat(filename); err == nil {
