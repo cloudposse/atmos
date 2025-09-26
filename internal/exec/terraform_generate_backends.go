@@ -91,6 +91,7 @@ func ExecuteTerraformGenerateBackends(
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var authSection map[string]any
 	var hooksSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
@@ -152,6 +153,10 @@ func ExecuteTerraformGenerateBackends(
 					providersSection = map[string]any{}
 				}
 
+				if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+					authSection = map[string]any{}
+				}
+
 				if hooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
 					hooksSection = map[string]any{}
 				}
@@ -181,6 +186,7 @@ func ExecuteTerraformGenerateBackends(
 					ComponentVarsSection:      varsSection,
 					ComponentSettingsSection:  settingsSection,
 					ComponentEnvSection:       envSection,
+					ComponentAuthSection:      authSection,
 					ComponentProvidersSection: providersSection,
 					ComponentHooksSection:     hooksSection,
 					ComponentOverridesSection: overridesSection,

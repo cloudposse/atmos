@@ -508,7 +508,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if err != nil {
 		t.Fatalf("Failed to create temporary directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tempDir) // Clean up the temporary directory after the test
 
 	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
 	// This ensures every test has its own cache and prevents interference

@@ -12,6 +12,7 @@ tests:
       diff: []
       stdout:
         - "Available Commands:"
+        - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"
         - "\\bcompletion\\b"
@@ -20,7 +21,9 @@ tests:
         - "\\bhelmfile\\b"
         - "\\bhelp\\b"
         - "\\blist\\b"
+        - "\\bpacker\\b"
         - "\\bpro\\b"
+        - "\\bsupport\\b"
         - "\\bterraform\\b"
         - "\\bvalidate\\b"
         - "\\bvendor\\b"
