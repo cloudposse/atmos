@@ -19,21 +19,21 @@ type spinnerModel struct {
 	done    bool
 }
 
-func initialSpinnerModel(message string) spinnerModel {
+func initialSpinnerModel(message string) *spinnerModel {
 	s := bspinner.New()
 	s.Spinner = bspinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	return spinnerModel{
+	return &spinnerModel{
 		spinner: s,
 		message: message,
 	}
 }
 
-func (m spinnerModel) Init() tea.Cmd {
+func (m *spinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
-func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -51,7 +51,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m spinnerModel) View() string {
+func (m *spinnerModel) View() string {
 	if m.done {
 		return ""
 	}
