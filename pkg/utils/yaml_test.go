@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,6 +27,16 @@ func TestYAMLToMapOfInterfacesRedPath(t *testing.T) {
 }
 
 func TestUnmarshalYAMLFromFile(t *testing.T) {
+	// Start a mock HTTP server to serve the remote file referenced in the test fixture
+	// The fixture at stacks/deploy/nonprod.yaml includes: http://localhost:8080/stacks/deploy/nonprod.yaml
+	remoteConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "remote-config")
+	mockServer := httptest.NewServer(http.FileServer(http.Dir(remoteConfigPath)))
+	defer mockServer.Close()
+
+	// Set the environment variable so the code knows to replace localhost:8080 with the mock server URL
+	os.Setenv("ATMOS_TEST_MOCK_SERVER_URL", mockServer.URL)
+	defer os.Unsetenv("ATMOS_TEST_MOCK_SERVER_URL")
+
 	stacksPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-include-yaml-function")
 	file := filepath.Join(stacksPath, "stacks", "deploy", "nonprod.yaml")
 

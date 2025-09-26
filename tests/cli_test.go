@@ -311,6 +311,11 @@ func sanitizeOutput(output string) (string, error) {
 	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
+	// 9. Normalize mock server port numbers in URLs for consistent testing.
+	// Replace dynamic port numbers in localhost/127.0.0.1 URLs with the standard "localhost:8080".
+	mockServerPortRegex := regexp.MustCompile(`http://(?:localhost|127\.0\.0\.1):\d+`)
+	result = mockServerPortRegex.ReplaceAllString(result, `http://localhost:8080`)
+
 	return result, nil
 }
 
@@ -450,6 +455,12 @@ func TestMain(m *testing.M) {
 	logger.Info("Starting directory", "dir", startingDir)
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
+
+	// Start mock HTTP server for remote imports
+	mockServerURL := StartMockHTTPServer()
+	defer StopMockHTTPServer()
+	os.Setenv("ATMOS_TEST_MOCK_SERVER_URL", mockServerURL)
+	logger.Info("Mock HTTP server started", "url", mockServerURL)
 
 	flag.Parse()        // Parse command-line flags
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
@@ -659,6 +670,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			continue
 		}
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
+	}
+	// Always pass the mock server URL if it's set, so remote imports work in tests
+	if mockURL := os.Getenv("ATMOS_TEST_MOCK_SERVER_URL"); mockURL != "" {
+		envVars = append(envVars, fmt.Sprintf("ATMOS_TEST_MOCK_SERVER_URL=%s", mockURL))
 	}
 	cmd.Env = envVars
 

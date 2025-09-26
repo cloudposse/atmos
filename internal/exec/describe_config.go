@@ -33,7 +33,7 @@ type describeConfigExec struct {
 func NewDescribeConfig(atmosConfig *schema.AtmosConfiguration) *describeConfigExec {
 	return &describeConfigExec{
 		atmosConfig:           atmosConfig,
-		pageCreator:           pager.New(),
+		pageCreator:           pager.NewFromAtmosConfig(atmosConfig),
 		printOrWriteToFile:    printOrWriteToFile,
 		IsTTYSupportForStdout: term.IsTTYSupportForStdout,
 	}
@@ -60,7 +60,7 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 		case nil:
 			return nil
 		default:
-			log.Debug("Failed to use pager")
+			log.Debug("Failed to use pager", "error", err)
 		}
 	}
 	return d.printOrWriteToFile(d.atmosConfig, format, output, res)

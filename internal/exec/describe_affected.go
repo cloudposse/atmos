@@ -213,6 +213,11 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 
 // Execute executes `describe affected` command.
 func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
+	// Update pageCreator with the loaded atmosConfig settings, but only if not already set (for testing)
+	if d.pageCreator == nil {
+		d.pageCreator = pager.NewFromAtmosConfig(a.CLIConfig)
+	}
+
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
@@ -352,7 +357,7 @@ func viewWithScroll(v *viewWithScrollProps) error {
 		case nil:
 			return nil
 		default:
-			log.Debug("Failed to use pager")
+			log.Debug("Failed to use pager", "error", err)
 		}
 	}
 

@@ -28,7 +28,7 @@ docs:
       base-dir: .
       input:
         - "./README-local.yaml"
-        - "https://raw.githubusercontent.com/cloudposse/atmos/main/README.yaml"
+        - "http://localhost:8080/docs/README.yaml"
         - name: "inline map"
           description: "inline override: description"
           github_repo: "Inline override: testing inline merge"

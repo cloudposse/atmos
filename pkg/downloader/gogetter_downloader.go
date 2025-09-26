@@ -2,6 +2,8 @@ package downloader
 
 import (
 	"context"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -26,8 +28,16 @@ type goGetterClientFactory struct {
 
 // NewClient creates a new `go-getter` client.
 func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string, mode ClientMode) (DownloadClient, error) {
+	// Replace localhost:8080 with actual mock server URL during testing
+	actualSrc := src
+	if mockURL := os.Getenv("ATMOS_TEST_MOCK_SERVER_URL"); mockURL != "" { //nolint:forbidigo // Test-only environment variable
+		if strings.HasPrefix(src, "http://localhost:8080") {
+			actualSrc = strings.Replace(src, "http://localhost:8080", mockURL, 1)
+		}
+	}
+
 	clientMode := getter.ClientModeAny
-	registerCustomDetectors(f.atmosConfig, src)
+	registerCustomDetectors(f.atmosConfig, actualSrc)
 	switch mode {
 	case ClientModeAny:
 		clientMode = getter.ClientModeAny
@@ -39,7 +49,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 
 	client := &getter.Client{
 		Ctx:             ctx,
-		Src:             src,
+		Src:             actualSrc,
 		Dst:             dest,
 		Mode:            clientMode,
 		DisableSymlinks: false,

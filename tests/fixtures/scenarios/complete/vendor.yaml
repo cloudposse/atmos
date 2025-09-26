@@ -1,5 +1,4 @@
 # atmos vendor pull
-# atmos vendor pull --component vpc-mixin-1
 # atmos vendor pull -c vpc-mixin-2
 # atmos vendor pull -c vpc-mixin-3
 # atmos vendor pull -c vpc-mixin-4
@@ -59,9 +58,11 @@ spec:
         - test
         - storage
     - component: "vpc-mixin-1"
-      source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf"
+      # Using CloudPosse's terraform-null-label repository instead of localhost
+      # This component validates vendoring of a single file from a GitHub repository
+      source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/variables.tf"
       targets:
-        - "components/terraform/infra/vpc3"
+        - "components/terraform/infra/vpc2/variables_from_github.tf"
       # Tags can be used to vendor component that have the specific tags
       # `atmos vendor pull --tags test`
       # Refer to https://atmos.tools/cli/commands/vendor/pull

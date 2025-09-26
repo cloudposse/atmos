@@ -128,9 +128,18 @@ func isRemoteImport(importPath string) bool {
 
 // Process remote imports.
 func processRemoteImport(basePath, importPath, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
-	parsedURL, err := url.Parse(importPath)
+	// In test mode, replace localhost:8080 with actual mock server URL
+	actualURL := importPath
+	if mockURL := os.Getenv("ATMOS_TEST_MOCK_SERVER_URL"); mockURL != "" { //nolint:forbidigo // Test-only environment variable
+		if strings.HasPrefix(importPath, "http://localhost:8080") {
+			actualURL = strings.Replace(importPath, "http://localhost:8080", mockURL, 1)
+			log.Debug("replaced localhost URL for testing", "original", importPath, "actual", actualURL)
+		}
+	}
+
+	parsedURL, err := url.Parse(actualURL)
 	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
-		log.Debug("unsupported URL", "URL", importPath, "error", err)
+		log.Debug("unsupported URL", "URL", actualURL, "error", err)
 		return nil, err
 	}
 

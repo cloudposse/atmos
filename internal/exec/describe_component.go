@@ -63,6 +63,11 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		return err
 	}
 
+	// Update pageCreator with the loaded atmosConfig settings, but only if not already set (for testing)
+	if d.pageCreator == nil {
+		d.pageCreator = pager.NewFromAtmosConfig(&atmosConfig)
+	}
+
 	componentSection, err := d.executeDescribeComponent(
 		component,
 		stack,
@@ -93,7 +98,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		case nil:
 			return nil
 		default:
-			log.Debug("Failed to use pager")
+			log.Debug("Failed to use pager", "error", err)
 		}
 	}
 
