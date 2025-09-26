@@ -11,8 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFinalCommandMergingBehavior demonstrates the final working behavior.
-func TestFinalCommandMergingBehavior(t *testing.T) {
+// TestCommandMergeCore validates the core command merging functionality,
+// ensuring that commands from imported configurations are properly merged
+// with local commands, and that local commands can override imported ones.
+func TestCommandMergeCore(t *testing.T) {
 	tests := []struct {
 		name        string
 		setupFiles  map[string]string
