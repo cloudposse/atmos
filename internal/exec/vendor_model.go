@@ -606,7 +606,6 @@ func executeDiffCheck(p *pkgVendorDiff, atmosConfig *schema.AtmosConfiguration) 
 
 		// Otherwise, check for updates using the existing logic
 		updateAvailable, latestInfo, err := checkForVendorUpdates(p.source, true)
-
 		if err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("Error checking for updates - %v", err),
