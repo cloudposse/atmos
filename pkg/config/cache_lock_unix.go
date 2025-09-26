@@ -18,7 +18,9 @@ func init() {
 }
 
 func withCacheFileLockUnix(cacheFile string, fn func() error) error {
-	lock := flock.New(cacheFile)
+	// Use a dedicated lock file to prevent lock loss during atomic rename.
+	lockPath := cacheFile + ".lock"
+	lock := flock.New(lockPath)
 	// Try to acquire lock but don't retry too many times
 	// This prevents hanging tests on systems with different locking semantics.
 	const maxRetries = 3 // Only retry 3 times with 10ms between
@@ -54,7 +56,9 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 
 	// Use file locking to prevent reading while another process is writing
 	// Use TryRLock to avoid blocking indefinitely which can cause deadlocks in PTY tests.
-	lock := flock.New(cacheFile)
+	// Use a dedicated lock file to prevent lock loss during atomic rename.
+	lockPath := cacheFile + ".lock"
+	lock := flock.New(lockPath)
 	locked, err := lock.TryRLock()
 	if err != nil {
 		return cfg, fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheLocked, err)
@@ -71,6 +75,11 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 	v := viper.New()
 	v.SetConfigFile(cacheFile)
 	if err := v.ReadInConfig(); err != nil {
+		// If the config file doesn't exist, return empty config (no error)
+		// This matches the Windows fallback behavior and test expectations.
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			return cfg, nil
+		}
 		return cfg, fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheRead, err)
 	}
 	if err := v.Unmarshal(&cfg); err != nil {
