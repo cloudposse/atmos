@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -153,8 +154,16 @@ func (r *AtmosRunner) BinaryPath() string {
 
 // Cleanup removes temporary binary.
 func (r *AtmosRunner) Cleanup() {
-	if r.coverDir != "" && r.binaryPath != "" && filepath.Dir(r.binaryPath) == os.TempDir() {
-		os.Remove(r.binaryPath)
+	if r.coverDir != "" && r.binaryPath != "" {
+		// Check if binary is in temp directory by checking if it starts with temp dir path.
+		tempDir := os.TempDir()
+		binaryDir := filepath.Dir(r.binaryPath)
+		// Clean paths for comparison.
+		tempDir = filepath.Clean(tempDir)
+		binaryDir = filepath.Clean(binaryDir)
+		if binaryDir == tempDir || strings.HasPrefix(binaryDir, tempDir+string(filepath.Separator)) {
+			os.Remove(r.binaryPath)
+		}
 	}
 }
 
