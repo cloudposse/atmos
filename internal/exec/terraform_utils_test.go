@@ -147,7 +147,8 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraformAffected': %v", err)
 	}
 
-	w.Close()
+	err = w.Close()
+	assert.NoError(t, err)
 	os.Stderr = oldStd
 }
 
@@ -195,7 +196,8 @@ func TestExecuteTerraformQuery(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraformQuery': %v", err)
 	}
 
-	w.Close()
+	err = w.Close()
+	assert.NoError(t, err)
 	os.Stderr = oldStd
 }
 

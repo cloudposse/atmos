@@ -86,14 +86,14 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	defer func() {
-		w.Close()
-		os.Stdout = oldStdout
-	}()
 	err = ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
+	// Restore stdout
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stdout = oldStdout
 
 	// Read the captured output
 	var buf bytes.Buffer
@@ -182,14 +182,14 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	defer func() {
-		w.Close()
-		os.Stdout = oldStdout
-	}()
 	err = ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
+	// Restore stdout
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stdout = oldStdout
 
 	// Read the captured output
 	var buf bytes.Buffer
@@ -250,14 +250,14 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	defer func() {
-		w.Close()
-		os.Stdout = oldStdout
-	}()
 	err = ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
+	// Restore stdout
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stdout = oldStdout
 
 	// Read the captured output
 	var buf bytes.Buffer
@@ -323,14 +323,14 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	defer func() {
-		w.Close()
-		os.Stdout = oldStdout
-	}()
 	err = ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
+	// Restore stdout
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stdout = oldStdout
 
 	// Read the captured output
 	var buf bytes.Buffer
@@ -425,10 +425,6 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
-	defer func() {
-		w.Close()
-		os.Stderr = oldStderr
-	}()
 
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(w)
@@ -437,6 +433,10 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
+	// Restore stderr
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stderr = oldStderr
 
 	// Read the captured output
 	var buf bytes.Buffer
@@ -549,15 +549,15 @@ func TestExecuteTerraform_Version(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
-			defer func() {
-				w.Close()
-				os.Stdout = oldStdout
-			}()
 
 			err = ExecuteTerraform(info)
 			if err != nil {
 				t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 			}
+			// Restore stdout
+			err = w.Close()
+			assert.NoError(t, err)
+			os.Stdout = oldStdout
 
 			// Read the captured output
 			var buf bytes.Buffer
@@ -598,10 +598,6 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
-	defer func() {
-		w.Close()
-		os.Stderr = oldStderr
-	}()
 
 	log.SetLevel(log.DebugLevel)
 
@@ -613,6 +609,10 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
+	// Restore stderr
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stderr = oldStderr
 
 	// Read the captured output
 	_, err = buf.ReadFrom(r)
