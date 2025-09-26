@@ -55,5 +55,9 @@ internal/exec/output.*
 
 # Coverage files
 **.out
+coverage*.out
 coverage.html
+coverage.*.tmp
+coverage/
+.gocoverdir/
 tests.test
