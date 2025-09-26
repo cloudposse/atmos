@@ -26,7 +26,7 @@ func IsAppendTag(tag string) bool {
 // HasAppendTag checks if a value has the append tag metadata.
 // This is used during merging to determine if a list should be appended.
 func HasAppendTag(value any) bool {
-	// Check if the value is a map with append metadata
+	// Check if the value is a map with append metadata.
 	if m, ok := value.(map[string]any); ok {
 		if _, hasAppend := m["__atmos_append__"]; hasAppend {
 			return true

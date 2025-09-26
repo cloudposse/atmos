@@ -165,6 +165,9 @@ var (
 	ErrInvalidFormat  = errors.New("invalid format")
 	ErrOutputFormat   = errors.New("output format error")
 
+	// File operation errors.
+	ErrRefusingToDeleteSymlink = errors.New("refusing to delete symbolic link")
+
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")
 	ErrNonStringElement = errors.New("element is not a string")
