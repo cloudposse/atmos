@@ -69,8 +69,8 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	// Inject token if available.
 	d.injectToken(parsedURL, host)
 
-	// Adjust subdirectory if needed.
-	d.adjustSubdir(parsedURL, d.source)
+	// Note: URI normalization (including adding //.) is now handled by normalizeVendorURI
+	// in the vendor processing pipeline, so we don't need to adjust subdirectory here
 
 	// Set "depth=1" for a shallow clone if not specified.
 	q := parsedURL.Query()
@@ -215,15 +215,10 @@ func (d *CustomGitDetector) getDefaultUsername(host string) string {
 	}
 }
 
-// adjustSubdir appends "//." to the path if no subdirectory is specified.
+// adjustSubdir is deprecated and no longer used.
+// URI normalization is now handled by normalizeVendorURI in the vendor processing pipeline.
+// This function is kept for backward compatibility but does nothing.
+// TODO: Remove this function in a future version after ensuring no external dependencies.
 func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
-	normalizedSource := filepath.ToSlash(source)
-	if normalizedSource != "" && !strings.Contains(normalizedSource, "//") {
-		parts := strings.SplitN(parsedURL.Path, "/", 4)
-		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
-			maskedSrc, _ := maskBasicAuth(source)
-			log.Debug("Detected top-level repo with no subdir: appending '//.'", keyURL, maskedSrc)
-			parsedURL.Path += "//."
-		}
-	}
+	// No-op: normalization is handled earlier in the pipeline
 }
