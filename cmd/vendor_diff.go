@@ -1,20 +1,25 @@
 package cmd
 
 import (
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
 // vendorDiffCmd executes 'vendor diff' CLI commands.
+// DEPRECATED: Use 'atmos vendor update --check' instead.
 var vendorDiffCmd = &cobra.Command{
 	Use:                "diff",
-	Short:              "Show differences in vendor configurations or dependencies",
-	Long:               "This command compares and displays the differences in vendor-specific configurations or dependencies.",
+	Short:              "Show differences in vendor configurations or dependencies (DEPRECATED: use 'vendor update --check')",
+	Long:               "This command compares and displays the differences in vendor-specific configurations or dependencies.\n\nDEPRECATED: This command is deprecated. Please use 'atmos vendor update --check' instead.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Hidden:             true, // Hide from help output
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
-		// TODO: There was no documentation here:https://atmos.tools/cli/commands/vendor we need to know what this command requires to check if we should add usage help
+
+		// Print deprecation notice
+		log.Warn("'atmos vendor diff' is deprecated. Please use 'atmos vendor update --check' instead.")
 
 		// Check Atmos configuration
 		checkAtmosConfig()
