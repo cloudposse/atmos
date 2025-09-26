@@ -151,7 +151,8 @@
     "list": {
       "format": "",
       "columns": null
-    }
+    },
+    "policy": {}
   },
   "initialized": true,
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",

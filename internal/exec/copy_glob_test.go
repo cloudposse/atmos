@@ -608,7 +608,7 @@ func TestCopyToTargetWithPatterns(t *testing.T) {
 		IncludedPaths: []string{"**/*.test"},
 		ExcludedPaths: []string{"**/skip.test"},
 	}
-	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
+	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false, nil); err != nil {
 		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dstDir, "sub", "keep.test")); os.IsNotExist(err) {
@@ -639,7 +639,7 @@ func TestCopyToTargetWithPatterns_NoPatterns(t *testing.T) {
 		IncludedPaths: []string{},
 		ExcludedPaths: []string{},
 	}
-	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
+	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false, nil); err != nil {
 		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dstDir, "file.txt")); os.IsNotExist(err) {
@@ -671,7 +671,7 @@ func TestCopyToTargetWithPatterns_LocalFileBranch(t *testing.T) {
 		IncludedPaths: []string{"**/*.txt"},
 		ExcludedPaths: []string{},
 	}
-	if err := copyToTargetWithPatterns(srcDir, targetFile, dummy, true); err != nil {
+	if err := copyToTargetWithPatterns(srcDir, targetFile, dummy, true, nil); err != nil {
 		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
 	}
 	if _, err := os.Stat(targetFile); os.IsNotExist(err) {
@@ -913,7 +913,7 @@ func TestCopyToTargetWithPatterns_UseCpCopy(t *testing.T) {
 		IncludedPaths: []string{},
 		ExcludedPaths: []string{},
 	}
-	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
+	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false, nil); err != nil {
 		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
 	}
 	if !called {

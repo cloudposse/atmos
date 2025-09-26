@@ -14,6 +14,17 @@ Atmos is a sophisticated Go CLI tool for managing complex cloud infrastructure u
 - **Vendoring system** for external components
 - **Terminal UI** with rich interactive components
 
+## Product Requirements Documents (PRDs)
+
+**Important**: Check the `prd/` directory for design decisions and requirements for features. PRDs contain:
+- Problem statements and goals
+- User stories and acceptance criteria
+- Design decisions with alternatives considered
+- Technical specifications
+- Implementation plans
+
+When implementing features, consult relevant PRDs first to understand the full context and requirements.
+
 ## Essential Commands
 
 ### Development Workflow
@@ -338,6 +349,11 @@ Use fixtures in `tests/test-cases/` for integration tests. Each test case should
 - If you need to update golden snapshots, do so intentionally and document the reason
 
 ## Common Development Tasks
+
+### Adding New Features or Major Changes
+1. **Check for existing PRDs** in `prd/` directory for design decisions and requirements
+2. **Create a PRD** for significant features following the template in `prd/`
+3. Follow the implementation plan outlined in the relevant PRD
 
 ### Adding New CLI Command
 1. Create `cmd/new_command.go` with Cobra command definition

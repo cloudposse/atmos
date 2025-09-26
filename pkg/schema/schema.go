@@ -740,8 +740,16 @@ type ComponentManifest struct {
 type Vendor struct {
 	// Path to vendor configuration file or directory containing vendor files
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
-	BasePath string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	List     ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	BasePath string       `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	List     ListConfig   `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	Policy   VendorPolicy `yaml:"policy,omitempty" json:"policy,omitempty" mapstructure:"policy"`
+}
+
+// VendorPolicy defines security policies for vendor operations.
+type VendorPolicy struct {
+	// Symlinks defines how symlinks are handled during vendoring.
+	// Options: "allow_safe" (default), "reject_all", "allow_all"
+	Symlinks string `yaml:"symlinks,omitempty" json:"symlinks,omitempty" mapstructure:"symlinks"`
 }
 
 type ChromaStyle struct {

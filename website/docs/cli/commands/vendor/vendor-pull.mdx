@@ -220,6 +220,141 @@ When resolving Git sources, Atmos follows these rules:
 2. If a **repository name** is provided without a scheme (`github.com/org/repo.git`), it defaults to `https://`, and if a token is set, it is injected into the URL.
 3. If a **username and repository name** are provided in SCP format (`git@github.com:org/repo.git`), it is rewritten as an SSH URL.
 
+## Configuration in `atmos.yaml`
+
+The vendoring behavior can be configured in your `atmos.yaml` file to control various aspects of how Atmos handles vendor operations.
+
+### Symlink Security Configuration
+
+Atmos provides configurable security policies for handling symbolic links during vendoring operations. This protects against symlink attacks (CVE-2025-8959) where malicious repositories could use symlinks to access files outside the intended directory boundaries.
+
+#### Setting the Symlink Policy
+
+Configure the symlink security policy in your `atmos.yaml` file:
+
+```yaml
+vendor:
+  policy:
+    symlinks: "allow_safe"  # Default: validates symlink targets
+```
+
+Or using dot notation:
+
+```yaml
+vendor:
+  policy.symlinks: "allow_safe"
+```
+
+#### Available Symlink Policies
+
+<dl>
+  <dt>`allow_safe` (default)</dt>
+  <dd>
+    Validates that symlink targets remain within the vendor source boundaries. This policy:
+    - Allows symlinks that point to files within the repository
+    - Blocks symlinks that attempt to escape to parent directories or system files
+    - Logs warnings when symlinks are rejected for security reasons
+    - Provides balanced security while maintaining functionality for legitimate use cases
+  </dd>
+
+  <dt>`reject_all`</dt>
+  <dd>
+    Maximum security mode that skips all symlinks during vendoring. This policy:
+    - Ignores all symlinks without following them
+    - Provides the highest level of security
+    - May break functionality if components depend on legitimate symlinks
+    - Recommended when vendoring from completely untrusted sources
+  </dd>
+
+  <dt>`allow_all`</dt>
+  <dd>
+    Legacy behavior that follows all symlinks without validation. This policy:
+    - Follows all symlinks as in previous Atmos versions
+    - Does not perform any security validation
+    - Should only be used with fully trusted internal sources
+    - Not recommended for public or third-party repositories
+  </dd>
+</dl>
+
+#### Security Best Practices
+
+1. **Use default settings for most cases**: The `allow_safe` policy provides good protection while maintaining functionality.
+
+2. **Maximum security for untrusted sources**: When vendoring from public or untrusted repositories, use:
+   ```yaml
+   vendor:
+     policy:
+       symlinks: "reject_all"
+   ```
+
+3. **Monitor security logs**: Watch for warnings about rejected symlinks:
+   ```shell
+   atmos vendor pull --component vpc
+   # Look for warnings like:
+   # WARN Symlink rejected - target outside boundary
+   ```
+
+4. **Review vendor sources**: Audit repositories before vendoring and prefer trusted, versioned sources.
+
+#### Examples
+
+**Secure Configuration for Public Sources:**
+
+```yaml
+# atmos.yaml
+vendor:
+  policy:
+    symlinks: "reject_all"  # Maximum security for untrusted sources
+
+# Example vendor.yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: "vpc"
+      source: "github.com/public-repo/terraform-modules//vpc"
+```
+
+**Balanced Configuration for Mixed Sources:**
+
+```yaml
+# atmos.yaml
+vendor:
+  policy:
+    symlinks: "allow_safe"  # Validate symlinks (default)
+
+# This will:
+# - Allow symlinks like: ./shared/common.tf -> ../modules/common.tf
+# - Block symlinks like: ./evil.tf -> /etc/passwd
+# - Block symlinks like: ./bad.tf -> ../../../../etc/shadow
+```
+
+#### Attack Patterns Prevented
+
+The `allow_safe` and `reject_all` policies protect against:
+
+- **Directory traversal**: Symlinks using `../` to escape boundaries
+- **Absolute paths**: Symlinks pointing to system files like `/etc/passwd`
+- **Boundary escapes**: Any symlink that resolves outside the vendor source directory
+
+#### Troubleshooting Symlinks
+
+If legitimate symlinks are being rejected:
+
+1. Verify the symlinks stay within the repository boundaries
+2. Consider restructuring components to avoid external symlinks
+3. For trusted internal sources only, you may use `allow_all` with caution
+
+:::warning Security Notice
+The symlink security feature addresses CVE-2025-8959. Always use `allow_safe` or `reject_all` when vendoring from external or untrusted sources to prevent potential security vulnerabilities.
+:::
+
+### Additional Configuration Options
+
+Additional vendor-related configuration options can be set in `atmos.yaml`. This section will be expanded as new configuration options are added.
+
+<!-- Future configuration sections can be added here -->
+
 
 :::note
 For more details on configuration, refer to [Atmos Configuration](/cli/configuration).

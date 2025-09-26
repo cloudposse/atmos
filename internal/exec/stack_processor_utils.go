@@ -632,8 +632,9 @@ func ProcessYAMLConfigFileWithContext(
 	// Deep-merge the stack manifest and all the imports
 	stackConfigsDeepMerged, err := m.MergeWithContext(atmosConfig, stackConfigs, mergeContext)
 	if err != nil {
-		// The error already contains context information from MergeWithContext
-		return nil, nil, nil, nil, nil, nil, nil, err
+		// Wrap error with static error for consistency, but preserve context from MergeWithContext
+		err2 := fmt.Errorf("%w: ProcessYAMLConfigFile: Deep-merge the stack manifest and all the imports: %v", errUtils.ErrMerge, err)
+		return nil, nil, nil, nil, nil, nil, nil, err2
 	}
 
 	return stackConfigsDeepMerged,
