@@ -1,12 +1,12 @@
 package exec
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 // TestYamlFuncTerraformOutputWithNewlines tests that terraform.output preserves newlines in output values.
@@ -74,12 +74,8 @@ func TestYamlFuncTerraformOutputWithNewlines(t *testing.T) {
 
 // TestYamlFuncTerraformOutputIntegration tests the full integration with ExecuteDescribeComponent.
 func TestYamlFuncTerraformOutputIntegration(t *testing.T) {
-	// Skip if we don't have terraform/tofu available.
-	if _, err := os.Stat("/usr/local/bin/tofu"); os.IsNotExist(err) {
-		if _, err := os.Stat("/usr/local/bin/terraform"); os.IsNotExist(err) {
-			t.Skipf("Skipping integration test: neither terraform nor tofu is available")
-		}
-	}
+	// Skip if terraform is not available in PATH.
+	tests.RequireTerraformInPath(t)
 
 	// This would be a more comprehensive integration test
 	// that actually runs terraform and verifies the outputs.

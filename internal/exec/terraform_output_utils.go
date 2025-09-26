@@ -465,6 +465,15 @@ func GetStaticRemoteStateOutput(
 	remoteStateSection map[string]any,
 	output string,
 ) any {
+	// Direct key lookup to preserve formatting and avoid yq when not needed.
+	if v, ok := remoteStateSection[output]; ok {
+		log.Debug("Directly returning static remote state output without yq processing",
+			"component", component,
+			"stack", stack,
+			outputLogKey, output)
+		return v
+	}
+
 	val := output
 	if !strings.HasPrefix(output, ".") {
 		val = "." + val

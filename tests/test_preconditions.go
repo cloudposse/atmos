@@ -333,3 +333,19 @@ func RequireOCIAuthentication(t *testing.T) {
 	// Token exists, log that authentication is available
 	t.Logf("OCI authentication available via GitHub token")
 }
+
+// RequireTerraformInPath checks if terraform is available in the system PATH.
+// It skips the test if terraform is not found.
+func RequireTerraformInPath(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check if terraform is in PATH using exec.LookPath
+	_, err := exec.LookPath("terraform")
+	if err != nil {
+		t.Skipf("terraform binary not found in PATH: required for terraform operations. Install terraform or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+}
