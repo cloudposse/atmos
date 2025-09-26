@@ -1,0 +1,106 @@
+---
+title: Atmos Functions
+sidebar_position: 1
+sidebar_label: Functions
+sidebar_class_name: hidden
+id: index
+description: Atmos Functions
+collapsible: true
+collapsed: false
+---
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos provides two types of functions for dynamic configuration: **YAML Functions** (recommended) and **Template Functions**. Understanding the difference is crucial for writing reliable, maintainable configurations.
+</Intro>
+
+## Critical Differences
+
+### YAML Functions (Recommended) ✅
+
+YAML functions are **native YAML features** that work with the YAML parser. They are processed **after** the YAML is parsed into a structured document.
+
+**Advantages:**
+- **Type-safe**: Work with actual YAML data types (strings, numbers, booleans, objects, arrays)
+- **Error-resistant**: Cannot break YAML syntax since they operate on parsed data
+- **Predictable**: Results are always valid YAML structures
+- **Debuggable**: Errors point to specific YAML nodes
+- **Native**: Part of the YAML specification via custom tags
+
+**Example:**
+```yaml
+# Safe and predictable - the function receives and returns proper YAML types
+vpc_id: !terraform.output vpc.vpc_id
+environment: !env AWS_ENVIRONMENT
+config: !include common-config.yaml
+```
+
+### Template Functions (Use with Caution) ⚠️
+
+Template functions use Go's text templating to **manipulate the raw text** before YAML parsing. They operate on the document as a string, not as structured data.
+
+**Disadvantages:**
+- **Error-prone**: Can easily generate invalid YAML syntax
+- **Type-unsafe**: Work with text, not data types
+- **Fragile**: Whitespace and indentation issues are common
+- **Hard to debug**: Errors appear as YAML parsing failures
+- **Side effects**: Can accidentally modify unintended parts of the document
+
+**Example of potential issues:**
+```yaml
+# DANGEROUS - template functions can break YAML structure
+# If the template returns multi-line text or special characters, YAML parsing fails
+value: {{ atmos.Component "vpc" .stack }}  # May break if output contains colons or newlines
+```
+
+## Best Practices
+
+:::warning
+**Always prefer YAML functions over template functions when possible.** Template functions should only be used when absolutely necessary for complex logic that cannot be achieved with YAML functions.
+:::
+
+### When to Use YAML Functions
+- Reading Terraform outputs: Use `!terraform.output` or `!terraform.state`
+- Including external files: Use `!include`
+- Environment variables: Use `!env`
+- External data stores: Use `!store`
+- Command execution: Use `!exec`
+
+### When Template Functions Might Be Necessary
+- Complex conditional logic that requires if/else statements
+- Loops and iteration over data structures
+- String manipulation that requires Go template functions
+- Dynamic key generation in YAML structures
+
+### Safety Guidelines for Template Functions
+
+If you must use template functions:
+
+1. **Test thoroughly** - Template errors often only appear with specific input values
+2. **Keep templates simple** - Complex templates are hard to debug
+3. **Validate output** - Ensure generated YAML is always valid
+4. **Use proper escaping** - Handle special characters in template outputs
+5. **Document extensively** - Explain why templates are needed and what they do
+6. **Consider alternatives** - Can you restructure to use YAML functions instead?
+
+## Function Categories
+
+<DocCardList/>
+
+## Migration Path
+
+If you have existing template functions, consider migrating to YAML functions:
+
+| Instead of (Template) | Use (YAML) |
+|----------------------|------------|
+| `{{ exec "command" }}` | `!exec command` |
+| `{{ env "VAR" }}` | `!env VAR` |
+| `{{ toJson .values }}` | Native YAML structures |
+| Reading outputs via templates | `!terraform.output` or `!terraform.state` |
+
+## Performance Considerations
+
+- **YAML functions** are generally faster as they work with parsed data structures
+- **Template functions** require an additional pre-processing step before YAML parsing
+- **`!terraform.state`** is the fastest way to read Terraform outputs (10-100x faster than `!terraform.output`)
