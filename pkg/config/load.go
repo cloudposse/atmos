@@ -29,6 +29,8 @@ const (
 	MaximumImportLvL = 10
 	// CommandsKey is the configuration key for commands.
 	commandsKey = "commands"
+	// YamlType is the configuration file type.
+	yamlType = "yaml"
 )
 
 var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
@@ -280,7 +282,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 	tempViper := viper.New()
 	tempViper.AddConfigPath(path)
 	tempViper.SetConfigName(fileName)
-	tempViper.SetConfigType("yaml")
+	tempViper.SetConfigType(yamlType)
 
 	if err := tempViper.ReadInConfig(); err != nil {
 		// Return sentinel error unwrapped for type checking
@@ -306,11 +308,20 @@ func readConfigFileContent(configFilePath string) ([]byte, error) {
 
 // processConfigImportsAndReapply processes imports and re-applies the original config for proper precedence.
 func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content []byte) error {
+	// Parse the main config to get its commands separately.
+	mainViper := viper.New()
+	mainViper.SetConfigType(yamlType)
+	if err := mainViper.ReadConfig(bytes.NewReader(content)); err != nil {
+		return fmt.Errorf("parse main config: %w", err)
+	}
+	mainCommands := mainViper.Get(commandsKey)
+
 	// Process default imports (e.g., .atmos.d) first.
 	// These don't need the main config to be loaded.
 	if err := mergeDefaultImports(path, tempViper); err != nil {
 		log.Debug("error process default imports", "path", path, "error", err)
 	}
+	defaultCommands := tempViper.Get(commandsKey)
 
 	// Now load the main config temporarily to process explicit imports.
 	// We need this because the import paths are defined in the main config.
@@ -318,15 +329,17 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		return fmt.Errorf("merge main config: %w", err)
 	}
 
+	// Clear commands before processing imports to collect only imported commands.
+	tempViper.Set(commandsKey, nil)
+
 	// Process explicit imports.
 	// This will read the import paths from the config and process them.
 	if err := mergeImports(tempViper); err != nil {
 		log.Debug("error process explicit imports", "file", tempViper.ConfigFileUsed(), "error", err)
 	}
 
-	// At this point, tempViper has imported settings merged in.
-	// The commands might be a mix of main + imported due to mergeConfigFile logic.
-	allMergedCommands := tempViper.Get(commandsKey)
+	// Get imported commands (without main commands).
+	importedCommands := tempViper.Get(commandsKey)
 
 	// Re-apply this config file's content after processing its imports.
 	// This ensures proper precedence: each config file's own settings override
@@ -335,9 +348,28 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		return fmt.Errorf("re-apply main config: %w", err)
 	}
 
-	// After re-applying, arrays including commands have been replaced with main config values.
-	// We need to restore the merged commands.
-	tempViper.Set(commandsKey, allMergedCommands)
+	// Now merge commands in the correct order with proper override behavior:
+	// 1. Default imports (.atmos.d)
+	// 2. Explicit imports
+	// 3. Main config (overrides imports on duplicates)
+	var finalCommands interface{}
+
+	// Start with defaults
+	if defaultCommands != nil {
+		finalCommands = defaultCommands
+	}
+
+	// Add imported, with imported overriding defaults on duplicates
+	if importedCommands != nil {
+		finalCommands = mergeCommandArrays(finalCommands, importedCommands)
+	}
+
+	// Add main, with main overriding all others on duplicates
+	if mainCommands != nil {
+		finalCommands = mergeCommandArrays(finalCommands, mainCommands)
+	}
+
+	tempViper.Set(commandsKey, finalCommands)
 
 	return nil
 }
@@ -516,25 +548,30 @@ func mergeConfigFile(
 	// Save existing commands before merge.
 	existingCommands := v.Get(commandsKey)
 
-	// Do the normal merge (which replaces arrays).
+	// Parse the new file to get its commands.
+	// We need to do this because viper.MergeConfig doesn't overwrite arrays.
+	tempViper := viper.New()
+	tempViper.SetConfigType(yamlType)
+	err = tempViper.ReadConfig(bytes.NewReader(content))
+	if err != nil {
+		return err
+	}
+	newCommands := tempViper.Get(commandsKey)
+
+	// Do the normal merge for all other settings (non-array values).
+	// This preserves viper's merge behavior for nested maps.
 	err = v.MergeConfig(bytes.NewReader(content))
 	if err != nil {
 		return err
 	}
 
-	// After merge, check if we need to merge commands.
-	// The new config's commands have replaced the existing ones.
-	if existingCommands != nil {
-		currentCommands := v.Get(commandsKey)
-		if currentCommands != nil {
-			// Both have commands - merge them.
-			// Existing commands first, then new commands.
-			merged := mergeCommandArrays(existingCommands, currentCommands)
-			v.Set(commandsKey, merged)
-		} else {
-			// New config has no commands, restore existing.
-			v.Set(commandsKey, existingCommands)
-		}
+	// Now handle command merging manually.
+	// Merge commands: when duplicates exist, the file being processed (new) takes precedence.
+	// This ensures local/main config can override imported/remote commands.
+	if existingCommands != nil || newCommands != nil {
+		// Second parameter wins on duplicates, so new commands override existing
+		merged := mergeCommandArrays(existingCommands, newCommands)
+		v.Set(commandsKey, merged)
 	}
 
 	err = preprocessAtmosYamlFunc(content, v)
@@ -547,10 +584,12 @@ func mergeConfigFile(
 
 // mergeCommandArrays merges two command arrays, appending new commands to existing ones.
 // This allows imports to extend commands rather than replace them.
-// It also deduplicates commands based on their names.
-func mergeCommandArrays(existing, new interface{}) []interface{} {
-	var result []interface{}
-	seenNames := make(map[string]bool)
+// When duplicates exist based on name, the second parameter takes precedence (override behavior).
+// This ensures local commands can override imported/remote commands.
+func mergeCommandArrays(first, second interface{}) []interface{} {
+	// Build a map of commands by name, with later entries overriding earlier ones.
+	commandMap := make(map[string]interface{})
+	var orderedNames []string
 
 	// Helper function to process a command list.
 	processCommands := func(commands interface{}) {
@@ -566,20 +605,33 @@ func mergeCommandArrays(existing, new interface{}) []interface{} {
 			}
 
 			name, ok := cmdMap["name"].(string)
-			if !ok || seenNames[name] {
+			if !ok {
 				continue
 			}
 
-			seenNames[name] = true
-			result = append(result, cmd)
+			// If this name hasn't been seen before, track its order.
+			if _, exists := commandMap[name]; !exists {
+				orderedNames = append(orderedNames, name)
+			}
+
+			// Store or override the command.
+			commandMap[name] = cmd
 		}
 	}
 
-	// Process existing commands first.
-	processCommands(existing)
+	// Process first set (will be overridden by second if duplicates).
+	processCommands(first)
 
-	// Process new commands.
-	processCommands(new)
+	// Process second set (overrides first if duplicate names).
+	processCommands(second)
+
+	// Build result in the order commands were first seen.
+	var result []interface{}
+	for _, name := range orderedNames {
+		if cmd, exists := commandMap[name]; exists {
+			result = append(result, cmd)
+		}
+	}
 
 	return result
 }
