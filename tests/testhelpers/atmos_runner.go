@@ -15,6 +15,7 @@ import (
 
 const (
 	executablePerm = 0o755 // Permission for executable files.
+	windowsOS      = "windows"
 )
 
 // AtmosRunner manages running Atmos with optional coverage collection.
@@ -25,35 +26,68 @@ type AtmosRunner struct {
 	buildErr   error
 }
 
-// NewAtmosRunner creates a runner that builds Atmos with coverage if GOCOVERDIR is set.
+// NewAtmosRunner creates a runner that always builds Atmos, with or without coverage instrumentation.
 func NewAtmosRunner(coverDir string) *AtmosRunner {
 	return &AtmosRunner{
 		coverDir: coverDir,
 	}
 }
 
-// Build builds Atmos with coverage instrumentation if needed.
+// Build always builds Atmos, with or without coverage instrumentation.
 func (r *AtmosRunner) Build() error {
 	r.buildOnce.Do(func() {
-		if r.coverDir == "" {
-			r.buildErr = r.useExistingBinary()
-			return
+		if r.coverDir != "" {
+			// Ensure coverage directory exists.
+			if err := os.MkdirAll(r.coverDir, executablePerm); err != nil {
+				r.buildErr = fmt.Errorf("failed to create coverage directory: %w", err)
+				return
+			}
+			r.buildErr = r.buildWithCoverage()
+		} else {
+			r.buildErr = r.buildWithoutCoverage()
 		}
-		// Ensure coverage directory exists.
-		if err := os.MkdirAll(r.coverDir, executablePerm); err != nil {
-			r.buildErr = fmt.Errorf("failed to create coverage directory: %w", err)
-			return
-		}
-		r.buildErr = r.buildWithCoverage()
 	})
 	return r.buildErr
+}
+
+// buildWithoutCoverage builds Atmos without coverage instrumentation.
+func (r *AtmosRunner) buildWithoutCoverage() error {
+	tempBinary := filepath.Join(os.TempDir(), fmt.Sprintf("atmos-test-%d", os.Getpid()))
+	// Add .exe extension on Windows.
+	if runtime.GOOS == windowsOS {
+		tempBinary += ".exe"
+	}
+	// Build from the repository root.
+	repoRoot, err := findRepoRoot()
+	if err != nil {
+		return fmt.Errorf("failed to find repository root: %w", err)
+	}
+
+	cmd := exec.Command("go", "build", "-o", tempBinary, ".")
+	cmd.Dir = repoRoot
+
+	// Run the build command.
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to build atmos: %w\nOutput: %s", err, output)
+	}
+
+	// Make the binary executable (Unix only, Windows doesn't need this).
+	if runtime.GOOS != windowsOS {
+		if err := os.Chmod(tempBinary, executablePerm); err != nil {
+			return fmt.Errorf("failed to make binary executable: %w", err)
+		}
+	}
+
+	r.binaryPath = tempBinary
+	return nil
 }
 
 // buildWithCoverage builds Atmos with coverage instrumentation.
 func (r *AtmosRunner) buildWithCoverage() error {
 	tempBinary := filepath.Join(os.TempDir(), fmt.Sprintf("atmos-coverage-%d", os.Getpid()))
 	// Add .exe extension on Windows.
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsOS {
 		tempBinary += ".exe"
 	}
 	// Build from the repository root.
@@ -72,60 +106,13 @@ func (r *AtmosRunner) buildWithCoverage() error {
 	}
 
 	// Make the binary executable (Unix only, Windows doesn't need this).
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != windowsOS {
 		if err := os.Chmod(tempBinary, executablePerm); err != nil {
 			return fmt.Errorf("failed to make binary executable: %w", err)
 		}
 	}
 
 	r.binaryPath = tempBinary
-	return nil
-}
-
-// findBuildAtmos tries to find build/atmos in the git repository.
-func findBuildAtmos() (string, bool) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", false
-	}
-
-	dir := wd
-	for {
-		gitDir := filepath.Join(dir, ".git")
-		if _, err := os.Stat(gitDir); err == nil {
-			// Found git root, check for build/atmos or build/atmos.exe on Windows.
-			buildPath := filepath.Join(dir, "build", "atmos")
-			if runtime.GOOS == "windows" {
-				buildPath += ".exe"
-			}
-			if _, err := os.Stat(buildPath); err == nil {
-				return buildPath, true
-			}
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break // Reached filesystem root.
-		}
-		dir = parent
-	}
-	return "", false
-}
-
-// useExistingBinary looks for an existing atmos binary, preferring build/atmos.
-func (r *AtmosRunner) useExistingBinary() error {
-	// Try to find build/atmos first.
-	if buildPath, found := findBuildAtmos(); found {
-		r.binaryPath = buildPath
-		return nil
-	}
-
-	// Fall back to PATH.
-	path, err := exec.LookPath("atmos")
-	if err != nil {
-		return fmt.Errorf("atmos not found in build/ or PATH: %w", err)
-	}
-	r.binaryPath = path
 	return nil
 }
 

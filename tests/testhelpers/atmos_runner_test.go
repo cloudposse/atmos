@@ -248,51 +248,6 @@ func TestAtmosRunner_Cleanup(t *testing.T) {
 	})
 }
 
-func Test_findBuildAtmos(t *testing.T) {
-	t.Run("from repo with build/atmos", func(t *testing.T) {
-		// This test depends on the actual repository structure.
-		path, found := findBuildAtmos()
-
-		// If we're in the atmos repo and build/atmos exists, it should be found.
-		if found {
-			assert.NotEmpty(t, path)
-			assert.Contains(t, path, "build")
-			assert.Contains(t, path, "atmos")
-
-			// Verify file exists.
-			_, err := os.Stat(path)
-			assert.NoError(t, err)
-		}
-	})
-
-	t.Run("from non-git directory", func(t *testing.T) {
-		// Change to temp directory without git.
-		tempDir := t.TempDir()
-		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tempDir)
-
-		path, found := findBuildAtmos()
-		assert.False(t, found)
-		assert.Empty(t, path)
-	})
-
-	t.Run("from git repo without build/atmos", func(t *testing.T) {
-		// Create temp git repo without build/atmos.
-		tempDir := t.TempDir()
-		gitDir := filepath.Join(tempDir, ".git")
-		os.Mkdir(gitDir, 0o755)
-
-		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tempDir)
-
-		path, found := findBuildAtmos()
-		assert.False(t, found)
-		assert.Empty(t, path)
-	})
-}
-
 func Test_findRepoRoot(t *testing.T) {
 	// Save current directory and restore after test.
 	oldWd, err := os.Getwd()
@@ -324,41 +279,46 @@ func Test_findRepoRoot(t *testing.T) {
 	assert.ErrorContains(t, err, "not in a git repository")
 }
 
-func TestAtmosRunner_useExistingBinary(t *testing.T) {
-	t.Run("finds build atmos", func(t *testing.T) {
-		runner := NewAtmosRunner("")
+func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
+	t.Run("successful build", func(t *testing.T) {
+		runner := &AtmosRunner{}
 
-		// Should find atmos in build/ or PATH.
-		err := runner.useExistingBinary()
-
-		// Should succeed if atmos is available.
-		if err == nil {
-			assert.NotEmpty(t, runner.binaryPath)
-
-			// Verify the binary exists.
-			_, statErr := os.Stat(runner.binaryPath)
-			assert.NoError(t, statErr)
+		// Try to build without coverage.
+		err := runner.buildWithoutCoverage()
+		if err != nil {
+			// Skip if build fails (might be missing dependencies).
+			t.Skipf("Skipping build test: %v", err)
 		}
+
+		// Should have created binary.
+		assert.NotEmpty(t, runner.binaryPath)
+		assert.FileExists(t, runner.binaryPath)
+
+		// Binary should be in temp directory.
+		assert.Contains(t, runner.binaryPath, os.TempDir())
+		assert.Contains(t, runner.binaryPath, "atmos-test")
+
+		// Should have correct extension on Windows.
+		if runtime.GOOS == "windows" {
+			assert.Contains(t, runner.binaryPath, ".exe")
+		}
+
+		// Cleanup.
+		os.Remove(runner.binaryPath)
 	})
 
-	t.Run("fallback to PATH when no build/atmos", func(t *testing.T) {
-		// Create a temp directory without build/atmos.
+	t.Run("handles missing repo root", func(t *testing.T) {
+		// Change to directory without git repo.
 		tempDir := t.TempDir()
 		oldWd, _ := os.Getwd()
 		defer os.Chdir(oldWd)
 		os.Chdir(tempDir)
 
 		runner := &AtmosRunner{}
-		err := runner.useExistingBinary()
 
-		// Should either find in PATH or error.
-		if err != nil {
-			assert.Contains(t, err.Error(), "atmos not found in build/ or PATH")
-		} else {
-			// Found in PATH.
-			assert.NotEmpty(t, runner.binaryPath)
-			assert.NotContains(t, runner.binaryPath, "build")
-		}
+		err := runner.buildWithoutCoverage()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to find repository root")
 	})
 }
 
@@ -381,6 +341,7 @@ func TestAtmosRunner_buildWithCoverage(t *testing.T) {
 
 		// Binary should be in temp directory.
 		assert.Contains(t, runner.binaryPath, os.TempDir())
+		assert.Contains(t, runner.binaryPath, "atmos-coverage")
 
 		// Should have correct extension on Windows.
 		if runtime.GOOS == "windows" {
@@ -440,21 +401,6 @@ func TestAtmosRunner_CoverageIntegration(t *testing.T) {
 }
 
 func TestAtmosRunner_ErrorPaths(t *testing.T) {
-	t.Run("missing binary in PATH", func(t *testing.T) {
-		runner := &AtmosRunner{}
-
-		// Temporarily modify PATH to exclude atmos.
-		oldPath := os.Getenv("PATH")
-		os.Setenv("PATH", "/nonexistent")
-		defer os.Setenv("PATH", oldPath)
-
-		// Should fail to find binary if build/atmos doesn't exist.
-		err := runner.useExistingBinary()
-		if _, found := findBuildAtmos(); !found {
-			assert.Error(t, err)
-		}
-	})
-
 	t.Run("build with invalid go module", func(t *testing.T) {
 		runner := &AtmosRunner{
 			coverDir: t.TempDir(),
