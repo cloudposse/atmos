@@ -8,7 +8,7 @@ import (
 )
 
 // vendorDiffCmd executes 'vendor diff' CLI commands.
-// DEPRECATED: Use 'atmos vendor update --check' instead.
+// Deprecated: Use 'atmos vendor update --check' instead.
 var vendorDiffCmd = &cobra.Command{
 	Use:                "diff",
 	Short:              "Show differences in vendor configurations or dependencies (DEPRECATED: use 'vendor update --check')",

@@ -21,7 +21,11 @@ type CacheConfig struct {
 }
 
 func GetCacheFilePath() (string, error) {
-	xdgCacheHome := os.Getenv("XDG_CACHE_HOME")
+	// Bind environment variables
+	_ = viper.BindEnv("XDG_CACHE_HOME")
+	_ = viper.BindEnv("ATMOS_XDG_CACHE_HOME", "XDG_CACHE_HOME")
+
+	xdgCacheHome := viper.GetString("XDG_CACHE_HOME")
 	var cacheDir string
 	if xdgCacheHome == "" {
 		cacheDir = filepath.Join(".", ".atmos")
@@ -42,7 +46,11 @@ func withCacheFileLock(cacheFile string, fn func() error) error {
 	if err != nil {
 		return errors.Wrap(err, "error acquiring file lock")
 	}
-	defer lock.Unlock()
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			log.Warn("failed to release file lock", "error", unlockErr)
+		}
+	}()
 	return fn()
 }
 

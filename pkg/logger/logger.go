@@ -21,7 +21,13 @@ const (
 	LogLevelWarning LogLevel = "Warning"
 )
 
-// logLevelOrder defines the order of log levels from most verbose to least verbose
+// Constants for logger operations.
+const (
+	defaultLogFileMode = 0o644
+	logFormatString    = "%s\n"
+)
+
+// logLevelOrder defines the order of log levels from most verbose to least verbose.
 var logLevelOrder = map[LogLevel]int{
 	LogLevelTrace:   0,
 	LogLevelDebug:   1,
@@ -67,39 +73,40 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 
 func (l *Logger) log(logColor *color.Color, message string) {
 	if l.File != "" {
-		if l.File == "/dev/stdout" {
+		switch l.File {
+		case "/dev/stdout":
 			_, err := logColor.Fprintln(os.Stdout, message)
 			if err != nil {
-				color.Red("%s\n", err)
+				color.Red(logFormatString, err)
 			}
-		} else if l.File == "/dev/stderr" {
+		case "/dev/stderr":
 			_, err := logColor.Fprintln(os.Stderr, message)
 			if err != nil {
-				color.Red("%s\n", err)
+				color.Red(logFormatString, err)
 			}
-		} else {
-			f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+		default:
+			f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, defaultLogFileMode)
 			if err != nil {
-				color.Red("%s\n", err)
+				color.Red(logFormatString, err)
 				return
 			}
 
 			defer func(f *os.File) {
 				err = f.Close()
 				if err != nil {
-					color.Red("%s\n", err)
+					color.Red(logFormatString, err)
 				}
 			}(f)
 
-			_, err = f.Write([]byte(fmt.Sprintf("%s\n", message)))
+			_, err = f.Write([]byte(fmt.Sprintf(logFormatString, message)))
 			if err != nil {
-				color.Red("%s\n", err)
+				color.Red(logFormatString, err)
 			}
 		}
 	} else {
 		_, err := logColor.Fprintln(os.Stdout, message)
 		if err != nil {
-			color.Red("%s\n", err)
+			color.Red(logFormatString, err)
 		}
 	}
 }
@@ -114,14 +121,14 @@ func (l *Logger) Error(err error) {
 		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
 			color.Red("Error logging the error:")
-			color.Red("%s\n", err2)
+			color.Red(logFormatString, err2)
 			color.Red("Original error:")
-			color.Red("%s\n", err)
+			color.Red(logFormatString, err)
 		}
 	}
 }
 
-// isLevelEnabled checks if a given log level should be enabled based on the logger's current level
+// isLevelEnabled checks if a given log level should be enabled based on the logger's current level.
 func (l *Logger) isLevelEnabled(level LogLevel) bool {
 	if l.LogLevel == LogLevelOff {
 		return false

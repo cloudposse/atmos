@@ -361,13 +361,14 @@ func (m *modelVendor) View() string {
 				}
 			}
 
-			if updateCount > 0 {
+			switch {
+			case updateCount > 0:
 				return doneStyle.Render(fmt.Sprintf("Found %d updates. Use --update flag to update the vendor configuration file.\n", updateCount))
-			} else if m.packages[0].diffPackage.outdatedOnly {
+			case m.packages[0].diffPackage.outdatedOnly:
 				// For --outdated mode with no updates, this shouldn't normally be shown
 				// (pre-filter should have caught it), but just in case
 				return doneStyle.Render("No outdated vendor dependencies found.\n")
-			} else {
+			default:
 				return doneStyle.Render("All vendor dependencies are up to date!\n")
 			}
 		}

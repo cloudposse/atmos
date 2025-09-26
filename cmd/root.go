@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 

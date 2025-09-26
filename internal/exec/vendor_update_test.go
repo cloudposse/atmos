@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -75,7 +76,7 @@ func TestCheckForVendorUpdates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Skip templated versions
-			if IsTemplatedVersion(tt.source.Version) {
+			if strings.Contains(tt.source.Version, "{{") {
 				assert.False(t, tt.expectUpdate)
 				return
 			}
@@ -251,26 +252,6 @@ func TestFilterSources(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expected, componentNames)
-		})
-	}
-}
-
-func TestIsTemplatedVersion(t *testing.T) {
-	tests := []struct {
-		version   string
-		templated bool
-	}{
-		{"1.0.0", false},
-		{"{{.Version}}", true},
-		{"v{{.Major}}.{{.Minor}}", true},
-		{"main", false},
-		{"", false},
-		{"{{ .Version }}", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.version, func(t *testing.T) {
-			assert.Equal(t, tt.templated, IsTemplatedVersion(tt.version))
 		})
 	}
 }

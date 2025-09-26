@@ -288,11 +288,12 @@ func executeVendorDiff(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 	filteredSources := filterSources(sources, flg.Component, flg.Tags)
 
 	if len(filteredSources) == 0 {
-		if flg.Component != "" {
+		switch {
+		case flg.Component != "":
 			fmt.Printf("No vendor sources found for component: %s\n", flg.Component)
-		} else if len(flg.Tags) > 0 {
+		case len(flg.Tags) > 0:
 			fmt.Printf("No vendor sources found for tags: %v\n", flg.Tags)
-		} else {
+		default:
 			fmt.Println("No vendor sources found")
 		}
 		return nil
@@ -300,128 +301,6 @@ func executeVendorDiff(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 
 	// Compare versions and display differences - pass the main vendor config file path
 	return compareAndDisplayVendorDiffs(filteredSources, flg.Update, flg.Outdated, foundVendorConfigFile)
-}
-
-// filterSources filters vendor sources based on component name and tags.
-func filterSources(sources []schema.AtmosVendorSource, component string, tags []string) []schema.AtmosVendorSource {
-	var filtered []schema.AtmosVendorSource
-
-	for _, source := range sources {
-		// If component is specified, only include matching components
-		if component != "" && source.Component != component {
-			continue
-		}
-
-		// If tags are specified, only include sources that have at least one matching tag
-		if len(tags) > 0 {
-			hasMatchingTag := false
-			for _, tag := range tags {
-				for _, sourceTag := range source.Tags {
-					if tag == sourceTag {
-						hasMatchingTag = true
-						break
-					}
-				}
-				if hasMatchingTag {
-					break
-				}
-			}
-			if !hasMatchingTag {
-				continue
-			}
-		}
-
-		filtered = append(filtered, source)
-	}
-
-	return filtered
-}
-
-// compareAndDisplayVendorDiffs compares local and remote versions and displays differences.
-func compareAndDisplayVendorDiffs(sources []schema.AtmosVendorSource, updateVendorFile bool, outdatedOnly bool, vendorConfigFile string) error {
-	// Print header immediately
-	fmt.Println("Checking for vendor updates...")
-	fmt.Println()
-
-	// For --outdated, we'll check all components but only display the outdated ones
-	// This allows us to show the progress bar correctly
-
-	// Convert sources to pkgVendorDiff packages for the reused vendor system
-	diffPackages := make([]pkgVendorDiff, 0, len(sources))
-	for _, source := range sources {
-		componentName := source.Component
-		if componentName == "" {
-			componentName = extractComponentNameFromSource(source.Source)
-		}
-
-		currentVersion := source.Version
-		if currentVersion == "" {
-			currentVersion = "latest"
-		}
-
-		// Create the diff package
-		diffPackages = append(diffPackages, pkgVendorDiff{
-			name:           componentName,
-			currentVersion: currentVersion,
-			source:         source,
-			outdatedOnly:   outdatedOnly, // Pass the outdatedOnly flag through to each component
-		})
-	}
-
-	// Use the existing vendor model infrastructure with our diff packages
-	// This gives us the same progress bar, spinner, and TUI system as vendor pull
-	err := executeVendorModel(diffPackages, true, &schema.AtmosConfiguration{})
-	if err != nil {
-		return fmt.Errorf("failed to check vendor updates: %w", err)
-	}
-
-	// If --update flag was used, we need to collect results and update the vendor file
-	if updateVendorFile {
-		if vendorConfigFile == "" {
-			fmt.Println("\nWarning: Cannot update vendor configuration - file path unknown")
-			return nil
-		}
-
-		// Collect update information
-		updatedVersions := make(map[string]string)
-		updateCount := 0
-
-		fmt.Println("\nCollecting update information...")
-
-		for _, source := range sources {
-			componentName := source.Component
-			if componentName == "" {
-				componentName = extractComponentNameFromSource(source.Source)
-			}
-
-			// Check for updates using the existing logic
-			updateAvailable, latestInfo, err := checkForVendorUpdates(source, true)
-			if err != nil {
-				continue // Skip components with errors
-			}
-
-			if updateAvailable && latestInfo != "" {
-				updatedVersions[componentName] = latestInfo
-				updateCount++
-			}
-		}
-
-		if updateCount > 0 {
-			fmt.Printf("Updating the vendor configuration file with %d updates...\n", updateCount)
-
-			// Update the vendor configuration file with the latest versions
-			if err := updateVendorConfigFile(updatedVersions, vendorConfigFile); err != nil {
-				fmt.Printf("Error updating vendor configuration file: %v\n", err)
-				return err
-			}
-
-			fmt.Printf("Successfully updated %d components in %s\n", updateCount, vendorConfigFile)
-		} else {
-			fmt.Println("No updates to apply to the vendor configuration file.")
-		}
-	}
-
-	return nil
 }
 
 // extractComponentNameFromSource extracts a component name from a source URL.
@@ -467,18 +346,19 @@ func checkForVendorUpdates(source schema.AtmosVendorSource, _ bool) (bool, strin
 	}
 
 	// Check for updates based on source type using go-getter patterns
-	if useOciScheme {
+	switch {
+	case useOciScheme:
 		return checkOciUpdates(uri, currentVersion)
-	} else if useLocalFileSystem {
+	case useLocalFileSystem:
 		return checkLocalUpdates(uri, sourceIsLocalFile, currentVersion)
-	} else {
+	default:
 		// For remote sources (Git, HTTP, etc.), try Git-based version checking
 		// This covers most remote repositories that have version tags
 		return checkRemoteUpdates(uri, currentVersion)
 	}
 }
 
-// checkRemoteUpdates checks for updates in remote sources (Git, HTTP, etc.) using go-getter patterns
+// checkRemoteUpdates checks for updates in remote sources (Git, HTTP, etc.) using go-getter patterns.
 func checkRemoteUpdates(uri, currentVersion string) (bool, string, error) {
 	// For HTTP/HTTPS URLs that aren't Git repositories, we can't check versions
 	// Only Git-like URLs can be checked for version updates

@@ -57,3 +57,4 @@ internal/exec/output.*
 coverage.out
 coverage.html
 tests.test
+exec.test

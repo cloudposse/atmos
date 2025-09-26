@@ -12,11 +12,6 @@ import (
 )
 
 // Constants for commonly used strings.
-const (
-	componentKey = "component"
-	latestTag    = "latest"
-	gitType      = "git"
-)
 
 // ExecuteVendorUpdateCmd executes `vendor update` commands.
 func ExecuteVendorUpdateCmd(cmd *cobra.Command, args []string) error {
@@ -161,11 +156,12 @@ func executeVendorUpdate(atmosConfig *schema.AtmosConfiguration, flg *VendorFlag
 	filteredSources := filterSources(sources, flg.Component, flg.Tags)
 
 	if len(filteredSources) == 0 {
-		if flg.Component != "" {
+		switch {
+		case flg.Component != "":
 			fmt.Printf("No vendor sources found for component: %s\n", flg.Component)
-		} else if len(flg.Tags) > 0 {
+		case len(flg.Tags) > 0:
 			fmt.Printf("No vendor sources found for tags: %v\n", flg.Tags)
-		} else {
+		default:
 			fmt.Println("No vendor sources found")
 		}
 		return nil
@@ -229,7 +225,8 @@ func processVendorImportsWithFileTracking(
 	}
 
 	// Build the file map from the sources
-	for _, source := range allSources {
+	for i := range allSources {
+		source := &allSources[i]
 		componentName := source.Component
 		if componentName == "" {
 			componentName = extractComponentNameFromSource(source.Source)
@@ -246,6 +243,160 @@ func processVendorImportsWithFileTracking(
 	return allSources, fileMap, nil
 }
 
+// vendorUpdateHelper contains helper methods for vendor update operations.
+type vendorUpdateHelper struct{}
+
+// newVendorUpdateHelper creates a new vendor update helper.
+func newVendorUpdateHelper() *vendorUpdateHelper {
+	return &vendorUpdateHelper{}
+}
+
+// prepareDiffPackages converts vendor sources to diff packages for the TUI.
+func (h *vendorUpdateHelper) prepareDiffPackages(sources []schema.AtmosVendorSource) []pkgVendorDiff {
+	diffPackages := make([]pkgVendorDiff, 0, len(sources))
+
+	for i := range sources {
+		componentName := h.extractComponentName(&sources[i])
+		currentVersion := h.extractCurrentVersion(&sources[i])
+
+		// Skip templated versions
+		if h.isTemplatedVersion(currentVersion) {
+			// Skip silently - logging happens elsewhere
+			continue
+		}
+
+		diffPackages = append(diffPackages, pkgVendorDiff{
+			name:           componentName,
+			currentVersion: currentVersion,
+			source:         sources[i],
+			outdatedOnly:   false,
+		})
+	}
+
+	return diffPackages
+}
+
+// extractComponentName extracts the component name from a vendor source.
+func (h *vendorUpdateHelper) extractComponentName(source *schema.AtmosVendorSource) string {
+	if source.Component != "" {
+		return source.Component
+	}
+	return extractComponentNameFromSource(source.Source)
+}
+
+// extractCurrentVersion extracts the current version from a vendor source.
+func (h *vendorUpdateHelper) extractCurrentVersion(source *schema.AtmosVendorSource) string {
+	if source.Version != "" {
+		return source.Version
+	}
+	return defaultVersionLatest
+}
+
+// isTemplatedVersion checks if a version contains template markers.
+func (h *vendorUpdateHelper) isTemplatedVersion(version string) bool {
+	return strings.Contains(version, templateStartMarker)
+}
+
+// groupUpdatesByFile organizes version updates by configuration file.
+func (h *vendorUpdateHelper) groupUpdatesByFile(
+	sources []schema.AtmosVendorSource,
+	fileMap map[string]string,
+	mainConfigFile string,
+) (map[string]map[string]string, error) {
+	updatesByFile := make(map[string]map[string]string)
+
+	fmt.Println("\nChecking for version updates...")
+
+	for i := range sources {
+		componentName := h.extractComponentName(&sources[i])
+
+		// Skip templated versions
+		if h.isTemplatedVersion(sources[i].Version) {
+			continue
+		}
+
+		// Check for updates
+		updateAvailable, latestVersion, err := checkForVendorUpdates(sources[i], true)
+		if err != nil {
+			// Skip silently - error will be logged elsewhere
+			continue
+		}
+
+		if updateAvailable && latestVersion != "" {
+			configFile := h.determineConfigFile(componentName, fileMap, mainConfigFile)
+			h.addUpdateToFile(updatesByFile, configFile, componentName, latestVersion)
+		}
+	}
+
+	return updatesByFile, nil
+}
+
+// determineConfigFile determines which configuration file to update.
+func (h *vendorUpdateHelper) determineConfigFile(
+	componentName string,
+	fileMap map[string]string,
+	mainConfigFile string,
+) string {
+	if configFile, exists := fileMap[componentName]; exists {
+		return configFile
+	}
+	return mainConfigFile
+}
+
+// addUpdateToFile adds an update to the appropriate file's update map.
+func (h *vendorUpdateHelper) addUpdateToFile(
+	updatesByFile map[string]map[string]string,
+	configFile string,
+	componentName string,
+	latestVersion string,
+) {
+	if updatesByFile[configFile] == nil {
+		updatesByFile[configFile] = make(map[string]string)
+	}
+	updatesByFile[configFile][componentName] = latestVersion
+}
+
+// applyUpdatesToFiles applies version updates to configuration files.
+func (h *vendorUpdateHelper) applyUpdatesToFiles(updatesByFile map[string]map[string]string) error {
+	totalUpdates := 0
+
+	for configFile, updates := range updatesByFile {
+		if len(updates) == 0 {
+			continue
+		}
+
+		fmt.Printf("\nUpdating %d components in %s...\n", len(updates), configFile)
+
+		if err := updateVendorConfigFile(updates, configFile); err != nil {
+			return fmt.Errorf("error updating %s: %w", configFile, err)
+		}
+
+		totalUpdates += len(updates)
+	}
+
+	h.printUpdateSummary(totalUpdates, len(updatesByFile))
+	return nil
+}
+
+// printUpdateSummary prints a summary of the updates performed.
+func (h *vendorUpdateHelper) printUpdateSummary(totalUpdates int, fileCount int) {
+	if totalUpdates > 0 {
+		fmt.Printf("\nSuccessfully updated %d components across %d files\n", totalUpdates, fileCount)
+	} else {
+		fmt.Println("\nAll vendor dependencies are up to date!")
+	}
+}
+
+// printOperationHeader prints the appropriate header for the operation.
+func (h *vendorUpdateHelper) printOperationHeader(dryRun bool) {
+	if dryRun {
+		fmt.Println("Checking for vendor updates...")
+	} else {
+		fmt.Println("Updating vendor configurations...")
+	}
+	fmt.Println()
+}
+
 // checkAndUpdateVendorVersions checks for version updates and optionally updates the files.
 func checkAndUpdateVendorVersions(
 	sources []schema.AtmosVendorSource,
@@ -253,106 +404,30 @@ func checkAndUpdateVendorVersions(
 	dryRun bool,
 	mainConfigFile string,
 ) error {
-	// Print header
-	if dryRun {
-		fmt.Println("Checking for vendor updates...")
-	} else {
-		fmt.Println("Updating vendor configurations...")
-	}
-	fmt.Println()
+	helper := newVendorUpdateHelper()
 
-	// Convert sources to diff packages for the TUI
-	diffPackages := make([]pkgVendorDiff, 0, len(sources))
-	for _, source := range sources {
-		componentName := source.Component
-		if componentName == "" {
-			componentName = extractComponentNameFromSource(source.Source)
-		}
+	// Print operation header
+	helper.printOperationHeader(dryRun)
 
-		currentVersion := source.Version
-		if currentVersion == "" {
-			currentVersion = "latest"
-		}
+	// Prepare diff packages for version checking
+	diffPackages := helper.prepareDiffPackages(sources)
 
-		// Skip templated versions
-		if strings.Contains(currentVersion, "{{") {
-			log.Warn("Skipping templated version", "component", componentName, "version", currentVersion)
-			continue
-		}
-
-		diffPackages = append(diffPackages, pkgVendorDiff{
-			name:           componentName,
-			currentVersion: currentVersion,
-			source:         source,
-			outdatedOnly:   false,
-		})
-	}
-
-	// Use the vendor model TUI to check versions
-	err := executeVendorModel(diffPackages, true, &schema.AtmosConfiguration{})
-	if err != nil {
+	// Execute version check using the TUI model
+	if err := executeVendorModel(diffPackages, true, &schema.AtmosConfiguration{}); err != nil {
 		return fmt.Errorf("failed to check vendor updates: %w", err)
 	}
 
-	// If not dry-run, update the configuration files
-	if !dryRun {
-		// Group updates by file
-		updatesByFile := make(map[string]map[string]string)
-
-		fmt.Println("\nChecking for version updates...")
-
-		for _, source := range sources {
-			componentName := source.Component
-			if componentName == "" {
-				componentName = extractComponentNameFromSource(source.Source)
-			}
-
-			// Skip templated versions
-			if strings.Contains(source.Version, "{{") {
-				continue
-			}
-
-			// Check for updates
-			updateAvailable, latestVersion, err := checkForVendorUpdates(source, true)
-			if err != nil {
-				log.Debug("Error checking updates", componentKey, componentName, "error", err)
-				continue
-			}
-
-			if updateAvailable && latestVersion != "" {
-				// Determine which file to update
-				configFile := fileMap[componentName]
-				if configFile == "" {
-					configFile = mainConfigFile
-				}
-
-				if updatesByFile[configFile] == nil {
-					updatesByFile[configFile] = make(map[string]string)
-				}
-				updatesByFile[configFile][componentName] = latestVersion
-			}
-		}
-
-		// Update each file with its respective updates
-		totalUpdates := 0
-		for configFile, updates := range updatesByFile {
-			if len(updates) > 0 {
-				fmt.Printf("\nUpdating %d components in %s...\n", len(updates), configFile)
-
-				if err := updateVendorConfigFile(updates, configFile); err != nil {
-					return fmt.Errorf("error updating %s: %w", configFile, err)
-				}
-
-				totalUpdates += len(updates)
-			}
-		}
-
-		if totalUpdates > 0 {
-			fmt.Printf("\nSuccessfully updated %d components across %d files\n", totalUpdates, len(updatesByFile))
-		} else {
-			fmt.Println("\nAll vendor dependencies are up to date!")
-		}
+	// If dry-run, we're done
+	if dryRun {
+		return nil
 	}
 
-	return nil
+	// Group updates by configuration file
+	updatesByFile, err := helper.groupUpdatesByFile(sources, fileMap, mainConfigFile)
+	if err != nil {
+		return err
+	}
+
+	// Apply updates to files
+	return helper.applyUpdatesToFiles(updatesByFile)
 }
