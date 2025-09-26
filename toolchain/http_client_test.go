@@ -113,6 +113,7 @@ func TestGitHubAuthenticatedTransport_RoundTrip(t *testing.T) {
 			if resp == nil {
 				t.Fatal("Expected non-nil response")
 			}
+			defer resp.Body.Close()
 
 			// Verify headers
 			if tt.expectAuth {
@@ -121,11 +122,9 @@ func TestGitHubAuthenticatedTransport_RoundTrip(t *testing.T) {
 					t.Errorf("Expected Authorization header %q, got %q",
 						expectedAuth, capturedRequest.Header.Get("Authorization"))
 				}
-			} else {
-				if capturedRequest.Header.Get("Authorization") != "" {
-					t.Errorf("Expected no Authorization header, got %q",
-						capturedRequest.Header.Get("Authorization"))
-				}
+			} else if capturedRequest.Header.Get("Authorization") != "" {
+				t.Errorf("Expected no Authorization header, got %q",
+					capturedRequest.Header.Get("Authorization"))
 			}
 
 			if tt.expectUserAgent {
