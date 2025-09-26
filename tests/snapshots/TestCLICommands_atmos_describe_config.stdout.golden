@@ -67,9 +67,6 @@
         "enabled": false,
         "timeout": 0,
         "datasources": null
-      },
-      "import": {
-        "process_without_context": false
       }
     }
   },

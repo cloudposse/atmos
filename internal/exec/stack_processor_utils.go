@@ -274,9 +274,10 @@ func ProcessYAMLConfigFileWithContext(
 	stackManifestTemplatesProcessed := stackYamlConfig
 	stackManifestTemplatesErrorMessage := ""
 
-	// Process `Go` templates in the imported stack manifest using the provided `context`
+	// Process `Go` templates in the imported stack manifest if it has a template extension
+	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
-	if !skipTemplatesProcessingInImports && (atmosConfig.Templates.Settings.Import.ProcessWithoutContext || len(context) > 0) {
+	if !skipTemplatesProcessingInImports && u.IsTemplateFile(filePath) {
 		stackManifestTemplatesProcessed, err = ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {

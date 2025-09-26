@@ -293,7 +293,6 @@ type TemplatesSettings struct {
 	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
 	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
 	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
-	Import      TemplateSettingsImport    `yaml:"import,omitempty" json:"import,omitempty" mapstructure:"import"`
 }
 
 type TemplatesSettingsSprig struct {
@@ -309,10 +308,6 @@ type TemplatesSettingsGomplate struct {
 	Enabled     bool                                           `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 	Timeout     int                                            `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
 	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
-}
-
-type TemplateSettingsImport struct {
-	ProcessWithoutContext bool `yaml:"process_without_context" json:"process_without_context" mapstructure:"process_without_context"`
 }
 
 type Terraform struct {
