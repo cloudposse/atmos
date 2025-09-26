@@ -257,15 +257,3 @@ atmos command --profiler-enabled --profiler-port=7070
 - **sum%**: Cumulative percentage up to this function
 
 Focus optimization efforts on functions with high **flat** time and high **flat%** percentages.
-
-## Environment Variables
-
-You can also configure profiling through environment variables:
-
-```shell
-export ATMOS_PROFILER_ENABLED=true
-export ATMOS_PROFILER_HOST=localhost
-export ATMOS_PROFILER_PORT=6060
-```
-
-These environment variables will be overridden by CLI flags when specified.
