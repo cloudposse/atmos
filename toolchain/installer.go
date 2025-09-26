@@ -645,7 +645,7 @@ func ExtractTarGz(src, dest string) error {
 			}
 		case tar.TypeReg:
 			// Ensure parent directory exists
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
 			// Create file
