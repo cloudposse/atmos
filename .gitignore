@@ -38,6 +38,9 @@
 .envrc
 .direnv/
 
+# Tool version managers
+.tool-versions
+
 # Ignore cache files
 **/.atmos/cache.yaml
 **/cache.*.txt
