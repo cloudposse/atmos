@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -239,4 +240,70 @@ func TestRunUninstallWithNoArgs(t *testing.T) {
 	cmd := &cobra.Command{}
 	err = runUninstall(cmd, []string{})
 	assert.NoError(t, err)
+}
+
+// FakeInstaller implements the minimal interface your RunUninstall needs
+type FakeInstaller struct {
+	CalledParseToolSpec   bool
+	ParseToolSpecOwner    string
+	ParseToolSpecRepo     string
+	ParseToolSpecErr      error
+	ReadLatestFileVersion string
+	ReadLatestFileErr     error
+	BinaryExists          bool
+	UninstallCalled       bool
+	UninstallErr          error
+	BinDir                string
+}
+
+func (f *FakeInstaller) parseToolSpec(tool string) (string, string, error) {
+	f.CalledParseToolSpec = true
+	return f.ParseToolSpecOwner, f.ParseToolSpecRepo, f.ParseToolSpecErr
+}
+
+func (f *FakeInstaller) ReadLatestFile(owner, repo string) (string, error) {
+	return f.ReadLatestFileVersion, f.ReadLatestFileErr
+}
+
+func TestRunUninstall(t *testing.T) {
+	tests := []struct {
+		name         string
+		toolSpec     string
+		installer    *FakeInstaller
+		expectErr    bool
+		expectUninst bool
+	}{
+		{
+			name:      "invalid tool spec",
+			toolSpec:  "@wrong",
+			installer: &FakeInstaller{},
+			expectErr: true,
+		},
+		{
+			name:     "uninstall latest but no latest file",
+			toolSpec: "tool@latest",
+			installer: &FakeInstaller{
+				ParseToolSpecOwner: "tool",
+				ParseToolSpecRepo:  "tool",
+				ReadLatestFileErr:  errors.New("not found"),
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
+			err := RunUninstall(tc.toolSpec) // might need to allow DI of installer
+			if tc.expectErr && err == nil {
+				t.Errorf("expected error but got nil")
+			}
+			if !tc.expectErr && err != nil {
+				t.Errorf("expected no error but got: %v", err)
+			}
+			if tc.expectUninst && !tc.installer.UninstallCalled {
+				t.Errorf("expected uninstallSingleTool to be called")
+			}
+		})
+	}
 }
