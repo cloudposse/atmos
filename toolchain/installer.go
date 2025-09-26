@@ -1,17 +1,16 @@
 package toolchain
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"text/template"
 	"time"
 
@@ -607,6 +606,66 @@ func Unzip(src, dest string) error {
 	return nil
 }
 
+// ExtractTarGz extracts a .tar.gz file to the given destination directory.
+func ExtractTarGz(src, dest string) error {
+	// Open the source file
+	f, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer f.Close()
+
+	// Create a gzip reader
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gzr.Close()
+
+	// Create a tar reader
+	tr := tar.NewReader(gzr)
+
+	// Iterate through tar entries
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break // End of archive
+		}
+		if err != nil {
+			return fmt.Errorf("error reading tar: %w", err)
+		}
+
+		targetPath := filepath.Join(dest, header.Name)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			// Create directory if it doesn't exist
+			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
+		case tar.TypeReg:
+			// Ensure parent directory exists
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directory: %w", err)
+			}
+			// Create file
+			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return fmt.Errorf("failed to create file: %w", err)
+			}
+			if _, err := io.Copy(outFile, tr); err != nil {
+				outFile.Close()
+				return fmt.Errorf("failed to write file: %w", err)
+			}
+			outFile.Close()
+		default:
+			// Skip special file types
+			fmt.Printf("Skipping unknown type: %s\n", header.Name)
+		}
+	}
+	return nil
+}
+
 // extractTarGz extracts a tar.gz file.
 func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 	log.Debug("Extracting tar.gz archive", "filename", filepath.Base(tarPath))
@@ -617,9 +676,8 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 	}
 	defer os.RemoveAll(tempDir)
 
-	cmd := exec.Command("tar", "-xzf", tarPath, "-C", tempDir)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to extract tar.gz: %w, output: %s", err, string(output))
+	if err = ExtractTarGz(tarPath, tempDir); err != nil {
+		return fmt.Errorf("failed to extract tar.gz: %w", err)
 	}
 
 	binaryName := tool.Name
@@ -658,13 +716,6 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *Tool) error {
 	}
 
 	return nil
-}
-
-func isCrossDeviceError(errno syscall.Errno) bool {
-	if runtime.GOOS == "windows" {
-		return errno == 0x11 // ERROR_NOT_SAME_DEVICE
-	}
-	return errno == syscall.EXDEV
 }
 
 // MoveFile tries os.Rename, but if that fails due to cross-device link,
@@ -776,14 +827,6 @@ func (i *Installer) getBinaryPath(owner, repo, version string) string {
 	}
 
 	return filepath.Join(i.binDir, owner, repo, version, binaryName)
-}
-
-// executeBinary executes a binary with the given arguments.
-func (i *Installer) executeBinary(binaryPath string, args []string) error {
-	// This would use os/exec to run the binary
-	// For now, just print what would be executed
-	log.Debug("Would execute binary", "path", binaryPath, "args", args)
-	return nil
 }
 
 // Uninstall removes a previously installed tool.
