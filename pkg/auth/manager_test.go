@@ -581,14 +581,14 @@ func TestManager_Authenticate_Errors(t *testing.T) {
 
 	// Identity not found.
 	_, err = m.Authenticate(context.Background(), "missing")
-	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	assert.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
 
 	// Identity present but invalid chain.
 	m = &manager{config: &schema.AuthConfig{Identities: map[string]schema.Identity{
 		"dev": {Kind: "aws/permission-set"},
 	}}}
 	_, err = m.Authenticate(context.Background(), "dev")
-	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	assert.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
 }
 
 func TestManager_Authenticate_SuccessFlow(t *testing.T) {
