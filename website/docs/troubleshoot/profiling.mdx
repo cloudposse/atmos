@@ -1,0 +1,271 @@
+---
+title: Performance Profiling
+sidebar_position: 2
+sidebar_label: Performance Profiling
+description: Use pprof to analyze Atmos performance and identify bottlenecks.
+---
+
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    Atmos includes built-in support for performance profiling using Go's standard `pprof` tool.
+    Profiling helps identify performance bottlenecks, memory usage patterns, and CPU hotspots to optimize Atmos
+    operations.
+</Intro>
+
+## What is pprof?
+
+[pprof](https://pkg.go.dev/net/http/pprof) is Go's built-in profiling tool that collects runtime performance data from Go applications.
+It can capture several types of profiles:
+
+- **CPU Profile**: Shows where your program spends CPU time
+- **Memory Profile**: Shows memory allocation patterns and usage
+- **Goroutine Profile**: Shows active goroutines and their call stacks
+- **Mutex Profile**: Shows lock contention patterns
+
+## Atmos Profiling Integration
+
+Atmos integrates pprof in two modes:
+
+### File-Based Profiling
+
+File-based profiling captures CPU profiles directly to a file, which is ideal for CLI tools that exit quickly.
+This mode automatically enables profiling when a file path is specified.
+
+```shell
+atmos terraform plan vpc -s plat-ue2-dev --profile-file=cpu.prof
+```
+
+<Terminal title="File-based profiling output">
+    ```
+    INFO CPU profiling started file=cpu.prof
+    INFO CPU profiling completed file=cpu.prof
+    ```
+</Terminal>
+
+### Server-Based Profiling
+
+Server-based profiling starts an HTTP server that serves pprof endpoints.
+This mode is useful for long-running operations or when you need access to multiple profile types.
+
+```shell
+atmos terraform plan vpc -s plat-ue2-dev --profiler-enabled
+```
+
+<Terminal title="Server-based profiling output">
+    ```
+    INFO Profiler server available at: url=http://localhost:6060/debug/pprof/
+    ```
+</Terminal>
+
+## Configuration
+
+### CLI Flags
+
+<dl>
+    <dt>`--profile-file`</dt>
+    <dd>Write CPU profiling data to the specified file (enables profiling automatically)</dd>
+
+    <dt>`--profiler-enabled`</dt>
+    <dd>Enable pprof profiling server (default: false)</dd>
+
+    <dt>`--profiler-host`</dt>
+    <dd>Host address for profiling server (default: localhost)</dd>
+
+    <dt>`--profiler-port`</dt>
+    <dd>Port for profiling server (default: 6060)</dd>
+</dl>
+
+### Configuration File
+
+You can also enable profiling through your `atmos.yaml` configuration:
+
+<File title="atmos.yaml">
+    ```yaml
+    profiler:
+      enabled: true
+      host: "localhost"
+      port: 6060
+    ```
+</File>
+
+## Analyzing Profile Data
+
+### File-Based Profiles
+
+After capturing a profile file, you can analyze it using Go's pprof tool:
+
+```shell
+# Interactive text mode
+go tool pprof cpu.prof
+
+# Web interface (requires Graphviz: brew install graphviz)
+go tool pprof -http=:8080 cpu.prof
+
+# Direct text output
+go tool pprof -top cpu.prof
+```
+
+<Terminal title="Sample pprof output">
+    ```
+    (pprof) top
+    Showing nodes accounting for 230ms, 95.83% of 240ms total
+    Dropped 15 nodes (cum <= 1.20ms)
+    flat flat% sum% cum cum%
+    80ms 33.33% 33.33% 80ms 33.33% github.com/cloudposse/atmos/internal/exec.processStackConfig
+    60ms 25.00% 58.33% 60ms 25.00% gopkg.in/yaml.v3.(*Decoder).Decode
+    40ms 16.67% 75.00% 40ms 16.67% github.com/cloudposse/atmos/pkg/utils.ProcessTmplWithDatasources
+    30ms 12.50% 87.50% 30ms 12.50% encoding/json.(*Decoder).Decode
+    20ms 8.33% 95.83% 20ms 8.33% github.com/cloudposse/atmos/pkg/stack.ProcessStackConfig
+    ```
+</Terminal>
+
+### Server-Based Profiles
+
+When using server mode, you can access different profile types through HTTP endpoints:
+
+```shell
+# CPU profile (30-second sample)
+go tool pprof http://localhost:6060/debug/pprof/profile
+
+# Memory allocation profile
+go tool pprof http://localhost:6060/debug/pprof/heap
+
+# Goroutine profile
+go tool pprof http://localhost:6060/debug/pprof/goroutine
+
+# Mutex contention profile
+go tool pprof http://localhost:6060/debug/pprof/mutex
+```
+
+You can also access the web interface directly:
+
+```shell
+open http://localhost:6060/debug/pprof/
+```
+
+## Common Profiling Scenarios
+
+### Performance Optimization
+
+Profile slow Atmos operations to identify bottlenecks:
+
+```shell
+# Profile a slow terraform plan operation
+atmos terraform plan large-component -s prod --profile-file=slow-plan.prof
+
+# Analyze the results
+go tool pprof -http=:8080 slow-plan.prof
+```
+
+### Memory Usage Analysis
+
+Identify memory-intensive operations:
+
+```shell
+# Start server mode for memory profiling
+atmos describe stacks --profiler-enabled
+
+# In another terminal, capture memory profile
+go tool pprof http://localhost:6060/debug/pprof/heap
+```
+
+### Custom Server Configuration
+
+Run profiler on a different host/port for security or networking requirements:
+
+```shell
+atmos terraform apply vpc -s prod \
+  --profiler-enabled \
+  --profiler-host=0.0.0.0 \
+  --profiler-port=8060
+```
+
+## Dependencies
+
+### Graphviz (Optional)
+
+The pprof web interface requires [Graphviz](https://graphviz.org/) to generate visual graphs:
+
+**macOS:**
+```shell
+brew install graphviz
+```
+
+**Ubuntu/Debian:**
+```shell
+sudo apt-get install graphviz
+```
+
+**CentOS/RHEL:**
+```shell
+sudo yum install graphviz
+```
+
+Without Graphviz, you can still use the text-based analysis modes.
+
+## Best Practices
+
+### File-Based vs Server-Based
+
+- **Use file-based profiling** for most CLI operations and performance analysis
+- **Use server-based profiling** for long-running operations or when you need multiple profile types
+
+### Profile Regularly
+
+- Profile before and after performance optimizations to measure impact
+- Establish baseline profiles for typical operations
+- Profile different stack sizes and complexity levels
+
+### Security Considerations
+
+- Server-based profiling exposes runtime information through HTTP
+- Use `localhost` binding in production environments
+- Disable profiling in production unless actively debugging
+
+## Troubleshooting
+
+### Common Issues
+
+**Profile file creation errors:**
+```shell
+# Ensure the directory exists
+mkdir -p /path/to/profile/
+atmos command --profile-file=/path/to/profile/cpu.prof
+```
+
+**Graphviz not found:**
+```shell
+# Use text-based analysis instead
+go tool pprof -top cpu.prof
+go tool pprof -list=functionName cpu.prof
+```
+
+**Server already running:**
+```shell
+# Use a different port
+atmos command --profiler-enabled --profiler-port=7070
+```
+
+### Understanding Profile Data
+
+- **flat**: Time spent in the function itself
+- **cum**: Cumulative time spent in the function and its callees
+- **flat%**: Percentage of total execution time spent in the function
+- **sum%**: Cumulative percentage up to this function
+
+Focus optimization efforts on functions with high **flat** time and high **flat%** percentages.
+
+## Environment Variables
+
+You can also configure profiling through environment variables:
+
+```shell
+export ATMOS_PROFILER_ENABLED=true
+export ATMOS_PROFILER_HOST=localhost
+export ATMOS_PROFILER_PORT=6060
+```
+
+These environment variables will be overridden by CLI flags when specified.
