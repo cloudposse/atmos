@@ -62,3 +62,7 @@ coverage.*.tmp
 coverage/
 .gocoverdir/
 tests.test
+
+# Toolchain installed tools
+toolchain/.tools/
+toolchain/.tool-versions
