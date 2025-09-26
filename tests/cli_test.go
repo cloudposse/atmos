@@ -425,18 +425,8 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 		logger.Info("Command execution error", "err", err)
 	}
 
-	// Close the PTY to signal the reader to stop
-	_ = ptmx.Close()
-
-	// Wait for the reader to finish with a timeout
-	select {
-	case readErr := <-done:
-		if readErr != nil {
-			return "", fmt.Errorf("failed to read PTY output: %v", readErr)
-		}
-	case <-time.After(2 * time.Second):
-		// If the reader doesn't finish in 2 seconds, continue with what we have
-		logger.Info("PTY reader timeout - continuing with partial output")
+	if readErr := <-done; readErr != nil {
+		return "", fmt.Errorf("failed to read PTY output: %v", readErr)
 	}
 
 	output := buffer.String()

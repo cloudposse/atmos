@@ -2,7 +2,7 @@
 
 tests:
   - name: atmos vendor pull
-    enabled: true  # Re-enabling to test telemetry fix
+    enabled: true
     snapshot: false
     tty: true
     description: "Vendoring works with pull command"

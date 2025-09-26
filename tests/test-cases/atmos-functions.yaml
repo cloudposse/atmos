@@ -1,7 +1,7 @@
 tests:
   - name: terraform output function
     enabled: true
-    tty: false  # Changed from true - PTY causes hanging with terraform commands
+    tty: true
     sandbox: true
     description: "Ensure the !terraform.output function works."
     workdir: "fixtures/scenarios/atmos-functions/"

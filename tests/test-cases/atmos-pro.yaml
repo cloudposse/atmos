@@ -2,7 +2,7 @@ tests:
   - name: atmos list instances
     snapshot: true
     enabled: true
-    tty: false  # Changed from true - PTY causes hanging
+    tty: true
     skip:
       # PTY not supported on windows
       os: !not windows

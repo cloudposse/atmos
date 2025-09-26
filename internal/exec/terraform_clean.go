@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -284,7 +285,7 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 		return err
 	}
 	if fileInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing to delete symbolic link: %s", objectName)
+		return fmt.Errorf("%w: %s", errUtils.ErrRefusingToDeleteSymlink, objectName)
 	}
 	// Proceed with deletion
 	err = os.RemoveAll(fullPath)
