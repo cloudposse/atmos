@@ -1,0 +1,58 @@
+package stream
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/cloudposse/atmos/tools/gotcha/internal/logger"
+	"github.com/cloudposse/atmos/tools/gotcha/internal/tui"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/config"
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/utils"
+)
+
+// RunSimpleStream runs tests with simple non-interactive streaming output.
+func RunSimpleStream(testPackages []string, testArgs, outputFile, coverProfile, showFilter string, alert bool, verbosityLevel string) int {
+	// Check if we're in test mode to prevent recursive test execution.
+	//nolint:forbidigo // GOTCHA_TEST_MODE is internal for preventing test recursion, not a user-configurable env var
+	if os.Getenv("GOTCHA_TEST_MODE") == "1" {
+		logger.GetLogger().Debug("Skipping test execution in test mode")
+		return 0
+	}
+
+	// Configure colors and initialize styles for stream mode
+	profile := tui.ConfigureColors()
+
+	// Debug: Log the detected color profile in CI
+	if config.IsCI() {
+		logger.GetLogger().Debug("Color profile detected", "profile", tui.ProfileName(profile), "CI", config.IsCI(), "GITHUB_ACTIONS", config.IsGitHubActions())
+	}
+
+	// Build the go test command
+	args := []string{"test", "-json"}
+
+	// Add coverage if requested
+	if coverProfile != "" {
+		args = append(args, fmt.Sprintf("-coverprofile=%s", coverProfile))
+	}
+
+	// Add verbose flag
+	args = append(args, "-v")
+
+	// Add timeout and other test arguments
+	if testArgs != "" {
+		// Parse testArgs string into individual arguments
+		extraArgs := strings.Fields(testArgs)
+		args = append(args, extraArgs...)
+	}
+
+	// Add packages to test
+	args = append(args, testPackages...)
+
+	// Run the tests
+	exitCode := RunTestsWithSimpleStreaming(args, outputFile, showFilter, verbosityLevel)
+
+	// Emit alert at completion
+	utils.EmitAlert(alert)
+	return exitCode
+}

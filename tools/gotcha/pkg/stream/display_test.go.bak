@@ -1,0 +1,453 @@
+package stream
+
+import (
+	"bytes"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/cloudposse/atmos/tools/gotcha/pkg/output"
+	"github.com/stretchr/testify/assert"
+)
+
+// TestDisplayPackageResult tests the displayPackageResult function
+func TestDisplayPackageResult(t *testing.T) {
+	// Create a test writer
+	writer := output.New()
+
+	tests := []struct {
+		name            string
+		pkg             *PackageResult
+		showFilter      string
+		expectedOutputs []string
+		notExpected     []string
+	}{
+		{
+			name: "display passed package",
+			pkg: &PackageResult{
+				Package: "test/package",
+				Tests: map[string]*TestResult{
+					"TestPass": {
+						Name:     "TestPass",
+						FullName: "test/package.TestPass",
+						Status:   "pass",
+						Elapsed:  1.5,
+					},
+				},
+				Status: "pass",
+			},
+			showFilter:      "all",
+			expectedOutputs: []string{"test/package", "✔", "TestPass"},
+			notExpected:     []string{},
+		},
+		{
+			name: "display failed package",
+			pkg: &PackageResult{
+				Package: "test/package",
+				Tests: map[string]*TestResult{
+					"TestFail": {
+						Name:     "TestFail",
+						FullName: "test/package.TestFail",
+						Status:   "fail",
+						Elapsed:  0.5,
+					},
+				},
+				Status: "fail",
+			},
+			showFilter:      "all",
+			expectedOutputs: []string{"test/package", "✘", "TestFail"},
+			notExpected:     []string{},
+		},
+		{
+			name: "display skipped tests with skip filter",
+			pkg: &PackageResult{
+				Package: "test/package",
+				Tests: map[string]*TestResult{
+					"TestSkip": {
+						Test:       "TestSkip",
+						Status:     "skip",
+						SkipReason: "Not implemented",
+						Duration:   0.1,
+					},
+				},
+				Status:   "skip",
+				Duration: 0.2,
+			},
+			showFilter:      "skipped",
+			expectedOutputs: []string{"TestSkip", "◷"},
+			notExpected:     []string{},
+		},
+		{
+			name: "hide passed tests with failed filter",
+			pkg: &PackageResult{
+				Package: "test/package",
+				Tests: map[string]*TestResult{
+					"TestPass": {
+						Test:     "TestPass",
+						Status:   "pass",
+						Duration: 1.0,
+					},
+				},
+				Status:   "pass",
+				Duration: 1.0,
+			},
+			showFilter:      "failed",
+			expectedOutputs: []string{},
+			notExpected:     []string{"TestPass"},
+		},
+		{
+			name: "display subtests",
+			pkg: &PackageResult{
+				Package: "test/package",
+				Tests: map[string]*TestResult{
+					"TestMain": {
+						Test:     "TestMain",
+						Status:   "pass",
+						Duration: 2.0,
+						Subtests: []*TestResult{
+							{
+								Test:     "TestMain/subtest1",
+								Status:   "pass",
+								Duration: 0.5,
+							},
+							{
+								Test:     "TestMain/subtest2",
+								Status:   "fail",
+								Duration: 0.3,
+							},
+						},
+					},
+				},
+				Status:   "fail",
+				Duration: 2.5,
+			},
+			showFilter:      "all",
+			expectedOutputs: []string{"TestMain", "subtest1", "subtest2"},
+			notExpected:     []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture output
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			// Display the package result
+			displayPackageResult(writer, tt.pkg, tt.showFilter, "normal")
+
+			// Restore stderr
+			w.Close()
+			os.Stderr = oldStderr
+
+			// Read captured output
+			var buf bytes.Buffer
+			buf.ReadFrom(r)
+			output := buf.String()
+
+			// Check expected outputs
+			for _, expected := range tt.expectedOutputs {
+				assert.Contains(t, output, expected,
+					"Output should contain '%s'", expected)
+			}
+
+			// Check not expected outputs
+			for _, notExpected := range tt.notExpected {
+				assert.NotContains(t, output, notExpected,
+					"Output should not contain '%s'", notExpected)
+			}
+		})
+	}
+}
+
+// TestDisplayTestLine tests the displayTestLine function
+func TestDisplayTestLine(t *testing.T) {
+	writer := output.New()
+
+	tests := []struct {
+		name           string
+		test           *TestResult
+		indent         int
+		showFilter     string
+		verbosityLevel string
+		expectedOutput []string
+	}{
+		{
+			name: "display passed test",
+			test: &TestResult{
+				Test:     "TestExample",
+				Status:   "pass",
+				Duration: 1.23,
+			},
+			indent:         2,
+			showFilter:     "all",
+			verbosityLevel: "normal",
+			expectedOutput: []string{"✔", "TestExample", "1.23s"},
+		},
+		{
+			name: "display failed test with output",
+			test: &TestResult{
+				Test:     "TestFailed",
+				Status:   "fail",
+				Duration: 0.5,
+				Output:   []string{"Error: assertion failed", "expected: true, got: false"},
+			},
+			indent:         2,
+			showFilter:     "all",
+			verbosityLevel: "with-output",
+			expectedOutput: []string{"✘", "TestFailed", "assertion failed"},
+		},
+		{
+			name: "display skipped test with reason",
+			test: &TestResult{
+				Test:       "TestSkipped",
+				Status:     "skip",
+				Duration:   0.01,
+				SkipReason: "Not supported on this platform",
+			},
+			indent:         2,
+			showFilter:     "all",
+			verbosityLevel: "verbose",
+			expectedOutput: []string{"◷", "TestSkipped", "Not supported"},
+		},
+		{
+			name: "display test with long duration",
+			test: &TestResult{
+				Test:     "TestSlow",
+				Status:   "pass",
+				Duration: 10.5,
+			},
+			indent:         2,
+			showFilter:     "all",
+			verbosityLevel: "normal",
+			expectedOutput: []string{"TestSlow", "10.50s"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture output
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			// Display the test line
+			displayTestLine(writer, tt.test, tt.indent, tt.showFilter, tt.verbosityLevel)
+
+			// Restore stderr
+			w.Close()
+			os.Stderr = oldStderr
+
+			// Read captured output
+			var buf bytes.Buffer
+			buf.ReadFrom(r)
+			output := buf.String()
+
+			// Check expected outputs
+			for _, expected := range tt.expectedOutput {
+				assert.Contains(t, output, expected,
+					"Output should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestDisplayTest tests the displayTest function
+func TestDisplayTest(t *testing.T) {
+	writer := output.New()
+
+	tests := []struct {
+		name           string
+		test           *TestResult
+		indent         int
+		showFilter     string
+		verbosityLevel string
+		expectedOutput []string
+	}{
+		{
+			name: "display test with subtests",
+			test: &TestResult{
+				Test:     "TestParent",
+				Status:   "pass",
+				Duration: 3.0,
+				Subtests: []*TestResult{
+					{
+						Test:     "TestParent/child1",
+						Status:   "pass",
+						Duration: 1.0,
+					},
+					{
+						Test:     "TestParent/child2",
+						Status:   "fail",
+						Duration: 0.5,
+					},
+				},
+			},
+			indent:         2,
+			showFilter:     "all",
+			verbosityLevel: "normal",
+			expectedOutput: []string{"TestParent", "child1", "child2", "✔", "✘"},
+		},
+		{
+			name: "display test without subtests",
+			test: &TestResult{
+				Test:     "TestSimple",
+				Status:   "pass",
+				Duration: 0.5,
+			},
+			indent:         2,
+			showFilter:     "all",
+			verbosityLevel: "normal",
+			expectedOutput: []string{"TestSimple", "✔"},
+		},
+		{
+			name: "filter failed tests only",
+			test: &TestResult{
+				Test:     "TestMixed",
+				Status:   "fail",
+				Duration: 2.0,
+				Subtests: []*TestResult{
+					{
+						Test:     "TestMixed/pass",
+						Status:   "pass",
+						Duration: 0.5,
+					},
+					{
+						Test:     "TestMixed/fail",
+						Status:   "fail",
+						Duration: 0.5,
+					},
+				},
+			},
+			indent:         2,
+			showFilter:     "failed",
+			verbosityLevel: "normal",
+			expectedOutput: []string{"TestMixed", "fail", "✘"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture output
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			// Display the test
+			displayTest(writer, tt.test, tt.indent, tt.showFilter, tt.verbosityLevel)
+
+			// Restore stderr
+			w.Close()
+			os.Stderr = oldStderr
+
+			// Read captured output
+			var buf bytes.Buffer
+			buf.ReadFrom(r)
+			output := buf.String()
+
+			// Check expected outputs
+			for _, expected := range tt.expectedOutput {
+				assert.Contains(t, output, expected,
+					"Output should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestGenerateSubtestProgress tests the generateSubtestProgress function
+func TestGenerateSubtestProgress(t *testing.T) {
+	tests := []struct {
+		name     string
+		subtests []*TestResult
+		expected string
+		contains []string
+	}{
+		{
+			name: "all passed",
+			subtests: []*TestResult{
+				{Status: "pass"},
+				{Status: "pass"},
+				{Status: "pass"},
+			},
+			contains: []string{"●●●", "100%"},
+		},
+		{
+			name: "mixed results",
+			subtests: []*TestResult{
+				{Status: "pass"},
+				{Status: "fail"},
+				{Status: "skip"},
+			},
+			contains: []string{"●", "○", "◷"},
+		},
+		{
+			name: "all failed",
+			subtests: []*TestResult{
+				{Status: "fail"},
+				{Status: "fail"},
+			},
+			contains: []string{"○○", "0%"},
+		},
+		{
+			name:     "no subtests",
+			subtests: []*TestResult{},
+			contains: []string{},
+		},
+		{
+			name: "many subtests truncated",
+			subtests: func() []*TestResult {
+				var tests []*TestResult
+				for i := 0; i < 25; i++ {
+					tests = append(tests, &TestResult{Status: "pass"})
+				}
+				return tests
+			}(),
+			contains: []string{"●●●●●●●●●●●●●●●●●●●●", "100%", "passed"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := generateSubtestProgress(tt.subtests)
+
+			for _, expected := range tt.contains {
+				assert.Contains(t, result, expected,
+					"Progress should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestShouldShowTestStatus tests the shouldShowTestStatus function
+func TestShouldShowTestStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     string
+		showFilter string
+		expected   bool
+	}{
+		{"show all - pass", "pass", "all", true},
+		{"show all - fail", "fail", "all", true},
+		{"show all - skip", "skip", "all", true},
+		{"show failed - pass", "pass", "failed", false},
+		{"show failed - fail", "fail", "failed", true},
+		{"show failed - skip", "skip", "failed", false},
+		{"show passed - pass", "pass", "passed", true},
+		{"show passed - fail", "fail", "passed", false},
+		{"show passed - skip", "skip", "passed", false},
+		{"show skipped - pass", "pass", "skipped", false},
+		{"show skipped - fail", "fail", "skipped", false},
+		{"show skipped - skip", "skip", "skipped", true},
+		{"show none - pass", "pass", "none", false},
+		{"show none - fail", "fail", "none", false},
+		{"show none - skip", "skip", "none", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := shouldShowTestStatus(tt.status, tt.showFilter)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

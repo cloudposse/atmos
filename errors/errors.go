@@ -90,7 +90,9 @@ var (
 	ErrAtmosConfigIsNil         = errors.New("atmos config is nil")
 	ErrInvalidListMergeStrategy = errors.New("invalid list merge strategy")
 	ErrMerge                    = errors.New("merge error")
+	ErrInvalidArguments         = errors.New("invalid arguments")
 	ErrInvalidStackManifest     = errors.New("invalid stack manifest")
+	ErrProcessingStackManifest  = errors.New("error processing stack manifest")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")

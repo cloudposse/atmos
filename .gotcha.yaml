@@ -1,0 +1,41 @@
+# Gotcha Configuration File
+# Configuration for the gotcha test summary tool
+
+# Output format: stdin, markdown, both, github, or stream
+format: stream
+
+# Space-separated list of packages to test
+packages:
+  - "./..."
+
+# Additional arguments to pass to go test
+testargs: "-timeout 40m"
+
+# Filter displayed tests: all, failed, passed, skipped
+show: failed
+
+# Output file for test results
+output: test-results.json
+
+# Coverage profile file for detailed analysis
+coverprofile: coverage.out
+
+# Exclude mock files from coverage calculations
+exclude-mocks: true
+
+# Alert configuration
+# Emit a terminal bell (\a) sound when tests complete
+alert: false
+
+# Package filtering configuration
+filter:
+  # Regex patterns to include packages (default: include all)
+  include:
+    - ".*"
+
+  # Regex patterns to exclude packages
+  exclude: []
+    # Example exclusions:
+    # - "^tests"           # exclude packages starting with "tests"
+    # - ".*mock.*"         # exclude packages containing "mock"
+    # - ".*_test$"         # exclude test packages

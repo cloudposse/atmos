@@ -7,9 +7,11 @@ repos:
         args: [-w]
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
 
-      - id: go-build-mod
-        name: Check Go build
-        description: Ensure code compiles before commit
+      # Disabled go-build-mod because it doesn't work with go.work files
+      # The code is built and tested in CI anyway
+      #- id: go-build-mod
+      #  name: Check Go build
+      #  description: Ensure code compiles before commit
 
       - id: go-mod-tidy
         name: Tidy go.mod
@@ -37,7 +39,7 @@ repos:
       - id: end-of-file-fixer
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
       - id: check-yaml
-        exclude: ^(vendor/)
+        exclude: ^(vendor/|tests/fixtures/scenarios/complete/stacks/catalog/invalid-yaml-and-schema/|tests/fixtures/scenarios/invalid-stacks/|tests/fixtures/scenarios/complete/components/helmfile/)
         args: [--allow-multiple-documents, --unsafe]
       - id: check-added-large-files
         args: [--maxkb=500]

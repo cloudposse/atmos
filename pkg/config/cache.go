@@ -42,7 +42,7 @@ func withCacheFileLock(cacheFile string, fn func() error) error {
 	if err != nil {
 		return errors.Wrap(err, "error acquiring file lock")
 	}
-	defer lock.Unlock()
+	defer func() { _ = lock.Unlock() }()
 	return fn()
 }
 
