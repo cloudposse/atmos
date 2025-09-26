@@ -12,7 +12,6 @@ import (
 
 	"github.com/adrg/xdg"
 	log "github.com/charmbracelet/log"
-	"github.com/google/renameio/v2"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -43,6 +42,10 @@ var withCacheFileLock func(cacheFile string, fn func() error) error
 // loadCacheWithReadLock is a platform-specific function for loading cache with read locks.
 // It is set during init() in cache_lock_unix.go.
 var loadCacheWithReadLock func(cacheFile string) (CacheConfig, error)
+
+// writeFileAtomic is a platform-specific function for atomic file writing.
+// It is set during init() in cache_atomic_unix.go or cache_atomic_windows.go.
+var writeFileAtomic func(filename string, data []byte, perm os.FileMode) error
 
 func LoadCache() (CacheConfig, error) {
 	cacheFile, err := GetCacheFilePath()
@@ -94,8 +97,8 @@ func SaveCache(cfg CacheConfig) error {
 			return errors.Wrap(err, "failed to marshal cache config")
 		}
 
-		// Write atomically using renameio.
-		if err := renameio.WriteFile(cacheFile, buf.Bytes(), 0o644); err != nil {
+		// Write atomically.
+		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
 			return errors.Wrap(err, "failed to write cache file")
 		}
 		return nil
@@ -145,8 +148,8 @@ func UpdateCache(update func(*CacheConfig)) error {
 			return errors.Wrap(err, "failed to marshal cache config")
 		}
 
-		// Write atomically using renameio.
-		if err := renameio.WriteFile(cacheFile, buf.Bytes(), 0o644); err != nil {
+		// Write atomically.
+		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
 			return errors.Wrap(err, "failed to write cache file")
 		}
 		return nil
