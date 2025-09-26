@@ -18,7 +18,7 @@ deploy-full-stack:
       command: terraform apply vpc
       stack: prod
       type: terraform
-      
+
     # Step 2: Deploy security groups with retry
     - name: deploy-security
       command: terraform apply security-groups
@@ -32,7 +32,7 @@ deploy-full-stack:
         multiplier: 2.0
         random_jitter: 0.1
         max_elapsed_time: "5m"
-    
+
     # Step 3: Deploy RDS database
     - name: deploy-database
       command: terraform apply rds
@@ -43,19 +43,19 @@ deploy-full-stack:
         backoff_strategy: linear
         initial_delay: "5s"
         max_delay: "1m"
-    
+
     # Step 4: Deploy EKS cluster
     - name: deploy-eks
       command: terraform apply eks
       stack: prod
       type: terraform
-      
+
     # Step 5: Deploy Helm charts
     - name: deploy-ingress
       command: helmfile apply nginx-ingress
       stack: prod
       type: helmfile
-      
+
     # Step 6: Deploy monitoring
     - name: deploy-monitoring
       command: helmfile apply monitoring
@@ -74,17 +74,17 @@ validate-infrastructure:
     - name: validate-syntax
       command: validate stacks
       type: atmos
-      
+
     - name: validate-vpc
       command: terraform validate vpc
       stack: dev
       type: terraform
-      
+
     - name: validate-eks
       command: terraform validate eks
       stack: dev
       type: terraform
-      
+
     - name: validate-policies
       command: validate component vpc
       stack: dev
@@ -99,7 +99,7 @@ plan-changes:
       command: terraform plan vpc
       stack: staging
       type: terraform
-      
+
     - name: plan-security
       command: terraform plan security-groups
       stack: staging
@@ -108,12 +108,12 @@ plan-changes:
         max_attempts: 2
         backoff_strategy: constant
         initial_delay: "1s"
-      
+
     - name: plan-database
       command: terraform plan rds
       stack: staging
       type: terraform
-      
+
     - name: plan-compute
       command: terraform plan eks
       stack: staging
@@ -129,30 +129,30 @@ destroy-infrastructure:
       command: helmfile destroy monitoring
       stack: dev
       type: helmfile
-      
+
     - name: destroy-ingress
       command: helmfile destroy nginx-ingress
       stack: dev
       type: helmfile
-      
+
     # Destroy compute
     - name: destroy-eks
       command: terraform destroy eks
       stack: dev
       type: terraform
-      
+
     # Destroy data layer
     - name: destroy-database
       command: terraform destroy rds
       stack: dev
       type: terraform
-      
+
     # Destroy security
     - name: destroy-security
       command: terraform destroy security-groups
       stack: dev
       type: terraform
-      
+
     # Destroy network last
     - name: destroy-vpc
       command: terraform destroy vpc
@@ -168,22 +168,22 @@ detect-drift:
       command: terraform refresh vpc
       stack: prod
       type: terraform
-      
+
     - name: refresh-security
       command: terraform refresh security-groups
       stack: prod
       type: terraform
-      
+
     - name: refresh-database
       command: terraform refresh rds
       stack: prod
       type: terraform
-      
+
     - name: refresh-compute
       command: terraform refresh eks
       stack: prod
       type: terraform
-      
+
     - name: generate-drift-report
       command: describe affected
       type: atmos
@@ -196,11 +196,11 @@ backup-state:
     - name: backup-vpc-state
       command: "aws s3 cp s3://terraform-state/vpc/terraform.tfstate s3://terraform-state-backup/vpc/terraform.tfstate.$(date +%Y%m%d)"
       type: shell
-      
+
     - name: backup-eks-state
       command: "aws s3 cp s3://terraform-state/eks/terraform.tfstate s3://terraform-state-backup/eks/terraform.tfstate.$(date +%Y%m%d)"
       type: shell
-      
+
     - name: backup-rds-state
       command: "aws s3 cp s3://terraform-state/rds/terraform.tfstate s3://terraform-state-backup/rds/terraform.tfstate.$(date +%Y%m%d)"
       type: shell
@@ -218,11 +218,11 @@ test-deployment:
         backoff_strategy: linear
         initial_delay: "5s"
         max_delay: "30s"
-      
+
     - name: test-eks-cluster
       command: "kubectl get nodes"
       type: shell
-      
+
     - name: test-database-connection
       command: "psql -h $DB_HOST -U $DB_USER -c 'SELECT 1'"
       type: shell
@@ -232,7 +232,7 @@ test-deployment:
         initial_delay: "2s"
         max_delay: "1m"
         multiplier: 2.0
-      
+
     - name: test-application-health
       command: "curl -f http://app.staging.example.com/health"
       type: shell
@@ -249,11 +249,11 @@ optimize-costs:
     - name: stop-non-prod-instances
       command: "aws ec2 stop-instances --instance-ids $(aws ec2 describe-instances --filters 'Name=tag:Environment,Values=dev' --query 'Reservations[].Instances[].InstanceId' --output text)"
       type: shell
-      
+
     - name: delete-old-snapshots
       command: "python scripts/cleanup_old_snapshots.py --days 30"
       type: shell
-      
+
     - name: resize-underutilized-instances
       command: "python scripts/rightsizing.py --environment dev"
       type: shell
@@ -267,7 +267,7 @@ promote-to-production:
       command: terraform plan vpc
       stack: staging
       type: terraform
-      
+
     # Apply to production
     - name: deploy-prod-vpc
       command: terraform apply vpc
@@ -279,7 +279,7 @@ promote-to-production:
         initial_delay: "5s"
         max_delay: "1m"
         multiplier: 2.0
-      
+
     - name: deploy-prod-eks
       command: terraform apply eks
       stack: prod
@@ -290,7 +290,7 @@ promote-to-production:
         initial_delay: "5s"
         max_delay: "1m"
         multiplier: 2.0
-      
+
     # Smoke tests
     - name: smoke-test
       command: "pytest tests/smoke/production_test.py"
@@ -309,15 +309,15 @@ maintenance-mode:
     - name: enable-maintenance-page
       command: "kubectl apply -f k8s/maintenance-page.yaml"
       type: shell
-      
+
     - name: drain-load-balancer
       command: "aws elb deregister-instances-from-load-balancer --load-balancer-name prod-lb --instances $(kubectl get nodes -o jsonpath='{.items[*].spec.providerID}' | sed 's/aws:\/\/\/.*\///g')"
       type: shell
-      
+
     - name: wait-for-connections
       command: "sleep 60"
       type: shell
-      
+
     - name: backup-database
       command: "pg_dump -h $DB_HOST -U $DB_USER $DB_NAME | gzip > backup-$(date +%Y%m%d-%H%M%S).sql.gz"
       type: shell
@@ -330,7 +330,7 @@ rollback-deployment:
     - name: retrieve-previous-version
       command: "terraform state pull | jq -r '.serial' > /tmp/previous-serial.txt"
       type: shell
-      
+
     - name: rollback-eks
       command: "terraform apply -target=module.eks -var='image_tag=previous'"
       stack: prod
@@ -343,7 +343,7 @@ rollback-deployment:
         multiplier: 2.0
         random_jitter: 0.2
         max_elapsed_time: "10m"
-      
+
     - name: rollback-application
       command: "kubectl rollout undo deployment/app -n production"
       type: shell
@@ -352,7 +352,7 @@ rollback-deployment:
         backoff_strategy: linear
         initial_delay: "5s"
         max_delay: "30s"
-      
+
     - name: verify-rollback
       command: "kubectl rollout status deployment/app -n production"
       type: shell

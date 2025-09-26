@@ -102,24 +102,24 @@ stores:
     type: aws-ssm
     region: us-east-1
     profile: prod
-  
+
   # Azure Key Vault
   azure-kv:
     type: azure-keyvault
     vault_name: mycompany-vault
-    
+
   # Google Secret Manager
   gcp-sm:
     type: google-secretmanager
     project_id: my-project-123
-    
+
   # Redis cache
   redis:
     type: redis
     host: redis.example.com
     port: 6379
     db: 0
-    
+
   # Artifactory
   artifactory:
     type: artifactory
@@ -204,12 +204,12 @@ integrations:
 settings:
   # List merge strategy for stack imports
   list_merge_strategy: "replace"  # Options: replace, append, merge
-  
+
   # Token injection settings
   inject_github_token: true        # Auto-inject GITHUB_TOKEN
   inject_bitbucket_token: false    # Don't auto-inject Bitbucket token
   inject_gitlab_token: false       # Don't auto-inject GitLab token
-  
+
   # Terminal display settings
   terminal:
     max_width: 120                # Maximum terminal width
@@ -226,12 +226,12 @@ settings:
       pager: true                # Use pager for highlighted output
       line_numbers: false        # Don't show line numbers by default
       wrap: false                # Don't wrap long lines
-  
+
   # DEPRECATED: Documentation settings (moved to terminal)
   docs:
     # max-width: 120             # DEPRECATED: Use settings.terminal.max_width
     # pagination: true           # DEPRECATED: Use settings.terminal.pager
-  
+
   # Markdown rendering settings
   markdown:
     document:
@@ -251,13 +251,13 @@ settings:
     emph:
       color: "#C0C0C0"
       italic: true
-  
+
   # Telemetry settings
   telemetry:
     enabled: true                 # Enable anonymous usage statistics
     token: "${ATMOS_TELEMETRY_TOKEN}"
     endpoint: "https://telemetry.atmos.tools"
-  
+
   # Atmos Pro settings
   pro:
     base_url: "https://api.atmos.tools"
@@ -309,7 +309,7 @@ commands:
             value: "{{ .Flags.region }}"
         steps:
           - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
-  
+
   - name: deploy
     description: Deploy infrastructure
     commands:
