@@ -5,8 +5,8 @@ import "errors"
 // Error format constants.
 const (
 	errFormat           = "%w: %v"
-	errWrapFormat       = "%w: %w"
-	errWrapFormatWithID = "%w '%s': %w"
+	errWrapFormat       = "%w: %s"
+	errWrapFormatWithID = "%w '%s': %s"
 )
 
 // Common errors shared across store implementations.

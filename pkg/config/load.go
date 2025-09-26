@@ -318,7 +318,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// - B's settings override C's settings
 	// - A's settings override both B's and C's settings
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("merge temp config: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMergeConfiguration, err)
 	}
 
 	return nil
@@ -370,7 +370,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	// Process YAML functions
 	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return fmt.Errorf("preprocess YAML functions: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrPreprocessYAMLFunctions, err)
 	}
 
 	// Marshal to YAML
@@ -512,7 +512,7 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 
 	// Merge the embedded configuration into Viper
 	if err := v.MergeConfig(reader); err != nil {
-		return fmt.Errorf("failed to merge embedded config: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrMergeEmbeddedConfig, err)
 	}
 
 	return nil
