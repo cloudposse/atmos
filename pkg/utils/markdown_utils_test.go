@@ -176,7 +176,7 @@ func TestTelemetryDisclosureMarkdown(t *testing.T) {
 	os.Stderr = w
 
 	// Print the telemetry disclosure message
-	message := `**Notice:** Telemetry Enabled - Atmos now collects completely anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting: <https://atmos.tools/cli/telemetry>`
+	message := `**Notice:** Telemetry Enabled - Atmos now collects completely anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd not like to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry`
 
 	PrintfMarkdownToTUI("%s", message)
 
