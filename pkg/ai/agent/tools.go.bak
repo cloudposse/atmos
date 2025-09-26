@@ -1,0 +1,272 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/anthropics/anthropic-sdk-go"
+
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// AtmosTools provides AI tools for Atmos-specific operations.
+type AtmosTools struct {
+	atmosConfig *schema.AtmosConfiguration
+}
+
+// NewAtmosTools creates a new AtmosTools instance.
+func NewAtmosTools(atmosConfig *schema.AtmosConfiguration) *AtmosTools {
+	return &AtmosTools{
+		atmosConfig: atmosConfig,
+	}
+}
+
+// GetAvailableTools returns the list of available Atmos tools for the AI.
+func (t *AtmosTools) GetAvailableTools() []anthropic.ToolParam {
+	return []anthropic.ToolParam{
+		{
+			Name:        "atmos_component_describe",
+			Description: anthropic.String("Get detailed information about an Atmos component in a specific stack including configuration, variables, and metadata."),
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"component": map[string]interface{}{
+						"type":        "string",
+						"description": "The name of the Atmos component",
+					},
+					"stack": map[string]interface{}{
+						"type":        "string",
+						"description": "The name of the Atmos stack",
+					},
+				},
+				"required": []string{"component", "stack"},
+			},
+		},
+		{
+			Name:        "atmos_list_components",
+			Description: anthropic.String("List all available components in the Atmos configuration."),
+			InputSchema: map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			Name:        "atmos_list_stacks",
+			Description: anthropic.String("List all available stacks in the Atmos configuration."),
+			InputSchema: map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			Name:        "atmos_validate_stack",
+			Description: anthropic.String("Validate an Atmos stack configuration for correctness and completeness."),
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"stack": map[string]interface{}{
+						"type":        "string",
+						"description": "The name of the Atmos stack to validate",
+					},
+				},
+				"required": []string{"stack"},
+			},
+		},
+		{
+			Name:        "atmos_terraform_plan",
+			Description: anthropic.String("Generate a Terraform plan for a component in a stack (dry-run, no changes made)."),
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"component": map[string]interface{}{
+						"type":        "string",
+						"description": "The name of the Atmos component",
+					},
+					"stack": map[string]interface{}{
+						"type":        "string",
+						"description": "The name of the Atmos stack",
+					},
+				},
+				"required": []string{"component", "stack"},
+			},
+		},
+		{
+			Name:        "atmos_get_setting",
+			Description: anthropic.String("Get a specific setting from the Atmos configuration."),
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"setting_path": map[string]interface{}{
+						"type":        "string",
+						"description": "The path to the setting (e.g., 'components.terraform.base_path')",
+					},
+				},
+				"required": []string{"setting_path"},
+			},
+		},
+	}
+}
+
+// ExecuteTool executes an Atmos tool based on the tool call.
+func (t *AtmosTools) ExecuteTool(ctx context.Context, toolCall anthropic.ToolUseBlock) (string, error) {
+	switch toolCall.Name {
+	case "atmos_component_describe":
+		return t.executeComponentDescribe(ctx, toolCall.Input)
+	case "atmos_list_components":
+		return t.executeListComponents(ctx)
+	case "atmos_list_stacks":
+		return t.executeListStacks(ctx)
+	case "atmos_validate_stack":
+		return t.executeValidateStack(ctx, toolCall.Input)
+	case "atmos_terraform_plan":
+		return t.executeTerraformPlan(ctx, toolCall.Input)
+	case "atmos_get_setting":
+		return t.executeGetSetting(ctx, toolCall.Input)
+	default:
+		return "", fmt.Errorf("unknown tool: %s", toolCall.Name)
+	}
+}
+
+func (t *AtmosTools) executeComponentDescribe(ctx context.Context, input interface{}) (string, error) {
+	var params struct {
+		Component string `json:"component"`
+		Stack     string `json:"stack"`
+	}
+
+	inputBytes, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input: %w", err)
+	}
+
+	if err := json.Unmarshal(inputBytes, &params); err != nil {
+		return "", fmt.Errorf("failed to unmarshal input: %w", err)
+	}
+
+	// Use Atmos exec functions to describe the component
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: params.Component,
+		Stack:            params.Stack,
+	}
+
+	componentDescription, err := e.ExecuteDescribeComponent(configAndStacksInfo, false)
+	if err != nil {
+		return "", fmt.Errorf("failed to describe component: %w", err)
+	}
+
+	return string(componentDescription), nil
+}
+
+func (t *AtmosTools) executeListComponents(ctx context.Context) (string, error) {
+	components, err := e.ExecuteListComponents()
+	if err != nil {
+		return "", fmt.Errorf("failed to list components: %w", err)
+	}
+
+	result, err := json.MarshalIndent(components, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal components: %w", err)
+	}
+
+	return string(result), nil
+}
+
+func (t *AtmosTools) executeListStacks(ctx context.Context) (string, error) {
+	stacks, err := e.ExecuteListStacks()
+	if err != nil {
+		return "", fmt.Errorf("failed to list stacks: %w", err)
+	}
+
+	result, err := json.MarshalIndent(stacks, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal stacks: %w", err)
+	}
+
+	return string(result), nil
+}
+
+func (t *AtmosTools) executeValidateStack(ctx context.Context, input interface{}) (string, error) {
+	var params struct {
+		Stack string `json:"stack"`
+	}
+
+	inputBytes, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input: %w", err)
+	}
+
+	if err := json.Unmarshal(inputBytes, &params); err != nil {
+		return "", fmt.Errorf("failed to unmarshal input: %w", err)
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		Stack: params.Stack,
+	}
+
+	err = e.ExecuteValidateStacks(configAndStacksInfo, false)
+	if err != nil {
+		return fmt.Sprintf("Stack validation failed: %s", err.Error()), nil
+	}
+
+	return fmt.Sprintf("Stack '%s' is valid", params.Stack), nil
+}
+
+func (t *AtmosTools) executeTerraformPlan(ctx context.Context, input interface{}) (string, error) {
+	var params struct {
+		Component string `json:"component"`
+		Stack     string `json:"stack"`
+	}
+
+	inputBytes, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input: %w", err)
+	}
+
+	if err := json.Unmarshal(inputBytes, &params); err != nil {
+		return "", fmt.Errorf("failed to unmarshal input: %w", err)
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: params.Component,
+		Stack:            params.Stack,
+	}
+
+	// Execute terraform plan (this is a dry-run operation)
+	err = e.ExecuteTerraformPlan(configAndStacksInfo, "", false)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute terraform plan: %w", err)
+	}
+
+	return fmt.Sprintf("Terraform plan completed successfully for component '%s' in stack '%s'", params.Component, params.Stack), nil
+}
+
+func (t *AtmosTools) executeGetSetting(ctx context.Context, input interface{}) (string, error) {
+	var params struct {
+		SettingPath string `json:"setting_path"`
+	}
+
+	inputBytes, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input: %w", err)
+	}
+
+	if err := json.Unmarshal(inputBytes, &params); err != nil {
+		return "", fmt.Errorf("failed to unmarshal input: %w", err)
+	}
+
+	// For now, return basic configuration info
+	// This could be expanded to navigate the configuration structure
+	result := map[string]interface{}{
+		"setting_path": params.SettingPath,
+		"note":         "Setting retrieval is available but specific path navigation not yet implemented",
+		"config_info":  "Use atmos config validation and describe commands for detailed configuration",
+	}
+
+	output, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal result: %w", err)
+	}
+
+	return string(output), nil
+}

@@ -1,0 +1,142 @@
+package agent
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// Client wraps the Anthropic API client with Atmos-specific functionality.
+type Client struct {
+	anthropic *anthropic.Client
+	config    *AIConfig
+}
+
+// AIConfig holds configuration for the AI client.
+type AIConfig struct {
+	Enabled    bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Provider   string `yaml:"provider" json:"provider" mapstructure:"provider"`
+	Model      string `yaml:"model" json:"model" mapstructure:"model"`
+	APIKeyEnv  string `yaml:"api_key_env" json:"api_key_env" mapstructure:"api_key_env"`
+	Streaming  bool   `yaml:"streaming" json:"streaming" mapstructure:"streaming"`
+	MaxTokens  int    `yaml:"max_tokens" json:"max_tokens" mapstructure:"max_tokens"`
+	ContextConfig ContextConfig `yaml:"context" json:"context" mapstructure:"context"`
+}
+
+// ContextConfig controls what context is automatically loaded.
+type ContextConfig struct {
+	AutoLoadStacks    bool `yaml:"auto_load_stacks" json:"auto_load_stacks" mapstructure:"auto_load_stacks"`
+	IncludeTemplates  bool `yaml:"include_templates" json:"include_templates" mapstructure:"include_templates"`
+	MaxContextSize    int  `yaml:"max_context_size" json:"max_context_size" mapstructure:"max_context_size"`
+}
+
+// NewClient creates a new AI client from Atmos configuration.
+func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
+	// Extract AI configuration from AtmosConfiguration
+	aiConfig := extractAIConfig(atmosConfig)
+
+	if !aiConfig.Enabled {
+		return nil, fmt.Errorf("AI features are disabled in configuration")
+	}
+
+	if aiConfig.Provider != "anthropic" {
+		return nil, fmt.Errorf("unsupported AI provider: %s", aiConfig.Provider)
+	}
+
+	// Get API key from environment
+	apiKey := os.Getenv(aiConfig.APIKeyEnv)
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key not found in environment variable: %s", aiConfig.APIKeyEnv)
+	}
+
+	// Create Anthropic client
+	anthropicClient := anthropic.NewClient(
+		option.WithAPIKey(apiKey),
+	)
+
+	return &Client{
+		anthropic: anthropicClient,
+		config:    aiConfig,
+	}, nil
+}
+
+// extractAIConfig extracts AI configuration from AtmosConfiguration.
+func extractAIConfig(atmosConfig *schema.AtmosConfiguration) *AIConfig {
+	// Set defaults
+	config := &AIConfig{
+		Enabled:   false,
+		Provider:  "anthropic",
+		Model:     "claude-4-20250514",
+		APIKeyEnv: "ANTHROPIC_API_KEY",
+		Streaming: true,
+		MaxTokens: 4096,
+		ContextConfig: ContextConfig{
+			AutoLoadStacks:  true,
+			IncludeTemplates: true,
+			MaxContextSize:  50000,
+		},
+	}
+
+	// Check if AI settings exist in the configuration
+	if atmosConfig.Settings.AI != nil {
+		if enabled, ok := atmosConfig.Settings.AI["enabled"].(bool); ok {
+			config.Enabled = enabled
+		}
+		if provider, ok := atmosConfig.Settings.AI["provider"].(string); ok {
+			config.Provider = provider
+		}
+		if model, ok := atmosConfig.Settings.AI["model"].(string); ok {
+			config.Model = model
+		}
+		if apiKeyEnv, ok := atmosConfig.Settings.AI["api_key_env"].(string); ok {
+			config.APIKeyEnv = apiKeyEnv
+		}
+		if streaming, ok := atmosConfig.Settings.AI["streaming"].(bool); ok {
+			config.Streaming = streaming
+		}
+		if maxTokens, ok := atmosConfig.Settings.AI["max_tokens"].(int); ok {
+			config.MaxTokens = maxTokens
+		}
+
+		// Extract context configuration
+		if contextMap, ok := atmosConfig.Settings.AI["context"].(map[string]interface{}); ok {
+			if autoLoadStacks, ok := contextMap["auto_load_stacks"].(bool); ok {
+				config.ContextConfig.AutoLoadStacks = autoLoadStacks
+			}
+			if includeTemplates, ok := contextMap["include_templates"].(bool); ok {
+				config.ContextConfig.IncludeTemplates = includeTemplates
+			}
+			if maxContextSize, ok := contextMap["max_context_size"].(int); ok {
+				config.ContextConfig.MaxContextSize = maxContextSize
+			}
+		}
+	}
+
+	return config
+}
+
+// GetModel returns the configured model name.
+func (c *Client) GetModel() string {
+	return c.config.Model
+}
+
+// GetConfig returns the AI configuration.
+func (c *Client) GetConfig() *AIConfig {
+	return c.config
+}
+
+// CreateMessage creates a message using the Anthropic API.
+func (c *Client) CreateMessage(ctx context.Context, params anthropic.MessageNewParams) (*anthropic.Message, error) {
+	return c.anthropic.Messages.New(ctx, params)
+}
+
+// CreateMessageStream creates a streaming message using the Anthropic API.
+func (c *Client) CreateMessageStream(ctx context.Context, params anthropic.MessageNewParams) (*anthropic.MessagesStreamEventHandler[anthropic.Message], error) {
+	stream := c.anthropic.Messages.NewStreaming(ctx, params)
+	return stream, nil
+}

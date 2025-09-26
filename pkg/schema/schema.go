@@ -264,6 +264,8 @@ type AtmosSettings struct {
 	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
 	// Telemetry settings
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
+	// AI settings
+	AI map[string]interface{} `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
 }
 
 // TelemetrySettings contains configuration for telemetry collection.

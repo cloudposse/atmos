@@ -140,4 +140,7 @@ var (
 	ErrCacheWrite     = errors.New("cache write failed")
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
+
+	// AI-related errors.
+	ErrAINotEnabled = errors.New("AI features are not enabled")
 )
