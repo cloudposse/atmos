@@ -137,7 +137,7 @@ Atmos uses the [Charm Logger](https://charm.sh/blog/the-charm-logger/), which of
 - Optional raw JSON output for machine ingestion
 
 Example output in terminal:
-```
+```console
 DEBU  Component processed  component=vpc stack=dev duration=1.2s
 ```
 
