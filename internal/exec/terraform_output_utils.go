@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 

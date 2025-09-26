@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -746,7 +746,8 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 
 			// Save original logger and set up test logger
 			originalLogger := log.Default()
-			logger := log.New(w)
+			logger := log.New()
+			logger.SetOutput(w)
 			log.SetDefault(logger)
 			defer log.SetDefault(originalLogger)
 

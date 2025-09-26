@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -117,7 +116,7 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	traceFromFlag := false
 	if cmd.Flags().Changed("logs-level") {
 		if v, err := cmd.Flags().GetString("logs-level"); err == nil {
-			if parsedLevel, parseErr := logger.ParseLogLevel(v); parseErr == nil {
+			if parsedLevel, parseErr := log.ParseLogLevel(v); parseErr == nil {
 				traceFromFlag = parsedLevel == u.LogLevelTrace
 			}
 		}
