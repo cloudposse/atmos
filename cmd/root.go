@@ -103,18 +103,33 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.WarnLevel)
 	}
 
+	// Always set up styles to ensure trace level shows as "TRAC"
+	styles := log.DefaultStyles()
+
+	// Set trace level to show "TRAC" instead of being blank/DEBU
+	if debugStyle, ok := styles.Levels[log.DebugLevel]; ok {
+		// Copy debug style but set the string to "TRAC"
+		styles.Levels[logger.TraceLevel] = debugStyle.SetString("TRAC")
+	} else {
+		// Fallback if debug style doesn't exist
+		styles.Levels[logger.TraceLevel] = lipgloss.NewStyle().SetString("TRAC")
+	}
+
+	// If colors are disabled, clear the colors but keep the level strings
 	if !atmosConfig.Settings.Terminal.IsColorEnabled() {
-		stylesDefault := log.DefaultStyles()
-		// Clear colors for levels
-		styles := &log.Styles{}
-		styles.Levels = make(map[log.Level]lipgloss.Style)
-		for k := range stylesDefault.Levels {
-			styles.Levels[k] = stylesDefault.Levels[k].UnsetForeground().Bold(false)
+		clearedStyles := &log.Styles{}
+		clearedStyles.Levels = make(map[log.Level]lipgloss.Style)
+		for k := range styles.Levels {
+			if k == logger.TraceLevel {
+				// Keep TRAC string but remove color
+				clearedStyles.Levels[k] = lipgloss.NewStyle().SetString("TRAC")
+			} else {
+				// For other levels, keep their default strings but remove color
+				clearedStyles.Levels[k] = styles.Levels[k].UnsetForeground().Bold(false)
+			}
 		}
-		// Add trace level style (use same style as debug if available)
-		if debugStyle, ok := stylesDefault.Levels[log.DebugLevel]; ok {
-			styles.Levels[logger.TraceLevel] = debugStyle.UnsetForeground().Bold(false)
-		}
+		log.SetStyles(clearedStyles)
+	} else {
 		log.SetStyles(styles)
 	}
 	// Only set output if a log file is configured
@@ -140,7 +155,12 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-	log.Debug("Set", "logs-level", logger.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+	// Use trace level for this message when trace is enabled, otherwise debug
+	if atmosConfig.Logs.Level == "Trace" {
+		logger.Trace("Set", "logs-level", logger.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+	} else {
+		log.Debug("Set", "logs-level", logger.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+	}
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
