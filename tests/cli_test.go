@@ -36,7 +36,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // Command-line flag for regenerating snapshots.
