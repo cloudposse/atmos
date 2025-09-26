@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -9,6 +8,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -135,7 +135,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 			}
 
 			if len(GetStackNamePattern(&atmosConfig)) < 1 {
-				return errors.New("stack name pattern must be provided in `stacks.name_pattern` CLI config or `ATMOS_STACKS_NAME_PATTERN` ENV variable")
+				return errUtils.ErrMissingStackNameTemplateCliConfig
 			}
 
 			stack, err := cfg.GetStackNameFromContextAndStackNamePattern(
@@ -170,7 +170,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 
 		context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
-		// Add Component to allow the `cluster_name_pattern` in `atmos.yaml` to use `{component} token
+		// Add Component to allow the `cluster_name_template` in `atmos.yaml` to use `{component} token
 		context.Component = strings.Replace(kubeconfigContext.Component, "/", "-", -1)
 
 		// `kubeconfig` can be overridden on the command line

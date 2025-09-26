@@ -24,7 +24,7 @@
       "use_eks": true,
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
-      "cluster_name_pattern": "",
+      "cluster_name_template": "",
       "command": ""
     },
     "packer": {
@@ -40,8 +40,8 @@
     "excluded_paths": [
       "**/_defaults.yaml"
     ],
-    "name_pattern": "{stage}",
-    "name_template": ""
+    "name_template": "",
+    "name_template": "{{ .vars.stage }}"
   },
   "workflows": {
     "base_path": "",

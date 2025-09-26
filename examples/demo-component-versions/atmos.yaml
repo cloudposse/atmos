@@ -15,14 +15,14 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
 logs:
   file: "/dev/stderr"
   level: Info
 
 commands:
-- name: "test"
-  description: "Run all tests"
-  steps:
-  - atmos vendor pull --everything
+  - name: "test"
+    description: "Run all tests"
+    steps:
+      - atmos vendor pull --everything

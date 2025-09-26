@@ -19,7 +19,7 @@ components:
     use_eks: true
     kubeconfig_path: ""
     helm_aws_profile_pattern: ""
-    cluster_name_pattern: ""
+    cluster_name_template: ""
     command: ""
   packer:
     base_path: ""
@@ -30,7 +30,7 @@ stacks:
     - deploy/**/*
   excluded_paths:
     - '**/_defaults.yaml'
-  name_pattern: '{stage}'
+  name_template: '{stage}'
   name_template: ""
 logs:
   file: /dev/stderr

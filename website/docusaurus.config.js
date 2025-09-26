@@ -305,7 +305,7 @@ const config = {
         mermaid: true,
     },
 
-    themes: ['@docusaurus/theme-mermaid']
+    themes: ['@docusaurus/theme-mermaid', 'docusaurus-json-schema-plugin']
 };
 
 module.exports = config;
