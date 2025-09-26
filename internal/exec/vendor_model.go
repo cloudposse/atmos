@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
@@ -606,7 +606,7 @@ func executeDiffCheck(p *pkgVendorDiff) tea.Cmd {
 		}
 
 		// Otherwise, check for updates using the existing logic
-		updateAvailable, latestInfo, err := checkForVendorUpdates(p.source, true)
+		updateAvailable, latestInfo, err := checkForVendorUpdates(&p.source, true)
 		if err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("%w: %v", errUtils.ErrCheckingForUpdates, err),

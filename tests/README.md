@@ -59,10 +59,11 @@ curl https://api.github.com/rate_limit
 ```
 
 ### Binary Tests
-Require atmos binary built in repository:
-```bash
-make build
-```
+Tests automatically build a temporary atmos binary for each test run:
+- When coverage is **disabled** (default): Builds a regular binary
+- When coverage is **enabled** (GOCOVERDIR set): Builds with coverage instrumentation
+
+This ensures tests always run with the latest code changes without requiring manual rebuilds.
 
 ### OCI Registry Tests
 Require GitHub token for pulling OCI images:

@@ -39,6 +39,11 @@
               "description": "The arguments to pass to the command.",
               "default": []
             },
+            "sandbox": {
+              "type": "boolean",
+              "description": "Run test in a sandboxed environment with isolated component copies.",
+              "default": false
+            },
             "expect": {
               "type": "object",
               "properties": {

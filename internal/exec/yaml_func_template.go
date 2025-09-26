@@ -3,7 +3,7 @@ package exec
 import (
 	"encoding/json"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	u "github.com/cloudposse/atmos/pkg/utils"

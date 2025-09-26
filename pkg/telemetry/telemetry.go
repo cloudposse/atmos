@@ -1,7 +1,7 @@
 package telemetry
 
 import (
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/posthog/posthog-go"
 )
 

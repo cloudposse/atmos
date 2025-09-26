@@ -110,7 +110,7 @@ func (h *vendorDiffHelper) collectUpdates(sources []schema.AtmosVendorSource) ma
 		componentName := h.extractComponentName(source)
 
 		// Check for updates using the existing logic
-		updateAvailable, latestInfo, err := checkForVendorUpdates(sources[i], true)
+		updateAvailable, latestInfo, err := checkForVendorUpdates(&sources[i], true)
 		if err != nil {
 			continue // Skip components with errors
 		}

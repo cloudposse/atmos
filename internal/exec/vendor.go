@@ -317,7 +317,7 @@ func extractComponentNameFromSource(source string) string {
 }
 
 // checkForVendorUpdates checks if updates are available for a vendor source.
-func checkForVendorUpdates(source schema.AtmosVendorSource, _ bool) (bool, string, error) {
+func checkForVendorUpdates(source *schema.AtmosVendorSource, _ bool) (bool, string, error) {
 	// Process the source URI template just like vendor pull does
 	tmplData := struct {
 		Component string
@@ -388,10 +388,10 @@ func checkRemoteUpdates(uri, currentVersion string) (bool, string, error) {
 		// If current version looks like a commit hash, compare
 		if isCommitHash(currentVersion) && latestCommit != "" {
 			if currentVersion != latestCommit[:min(len(currentVersion), len(latestCommit))] {
-				return true, latestCommit[:8], nil // Show short commit hash
+				return true, latestCommit[:gitShortHashLength], nil // Show short commit hash
 			}
 		} else if latestCommit != "" {
-			return true, latestCommit[:8], nil
+			return true, latestCommit[:gitShortHashLength], nil
 		}
 
 		return false, currentVersion, nil
@@ -479,24 +479,23 @@ func getLatestGitTag(gitURL string) (string, error) {
 	ctx := context.Background()
 
 	// Use git ls-remote with proper error handling
-	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--tags", "--sort=-version:refname", gitURL)
+	cmd := exec.CommandContext(ctx, gitCommand, "ls-remote", "--tags", "--sort=-version:refname", gitURL)
 	cmd.Env = append(os.Environ(),
 		"GIT_SSH_COMMAND=ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=10",
-		"GIT_TERMINAL_PROMPT=0")
+		gitTerminalPrompt0)
 
 	output, err := cmd.Output()
 	if err != nil {
 		// Try HTTPS fallback
 		httpsURL := convertSSHToHTTPS(gitURL)
-		if httpsURL != gitURL {
-			cmd = exec.CommandContext(ctx, "git", "ls-remote", "--tags", "--sort=-version:refname", httpsURL)
-			cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-			output, err = cmd.Output()
-			if err != nil {
-				return "", fmt.Errorf("failed to execute git ls-remote (both SSH and HTTPS): %w", err)
-			}
-		} else {
+		if httpsURL == gitURL {
 			return "", fmt.Errorf("failed to execute git ls-remote: %w", err)
+		}
+		cmd = exec.CommandContext(ctx, gitCommand, "ls-remote", "--tags", "--sort=-version:refname", httpsURL)
+		cmd.Env = append(os.Environ(), gitTerminalPrompt0)
+		output, err = cmd.Output()
+		if err != nil {
+			return "", fmt.Errorf("failed to execute git ls-remote (both SSH and HTTPS): %w", err)
 		}
 	}
 
@@ -507,24 +506,23 @@ func getLatestGitTag(gitURL string) (string, error) {
 func getLatestGitCommit(gitURL string) (string, error) {
 	ctx := context.Background()
 
-	cmd := exec.CommandContext(ctx, "git", "ls-remote", gitURL, "HEAD")
+	cmd := exec.CommandContext(ctx, gitCommand, "ls-remote", gitURL, "HEAD")
 	cmd.Env = append(os.Environ(),
 		"GIT_SSH_COMMAND=ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=10",
-		"GIT_TERMINAL_PROMPT=0")
+		gitTerminalPrompt0)
 
 	output, err := cmd.Output()
 	if err != nil {
 		// Try HTTPS fallback
 		httpsURL := convertSSHToHTTPS(gitURL)
-		if httpsURL != gitURL {
-			cmd = exec.CommandContext(ctx, "git", "ls-remote", httpsURL, "HEAD")
-			cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-			output, err = cmd.Output()
-			if err != nil {
-				return "", fmt.Errorf("failed to execute git ls-remote (both SSH and HTTPS): %w", err)
-			}
-		} else {
+		if httpsURL == gitURL {
 			return "", fmt.Errorf("failed to execute git ls-remote: %w", err)
+		}
+		cmd = exec.CommandContext(ctx, gitCommand, "ls-remote", httpsURL, "HEAD")
+		cmd.Env = append(os.Environ(), gitTerminalPrompt0)
+		output, err = cmd.Output()
+		if err != nil {
+			return "", fmt.Errorf("failed to execute git ls-remote (both SSH and HTTPS): %w", err)
 		}
 	}
 

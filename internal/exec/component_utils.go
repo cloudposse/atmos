@@ -1,7 +1,7 @@
 package exec
 
 import (
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // isComponentEnabled checks if a component is enabled based on its metadata.

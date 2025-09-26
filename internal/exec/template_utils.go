@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 	_ "github.com/hairyhenderson/gomplate/v4"

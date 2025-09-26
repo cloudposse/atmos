@@ -15,8 +15,9 @@ runs:
   using: 'composite'
   steps:
     - name: Remove auto-added semver labels
-      uses: actions/github-script@v7
+      uses: actions/github-script@v8
       with:
+        github-token: ${{ github.token }}
         script: |
           // Check if this is a pull request event
           if (!context.payload.pull_request) {

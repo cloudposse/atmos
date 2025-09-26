@@ -2,7 +2,9 @@ package exec
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -62,8 +64,30 @@ func TestWriteMergedDataToFile(t *testing.T) {
 	}
 
 	// Read the file from the URL.
-	// Remove the "file://" prefix.
-	filePath := strings.TrimPrefix(urlStr, "file://")
+	// Parse the URL properly to handle both Windows and Unix paths.
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		t.Fatalf("failed to parse URL %s: %v", urlStr, err)
+	}
+	// Convert the URL to a file path.
+	filePath := parsedURL.Path
+	if runtime.GOOS == "windows" {
+		// On Windows, file URLs can have two forms:
+		// 1. file://C:/temp/file.json (no leading slash in Path)
+		// 2. file:///C:/temp/file.json (leading slash in Path)
+		// If there's a leading slash followed by a drive letter, remove the slash.
+		if len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
+			filePath = filePath[1:]
+		}
+		// If the path doesn't have a drive letter, it's likely the URL was
+		// constructed incorrectly. Check if Host contains the drive letter.
+		if parsedURL.Host != "" && (len(filePath) < 2 || filePath[1] != ':') {
+			// Combine host and path for Windows file URLs
+			filePath = parsedURL.Host + filePath
+		}
+		// Convert forward slashes to backslashes for Windows
+		filePath = filepath.FromSlash(filePath)
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read file: %v", err)
@@ -99,7 +123,30 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 	}
 
 	// Verify that the file contains the dummyFileURL.
-	filePath := strings.TrimPrefix(urlStr, "file://")
+	// Parse the URL properly to handle both Windows and Unix paths.
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		t.Fatalf("failed to parse URL %s: %v", urlStr, err)
+	}
+	// Convert the URL to a file path.
+	filePath := parsedURL.Path
+	if runtime.GOOS == "windows" {
+		// On Windows, file URLs can have two forms:
+		// 1. file://C:/temp/file.json (no leading slash in Path)
+		// 2. file:///C:/temp/file.json (leading slash in Path)
+		// If there's a leading slash followed by a drive letter, remove the slash.
+		if len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
+			filePath = filePath[1:]
+		}
+		// If the path doesn't have a drive letter, it's likely the URL was
+		// constructed incorrectly. Check if Host contains the drive letter.
+		if parsedURL.Host != "" && (len(filePath) < 2 || filePath[1] != ':') {
+			// Combine host and path for Windows file URLs
+			filePath = parsedURL.Host + filePath
+		}
+		// Convert forward slashes to backslashes for Windows
+		filePath = filepath.FromSlash(filePath)
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read file: %v", err)

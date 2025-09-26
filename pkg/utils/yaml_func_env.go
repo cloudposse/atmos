@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 var ErrInvalidAtmosYAMLFunction = fmt.Errorf("invalid Atmos YAML function")

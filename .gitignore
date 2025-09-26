@@ -54,7 +54,11 @@ tests/fixtures/scenarios/vendor/components/**
 internal/exec/output.*
 
 # Coverage files
-coverage.out
+**.out
+coverage*.out
 coverage.html
+coverage.*.tmp
+coverage/
+.gocoverdir/
 tests.test
 exec.test

@@ -2,15 +2,8 @@ package exec
 
 // Constants for vendor operations to avoid magic strings.
 const (
-	// YAML field names.
-	yamlComponentField = "component:"
-	yamlVersionField   = "version:"
-
 	// File permissions.
 	vendorDefaultFilePermissions = 0o600
-
-	// Log formatting.
-	logMessageFormat = "%s\n"
 
 	// Version defaults.
 	defaultVersionLatest = "latest"
@@ -18,6 +11,10 @@ const (
 	// Template markers.
 	templateStartMarker = "{{"
 
-	// Component key for logging.
-	componentLogKey = "component"
+	// Git commit hash display length.
+	gitShortHashLength = 8
+
+	// Git command constants.
+	gitCommand         = "git"
+	gitTerminalPrompt0 = "GIT_TERMINAL_PROMPT=0"
 )

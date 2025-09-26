@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -32,6 +33,7 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
+	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -42,8 +44,10 @@ var (
 	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 	startingDir         string
 	snapshotBaseDir     string
-	repoRoot            string // Repository root directory for path normalization and binary checks
-	skipReason          string // Package-level variable to track why tests should be skipped
+	repoRoot            string                   // Repository root directory for path normalization
+	skipReason          string                   // Package-level variable to track why tests should be skipped
+	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
+	coverDir            string                   // GOCOVERDIR environment variable value
 )
 
 // Define styles using lipgloss.
@@ -51,7 +55,7 @@ var (
 	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
 	removedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("160")) // Red
 )
-var logger *log.Logger
+var logger *log.AtmosLogger
 
 type Expectation struct {
 	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output
@@ -76,6 +80,7 @@ type TestCase struct {
 	Tty         bool              `yaml:"tty"`         // Enable TTY simulation
 	Snapshot    bool              `yaml:"snapshot"`    // Enable snapshot comparison
 	Clean       bool              `yaml:"clean"`       // Removes untracked files in work directory
+	Sandbox     bool              `yaml:"sandbox"`     // Run in sandboxed environment with isolated components
 	Skip        struct {
 		OS MatchPattern `yaml:"os"`
 	} `yaml:"skip"`
@@ -172,16 +177,11 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 	return &suite, nil
 }
 
-type PathManager struct {
-	OriginalPath string
-	Prepended    []string
-}
-
 func init() {
 	// Initialize with default settings.
-	logger = log.NewWithOptions(os.Stdout, log.Options{
-		Level: log.InfoLevel,
-	})
+	logger = log.New()
+	logger.SetOutput(os.Stdout)
+	logger.SetLevel(log.InfoLevel)
 
 	// Ensure that Lipgloss uses terminal colors for tests
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -200,53 +200,11 @@ func init() {
 	// Add a custom style for key `err`
 	styles.Keys["err"] = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))
 	styles.Values["err"] = lipgloss.NewStyle().Bold(true)
-	logger = log.New(os.Stderr)
+	logger = log.New()
+	logger.SetOutput(os.Stderr)
 	logger.SetStyles(styles)
 	logger.SetColorProfile(termenv.TrueColor)
 	logger.Info("Smoke tests for atmos CLI starting")
-
-	// Initialize PathManager and update PATH
-	pathManager := NewPathManager()
-	pathManager.Prepend("../build", "..")
-	err := pathManager.Apply()
-	if err != nil {
-		logger.Fatal("Failed to apply updated PATH", "error", err)
-	}
-	logger.Info("Path Manager", "PATH", pathManager.GetPath())
-}
-
-// NewPathManager initializes a PathManager with the current PATH.
-func NewPathManager() *PathManager {
-	return &PathManager{
-		OriginalPath: os.Getenv("PATH"),
-		Prepended:    []string{},
-	}
-}
-
-// Prepend adds directories to the PATH with precedence.
-func (pm *PathManager) Prepend(dirs ...string) {
-	for _, dir := range dirs {
-		absPath, err := filepath.Abs(dir)
-		if err != nil {
-			logger.Fatal("Failed to resolve absolute path", "dir", dir, "error", err)
-			continue
-		}
-		pm.Prepended = append(pm.Prepended, absPath)
-	}
-}
-
-// GetPath returns the updated PATH.
-func (pm *PathManager) GetPath() string {
-	return fmt.Sprintf("%s%c%s",
-		strings.Join(pm.Prepended, string(os.PathListSeparator)),
-		os.PathListSeparator,
-		pm.OriginalPath,
-	)
-}
-
-// Apply updates the PATH environment variable globally.
-func (pm *PathManager) Apply() error {
-	return os.Setenv("PATH", pm.GetPath())
 }
 
 // Determine if running in a CI environment.
@@ -483,30 +441,10 @@ func TestMain(m *testing.M) {
 		logger.Fatal("failed to locate git repository", "dir", startingDir)
 	}
 
-	// Check for the atmos binary
-	binaryPath, err := exec.LookPath("atmos")
-	if err != nil {
-		skipReason = fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
-		logger.Info("Tests will be skipped", "reason", skipReason)
-	} else {
-		rel, err := filepath.Rel(repoRoot, binaryPath)
-		if err == nil && strings.HasPrefix(rel, "..") {
-			skipReason = fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
-			logger.Info("Tests will be skipped", "reason", skipReason)
-		} else {
-			stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
-			if err != nil {
-				skipReason = fmt.Sprintf("Failed to check if rebuild needed: %v", err)
-				logger.Info("Tests will be skipped", "reason", skipReason)
-			} else if stale {
-				skipReason = fmt.Sprintf("Atmos binary at %s needs rebuild. Run 'make build' to rebuild.", binaryPath)
-				logger.Info("Tests will be skipped", "reason", skipReason)
-			}
-		}
-	}
-
-	if skipReason == "" {
-		logger.Info("Atmos binary for tests", "binary", binaryPath)
+	// Check if we should collect coverage
+	coverDir = os.Getenv("GOCOVERDIR")
+	if coverDir != "" {
+		logger.Info("Coverage collection enabled", "GOCOVERDIR", coverDir)
 	}
 
 	logger.Info("Starting directory", "dir", startingDir)
@@ -515,7 +453,26 @@ func TestMain(m *testing.M) {
 
 	flag.Parse()        // Parse command-line flags
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
+
+	// Clean up the temporary binary if we built one
+	if atmosRunner != nil {
+		atmosRunner.Cleanup()
+	}
+
 	errUtils.Exit(exitCode)
+}
+
+// prepareAtmosCommand prepares an atmos command with coverage support if enabled.
+func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exec.Cmd {
+	// Lazy initialize atmosRunner only when needed for atmos commands
+	if atmosRunner == nil {
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		if err := atmosRunner.Build(); err != nil {
+			t.Skipf("Failed to initialize Atmos: %v", err)
+		}
+		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+	}
+	return atmosRunner.CommandContext(ctx, args...)
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
@@ -554,6 +511,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
 
+	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
+	// This ensures every test has its own cache and prevents interference
+	xdgCacheHome := filepath.Join(tempDir, ".cache")
+	tc.Env["XDG_CACHE_HOME"] = xdgCacheHome
+	// Also set the process environment so removeCacheFile() uses the test path
+	os.Setenv("XDG_CACHE_HOME", xdgCacheHome)
+	// Reload XDG to pick up the new environment
+	xdg.Reload()
+
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
@@ -562,7 +528,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// Set environment variables for the test case
 		tc.Env["HOME"] = tempDir
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
-		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
 		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
@@ -591,6 +556,33 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
 		}
 
+		// Setup sandbox environment if enabled
+		var sandboxEnv *testhelpers.SandboxEnvironment
+		if tc.Sandbox {
+			logger.Info("Setting up sandbox environment", "workdir", tc.Workdir)
+
+			env, err := testhelpers.SetupSandbox(t, absoluteWorkdir)
+			if err != nil {
+				t.Fatalf("Failed to setup sandbox for test %q: %v", tc.Name, err)
+			}
+			sandboxEnv = env
+
+			// Add sandbox environment variables to override component paths
+			if tc.Env == nil {
+				tc.Env = make(map[string]string)
+			}
+			for k, v := range sandboxEnv.GetEnvironmentVariables() {
+				logger.Debug("Setting sandbox env var", "key", k, "value", v)
+				tc.Env[k] = v
+			}
+
+			// Ensure sandbox is cleaned up after test
+			defer func() {
+				logger.Debug("Cleaning up sandbox", "tempdir", sandboxEnv.TempDir)
+				sandboxEnv.Cleanup()
+			}()
+		}
+
 		// Clean the directory if enabled
 		if tc.Clean {
 			logger.Info("Cleaning directory", "workdir", tc.Workdir)
@@ -598,12 +590,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
 			}
 		}
-	}
-
-	// Check if the binary exists
-	binaryPath, err := exec.LookPath(tc.Command)
-	if err != nil {
-		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
 	}
 
 	// Include the system PATH in the test environment
@@ -632,14 +618,46 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	currentEnvVars := telemetry.PreserveCIEnvVars()
 	defer telemetry.RestoreCIEnvVars(currentEnvVars)
 
-	// Prepare the command using the context
-	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
+	// Prepare the command based on what's being tested
+	var cmd *exec.Cmd
+	if tc.Command == "atmos" {
+		cmd = prepareAtmosCommand(t, ctx, tc.Args...)
+	} else {
+		// For non-atmos commands, use regular exec
+		binaryPath, err := exec.LookPath(tc.Command)
+		if err != nil {
+			t.Fatalf("Binary not found: %s", tc.Command)
+		}
+		cmd = exec.CommandContext(ctx, binaryPath, tc.Args...)
+	}
+
+	// Preserve GOCOVERDIR if it's already set by atmosRunner
+	existingEnv := cmd.Env
+	if existingEnv == nil {
+		existingEnv = []string{}
+	}
 
 	// Set environment variables without inheriting from the current environment.
 	// This ensures an isolated test environment, preventing unintended side effects
 	// and improving reproducibility across different systems.
 	var envVars []string
+
+	// First, check if GOCOVERDIR is already set by atmosRunner
+	var hasCoverDir bool
+	for _, env := range existingEnv {
+		if strings.HasPrefix(env, "GOCOVERDIR=") {
+			envVars = append(envVars, env)
+			hasCoverDir = true
+			break
+		}
+	}
+
+	// Add test-specific environment variables
 	for key, value := range tc.Env {
+		// Don't override GOCOVERDIR if it was set by atmosRunner
+		if key == "GOCOVERDIR" && hasCoverDir {
+			continue
+		}
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Env = envVars
@@ -923,23 +941,22 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bo
 }
 
 func verifyFormatValidation(t *testing.T, output string, formats []string) bool {
-	success := true
 	for _, format := range formats {
 		switch format {
-		case "yaml":
-			if !verifyYAMLFormat(t, output) {
-				success = false
-			}
 		case "json":
 			if !verifyJSONFormat(t, output) {
-				success = false
+				return false
+			}
+		case "yaml":
+			if !verifyYAMLFormat(t, output) {
+				return false
 			}
 		default:
-			t.Logf("Unknown validation format: %s", format)
-			success = false
+			t.Logf("Unknown format: %s", format)
+			return false
 		}
 	}
-	return success
+	return true
 }
 
 func verifyYAMLFormat(t *testing.T, output string) bool {
@@ -1188,48 +1205,6 @@ func cleanDirectory(t *testing.T, workdir string) error {
 	}
 
 	return nil
-}
-
-// checkIfRebuildNeeded runs `go list` to check if the binary is stale.
-func checkIfRebuildNeeded(binaryPath string, srcDir string) (bool, error) {
-	// Get binary modification time
-	binInfo, err := os.Stat(binaryPath)
-	if os.IsNotExist(err) {
-		return true, fmt.Errorf("binary not found: %s", binaryPath)
-	} else if err != nil {
-		return false, err
-	}
-	binModTime := binInfo.ModTime()
-
-	// Find latest Go source file modification time
-	var latestModTime time.Time
-	err = filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Ignore directories and non-Go files
-		if info.IsDir() || filepath.Ext(path) != ".go" {
-			return nil
-		}
-
-		// Ignore `_test.go` files
-		if strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-
-		// Update latest modification time
-		if info.ModTime().After(latestModTime) {
-			latestModTime = info.ModTime()
-		}
-		return nil
-	})
-	if err != nil {
-		return false, err
-	}
-
-	// Compare timestamps
-	return latestModTime.After(binModTime), nil
 }
 
 // findGitRepo finds the Git repository root.

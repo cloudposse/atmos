@@ -302,7 +302,7 @@ func (h *vendorUpdateHelper) groupUpdatesByFile(
 	sources []schema.AtmosVendorSource,
 	fileMap map[string]string,
 	mainConfigFile string,
-) (map[string]map[string]string, error) {
+) map[string]map[string]string {
 	updatesByFile := make(map[string]map[string]string)
 
 	fmt.Println("\nChecking for version updates...")
@@ -316,7 +316,7 @@ func (h *vendorUpdateHelper) groupUpdatesByFile(
 		}
 
 		// Check for updates
-		updateAvailable, latestVersion, err := checkForVendorUpdates(sources[i], true)
+		updateAvailable, latestVersion, err := checkForVendorUpdates(&sources[i], true)
 		if err != nil {
 			// Skip silently - error will be logged elsewhere
 			continue
@@ -328,7 +328,7 @@ func (h *vendorUpdateHelper) groupUpdatesByFile(
 		}
 	}
 
-	return updatesByFile, nil
+	return updatesByFile
 }
 
 // determineConfigFile determines which configuration file to update.
@@ -423,10 +423,7 @@ func checkAndUpdateVendorVersions(
 	}
 
 	// Group updates by configuration file
-	updatesByFile, err := helper.groupUpdatesByFile(sources, fileMap, mainConfigFile)
-	if err != nil {
-		return err
-	}
+	updatesByFile := helper.groupUpdatesByFile(sources, fileMap, mainConfigFile)
 
 	// Apply updates to files
 	return helper.applyUpdatesToFiles(updatesByFile)

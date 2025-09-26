@@ -7,9 +7,11 @@ import (
 const (
 	ErrWrappingFormat       = "%w: %w"
 	ErrStringWrappingFormat = "%w: %s"
+	ErrValueWrappingFormat  = "%w: %v"
 )
 
 var (
+	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
 	ErrCopyPackage                           = errors.New("failed to copy package")
@@ -28,8 +30,11 @@ var (
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
 	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
 	ErrEmptyFilePath                         = errors.New("file path is empty")
+	ErrEmptyWorkdir                          = errors.New("workdir cannot be empty")
+	ErrWorkdirNotExist                       = errors.New("workdir does not exist")
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
+	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
@@ -132,7 +137,6 @@ var (
 	// Vendor errors.
 	ErrVendorConfigFileNotFound         = errors.New("vendor config file not found")
 	ErrVersionCheckingNotSupported      = errors.New("version checking not supported for direct HTTP file downloads")
-	ErrRefusingToDeleteSymLink          = errors.New("refusing to delete symbolic link")
 	ErrNoValidCommitsFound              = errors.New("no valid commits found")
 	ErrNoTagsFound                      = errors.New("no tags found")
 	ErrNoStableReleaseTags              = errors.New("no stable release tags found")
@@ -142,4 +146,11 @@ var (
 	ErrInvalidGitLsRemoteOutput         = errors.New("invalid git ls-remote output")
 	ErrOCIVersionCheckingNotImplemented = errors.New("OCI version checking not yet implemented - use 'latest' tag for automatic updates")
 	ErrCheckingForUpdates               = errors.New("error checking for updates")
+
+	// Cache-related errors.
+	ErrCacheLocked    = errors.New("cache file is locked")
+	ErrCacheRead      = errors.New("cache read failed")
+	ErrCacheWrite     = errors.New("cache write failed")
+	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
+	ErrCacheMarshal   = errors.New("cache marshal failed")
 )
