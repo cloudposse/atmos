@@ -15,12 +15,12 @@ tests:
     expect:
       exit_code: 0
       stdout:
-        - "Component,Stack"
-        - "mock/disabled,nonprod"
-        - "mock/drift,nonprod"
-        - "mock/nodrift,nonprod"
-        - "mock/drift,prod"
-        - "mock/nodrift,prod"
+        - "Component.*Stack"
+        - "mock/disabled.*nonprod"
+        - "mock/drift.*nonprod"
+        - "mock/nodrift.*nonprod"
+        - "mock/drift.*prod"
+        - "mock/nodrift.*prod"
 
   - name: atmos list instances no tty
     snapshot: true

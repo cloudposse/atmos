@@ -19,7 +19,8 @@ tests:
       os: !not windows
     expect:
       exit_code: 0
-      stderr:
+      # When TTY is enabled, stderr output appears in stdout due to PTY behavior
+      stdout:
         - "Telemetry Enabled"
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
