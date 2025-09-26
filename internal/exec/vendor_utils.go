@@ -624,5 +624,5 @@ func updateVendorConfigFile(sources []schema.AtmosVendorSource, updatedVersions 
 	}
 
 	// Write the file back
-	return os.WriteFile(vendorConfigFile, []byte(newContent), 0644)
+	return os.WriteFile(vendorConfigFile, []byte(newContent), 0o644)
 }
