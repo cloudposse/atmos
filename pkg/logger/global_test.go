@@ -3,6 +3,7 @@ package logger
 import (
 	"bytes"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,7 @@ func TestGlobalLoggerConcurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	const numGoroutines = 100
 	const numOperations = 100
+	var failureCount atomic.Int32
 
 	// Start goroutines that read from the default logger
 	wg.Add(numGoroutines)
@@ -38,7 +40,10 @@ func TestGlobalLoggerConcurrency(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
 				logger := Default()
-				require.NotNil(t, logger)
+				if logger == nil {
+					failureCount.Add(1)
+					return
+				}
 				// Try to use the logger
 				logger.GetLevel()
 				logger.GetLevelString()
@@ -74,6 +79,9 @@ func TestGlobalLoggerConcurrency(t *testing.T) {
 
 	// Wait for all goroutines to complete
 	wg.Wait()
+
+	// Check if any goroutine reported a failure
+	require.Equal(t, int32(0), failureCount.Load(), "Some goroutines found nil logger")
 
 	// Verify we can still get and set the default logger
 	testLogger := New()

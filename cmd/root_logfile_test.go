@@ -17,15 +17,8 @@ func TestLogFileStaysOpen(t *testing.T) {
 	logFile := filepath.Join(tempDir, "test.log")
 
 	// Set up the log file configuration.
-	originalLogFile := os.Getenv("ATMOS_LOGS_FILE")
-	originalLogLevel := os.Getenv("ATMOS_LOGS_LEVEL")
-	defer func() {
-		os.Setenv("ATMOS_LOGS_FILE", originalLogFile)
-		os.Setenv("ATMOS_LOGS_LEVEL", originalLogLevel)
-	}()
-
-	os.Setenv("ATMOS_LOGS_FILE", logFile)
-	os.Setenv("ATMOS_LOGS_LEVEL", "Trace")
+	t.Setenv("ATMOS_LOGS_FILE", logFile)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Trace")
 
 	// Simulate opening the log file (this would happen in setupLogger).
 	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)

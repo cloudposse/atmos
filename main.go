@@ -17,10 +17,15 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-sigChan
+		sig := <-sigChan
 		// Clean up resources before exit.
 		cmd.Cleanup()
-		os.Exit(130) // Standard exit code for SIGINT.
+		// Exit with correct POSIX exit code (128 + signal number).
+		if s, ok := sig.(syscall.Signal); ok {
+			os.Exit(128 + int(s))
+		}
+		// Fallback to SIGINT exit code if signal type assertion fails.
+		os.Exit(130)
 	}()
 
 	// Disable timestamp in logs so snapshots work. We will address this in a future PR updating styles, etc.

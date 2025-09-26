@@ -8,8 +8,7 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// AtmosLogger wraps the Charm Bracelet logger to provide a consistent
-// interface for Atmos while maintaining full compatibility.
+// AtmosLogger wraps the Charm Bracelet logger to provide a consistent interface for Atmos while maintaining full compatibility.
 type AtmosLogger struct {
 	charm *charm.Logger
 }
@@ -127,8 +126,7 @@ func (l *AtmosLogger) With(keyvals ...interface{}) *AtmosLogger {
 	return &AtmosLogger{charm: l.charm.With(keyvals...)}
 }
 
-// GetLevelString returns the string representation of the current log level,
-// handling our custom levels appropriately.
+// GetLevelString returns the string representation of the current log level handling our custom levels appropriately.
 func (l *AtmosLogger) GetLevelString() string {
 	level := l.GetLevel()
 	switch level {
