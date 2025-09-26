@@ -217,7 +217,7 @@ func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Tool, error
 
 	// Check cache first
 	if data, err := os.ReadFile(cacheFile); err == nil {
-		return ar.parseRegistryFile(data, owner, repo)
+		return ar.parseRegistryFile(data)
 	}
 
 	// Fetch from remote
@@ -243,11 +243,11 @@ func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Tool, error
 		log.Debug("Failed to cache registry file", "error", err)
 	}
 
-	return ar.parseRegistryFile(data, owner, repo)
+	return ar.parseRegistryFile(data)
 }
 
 // parseRegistryFile parses Aqua registry YAML data.
-func (ar *AquaRegistry) parseRegistryFile(data []byte, owner, repo string) (*Tool, error) {
+func (ar *AquaRegistry) parseRegistryFile(data []byte) (*Tool, error) {
 	// Try AquaRegistryFile (packages)
 	var aquaRegistry AquaRegistryFile
 	if err := yaml.Unmarshal(data, &aquaRegistry); err == nil && len(aquaRegistry.Packages) > 0 {
