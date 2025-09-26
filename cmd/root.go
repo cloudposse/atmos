@@ -103,16 +103,16 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.WarnLevel)
 	}
 
-	// Always set up styles to ensure trace level shows as "TRAC"
+	// Always set up styles to ensure trace level shows as "TRCE"
 	styles := log.DefaultStyles()
 
-	// Set trace level to show "TRAC" instead of being blank/DEBU
+	// Set trace level to show "TRCE" instead of being blank/DEBU
 	if debugStyle, ok := styles.Levels[log.DebugLevel]; ok {
-		// Copy debug style but set the string to "TRAC"
-		styles.Levels[logger.TraceLevel] = debugStyle.SetString("TRAC")
+		// Copy debug style but set the string to "TRCE"
+		styles.Levels[logger.TraceLevel] = debugStyle.SetString("TRCE")
 	} else {
 		// Fallback if debug style doesn't exist
-		styles.Levels[logger.TraceLevel] = lipgloss.NewStyle().SetString("TRAC")
+		styles.Levels[logger.TraceLevel] = lipgloss.NewStyle().SetString("TRCE")
 	}
 
 	// If colors are disabled, clear the colors but keep the level strings
@@ -121,8 +121,8 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		clearedStyles.Levels = make(map[log.Level]lipgloss.Style)
 		for k := range styles.Levels {
 			if k == logger.TraceLevel {
-				// Keep TRAC string but remove color
-				clearedStyles.Levels[k] = lipgloss.NewStyle().SetString("TRAC")
+				// Keep TRCE string but remove color
+				clearedStyles.Levels[k] = lipgloss.NewStyle().SetString("TRCE")
 			} else {
 				// For other levels, keep their default strings but remove color
 				clearedStyles.Levels[k] = styles.Levels[k].UnsetForeground().Bold(false)

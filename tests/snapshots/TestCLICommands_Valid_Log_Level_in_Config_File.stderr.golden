@@ -1,4 +1,4 @@
-TRAC Set logs-level=trace logs-file=/dev/stderr
+TRCE Set logs-level=trace logs-file=/dev/stderr
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
