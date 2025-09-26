@@ -166,11 +166,11 @@ viper.SetEnvPrefix("ATMOS")
   t.Skipf("Skipping symlink test on Windows: symlinks require special privileges")
   t.Skipf("Skipping test: %s", dynamicReason)
   ```
-- **For CLI tests that depend on rebuilt binaries**:
-  - Set package-level `skipReason` variable in `TestMain` before calling `m.Run()`
-  - Individual test functions check and skip with `t.Skipf()` if set
+- **For CLI tests**:
+  - Tests automatically build a temporary binary for each test run
+  - When coverage is disabled: builds a regular binary
+  - When coverage is enabled (GOCOVERDIR set): builds with coverage instrumentation
   - TestMain MUST call `os.Exit(m.Run())` to propagate the test exit code
-  - Never use `log.Fatal()` for missing/stale binaries - set `skipReason` instead
 
 ### CLI Command Structure & Examples
 Atmos uses **embedded markdown files** for maintainable examples:
@@ -713,9 +713,9 @@ The project includes Cursor rules in `.cursor/rules/atmos-rules.mdc` covering:
 ### Compilation Requirements (MANDATORY)
 - **ALWAYS compile after making changes** - Run `go build` after ANY code modification
 - **Verify no compilation errors** before proceeding with further changes or commits
-- **Run tests after successful compilation** - Execute `go test ./...` to ensure functionality
+- **Run tests to ensure functionality** - Execute `go test ./...` (tests handle binary requirements automatically)
 - **Never assume code changes work** without compilation verification
-- **Use build-and-test pattern**: `go build -o binary . && go test ./... 2>&1`
+- **Use compile-and-test pattern**: `go build . && go test ./... 2>&1`
 - **Fix compilation errors immediately** - Do not proceed with additional changes until compilation succeeds
 - **This prevents undefined function/variable errors** that waste time and create broken commits
 
