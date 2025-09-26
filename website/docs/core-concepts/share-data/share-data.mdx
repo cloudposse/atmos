@@ -61,7 +61,7 @@ components:
 
 <ActionCard>
 For more advanced examples, check out the `!store` YAML function documentation.
-<PrimaryCTA to="/core-concepts/stacks/yaml-functions/store">Learn More</PrimaryCTA>
+<PrimaryCTA to="/functions/yaml/store">Learn More</PrimaryCTA>
 </ActionCard>
 
 ###  Function: `!terraform.output`
@@ -94,12 +94,12 @@ components:
 
 <ActionCard>
 For more advanced examples, check out the `!terraform.output` YAML function documentation.
-<PrimaryCTA to="/core-concepts/stacks/yaml-functions/terraform.output">Learn More</PrimaryCTA>
+<PrimaryCTA to="/functions/yaml/terraform.output">Learn More</PrimaryCTA>
 </ActionCard>
 
 ###  Function: `!terraform.state`
 
-The [`!terraform.state`](/core-concepts/stacks/yaml-functions/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it’s **very fast**, doesn’t require provider initialization, and currently supports [S3 and local backends](/core-concepts/components/terraform/backends) for accessing [remote state](/core-concepts/share-data/remote-state).
+The [`!terraform.state`](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it’s **very fast**, doesn’t require provider initialization, and currently supports [S3 and local backends](/core-concepts/components/terraform/backends) for accessing [remote state](/core-concepts/share-data/remote-state).
 
 For example, we can read the `vpc_id` output of the `vpc` component in the current stack:
 
@@ -124,18 +124,18 @@ components:
 
 <ActionCard>
     For more advanced examples, check out the `!terraform.state` YAML function documentation.
-    <PrimaryCTA to="/core-concepts/stacks/yaml-functions/terraform.state">Learn More</PrimaryCTA>
+    <PrimaryCTA to="/functions/yaml/terraform.state">Learn More</PrimaryCTA>
 </ActionCard>
 
 :::tip
-The [`!terraform.state`](/core-concepts/stacks/yaml-functions/terraform.state) function accepts the same parameters and
-produces the same result as the [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output) function,
+The [`!terraform.state`](/functions/yaml/terraform.state) function accepts the same parameters and
+produces the same result as the [`!terraform.output`](/functions/yaml/terraform.output) function,
 but has significantly less impact on performance as it reads the state file directly from the configured backend without
 executing Terraform/OpenTofu commands, generating varfiles and backend config files, and initializing all modules and providers.
 
 To understand the performance implications of the `!terraform.output` and `!terraform.state` functions,
-compare the [!terraform.output Execution Flow](/core-concepts/stacks/yaml-functions/terraform.output#terraformoutput-function-execution-flow) with the
-[!terraform.state Execution Flow](/core-concepts/stacks/yaml-functions/terraform.state#terraformstate-function-execution-flow).
+compare the [!terraform.output Execution Flow](/functions/yaml/terraform.output#terraformoutput-function-execution-flow) with the
+[!terraform.state Execution Flow](/functions/yaml/terraform.state#terraformstate-function-execution-flow).
 :::
 
 ## Using Template Functions
@@ -168,7 +168,7 @@ components:
 
 <ActionCard>
     For more advanced examples, check out the `atmos.Store` template function documentation.
-    <PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Store">Learn More</PrimaryCTA>
+    <PrimaryCTA to="/functions/template/atmos.Store">Learn More</PrimaryCTA>
 </ActionCard>
 
 ###  Function: `atmos.Component`
@@ -199,7 +199,7 @@ components:
 
 <ActionCard>
 For more advanced examples, check out the `atmos.Component` function documentation.
-<PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Component">Learn More</PrimaryCTA>
+<PrimaryCTA to="/functions/template/atmos.Component">Learn More</PrimaryCTA>
 </ActionCard>
 
 ### Data Sources

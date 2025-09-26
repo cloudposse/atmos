@@ -146,25 +146,25 @@ Atmos extends standard YAML with several custom functions that can be used in at
   <dt>`!env`</dt>
   <dd>
     Used to retrieve environment variables.
-    See the [`!env` documentation](/core-concepts/stacks/yaml-functions/env) for more details.
+    See the [`!env` documentation](/functions/yaml/env) for more details.
   </dd>
 
   <dt>`!exec`</dt>
   <dd>
     Used to execute shell scripts and assign their output.
-    See the [`!exec` documentation](/core-concepts/stacks/yaml-functions/exec) for more details.
+    See the [`!exec` documentation](/functions/yaml/exec) for more details.
   </dd>
 
   <dt>`!include`</dt>
   <dd>
     Used to include other YAML files into the current configuration.
-    See the [`!include` documentation](/core-concepts/stacks/yaml-functions/include) for more details.
+    See the [`!include` documentation](/functions/yaml/include) for more details.
   </dd>
 
   <dt>`!repo-root`</dt>
   <dd>
     Used to retrieve the root directory of the Atmos repository. If the Git root is not found, it will return a default value if specified; otherwise, it returns an error.
-    See the [`!repo-root` documentation](/core-concepts/stacks/yaml-functions/repo-root) for more details.
+    See the [`!repo-root` documentation](/functions/yaml/repo-root) for more details.
   </dd>
 </dl>
 ## Imports
@@ -631,7 +631,7 @@ Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifes
 functions and data sources:
 
  - [Go `text/template` functions](https://pkg.go.dev/text/template#hdr-Functions)
- - [Atmos Template Functions](/core-concepts/stacks/templates/functions)
+ - [Atmos Template Functions](/functions/template)
  - [Sprig Functions](https://masterminds.github.io/sprig/)
  - [Gomplate Functions](https://docs.gomplate.ca/functions/)
  - [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
