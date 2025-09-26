@@ -21,12 +21,12 @@ vars:
   environment: ue1
   stage: dev
   region: us-east-1
-  
+
   # Custom business variables
   cost_center: engineering
   team: platform
   contact: platform-team@example.com
-  
+
   # Feature flags
   enable_monitoring: true
   enable_backup: true
@@ -50,7 +50,7 @@ settings:
       environment: "{{ .vars.environment }}"
       stage: "{{ .vars.stage }}"
     - component: eks
-      
+
   # Validation rules
   validation:
     check-vpc-config:
@@ -58,7 +58,7 @@ settings:
       schema_path: schemas/vpc-component.json
       description: Validate VPC configuration
       disabled: false
-      
+
     check-security-policies:
       schema_type: opa
       schema_path: policies/security.rego
@@ -66,7 +66,7 @@ settings:
       timeout: 30
       module_paths:
         - policies/lib
-  
+
   # Spacelift configuration
   spacelift:
     workspace_enabled: true
@@ -81,8 +81,8 @@ settings:
     policies:
       - trigger-policy
       - security-policy
-      
-  # Atlantis configuration  
+
+  # Atlantis configuration
   atlantis:
     enabled: true
     apply_requirements:
@@ -90,7 +90,7 @@ settings:
       - mergeable
     workflow: custom
     delete_source_branch_on_merge: true
-    
+
   # Template processing settings
   templates:
     enabled: true
@@ -110,7 +110,7 @@ terraform:
       dynamodb_table: "{{ .vars.namespace }}-{{ .vars.tenant }}-terraform-state-lock"
       region: "{{ .vars.region }}"
       role_arn: "arn:aws:iam::123456789012:role/terraform"
-  
+
   # Remote state configuration for data sources
   remote_state_backend_type: s3
   remote_state_backend:
@@ -120,15 +120,15 @@ terraform:
       key: "terraform.tfstate"
       dynamodb_table: "{{ .vars.namespace }}-{{ .vars.tenant }}-terraform-state-lock"
       region: "{{ .vars.region }}"
-      
+
   # Global Terraform variables
   vars:
     terraform_version: "1.5.0"
-    
+
   # Environment variables for Terraform
   env:
     TF_IN_AUTOMATION: "true"
-    
+
   # Terraform providers configuration
   providers:
     aws:
@@ -174,7 +174,7 @@ components:
         custom:
           vpc_flow_logs_enabled: true
         locked: false  # Set to true to prevent modifications
-        
+
       vars:
         name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-vpc"
         ipv4_primary_cidr_block: 10.0.0.0/16
@@ -184,19 +184,19 @@ components:
           - us-east-1c
         nat_gateway_enabled: true
         nat_instance_enabled: false
-        
+
       env:
         VPC_CUSTOM_VAR: custom-value
-        
+
       settings:
         spacelift:
           workspace_enabled: true
-          
+
       # Component-specific providers
       providers:
         aws:
           region: us-east-1
-          
+
       # Lifecycle hooks
       hooks:
         before:
@@ -205,12 +205,12 @@ components:
         after:
           - name: notify-completion
             command: echo "VPC deployment completed"
-            
+
     # EKS cluster component
     eks:
       metadata:
         component: eks
-        
+
       vars:
         cluster_name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster"
         kubernetes_version: "1.28"
@@ -220,17 +220,17 @@ components:
         desired_size: 3
         min_size: 1
         max_size: 10
-        
+
       # Component dependencies
       settings:
         depends_on:
           - vpc  # Depends on VPC in same stack
-          
+
     # RDS database component
     rds:
       metadata:
         component: rds
-        
+
       vars:
         engine: postgres
         engine_version: "15.4"
@@ -242,19 +242,19 @@ components:
         master_username: dbadmin
         # Reference password from external store
         master_password: !store aws-ssm /{{ .vars.namespace }}/{{ .vars.stage }}/rds/password
-        
+
       # Override backend for this component
       backend:
         s3:
           bucket: "{{ .vars.namespace }}-sensitive-terraform-state"
           encrypt: true
-          
+
   helmfile:
     # nginx-ingress Helm release
     nginx-ingress:
       metadata:
         component: nginx-ingress
-        
+
       vars:
         chart: nginx-stable/nginx-ingress
         chart_version: 0.17.1
@@ -266,14 +266,14 @@ components:
               type: LoadBalancer
             metrics:
               enabled: true
-              
+
     # Monitoring stack
     monitoring:
       metadata:
         component: monitoring
         inherits:
           - monitoring-defaults
-          
+
       vars:
         charts:
           - name: prometheus
@@ -282,13 +282,13 @@ components:
           - name: grafana
             chart: grafana/grafana
             version: 6.59.0
-            
+
   packer:
     # Base AMI for application servers
     app-server:
       metadata:
         component: app-server
-        
+
       vars:
         source_ami_filter:
           name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
@@ -316,7 +316,7 @@ overrides:
         vars:
           nat_gateway_enabled: false
           nat_instance_enabled: true  # Use cheaper NAT instance in dev
-          
+
     eks:
       production:
         vars:
@@ -328,7 +328,7 @@ overrides:
           desired_size: 2
           min_size: 1
           max_size: 5
-          
+
   # Override helmfile releases
   helmfile:
     nginx-ingress:
@@ -354,7 +354,7 @@ workflows:
         command: atmos terraform apply eks -s {{ .stack }}
       - name: deploy-ingress
         command: atmos helmfile apply nginx-ingress -s {{ .stack }}
-        
+
   validate-all:
     description: Validate all components
     steps:
