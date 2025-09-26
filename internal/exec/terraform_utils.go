@@ -178,6 +178,7 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 }
 
 // ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
+// Deprecated: Use ExecuteTerraformAffectedWithGraph instead, which uses the generalized dependency graph.
 func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
 	var affectedList []schema.Affected
 	var err error

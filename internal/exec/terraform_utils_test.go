@@ -88,7 +88,7 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 	}
 }
 
-func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
+func TestExecuteTerraformAffectedWithGraphAndDependents(t *testing.T) {
 	// Check for valid Git remote URL before running test
 	tests.RequireGitRemoteWithValidURL(t)
 
@@ -140,9 +140,9 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 		CloneTargetRef:    true,
 	}
 
-	err = ExecuteTerraformAffected(&a, &info)
+	err = ExecuteTerraformAffectedWithGraph(&a, &info)
 	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraformAffected': %v", err)
+		t.Fatalf("Failed to execute 'ExecuteTerraformAffectedWithGraph': %v", err)
 	}
 
 	w.Close()
