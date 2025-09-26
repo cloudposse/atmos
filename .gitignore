@@ -84,3 +84,6 @@ tools/lintroller/.lintroller
 
 performance-optimization/
 node_modules
+# Toolchain installed tools
+toolchain/.tools/
+toolchain/.tool-versions
