@@ -3,8 +3,10 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -39,7 +41,7 @@ func withCacheFileLockUnix(cacheFile string, fn func() error) error {
 	if !locked {
 		// If we can't get lock quickly, skip the cache operation
 		// Cache is not critical for functionality.
-		return errors.New("cache file is locked by another process")
+		return fmt.Errorf("%w: cache file is locked by another process", errUtils.ErrCacheLocked)
 	}
 
 	defer func() {

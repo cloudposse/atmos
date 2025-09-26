@@ -3,12 +3,14 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/adrg/xdg"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,11 +20,16 @@ func TestCacheFileLockDeadlock(t *testing.T) {
 	// Create a temporary cache directory.
 	testDir := t.TempDir()
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
 
 	// Reload XDG to pick up the environment change.
 	xdg.Reload()
+
+	// Ensure XDG state is restored after the test.
+	t.Cleanup(func() {
+		os.Setenv("XDG_CACHE_HOME", originalXDG)
+		xdg.Reload()
+	})
 
 	// Create initial cache.
 	initialCache := CacheConfig{
@@ -65,8 +72,11 @@ func TestCacheFileLockDeadlock(t *testing.T) {
 					mu.Unlock()
 				} else {
 					// Lock contention is expected when multiple goroutines compete.
+					// Verify that the error is our sentinel error.
+					assert.True(t, errors.Is(err, errUtils.ErrCacheLocked),
+						"Expected ErrCacheLocked sentinel error for goroutine %d, got: %v", id, err)
 					assert.Contains(t, err.Error(), "cache file is locked by another process",
-						"Unexpected error for goroutine %d: %v", id, err)
+						"Unexpected error message for goroutine %d: %v", id, err)
 				}
 			}(i)
 		}
@@ -91,11 +101,16 @@ func TestCacheFileLockDeadlock(t *testing.T) {
 func TestCacheFileLockTimeoutBehavior(t *testing.T) {
 	testDir := t.TempDir()
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
 
 	// Reload XDG to pick up the environment change.
 	xdg.Reload()
+
+	// Ensure XDG state is restored after the test.
+	t.Cleanup(func() {
+		os.Setenv("XDG_CACHE_HOME", originalXDG)
+		xdg.Reload()
+	})
 
 	cacheFile, err := GetCacheFilePath()
 	require.NoError(t, err)
@@ -119,11 +134,16 @@ func TestCacheFileLockTimeoutBehavior(t *testing.T) {
 func TestLoadCacheNonBlockingWithLockedFile(t *testing.T) {
 	testDir := t.TempDir()
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 	os.Setenv("XDG_CACHE_HOME", testDir)
 
 	// Reload XDG to pick up the environment change.
 	xdg.Reload()
+
+	// Ensure XDG state is restored after the test.
+	t.Cleanup(func() {
+		os.Setenv("XDG_CACHE_HOME", originalXDG)
+		xdg.Reload()
+	})
 
 	// Create initial cache.
 	initialCache := CacheConfig{
