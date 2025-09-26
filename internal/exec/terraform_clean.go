@@ -31,7 +31,6 @@ var (
 	ErrCollectFiles              = errors.New("failed to collect files")
 	ErrEmptyEnvDir               = errors.New("ENV TF_DATA_DIR is empty")
 	ErrResolveEnvDir             = errors.New("error resolving TF_DATA_DIR path")
-	ErrSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrRefusingToDeleteDir       = errors.New("refusing to delete root directory")
 	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
 	ErrRootPath                  = errors.New("root path cannot be empty")
