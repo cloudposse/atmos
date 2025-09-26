@@ -186,24 +186,30 @@ func shouldSkipComponentForGraph(componentSection map[string]any, componentName 
 
 // applyFiltersToGraph applies query and component filters to the graph.
 func applyFiltersToGraph(graph *dependency.Graph, _ map[string]any, info *schema.ConfigAndStacksInfo) *dependency.Graph {
-	// Collect node IDs based on filters.
+	// Determine base set: components/stack if provided; otherwise all nodes.
 	nodeIDs := collectFilteredNodeIDs(graph, info)
+
+	// If no nodes collected from filters, use all nodes as the base set
+	if len(nodeIDs) == 0 {
+		// Check if we have any filters specified
+		if len(info.Components) == 0 && info.Stack == "" && info.Query == "" {
+			// No filters at all - return the original graph
+			return graph
+		}
+		// We have filters but no nodes collected (query-only case or empty filter result)
+		nodeIDs = getAllNodeIDs(graph)
+	}
 
 	// Apply query filter if specified.
 	if info.Query != "" {
 		nodeIDs = filterNodesByQuery(graph, nodeIDs, info.Query)
 	}
 
-	// If no filters applied, include all nodes.
-	if !hasFilters(info) {
-		nodeIDs = getAllNodeIDs(graph)
-	}
-
 	// Filter the graph.
 	return graph.Filter(dependency.Filter{
 		NodeIDs:             nodeIDs,
-		IncludeDependencies: true,  // Include what these components depend on.
-		IncludeDependents:   false, // Don't include what depends on these.
+		IncludeDependencies: true,  // Include prerequisites.
+		IncludeDependents:   false, // Exclude reverse deps.
 	})
 }
 
@@ -288,11 +294,6 @@ func isNodeInComponents(node *dependency.Node, components []string) bool {
 // isNodeInStack checks if a node is in the specified stack (or if no stack is specified).
 func isNodeInStack(node *dependency.Node, stack string) bool {
 	return stack == "" || node.Stack == stack
-}
-
-// hasFilters checks if any filters are specified.
-func hasFilters(info *schema.ConfigAndStacksInfo) bool {
-	return len(info.Components) > 0 || info.Stack != "" || info.Query != ""
 }
 
 // getAllNodeIDs returns all node IDs from the graph.

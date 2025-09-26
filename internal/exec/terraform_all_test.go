@@ -12,7 +12,7 @@ import (
 )
 
 func TestBuildTerraformDependencyGraph(t *testing.T) {
-	// Test building dependency graph from stacks
+	// Test building dependency graph from stacks.
 	stacks := map[string]any{
 		"dev": map[string]any{
 			"components": map[string]any{
@@ -60,7 +60,7 @@ func TestBuildTerraformDependencyGraph(t *testing.T) {
 	assert.NotNil(t, graph)
 	assert.Equal(t, 3, graph.Size())
 
-	// Verify nodes exist
+	// Verify nodes exist.
 	vpcNode, exists := graph.GetNode("vpc-dev")
 	assert.True(t, exists)
 	assert.Equal(t, "vpc", vpcNode.Component)
@@ -76,7 +76,7 @@ func TestBuildTerraformDependencyGraph(t *testing.T) {
 	assert.Equal(t, "app", appNode.Component)
 	assert.Equal(t, 1, len(appNode.Dependencies))
 
-	// Verify execution order
+	// Verify execution order.
 	order, err := graph.TopologicalSort()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(order))
@@ -86,7 +86,7 @@ func TestBuildTerraformDependencyGraph(t *testing.T) {
 }
 
 func TestBuildTerraformDependencyGraph_WithAbstractComponents(t *testing.T) {
-	// Test that abstract components are filtered out
+	// Test that abstract components are filtered out.
 	stacks := map[string]any{
 		"dev": map[string]any{
 			"components": map[string]any{
@@ -119,10 +119,10 @@ func TestBuildTerraformDependencyGraph_WithAbstractComponents(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, graph)
-	assert.Equal(t, 1, graph.Size()) // Only "real" component
+	assert.Equal(t, 1, graph.Size()) // Only "real" component.
 
 	_, exists := graph.GetNode("base-dev")
-	assert.False(t, exists) // Abstract component not in graph
+	assert.False(t, exists) // Abstract component not in graph.
 
 	realNode, exists := graph.GetNode("real-dev")
 	assert.True(t, exists)
@@ -130,7 +130,7 @@ func TestBuildTerraformDependencyGraph_WithAbstractComponents(t *testing.T) {
 }
 
 func TestBuildTerraformDependencyGraph_WithDisabledComponents(t *testing.T) {
-	// Test that disabled components are filtered out
+	// Test that disabled components are filtered out.
 	stacks := map[string]any{
 		"dev": map[string]any{
 			"components": map[string]any{
@@ -163,10 +163,10 @@ func TestBuildTerraformDependencyGraph_WithDisabledComponents(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, graph)
-	assert.Equal(t, 1, graph.Size()) // Only "enabled" component
+	assert.Equal(t, 1, graph.Size()) // Only "enabled" component.
 
 	_, exists := graph.GetNode("disabled-dev")
-	assert.False(t, exists) // Disabled component not in graph
+	assert.False(t, exists) // Disabled component not in graph.
 
 	enabledNode, exists := graph.GetNode("enabled-dev")
 	assert.True(t, exists)
@@ -174,7 +174,7 @@ func TestBuildTerraformDependencyGraph_WithDisabledComponents(t *testing.T) {
 }
 
 func TestApplyFiltersToGraph(t *testing.T) {
-	// Create a test graph
+	// Create a test graph.
 	graph := dependency.NewGraph()
 
 	node1 := &dependency.Node{
@@ -207,14 +207,14 @@ func TestApplyFiltersToGraph(t *testing.T) {
 		}
 
 		filtered := applyFiltersToGraph(graph, nil, info)
-		assert.Equal(t, 2, filtered.Size()) // Only dev stack components
+		assert.Equal(t, 2, filtered.Size()) // Only dev stack components.
 
 		_, exists := filtered.GetNode("vpc-dev")
 		assert.True(t, exists)
 		_, exists = filtered.GetNode("database-dev")
 		assert.True(t, exists)
 		_, exists = filtered.GetNode("app-prod")
-		assert.False(t, exists) // prod stack component filtered out
+		assert.False(t, exists) // prod stack component filtered out.
 	})
 
 	t.Run("filter by components", func(t *testing.T) {
@@ -230,14 +230,14 @@ func TestApplyFiltersToGraph(t *testing.T) {
 		_, exists = filtered.GetNode("database-dev")
 		assert.True(t, exists)
 		_, exists = filtered.GetNode("app-prod")
-		assert.False(t, exists) // app component filtered out
+		assert.False(t, exists) // app component filtered out.
 	})
 
 	t.Run("no filters", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{}
 
 		filtered := applyFiltersToGraph(graph, nil, info)
-		assert.Equal(t, 3, filtered.Size()) // All components included
+		assert.Equal(t, 3, filtered.Size()) // All components included.
 	})
 }
 
@@ -270,7 +270,7 @@ func TestExecuteTerraformAll_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Mock to avoid actually executing terraform
+			// Mock to avoid actually executing terraform.
 			tt.info.SubCommand = "plan"
 			err := ExecuteTerraformAll(tt.info)
 
@@ -338,21 +338,21 @@ func TestShouldIncludeComponentForAll(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// This function is internal to terraform_all.go, we'll test it indirectly
-			// through buildTerraformDependencyGraph tests
-			_ = tt // Avoid unused variable warning
-			// Test covered by buildTerraformDependencyGraph tests
+			// through buildTerraformDependencyGraph tests.
+			_ = tt // Avoid unused variable warning.
+			// Test covered by buildTerraformDependencyGraph tests.
 		})
 	}
 }
 
-// Test removed: isComponentAbstract is not exported
+// Test removed: isComponentAbstract is not exported.
 
-// Test removed: isComponentEnabled is not exported
+// Test removed: isComponentEnabled is not exported.
 
 // Test removed: collectFilteredNodeIDs is not exported.
 func TestCollectFilteredNodeIDsRemoved(t *testing.T) {
 	t.Skip("collectFilteredNodeIDs is not exported")
-	// Create test graph
+	// Create test graph.
 	graph := dependency.NewGraph()
 
 	nodes := []*dependency.Node{
@@ -407,7 +407,7 @@ func TestCollectFilteredNodeIDsRemoved(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Function not exported - test indirectly through buildTerraformDependencyGraph
+			// Function not exported - test indirectly through buildTerraformDependencyGraph.
 		})
 	}
 }
@@ -453,7 +453,7 @@ func TestGetComponentNameRemoved(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Function not exported
+			// Function not exported.
 		})
 	}
 }
@@ -497,7 +497,7 @@ func TestValidateExecuteTerraformAllArgsRemoved(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Function not exported
+			// Function not exported.
 			err := error(nil)
 
 			if tt.expectError {

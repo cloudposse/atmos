@@ -7,7 +7,7 @@ import (
 // GraphBuilder implements the Builder interface for constructing dependency graphs.
 type GraphBuilder struct {
 	graph *Graph
-	// Track if build has been called to prevent modifications after build
+	// Track if build has been called to prevent modifications after build.
 	built bool
 }
 
@@ -44,15 +44,15 @@ func (b *GraphBuilder) Build() (*Graph, error) {
 		return nil, ErrGraphAlreadyBuilt
 	}
 
-	// Validate the graph for cycles
+	// Validate the graph for cycles.
 	if hasCycle, cyclePath := b.graph.HasCycles(); hasCycle {
 		return nil, fmt.Errorf("%w: %v", ErrCircularDependency, cyclePath)
 	}
 
-	// Identify root nodes
+	// Identify root nodes.
 	b.graph.IdentifyRoots()
 
-	// Check if we have at least one root node (unless the graph is empty)
+	// Check if we have at least one root node (unless the graph is empty).
 	if len(b.graph.Nodes) > 0 && len(b.graph.Roots) == 0 {
 		return nil, ErrNoRootNodes
 	}
