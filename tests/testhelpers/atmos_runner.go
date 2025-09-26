@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -50,6 +51,10 @@ func (r *AtmosRunner) Build() error {
 // buildWithCoverage builds Atmos with coverage instrumentation.
 func (r *AtmosRunner) buildWithCoverage() error {
 	tempBinary := filepath.Join(os.TempDir(), fmt.Sprintf("atmos-coverage-%d", os.Getpid()))
+	// Add .exe extension on Windows.
+	if runtime.GOOS == "windows" {
+		tempBinary += ".exe"
+	}
 	// Build from the repository root.
 	repoRoot, err := findRepoRoot()
 	if err != nil {
@@ -65,9 +70,11 @@ func (r *AtmosRunner) buildWithCoverage() error {
 		return fmt.Errorf("failed to build atmos with coverage: %w\nOutput: %s", err, output)
 	}
 
-	// Make the binary executable.
-	if err := os.Chmod(tempBinary, executablePerm); err != nil {
-		return fmt.Errorf("failed to make binary executable: %w", err)
+	// Make the binary executable (Unix only, Windows doesn't need this).
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(tempBinary, executablePerm); err != nil {
+			return fmt.Errorf("failed to make binary executable: %w", err)
+		}
 	}
 
 	r.binaryPath = tempBinary
@@ -85,8 +92,11 @@ func findBuildAtmos() (string, bool) {
 	for {
 		gitDir := filepath.Join(dir, ".git")
 		if _, err := os.Stat(gitDir); err == nil {
-			// Found git root, check for build/atmos.
+			// Found git root, check for build/atmos or build/atmos.exe on Windows.
 			buildPath := filepath.Join(dir, "build", "atmos")
+			if runtime.GOOS == "windows" {
+				buildPath += ".exe"
+			}
 			if _, err := os.Stat(buildPath); err == nil {
 				return buildPath, true
 			}
