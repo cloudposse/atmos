@@ -7,9 +7,11 @@ import (
 const (
 	ErrWrappingFormat       = "%w: %w"
 	ErrStringWrappingFormat = "%w: %s"
+	ErrValueWrappingFormat  = "%w: %v"
 )
 
 var (
+	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
 	ErrCopyPackage                           = errors.New("failed to copy package")
@@ -131,4 +133,11 @@ var (
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+
+	// Cache-related errors.
+	ErrCacheLocked    = errors.New("cache file is locked")
+	ErrCacheRead      = errors.New("cache read failed")
+	ErrCacheWrite     = errors.New("cache write failed")
+	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
+	ErrCacheMarshal   = errors.New("cache marshal failed")
 )
