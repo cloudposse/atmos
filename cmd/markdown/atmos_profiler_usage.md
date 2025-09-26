@@ -8,26 +8,47 @@ profiler:
   port: 6060
 ```
 
-- Enable profiler with command-line flags
+- Enable profiler server with command-line flags
 
 ```
 $ atmos terraform plan vpc -s plat-ue2-dev --profiler-enabled
 profiler available at: http://localhost:6060/debug/pprof/
 ```
 
-- Access profiler web interface
+- Write CPU profile to file (recommended for CLI tools)
+
+```
+$ atmos terraform plan vpc -s plat-ue2-dev --profile-file=cpu.prof
+CPU profiling started file=cpu.prof
+CPU profiling completed file=cpu.prof
+```
+
+- Analyze CPU profile file
+
+```
+# Interactive text mode
+$ go tool pprof cpu.prof
+
+# Web interface (requires Graphviz: brew install graphviz)
+$ go tool pprof -http=:8080 cpu.prof
+
+# Direct text output
+$ go tool pprof -top cpu.prof
+```
+
+- Access profiler web interface (when using server mode)
 
 ```
 $ open http://localhost:6060/debug/pprof/
 ```
 
-- Capture CPU profile for analysis
+- Capture CPU profile from server for analysis
 
 ```
 $ go tool pprof http://localhost:6060/debug/pprof/profile
 ```
 
-- Capture memory profile for analysis
+- Capture memory profile from server for analysis
 
 ```
 $ go tool pprof http://localhost:6060/debug/pprof/heap

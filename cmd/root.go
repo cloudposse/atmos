@@ -161,15 +161,20 @@ func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) e
 			profilerConfig.Host = host
 		}
 	}
-
-	// Create and start profiler server
-	profilerServer = profiler.New(profilerConfig)
-	if err := profilerServer.Start(); err != nil {
-		return fmt.Errorf("failed to start profiler server: %w", err)
+	if cmd.Flags().Changed("profile-file") {
+		if file, err := cmd.Flags().GetString("profile-file"); err == nil {
+			profilerConfig.File = file
+			// Enable profiler automatically when file is specified
+			if file != "" {
+				profilerConfig.Enabled = true
+			}
+		}
 	}
 
-	if profilerConfig.Enabled {
-		log.Info("pprof profiler available", "url", profilerServer.GetURL())
+	// Create and start profiler
+	profilerServer = profiler.New(profilerConfig)
+	if err := profilerServer.Start(); err != nil {
+		return fmt.Errorf("failed to start profiler: %w", err)
 	}
 
 	return nil
@@ -220,6 +225,13 @@ func Execute() error {
 	if cmd != nil {
 		if setupErr := setupProfiler(cmd, &atmosConfig); setupErr != nil {
 			log.Error("Failed to setup profiler", "error", setupErr)
+		} else if profilerServer != nil {
+			// Ensure profiler stops when the command finishes
+			defer func() {
+				if stopErr := profilerServer.Stop(); stopErr != nil {
+					log.Error("Failed to stop profiler", "error", stopErr)
+				}
+			}()
 		}
 	}
 	telemetry.CaptureCmd(cmd, err)
@@ -266,6 +278,7 @@ func init() {
 	RootCmd.PersistentFlags().Bool("profiler-enabled", false, "Enable pprof profiling server")
 	RootCmd.PersistentFlags().Int("profiler-port", 6060, "Port for pprof profiling server")
 	RootCmd.PersistentFlags().String("profiler-host", "localhost", "Host for pprof profiling server")
+	RootCmd.PersistentFlags().String("profile-file", "", "Write profiling data to file instead of starting server")
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
