@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	tfdocsFormat "github.com/terraform-docs/terraform-docs/format"
 	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"

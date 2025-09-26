@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
@@ -42,6 +43,17 @@ func Test_CheckErrorPrintAndExit(t *testing.T) {
 }
 
 func TestCheckErrorAndPrint(t *testing.T) {
+	// Save original logger
+	originalLogger := log.Default()
+	defer log.SetDefault(originalLogger)
+
+	// Create test logger to capture log output
+	var logBuf bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&logBuf)
+	testLogger.SetLevel(log.TraceLevel)
+	log.SetDefault(testLogger)
+
 	render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 	title := "Test Error"
 	err := errors.New("this is a test error")
@@ -67,6 +79,23 @@ func TestCheckErrorAndPrint(t *testing.T) {
 	// Check if output contains the expected content
 	expectedOutput := "Test Error"
 	assert.Contains(t, output.String(), expectedOutput, "'TestPrintErrorMarkdown' output should contain information about the error")
+
+	// Test with nil render to improve coverage
+	t.Run("nil render", func(t *testing.T) {
+		// Save and nil render
+		originalRender := render
+		render = nil
+		defer func() {
+			render = originalRender
+		}()
+
+		logBuf.Reset()
+		testErr := errors.New("error with nil render")
+		CheckErrorAndPrint(testErr, "Test", "Suggestion")
+
+		// Should log error directly
+		assert.Contains(t, logBuf.String(), "error with nil render")
+	})
 }
 
 func TestPrintErrorMarkdownAndExit(t *testing.T) {

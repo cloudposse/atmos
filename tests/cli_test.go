@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -32,10 +33,10 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
+	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // Command-line flag for regenerating snapshots.
@@ -54,7 +55,7 @@ var (
 	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
 	removedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("160")) // Red
 )
-var logger *log.Logger
+var logger *log.AtmosLogger
 
 type Expectation struct {
 	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output
@@ -178,9 +179,9 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 
 func init() {
 	// Initialize with default settings.
-	logger = log.NewWithOptions(os.Stdout, log.Options{
-		Level: log.InfoLevel,
-	})
+	logger = log.New()
+	logger.SetOutput(os.Stdout)
+	logger.SetLevel(log.InfoLevel)
 
 	// Ensure that Lipgloss uses terminal colors for tests
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -199,7 +200,8 @@ func init() {
 	// Add a custom style for key `err`
 	styles.Keys["err"] = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))
 	styles.Values["err"] = lipgloss.NewStyle().Bold(true)
-	logger = log.New(os.Stderr)
+	logger = log.New()
+	logger.SetOutput(os.Stderr)
 	logger.SetStyles(styles)
 	logger.SetColorProfile(termenv.TrueColor)
 	logger.Info("Smoke tests for atmos CLI starting")
@@ -535,6 +537,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
 
+	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
+	// This ensures every test has its own cache and prevents interference
+	xdgCacheHome := filepath.Join(tempDir, ".cache")
+	tc.Env["XDG_CACHE_HOME"] = xdgCacheHome
+	// Also set the process environment so removeCacheFile() uses the test path
+	os.Setenv("XDG_CACHE_HOME", xdgCacheHome)
+	// Reload XDG to pick up the new environment
+	xdg.Reload()
+
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
@@ -543,7 +554,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// Set environment variables for the test case
 		tc.Env["HOME"] = tempDir
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
-		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
 		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
@@ -957,23 +967,22 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bo
 }
 
 func verifyFormatValidation(t *testing.T, output string, formats []string) bool {
-	success := true
 	for _, format := range formats {
 		switch format {
-		case "yaml":
-			if !verifyYAMLFormat(t, output) {
-				success = false
-			}
 		case "json":
 			if !verifyJSONFormat(t, output) {
-				success = false
+				return false
+			}
+		case "yaml":
+			if !verifyYAMLFormat(t, output) {
+				return false
 			}
 		default:
-			t.Logf("Unknown validation format: %s", format)
-			success = false
+			t.Logf("Unknown format: %s", format)
+			return false
 		}
 	}
-	return success
+	return true
 }
 
 func verifyYAMLFormat(t *testing.T, output string) bool {

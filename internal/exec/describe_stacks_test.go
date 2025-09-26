@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 

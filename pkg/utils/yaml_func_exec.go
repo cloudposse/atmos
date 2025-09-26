@@ -3,7 +3,7 @@ package utils
 import (
 	"encoding/json"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 func ProcessTagExec(

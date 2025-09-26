@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"

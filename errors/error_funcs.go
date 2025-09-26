@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 

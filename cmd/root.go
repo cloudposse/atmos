@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
@@ -21,15 +20,23 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/logger"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// LogFileMode is the file mode for log files.
+	logFileMode = 0o644
+)
+
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
+
+// logFileHandle holds the opened log file for the lifetime of the program.
+var logFileHandle *os.File
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -85,7 +92,7 @@ var RootCmd = &cobra.Command{
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	switch atmosConfig.Logs.Level {
 	case "Trace":
-		log.SetLevel(log.DebugLevel)
+		log.SetLevel(log.TraceLevel)
 	case "Debug":
 		log.SetLevel(log.DebugLevel)
 	case "Info":
@@ -98,37 +105,76 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.WarnLevel)
 	}
 
+	// Always set up styles to ensure trace level shows as "TRCE"
+	styles := log.DefaultStyles()
+
+	// Set trace level to show "TRCE" instead of being blank/DEBU
+	if debugStyle, ok := styles.Levels[log.DebugLevel]; ok {
+		// Copy debug style but set the string to "TRCE"
+		styles.Levels[log.TraceLevel] = debugStyle.SetString("TRCE")
+	} else {
+		// Fallback if debug style doesn't exist
+		styles.Levels[log.TraceLevel] = lipgloss.NewStyle().SetString("TRCE")
+	}
+
+	// If colors are disabled, clear the colors but keep the level strings
 	if !atmosConfig.Settings.Terminal.IsColorEnabled() {
-		stylesDefault := log.DefaultStyles()
-		// Clear colors for levels
-		styles := &log.Styles{}
-		styles.Levels = make(map[log.Level]lipgloss.Style)
-		for k := range stylesDefault.Levels {
-			styles.Levels[k] = stylesDefault.Levels[k].UnsetForeground().Bold(false)
+		clearedStyles := &log.Styles{}
+		clearedStyles.Levels = make(map[log.Level]lipgloss.Style)
+		for k := range styles.Levels {
+			if k == log.TraceLevel {
+				// Keep TRCE string but remove color
+				clearedStyles.Levels[k] = lipgloss.NewStyle().SetString("TRCE")
+			} else {
+				// For other levels, keep their default strings but remove color
+				clearedStyles.Levels[k] = styles.Levels[k].UnsetForeground().Bold(false)
+			}
 		}
+		log.SetStyles(clearedStyles)
+	} else {
 		log.SetStyles(styles)
 	}
-	var output io.Writer
+	// Only set output if a log file is configured
+	if atmosConfig.Logs.File != "" {
+		var output io.Writer
 
-	switch atmosConfig.Logs.File {
-	case "/dev/stderr":
-		output = os.Stderr
-	case "/dev/stdout":
-		output = os.Stdout
-	case "/dev/null":
-		output = io.Discard // More efficient than opening os.DevNull
-	default:
-		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
-		defer logFile.Close()
-		output = logFile
+		switch atmosConfig.Logs.File {
+		case "/dev/stderr":
+			output = os.Stderr
+		case "/dev/stdout":
+			output = os.Stdout
+		case "/dev/null":
+			output = io.Discard // More efficient than opening os.DevNull
+		default:
+			logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFileMode)
+			errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
+			// Store the file handle for later cleanup instead of deferring close.
+			logFileHandle = logFile
+			output = logFile
+		}
+
+		log.SetOutput(output)
 	}
-
-	log.SetOutput(output)
-	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
+	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+}
+
+// cleanupLogFile closes the log file handle if it was opened.
+func cleanupLogFile() {
+	if logFileHandle != nil {
+		// Flush any remaining log data before closing.
+		_ = logFileHandle.Sync()
+		_ = logFileHandle.Close()
+		logFileHandle = nil
+	}
+}
+
+// Cleanup performs cleanup operations before the program exits.
+// This should be called by main when the program is terminating.
+func Cleanup() {
+	cleanupLogFile()
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
