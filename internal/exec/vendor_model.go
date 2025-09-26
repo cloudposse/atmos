@@ -579,7 +579,7 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosC
 	}
 
 	if installer.diffPackage != nil {
-		return executeDiffCheck(installer.diffPackage, atmosConfig)
+		return executeDiffCheck(installer.diffPackage)
 	}
 
 	// No valid package provided
@@ -592,8 +592,8 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosC
 	}
 }
 
-// executeDiffCheck performs the version diff check for a component
-func executeDiffCheck(p *pkgVendorDiff, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
+// executeDiffCheck performs the version diff check for a component.
+func executeDiffCheck(p *pkgVendorDiff) tea.Cmd {
 	return func() tea.Msg {
 		// If we already have the latest version from pre-check, use that directly
 		if p.outdatedOnly && p.latestVersion != "" {
@@ -608,7 +608,7 @@ func executeDiffCheck(p *pkgVendorDiff, atmosConfig *schema.AtmosConfiguration) 
 		updateAvailable, latestInfo, err := checkForVendorUpdates(p.source, true)
 		if err != nil {
 			return installedPkgMsg{
-				err:  fmt.Errorf("Error checking for updates - %v", err),
+				err:  fmt.Errorf("%w: %v", errUtils.ErrCheckingForUpdates, err),
 				name: p.name,
 			}
 		}

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -263,7 +264,7 @@ func executeVendorDiff(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 	}
 
 	if !vendorConfigExists {
-		return fmt.Errorf("vendor config file not found: %s", vendorConfigFileName)
+		return fmt.Errorf("%w: %s", errUtils.ErrVendorConfigFileNotFound, vendorConfigFileName)
 	}
 
 	// Process imports and get all sources
@@ -301,7 +302,7 @@ func executeVendorDiff(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 	return compareAndDisplayVendorDiffs(filteredSources, flg.Update, flg.Outdated, foundVendorConfigFile)
 }
 
-// filterSources filters vendor sources based on component name and tags
+// filterSources filters vendor sources based on component name and tags.
 func filterSources(sources []schema.AtmosVendorSource, component string, tags []string) []schema.AtmosVendorSource {
 	var filtered []schema.AtmosVendorSource
 
@@ -336,7 +337,7 @@ func filterSources(sources []schema.AtmosVendorSource, component string, tags []
 	return filtered
 }
 
-// compareAndDisplayVendorDiffs compares local and remote versions and displays differences
+// compareAndDisplayVendorDiffs compares local and remote versions and displays differences.
 func compareAndDisplayVendorDiffs(sources []schema.AtmosVendorSource, updateVendorFile bool, outdatedOnly bool, vendorConfigFile string) error {
 	// Print header immediately
 	fmt.Println("Checking for vendor updates...")
@@ -409,7 +410,7 @@ func compareAndDisplayVendorDiffs(sources []schema.AtmosVendorSource, updateVend
 			fmt.Printf("Updating the vendor configuration file with %d updates...\n", updateCount)
 
 			// Update the vendor configuration file with the latest versions
-			if err := updateVendorConfigFile(sources, updatedVersions, vendorConfigFile); err != nil {
+			if err := updateVendorConfigFile(updatedVersions, vendorConfigFile); err != nil {
 				fmt.Printf("Error updating vendor configuration file: %v\n", err)
 				return err
 			}
@@ -423,7 +424,7 @@ func compareAndDisplayVendorDiffs(sources []schema.AtmosVendorSource, updateVend
 	return nil
 }
 
-// extractComponentNameFromSource extracts a component name from a source URL
+// extractComponentNameFromSource extracts a component name from a source URL.
 func extractComponentNameFromSource(source string) string {
 	// Extract the last part of the URL path as component name
 	parts := strings.Split(strings.TrimSuffix(source, "/"), "/")
@@ -436,7 +437,7 @@ func extractComponentNameFromSource(source string) string {
 	return source
 }
 
-// checkForVendorUpdates checks if updates are available for a vendor source
+// checkForVendorUpdates checks if updates are available for a vendor source.
 func checkForVendorUpdates(source schema.AtmosVendorSource, _ bool) (bool, string, error) {
 	// Process the source URI template just like vendor pull does
 	tmplData := struct {
@@ -488,15 +489,12 @@ func checkRemoteUpdates(uri, currentVersion string) (bool, string, error) {
 				!strings.Contains(uri, "gitlab.com") && !strings.Contains(uri, "bitbucket.org")) {
 			// This is likely a direct HTTP file download, not a Git repository
 			// We can't check for version updates for direct file downloads
-			return false, currentVersion, fmt.Errorf("version checking not supported for direct HTTP file downloads")
+			return false, currentVersion, errUtils.ErrVersionCheckingNotSupported
 		}
 	}
 
 	// Extract the clean Git URL using the same patterns as vendor pull
-	gitURL, err := extractCleanGitURL(uri)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to extract Git URL: %w", err)
-	}
+	gitURL := extractCleanGitURL(uri)
 
 	// Use Git commands to check for version tags and commits
 	latestTag, err := getLatestGitTag(gitURL)
@@ -529,18 +527,18 @@ func checkRemoteUpdates(uri, currentVersion string) (bool, string, error) {
 	return false, currentVersion, nil
 }
 
-// checkOciUpdates checks for updates in OCI registries
+// checkOciUpdates checks for updates in OCI registries.
 func checkOciUpdates(_ string, currentVersion string) (bool, string, error) {
 	// OCI version checking would require implementing OCI registry API calls
 	// This is a future enhancement - for now, assume no updates are available
-	return false, currentVersion, fmt.Errorf("OCI version checking not yet implemented - use 'latest' tag for automatic updates")
+	return false, currentVersion, errUtils.ErrOCIVersionCheckingNotImplemented
 }
 
-// checkLocalUpdates checks for updates in local filesystem sources
+// checkLocalUpdates checks for updates in local filesystem sources.
 func checkLocalUpdates(uri string, _ bool, currentVersion string) (bool, string, error) {
 	// Use the same file validation patterns as vendor pull
 	if !u.FileExists(uri) {
-		return false, currentVersion, fmt.Errorf("local source does not exist: %s", uri)
+		return false, currentVersion, fmt.Errorf("%w: %s", errUtils.ErrLocalSourceDoesNotExist, uri)
 	}
 
 	// Get file/directory info using the same patterns
@@ -559,8 +557,8 @@ func checkLocalUpdates(uri string, _ bool, currentVersion string) (bool, string,
 	return false, modTime, nil
 }
 
-// extractCleanGitURL extracts the actual Git repository URL using the same patterns as vendor pull
-func extractCleanGitURL(uri string) (string, error) {
+// extractCleanGitURL extracts the actual Git repository URL using the same patterns as vendor pull.
+func extractCleanGitURL(uri string) string {
 	// Handle git:: prefixed URLs like the vendor pull implementation
 	if strings.HasPrefix(uri, "git::") {
 		// Remove git:: prefix
@@ -576,7 +574,7 @@ func extractCleanGitURL(uri string) (string, error) {
 			gitURL = gitURL[:idx]
 		}
 
-		return gitURL, nil
+		return gitURL
 	}
 
 	// Handle other Git URL formats
@@ -593,10 +591,10 @@ func extractCleanGitURL(uri string) (string, error) {
 		}
 	}
 
-	return uri, nil
+	return uri
 }
 
-// getLatestGitTag gets the latest stable tag from a Git repository
+// getLatestGitTag gets the latest stable tag from a Git repository.
 func getLatestGitTag(gitURL string) (string, error) {
 	ctx := context.Background()
 
@@ -625,7 +623,7 @@ func getLatestGitTag(gitURL string) (string, error) {
 	return parseLatestStableTag(string(output))
 }
 
-// getLatestGitCommit gets the latest commit from a Git repository
+// getLatestGitCommit gets the latest commit from a Git repository.
 func getLatestGitCommit(gitURL string) (string, error) {
 	ctx := context.Background()
 
@@ -653,11 +651,11 @@ func getLatestGitCommit(gitURL string) (string, error) {
 	return parseLatestCommit(string(output))
 }
 
-// parseLatestStableTag parses git ls-remote output to find the latest stable tag
+// parseLatestStableTag parses git ls-remote output to find the latest stable tag.
 func parseLatestStableTag(output string) (string, error) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) == 0 || lines[0] == "" {
-		return "", fmt.Errorf("no tags found")
+		return "", errUtils.ErrNoTagsFound
 	}
 
 	// Parse all lines to find the latest stable tag
@@ -693,33 +691,33 @@ func parseLatestStableTag(output string) (string, error) {
 	}
 
 	if latestTag == "" {
-		return "", fmt.Errorf("no stable release tags found")
+		return "", errUtils.ErrNoStableReleaseTags
 	}
 
 	return latestTag, nil
 }
 
-// parseLatestCommit parses git ls-remote output to extract the latest commit
+// parseLatestCommit parses git ls-remote output to extract the latest commit.
 func parseLatestCommit(output string) (string, error) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) == 0 || lines[0] == "" {
-		return "", fmt.Errorf("no commits found")
+		return "", errUtils.ErrNoCommitsFound
 	}
 
 	parts := strings.Fields(lines[0])
 	if len(parts) < 1 {
-		return "", fmt.Errorf("invalid git ls-remote output")
+		return "", errUtils.ErrInvalidGitLsRemoteOutput
 	}
 
 	commit := parts[0]
 	if commit == "" {
-		return "", fmt.Errorf("no valid commits found")
+		return "", errUtils.ErrNoValidCommitsFound
 	}
 
 	return commit, nil
 }
 
-// convertSSHToHTTPS converts SSH Git URLs to HTTPS URLs
+// convertSSHToHTTPS converts SSH Git URLs to HTTPS URLs.
 func convertSSHToHTTPS(gitURL string) string {
 	// Convert git@github.com:user/repo.git to https://github.com/user/repo.git
 	if strings.HasPrefix(gitURL, "git@github.com:") {
@@ -736,7 +734,7 @@ func convertSSHToHTTPS(gitURL string) string {
 	return gitURL
 }
 
-// isVersionNewer uses Masterminds/semver for semantic version comparison
+// isVersionNewer uses Masterminds/semver for semantic version comparison.
 func isVersionNewer(current, latest string) bool {
 	if current == "latest" {
 		return false
@@ -754,7 +752,7 @@ func isVersionNewer(current, latest string) bool {
 	return latestVer.GreaterThan(currentVer)
 }
 
-// isCommitHash checks if a version string looks like a Git commit hash using regex
+// isCommitHash checks if a version string looks like a Git commit hash using regex.
 func isCommitHash(version string) bool {
 	return commitHashRegex.MatchString(version)
 }

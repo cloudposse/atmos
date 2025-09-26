@@ -6,6 +6,7 @@ import (
 
 	"github.com/fatih/color"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -61,7 +62,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		}
 	}
 
-	return "", fmt.Errorf("invalid log level `%s`. Valid options are: %v", logLevel, validLevels)
+	return "", fmt.Errorf("%w: `%s`. Valid options are: %v", errUtils.ErrInvalidLogLevel, logLevel, validLevels)
 }
 
 func (l *Logger) log(logColor *color.Color, message string) {

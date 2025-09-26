@@ -128,4 +128,18 @@ var (
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+
+	// Vendor errors.
+	ErrVendorConfigFileNotFound         = errors.New("vendor config file not found")
+	ErrVersionCheckingNotSupported      = errors.New("version checking not supported for direct HTTP file downloads")
+	ErrRefusingToDeleteSymLink          = errors.New("refusing to delete symbolic link")
+	ErrNoValidCommitsFound              = errors.New("no valid commits found")
+	ErrNoTagsFound                      = errors.New("no tags found")
+	ErrNoStableReleaseTags              = errors.New("no stable release tags found")
+	ErrNoCommitsFound                   = errors.New("no commits found")
+	ErrLocalSourceDoesNotExist          = errors.New("local source does not exist")
+	ErrInvalidLogLevel                  = errors.New("invalid log level")
+	ErrInvalidGitLsRemoteOutput         = errors.New("invalid git ls-remote output")
+	ErrOCIVersionCheckingNotImplemented = errors.New("OCI version checking not yet implemented - use 'latest' tag for automatic updates")
+	ErrCheckingForUpdates               = errors.New("error checking for updates")
 )

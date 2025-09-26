@@ -5,9 +5,17 @@ import (
 	"strings"
 
 	log "github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
+)
+
+// Constants for commonly used strings.
+const (
+	componentKey = "component"
+	latestTag    = "latest"
+	gitType      = "git"
 )
 
 // ExecuteVendorUpdateCmd executes `vendor update` commands.
@@ -129,7 +137,7 @@ func executeVendorUpdate(atmosConfig *schema.AtmosConfiguration, flg *VendorFlag
 		if flg.Component != "" {
 			return executeComponentVendorUpdate(atmosConfig, flg)
 		}
-		return fmt.Errorf("vendor config file not found: %s", vendorConfigFileName)
+		return fmt.Errorf("%w: %s", errUtils.ErrVendorConfigFileNotFound, vendorConfigFileName)
 	}
 
 	// Process all imports and get sources with file mappings
@@ -307,7 +315,7 @@ func checkAndUpdateVendorVersions(
 			// Check for updates
 			updateAvailable, latestVersion, err := checkForVendorUpdates(source, true)
 			if err != nil {
-				log.Debug("Error checking updates", "component", componentName, "error", err)
+				log.Debug("Error checking updates", componentKey, componentName, "error", err)
 				continue
 			}
 
@@ -331,19 +339,7 @@ func checkAndUpdateVendorVersions(
 			if len(updates) > 0 {
 				fmt.Printf("\nUpdating %d components in %s...\n", len(updates), configFile)
 
-				// Read sources for this specific file
-				fileSources := []schema.AtmosVendorSource{}
-				for _, source := range sources {
-					componentName := source.Component
-					if componentName == "" {
-						componentName = extractComponentNameFromSource(source.Source)
-					}
-					if fileMap[componentName] == configFile {
-						fileSources = append(fileSources, source)
-					}
-				}
-
-				if err := updateVendorConfigFile(fileSources, updates, configFile); err != nil {
+				if err := updateVendorConfigFile(updates, configFile); err != nil {
 					return fmt.Errorf("error updating %s: %w", configFile, err)
 				}
 

@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"os"
 	"testing"
 
@@ -10,30 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Mock implementation for testing
-type mockGitChecker struct {
-	latestTags    map[string]string
-	latestCommits map[string]string
-}
-
-func (m *mockGitChecker) GetLatestTag(repoURL string) (string, error) {
-	if tag, ok := m.latestTags[repoURL]; ok {
-		return tag, nil
-	}
-	return "", errors.New("no tags found")
-}
-
-func (m *mockGitChecker) GetLatestCommit(repoURL string) (string, error) {
-	if commit, ok := m.latestCommits[repoURL]; ok {
-		return commit, nil
-	}
-	return "", errors.New("no commits found")
-}
-
-func (m *mockGitChecker) IsVersionNewer(currentVersion, newVersion string) bool {
-	// Simple comparison for testing
-	return currentVersion != newVersion && newVersion != ""
-}
+// Mock implementation removed - using actual implementation for testing.
 
 func TestCheckForVendorUpdates(t *testing.T) {
 	tests := []struct {
@@ -367,7 +343,7 @@ func TestValidateVendorUpdateFlags(t *testing.T) {
 	}
 }
 
-// TestVendorUpdateWithMocks tests the vendor update logic with mocked dependencies
+// TestVendorUpdateWithMocks tests the vendor update logic with mocked dependencies.
 func TestVendorUpdateWithMocks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -376,7 +352,8 @@ func TestVendorUpdateWithMocks(t *testing.T) {
 		// This test would use generated mocks once we run mockgen
 		// For now, we'll use the simplified mock implementation above
 
-		sources := []schema.AtmosVendorSource{
+		// sources would be used with generated mocks
+		_ = []schema.AtmosVendorSource{
 			{
 				Component: "vpc",
 				Source:    "github.com/cloudposse/terraform-aws-vpc.git",
@@ -402,7 +379,7 @@ func TestVendorUpdateWithMocks(t *testing.T) {
 		tmpFile.Close()
 
 		// Update the file
-		err = updateVendorConfigFile(sources, updates, tmpFile.Name())
+		err = updateVendorConfigFile(updates, tmpFile.Name())
 		assert.NoError(t, err)
 
 		// Read and verify the updated content
