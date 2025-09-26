@@ -290,10 +290,15 @@ func TestDependencyParser_ParseSingleDependency(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "unsupported type string",
+			name:        "string dependency not found",
 			dep:         "invalid",
 			expectError: true,
-			errorMsg:    "unsupported dependency type",
+			errorMsg:    "dependency target not found",
+		},
+		{
+			name:        "valid string dependency",
+			dep:         "vpc",
+			expectError: false,
 		},
 		{
 			name:        "unsupported type int",
