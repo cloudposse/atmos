@@ -25,7 +25,36 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 		t.Fatalf("Failed to get the current working directory: %v", err)
 	}
 
+	// Clean up any leftover terraform files from previous test runs to avoid conflicts
+	componentPath := filepath.Join(startingDir, "..", "..", "tests", "fixtures", "components", "terraform", "env-example")
+	cleanupFiles := []string{
+		filepath.Join(componentPath, ".terraform"),
+		filepath.Join(componentPath, ".terraform.lock.hcl"),
+		filepath.Join(componentPath, "terraform.tfstate.d"),
+		filepath.Join(componentPath, "backend.tf.json"),
+	}
+
+	// Clean before test
+	for _, path := range cleanupFiles {
+		os.RemoveAll(path)
+	}
+
+	// Also look for and remove any .tfvars.json files
+	matches, _ := filepath.Glob(filepath.Join(componentPath, "*.terraform.tfvars.json"))
+	for _, match := range matches {
+		os.Remove(match)
+	}
+
 	defer func() {
+		// Clean up after test
+		for _, path := range cleanupFiles {
+			os.RemoveAll(path)
+		}
+		matches, _ := filepath.Glob(filepath.Join(componentPath, "*.terraform.tfvars.json"))
+		for _, match := range matches {
+			os.Remove(match)
+		}
+
 		// Change back to the original working directory after the test
 		if err := os.Chdir(startingDir); err != nil {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
