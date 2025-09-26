@@ -12,7 +12,7 @@ profiler:
 
 ```
 $ atmos terraform plan vpc -s plat-ue2-dev --profiler-enabled
-pprof profiler available at: http://localhost:6060/debug/pprof/
+profiler available at: http://localhost:6060/debug/pprof/
 ```
 
 - Access profiler web interface

@@ -68,8 +68,6 @@ func (p *Server) Start() error {
 	}
 
 	go func() {
-		log.Info("Profiler server available at:", "url", fmt.Sprintf("http://%s/debug/pprof/", addr))
-
 		if err := p.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("Profiler server error", "error", err)
 		}
