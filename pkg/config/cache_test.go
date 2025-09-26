@@ -13,16 +13,10 @@ import (
 )
 
 func TestGetCacheFilePathWithXDGCacheHome(t *testing.T) {
-	// Save original XDG_CACHE_HOME.
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
-
 	// Test with XDG_CACHE_HOME set.
 	testDir := t.TempDir()
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
 
 	path, err := GetCacheFilePath()
 	assert.NoError(t, err)
@@ -31,15 +25,10 @@ func TestGetCacheFilePathWithXDGCacheHome(t *testing.T) {
 }
 
 func TestGetCacheFilePathWithoutXDGCacheHome(t *testing.T) {
-	// Save original XDG_CACHE_HOME.
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
-
 	// Clear XDG_CACHE_HOME to test default behavior.
+	cleanup := withTestXDGHome(t, "")
+	defer cleanup()
 	os.Unsetenv("XDG_CACHE_HOME")
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
 
 	path, err := GetCacheFilePath()
 	assert.NoError(t, err)
@@ -59,12 +48,8 @@ func TestCacheSharedBetweenVersionAndTelemetry(t *testing.T) {
 
 	// Create a test cache directory.
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
 
 	// Create a cache with both fields set.
 	cache := CacheConfig{
@@ -90,12 +75,8 @@ func TestCacheSharedBetweenVersionAndTelemetry(t *testing.T) {
 func TestLoadCacheNonExistent(t *testing.T) {
 	// Test loading a cache when file doesn't exist.
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
 
 	// Load non-existent cache should return empty config without error.
 	cache, err := LoadCache()
@@ -110,12 +91,8 @@ func TestSaveCacheCreatesDirectory(t *testing.T) {
 	testDir := t.TempDir()
 	// Use a subdirectory that doesn't exist yet.
 	cacheDir := filepath.Join(testDir, "subdir")
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
-	os.Setenv("XDG_CACHE_HOME", cacheDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, cacheDir)
+	defer cleanup()
 
 	cache := CacheConfig{
 		LastChecked:              9876543210,
@@ -139,12 +116,8 @@ func TestSaveCacheCreatesDirectory(t *testing.T) {
 func TestConcurrentCacheAccess(t *testing.T) {
 	// Test concurrent reads and writes to the cache.
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
 
 	// Create initial cache.
 	initialCache := CacheConfig{
@@ -337,12 +310,8 @@ func TestParseFrequency(t *testing.T) {
 func TestLoadCacheWithCorruptedFile(t *testing.T) {
 	// Test loading a cache when the file is corrupted.
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
 
 	// Create a corrupted cache file.
 	cacheDir := filepath.Join(testDir, "atmos")
@@ -381,8 +350,6 @@ func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
 	}
 
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
 
 	// Create a read-only directory.
 	readOnlyDir := filepath.Join(testDir, "readonly")
@@ -390,10 +357,8 @@ func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Set XDG_CACHE_HOME to a subdirectory of the read-only directory.
-	os.Setenv("XDG_CACHE_HOME", filepath.Join(readOnlyDir, "subdir"))
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, filepath.Join(readOnlyDir, "subdir"))
+	defer cleanup()
 
 	// GetCacheFilePath should return an error when it can't create the directory.
 	_, err = GetCacheFilePath()
@@ -406,12 +371,8 @@ func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
 func TestUpdateCacheWithNonExistentFile(t *testing.T) {
 	// Test UpdateCache when the cache file doesn't exist yet.
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
 
 	// Update non-existent cache should create it.
 	err := UpdateCache(func(cache *CacheConfig) {
@@ -433,12 +394,8 @@ func TestWithCacheFileLockTimeout(t *testing.T) {
 	// Test that file lock acquisition times out appropriately.
 	// This test simulates a scenario where the lock is held for a long time.
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer os.Setenv("XDG_CACHE_HOME", originalXDG)
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
 
 	// Create initial cache.
 	initialCache := CacheConfig{

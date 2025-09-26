@@ -4,12 +4,10 @@ package config
 
 import (
 	"errors"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,19 +15,10 @@ import (
 
 // TestCacheFileLockDeadlock tests that file locking doesn't cause deadlocks.
 func TestCacheFileLockDeadlock(t *testing.T) {
-	// Create a temporary cache directory.
+	// Create a temporary cache directory and set up XDG with proper synchronization.
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
-
-	// Ensure XDG state is restored after the test.
-	t.Cleanup(func() {
-		os.Setenv("XDG_CACHE_HOME", originalXDG)
-		xdg.Reload()
-	})
+	cleanup := withTestXDGHome(t, testDir)
+	t.Cleanup(cleanup)
 
 	// Create initial cache.
 	initialCache := CacheConfig{
@@ -100,17 +89,8 @@ func TestCacheFileLockDeadlock(t *testing.T) {
 // TestCacheFileLockTimeoutBehavior tests the timeout behavior of file locking.
 func TestCacheFileLockTimeoutBehavior(t *testing.T) {
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
-
-	// Ensure XDG state is restored after the test.
-	t.Cleanup(func() {
-		os.Setenv("XDG_CACHE_HOME", originalXDG)
-		xdg.Reload()
-	})
+	cleanup := withTestXDGHome(t, testDir)
+	t.Cleanup(cleanup)
 
 	cacheFile, err := GetCacheFilePath()
 	require.NoError(t, err)
@@ -133,17 +113,8 @@ func TestCacheFileLockTimeoutBehavior(t *testing.T) {
 // when the file is locked.
 func TestLoadCacheNonBlockingWithLockedFile(t *testing.T) {
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
-
-	// Ensure XDG state is restored after the test.
-	t.Cleanup(func() {
-		os.Setenv("XDG_CACHE_HOME", originalXDG)
-		xdg.Reload()
-	})
+	cleanup := withTestXDGHome(t, testDir)
+	t.Cleanup(cleanup)
 
 	// Create initial cache.
 	initialCache := CacheConfig{

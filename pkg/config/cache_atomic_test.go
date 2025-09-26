@@ -5,26 +5,16 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/adrg/xdg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // TestAtomicFileWrites verifies that cache writes are atomic.
 func TestAtomicFileWrites(t *testing.T) {
-	// Create a temporary cache directory.
+	// Create a temporary cache directory and set up XDG with proper synchronization.
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
-
-	// Ensure XDG state is restored after the test.
-	t.Cleanup(func() {
-		os.Setenv("XDG_CACHE_HOME", originalXDG)
-		xdg.Reload()
-	})
+	cleanup := withTestXDGHome(t, testDir)
+	t.Cleanup(cleanup)
 
 	// Create initial cache with known values.
 	initialCache := CacheConfig{
@@ -93,19 +83,10 @@ func TestAtomicFileWrites(t *testing.T) {
 
 // TestAtomicWriteFailureRecovery tests that failed writes don't corrupt the cache.
 func TestAtomicWriteFailureRecovery(t *testing.T) {
-	// Create a temporary cache directory.
+	// Create a temporary cache directory and set up XDG with proper synchronization.
 	testDir := t.TempDir()
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	os.Setenv("XDG_CACHE_HOME", testDir)
-
-	// Reload XDG to pick up the environment change.
-	xdg.Reload()
-
-	// Ensure XDG state is restored after the test.
-	t.Cleanup(func() {
-		os.Setenv("XDG_CACHE_HOME", originalXDG)
-		xdg.Reload()
-	})
+	cleanup := withTestXDGHome(t, testDir)
+	t.Cleanup(cleanup)
 
 	// Create initial cache with known values.
 	goodCache := CacheConfig{
