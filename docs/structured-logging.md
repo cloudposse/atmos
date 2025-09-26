@@ -23,7 +23,9 @@ Describe the core event in the log **message**:
 Then add **contextual fields**:
 
 ```go
-log.Error("Failed to validate request", "component", "authn", "user", userID, "error", err)
+import "github.com/cloudposse/atmos/pkg/logger"
+
+logger.Error("Failed to validate request", "component", "authn", "user", userID, "error", err)
 ```
 
 This approach ensures:
@@ -59,14 +61,16 @@ Different log levels warrant different amounts of context. Higher severity level
 Include maximum context for execution flow analysis:
 
 ```go
-log.Trace("Entering function",
+import "github.com/cloudposse/atmos/pkg/logger"
+
+logger.Trace("Entering function",
     "func", "ProcessTemplate",
     "input_size", len(input),
     "template", templateName,
     "context_keys", contextKeys,
     "caller", callerFunc)
 
-log.Trace("Branch taken",
+logger.Trace("Branch taken",
     "condition", conditionName,
     "value", evaluatedValue,
     "branch", "true")
@@ -79,12 +83,14 @@ Trace logs should provide enough information to reconstruct the exact execution 
 Include diagnostic context for understanding behavior:
 
 ```go
-log.Debug("Component processed",
+import "github.com/cloudposse/atmos/pkg/logger"
+
+logger.Debug("Component processed",
     "component", name,
     "stack", stack,
     "duration", duration)
 
-log.Debug("Cache operation",
+logger.Debug("Cache operation",
     "operation", "get",
     "key", cacheKey,
     "hit", true,
@@ -98,8 +104,10 @@ Debug logs should help diagnose issues without overwhelming detail.
 Include minimal context for major events only:
 
 ```go
+import "github.com/cloudposse/atmos/pkg/logger"
+
 // Use sparingly - only for major lifecycle events
-log.Info("Service initialized",
+logger.Info("Service initialized",
     "version", version,
     "mode", operationMode)
 ```
@@ -111,13 +119,15 @@ Info logs should be self-explanatory with minimal context.
 Include problem context for troubleshooting:
 
 ```go
-log.Warn("Retry attempt",
+import "github.com/cloudposse/atmos/pkg/logger"
+
+logger.Warn("Retry attempt",
     "operation", "api_call",
     "attempt", retryCount,
     "max_attempts", maxRetries,
     "error", err)
 
-log.Error("Operation failed",
+logger.Error("Operation failed",
     "component", componentName,
     "stack", stackName,
     "operation", "deploy",
@@ -131,7 +141,7 @@ Error and warning logs need enough context to diagnose and fix issues.
 
 Atmos uses the [Charm Logger](https://charm.sh/blog/the-charm-logger/), which offers:
 
-- Simple APIs such as `log.Trace`, `log.Debug`, `log.Info`, `log.Warn`, and `log.Error`
+- Simple APIs through `pkg/logger` such as `logger.Trace`, `logger.Debug`, `logger.Info`, `logger.Warn`, and `logger.Error`
 - Automatic line wrapping and colorized output for terminals
 - Friendly formatting for console output
 - Optional raw JSON output for machine ingestion
@@ -159,12 +169,14 @@ Example JSON output:
 For expensive operations in logs, especially at trace level:
 
 ```go
+import "github.com/cloudposse/atmos/pkg/logger"
+
 // Avoid: Serializes even if trace is disabled
-log.Trace("Config state", "json", toJSON(config))
+logger.Trace("Config state", "json", toJSON(config))
 
 // Better: Only computes if trace is enabled
-if log.GetLevel() <= logger.TraceLevel {
-    log.Trace("Config state", "json", toJSON(config))
+if logger.IsLevelEnabled(logger.TraceLevel) {
+    logger.Trace("Config state", "json", toJSON(config))
 }
 ```
 
@@ -173,11 +185,13 @@ if log.GetLevel() <= logger.TraceLevel {
 Always use structured logging with key-value pairs:
 
 ```go
+import "github.com/cloudposse/atmos/pkg/logger"
+
 // Wrong: String interpolation
-log.Debug(fmt.Sprintf("Processing component %s in stack %s", name, stack))
+logger.Debug(fmt.Sprintf("Processing component %s in stack %s", name, stack))
 
 // Right: Structured logging
-log.Debug("Processing component", "component", name, "stack", stack)
+logger.Debug("Processing component", "component", name, "stack", stack)
 ```
 
 ## Linting and Conventions

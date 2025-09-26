@@ -158,7 +158,6 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-	// Always use debug level for this message
 	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
 }
 
