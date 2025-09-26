@@ -201,7 +201,7 @@ func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Too
 	}
 
 	for _, url := range possiblePaths {
-		tool, err := ar.fetchRegistryFile(url, owner, repo)
+		tool, err := ar.fetchRegistryFile(url)
 		if err == nil {
 			return tool, nil
 		}
@@ -211,7 +211,7 @@ func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*Too
 }
 
 // fetchRegistryFile fetches and parses a registry.yaml file.
-func (ar *AquaRegistry) fetchRegistryFile(url, owner, repo string) (*Tool, error) {
+func (ar *AquaRegistry) fetchRegistryFile(url string) (*Tool, error) {
 	// Create cache key
 	cacheKey := strings.ReplaceAll(url, "/", "_")
 	cacheKey = strings.ReplaceAll(cacheKey, ":", "_")
