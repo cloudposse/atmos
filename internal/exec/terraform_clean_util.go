@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )

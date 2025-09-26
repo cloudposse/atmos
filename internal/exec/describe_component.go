@@ -1,7 +1,7 @@
 package exec
 
 import (
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"

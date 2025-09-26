@@ -3,7 +3,7 @@ package hooks
 import (
 	"fmt"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 

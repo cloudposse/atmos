@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 // TestExecuteTerraform_ExportEnvVar check that when executing the terraform apply command.
@@ -21,9 +21,7 @@ import (
 // Check that `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` point to a directory.
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -145,9 +143,7 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 
 func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -213,9 +209,7 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 
 func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -283,9 +277,7 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 
 func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	err := os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
 
@@ -348,9 +340,7 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 
 func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -389,9 +379,7 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 
 func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -456,9 +444,7 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 
 func TestExecuteTerraform_OpaValidation(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -500,9 +486,7 @@ func TestExecuteTerraform_OpaValidation(t *testing.T) {
 
 func TestExecuteTerraform_Version(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	tests := []struct {
 		name           string
 		workDir        string
@@ -576,9 +560,7 @@ func TestExecuteTerraform_Version(t *testing.T) {
 
 func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skipf("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	workDir := "../../tests/fixtures/scenarios/terraform-cloud"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -782,7 +764,8 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 
 			// Save original logger and set up test logger
 			originalLogger := log.Default()
-			logger := log.New(w)
+			logger := log.New()
+			logger.SetOutput(w)
 			log.SetDefault(logger)
 			defer log.SetDefault(originalLogger)
 

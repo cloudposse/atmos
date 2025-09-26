@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 

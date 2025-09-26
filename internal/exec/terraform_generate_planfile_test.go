@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	"os"
-	osexec "os/exec"
 	"path/filepath"
 	"testing"
 
@@ -12,13 +11,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skip("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
 	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
 	component := "component-1"
@@ -89,9 +87,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 
 func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skip("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
 	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
 	component := "component-1"
@@ -203,9 +199,7 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 
 func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 	// Skip if terraform is not installed
-	if _, err := osexec.LookPath("terraform"); err != nil {
-		t.Skip("Skipping test: terraform is not installed or not in PATH")
-	}
+	tests.RequireTerraform(t)
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
 	component := "component-1"
 	stack := "nonprod"

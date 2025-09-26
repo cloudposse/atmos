@@ -201,14 +201,6 @@ func skipIfPackerNotInstalled(t *testing.T) {
 	}
 }
 
-// skipIfTerraformNotInstalled skips the test if terraform is not available in PATH.
-func skipIfTerraformNotInstalled(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("terraform"); err != nil {
-		t.Skip("Skipping test: terraform is not installed or not in PATH")
-	}
-}
-
 // skipIfHelmfileNotInstalled skips the test if helmfile is not available in PATH.
 func skipIfHelmfileNotInstalled(t *testing.T) {
 	t.Helper()

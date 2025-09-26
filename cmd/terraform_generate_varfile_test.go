@@ -7,10 +7,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestTerraformGenerateVarfileCmd(t *testing.T) {
-	skipIfTerraformNotInstalled(t)
+	tests.RequireTerraform(t)
 
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 

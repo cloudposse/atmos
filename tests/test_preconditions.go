@@ -311,6 +311,13 @@ func LogPreconditionOverride(t *testing.T) {
 	}
 }
 
+// RequireTerraform checks if terraform is installed and available in PATH.
+// This is a convenience function that uses RequireExecutable specifically for terraform.
+func RequireTerraform(t *testing.T) {
+	t.Helper()
+	RequireExecutable(t, "terraform", "terraform operations")
+}
+
 // RequireOCIAuthentication checks if authentication is configured for pulling OCI images from GitHub Container Registry.
 // This is typically provided by GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variables.
 func RequireOCIAuthentication(t *testing.T) {
