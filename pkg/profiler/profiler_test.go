@@ -1,7 +1,10 @@
 package profiler
 
 import (
+	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -17,6 +20,9 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if config.Host != "localhost" {
 		t.Errorf("Expected default host 'localhost', got %s", config.Host)
+	}
+	if config.ProfileType != ProfileTypeCPU {
+		t.Errorf("Expected default profile type CPU, got %s", config.ProfileType)
 	}
 }
 
@@ -217,5 +223,266 @@ func TestStopWithoutStart(t *testing.T) {
 
 	if profiler.IsRunning() {
 		t.Error("Profiler should not be running")
+	}
+}
+
+func TestIsValidProfileType(t *testing.T) {
+	tests := []struct {
+		profileType ProfileType
+		expected    bool
+	}{
+		{ProfileTypeCPU, true},
+		{ProfileTypeHeap, true},
+		{ProfileTypeAllocs, true},
+		{ProfileTypeGoroutine, true},
+		{ProfileTypeBlock, true},
+		{ProfileTypeMutex, true},
+		{ProfileTypeThreadCreate, true},
+		{ProfileTypeTrace, true},
+		{"invalid", false},
+		{"", false},
+	}
+
+	for _, test := range tests {
+		result := IsValidProfileType(test.profileType)
+		if result != test.expected {
+			t.Errorf("IsValidProfileType(%s) = %v, expected %v", test.profileType, result, test.expected)
+		}
+	}
+}
+
+func TestParseProfileType(t *testing.T) {
+	tests := []struct {
+		input       string
+		expected    ProfileType
+		expectError bool
+	}{
+		{"cpu", ProfileTypeCPU, false},
+		{"CPU", ProfileTypeCPU, false},
+		{"heap", ProfileTypeHeap, false},
+		{"HEAP", ProfileTypeHeap, false},
+		{"allocs", ProfileTypeAllocs, false},
+		{"goroutine", ProfileTypeGoroutine, false},
+		{"block", ProfileTypeBlock, false},
+		{"mutex", ProfileTypeMutex, false},
+		{"threadcreate", ProfileTypeThreadCreate, false},
+		{"trace", ProfileTypeTrace, false},
+		{"invalid", "", true},
+		{"", "", true},
+	}
+
+	for _, test := range tests {
+		result, err := ParseProfileType(test.input)
+		if test.expectError {
+			if err == nil {
+				t.Errorf("ParseProfileType(%s) expected error, but got none", test.input)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("ParseProfileType(%s) unexpected error: %v", test.input, err)
+			}
+			if result != test.expected {
+				t.Errorf("ParseProfileType(%s) = %s, expected %s", test.input, result, test.expected)
+			}
+		}
+	}
+}
+
+func TestGetSupportedProfileTypes(t *testing.T) {
+	types := GetSupportedProfileTypes()
+	expectedCount := 8 // CPU, Heap, Allocs, Goroutine, Block, Mutex, ThreadCreate, Trace
+
+	if len(types) != expectedCount {
+		t.Errorf("Expected %d profile types, got %d", expectedCount, len(types))
+	}
+
+	// Check that all types are valid
+	for _, profileType := range types {
+		if !IsValidProfileType(profileType) {
+			t.Errorf("GetSupportedProfileTypes() returned invalid type: %s", profileType)
+		}
+	}
+}
+
+func TestFileBasedProfilingCPU(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "profiler_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	profileFile := filepath.Join(tempDir, "cpu.prof")
+	config := Config{
+		Enabled:     true,
+		File:        profileFile,
+		ProfileType: ProfileTypeCPU,
+	}
+
+	profiler := New(config)
+
+	// Start profiling
+	err = profiler.Start()
+	if err != nil {
+		t.Fatalf("Failed to start CPU profiling: %v", err)
+	}
+
+	if !profiler.IsRunning() {
+		t.Error("Profiler should be running")
+	}
+
+	// Let it run for a short time
+	time.Sleep(100 * time.Millisecond)
+
+	// Stop profiling
+	err = profiler.Stop()
+	if err != nil {
+		t.Fatalf("Failed to stop CPU profiling: %v", err)
+	}
+
+	if profiler.IsRunning() {
+		t.Error("Profiler should not be running after stop")
+	}
+
+	// Check that the profile file was created
+	if _, err := os.Stat(profileFile); os.IsNotExist(err) {
+		t.Errorf("Profile file was not created: %s", profileFile)
+	}
+}
+
+func TestFileBasedProfilingHeap(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "profiler_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	profileFile := filepath.Join(tempDir, "heap.prof")
+	config := Config{
+		Enabled:     true,
+		File:        profileFile,
+		ProfileType: ProfileTypeHeap,
+	}
+
+	profiler := New(config)
+
+	// Start profiling
+	err = profiler.Start()
+	if err != nil {
+		t.Fatalf("Failed to start heap profiling: %v", err)
+	}
+
+	// Let it run for a short time
+	time.Sleep(100 * time.Millisecond)
+
+	// Stop profiling
+	err = profiler.Stop()
+	if err != nil {
+		t.Fatalf("Failed to stop heap profiling: %v", err)
+	}
+
+	// Check that the profile file was created
+	if _, err := os.Stat(profileFile); os.IsNotExist(err) {
+		t.Errorf("Profile file was not created: %s", profileFile)
+	}
+}
+
+func TestFileBasedProfilingTrace(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "profiler_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	profileFile := filepath.Join(tempDir, "trace.out")
+	config := Config{
+		Enabled:     true,
+		File:        profileFile,
+		ProfileType: ProfileTypeTrace,
+	}
+
+	profiler := New(config)
+
+	// Start profiling
+	err = profiler.Start()
+	if err != nil {
+		t.Fatalf("Failed to start trace profiling: %v", err)
+	}
+
+	// Let it run for a short time
+	time.Sleep(100 * time.Millisecond)
+
+	// Stop profiling
+	err = profiler.Stop()
+	if err != nil {
+		t.Fatalf("Failed to stop trace profiling: %v", err)
+	}
+
+	// Check that the profile file was created
+	if _, err := os.Stat(profileFile); os.IsNotExist(err) {
+		t.Errorf("Profile file was not created: %s", profileFile)
+	}
+}
+
+func TestFileBasedProfilingInvalidType(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "profiler_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	profileFile := filepath.Join(tempDir, "invalid.prof")
+	config := Config{
+		Enabled:     true,
+		File:        profileFile,
+		ProfileType: "invalid",
+	}
+
+	profiler := New(config)
+
+	// Start profiling should fail
+	err = profiler.Start()
+	if err == nil {
+		t.Fatal("Expected error for invalid profile type, but got none")
+	}
+
+	if profiler.IsRunning() {
+		t.Error("Profiler should not be running with invalid profile type")
+	}
+}
+
+func TestDefaultProfileType(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "profiler_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	profileFile := filepath.Join(tempDir, "default.prof")
+	config := Config{
+		Enabled: true,
+		File:    profileFile,
+		// ProfileType intentionally omitted to test default
+	}
+
+	profiler := New(config)
+
+	// Start profiling (should default to CPU)
+	err = profiler.Start()
+	if err != nil {
+		t.Fatalf("Failed to start profiling with default type: %v", err)
+	}
+
+	// Let it run for a short time
+	time.Sleep(100 * time.Millisecond)
+
+	// Stop profiling
+	err = profiler.Stop()
+	if err != nil {
+		t.Fatalf("Failed to stop profiling: %v", err)
+	}
+
+	// Check that the profile file was created
+	if _, err := os.Stat(profileFile); os.IsNotExist(err) {
+		t.Errorf("Profile file was not created: %s", profileFile)
 	}
 }

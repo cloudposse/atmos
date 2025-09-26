@@ -6,27 +6,54 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"runtime"
 	"runtime/pprof"
+	"runtime/trace"
+	"strings"
 	"sync"
 	"time"
 
 	log "github.com/charmbracelet/log"
 )
 
+// ProfileType represents the type of profile to collect.
+type ProfileType string
+
+const (
+	// ProfileTypeCPU collects CPU profile data.
+	ProfileTypeCPU ProfileType = "cpu"
+	// ProfileTypeHeap collects heap memory profile data.
+	ProfileTypeHeap ProfileType = "heap"
+	// ProfileTypeAllocs collects allocation profile data.
+	ProfileTypeAllocs ProfileType = "allocs"
+	// ProfileTypeGoroutine collects goroutine profile data.
+	ProfileTypeGoroutine ProfileType = "goroutine"
+	// ProfileTypeBlock collects blocking profile data.
+	ProfileTypeBlock ProfileType = "block"
+	// ProfileTypeMutex collects mutex contention profile data.
+	ProfileTypeMutex ProfileType = "mutex"
+	// ProfileTypeThreadCreate collects thread creation profile data.
+	ProfileTypeThreadCreate ProfileType = "threadcreate"
+	// ProfileTypeTrace collects execution trace data.
+	ProfileTypeTrace ProfileType = "trace"
+)
+
 // Config holds the configuration for the profiler.
 type Config struct {
-	Enabled bool   `json:"enabled" yaml:"enabled"`
-	Port    int    `json:"port" yaml:"port"`
-	Host    string `json:"host" yaml:"host"`
-	File    string `json:"file" yaml:"file"`
+	Enabled     bool        `json:"enabled" yaml:"enabled"`
+	Port        int         `json:"port" yaml:"port"`
+	Host        string      `json:"host" yaml:"host"`
+	File        string      `json:"file" yaml:"file"`
+	ProfileType ProfileType `json:"profile_type" yaml:"profile_type"`
 }
 
 // DefaultConfig returns the default profiler configuration.
 func DefaultConfig() Config {
 	return Config{
-		Enabled: false,
-		Port:    6060,
-		Host:    "localhost",
+		Enabled:     false,
+		Port:        6060,
+		Host:        "localhost",
+		ProfileType: ProfileTypeCPU,
 	}
 }
 
@@ -39,6 +66,7 @@ type Server struct {
 	cancel      context.CancelFunc
 	profFile    *os.File
 	isFileBased bool
+	profileType ProfileType
 }
 
 // New creates a new profiler server with the given configuration.
@@ -63,6 +91,13 @@ func (p *Server) Start() error {
 
 	// Check if file-based profiling is requested
 	if p.config.File != "" {
+		p.profileType = p.config.ProfileType
+		if p.profileType == "" {
+			p.profileType = ProfileTypeCPU
+		}
+		if !IsValidProfileType(p.profileType) {
+			return fmt.Errorf("unsupported profile type: %s. Supported types: %v", p.profileType, GetSupportedProfileTypes())
+		}
 		return p.startFileBasedProfiling()
 	}
 
@@ -70,7 +105,7 @@ func (p *Server) Start() error {
 	return p.startServerBasedProfiling()
 }
 
-// startFileBasedProfiling starts CPU profiling to a file.
+// startFileBasedProfiling starts profiling to a file based on the profile type.
 func (p *Server) startFileBasedProfiling() error {
 	if p.profFile != nil {
 		log.Warn("File-based profiler is already running")
@@ -83,14 +118,36 @@ func (p *Server) startFileBasedProfiling() error {
 		return fmt.Errorf("failed to create profile file %s: %w", p.config.File, err)
 	}
 
-	if err := pprof.StartCPUProfile(p.profFile); err != nil {
+	switch p.profileType {
+	case ProfileTypeCPU:
+		if err := pprof.StartCPUProfile(p.profFile); err != nil {
+			p.profFile.Close()
+			p.profFile = nil
+			return fmt.Errorf("failed to start CPU profile: %w", err)
+		}
+	case ProfileTypeTrace:
+		if err := trace.Start(p.profFile); err != nil {
+			p.profFile.Close()
+			p.profFile = nil
+			return fmt.Errorf("failed to start trace profile: %w", err)
+		}
+	case ProfileTypeHeap, ProfileTypeAllocs, ProfileTypeGoroutine, ProfileTypeBlock, ProfileTypeMutex, ProfileTypeThreadCreate:
+		// These profiles are collected on-demand when stopping, so we just keep the file open
+		// Enable runtime profiling for block and mutex if needed
+		if p.profileType == ProfileTypeBlock {
+			runtime.SetBlockProfileRate(1)
+		}
+		if p.profileType == ProfileTypeMutex {
+			runtime.SetMutexProfileFraction(1)
+		}
+	default:
 		p.profFile.Close()
 		p.profFile = nil
-		return fmt.Errorf("failed to start CPU profile: %w", err)
+		return fmt.Errorf("unsupported profile type: %s", p.profileType)
 	}
 
 	p.isFileBased = true
-	log.Info("CPU profiling started", "file", p.config.File)
+	log.Info("Profiling started", "type", p.profileType, "file", p.config.File)
 	return nil
 }
 
@@ -139,16 +196,59 @@ func (p *Server) Stop() error {
 	return nil
 }
 
-// stopFileBasedProfiling stops CPU profiling and closes the file.
+// stopFileBasedProfiling stops profiling and writes/closes the file based on profile type.
 func (p *Server) stopFileBasedProfiling() error {
-	pprof.StopCPUProfile()
+	var writeErr error
+
+	switch p.profileType {
+	case ProfileTypeCPU:
+		pprof.StopCPUProfile()
+	case ProfileTypeTrace:
+		trace.Stop()
+	case ProfileTypeHeap:
+		if prof := pprof.Lookup("heap"); prof != nil {
+			writeErr = prof.WriteTo(p.profFile, 0)
+		}
+	case ProfileTypeAllocs:
+		if prof := pprof.Lookup("allocs"); prof != nil {
+			writeErr = prof.WriteTo(p.profFile, 0)
+		}
+	case ProfileTypeGoroutine:
+		if prof := pprof.Lookup("goroutine"); prof != nil {
+			writeErr = prof.WriteTo(p.profFile, 0)
+		}
+	case ProfileTypeBlock:
+		if prof := pprof.Lookup("block"); prof != nil {
+			writeErr = prof.WriteTo(p.profFile, 0)
+		}
+		runtime.SetBlockProfileRate(0) // Disable block profiling
+	case ProfileTypeMutex:
+		if prof := pprof.Lookup("mutex"); prof != nil {
+			writeErr = prof.WriteTo(p.profFile, 0)
+		}
+		runtime.SetMutexProfileFraction(0) // Disable mutex profiling
+	case ProfileTypeThreadCreate:
+		if prof := pprof.Lookup("threadcreate"); prof != nil {
+			writeErr = prof.WriteTo(p.profFile, 0)
+		}
+	default:
+		writeErr = fmt.Errorf("unsupported profile type: %s", p.profileType)
+	}
+
+	if writeErr != nil {
+		log.Error("Error writing profile data", "error", writeErr, "type", p.profileType, "file", p.config.File)
+	}
 
 	if err := p.profFile.Close(); err != nil {
 		log.Error("Error closing profile file", "error", err, "file", p.config.File)
 		return err
 	}
 
-	log.Info("CPU profiling completed", "file", p.config.File)
+	if writeErr != nil {
+		return writeErr
+	}
+
+	log.Info("Profiling completed", "type", p.profileType, "file", p.config.File)
 	p.profFile = nil
 	p.isFileBased = false
 	p.cancel()
@@ -195,4 +295,38 @@ func (p *Server) GetURL() string {
 		return ""
 	}
 	return fmt.Sprintf("http://%s/debug/pprof/", p.GetAddress())
+}
+
+// IsValidProfileType checks if the given profile type is supported.
+func IsValidProfileType(profileType ProfileType) bool {
+	switch profileType {
+	case ProfileTypeCPU, ProfileTypeHeap, ProfileTypeAllocs, ProfileTypeGoroutine,
+		ProfileTypeBlock, ProfileTypeMutex, ProfileTypeThreadCreate, ProfileTypeTrace:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetSupportedProfileTypes returns a list of all supported profile types.
+func GetSupportedProfileTypes() []ProfileType {
+	return []ProfileType{
+		ProfileTypeCPU,
+		ProfileTypeHeap,
+		ProfileTypeAllocs,
+		ProfileTypeGoroutine,
+		ProfileTypeBlock,
+		ProfileTypeMutex,
+		ProfileTypeThreadCreate,
+		ProfileTypeTrace,
+	}
+}
+
+// ParseProfileType converts a string to ProfileType, with case-insensitive matching.
+func ParseProfileType(s string) (ProfileType, error) {
+	profileType := ProfileType(strings.ToLower(s))
+	if IsValidProfileType(profileType) {
+		return profileType, nil
+	}
+	return "", fmt.Errorf("unsupported profile type: %s. Supported types: %v", s, GetSupportedProfileTypes())
 }

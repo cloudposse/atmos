@@ -21,9 +21,13 @@ import Intro from '@site/src/components/Intro'
 It can capture several types of profiles:
 
 - **CPU Profile**: Shows where your program spends CPU time
-- **Memory Profile**: Shows memory allocation patterns and usage
+- **Heap Profile**: Shows current heap memory allocation patterns
+- **Allocs Profile**: Shows all memory allocations since program start
 - **Goroutine Profile**: Shows active goroutines and their call stacks
+- **Block Profile**: Shows operations that led to blocking on synchronization primitives
 - **Mutex Profile**: Shows lock contention patterns
+- **Thread Create Profile**: Shows stack traces that led to thread creation
+- **Trace Profile**: Shows detailed execution traces for performance analysis
 
 ## Atmos Profiling Integration
 
@@ -31,17 +35,27 @@ Atmos integrates pprof in two modes:
 
 ### File-Based Profiling
 
-File-based profiling captures CPU profiles directly to a file, which is ideal for CLI tools that exit quickly.
-This mode automatically enables profiling when a file path is specified.
+File-based profiling captures profiles directly to a file, which is ideal for CLI tools that exit quickly.
+This mode automatically enables profiling when a file path is specified. You can specify the type of profile to collect using the `--profile-type` flag.
 
 ```shell
+# CPU profiling (default)
 atmos terraform plan vpc -s plat-ue2-dev --profile-file=cpu.prof
+
+# Memory heap profiling
+atmos terraform plan vpc -s plat-ue2-dev --profile-file=heap.prof --profile-type=heap
+
+# Execution trace profiling
+atmos terraform plan vpc -s plat-ue2-dev --profile-file=trace.out --profile-type=trace
+
+# Goroutine profiling
+atmos terraform plan vpc -s plat-ue2-dev --profile-file=goroutine.prof --profile-type=goroutine
 ```
 
 <Terminal title="File-based profiling output">
     ```
-    INFO CPU profiling started file=cpu.prof
-    INFO CPU profiling completed file=cpu.prof
+    INFO Profiling started type=cpu file=cpu.prof
+    INFO Profiling completed type=cpu file=cpu.prof
     ```
 </Terminal>
 
@@ -66,7 +80,10 @@ atmos terraform plan vpc -s plat-ue2-dev --profiler-enabled
 
 <dl>
     <dt>`--profile-file`</dt>
-    <dd>Write CPU profiling data to the specified file (enables profiling automatically)</dd>
+    <dd>Write profiling data to the specified file (enables profiling automatically)</dd>
+
+    <dt>`--profile-type`</dt>
+    <dd>Type of profile to collect when using `--profile-file`. Options: `cpu`, `heap`, `allocs`, `goroutine`, `block`, `mutex`, `threadcreate`, `trace` (default: `cpu`)</dd>
 
     <dt>`--profiler-enabled`</dt>
     <dd>Enable pprof profiling server (default: false)</dd>
@@ -88,6 +105,8 @@ You can also enable profiling through your `atmos.yaml` configuration:
       enabled: true
       host: "localhost"
       port: 6060
+      file: "profile.out"           # Optional: file-based profiling
+      profile_type: "cpu"           # Optional: profile type for file-based profiling
     ```
 </File>
 
@@ -95,24 +114,40 @@ You can also enable profiling through your `atmos.yaml` configuration:
 
 ### File-Based Profiles
 
-After capturing a profile file, you can analyze it using Go's pprof tool:
+After capturing a profile file, you can analyze it using Go's pprof tool. The analysis method depends on the profile type:
 
+**CPU and Memory Profiles:**
 ```shell
 # Interactive text mode
 go tool pprof cpu.prof
+go tool pprof heap.prof
 
 # Web interface (requires Graphviz: brew install graphviz)
 go tool pprof -http=:8080 cpu.prof
+go tool pprof -http=:8080 heap.prof
 
 # Direct text output
 go tool pprof -top cpu.prof
+go tool pprof -top heap.prof
+```
+
+**Trace Profiles:**
+```shell
+# Use go tool trace for execution traces
+go tool trace trace.out
+
+# This opens a web interface showing:
+# - Timeline view of goroutines
+# - Network blocking profile
+# - Synchronization blocking profile
+# - System call blocking profile
 ```
 
 <Terminal title="Sample pprof output">
     ```
     (pprof) top
     Showing nodes accounting for 230ms, 95.83% of 240ms total
-    Dropped 15 nodes (cum <= 1.20ms)
+    Dropped 15 nodes (cum &lt;= 1.20ms)
     flat flat% sum% cum cum%
     80ms 33.33% 33.33% 80ms 33.33% github.com/cloudposse/atmos/internal/exec.processStackConfig
     60ms 25.00% 58.33% 60ms 25.00% gopkg.in/yaml.v3.(*Decoder).Decode
@@ -153,23 +188,46 @@ open http://localhost:6060/debug/pprof/
 Profile slow Atmos operations to identify bottlenecks:
 
 ```shell
-# Profile a slow terraform plan operation
-atmos terraform plan large-component -s prod --profile-file=slow-plan.prof
+# Profile CPU usage in a slow terraform plan operation
+atmos terraform plan large-component -s prod --profile-file=slow-plan.prof --profile-type=cpu
+
+# Profile memory usage
+atmos terraform plan large-component -s prod --profile-file=memory.prof --profile-type=heap
+
+# Profile detailed execution trace
+atmos terraform plan large-component -s prod --profile-file=trace.out --profile-type=trace
 
 # Analyze the results
 go tool pprof -http=:8080 slow-plan.prof
+go tool pprof -http=:8080 memory.prof
+go tool trace trace.out
 ```
 
 ### Memory Usage Analysis
 
-Identify memory-intensive operations:
+Identify memory-intensive operations using different approaches:
 
+**File-based memory profiling:**
 ```shell
-# Start server mode for memory profiling
+# Capture heap profile to file
+atmos describe stacks --profile-file=heap.prof --profile-type=heap
+
+# Capture allocation profile to file
+atmos describe stacks --profile-file=allocs.prof --profile-type=allocs
+
+# Analyze the results
+go tool pprof -http=:8080 heap.prof
+go tool pprof -http=:8080 allocs.prof
+```
+
+**Server-based memory profiling:**
+```shell
+# Start server mode for live memory profiling
 atmos describe stacks --profiler-enabled
 
 # In another terminal, capture memory profile
 go tool pprof http://localhost:6060/debug/pprof/heap
+go tool pprof http://localhost:6060/debug/pprof/allocs
 ```
 
 ### Custom Server Configuration
@@ -210,8 +268,8 @@ Without Graphviz, you can still use the text-based analysis modes.
 
 ### File-Based vs Server-Based
 
-- **Use file-based profiling** for most CLI operations and performance analysis
-- **Use server-based profiling** for long-running operations or when you need multiple profile types
+- **Use file-based profiling** for most CLI operations and performance analysis. Supports all profile types: `cpu`, `heap`, `allocs`, `goroutine`, `block`, `mutex`, `threadcreate`, `trace`
+- **Use server-based profiling** for long-running operations or when you need to collect multiple profile types interactively
 
 ### Profile Regularly
 
@@ -233,7 +291,14 @@ Without Graphviz, you can still use the text-based analysis modes.
 ```shell
 # Ensure the directory exists
 mkdir -p /path/to/profile/
-atmos command --profile-file=/path/to/profile/cpu.prof
+atmos command --profile-file=/path/to/profile/cpu.prof --profile-type=cpu
+```
+
+**Invalid profile type:**
+```shell
+# Check supported profile types
+echo "Supported types: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace"
+atmos command --profile-file=profile.out --profile-type=heap
 ```
 
 **Graphviz not found:**

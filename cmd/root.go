@@ -216,6 +216,15 @@ func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) e
 			}
 		}
 	}
+	if cmd.Flags().Changed("profile-type") {
+		if profileType, err := cmd.Flags().GetString("profile-type"); err == nil {
+			if parsedType, parseErr := profiler.ParseProfileType(profileType); parseErr == nil {
+				profilerConfig.ProfileType = parsedType
+			} else {
+				return fmt.Errorf("invalid profile type: %w", parseErr)
+			}
+		}
+	}
 
 	// Create and start profiler
 	profilerServer = profiler.New(profilerConfig)
@@ -325,6 +334,7 @@ func init() {
 	RootCmd.PersistentFlags().Int("profiler-port", 6060, "Port for pprof profiling server")
 	RootCmd.PersistentFlags().String("profiler-host", "localhost", "Host for pprof profiling server")
 	RootCmd.PersistentFlags().String("profile-file", "", "Write profiling data to file instead of starting server")
+	RootCmd.PersistentFlags().String("profile-type", "cpu", "Type of profile to collect when using --profile-file. Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
