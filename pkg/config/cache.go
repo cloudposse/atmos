@@ -11,17 +11,17 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
 type CacheConfig struct {
-	LastChecked              int64  `mapstructure:"last_checked"`
-	InstallationId           string `mapstructure:"installation_id"`
-	TelemetryDisclosureShown bool   `mapstructure:"telemetry_disclosure_shown"`
+	LastChecked              int64  `mapstructure:"last_checked" yaml:"last_checked"`
+	InstallationId           string `mapstructure:"installation_id" yaml:"installation_id"`
+	TelemetryDisclosureShown bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
 }
 
 func GetCacheFilePath() (string, error) {

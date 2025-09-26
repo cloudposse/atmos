@@ -3,8 +3,11 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func init() {
@@ -42,6 +45,13 @@ func writeFileAtomicWindows(filename string, data []byte, perm os.FileMode) erro
 		return err
 	}
 	tmpFile = nil // Mark as closed for defer cleanup.
+
+	// Apply the requested permissions to the temporary file.
+	// Treat chmod failures as fatal to ensure cache files have correct permissions.
+	if err := os.Chmod(tmpName, perm); err != nil {
+		os.Remove(tmpName) // Clean up temp file.
+		return fmt.Errorf("%w: failed to chmod temp cache file %s: %v", errUtils.ErrCacheWrite, tmpName, err)
+	}
 
 	// On Windows, we need to remove the target file first if it exists.
 	// This is because Windows doesn't allow renaming over an existing file.
