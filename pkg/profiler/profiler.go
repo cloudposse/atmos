@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
 // Config holds the configuration for the profiler.
@@ -68,18 +68,17 @@ func (p *Server) Start() error {
 	}
 
 	go func() {
-		log.Info("Starting pprof server", "address", addr)
-		log.Info("pprof endpoints available at:", "url", fmt.Sprintf("http://%s/debug/pprof/", addr))
+		log.Info("Profiler server available at:", "url", fmt.Sprintf("http://%s/debug/pprof/", addr))
 
 		if err := p.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("pprof server error", "error", err)
+			log.Error("Profiler server error", "error", err)
 		}
 	}()
 
 	// Give the server a moment to start
 	time.Sleep(100 * time.Millisecond)
 
-	log.Debug("pprof server started successfully")
+	log.Debug("Profiler server started successfully")
 	return nil
 }
 
@@ -92,20 +91,20 @@ func (p *Server) Stop() error {
 		return nil
 	}
 
-	log.Debug("Stopping pprof server")
+	log.Debug("Stopping profiler server")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := p.server.Shutdown(ctx); err != nil {
-		log.Error("Error shutting down pprof server", "error", err)
+		log.Error("Error shutting down profiler server", "error", err)
 		return err
 	}
 
 	p.server = nil
 	p.cancel()
 
-	log.Debug("pprof server stopped")
+	log.Debug("Profiler server stopped")
 	return nil
 }
 
