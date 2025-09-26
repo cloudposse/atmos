@@ -370,7 +370,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	// Process YAML functions
 	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrPreprocessYAMLFunctions, err)
+		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrPreprocessYAMLFunctions, err)
 	}
 
 	// Marshal to YAML

@@ -118,7 +118,7 @@ func ValidateWithOpa(
 	// Execute the prepared query
 	rs, err := query.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
-		if err.Error() == "context deadline exceeded" {
+		if errors.Is(err, context.DeadlineExceeded) {
 			err = errors.New(timeoutErrorMessage)
 		}
 		return false, err
@@ -208,7 +208,7 @@ func ValidateWithOpaLegacy(
 		Config: bytes.NewReader(config),
 	})
 	if err != nil {
-		if err.Error() == "context deadline exceeded" {
+		if errors.Is(err, context.DeadlineExceeded) {
 			err = errors.New(timeoutErrorMessage)
 		}
 		return false, err
@@ -221,7 +221,7 @@ func ValidateWithOpaLegacy(
 		Path:  "/atmos/errors",
 		Input: dataFromJson,
 	}); err != nil {
-		if err.Error() == "context deadline exceeded" {
+		if errors.Is(err, context.DeadlineExceeded) {
 			err = errors.New(timeoutErrorMessage)
 		}
 		return false, err
