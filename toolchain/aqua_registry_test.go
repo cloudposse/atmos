@@ -274,7 +274,7 @@ packages:
     binary_name: tool
 `)
 
-	tool, err := ar.parseRegistryFile(data, "test", "tool")
+	tool, err := ar.parseRegistryFile(data)
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.Equal(t, "tool", tool.Name)
@@ -297,7 +297,7 @@ tools:
     format: zip
 `)
 
-	tool, err := ar.parseRegistryFile(data, "test", "tool")
+	tool, err := ar.parseRegistryFile(data)
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.Equal(t, "tool", tool.Name)
@@ -311,7 +311,7 @@ func TestAquaRegistry_parseRegistryFile_Invalid(t *testing.T) {
 	// Test parsing invalid YAML
 	data := []byte(`invalid yaml content`)
 
-	tool, err := ar.parseRegistryFile(data, "test", "tool")
+	tool, err := ar.parseRegistryFile(data)
 	assert.Error(t, err)
 	assert.Nil(t, tool)
 	assert.Contains(t, err.Error(), "no tools or packages found in registry file")
