@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"bytes"
+	"math"
 	"os"
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestNoColorLog(t *testing.T) {
@@ -119,4 +122,193 @@ func TestInitFunction(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSetupLogger_TraceLevel(t *testing.T) {
+	// Save original state.
+	originalLevel := log.GetLevel()
+	defer func() {
+		log.SetLevel(originalLevel)
+		log.SetOutput(os.Stderr) // Reset to default
+	}()
+
+	tests := []struct {
+		name          string
+		configLevel   string
+		expectedLevel log.Level
+	}{
+		{"Trace", "Trace", log.TraceLevel},
+		{"Debug", "Debug", log.DebugLevel},
+		{"Info", "Info", log.InfoLevel},
+		{"Warning", "Warning", log.WarnLevel},
+		{"Off", "Off", log.Level(math.MaxInt32)},
+		{"Default", "", log.WarnLevel},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &schema.AtmosConfiguration{
+				Logs: schema.Logs{
+					Level: tt.configLevel,
+					File:  "/dev/stderr", // Default log file
+				},
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{},
+				},
+			}
+
+			setupLogger(cfg)
+			assert.Equal(t, tt.expectedLevel, log.GetLevel(),
+				"Expected level %v for config %q", tt.expectedLevel, tt.configLevel)
+		})
+	}
+}
+
+func TestSetupLogger_TraceVisibility(t *testing.T) {
+	// Save original state.
+	originalLevel := log.GetLevel()
+	defer func() {
+		log.SetLevel(originalLevel)
+		log.SetOutput(os.Stderr) // Reset to default
+	}()
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+
+	tests := []struct {
+		name         string
+		configLevel  string
+		traceVisible bool
+		debugVisible bool
+		infoVisible  bool
+	}{
+		{
+			name:         "Trace level shows all",
+			configLevel:  "Trace",
+			traceVisible: true,
+			debugVisible: true,
+			infoVisible:  true,
+		},
+		{
+			name:         "Debug level hides trace",
+			configLevel:  "Debug",
+			traceVisible: false,
+			debugVisible: true,
+			infoVisible:  true,
+		},
+		{
+			name:         "Info level hides trace and debug",
+			configLevel:  "Info",
+			traceVisible: false,
+			debugVisible: false,
+			infoVisible:  true,
+		},
+		{
+			name:         "Warning level hides trace, debug, and info",
+			configLevel:  "Warning",
+			traceVisible: false,
+			debugVisible: false,
+			infoVisible:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &schema.AtmosConfiguration{
+				Logs: schema.Logs{
+					Level: tt.configLevel,
+					File:  "", // No file so it uses the pre-set buffer
+				},
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{},
+				},
+			}
+			setupLogger(cfg)
+
+			// Test trace visibility.
+			buf.Reset()
+			log.Trace("trace test message")
+			hasTrace := strings.Contains(buf.String(), "trace test message")
+			assert.Equal(t, tt.traceVisible, hasTrace,
+				"Trace visibility incorrect for %q level", tt.configLevel)
+
+			// Test debug visibility.
+			buf.Reset()
+			log.Debug("debug test message")
+			hasDebug := strings.Contains(buf.String(), "debug test message")
+			assert.Equal(t, tt.debugVisible, hasDebug,
+				"Debug visibility incorrect for %q level", tt.configLevel)
+
+			// Test info visibility.
+			buf.Reset()
+			log.Info("info test message")
+			hasInfo := strings.Contains(buf.String(), "info test message")
+			assert.Equal(t, tt.infoVisible, hasInfo,
+				"Info visibility incorrect for %q level", tt.configLevel)
+		})
+	}
+}
+
+func TestSetupLogger_TraceLevelFromEnvironment(t *testing.T) {
+	// Save original state.
+	originalLevel := log.GetLevel()
+	originalEnv := os.Getenv("ATMOS_LOGS_LEVEL")
+	defer func() {
+		log.SetLevel(originalLevel)
+		log.SetOutput(os.Stderr) // Reset to default
+		if originalEnv == "" {
+			os.Unsetenv("ATMOS_LOGS_LEVEL")
+		} else {
+			os.Setenv("ATMOS_LOGS_LEVEL", originalEnv)
+		}
+	}()
+
+	// Test that ATMOS_LOGS_LEVEL=Trace works.
+	os.Setenv("ATMOS_LOGS_LEVEL", "Trace")
+
+	// Simulate loading config from environment.
+	cfg := &schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: os.Getenv("ATMOS_LOGS_LEVEL"),
+			File:  "/dev/stderr", // Default log file
+		},
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{},
+		},
+	}
+	setupLogger(cfg)
+
+	assert.Equal(t, log.TraceLevel, log.GetLevel(),
+		"Should set trace level from environment variable")
+}
+
+func TestSetupLogger_NoColorWithTraceLevel(t *testing.T) {
+	// Save original state.
+	originalLevel := log.GetLevel()
+	defer func() {
+		log.SetLevel(originalLevel)
+		log.SetOutput(os.Stderr) // Reset to default
+	}()
+
+	// Test that trace level works with no-color mode.
+	cfg := &schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Trace",
+			File:  "/dev/stderr", // Default log file
+		},
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				// This simulates NO_COLOR environment.
+			},
+		},
+	}
+
+	// Mock the IsColorEnabled to return false.
+	// Since we can't easily mock it, we'll just test that setupLogger doesn't panic.
+	assert.NotPanics(t, func() {
+		setupLogger(cfg)
+	}, "setupLogger should not panic with trace level and no color")
+
+	assert.Equal(t, log.TraceLevel, log.GetLevel(),
+		"Trace level should be set even with no color")
 }

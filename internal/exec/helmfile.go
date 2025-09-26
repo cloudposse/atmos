@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -74,13 +74,19 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if the component exists as a helmfile component
-	componentPath := filepath.Join(atmosConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, "helmfile", info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component path: %w", err)
+	}
+
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
+		// Get the base path for error message, respecting user's actual config
+		basePath, _ := u.GetComponentBasePath(&atmosConfig, "helmfile")
 		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
-			filepath.Join(atmosConfig.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
+			basePath,
 		)
 	}
 

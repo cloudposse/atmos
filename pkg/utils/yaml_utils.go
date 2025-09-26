@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -176,6 +176,11 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 		if SliceContainsString(AtmosYamlTags, tag) {
 			n.Value = getValueWithTag(n)
+			// Clear the custom tag to prevent the YAML decoder from processing it again.
+			// We keep the value as is since it will be processed later by processCustomTags.
+			// We don't set a specific type tag (like !!str) because the function might return
+			// any type (string, map, list, etc.) when it's actually executed.
+			n.Tag = ""
 		}
 
 		// Handle the !include tag with extension-based parsing

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"

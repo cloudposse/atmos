@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -277,26 +277,29 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 
 // DeletePathTerraform deletes the specified file or folder. with a checkmark or xmark
 func DeletePathTerraform(fullPath string, objectName string) error {
+	// Normalize path separators to forward slashes for consistent output across platforms
+	normalizedObjectName := filepath.ToSlash(objectName)
+
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
 		xMark := theme.Styles.XMark
-		fmt.Printf("%s Cannot delete %s: path does not exist", xMark, objectName)
+		fmt.Printf("%s Cannot delete %s: path does not exist", xMark, normalizedObjectName)
 		fmt.Println()
 		return err
 	}
 	if fileInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("%w: %s", errUtils.ErrRefuseToDeleteSymlink, objectName)
+		return fmt.Errorf("%w: %s", errUtils.ErrRefuseDeleteSymbolicLink, normalizedObjectName)
 	}
 	// Proceed with deletion
 	err = os.RemoveAll(fullPath)
 	if err != nil {
 		xMark := theme.Styles.XMark
-		fmt.Printf("%s Error deleting %s", xMark, objectName)
+		fmt.Printf("%s Error deleting %s", xMark, normalizedObjectName)
 		fmt.Println()
 		return err
 	}
 	checkMark := theme.Styles.Checkmark
-	fmt.Printf("%s Deleted %s", checkMark, objectName)
+	fmt.Printf("%s Deleted %s", checkMark, normalizedObjectName)
 	fmt.Println()
 	return nil
 }
