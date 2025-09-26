@@ -107,19 +107,19 @@ This pattern adds complexity but provides the strongest guarantees for regulated
 
 ### Trunk-Based Patterns
 
-#### 1. [Strict Version Pinning](#strict-version-pinning)
+#### 1. [Strict Version Pinning](/design-patterns/strict-version-pinning)
 **Trunk-based**: Pin component versions per environment using tags or commit SHAs from the main branch. Optimizes for reproducibility and rollback capability at the cost of high operational overhead and weak feedback loops. Requires lockstep promotions.
 
-#### 2. [Release Tracks/Channels](#release-trackschannels)
+#### 2. [Release Tracks/Channels](/design-patterns/release-tracks-channels)
 **Trunk-based**: Environments subscribe to moving tracks (e.g., `alpha`, `beta`, `prod`) defined in configuration on the main branch. You promote tracks, not individual environment pins. Provides strong convergence and feedback with medium overhead.
 
-#### 3. [Folder-Based Versioning](#folder-based-versioning)
+#### 3. [Folder-Based Versioning](/design-patterns/folder-based-versioning)
 **Trunk-based**: Create new component folders for deliberate, long-lived divergence (e.g., `vpc-v2`) in the main branch. Makes versioning explicit in the repository structure and allows gradual convergence by switching folders.
 
-#### 4. [Vendoring Components](#vendoring-components)
+#### 4. [Vendoring Components](/design-patterns/vendoring-components)
 **Trunk-based**: Copy upstream code locally into the main branch with a manifest tracking origin and lineage. Update locally in bulk; diverge intentionally when needed. Provides strong local control with predictable update windows.
 
-#### 5. Component Pinning with Automation (Recommended Default)
+#### 5. [Component Pinning with Automation](/design-patterns/component-pinning-automation) (Recommended Default)
 **Trunk-based**: All environments pin to the same component version on the main branch, with automated testing and deployment pipelines. Decouples release from deploy using automation rather than VCS strategies. Promotes strong convergence, embraces trunk-based development, and allows easy preview of change impact across all dependent environments. This is the recommended default for most teams.
 
 #### 6. Immutable Release Artifacts
@@ -127,7 +127,7 @@ This pattern adds complexity but provides the strongest guarantees for regulated
 
 ### Git Flow Pattern
 
-#### 7. [Git Flow: Branches as Channels](#git-flow-branches-as-channels)
+#### 7. [Git Flow: Branches as Channels](/design-patterns/git-flow-branches-as-channels)
 **Branch-based**: Long-lived branches map to release channels. Environments track branches; promotions happen via merges between branches. This is the only pattern that diverges from trunk-based development, using Git Flow's branching model instead.
 
 ## Quick Comparison

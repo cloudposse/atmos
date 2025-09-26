@@ -49,6 +49,14 @@ const config = {
                     {
                         from: '/reference/terraform-limitations',
                         to: '/introduction/why-atmos'
+                    },
+                    {
+                        from: '/design-patterns/component-catalog-with-mixins',
+                        to: '/design-patterns/component-catalog/with-mixins'
+                    },
+                    {
+                        from: '/design-patterns/component-catalog-template',
+                        to: '/design-patterns/component-catalog/template'
                     }
                 ],
             },
