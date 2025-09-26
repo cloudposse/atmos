@@ -158,12 +158,8 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-	// Use trace level for this message when trace is enabled, otherwise debug
-	if atmosConfig.Logs.Level == "Trace" {
-		log.Trace("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
-	} else {
-		log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
-	}
+	// Always use debug level for this message
+	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
 }
 
 // cleanupLogFile closes the log file handle if it was opened.
