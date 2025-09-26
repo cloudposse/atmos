@@ -7,6 +7,7 @@ import (
 const (
 	ErrWrappingFormat       = "%w: %w"
 	ErrStringWrappingFormat = "%w: %s"
+	ErrValueWrappingFormat  = "%w: %v"
 )
 
 var (
@@ -133,5 +134,9 @@ var (
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
 
 	// Cache-related errors.
-	ErrCacheLocked = errors.New("cache file is locked")
+	ErrCacheLocked    = errors.New("cache file is locked")
+	ErrCacheRead      = errors.New("cache read failed")
+	ErrCacheWrite     = errors.New("cache write failed")
+	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
+	ErrCacheMarshal   = errors.New("cache marshal failed")
 )

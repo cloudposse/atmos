@@ -12,6 +12,7 @@ import (
 
 	"github.com/adrg/xdg"
 	log "github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -74,6 +75,18 @@ func LoadCache() (CacheConfig, error) {
 	return loadCacheWithReadLock(cacheFile)
 }
 
+// SaveCache writes the provided cache configuration to the cache file atomically.
+// The function acquires an exclusive lock to prevent concurrent writes and ensures
+// data consistency across multiple processes.
+//
+// Parameters:
+//   - cfg: The CacheConfig to save to disk.
+//
+// Returns an error if the cache file cannot be created or written.
+// Callers can check for specific failure types using errors.Is() with the
+// following sentinel errors:
+//   - ErrCacheMarshal: Failed to marshal cache content to YAML
+//   - ErrCacheWrite: Failed to write the cache file
 func SaveCache(cfg CacheConfig) error {
 	cacheFile, err := GetCacheFilePath()
 	if err != nil {
@@ -94,12 +107,12 @@ func SaveCache(cfg CacheConfig) error {
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
 		if err := enc.Encode(data); err != nil {
-			return errors.Wrap(err, "failed to marshal cache config")
+			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheMarshal, err)
 		}
 
 		// Write atomically.
 		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
-			return errors.Wrap(err, "failed to write cache file")
+			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheWrite, err)
 		}
 		return nil
 	})
@@ -109,6 +122,17 @@ func SaveCache(cfg CacheConfig) error {
 // loading the current configuration, applying the update function,
 // and saving the result. This prevents race conditions when multiple
 // processes try to update different fields simultaneously.
+//
+// Parameters:
+//   - update: A function that modifies the provided CacheConfig in place.
+//
+// Returns an error if the cache file cannot be accessed, read, or written.
+// Callers can check for specific failure types using errors.Is() with the
+// following sentinel errors:
+//   - ErrCacheRead: Failed to read the cache file
+//   - ErrCacheUnmarshal: Failed to unmarshal cache content
+//   - ErrCacheWrite: Failed to write the cache file
+//   - ErrCacheMarshal: Failed to marshal cache content
 func UpdateCache(update func(*CacheConfig)) error {
 	cacheFile, err := GetCacheFilePath()
 	if err != nil {
@@ -123,10 +147,10 @@ func UpdateCache(update func(*CacheConfig)) error {
 			v := viper.New()
 			v.SetConfigFile(cacheFile)
 			if err := v.ReadInConfig(); err != nil {
-				return errors.Wrap(err, "failed to read cache file")
+				return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheRead, err)
 			}
 			if err := v.Unmarshal(&cfg); err != nil {
-				return errors.Wrap(err, "failed to unmarshal cache file")
+				return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheUnmarshal, err)
 			}
 		}
 
@@ -145,12 +169,12 @@ func UpdateCache(update func(*CacheConfig)) error {
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
 		if err := enc.Encode(data); err != nil {
-			return errors.Wrap(err, "failed to marshal cache config")
+			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheMarshal, err)
 		}
 
 		// Write atomically.
 		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
-			return errors.Wrap(err, "failed to write cache file")
+			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheWrite, err)
 		}
 		return nil
 	})

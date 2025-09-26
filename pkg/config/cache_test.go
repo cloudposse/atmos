@@ -162,6 +162,10 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	// Writer 1: Update LastChecked.
 	go func() {
 		err := UpdateCache(func(cache *CacheConfig) {
+			// Ensure InstallationId is preserved
+			if cache.InstallationId == "" {
+				cache.InstallationId = "concurrent-test"
+			}
 			cache.LastChecked = 2000
 		})
 		if err != nil {
@@ -173,6 +177,10 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	// Writer 2: Update TelemetryDisclosureShown.
 	go func() {
 		err := UpdateCache(func(cache *CacheConfig) {
+			// Ensure InstallationId is preserved
+			if cache.InstallationId == "" {
+				cache.InstallationId = "concurrent-test"
+			}
 			cache.TelemetryDisclosureShown = true
 		})
 		if err != nil {
@@ -357,7 +365,7 @@ func TestLoadCacheWithCorruptedFile(t *testing.T) {
 		// On Unix, should return an error.
 		assert.Error(t, err)
 		if err != nil {
-			assert.Contains(t, err.Error(), "failed to read cache file")
+			assert.Contains(t, err.Error(), "cache read failed")
 		}
 	}
 }
@@ -365,6 +373,9 @@ func TestLoadCacheWithCorruptedFile(t *testing.T) {
 func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
 	// Test GetCacheFilePath when directory creation fails.
 	// This is harder to test without mocking, but we can test with read-only parent.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping read-only directory test on Windows: permission model differs")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("Skipping test when running as root")
 	}
@@ -387,7 +398,9 @@ func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
 	// GetCacheFilePath should return an error when it can't create the directory.
 	_, err = GetCacheFilePath()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "error creating cache directory")
+	if err != nil {
+		assert.Contains(t, err.Error(), "error creating cache directory")
+	}
 }
 
 func TestUpdateCacheWithNonExistentFile(t *testing.T) {

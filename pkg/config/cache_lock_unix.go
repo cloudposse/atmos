@@ -8,7 +8,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/gofrs/flock"
-	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
 
@@ -29,7 +28,7 @@ func withCacheFileLockUnix(cacheFile string, fn func() error) error {
 	for i := 0; i < maxRetries; i++ {
 		locked, err = lock.TryLock()
 		if err != nil {
-			return errors.Wrap(err, "error trying to acquire file lock")
+			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheLocked, err)
 		}
 		if locked {
 			break
@@ -58,7 +57,7 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 	lock := flock.New(cacheFile)
 	locked, err := lock.TryRLock()
 	if err != nil {
-		return cfg, errors.Wrap(err, "error trying to acquire read lock")
+		return cfg, fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheLocked, err)
 	}
 	if !locked {
 		// If we can't get the lock immediately, return empty config
@@ -72,10 +71,10 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 	v := viper.New()
 	v.SetConfigFile(cacheFile)
 	if err := v.ReadInConfig(); err != nil {
-		return cfg, errors.Wrap(err, "failed to read cache file")
+		return cfg, fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheRead, err)
 	}
 	if err := v.Unmarshal(&cfg); err != nil {
-		return cfg, errors.Wrap(err, "failed to unmarshal cache file")
+		return cfg, fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheUnmarshal, err)
 	}
 	return cfg, nil
 }

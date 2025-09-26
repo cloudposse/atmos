@@ -33,6 +33,7 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
+	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -558,7 +559,12 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
 	// This ensures every test has its own cache and prevents interference
-	tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
+	xdgCacheHome := filepath.Join(tempDir, ".cache")
+	tc.Env["XDG_CACHE_HOME"] = xdgCacheHome
+	// Also set the process environment so removeCacheFile() uses the test path
+	os.Setenv("XDG_CACHE_HOME", xdgCacheHome)
+	// Reload XDG to pick up the new environment
+	xdg.Reload()
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
