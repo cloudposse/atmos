@@ -637,6 +637,11 @@ func ExtractTarGz(src, dest string) error {
 
 		targetPath := filepath.Join(dest, header.Name)
 
+		// Prevent ZipSlip
+		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(dest)+string(os.PathSeparator)) {
+			return fmt.Errorf("illegal file path: %s", header.Name)
+		}
+
 		switch header.Typeflag {
 		case tar.TypeDir:
 			// Create directory if it doesn't exist
