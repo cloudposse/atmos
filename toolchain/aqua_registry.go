@@ -16,6 +16,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const versionPrefix = "v"
+
 // AquaRegistry represents the Aqua registry structure.
 type AquaRegistry struct {
 	client *http.Client
@@ -302,7 +304,7 @@ func (ar *AquaRegistry) BuildAssetURL(tool *Tool, version string) (string, error
 	// Create template with custom functions
 	funcMap := template.FuncMap{
 		"trimV": func(s string) string {
-			return strings.TrimPrefix(s, "v")
+			return strings.TrimPrefix(s, versionPrefix)
 		},
 		"trimPrefix": func(prefix, s string) string {
 			return strings.TrimPrefix(s, prefix)
@@ -334,8 +336,8 @@ func (ar *AquaRegistry) BuildAssetURL(tool *Tool, version string) (string, error
 	// For github_release type, construct GitHub release URL
 	// Ensure version has v prefix for GitHub releases
 	releaseVersion := version
-	if !strings.HasPrefix(releaseVersion, "v") {
-		releaseVersion = "v" + releaseVersion
+	if !strings.HasPrefix(releaseVersion, versionPrefix) {
+		releaseVersion = versionPrefix + releaseVersion
 	}
 
 	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
@@ -402,7 +404,7 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	for _, release := range releases {
 		if !release.Prerelease {
 			// Remove 'v' prefix if present
-			version := strings.TrimPrefix(release.TagName, "v")
+			version := strings.TrimPrefix(release.TagName, versionPrefix)
 			return version, nil
 		}
 	}
@@ -445,7 +447,7 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 	for _, release := range releases {
 		if !release.Prerelease {
 			// Remove 'v' prefix if present
-			version := strings.TrimPrefix(release.TagName, "v")
+			version := strings.TrimPrefix(release.TagName, versionPrefix)
 			versions = append(versions, version)
 		}
 	}
