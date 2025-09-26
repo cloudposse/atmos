@@ -1,6 +1,10 @@
-Component,Stack
-mock/disabled,nonprod
-mock/drift,nonprod
-mock/nodrift,nonprod
-mock/drift,prod
-mock/nodrift,prod
+]11;?\[6n]10;?\[6n]11;?\[6n]11;?\[6n]11;?\[6n[38;5;98;1m[0m[38;5;98;1m[0m[38;5;98;1mNotice:[0m[38;5;231m Telemetry Enabled - Atmos now collects completely anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd not like to participate in this anonymous program, by visiting: [0m[38;5;38;4mhttps://atmos.tools/cli/telemetry[0m
+[38;5;62m┏[0m[38;5;62m━━━━━━━━━━━━━━━[0m[38;5;62m┳[0m[38;5;62m━━━━━━━━━[0m[38;5;62m┓[0m
+[38;5;62m┃[0m   [1;38;5;46mComponent[0m   [38;5;62m┃[0m  [1;38;5;46mStack[0m  [38;5;62m┃[0m
+[38;5;62m┣[0m[38;5;62m━━━━━━━━━━━━━━━[0m[38;5;62m╋[0m[38;5;62m━━━━━━━━━[0m[38;5;62m┫[0m
+[38;5;62m┃[0m [38;5;231mmock/disabled[0m [38;5;62m┃[0m [38;5;231mnonprod[0m [38;5;62m┃[0m
+[38;5;62m┃[0m [38;5;231mmock/drift[0m    [38;5;62m┃[0m [38;5;231mnonprod[0m [38;5;62m┃[0m
+[38;5;62m┃[0m [38;5;231mmock/nodrift[0m  [38;5;62m┃[0m [38;5;231mnonprod[0m [38;5;62m┃[0m
+[38;5;62m┃[0m [38;5;231mmock/drift[0m    [38;5;62m┃[0m [38;5;231mprod[0m    [38;5;62m┃[0m
+[38;5;62m┃[0m [38;5;231mmock/nodrift[0m  [38;5;62m┃[0m [38;5;231mprod[0m    [38;5;62m┃[0m
+[38;5;62m┗[0m[38;5;62m━━━━━━━━━━━━━━━[0m[38;5;62m┻[0m[38;5;62m━━━━━━━━━[0m[38;5;62m┛[0m

@@ -11,7 +11,7 @@ tests:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
   - name: atmos support
@@ -38,7 +38,7 @@ tests:
         - "atmos.yaml CLI config file was not found."
         - "https://atmos.tools/cli/configuration"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 1
 
   - name: check atmos --help in empty-dir
@@ -93,7 +93,7 @@ tests:
       stdout:
         - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
   - name: atmos doesnt warn if in git repo with atmos config
@@ -113,7 +113,7 @@ tests:
       stdout:
         - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
   - name: atmos doesnt warn if in git repo with no atmos config

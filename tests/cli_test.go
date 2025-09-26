@@ -492,19 +492,9 @@ func TestMain(m *testing.M) {
 		skipReason = fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
 		logger.Info("Tests will be skipped", "reason", skipReason)
 	} else {
-		rel, err := filepath.Rel(repoRoot, binaryPath)
-		if err == nil && strings.HasPrefix(rel, "..") {
-			skipReason = fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
+		skipReason = checkBinaryLocation(binaryPath, repoRoot)
+		if skipReason != "" {
 			logger.Info("Tests will be skipped", "reason", skipReason)
-		} else {
-			stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
-			if err != nil {
-				skipReason = fmt.Sprintf("Failed to check if rebuild needed: %v", err)
-				logger.Info("Tests will be skipped", "reason", skipReason)
-			} else if stale {
-				skipReason = fmt.Sprintf("Atmos binary at %s needs rebuild. Run 'make build' to rebuild.", binaryPath)
-				logger.Info("Tests will be skipped", "reason", skipReason)
-			}
 		}
 	}
 
@@ -1218,6 +1208,24 @@ func cleanDirectory(t *testing.T, workdir string) error {
 	}
 
 	return nil
+}
+
+// checkBinaryLocation validates the binary location and checks if rebuild is needed.
+func checkBinaryLocation(binaryPath string, repoRoot string) string {
+	rel, err := filepath.Rel(repoRoot, binaryPath)
+	if err == nil && strings.HasPrefix(rel, "..") {
+		return fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
+	}
+
+	stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
+	if err != nil {
+		return fmt.Sprintf("Failed to check if rebuild needed: %v", err)
+	}
+	if stale {
+		return fmt.Sprintf("Atmos binary at %s needs rebuild. Run 'make build' to rebuild.", binaryPath)
+	}
+
+	return ""
 }
 
 // checkIfRebuildNeeded runs `go list` to check if the binary is stale.

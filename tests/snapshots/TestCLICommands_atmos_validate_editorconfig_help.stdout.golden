@@ -1,5 +1,5 @@
 
-Validate all files against the project's EditorConfig rules                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+Validate all files against the project's EditorConfig rules                                                             
 
 Usage:
 
@@ -83,6 +83,6 @@ Global Flags:
                                      /dev/null)
 
 
-Use atmos validate editorconfig --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+Use atmos validate editorconfig --help for more information about a command.                                            
 
 
