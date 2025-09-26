@@ -236,7 +236,7 @@ func verifyReadResult(t *testing.T, testName string, result any) {
 		// - Explicit newlines in quoted strings are removed
 		// - This is not ideal but is the current implementation
 		assert.NotEmpty(t, strResult, "Result should not be empty")
-		
+
 		// Document what we're actually getting vs what we might expect
 		t.Logf("Test case '%s': Got result: %q", testName, strResult)
 	}
@@ -250,12 +250,12 @@ func verifyWriteResult(t *testing.T, result any, checkKey string) {
 	if !ok {
 		return
 	}
-	
+
 	configMap, ok := mapResult[checkKey].(map[string]any)
 	if !ok {
 		return
 	}
-	
+
 	if template, ok := configMap["template"].(string); ok {
 		assert.Contains(t, template, "\n", "Modified value should preserve newlines")
 	}
