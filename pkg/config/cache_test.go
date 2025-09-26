@@ -115,6 +115,10 @@ func TestSaveCacheCreatesDirectory(t *testing.T) {
 
 func TestConcurrentCacheAccess(t *testing.T) {
 	// Test concurrent reads and writes to the cache.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping concurrent cache test on Windows: file locking is disabled")
+	}
+
 	testDir := t.TempDir()
 	cleanup := withTestXDGHome(t, testDir)
 	defer cleanup()
@@ -135,10 +139,6 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	// Writer 1: Update LastChecked.
 	go func() {
 		err := UpdateCache(func(cache *CacheConfig) {
-			// Ensure InstallationId is preserved
-			if cache.InstallationId == "" {
-				cache.InstallationId = "concurrent-test"
-			}
 			cache.LastChecked = 2000
 		})
 		if err != nil {
@@ -150,10 +150,6 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	// Writer 2: Update TelemetryDisclosureShown.
 	go func() {
 		err := UpdateCache(func(cache *CacheConfig) {
-			// Ensure InstallationId is preserved
-			if cache.InstallationId == "" {
-				cache.InstallationId = "concurrent-test"
-			}
 			cache.TelemetryDisclosureShown = true
 		})
 		if err != nil {
@@ -190,18 +186,9 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	finalCache, err := LoadCache()
 	assert.NoError(t, err)
 	assert.Equal(t, "concurrent-test", finalCache.InstallationId)
-	// Both updates should be applied when using UpdateCache.
-	// On Windows without locking, one update might be lost due to race conditions.
-	if runtime.GOOS == "windows" {
-		// On Windows, at least one of the updates should be applied.
-		// We can't guarantee both due to lack of locking.
-		assert.True(t, finalCache.LastChecked == 2000 || finalCache.TelemetryDisclosureShown,
-			"At least one update should be applied on Windows")
-	} else {
-		// On Unix with proper locking, both updates should be applied.
-		assert.Equal(t, int64(2000), finalCache.LastChecked)
-		assert.True(t, finalCache.TelemetryDisclosureShown)
-	}
+	// With proper locking, both updates should be applied.
+	assert.Equal(t, int64(2000), finalCache.LastChecked)
+	assert.True(t, finalCache.TelemetryDisclosureShown)
 }
 
 func TestShouldCheckForUpdates(t *testing.T) {

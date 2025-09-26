@@ -12,6 +12,10 @@ import (
 
 // TestAtomicFileWrites verifies that cache writes are atomic.
 func TestAtomicFileWrites(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping concurrent cache test on Windows: file locking is disabled")
+	}
+
 	// Create a temporary cache directory and set up XDG with proper synchronization.
 	testDir := t.TempDir()
 	cleanup := withTestXDGHome(t, testDir)
@@ -46,10 +50,6 @@ func TestAtomicFileWrites(t *testing.T) {
 
 			// Each goroutine updates the cache with a unique value.
 			err := UpdateCache(func(cache *CacheConfig) {
-				// Preserve InstallationId if it's empty (can happen on Windows during concurrent access)
-				if cache.InstallationId == "" {
-					cache.InstallationId = "atomic-test"
-				}
 				cache.LastChecked = int64(2000 + id)
 				cache.TelemetryDisclosureShown = (id % 2) == 0
 			})
@@ -76,26 +76,10 @@ func TestAtomicFileWrites(t *testing.T) {
 	finalCache, err := LoadCache()
 	assert.NoError(t, err)
 
-	// On Windows without locking, the cache might be empty if all writes failed
-	// In that case, re-save the initial values
-	if runtime.GOOS == "windows" && finalCache.InstallationId == "" {
-		t.Log("Cache was empty on Windows, likely due to concurrent write failures. Re-saving initial cache.")
-		err = SaveCache(initialCache)
-		assert.NoError(t, err)
-		finalCache, err = LoadCache()
-		assert.NoError(t, err)
-	}
-
 	// The cache should have one of the values written, not a corrupted mix.
 	assert.Equal(t, "atomic-test", finalCache.InstallationId)
-	// On Windows, LastChecked might still be the initial value if all concurrent writes failed
-	if runtime.GOOS == "windows" {
-		assert.True(t, finalCache.LastChecked >= 1000 && finalCache.LastChecked < 2010,
-			"LastChecked should be the initial or one of the written values: %d", finalCache.LastChecked)
-	} else {
-		assert.True(t, finalCache.LastChecked >= 2000 && finalCache.LastChecked < 2010,
-			"LastChecked should be one of the written values: %d", finalCache.LastChecked)
-	}
+	assert.True(t, finalCache.LastChecked >= 2000 && finalCache.LastChecked < 2010,
+		"LastChecked should be one of the written values: %d", finalCache.LastChecked)
 
 	// Verify the file still exists and is readable.
 	_, err = os.Stat(cacheFile)
