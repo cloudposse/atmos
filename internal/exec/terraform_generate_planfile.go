@@ -132,7 +132,7 @@ func ExecuteTerraformGeneratePlanfile(
 	// Create a temporary directory for all temporary files.
 	tmpDir, err := os.MkdirTemp("", "atmos-terraform-generate-planfile")
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrCreatingTempDirectory, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrCreatingTempDirectory, err)
 	}
 
 	defer func(path string) {
@@ -151,7 +151,7 @@ func ExecuteTerraformGeneratePlanfile(
 	// Get the JSON representation of the new plan.
 	planJSON, err := getTerraformPlanJSON(&atmosConfig, info, componentPath, planFile)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, ErrGettingJsonForPlanfile, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrGettingJsonForPlanfile, err)
 	}
 
 	// Resolve the planfile path based on options. If a custom file is specified, use that. Otherwise, use the default path.
@@ -206,7 +206,7 @@ func resolvePlanfilePath(componentPath, format string, customFile string, info *
 
 	err := u.EnsureDir(planFilePath)
 	if err != nil {
-		return "", fmt.Errorf(errUtils.ErrWrappingFormat, ErrCreatingIntermediateSubdirectories, err)
+		return "", fmt.Errorf(errUtils.ErrStringWrappingFormat, ErrCreatingIntermediateSubdirectories, err)
 	}
 
 	return planFilePath, nil
@@ -216,7 +216,7 @@ func resolvePlanfilePath(componentPath, format string, customFile string, info *
 func writePlanfile(planFilePath, format string, planJSON string) error {
 	d, err := u.ConvertFromJSON(planJSON)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrConvertingJsonToGoType, err)
+		return fmt.Errorf("%w: %s", ErrConvertingJsonToGoType, err)
 	}
 
 	const fileMode = 0o644

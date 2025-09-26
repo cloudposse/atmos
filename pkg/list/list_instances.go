@@ -208,12 +208,12 @@ func uploadInstances(instances []schema.Instance) error {
 	repo, err := git.GetLocalRepo()
 	if err != nil {
 		log.Error(errUtils.ErrFailedToGetLocalRepo.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
 	}
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToGetRepoInfo.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
 	}
 	if repoInfo.RepoUrl == "" || repoInfo.RepoName == "" || repoInfo.RepoOwner == "" || repoInfo.RepoHost == "" {
 		log.Warn("Git repo info is incomplete; upload may be rejected.", "repo_url", repoInfo.RepoUrl, "repo_name", repoInfo.RepoName, "repo_owner", repoInfo.RepoOwner, "repo_host", repoInfo.RepoHost)
@@ -223,13 +223,13 @@ func uploadInstances(instances []schema.Instance) error {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToCreateAPIClient.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
 	req := dtos.InstancesUploadRequest{
@@ -243,7 +243,7 @@ func uploadInstances(instances []schema.Instance) error {
 	err = apiClient.UploadInstances(&req)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToUploadInstances.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadInstances, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToUploadInstances, err)
 	}
 
 	u.PrintfMessageToTUI("Successfully uploaded instances to Atmos Pro API.")
@@ -256,7 +256,7 @@ func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrExecuteDescribeStacks, err)
+		return nil, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrExecuteDescribeStacks, err)
 	}
 
 	// Collect instances.
@@ -274,21 +274,21 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 
 	// Get flags.
 	upload, err := cmd.Flags().GetBool("upload")
 	if err != nil {
 		log.Error(errUtils.ErrParseFlag.Error(), "flag", "upload", "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrParseFlag, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrParseFlag, err)
 	}
 
 	// Process instances.
 	instances, err := processInstances(&atmosConfig)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrProcessInstances, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrProcessInstances, err)
 	}
 
 	// Inline handleOutput.
