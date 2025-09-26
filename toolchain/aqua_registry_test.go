@@ -248,13 +248,13 @@ packages:
 	ar.cache.baseDir = t.TempDir()
 
 	// Test fetching registry file
-	tool, err := ar.fetchRegistryFile(ts.URL+"/test/tool/registry.yaml", "test", "tool")
+	tool, err := ar.fetchRegistryFile(ts.URL + "/test/tool/registry.yaml")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.Equal(t, "tool", tool.Name)
 
 	// Test that it's cached
-	tool2, err := ar.fetchRegistryFile(ts.URL+"/test/tool/registry.yaml", "test", "tool")
+	tool2, err := ar.fetchRegistryFile(ts.URL + "/test/tool/registry.yaml")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool2)
 	assert.Equal(t, tool.Name, tool2.Name)
