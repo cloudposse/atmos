@@ -1,0 +1,201 @@
+---
+title: "!unset"
+sidebar_label: "!unset"
+sidebar_class_name: command
+id: unset
+description: Delete/remove values from Atmos stack configurations
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+
+:::note Purpose
+Use the `!unset` function to delete or remove keys from Atmos stack configurations during inheritance and merging. This allows you to explicitly remove values that were defined in parent configurations or imports.
+:::
+
+## Usage
+
+The `!unset` function is a YAML explicit type that marks a key for deletion from the configuration. Unlike setting a value to `null` (which keeps the key with a null value), `!unset` completely removes the key from the configuration.
+
+## Examples
+
+### Basic Usage
+
+<File title="stacks/base.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_nat_gateway: true
+        enable_vpn_gateway: true
+        availability_zones: ["us-east-1a", "us-east-1b", "us-east-1c"]
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - base
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Remove VPN gateway for dev environment
+        enable_vpn_gateway: !unset
+
+        # Override NAT gateway setting
+        enable_nat_gateway: false
+```
+</File>
+
+After processing, the `dev` stack will have:
+- `enable_nat_gateway: false` (overridden)
+- No `enable_vpn_gateway` key (removed by `!unset`)
+- `availability_zones` inherited from base
+
+### Removing Nested Values
+
+<File title="stacks/config.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        config:
+          database:
+            host: "prod.db.example.com"
+            port: 5432
+            ssl_mode: "require"
+            backup_enabled: true
+```
+</File>
+
+<File title="stacks/override.yaml">
+```yaml
+import:
+  - config
+
+components:
+  terraform:
+    app:
+      vars:
+        config:
+          database:
+            # Remove backup configuration for this environment
+            backup_enabled: !unset
+
+            # Keep other database settings
+            host: "dev.db.example.com"
+```
+</File>
+
+### Working with Lists
+
+When used in arrays, `!unset` removes the item from the list:
+
+<File title="stacks/example.yaml">
+```yaml
+components:
+  terraform:
+    security:
+      vars:
+        allowed_ports:
+          - 80
+          - 443
+          - !unset  # This item will be removed from the list
+          - 8080
+```
+</File>
+
+The resulting `allowed_ports` will be `[80, 443, 8080]`.
+
+## Use Cases
+
+### 1. Environment-Specific Configuration
+
+Remove production-only settings from development environments:
+
+```yaml
+# base.yaml - Contains all possible settings
+monitoring:
+  alerts:
+    pagerduty: enabled
+    email: enabled
+    sms: enabled
+
+# dev.yaml - Remove production alerting
+monitoring:
+  alerts:
+    pagerduty: !unset  # Don't need PagerDuty in dev
+    sms: !unset        # Don't need SMS alerts in dev
+    email: enabled     # Keep email notifications
+```
+
+### 2. Feature Flags
+
+Remove feature flags that aren't applicable to certain deployments:
+
+```yaml
+# defaults.yaml
+features:
+  experimental_feature: true
+  beta_feature: true
+  legacy_support: true
+
+# modern-stack.yaml
+features:
+  legacy_support: !unset  # Remove legacy support entirely
+```
+
+### 3. Security Configuration
+
+Remove sensitive configurations from non-production environments:
+
+```yaml
+# prod.yaml
+security:
+  vault_integration: true
+  audit_logging: true
+  compliance_mode: "strict"
+
+# staging.yaml
+import:
+  - prod
+
+security:
+  compliance_mode: !unset  # Not needed in staging
+  audit_logging: false      # Override to false
+```
+
+## How It Works
+
+The `!unset` function operates at two levels:
+
+1. **During YAML parsing**: When the YAML is initially parsed, keys marked with `!unset` are identified
+2. **During merging**: When configurations are merged (through imports or inheritance), keys marked with `!unset` are removed from the target configuration
+
+This ensures that the key is completely absent from the final configuration, not just set to `null` or an empty value.
+
+## Comparison with Other Approaches
+
+| Approach | Result | Use Case |
+|----------|--------|----------|
+| `key: !unset` | Key is completely removed | When you want the key to not exist |
+| `key: null` | Key exists with `null` value | When you want to explicitly set null |
+| `key: ""` | Key exists with empty string | When you want an empty value |
+| Omitting the key | Key is inherited if defined in parent | Normal inheritance behavior |
+
+## Important Notes
+
+- `!unset` only affects the specific key it's assigned to
+- It works with all Atmos configuration sections: `vars`, `settings`, `env`, `metadata`, etc.
+- The function is processed after template rendering but before final merging
+- You cannot "unset" a key that doesn't exist (no error is thrown, it's simply ignored)
+- Works with all merge strategies (replace, append, merge)
+
+## Related
+
+- [Atmos Inheritance](/core-concepts/stacks/inheritance)
+- [Stack Manifests](/core-concepts/stacks)
+- [YAML Functions Overview](/functions/yaml)

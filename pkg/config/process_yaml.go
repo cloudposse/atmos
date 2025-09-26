@@ -57,23 +57,23 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		return nil
 	}
 
-	if node.Kind == yaml.MappingNode {
-		if err := processMappingNode(node, v, currentPath); err != nil {
-			return err
+	switch node.Kind {
+	case yaml.DocumentNode:
+		// Process document nodes by processing their content.
+		for _, child := range node.Content {
+			if err := processNode(child, v, currentPath); err != nil {
+				return err
+			}
 		}
+	case yaml.MappingNode:
+		return processMappingNode(node, v, currentPath)
+	case yaml.ScalarNode:
+		return processScalarNode(node, v, currentPath)
+	case yaml.SequenceNode:
+		// Handle sequences/arrays.
+		return processChildren(node.Content, v, currentPath, true)
 	}
 
-	if node.Kind == yaml.ScalarNode && node.Tag != "" {
-		if err := processScalarNode(node, v, currentPath); err != nil {
-			return err
-		}
-	}
-
-	// Determine if parent is a sequence to correctly index children
-	parentIsSeq := node.Kind == yaml.SequenceNode
-	if err := processChildren(node.Content, v, currentPath, parentIsSeq); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -85,6 +85,17 @@ func processMappingNode(node *yaml.Node, v *viper.Viper, currentPath string) err
 
 		if currentPath != "" {
 			newPath = currentPath + "." + newPath
+		}
+
+		// Check if the value node has the !unset tag.
+		if valueNode.Tag == u.AtmosYamlFuncUnset {
+			// Remove the key from the configuration by setting it to nil.
+			// Note: Viper doesn't have a direct Delete method, so setting to nil
+			// is the conventional approach. When queried, Viper treats nil values
+			// as non-existent keys, returning nil from Get() calls.
+			v.Set(newPath, nil)
+			log.Debug("Unsetting configuration key", "path", newPath)
+			continue
 		}
 
 		if err := processNode(valueNode, v, newPath); err != nil {
@@ -108,19 +119,47 @@ func processChildren(children []*yaml.Node, v *viper.Viper, currentPath string, 
 }
 
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
-	if node.Tag == "" {
-		return nil
-	}
-
-	switch {
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
-		return handleEnv(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncExec):
-		return handleExec(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
-		return handleInclude(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
-		return handleGitRoot(node, v, currentPath)
+	// Handle nodes with special tags.
+	if node.Tag != "" && node.Tag != "!!str" && node.Tag != "!!int" && node.Tag != "!!bool" && node.Tag != "!!float" && node.Tag != "!!null" {
+		switch {
+		case strings.HasPrefix(node.Tag, u.AtmosYamlFuncUnset):
+			// Remove the key from the configuration by setting it to nil.
+			// Viper treats nil values as non-existent keys.
+			v.Set(currentPath, nil)
+			log.Debug("Unsetting configuration key", "path", currentPath)
+			node.Tag = "" // Avoid re-processing.
+			return nil
+		case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
+			return handleEnv(node, v, currentPath)
+		case strings.HasPrefix(node.Tag, u.AtmosYamlFuncExec):
+			return handleExec(node, v, currentPath)
+		case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
+			return handleInclude(node, v, currentPath)
+		case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
+			return handleGitRoot(node, v, currentPath)
+		}
+	} else if !v.IsSet(currentPath) {
+		// For regular scalar nodes (without special tags), only set their values
+		// if they haven't been set yet. This preserves the merge order when
+		// this function is called after MergeConfig.
+		var value any
+		switch node.Tag {
+		case "!!str", "":
+			value = node.Value
+		case "!!int":
+			// Convert to int if needed.
+			value = node.Value
+		case "!!bool":
+			value = node.Value == "true"
+		case "!!float":
+			// Convert to float if needed.
+			value = node.Value
+		case "!!null":
+			value = nil
+		default:
+			value = node.Value
+		}
+		v.Set(currentPath, value)
 	}
 	return nil
 }
