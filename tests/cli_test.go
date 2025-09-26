@@ -33,6 +33,7 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
+	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -510,6 +511,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
 
+	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
+	// This ensures every test has its own cache and prevents interference
+	xdgCacheHome := filepath.Join(tempDir, ".cache")
+	tc.Env["XDG_CACHE_HOME"] = xdgCacheHome
+	// Also set the process environment so removeCacheFile() uses the test path
+	os.Setenv("XDG_CACHE_HOME", xdgCacheHome)
+	// Reload XDG to pick up the new environment
+	xdg.Reload()
+
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
@@ -518,7 +528,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// Set environment variables for the test case
 		tc.Env["HOME"] = tempDir
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
-		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
 		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
@@ -932,23 +941,22 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bo
 }
 
 func verifyFormatValidation(t *testing.T, output string, formats []string) bool {
-	success := true
 	for _, format := range formats {
 		switch format {
-		case "yaml":
-			if !verifyYAMLFormat(t, output) {
-				success = false
-			}
 		case "json":
 			if !verifyJSONFormat(t, output) {
-				success = false
+				return false
+			}
+		case "yaml":
+			if !verifyYAMLFormat(t, output) {
+				return false
 			}
 		default:
-			t.Logf("Unknown validation format: %s", format)
-			success = false
+			t.Logf("Unknown format: %s", format)
+			return false
 		}
 	}
-	return success
+	return true
 }
 
 func verifyYAMLFormat(t *testing.T, output string) bool {
