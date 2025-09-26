@@ -57,7 +57,12 @@ internal/exec/output.*
 **.out
 coverage*.out
 coverage.html
+node_modules
 coverage.*.tmp
 coverage/
 .gocoverdir/
 tests.test
+
+# Toolchain installed tools
+toolchain/.tools/
+toolchain/.tool-versions
