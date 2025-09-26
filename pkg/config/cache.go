@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,8 +12,10 @@ import (
 
 	"github.com/adrg/xdg"
 	log "github.com/charmbracelet/log"
+	"github.com/google/renameio/v2"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 type CacheConfig struct {
@@ -76,11 +79,23 @@ func SaveCache(cfg CacheConfig) error {
 
 	// Use file locking to prevent concurrent writes
 	return withCacheFileLock(cacheFile, func() error {
-		v := viper.New()
-		v.Set("last_checked", cfg.LastChecked)
-		v.Set("installation_id", cfg.InstallationId)
-		v.Set("telemetry_disclosure_shown", cfg.TelemetryDisclosureShown)
-		if err := v.WriteConfigAs(cacheFile); err != nil {
+		// Prepare the config data.
+		data := map[string]interface{}{
+			"last_checked":               cfg.LastChecked,
+			"installation_id":            cfg.InstallationId,
+			"telemetry_disclosure_shown": cfg.TelemetryDisclosureShown,
+		}
+
+		// Marshal to YAML.
+		var buf bytes.Buffer
+		enc := yaml.NewEncoder(&buf)
+		enc.SetIndent(2)
+		if err := enc.Encode(data); err != nil {
+			return errors.Wrap(err, "failed to marshal cache config")
+		}
+
+		// Write atomically using renameio.
+		if err := renameio.WriteFile(cacheFile, buf.Bytes(), 0o644); err != nil {
 			return errors.Wrap(err, "failed to write cache file")
 		}
 		return nil
@@ -115,12 +130,23 @@ func UpdateCache(update func(*CacheConfig)) error {
 		// Apply the update
 		update(&cfg)
 
-		// Save the updated configuration
-		v := viper.New()
-		v.Set("last_checked", cfg.LastChecked)
-		v.Set("installation_id", cfg.InstallationId)
-		v.Set("telemetry_disclosure_shown", cfg.TelemetryDisclosureShown)
-		if err := v.WriteConfigAs(cacheFile); err != nil {
+		// Prepare the updated configuration data.
+		data := map[string]interface{}{
+			"last_checked":               cfg.LastChecked,
+			"installation_id":            cfg.InstallationId,
+			"telemetry_disclosure_shown": cfg.TelemetryDisclosureShown,
+		}
+
+		// Marshal to YAML.
+		var buf bytes.Buffer
+		enc := yaml.NewEncoder(&buf)
+		enc.SetIndent(2)
+		if err := enc.Encode(data); err != nil {
+			return errors.Wrap(err, "failed to marshal cache config")
+		}
+
+		// Write atomically using renameio.
+		if err := renameio.WriteFile(cacheFile, buf.Bytes(), 0o644); err != nil {
 			return errors.Wrap(err, "failed to write cache file")
 		}
 		return nil
