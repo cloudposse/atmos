@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 )
 
 // LogLevel represents log level as a string.
@@ -20,6 +21,8 @@ const (
 	LogLevelInfo LogLevel = "Info"
 	// LogLevelWarning is the warning log level.
 	LogLevelWarning LogLevel = "Warning"
+	// LogLevelError is the error log level.
+	LogLevelError LogLevel = "Error"
 )
 
 // ErrInvalidLogLevel is returned when an invalid log level is provided.
@@ -27,13 +30,22 @@ var ErrInvalidLogLevel = errors.New("invalid log level")
 
 // ParseLogLevel parses a string log level and returns a LogLevel.
 func ParseLogLevel(logLevel string) (LogLevel, error) {
+	logLevel = strings.TrimSpace(logLevel)
 	if logLevel == "" {
 		return LogLevelInfo, nil
 	}
 
-	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelOff}
+	// Make case-insensitive comparison
+	logLevelLower := strings.ToLower(logLevel)
+
+	// Handle warn as alias for warning
+	if logLevelLower == "warn" {
+		return LogLevelWarning, nil
+	}
+
+	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelError, LogLevelOff}
 	for _, level := range validLevels {
-		if LogLevel(logLevel) == level {
+		if strings.ToLower(string(level)) == logLevelLower {
 			return level, nil
 		}
 	}
@@ -52,9 +64,11 @@ func ConvertLogLevel(level LogLevel) Level {
 		return InfoLevel
 	case LogLevelWarning:
 		return WarnLevel
+	case LogLevelError:
+		return ErrorLevel
 	case LogLevelOff:
 		return Level(math.MaxInt32)
 	default:
-		return WarnLevel
+		return InfoLevel
 	}
 }
