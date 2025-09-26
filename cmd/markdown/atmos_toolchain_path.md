@@ -1,11 +1,11 @@
 - Print PATH for all tools in .tool-versions (absolute paths)
 ```
- $ atmos toolchain path                   
+ $ atmos toolchain path
 ```
 
 - Print the relative paths in the PATH
 ```
- $ atmos toolchain path --relative 
+ $ atmos toolchain path --relative
 ```
 
 - Output the PATH for Shell scripting
