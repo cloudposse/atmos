@@ -31,7 +31,7 @@ func (g *Graph) AddNode(node *Node) error {
 		return fmt.Errorf(errWithContextFormat, ErrNodeExists, node.ID)
 	}
 
-	// Initialize slices if nil
+	// Initialize slices if nil.
 	if node.Dependencies == nil {
 		node.Dependencies = []string{}
 	}
@@ -64,14 +64,14 @@ func (g *Graph) AddDependency(fromID, toID string) error {
 		return fmt.Errorf(errWithContextFormat, ErrNodeNotFound, toID)
 	}
 
-	// Check if dependency already exists
+	// Check if dependency already exists.
 	for _, dep := range fromNode.Dependencies {
 		if dep == toID {
-			return nil // Dependency already exists, skip
+			return nil // Dependency already exists, skip.
 		}
 	}
 
-	// Add the dependency relationship
+	// Add the dependency relationship.
 	fromNode.Dependencies = append(fromNode.Dependencies, toID)
 	toNode.Dependents = append(toNode.Dependents, fromID)
 
@@ -106,7 +106,7 @@ func (g *Graph) HasCycles() (bool, []string) {
 	recStack := make(map[string]bool)
 	var cyclePath []string
 
-	// Helper function for DFS
+	// Helper function for DFS.
 	var dfs func(nodeID string) bool
 	dfs = func(nodeID string) bool {
 		visited[nodeID] = true
@@ -120,7 +120,7 @@ func (g *Graph) HasCycles() (bool, []string) {
 					return true
 				}
 			} else if recStack[depID] {
-				// Cycle detected
+				// Cycle detected.
 				cyclePath = []string{nodeID, depID}
 				return true
 			}
@@ -130,7 +130,7 @@ func (g *Graph) HasCycles() (bool, []string) {
 		return false
 	}
 
-	// Check all unvisited nodes
+	// Check all unvisited nodes.
 	for id := range g.Nodes {
 		if !visited[id] {
 			if dfs(id) {
@@ -153,27 +153,12 @@ func (g *Graph) Reset() {
 func (g *Graph) Clone() *Graph {
 	newGraph := NewGraph()
 
-	// Clone all nodes
+	// Clone all nodes using the helper function.
 	for id, node := range g.Nodes {
-		newNode := &Node{
-			ID:           node.ID,
-			Component:    node.Component,
-			Stack:        node.Stack,
-			Type:         node.Type,
-			Dependencies: make([]string, len(node.Dependencies)),
-			Dependents:   make([]string, len(node.Dependents)),
-			Metadata:     node.Metadata, // Note: This is a shallow copy of the map
-			Processed:    node.Processed,
-		}
-
-		// Copy slices
-		copy(newNode.Dependencies, node.Dependencies)
-		copy(newNode.Dependents, node.Dependents)
-
-		newGraph.Nodes[id] = newNode
+		newGraph.Nodes[id] = cloneNodeCore(node)
 	}
 
-	// Copy roots
+	// Copy roots.
 	newGraph.Roots = make([]string, len(g.Roots))
 	copy(newGraph.Roots, g.Roots)
 

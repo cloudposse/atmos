@@ -47,28 +47,7 @@ func (g *Graph) copyNodesToFilteredGraph(filtered *Graph, toInclude map[string]b
 
 // cloneNodeForFilter creates a copy of a node with filtered relationships.
 func (g *Graph) cloneNodeForFilter(node *Node, toInclude map[string]bool) *Node {
-	newNode := &Node{
-		ID:           node.ID,
-		Component:    node.Component,
-		Stack:        node.Stack,
-		Type:         node.Type,
-		Dependencies: filterNodeIDs(node.Dependencies, toInclude),
-		Dependents:   filterNodeIDs(node.Dependents, toInclude),
-		Metadata:     node.Metadata,
-		Processed:    node.Processed,
-	}
-	return newNode
-}
-
-// filterNodeIDs returns only the IDs that are in the toInclude set.
-func filterNodeIDs(ids []string, toInclude map[string]bool) []string {
-	filtered := []string{}
-	for _, id := range ids {
-		if toInclude[id] {
-			filtered = append(filtered, id)
-		}
-	}
-	return filtered
+	return cloneNodeWithFilteredEdges(node, toInclude)
 }
 
 // FilterByType creates a new graph containing only nodes of the specified type.
@@ -155,37 +134,73 @@ func (g *Graph) GetConnectedComponents() []*Graph {
 	visited := make(map[string]bool)
 	components := []*Graph{}
 
-	// DFS to find all nodes in a connected component
-	var dfs func(nodeID string, component *Graph)
-	dfs = func(nodeID string, component *Graph) {
-		if visited[nodeID] {
-			return
-		}
-		visited[nodeID] = true
-
-		node := g.Nodes[nodeID]
-		component.Nodes[nodeID] = node
-
-		// Visit all connected nodes (both dependencies and dependents)
-		for _, depID := range node.Dependencies {
-			dfs(depID, component)
-		}
-		for _, depID := range node.Dependents {
-			dfs(depID, component)
-		}
-	}
-
-	// Find all connected components
+	// Find all connected components.
 	for id := range g.Nodes {
 		if !visited[id] {
-			component := NewGraph()
-			dfs(id, component)
-			component.IdentifyRoots()
+			// Find all nodes in this component.
+			componentNodeIDs := g.findConnectedComponent(id, visited)
+
+			// Build the component graph.
+			component := g.buildComponentGraph(componentNodeIDs)
 			components = append(components, component)
 		}
 	}
 
 	return components
+}
+
+// findConnectedComponent performs DFS to find all nodes connected to the start node.
+// It marks all found nodes as visited and returns their IDs.
+func (g *Graph) findConnectedComponent(startID string, visited map[string]bool) map[string]bool {
+	componentNodeIDs := make(map[string]bool)
+	g.traverseConnectedNodes(startID, visited, componentNodeIDs)
+	return componentNodeIDs
+}
+
+// traverseConnectedNodes recursively visits all connected nodes using DFS.
+func (g *Graph) traverseConnectedNodes(nodeID string, visited map[string]bool, componentNodeIDs map[string]bool) {
+	if visited[nodeID] {
+		return
+	}
+
+	visited[nodeID] = true
+	componentNodeIDs[nodeID] = true
+
+	node, exists := g.Nodes[nodeID]
+	if !exists {
+		return
+	}
+
+	// Visit all dependencies.
+	for _, depID := range node.Dependencies {
+		g.traverseConnectedNodes(depID, visited, componentNodeIDs)
+	}
+
+	// Visit all dependents.
+	for _, depID := range node.Dependents {
+		g.traverseConnectedNodes(depID, visited, componentNodeIDs)
+	}
+}
+
+// buildComponentGraph creates a new graph containing only the specified nodes.
+// It clones nodes and filters their edges to only include nodes within the component.
+func (g *Graph) buildComponentGraph(componentNodeIDs map[string]bool) *Graph {
+	component := NewGraph()
+
+	// Clone each node with filtered edges.
+	for nodeID := range componentNodeIDs {
+		node, exists := g.Nodes[nodeID]
+		if !exists {
+			continue
+		}
+
+		// Clone the node with edges filtered to component nodes only.
+		clonedNode := cloneNodeWithFilteredEdges(node, componentNodeIDs)
+		component.Nodes[nodeID] = clonedNode
+	}
+
+	component.IdentifyRoots()
+	return component
 }
 
 // RemoveNode removes a node and all its relationships from the graph.

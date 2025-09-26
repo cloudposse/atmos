@@ -16,6 +16,9 @@ const (
 	logFieldTo    = "to"
 	logFieldError = "error"
 	logFieldType  = "type"
+
+	// NodeIDFormat is the format for node IDs.
+	nodeIDFormat = "%s-%s"
 )
 
 // DependencyParser handles parsing of component dependencies from configuration.
@@ -43,7 +46,7 @@ func (p *DependencyParser) ParseComponentDependencies(
 		return nil
 	}
 
-	fromID := fmt.Sprintf("%s-%s", componentName, stackName)
+	fromID := fmt.Sprintf(nodeIDFormat, componentName, stackName)
 
 	// Check for dependencies in settings.depends_on.
 	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
@@ -108,6 +111,12 @@ func (p *DependencyParser) parseSingleDependency(fromID, defaultStack string, de
 		return p.parseDependencyMapEntry(fromID, defaultStack, depTyped)
 	case map[any]any:
 		return p.parseDependencyMapAnyEntry(fromID, defaultStack, depTyped)
+	case string:
+		// Shorthand: depends_on:
+		//   - component
+		component := depTyped
+		toID := fmt.Sprintf(nodeIDFormat, component, defaultStack)
+		return p.addDependencyIfExists(fromID, toID)
 	default:
 		return fmt.Errorf("%w: %T", errUtils.ErrUnsupportedDependencyType, dep)
 	}
@@ -125,7 +134,7 @@ func (p *DependencyParser) parseDependencyMapEntry(fromID, defaultStack string, 
 		stack = stackVal
 	}
 
-	toID := fmt.Sprintf("%s-%s", component, stack)
+	toID := fmt.Sprintf(nodeIDFormat, component, stack)
 	return p.addDependencyIfExists(fromID, toID)
 }
 
@@ -141,7 +150,7 @@ func (p *DependencyParser) parseDependencyMapAnyEntry(fromID, defaultStack strin
 		stack = stackVal
 	}
 
-	toID := fmt.Sprintf("%s-%s", component, stack)
+	toID := fmt.Sprintf(nodeIDFormat, component, stack)
 	return p.addDependencyIfExists(fromID, toID)
 }
 

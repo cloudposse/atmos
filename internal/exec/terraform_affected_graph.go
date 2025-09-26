@@ -5,6 +5,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -16,7 +17,7 @@ func ExecuteTerraformAffectedWithGraph(args *DescribeAffectedCmdArgs, info *sche
 	// Get the list of affected components.
 	affectedList, err := getAffectedComponents(args)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: get affected components: %v", errUtils.ErrDescribeAffected, err)
 	}
 
 	if len(affectedList) == 0 {
@@ -26,13 +27,13 @@ func ExecuteTerraformAffectedWithGraph(args *DescribeAffectedCmdArgs, info *sche
 
 	// Log affected components for debugging.
 	if err := logAffectedComponents(affectedList); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", errUtils.ErrFormatForLogging, err)
 	}
 
 	// Build and filter the dependency graph.
 	filteredGraph, err := buildFilteredDependencyGraph(args, info, affectedList)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: build filtered dependency graph: %v", errUtils.ErrBuildDepGraph, err)
 	}
 
 	// Execute components in dependency order.
@@ -105,11 +106,16 @@ func getAffectedWithCheckout(args *DescribeAffectedCmdArgs) ([]schema.Affected, 
 
 // logAffectedComponents logs the affected components for debugging.
 func logAffectedComponents(affectedList []schema.Affected) error {
-	affectedYaml, err := u.ConvertToYAML(affectedList)
-	if err != nil {
-		return err
+	// Create sanitized list with only component@stack identifiers
+	pairs := make([]string, 0, len(affectedList))
+	for i := range affectedList {
+		pairs = append(pairs, fmt.Sprintf("%s@%s", affectedList[i].Component, affectedList[i].Stack))
 	}
-	log.Debug("Affected", "components", affectedYaml)
+	out, err := u.ConvertToYAML(pairs)
+	if err != nil {
+		return fmt.Errorf("format affected components for logging: %w", err)
+	}
+	log.Debug("Affected components", "count", len(pairs), "list", out)
 	return nil
 }
 

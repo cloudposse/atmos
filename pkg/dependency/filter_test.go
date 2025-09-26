@@ -9,10 +9,10 @@ import (
 )
 
 func TestGraph_Filter(t *testing.T) {
-	// Create a test graph
+	// Create a test graph.
 	graph := NewGraph()
 
-	// Add nodes
+	// Add nodes.
 	nodes := []*Node{
 		{ID: "vpc-dev", Component: "vpc", Stack: "dev", Type: config.TerraformComponentType},
 		{ID: "database-dev", Component: "database", Stack: "dev", Type: config.TerraformComponentType},
@@ -25,7 +25,7 @@ func TestGraph_Filter(t *testing.T) {
 		_ = graph.AddNode(node)
 	}
 
-	// Add dependencies
+	// Add dependencies.
 	_ = graph.AddDependency("database-dev", "vpc-dev")
 	_ = graph.AddDependency("app-dev", "database-dev")
 	_ = graph.AddDependency("database-prod", "vpc-prod")
@@ -109,15 +109,15 @@ func TestGraph_Filter(t *testing.T) {
 				assert.True(t, exists, "Expected node %s to exist in filtered graph", expectedID)
 			}
 
-			// Verify relationships are preserved in filtered graph
+			// Verify relationships are preserved in filtered graph.
 			if tt.filter.IncludeDependencies || tt.filter.IncludeDependents {
 				for _, node := range filtered.Nodes {
-					// Check dependencies
+					// Check dependencies.
 					for _, depID := range node.Dependencies {
 						_, exists := filtered.GetNode(depID)
 						assert.True(t, exists, "Dependency %s should exist in filtered graph", depID)
 					}
-					// Check dependents
+					// Check dependents.
 					for _, depID := range node.Dependents {
 						_, exists := filtered.GetNode(depID)
 						assert.True(t, exists, "Dependent %s should exist in filtered graph", depID)
@@ -131,7 +131,7 @@ func TestGraph_Filter(t *testing.T) {
 func TestGraph_FilterByType(t *testing.T) {
 	graph := NewGraph()
 
-	// Add nodes with different types
+	// Add nodes with different types.
 	nodes := []*Node{
 		{ID: "vpc-dev", Component: "vpc", Stack: "dev", Type: config.TerraformComponentType},
 		{ID: "app-helm", Component: "app", Stack: "dev", Type: config.HelmfileComponentType},
@@ -143,7 +143,7 @@ func TestGraph_FilterByType(t *testing.T) {
 		_ = graph.AddNode(node)
 	}
 
-	// Add dependencies
+	// Add dependencies.
 	_ = graph.AddDependency("database-dev", "vpc-dev")
 	_ = graph.AddDependency("app-helm", "database-dev")
 
@@ -163,7 +163,7 @@ func TestGraph_FilterByType(t *testing.T) {
 	t.Run("filter helmfile components", func(t *testing.T) {
 		filtered := graph.FilterByType(config.HelmfileComponentType)
 
-		// Should include helmfile components and their terraform dependencies
+		// Should include helmfile components and their terraform dependencies.
 		assert.Greater(t, filtered.Size(), 0)
 
 		_, exists := filtered.GetNode("app-helm")
@@ -176,7 +176,7 @@ func TestGraph_FilterByType(t *testing.T) {
 func TestGraph_FilterByStack(t *testing.T) {
 	graph := NewGraph()
 
-	// Add nodes from different stacks
+	// Add nodes from different stacks.
 	nodes := []*Node{
 		{ID: "vpc-dev", Component: "vpc", Stack: "dev", Type: config.TerraformComponentType},
 		{ID: "database-dev", Component: "database", Stack: "dev", Type: config.TerraformComponentType},
@@ -189,15 +189,15 @@ func TestGraph_FilterByStack(t *testing.T) {
 		_ = graph.AddNode(node)
 	}
 
-	// Add dependencies within and across stacks
+	// Add dependencies within and across stacks.
 	_ = graph.AddDependency("database-dev", "vpc-dev")
 	_ = graph.AddDependency("database-prod", "vpc-prod")
-	_ = graph.AddDependency("vpc-staging", "vpc-dev") // Cross-stack dependency
+	_ = graph.AddDependency("vpc-staging", "vpc-dev") // Cross-stack dependency.
 
 	t.Run("filter dev stack", func(t *testing.T) {
 		filtered := graph.FilterByStack("dev")
 
-		// Should include dev components and staging vpc (which depends on dev)
+		// Should include dev components and staging vpc (which depends on dev).
 		assert.Greater(t, filtered.Size(), 0)
 
 		_, exists := filtered.GetNode("vpc-dev")
@@ -225,7 +225,7 @@ func TestGraph_FilterByStack(t *testing.T) {
 func TestGraph_FilterByComponent(t *testing.T) {
 	graph := NewGraph()
 
-	// Add nodes
+	// Add nodes.
 	nodes := []*Node{
 		{ID: "vpc-dev", Component: "vpc", Stack: "dev", Type: config.TerraformComponentType},
 		{ID: "vpc-prod", Component: "vpc", Stack: "prod", Type: config.TerraformComponentType},
@@ -238,7 +238,7 @@ func TestGraph_FilterByComponent(t *testing.T) {
 		_ = graph.AddNode(node)
 	}
 
-	// Add dependencies
+	// Add dependencies.
 	_ = graph.AddDependency("database-dev", "vpc-dev")
 	_ = graph.AddDependency("database-prod", "vpc-prod")
 	_ = graph.AddDependency("app-dev", "database-dev")
@@ -246,7 +246,7 @@ func TestGraph_FilterByComponent(t *testing.T) {
 	t.Run("filter vpc component", func(t *testing.T) {
 		filtered := graph.FilterByComponent("vpc")
 
-		// Should include all vpc instances and their dependents
+		// Should include all vpc instances and their dependents.
 		assert.Greater(t, filtered.Size(), 2)
 
 		_, exists := filtered.GetNode("vpc-dev")
@@ -254,7 +254,7 @@ func TestGraph_FilterByComponent(t *testing.T) {
 		_, exists = filtered.GetNode("vpc-prod")
 		assert.True(t, exists)
 
-		// Should include dependents as well
+		// Should include dependents as well.
 		_, exists = filtered.GetNode("database-dev")
 		assert.True(t, exists)
 		_, exists = filtered.GetNode("database-prod")
@@ -264,7 +264,7 @@ func TestGraph_FilterByComponent(t *testing.T) {
 	t.Run("filter database component", func(t *testing.T) {
 		filtered := graph.FilterByComponent("database")
 
-		// Should include database instances, their dependencies and dependents
+		// Should include database instances, their dependencies and dependents.
 		assert.Greater(t, filtered.Size(), 2)
 
 		_, exists := filtered.GetNode("database-dev")
@@ -277,21 +277,21 @@ func TestGraph_FilterByComponent(t *testing.T) {
 func TestGraph_GetConnectedComponents(t *testing.T) {
 	graph := NewGraph()
 
-	// Create two separate subgraphs
-	// Subgraph 1: vpc-dev <- database-dev <- app-dev
+	// Create two separate subgraphs.
+	// Subgraph 1: vpc-dev <- database-dev <- app-dev.
 	nodes1 := []*Node{
 		{ID: "vpc-dev", Component: "vpc", Stack: "dev"},
 		{ID: "database-dev", Component: "database", Stack: "dev"},
 		{ID: "app-dev", Component: "app", Stack: "dev"},
 	}
 
-	// Subgraph 2: vpc-prod <- database-prod
+	// Subgraph 2: vpc-prod <- database-prod.
 	nodes2 := []*Node{
 		{ID: "vpc-prod", Component: "vpc", Stack: "prod"},
 		{ID: "database-prod", Component: "database", Stack: "prod"},
 	}
 
-	// Isolated node
+	// Isolated node.
 	isolatedNode := &Node{ID: "isolated", Component: "isolated", Stack: "test"}
 
 	for _, node := range nodes1 {
@@ -302,24 +302,24 @@ func TestGraph_GetConnectedComponents(t *testing.T) {
 	}
 	_ = graph.AddNode(isolatedNode)
 
-	// Add dependencies for subgraph 1
+	// Add dependencies for subgraph 1.
 	_ = graph.AddDependency("database-dev", "vpc-dev")
 	_ = graph.AddDependency("app-dev", "database-dev")
 
-	// Add dependencies for subgraph 2
+	// Add dependencies for subgraph 2.
 	_ = graph.AddDependency("database-prod", "vpc-prod")
 
 	components := graph.GetConnectedComponents()
 
 	assert.Equal(t, 3, len(components), "Should have 3 connected components")
 
-	// Verify each component
+	// Verify each component.
 	componentSizes := []int{}
 	for _, comp := range components {
 		componentSizes = append(componentSizes, comp.Size())
 	}
 
-	// Should have components of sizes 3, 2, and 1
+	// Should have components of sizes 3, 2, and 1.
 	assert.Contains(t, componentSizes, 3)
 	assert.Contains(t, componentSizes, 2)
 	assert.Contains(t, componentSizes, 1)
@@ -328,7 +328,7 @@ func TestGraph_GetConnectedComponents(t *testing.T) {
 func TestGraph_RemoveNode(t *testing.T) {
 	graph := NewGraph()
 
-	// Create a graph with dependencies
+	// Create a graph with dependencies.
 	nodes := []*Node{
 		{ID: "vpc-dev", Component: "vpc", Stack: "dev"},
 		{ID: "database-dev", Component: "database", Stack: "dev"},
@@ -340,30 +340,30 @@ func TestGraph_RemoveNode(t *testing.T) {
 		_ = graph.AddNode(node)
 	}
 
-	// Create dependencies: vpc <- database <- app, vpc <- cache
+	// Create dependencies: vpc <- database <- app, vpc <- cache.
 	_ = graph.AddDependency("database-dev", "vpc-dev")
 	_ = graph.AddDependency("app-dev", "database-dev")
 	_ = graph.AddDependency("cache-dev", "vpc-dev")
 
 	t.Run("remove middle node", func(t *testing.T) {
-		// Clone the graph for this test
+		// Clone the graph for this test.
 		testGraph := graph.Clone()
 
 		err := testGraph.RemoveNode("database-dev")
 		assert.NoError(t, err)
 
-		// Verify node is removed
+		// Verify node is removed.
 		_, exists := testGraph.GetNode("database-dev")
 		assert.False(t, exists)
 
-		// Verify relationships are updated
+		// Verify relationships are updated.
 		appNode, _ := testGraph.GetNode("app-dev")
 		assert.NotContains(t, appNode.Dependencies, "database-dev")
 
 		vpcNode, _ := testGraph.GetNode("vpc-dev")
 		assert.NotContains(t, vpcNode.Dependents, "database-dev")
 
-		// Graph should now have 3 nodes
+		// Graph should now have 3 nodes.
 		assert.Equal(t, 3, testGraph.Size())
 	})
 
@@ -373,11 +373,11 @@ func TestGraph_RemoveNode(t *testing.T) {
 		err := testGraph.RemoveNode("vpc-dev")
 		assert.NoError(t, err)
 
-		// Verify node is removed
+		// Verify node is removed.
 		_, exists := testGraph.GetNode("vpc-dev")
 		assert.False(t, exists)
 
-		// Verify dependencies are updated
+		// Verify dependencies are updated.
 		dbNode, _ := testGraph.GetNode("database-dev")
 		assert.NotContains(t, dbNode.Dependencies, "vpc-dev")
 
@@ -391,11 +391,11 @@ func TestGraph_RemoveNode(t *testing.T) {
 		err := testGraph.RemoveNode("app-dev")
 		assert.NoError(t, err)
 
-		// Verify node is removed
+		// Verify node is removed.
 		_, exists := testGraph.GetNode("app-dev")
 		assert.False(t, exists)
 
-		// Verify parent's dependents are updated
+		// Verify parent's dependents are updated.
 		dbNode, _ := testGraph.GetNode("database-dev")
 		assert.NotContains(t, dbNode.Dependents, "app-dev")
 	})
@@ -405,15 +405,15 @@ func TestGraph_RemoveNode(t *testing.T) {
 		originalSize := testGraph.Size()
 
 		err := testGraph.RemoveNode("non-existent")
-		assert.NoError(t, err) // Should not error for non-existent node
+		assert.NoError(t, err) // Should not error for non-existent node.
 
-		// Graph should remain unchanged
+		// Graph should remain unchanged.
 		assert.Equal(t, originalSize, testGraph.Size())
 	})
 }
 
 func TestFilterHelperFunctions(t *testing.T) {
-	t.Run("filterNodeIDs", func(t *testing.T) {
+	t.Run("filterStringSlice", func(t *testing.T) {
 		ids := []string{"vpc-dev", "database-dev", "app-dev", "cache-dev"}
 		toInclude := map[string]bool{
 			"vpc-dev":      true,
@@ -421,7 +421,7 @@ func TestFilterHelperFunctions(t *testing.T) {
 			"non-existent": true,
 		}
 
-		filtered := filterNodeIDs(ids, toInclude)
+		filtered := filterStringSlice(ids, toInclude)
 
 		assert.Equal(t, 2, len(filtered))
 		assert.Contains(t, filtered, "vpc-dev")
