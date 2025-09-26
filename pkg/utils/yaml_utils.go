@@ -172,7 +172,8 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
-		val := strings.TrimSpace(n.Value)
+		// Only trim value when it's needed for file paths or includes
+		// For custom tags that will be processed, preserve the original value
 
 		if SliceContainsString(AtmosYamlTags, tag) {
 			n.Value = getValueWithTag(n)
@@ -182,6 +183,9 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 			// any type (string, map, list, etc.) when it's actually executed.
 			n.Tag = ""
 		}
+
+		// For include tags, we need to trim the value as it's a file path
+		val := strings.TrimSpace(n.Value)
 
 		// Handle the !include tag with extension-based parsing
 		if tag == AtmosYamlFuncInclude {
@@ -209,8 +213,9 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 func getValueWithTag(n *yaml.Node) string {
 	tag := strings.TrimSpace(n.Tag)
-	val := strings.TrimSpace(n.Value)
-	return strings.TrimSpace(tag + " " + val)
+	// Don't trim the value as it may contain intentional whitespace/newlines
+	// The value will be processed by the YAML function handlers which will handle it appropriately
+	return tag + " " + n.Value
 }
 
 // UnmarshalYAML unmarshals YAML into a Go type.
