@@ -100,6 +100,16 @@ logs:
   # Supported log levels: Trace, Debug, Info, Warning, Off
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
+profiler:
+  # Enable or disable the pprof profiling server
+  # Can also be set using '--profiler-enabled' command-line flag
+  enabled: false
+  # Host to bind the profiling server to
+  # Can also be set using '--profiler-host' command-line flag
+  host: "localhost"
+  # Port to run the profiling server on
+  # Can also be set using '--profiler-port' command-line flag
+  port: 6060
 schemas:
   jsonschema:
     base_path: stacks/schemas/jsonschema
@@ -565,6 +575,84 @@ BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
 ]
 ````
 </Terminal>
+
+## Profiler
+
+Atmos includes built-in performance profiling capabilities using Go's pprof profiler. This allows you to analyze CPU usage, memory allocations, goroutines, and other performance metrics when running Atmos commands.
+
+The profiler is configured in the `profiler` section:
+
+<File title="atmos.yaml">
+```yaml
+profiler:
+  # Enable or disable the pprof profiling server
+  enabled: false
+  # Host to bind the profiling server to (default: localhost)
+  host: "localhost"
+  # Port to run the profiling server on (default: 6060)
+  port: 6060
+```
+</File>
+
+<dl>
+  <dt>`profiler.enabled`</dt>
+  <dd>
+    Enable or disable the pprof profiling server. When enabled, Atmos will start an HTTP server that serves pprof endpoints for performance analysis. Can also be set using the `--profiler-enabled` command-line flag.
+  </dd>
+
+  <dt>`profiler.host`</dt>
+  <dd>
+    The host address to bind the profiling server to. Defaults to `localhost` for security. Can also be set using the `--profiler-host` command-line flag.
+  </dd>
+
+  <dt>`profiler.port`</dt>
+  <dd>
+    The port number for the profiling server. Defaults to `6060` (the standard pprof port). Can also be set using the `--profiler-port` command-line flag.
+  </dd>
+</dl>
+
+### Using the Profiler
+
+When the profiler is enabled, Atmos will start a pprof server and display the URL when any command is run:
+
+<Terminal title="atmos terraform plan vpc -s plat-ue2-dev --profiler-enabled">
+```console
+pprof profiler available at: http://localhost:6060/debug/pprof/
+Executing 'terraform plan' command...
+```
+</Terminal>
+
+The profiler provides several endpoints for different types of analysis:
+
+- **CPU Profile**: `http://localhost:6060/debug/pprof/profile` - 30-second CPU profile
+- **Memory Profile**: `http://localhost:6060/debug/pprof/heap` - Memory heap profile
+- **Goroutines**: `http://localhost:6060/debug/pprof/goroutine` - Stack traces of all current goroutines
+- **Web Interface**: `http://localhost:6060/debug/pprof/` - Interactive web interface
+
+### Analyzing Performance Data
+
+You can use Go's pprof tool to analyze the profiling data:
+
+<Terminal title="Analyzing CPU profile">
+```console
+# Capture and analyze CPU profile
+go tool pprof http://localhost:6060/debug/pprof/profile
+
+# Capture and analyze memory profile
+go tool pprof http://localhost:6060/debug/pprof/heap
+
+# Generate a web-based visualization
+go tool pprof -http=:8080 http://localhost:6060/debug/pprof/profile
+```
+</Terminal>
+
+### Security Considerations
+
+:::warning Security Notice
+The profiler exposes detailed runtime information about your Atmos process. Only enable it when needed for debugging or performance analysis, and ensure the host/port are not accessible from untrusted networks.
+:::
+
+By default, the profiler binds to `localhost` only, which prevents external access. If you need to access the profiler from another machine, make sure to use appropriate network security measures.
 
 ## Aliases
 
