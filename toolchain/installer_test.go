@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"archive/tar"
 	"compress/gzip"
 	"io"
 	"net/http"
@@ -1301,4 +1302,69 @@ func TestBuildAssetURLWithEmptyFields(t *testing.T) {
 
 	// The generated URL would be malformed like:
 	// https://github.com///releases/download/1.0.0/test-tool_1.0.0_darwin_arm64.tar.gz
+}
+
+// helper to create a tar.gz for testing
+func createTestTarGz(t *testing.T, path string, files map[string]string) {
+	t.Helper()
+
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("failed to create tar.gz: %v", err)
+	}
+	defer f.Close()
+
+	gw := gzip.NewWriter(f)
+	defer gw.Close()
+
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	for name, content := range files {
+		hdr := &tar.Header{
+			Name: name,
+			Mode: 0600,
+			Size: int64(len(content)),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatalf("failed to write tar header: %v", err)
+		}
+		if _, err := tw.Write([]byte(content)); err != nil {
+			t.Fatalf("failed to write tar content: %v", err)
+		}
+	}
+}
+
+func TestExtractTarGz(t *testing.T) {
+	// Setup temp dirs
+	tmpDir := t.TempDir()
+	src := filepath.Join(tmpDir, "test.tar.gz")
+	dest := filepath.Join(tmpDir, "out")
+
+	// Files to include in tar.gz
+	files := map[string]string{
+		"file1.txt":     "hello world",
+		"dir/file2.txt": "nested content",
+	}
+
+	// Create tar.gz
+	createTestTarGz(t, src, files)
+
+	// Run extraction
+	if err := ExtractTarGz(src, dest); err != nil {
+		t.Fatalf("ExtractTarGz failed: %v", err)
+	}
+
+	// Verify files
+	for name, expected := range files {
+		p := filepath.Join(dest, name)
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Errorf("failed to read extracted file %s: %v", name, err)
+			continue
+		}
+		if string(data) != expected {
+			t.Errorf("file %s: expected %q, got %q", name, expected, string(data))
+		}
+	}
 }
