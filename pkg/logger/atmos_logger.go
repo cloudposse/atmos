@@ -82,22 +82,22 @@ func (l *AtmosLogger) Fatalf(format string, args ...interface{}) {
 }
 
 // Log logs a message at the given level.
-func (l *AtmosLogger) Log(level charm.Level, msg interface{}, keyvals ...interface{}) {
+func (l *AtmosLogger) Log(level Level, msg interface{}, keyvals ...interface{}) {
 	l.charm.Log(level, msg, keyvals...)
 }
 
 // Logf logs a formatted message at the given level.
-func (l *AtmosLogger) Logf(level charm.Level, format string, args ...interface{}) {
+func (l *AtmosLogger) Logf(level Level, format string, args ...interface{}) {
 	l.charm.Logf(level, format, args...)
 }
 
 // SetLevel sets the log level.
-func (l *AtmosLogger) SetLevel(level charm.Level) {
+func (l *AtmosLogger) SetLevel(level Level) {
 	l.charm.SetLevel(level)
 }
 
 // GetLevel returns the current log level.
-func (l *AtmosLogger) GetLevel() charm.Level {
+func (l *AtmosLogger) GetLevel() Level {
 	return l.charm.GetLevel()
 }
 
@@ -132,7 +132,7 @@ func (l *AtmosLogger) GetLevelString() string {
 	switch level {
 	case TraceLevel:
 		return "trace"
-	case charm.Level(math.MaxInt32):
+	case Level(math.MaxInt32):
 		return "off"
 	default:
 		return level.String()

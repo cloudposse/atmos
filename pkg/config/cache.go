@@ -19,9 +19,9 @@ import (
 )
 
 type CacheConfig struct {
-	LastChecked              int64  `mapstructure:"last_checked"`
-	InstallationId           string `mapstructure:"installation_id"`
-	TelemetryDisclosureShown bool   `mapstructure:"telemetry_disclosure_shown"`
+	LastChecked              int64  `mapstructure:"last_checked" yaml:"last_checked"`
+	InstallationId           string `mapstructure:"installation_id" yaml:"installation_id"`
+	TelemetryDisclosureShown bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
 }
 
 func GetCacheFilePath() (string, error) {
