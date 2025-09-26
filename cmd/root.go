@@ -35,6 +35,9 @@ const (
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
 
+// logFileHandle holds the opened log file for the lifetime of the program.
+var logFileHandle *os.File
+
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:                "atmos",
@@ -145,7 +148,8 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		default:
 			logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFileMode)
 			errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
-			defer logFile.Close()
+			// Store the file handle for later cleanup instead of deferring close.
+			logFileHandle = logFile
 			output = logFile
 		}
 
@@ -160,6 +164,22 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	} else {
 		log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
 	}
+}
+
+// cleanupLogFile closes the log file handle if it was opened.
+func cleanupLogFile() {
+	if logFileHandle != nil {
+		// Flush any remaining log data before closing.
+		_ = logFileHandle.Sync()
+		_ = logFileHandle.Close()
+		logFileHandle = nil
+	}
+}
+
+// Cleanup performs cleanup operations before the program exits.
+// This should be called by main when the program is terminating.
+func Cleanup() {
+	cleanupLogFile()
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
