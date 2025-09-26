@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
@@ -27,6 +27,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
+
+// File permission constant for log files.
+const logFilePermission = 0o666
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
@@ -118,7 +121,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	case "/dev/null":
 		output = io.Discard // More efficient than opening os.DevNull
 	default:
-		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFilePermission)
 		errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
 		defer logFile.Close()
 		output = logFile

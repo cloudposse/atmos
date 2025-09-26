@@ -45,7 +45,7 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 
-	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
+	logger, err := l.NewLoggerFromCliConfig(&atmosConfig)
 	if err != nil {
 		return ProLockUnlockCmdArgs{}, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateLogger, err)
 	}

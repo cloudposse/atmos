@@ -6,6 +6,7 @@ import (
 
 	"github.com/fatih/color"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -18,9 +19,13 @@ const (
 	LogLevelDebug   LogLevel = "Debug"
 	LogLevelInfo    LogLevel = "Info"
 	LogLevelWarning LogLevel = "Warning"
+
+	// File permission constants.
+	logFilePermission = 0o644
+	messageFmtString  = "%s\n"
 )
 
-// logLevelOrder defines the order of log levels from most verbose to least verbose
+// logLevelOrder defines the order of log levels from most verbose to least verbose.
 var logLevelOrder = map[LogLevel]int{
 	LogLevelTrace:   0,
 	LogLevelDebug:   1,
@@ -41,7 +46,7 @@ func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
 	}, nil
 }
 
-func NewLoggerFromCliConfig(cfg schema.AtmosConfiguration) (*Logger, error) {
+func NewLoggerFromCliConfig(cfg *schema.AtmosConfiguration) (*Logger, error) {
 	logLevel, err := ParseLogLevel(cfg.Logs.Level)
 	if err != nil {
 		return nil, err
@@ -61,45 +66,56 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		}
 	}
 
-	return "", fmt.Errorf("invalid log level `%s`. Valid options are: %v", logLevel, validLevels)
+	return "", fmt.Errorf("%w: `%s`. Valid options are: %v", errUtils.ErrInvalidLogLevel, logLevel, validLevels)
 }
 
 func (l *Logger) log(logColor *color.Color, message string) {
-	if l.File != "" {
-		if l.File == "/dev/stdout" {
-			_, err := logColor.Fprintln(os.Stdout, message)
-			if err != nil {
-				color.Red("%s\n", err)
-			}
-		} else if l.File == "/dev/stderr" {
-			_, err := logColor.Fprintln(os.Stderr, message)
-			if err != nil {
-				color.Red("%s\n", err)
-			}
-		} else {
-			f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
-			if err != nil {
-				color.Red("%s\n", err)
-				return
-			}
+	if l.File == "" {
+		l.logToStdout(logColor, message)
+		return
+	}
 
-			defer func(f *os.File) {
-				err = f.Close()
-				if err != nil {
-					color.Red("%s\n", err)
-				}
-			}(f)
+	switch l.File {
+	case "/dev/stdout":
+		l.logToStdout(logColor, message)
+	case "/dev/stderr":
+		l.logToStderr(logColor, message)
+	default:
+		l.logToFile(message)
+	}
+}
 
-			_, err = f.Write([]byte(fmt.Sprintf("%s\n", message)))
-			if err != nil {
-				color.Red("%s\n", err)
-			}
-		}
-	} else {
-		_, err := logColor.Fprintln(os.Stdout, message)
+func (l *Logger) logToStdout(logColor *color.Color, message string) {
+	_, err := logColor.Fprintln(os.Stdout, message)
+	if err != nil {
+		color.Red(messageFmtString, err)
+	}
+}
+
+func (l *Logger) logToStderr(logColor *color.Color, message string) {
+	_, err := logColor.Fprintln(os.Stderr, message)
+	if err != nil {
+		color.Red(messageFmtString, err)
+	}
+}
+
+func (l *Logger) logToFile(message string) {
+	f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, logFilePermission)
+	if err != nil {
+		color.Red(messageFmtString, err)
+		return
+	}
+
+	defer func(f *os.File) {
+		err = f.Close()
 		if err != nil {
-			color.Red("%s\n", err)
+			color.Red(messageFmtString, err)
 		}
+	}(f)
+
+	_, err = fmt.Fprintf(f, messageFmtString, message)
+	if err != nil {
+		color.Red(messageFmtString, err)
 	}
 }
 
@@ -120,7 +136,7 @@ func (l *Logger) Error(err error) {
 	}
 }
 
-// isLevelEnabled checks if a given log level should be enabled based on the logger's current level
+// isLevelEnabled checks if a given log level should be enabled based on the logger's current level.
 func (l *Logger) isLevelEnabled(level LogLevel) bool {
 	if l.LogLevel == LogLevelOff {
 		return false

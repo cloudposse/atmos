@@ -488,20 +488,26 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		skipReason = fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
 		logger.Info("Tests will be skipped", "reason", skipReason)
-	} else {
+	}
+
+	// Check if binary is outside repository
+	if skipReason == "" {
 		rel, err := filepath.Rel(repoRoot, binaryPath)
 		if err == nil && strings.HasPrefix(rel, "..") {
 			skipReason = fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
 			logger.Info("Tests will be skipped", "reason", skipReason)
-		} else {
-			stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
-			if err != nil {
-				skipReason = fmt.Sprintf("Failed to check if rebuild needed: %v", err)
-				logger.Info("Tests will be skipped", "reason", skipReason)
-			} else if stale {
-				skipReason = fmt.Sprintf("Atmos binary at %s needs rebuild. Run 'make build' to rebuild.", binaryPath)
-				logger.Info("Tests will be skipped", "reason", skipReason)
-			}
+		}
+	}
+
+	// Check if rebuild is needed
+	if skipReason == "" {
+		stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
+		if err != nil {
+			skipReason = fmt.Sprintf("Failed to check if rebuild needed: %v", err)
+			logger.Info("Tests will be skipped", "reason", skipReason)
+		} else if stale {
+			skipReason = fmt.Sprintf("Atmos binary at %s needs rebuild. Run 'make build' to rebuild.", binaryPath)
+			logger.Info("Tests will be skipped", "reason", skipReason)
 		}
 	}
 

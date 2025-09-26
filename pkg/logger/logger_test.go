@@ -56,7 +56,7 @@ func TestNewLoggerFromCliConfig(t *testing.T) {
 		},
 	}
 
-	logger, err := NewLoggerFromCliConfig(atmosConfig)
+	logger, err := NewLoggerFromCliConfig(&atmosConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 	assert.Equal(t, LogLevelInfo, logger.LogLevel)
@@ -320,7 +320,7 @@ func TestLoggerFromCliConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			logger, err := NewLoggerFromCliConfig(test.config)
+			logger, err := NewLoggerFromCliConfig(&test.config)
 			if test.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, logger)
