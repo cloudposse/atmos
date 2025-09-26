@@ -7,10 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -138,7 +137,7 @@ func TestSetupLogger_TraceLevel(t *testing.T) {
 		configLevel   string
 		expectedLevel log.Level
 	}{
-		{"Trace", "Trace", logger.TraceLevel},
+		{"Trace", "Trace", log.TraceLevel},
 		{"Debug", "Debug", log.DebugLevel},
 		{"Info", "Info", log.InfoLevel},
 		{"Warning", "Warning", log.WarnLevel},
@@ -228,7 +227,7 @@ func TestSetupLogger_TraceVisibility(t *testing.T) {
 
 			// Test trace visibility.
 			buf.Reset()
-			logger.Trace("trace test message")
+			log.Trace("trace test message")
 			hasTrace := strings.Contains(buf.String(), "trace test message")
 			assert.Equal(t, tt.traceVisible, hasTrace,
 				"Trace visibility incorrect for %q level", tt.configLevel)
@@ -279,7 +278,7 @@ func TestSetupLogger_TraceLevelFromEnvironment(t *testing.T) {
 	}
 	setupLogger(cfg)
 
-	assert.Equal(t, logger.TraceLevel, log.GetLevel(),
+	assert.Equal(t, log.TraceLevel, log.GetLevel(),
 		"Should set trace level from environment variable")
 }
 
@@ -310,6 +309,6 @@ func TestSetupLogger_NoColorWithTraceLevel(t *testing.T) {
 		setupLogger(cfg)
 	}, "setupLogger should not panic with trace level and no color")
 
-	assert.Equal(t, logger.TraceLevel, log.GetLevel(),
+	assert.Equal(t, log.TraceLevel, log.GetLevel(),
 		"Trace level should be set even with no color")
 }

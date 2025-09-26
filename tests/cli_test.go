@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -54,7 +55,7 @@ var (
 	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
 	removedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("160")) // Red
 )
-var logger *log.Logger
+var logger *log.AtmosLogger
 
 type Expectation struct {
 	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output
@@ -178,9 +179,9 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 
 func init() {
 	// Initialize with default settings.
-	logger = log.NewWithOptions(os.Stdout, log.Options{
-		Level: log.InfoLevel,
-	})
+	logger = log.New()
+	logger.SetOutput(os.Stdout)
+	logger.SetLevel(log.InfoLevel)
 
 	// Ensure that Lipgloss uses terminal colors for tests
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -199,7 +200,8 @@ func init() {
 	// Add a custom style for key `err`
 	styles.Keys["err"] = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))
 	styles.Values["err"] = lipgloss.NewStyle().Bold(true)
-	logger = log.New(os.Stderr)
+	logger = log.New()
+	logger.SetOutput(os.Stderr)
 	logger.SetStyles(styles)
 	logger.SetColorProfile(termenv.TrueColor)
 	logger.Info("Smoke tests for atmos CLI starting")

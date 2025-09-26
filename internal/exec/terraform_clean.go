@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/charmbracelet/log"
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -31,6 +31,7 @@ var (
 	ErrCollectFiles              = errors.New("failed to collect files")
 	ErrEmptyEnvDir               = errors.New("ENV TF_DATA_DIR is empty")
 	ErrResolveEnvDir             = errors.New("error resolving TF_DATA_DIR path")
+	ErrSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrRefusingToDeleteDir       = errors.New("refusing to delete root directory")
 	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
 	ErrRootPath                  = errors.New("root path cannot be empty")

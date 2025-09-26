@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
@@ -21,7 +20,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/logger"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -90,7 +89,7 @@ var RootCmd = &cobra.Command{
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	switch atmosConfig.Logs.Level {
 	case "Trace":
-		log.SetLevel(logger.TraceLevel)
+		log.SetLevel(log.TraceLevel)
 	case "Debug":
 		log.SetLevel(log.DebugLevel)
 	case "Info":
@@ -109,10 +108,10 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	// Set trace level to show "TRCE" instead of being blank/DEBU
 	if debugStyle, ok := styles.Levels[log.DebugLevel]; ok {
 		// Copy debug style but set the string to "TRCE"
-		styles.Levels[logger.TraceLevel] = debugStyle.SetString("TRCE")
+		styles.Levels[log.TraceLevel] = debugStyle.SetString("TRCE")
 	} else {
 		// Fallback if debug style doesn't exist
-		styles.Levels[logger.TraceLevel] = lipgloss.NewStyle().SetString("TRCE")
+		styles.Levels[log.TraceLevel] = lipgloss.NewStyle().SetString("TRCE")
 	}
 
 	// If colors are disabled, clear the colors but keep the level strings
@@ -120,7 +119,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		clearedStyles := &log.Styles{}
 		clearedStyles.Levels = make(map[log.Level]lipgloss.Style)
 		for k := range styles.Levels {
-			if k == logger.TraceLevel {
+			if k == log.TraceLevel {
 				// Keep TRCE string but remove color
 				clearedStyles.Levels[k] = lipgloss.NewStyle().SetString("TRCE")
 			} else {
@@ -152,14 +151,14 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 		log.SetOutput(output)
 	}
-	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	// Use trace level for this message when trace is enabled, otherwise debug
 	if atmosConfig.Logs.Level == "Trace" {
-		logger.Trace("Set", "logs-level", logger.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+		log.Trace("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
 	} else {
-		log.Debug("Set", "logs-level", logger.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+		log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
 	}
 }
 
