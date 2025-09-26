@@ -23,6 +23,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -30,6 +31,9 @@ import (
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
+
+// profilerServer holds the global profiler server instance.
+var profilerServer *profiler.Server
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -131,6 +135,46 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
 }
 
+// setupProfiler initializes and starts the profiler if enabled.
+func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
+	// Get profiler configuration from config file
+	profilerConfig := atmosConfig.Profiler
+
+	// If profiler config is empty, use defaults
+	if profilerConfig.Host == "" && profilerConfig.Port == 0 {
+		profilerConfig = profiler.DefaultConfig()
+	}
+
+	// Override with CLI flags if provided
+	if cmd.Flags().Changed("profiler-enabled") {
+		if enabled, err := cmd.Flags().GetBool("profiler-enabled"); err == nil {
+			profilerConfig.Enabled = enabled
+		}
+	}
+	if cmd.Flags().Changed("profiler-port") {
+		if port, err := cmd.Flags().GetInt("profiler-port"); err == nil {
+			profilerConfig.Port = port
+		}
+	}
+	if cmd.Flags().Changed("profiler-host") {
+		if host, err := cmd.Flags().GetString("profiler-host"); err == nil {
+			profilerConfig.Host = host
+		}
+	}
+
+	// Create and start profiler server
+	profilerServer = profiler.New(profilerConfig)
+	if err := profilerServer.Start(); err != nil {
+		return fmt.Errorf("failed to start profiler server: %w", err)
+	}
+
+	if profilerConfig.Enabled {
+		log.Info("pprof profiler available", "url", profilerServer.GetURL())
+	}
+
+	return nil
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
@@ -171,6 +215,13 @@ func Execute() error {
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
+
+	// Setup profiler after command parsing but before telemetry
+	if cmd != nil {
+		if setupErr := setupProfiler(cmd, &atmosConfig); setupErr != nil {
+			log.Error("Failed to setup profiler", "error", setupErr)
+		}
+	}
 	telemetry.CaptureCmd(cmd, err)
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
@@ -212,6 +263,9 @@ func init() {
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
 	// Set NoOptDefVal so --pager without value means "true"
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
+	RootCmd.PersistentFlags().Bool("profiler-enabled", false, "Enable pprof profiling server")
+	RootCmd.PersistentFlags().Int("profiler-port", 6060, "Port for pprof profiling server")
+	RootCmd.PersistentFlags().String("profiler-host", "localhost", "Host for pprof profiling server")
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
