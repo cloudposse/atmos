@@ -564,7 +564,7 @@ packages:
 	// Test that it falls back to the second registry
 	tool, err := ar.fetchFromRegistry(registry1.URL, "test", "tool")
 	assert.Error(t, err)
-
+	assert.Nil(t, tool)
 	tool, err = ar.fetchFromRegistry(registry2.URL, "test", "tool")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
