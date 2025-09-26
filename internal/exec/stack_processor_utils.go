@@ -276,7 +276,7 @@ func ProcessYAMLConfigFileWithContext(
 
 	// Process `Go` templates in the imported stack manifest using the provided `context`
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
-	if !skipTemplatesProcessingInImports && len(context) > 0 {
+	if !skipTemplatesProcessingInImports && (atmosConfig.Templates.Settings.Import.ProcessWithoutContext || len(context) > 0) {
 		stackManifestTemplatesProcessed, err = ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
