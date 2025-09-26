@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -20,7 +20,11 @@ import (
 )
 
 // Dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
-var StderrLogger = log.New(os.Stderr)
+var StderrLogger = func() *log.AtmosLogger {
+	l := log.New()
+	l.SetOutput(os.Stderr)
+	return l
+}()
 
 var (
 	ErrVendorComponents              = errors.New("failed to vendor components")

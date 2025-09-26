@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
