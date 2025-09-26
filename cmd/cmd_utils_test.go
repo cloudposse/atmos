@@ -191,3 +191,12 @@ func TestIsVersionCommand(t *testing.T) {
 		})
 	}
 }
+
+// TestPreCustomCommand verifies the preCustomCommand function behavior.
+// Note: The error handling paths with CheckErrorPrintAndExit are tested in integration tests
+// since they involve package-level functions that can't be easily mocked.
+func TestPreCustomCommand(t *testing.T) {
+	// The main test coverage for the modified subcommand error handling is in:
+	// tests/cli_custom_command_test.go which tests the actual output
+	t.Skip("Skipping unit tests for preCustomCommand - covered by integration tests in tests/cli_custom_command_test.go")
+}

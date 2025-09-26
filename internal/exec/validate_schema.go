@@ -2,12 +2,14 @@ package exec
 
 import (
 	"fmt"
+	"os"
 
 	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
@@ -127,12 +129,15 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 			return count, err
 		}
 		if len(validationErrors) == 0 {
-			log.Info("No Validation Errors", "file", file, "schema", schema)
+			successMsg := fmt.Sprintf("✓ No validation errors: file=%s schema=%s\n", file, schema)
+			theme.Colors.Success.Fprint(os.Stderr, successMsg)
 			continue
 		}
-		log.Error("Invalid YAML", "file", file)
+		errorMsg := fmt.Sprintf("✗ Invalid YAML: file=%s\n", file)
+		theme.Colors.Error.Fprint(os.Stderr, errorMsg)
 		for _, err := range validationErrors {
-			log.Error("", "file", file, "field", err.Field(), "type", err.Type(), "description", err.Description())
+			detailMsg := fmt.Sprintf("  ✗ file=%s field=%s type=%s description=%s\n", file, err.Field(), err.Type(), err.Description())
+			theme.Colors.Error.Fprint(os.Stderr, detailMsg)
 			count++
 		}
 	}

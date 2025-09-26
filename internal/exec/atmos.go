@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	log "github.com/charmbracelet/log"
@@ -10,6 +11,7 @@ import (
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -128,7 +130,9 @@ func ExecuteAtmosCmd() error {
 			return err
 		}
 
-		log.Info("Validated successfully", "component", selectedComponent, "stack", selectedStack)
+		// Print success message with color to stderr
+		successMsg := fmt.Sprintf("✓ Validated successfully: component=%s stack=%s\n", selectedComponent, selectedStack)
+		theme.Colors.Success.Fprint(os.Stderr, successMsg)
 		return nil
 	}
 
