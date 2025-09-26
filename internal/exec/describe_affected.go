@@ -45,6 +45,7 @@ type DescribeAffectedCmdArgs struct {
 	ProcessYamlFunctions        bool
 	Skip                        []string
 	ExcludeLocked               bool
+	DependentsStack             string
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -98,6 +99,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
+		dependentsStack string,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -177,6 +179,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
 		"exclude-locked":                 &describe.ExcludeLocked,
+		"dependents-stack":               &describe.DependentsStack,
 	}
 
 	// By default, process templates and YAML functions
@@ -266,7 +269,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.DependentsStack)
 		if err != nil {
 			return err
 		}

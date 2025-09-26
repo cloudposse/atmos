@@ -14,6 +14,8 @@ components:
     tgw/attachment:
       metadata:
         component: mock
+        # Disable the component so it doesn't get included in the affected and dependent lists
+        enabled: false
       settings:
         depends_on:
           1:

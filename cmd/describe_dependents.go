@@ -110,6 +110,11 @@ func setFlagsForDescribeDependentsCmd(flags *pflag.FlagSet, describe *exec.Descr
 		return ErrInvalidFormat
 	}
 
+	err = setStringFlagIfChanged(flags, "dependents-stack", &describe.DependentsStack)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -123,6 +128,7 @@ func init() {
 	describeDependentsCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeDependentsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeDependentsCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
+	describeDependentsCmd.PersistentFlags().String("dependents-stack", "", "Filter the dependent components by a specific stack")
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
 	errUtils.CheckErrorPrintAndExit(err, "", "")

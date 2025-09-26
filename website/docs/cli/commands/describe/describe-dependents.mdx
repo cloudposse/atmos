@@ -241,12 +241,13 @@ Run `atmos describe dependents --help` to see all the available options
 ## Examples
 
 ```shell
-atmos describe dependents test/test-component -s tenant1-ue2-test-1
-atmos describe dependents test/test-component -s tenant1-ue2-dev --format yaml
-atmos describe dependents test/test-component -s tenant1-ue2-test-1 -f yaml
-atmos describe dependents test/test-component -s tenant1-ue2-test-1 --file dependents.json
-atmos describe dependents test/test-component -s tenant1-ue2-test-1 --format yaml --file dependents.yaml
-atmos describe dependents test/test-component -s tenant1-ue2-test-1 --query <yq-expression>
+atmos describe dependents <component> -s <stack>
+atmos describe dependents <component> -s <stack> --format yaml
+atmos describe dependents <component> -s <stack> -f yaml
+atmos describe dependents <component> -s <stack> --file dependents.json
+atmos describe dependents <component> -s <stack> --format yaml --file dependents.yaml
+atmos describe dependents <component> -s <stack> --query <yq-expression>
+atmos describe dependents <component> -s <stack> --dependents-stack <stack>
 ```
 
 ## Arguments
@@ -310,6 +311,13 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1 --query <yq-
 
         `atmos describe dependents <component> -s <stack> --skip=terraform.output,include`
     </dd>
+
+    <dt>`--dependents-stack` <em>(optional)</em></dt>
+    <dd>
+        Filter the dependent components by a specific stack.
+
+        `atmos describe dependents <component> -s <stack> --dependents-stack <stack>`
+    </dd>
 </dl>
 
 ## Output
@@ -365,6 +373,8 @@ the `settings.atlantis` section in the stack manifest. Refer to [Atlantis Integr
 
 Abstract Atmos components (`metadata.type` is set to `abstract`) are not included in the output since they serve as blueprints for other
 Atmos components and are not meant to be provisioned.
+
+Disabled components (`metadata.enabled: false`) are also excluded from dependents.
 
 :::
 
