@@ -53,7 +53,11 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
 	}
 
-	return filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
+	v, err := filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+	}
+	return v, nil
 }
 
 // FetchAndParseByExtension downloads a remote file and parses it based on its extension.
@@ -72,7 +76,11 @@ func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
 	}
 
 	// Pass the original source URL for extension detection
-	return filetype.ParseFileByExtension(readFunc, src)
+	v, err := filetype.ParseFileByExtension(readFunc, src)
+	if err != nil {
+		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+	}
+	return v, nil
 }
 
 // FetchAndParseRaw downloads a remote file and always returns it as a raw string.
@@ -84,7 +92,11 @@ func (fd *fileDownloader) FetchAndParseRaw(src string) (any, error) {
 		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
 	}
 
-	return filetype.ParseFileRaw(fd.fileReader, filePath)
+	v, err := filetype.ParseFileRaw(fd.fileReader, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+	}
+	return v, nil
 }
 
 // FetchData fetches content from a given source and returns it as a byte slice.

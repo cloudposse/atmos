@@ -7,11 +7,14 @@ import (
 const (
 	ErrWrappingFormat       = "%w: %w"
 	ErrStringWrappingFormat = "%w: %s"
+	ErrValueWrappingFormat  = "%w: %v"
 )
 
 var (
+	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
+	ErrParseFile                             = errors.New("failed to parse file")
 	ErrParseURL                              = errors.New("failed to parse URL")
 	ErrInvalidURL                            = errors.New("invalid URL")
 	ErrCreateDownloadClient                  = errors.New("failed to create download client")
@@ -93,7 +96,7 @@ var (
 	ErrFileNotFound                = errors.New("file not found")
 	ErrExpectedFile                = errors.New("--config expected file found directory")
 	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
-	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found on directory")
+	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrInvalidComponent                   = errors.New("invalid component")
@@ -151,4 +154,19 @@ var (
 	ErrProcessInstances          = errors.New("failed to process instances")
 	ErrParseFlag                 = errors.New("failed to parse flag value")
 	ErrFailedToFinalizeCSVOutput = errors.New("failed to finalize CSV output")
+	ErrParseStacks               = errors.New("could not parse stacks")
+	ErrParseComponents           = errors.New("could not parse components")
+	ErrNoComponentsFound         = errors.New("no components found")
+	ErrStackNotFound             = errors.New("stack not found")
+	ErrProcessStack              = errors.New("error processing stack")
+
+	// Cache-related errors.
+	ErrCacheLocked    = errors.New("cache file is locked")
+	ErrCacheRead      = errors.New("cache read failed")
+	ErrCacheWrite     = errors.New("cache write failed")
+	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
+	ErrCacheMarshal   = errors.New("cache marshal failed")
+
+	// Logger errors.
+	ErrInvalidLogLevel = errors.New("invalid log level")
 )

@@ -6,6 +6,7 @@ import (
 
 	"github.com/fatih/color"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -18,9 +19,12 @@ const (
 	LogLevelDebug   LogLevel = "Debug"
 	LogLevelInfo    LogLevel = "Info"
 	LogLevelWarning LogLevel = "Warning"
+
+	// File permissions for log files.
+	logFilePermissions = 0o644
 )
 
-// logLevelOrder defines the order of log levels from most verbose to least verbose
+// logLevelOrder defines the order of log levels from most verbose to least verbose.
 var logLevelOrder = map[LogLevel]int{
 	LogLevelTrace:   0,
 	LogLevelDebug:   1,
@@ -61,7 +65,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		}
 	}
 
-	return "", fmt.Errorf("invalid log level `%s`. Valid options are: %v", logLevel, validLevels)
+	return "", fmt.Errorf("%w: `%s`. Valid options are: %v", errUtils.ErrInvalidLogLevel, logLevel, validLevels)
 }
 
 func (l *Logger) log(logColor *color.Color, message string) {
@@ -77,7 +81,7 @@ func (l *Logger) log(logColor *color.Color, message string) {
 				color.Red("%s\n", err)
 			}
 		} else {
-			f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+			f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, logFilePermissions)
 			if err != nil {
 				color.Red("%s\n", err)
 				return
@@ -120,7 +124,7 @@ func (l *Logger) Error(err error) {
 	}
 }
 
-// isLevelEnabled checks if a given log level should be enabled based on the logger's current level
+// isLevelEnabled checks if a given log level should be enabled based on the logger's current level.
 func (l *Logger) isLevelEnabled(level LogLevel) bool {
 	if l.LogLevel == LogLevelOff {
 		return false

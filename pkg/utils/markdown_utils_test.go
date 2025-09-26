@@ -146,18 +146,32 @@ func TestMarkdownWithoutRenderer(t *testing.T) {
 
 	// Capture stdout
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+	})
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	t.Cleanup(func() {
+		r.Close()
+	})
+
 	os.Stdout = w
 
 	// Should still print raw text without rendering
 	PrintfMarkdown("## Test Header\n**Bold** text")
 
-	w.Close()
-	os.Stdout = oldStdout
+	if err := w.Close(); err != nil {
+		t.Fatalf("Failed to close writer: %v", err)
+	}
 
 	// Read output
 	var output bytes.Buffer
-	io.Copy(&output, r)
+	if _, err := io.Copy(&output, r); err != nil {
+		t.Fatalf("Failed to copy output: %v", err)
+	}
 	result := output.String()
 
 	// Should contain raw markdown since renderer is nil

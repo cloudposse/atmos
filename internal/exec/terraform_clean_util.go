@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	log "github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
@@ -37,12 +38,12 @@ func getAllStacksComponentsPaths(stacksMap map[string]any) []string {
 func getComponentsPaths(stackData any) ([]string, error) {
 	stackMap, ok := stackData.(map[string]any)
 	if !ok {
-		return nil, ErrParseStacks
+		return nil, errUtils.ErrParseStacks
 	}
 
 	componentsMap, ok := stackMap["components"].(map[string]any)
 	if !ok {
-		return nil, ErrParseComponents
+		return nil, errUtils.ErrParseComponents
 	}
 
 	terraformComponents, ok := componentsMap["terraform"].(map[string]any)
