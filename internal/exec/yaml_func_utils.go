@@ -84,7 +84,40 @@ func processCustomTags(
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return res
 	default:
-		// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing
+		// Check if the input looks like a YAML tag (starts with !)
+		if strings.HasPrefix(input, "!") {
+			// Extract just the tag part (before any space)
+			tagParts := strings.SplitN(input, " ", 2)
+			tag := tagParts[0]
+
+			// Check if this is an unsupported tag
+			supportedTags := []string{
+				u.AtmosYamlFuncTemplate,
+				u.AtmosYamlFuncExec,
+				u.AtmosYamlFuncStore,
+				u.AtmosYamlFuncStoreGet,
+				u.AtmosYamlFuncTerraformOutput,
+				u.AtmosYamlFuncTerraformState,
+				u.AtmosYamlFuncEnv,
+			}
+
+			for _, supported := range supportedTags {
+				if strings.HasPrefix(input, supported) {
+					// It's a supported tag but not handled in switch above (might be skipped)
+					return input
+				}
+			}
+
+			// It's an unsupported tag - log error and exit
+			errUtils.CheckErrorPrintAndExit(
+				fmt.Errorf("%w: '%s' in stack '%s'. Supported tags are: %s",
+					errUtils.ErrUnsupportedYamlTag,
+					tag,
+					currentStack,
+					strings.Join(supportedTags, ", ")),
+				"", "")
+		}
+		// Not a tag, return as-is
 		return input
 	}
 }
