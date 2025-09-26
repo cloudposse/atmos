@@ -183,7 +183,7 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 		percent = 0.6
 		bar = progressBar.ViewAs(percent)
 		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
-		spinner, _ = spinner.Update(bspinner.TickMsg{})
+		spinner.Update(bspinner.TickMsg{})
 		time.Sleep(100 * time.Millisecond)
 	}
 

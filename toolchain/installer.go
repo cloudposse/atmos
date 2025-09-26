@@ -372,9 +372,7 @@ func (i *Installer) buildAssetURL(tool *Tool, version string) (string, error) {
 
 		// Remove 'v' prefix from version for asset naming
 		versionForAsset := version
-		if strings.HasPrefix(versionForAsset, "v") {
-			versionForAsset = versionForAsset[1:]
-		}
+		versionForAsset = strings.TrimPrefix(versionForAsset, "v")
 
 		// Create template data
 		data := struct {
