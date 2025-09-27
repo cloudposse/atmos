@@ -202,6 +202,30 @@ func ProcessYAMLConfigFile(
 	)
 }
 
+// formatTemplateProcessingError formats template processing errors with proper context.
+func formatTemplateProcessingError(
+	err error,
+	atmosConfig *schema.AtmosConfiguration,
+	mergeContext *m.MergeContext,
+	relativeFilePath string,
+	stackYamlConfig string,
+) error {
+	stackManifestTemplatesErrorMessage := ""
+	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+		stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
+	}
+
+	// Check if we have merge context to provide enhanced error formatting
+	if mergeContext != nil {
+		// Wrap the error with the sentinel first to preserve it
+		wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
+		// Then format it with context information
+		return mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+	}
+
+	return fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
+}
+
 // ProcessYAMLConfigFileWithContext takes a path to a YAML stack manifest,
 // recursively processes and deep-merges all the imports with context tracking,
 // and returns the final stack config.
@@ -272,7 +296,6 @@ func ProcessYAMLConfigFileWithContext(
 	}
 
 	stackManifestTemplatesProcessed := stackYamlConfig
-	stackManifestTemplatesErrorMessage := ""
 
 	// Process `Go` templates in the imported stack manifest if it has a template extension
 	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates
@@ -280,39 +303,17 @@ func ProcessYAMLConfigFileWithContext(
 	if !skipTemplatesProcessingInImports && u.IsTemplateFile(filePath) {
 		stackManifestTemplatesProcessed, err = ProcessTmpl(relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if err != nil {
-			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
-			}
-			// Check if we have merge context to provide enhanced error formatting
-			if mergeContext != nil {
-				// Wrap the error with the sentinel first to preserve it
-				wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
-				// Then format it with context information
-				e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
-				return nil, nil, nil, nil, nil, nil, nil, e
-			} else {
-				e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
-				return nil, nil, nil, nil, nil, nil, nil, e
-			}
+			return nil, nil, nil, nil, nil, nil, nil, formatTemplateProcessingError(
+				err, atmosConfig, mergeContext, relativeFilePath, stackYamlConfig,
+			)
 		}
 	}
 
 	stackConfigMap, err := u.UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, stackManifestTemplatesProcessed, filePath)
 	if err != nil {
-		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
-		}
-		// Check if we have merge context to provide enhanced error formatting
-		if mergeContext != nil {
-			// Wrap the error with the sentinel first to preserve it
-			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
-			// Then format it with context information
-			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
-			return nil, nil, nil, nil, nil, nil, nil, e
-		} else {
-			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
-			return nil, nil, nil, nil, nil, nil, nil, e
-		}
+		return nil, nil, nil, nil, nil, nil, nil, formatTemplateProcessingError(
+			err, atmosConfig, mergeContext, relativeFilePath, stackYamlConfig,
+		)
 	}
 
 	// If the path to the Atmos manifest JSON Schema is provided, validate the stack manifest against it
