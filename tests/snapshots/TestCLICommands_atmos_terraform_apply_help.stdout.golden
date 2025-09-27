@@ -101,6 +101,23 @@ Global Flags:
                                       Atmos stack manifests when executing
                                       terraform commands (default true)
 
+        --profile-file string         Write profiling data to file instead of
+                                      starting server
+
+        --profile-type string         Type of profile to collect when using
+                                      --profile-file. Options: cpu, heap,
+                                      allocs, goroutine, block, mutex,
+                                      threadcreate, trace (default cpu)
+
+        --profiler-enabled            Enable pprof profiling server (default
+                                      false)
+
+        --profiler-host string        Host for pprof profiling server (default
+                                      localhost)
+
+        --profiler-port int           Port for pprof profiling server (default
+                                      6060)
+
     -q, --query string                Execute atmos terraform <command> on the
                                       components filtered by a YQ expression, in
                                       all stacks or in a specific stack
