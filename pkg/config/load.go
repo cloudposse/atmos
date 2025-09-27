@@ -12,11 +12,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -124,6 +124,13 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.telemetry.token", "ATMOS_TELEMETRY_TOKEN")
 	bindEnv(v, "settings.telemetry.endpoint", "ATMOS_TELEMETRY_ENDPOINT")
 	bindEnv(v, "settings.telemetry.logging", "ATMOS_TELEMETRY_LOGGING")
+
+	// Profiler settings
+	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
+	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")
+	bindEnv(v, "profiler.port", "ATMOS_PROFILER_PORT")
+	bindEnv(v, "profiler.file", "ATMOS_PROFILE_FILE")
+	bindEnv(v, "profiler.profile_type", "ATMOS_PROFILE_TYPE")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
