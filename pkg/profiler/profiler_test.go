@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -758,15 +759,25 @@ func TestProfilerStateResetOnErrors(t *testing.T) {
 		t.Fatalf("Failed to create read-only dir: %v", err)
 	}
 
+	// On Windows, we need to use a different approach to create a permission failure
+	// since Windows doesn't respect Unix-style directory permissions the same way
+	var invalidPath string
+	if runtime.GOOS == "windows" {
+		// Use a non-existent deeply nested path that will fail on Windows
+		invalidPath = filepath.Join(readOnlyDir, "nonexistent", "deeply", "nested", "path", "test.prof")
+	} else {
+		invalidPath = filepath.Join(readOnlyDir, "test.prof")
+	}
+
 	config := Config{
 		Enabled:     true,
-		File:        filepath.Join(readOnlyDir, "test.prof"),
+		File:        invalidPath,
 		ProfileType: ProfileTypeHeap,
 	}
 
 	profiler := New(config)
 
-	// This should fail due to permission error
+	// This should fail due to permission error or invalid path
 	err = profiler.Start()
 	if err == nil {
 		t.Error("Start() should fail when unable to create profile file")

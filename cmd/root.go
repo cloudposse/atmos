@@ -108,6 +108,7 @@ var RootCmd = &cobra.Command{
 	},
 }
 
+// setupLogger configures the global logger based on the provided Atmos configuration.
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	switch atmosConfig.Logs.Level {
 	case "Trace":
@@ -235,9 +236,27 @@ func buildProfilerConfig(cmd *cobra.Command, atmosConfig *schema.AtmosConfigurat
 func getBaseProfilerConfig(atmosConfig *schema.AtmosConfiguration) profiler.Config {
 	profilerConfig := atmosConfig.Profiler
 
-	// If profiler config is empty, use defaults
-	if profilerConfig.Host == "" && profilerConfig.Port == 0 {
-		profilerConfig = profiler.DefaultConfig()
+	// Check if profiler config is completely empty
+	isEmpty := profilerConfig.Host == "" &&
+		profilerConfig.Port == 0 &&
+		profilerConfig.File == "" &&
+		profilerConfig.ProfileType == "" &&
+		!profilerConfig.Enabled
+
+	if isEmpty {
+		return profiler.DefaultConfig()
+	}
+
+	// Default individual fields independently to avoid partial configurations
+	defaultConfig := profiler.DefaultConfig()
+	if profilerConfig.Host == "" {
+		profilerConfig.Host = defaultConfig.Host
+	}
+	if profilerConfig.Port == 0 {
+		profilerConfig.Port = defaultConfig.Port
+	}
+	if profilerConfig.ProfileType == "" {
+		profilerConfig.ProfileType = defaultConfig.ProfileType
 	}
 
 	return profilerConfig
@@ -337,12 +356,12 @@ func applyProfileTypeFlag(config *profiler.Config, cmd *cobra.Command) error {
 
 	profileType, err := cmd.Flags().GetString("profile-type")
 	if err != nil {
-		return fmt.Errorf("%w: failed to get profile-type flag: %w", errUtils.ErrInvalidFlag, err)
+		return fmt.Errorf("%w: failed to get profile-type flag: %v", errUtils.ErrInvalidFlag, err)
 	}
 
 	parsedType, parseErr := profiler.ParseProfileType(profileType)
 	if parseErr != nil {
-		return fmt.Errorf("%w: invalid profile type '%s': %w", errUtils.ErrParseFlag, profileType, parseErr)
+		return fmt.Errorf("%w: invalid profile type '%s': %v", errUtils.ErrParseFlag, profileType, parseErr)
 	}
 
 	config.ProfileType = parsedType
@@ -400,6 +419,7 @@ func Execute() error {
 	return err
 }
 
+// getInvalidCommandName extracts the invalid command name from an error message.
 func getInvalidCommandName(input string) string {
 	// Regular expression to match the command name inside quotes
 	re := regexp.MustCompile(`unknown command "([^"]+)"`)
@@ -447,6 +467,7 @@ func init() {
 	initCobraConfig()
 }
 
+// initCobraConfig initializes Cobra command configuration and styling.
 func initCobraConfig() {
 	RootCmd.SetOut(os.Stdout)
 	styles := boa.DefaultStyles()
