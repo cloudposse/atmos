@@ -1,0 +1,204 @@
+---
+title: atmos vendor update
+sidebar_label: update
+sidebar_class_name: command
+id: vendor-update
+description: Update version references in vendor configurations to their latest available versions
+---
+import Terminal from '@site/src/components/Terminal'
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note Purpose
+Use this command to check for available updates and automatically update version references in your vendor configuration files (`vendor.yaml` and `component.yaml`). The command preserves YAML structure, including anchors, comments, and formatting.
+:::
+
+<Screengrab title="atmos vendor update --help" slug="atmos-vendor-update--help" />
+
+## Usage
+
+```shell
+atmos vendor update [options]
+```
+
+## Examples
+
+### Check for available updates without making changes
+
+```shell
+atmos vendor update --check
+```
+
+<Terminal title="atmos vendor update --check">
+```console
+Checking for vendor updates...
+
+✓ terraform-aws-vpc (1.323.0 → 1.372.0)
+✓ terraform-aws-s3-bucket (4.1.0 → 4.2.0)
+✓ terraform-aws-eks (2.1.0 - up to date)
+⚠ custom-module (skipped - templated version {{.Version}})
+✓ terraform-aws-rds (5.0.0 → 5.1.0)
+
+Found 3 updates available. Use 'atmos vendor update' to update the configuration files.
+```
+</Terminal>
+
+### Update version references in configuration files
+
+```shell
+atmos vendor update
+```
+
+This updates the version strings in your vendor configuration files while preserving the YAML structure.
+
+### Update versions and pull new components
+
+```shell
+atmos vendor update --pull
+```
+
+This combines two operations:
+1. Updates version references in the configuration files
+2. Executes `atmos vendor pull` to download the new component versions
+
+### Update a specific component
+
+```shell
+atmos vendor update --component vpc
+```
+
+### Update components with specific tags
+
+```shell
+atmos vendor update --tags terraform,networking
+```
+
+## Arguments
+
+*This command does not require any arguments*
+
+## Flags
+
+<dl>
+  <dt>`--check`</dt>
+  <dd>Check for available updates without modifying configuration files (dry-run mode)</dd>
+
+  <dt>`--pull`</dt>
+  <dd>Update version references AND pull the new component versions in one operation</dd>
+
+  <dt>`--component` / `-c`</dt>
+  <dd>Update version reference for a specific component</dd>
+
+  <dt>`--tags`</dt>
+  <dd>Update version references for components with specific tags (comma-separated)</dd>
+
+  <dt>`--type` / `-t`</dt>
+  <dd>Component type: `terraform` or `helmfile` (default: `terraform`)</dd>
+
+  <dt>`--help` / `-h`</dt>
+  <dd>Show help for the command</dd>
+</dl>
+
+## Supported Upstream Sources
+
+The `vendor update` command currently supports version checking for the following upstream sources:
+
+| Source Type | Version Detection | Support Status | Example |
+|-------------|------------------|----------------|---------|
+| **Git Repositories** | Git tags & commits | ✅ Supported | `github.com/cloudposse/terraform-aws-components.git` |
+| **OCI Registries** | Registry API | ⏳ Coming Soon | `oci://ghcr.io/cloudposse/components` |
+| **HTTP/HTTPS Files** | N/A | ❌ Not Applicable | `https://raw.githubusercontent.com/...` |
+| **Local Files** | N/A | ❌ Not Applicable | `./components/vpc` |
+| **Amazon S3** | Object Metadata | ⏳ Future | `s3://bucket/components/` |
+| **Google GCS** | Object Metadata | ⏳ Future | `gs://bucket/components/` |
+
+:::info Version Detection
+- **Git repositories**: The command checks for newer semantic version tags and commit hashes
+- **Templated versions**: Versions containing `{{` template syntax are automatically skipped
+- **Local files**: No version checking is performed for local file sources
+:::
+
+## How It Works
+
+1. **Read Configuration**: The command reads your `vendor.yaml` or `component.yaml` files, including all imports
+2. **Check Versions**: For each component, it checks the upstream source for newer versions
+3. **Preserve Structure**: When updating, it preserves:
+   - YAML anchors and references
+   - Comments and documentation
+   - Indentation and formatting
+   - Quote styles
+4. **Update Files**: Updates only the version fields in the appropriate configuration files
+5. **Optional Pull**: With `--pull`, automatically downloads the updated components
+
+## YAML Structure Preservation
+
+The command intelligently preserves YAML structures:
+
+```yaml
+# Comments are preserved
+spec:
+  bases:
+    - &library  # Anchors are preserved
+      source: "github.com/example"
+      version: "1.0.0"  # This will be updated
+    - &main
+      <<: *library  # References work correctly
+      version: "main"
+  sources:
+    - <<: *main
+      component: "vpc"
+```
+
+## Configuration File Support
+
+The command supports both vendor configuration formats:
+
+### vendor.yaml (AtmosVendorConfig)
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: "vpc"
+      source: "github.com/cloudposse/terraform-aws-vpc.git"
+      version: "1.2.0"  # Will be updated
+```
+
+### component.yaml (ComponentVendorConfig)
+```yaml
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+spec:
+  source:
+    uri: "github.com/cloudposse/terraform-aws-vpc.git"
+    version: "1.2.0"  # Will be updated
+```
+
+## Import Chain Support
+
+The command handles vendor configurations with imports:
+
+```yaml
+spec:
+  imports:
+    - "vendor/base.yaml"  # Updates tracked to this file
+    - "vendor/networking.yaml"  # And this file
+  sources:
+    - component: "vpc"
+      version: "1.0.0"  # Updates tracked to main file
+```
+
+Each imported file is updated independently, preserving local modifications.
+
+## Related Commands
+
+- [`atmos vendor pull`](/cli/commands/vendor/pull) - Pull vendor components and mixins
+
+## Migration from vendor diff
+
+The `vendor diff` command is deprecated. Replace your usage as follows:
+
+| Old Command | New Command |
+|------------|------------|
+| `atmos vendor diff` | `atmos vendor update --check` |
+| `atmos vendor diff --update` | `atmos vendor update` |
+| `atmos vendor diff --component vpc` | `atmos vendor update --component vpc --check` |

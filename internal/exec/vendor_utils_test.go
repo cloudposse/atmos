@@ -75,7 +75,7 @@ func TestReadAndProcessVendorConfigFile(t *testing.T) {
 }
 
 // TestExecuteVendorPull tests the ExecuteVendorPullCommand function.
-// It checks that the function executes the `atmos vendor pull`
+// It checks that the function executes the `atmos vendor pull`.
 // and that the vendor components are correctly pulled.
 // The function also verifies that the state files are existing and deleted after the vendor pull command is executed.
 func TestExecuteVendorPull(t *testing.T) {
