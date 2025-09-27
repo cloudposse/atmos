@@ -198,70 +198,10 @@ func Cleanup() {
 
 // setupProfiler initializes and starts the profiler if enabled.
 func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
-	// Get profiler configuration from config file and environment variables
-	profilerConfig := atmosConfig.Profiler
-
-	// If profiler config is empty, use defaults
-	if profilerConfig.Host == "" && profilerConfig.Port == 0 {
-		profilerConfig = profiler.DefaultConfig()
-	}
-
-	// Apply any values from environment variables that were loaded into atmosConfig
-	if atmosConfig.Profiler.Host != "" {
-		profilerConfig.Host = atmosConfig.Profiler.Host
-	}
-	if atmosConfig.Profiler.Port != 0 {
-		profilerConfig.Port = atmosConfig.Profiler.Port
-	}
-	if atmosConfig.Profiler.File != "" {
-		profilerConfig.File = atmosConfig.Profiler.File
-		// Enable profiler automatically when file is specified via env var
-		profilerConfig.Enabled = true
-	}
-	if atmosConfig.Profiler.ProfileType != "" {
-		if parsedType, parseErr := profiler.ParseProfileType(string(atmosConfig.Profiler.ProfileType)); parseErr == nil {
-			profilerConfig.ProfileType = parsedType
-		} else {
-			return fmt.Errorf("invalid profile type from environment variable: %w", parseErr)
-		}
-	}
-	if atmosConfig.Profiler.Enabled {
-		profilerConfig.Enabled = atmosConfig.Profiler.Enabled
-	}
-
-	// Override with CLI flags if provided
-	if cmd.Flags().Changed("profiler-enabled") {
-		if enabled, err := cmd.Flags().GetBool("profiler-enabled"); err == nil {
-			profilerConfig.Enabled = enabled
-		}
-	}
-	if cmd.Flags().Changed("profiler-port") {
-		if port, err := cmd.Flags().GetInt("profiler-port"); err == nil {
-			profilerConfig.Port = port
-		}
-	}
-	if cmd.Flags().Changed("profiler-host") {
-		if host, err := cmd.Flags().GetString("profiler-host"); err == nil {
-			profilerConfig.Host = host
-		}
-	}
-	if cmd.Flags().Changed("profile-file") {
-		if file, err := cmd.Flags().GetString("profile-file"); err == nil {
-			profilerConfig.File = file
-			// Enable profiler automatically when file is specified
-			if file != "" {
-				profilerConfig.Enabled = true
-			}
-		}
-	}
-	if cmd.Flags().Changed("profile-type") {
-		if profileType, err := cmd.Flags().GetString("profile-type"); err == nil {
-			if parsedType, parseErr := profiler.ParseProfileType(profileType); parseErr == nil {
-				profilerConfig.ProfileType = parsedType
-			} else {
-				return fmt.Errorf("invalid profile type: %w", parseErr)
-			}
-		}
+	// Build profiler configuration from multiple sources
+	profilerConfig, err := buildProfilerConfig(cmd, atmosConfig)
+	if err != nil {
+		return err
 	}
 
 	// Create and start profiler
@@ -270,6 +210,142 @@ func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) e
 		return fmt.Errorf("failed to start profiler: %w", err)
 	}
 
+	return nil
+}
+
+// buildProfilerConfig constructs profiler configuration from environment and CLI flags.
+func buildProfilerConfig(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (profiler.Config, error) {
+	// Start with environment/config values or defaults
+	profilerConfig := getBaseProfilerConfig(atmosConfig)
+
+	// Apply environment variable overrides
+	if err := applyProfilerEnvironmentOverrides(&profilerConfig, atmosConfig); err != nil {
+		return profilerConfig, err
+	}
+
+	// Apply CLI flag overrides
+	if err := applyCLIFlagOverrides(&profilerConfig, cmd); err != nil {
+		return profilerConfig, err
+	}
+
+	return profilerConfig, nil
+}
+
+// getBaseProfilerConfig returns the base configuration from config file or defaults.
+func getBaseProfilerConfig(atmosConfig *schema.AtmosConfiguration) profiler.Config {
+	profilerConfig := atmosConfig.Profiler
+
+	// If profiler config is empty, use defaults
+	if profilerConfig.Host == "" && profilerConfig.Port == 0 {
+		profilerConfig = profiler.DefaultConfig()
+	}
+
+	return profilerConfig
+}
+
+// applyProfilerEnvironmentOverrides applies environment variable values to profiler config.
+func applyProfilerEnvironmentOverrides(config *profiler.Config, atmosConfig *schema.AtmosConfiguration) error {
+	if atmosConfig.Profiler.Host != "" {
+		config.Host = atmosConfig.Profiler.Host
+	}
+	if atmosConfig.Profiler.Port != 0 {
+		config.Port = atmosConfig.Profiler.Port
+	}
+	if atmosConfig.Profiler.File != "" {
+		config.File = atmosConfig.Profiler.File
+		// Enable profiler automatically when file is specified via env var
+		config.Enabled = true
+	}
+	if atmosConfig.Profiler.ProfileType != "" {
+		parsedType, parseErr := profiler.ParseProfileType(string(atmosConfig.Profiler.ProfileType))
+		if parseErr != nil {
+			return fmt.Errorf("invalid profile type from environment variable: %w", parseErr)
+		}
+		config.ProfileType = parsedType
+	}
+	if atmosConfig.Profiler.Enabled {
+		config.Enabled = atmosConfig.Profiler.Enabled
+	}
+
+	return nil
+}
+
+// applyCLIFlagOverrides applies CLI flag values to profiler config.
+func applyCLIFlagOverrides(config *profiler.Config, cmd *cobra.Command) error {
+	applyBoolFlag(cmd, "profiler-enabled", func(val bool) { config.Enabled = val })
+	applyIntFlag(cmd, "profiler-port", func(val int) { config.Port = val })
+	applyStringFlag(cmd, "profiler-host", func(val string) { config.Host = val })
+
+	if err := applyProfileFileFlag(config, cmd); err != nil {
+		return err
+	}
+
+	if err := applyProfileTypeFlag(config, cmd); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// applyBoolFlag applies a boolean CLI flag to the config.
+func applyBoolFlag(cmd *cobra.Command, flagName string, setter func(bool)) {
+	if cmd.Flags().Changed(flagName) {
+		if val, err := cmd.Flags().GetBool(flagName); err == nil {
+			setter(val)
+		}
+	}
+}
+
+// applyIntFlag applies an integer CLI flag to the config.
+func applyIntFlag(cmd *cobra.Command, flagName string, setter func(int)) {
+	if cmd.Flags().Changed(flagName) {
+		if val, err := cmd.Flags().GetInt(flagName); err == nil {
+			setter(val)
+		}
+	}
+}
+
+// applyStringFlag applies a string CLI flag to the config.
+func applyStringFlag(cmd *cobra.Command, flagName string, setter func(string)) {
+	if cmd.Flags().Changed(flagName) {
+		if val, err := cmd.Flags().GetString(flagName); err == nil {
+			setter(val)
+		}
+	}
+}
+
+// applyProfileFileFlag applies the profile-file flag with auto-enable logic.
+func applyProfileFileFlag(config *profiler.Config, cmd *cobra.Command) error {
+	if cmd.Flags().Changed("profile-file") {
+		file, err := cmd.Flags().GetString("profile-file")
+		if err == nil {
+			config.File = file
+			// Enable profiler automatically when file is specified
+			if file != "" {
+				config.Enabled = true
+			}
+		}
+	}
+	return nil
+}
+
+// applyProfileTypeFlag applies the profile-type flag with validation.
+func applyProfileTypeFlag(config *profiler.Config, cmd *cobra.Command) error {
+	if !cmd.Flags().Changed("profile-type") {
+		return nil
+	}
+
+	profileType, err := cmd.Flags().GetString("profile-type")
+	if err != nil {
+		return fmt.Errorf("%w: failed to get profile-type flag: %w", errUtils.ErrInvalidFlag, err)
+	}
+
+	parsedType, parseErr := profiler.ParseProfileType(profileType)
+	if parseErr != nil {
+		return fmt.Errorf("%w: invalid profile type '%s': %w", errUtils.ErrParseFlag, profileType, parseErr)
+	}
+
+	config.ProfileType = parsedType
 	return nil
 }
 
@@ -356,10 +432,12 @@ func init() {
 	// Set NoOptDefVal so --pager without value means "true"
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
 	RootCmd.PersistentFlags().Bool("profiler-enabled", false, "Enable pprof profiling server")
-	RootCmd.PersistentFlags().Int("profiler-port", 6060, "Port for pprof profiling server")
+	RootCmd.PersistentFlags().Int("profiler-port", profiler.DefaultProfilerPort, "Port for pprof profiling server")
 	RootCmd.PersistentFlags().String("profiler-host", "localhost", "Host for pprof profiling server")
 	RootCmd.PersistentFlags().String("profile-file", "", "Write profiling data to file instead of starting server")
-	RootCmd.PersistentFlags().String("profile-type", "cpu", "Type of profile to collect when using --profile-file. Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
+	RootCmd.PersistentFlags().String("profile-type", "cpu",
+		"Type of profile to collect when using --profile-file. "+
+			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

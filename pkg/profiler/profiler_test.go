@@ -276,17 +276,19 @@ func TestParseProfileType(t *testing.T) {
 
 	for _, test := range tests {
 		result, err := ParseProfileType(test.input)
-		if test.expectError {
-			if err == nil {
-				t.Errorf("ParseProfileType(%s) expected error, but got none", test.input)
-			}
-		} else {
-			if err != nil {
-				t.Errorf("ParseProfileType(%s) unexpected error: %v", test.input, err)
-			}
-			if result != test.expected {
-				t.Errorf("ParseProfileType(%s) = %s, expected %s", test.input, result, test.expected)
-			}
+
+		if test.expectError && err == nil {
+			t.Errorf("ParseProfileType(%s) expected error, but got none", test.input)
+			continue
+		}
+
+		if !test.expectError && err != nil {
+			t.Errorf("ParseProfileType(%s) unexpected error: %v", test.input, err)
+			continue
+		}
+
+		if !test.expectError && result != test.expected {
+			t.Errorf("ParseProfileType(%s) = %s, expected %s", test.input, result, test.expected)
 		}
 	}
 }
@@ -752,7 +754,7 @@ func TestProfilerStateResetOnErrors(t *testing.T) {
 
 	// Create a read-only directory to force file creation failure
 	readOnlyDir := filepath.Join(tempDir, "readonly")
-	if err := os.Mkdir(readOnlyDir, 0444); err != nil {
+	if err := os.Mkdir(readOnlyDir, 0o444); err != nil {
 		t.Fatalf("Failed to create read-only dir: %v", err)
 	}
 

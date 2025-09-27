@@ -114,7 +114,8 @@ func (p *Server) Start() error {
 			p.profileType = ProfileTypeCPU
 		}
 		if !IsValidProfileType(p.profileType) {
-			return fmt.Errorf("%w: %s. Supported types: %v", ErrUnsupportedProfileType, p.profileType, GetSupportedProfileTypes())
+			return fmt.Errorf("%w: %s. Supported types: %v",
+				ErrUnsupportedProfileType, p.profileType, GetSupportedProfileTypes())
 		}
 		return p.startFileBasedProfiling()
 	}
@@ -133,9 +134,20 @@ func (p *Server) startFileBasedProfiling() error {
 	var err error
 	p.profFile, err = os.Create(p.config.File)
 	if err != nil {
-		return fmt.Errorf("%w %s: %w", ErrCreateProfileFile, p.config.File, err)
+		return fmt.Errorf("%w: %s: %w", ErrCreateProfileFile, p.config.File, err)
 	}
 
+	if err := p.startProfileByType(); err != nil {
+		return err
+	}
+
+	p.isFileBased = true
+	log.Info("Profiling started", "type", p.profileType, "file", p.config.File)
+	return nil
+}
+
+// startProfileByType starts profiling based on the configured profile type.
+func (p *Server) startProfileByType() error {
 	switch p.profileType {
 	case ProfileTypeCPU:
 		if err := pprof.StartCPUProfile(p.profFile); err != nil {
@@ -149,7 +161,8 @@ func (p *Server) startFileBasedProfiling() error {
 			p.profFile = nil
 			return fmt.Errorf("%w: %v", ErrStartTraceProfile, err)
 		}
-	case ProfileTypeHeap, ProfileTypeAllocs, ProfileTypeGoroutine, ProfileTypeBlock, ProfileTypeMutex, ProfileTypeThreadCreate:
+	case ProfileTypeHeap, ProfileTypeAllocs, ProfileTypeGoroutine,
+		ProfileTypeBlock, ProfileTypeMutex, ProfileTypeThreadCreate:
 		// These profiles are collected on-demand when stopping, so we just keep the file open
 		// Enable runtime profiling for block and mutex if needed
 		if p.profileType == ProfileTypeBlock {
@@ -163,9 +176,6 @@ func (p *Server) startFileBasedProfiling() error {
 		p.profFile = nil
 		return fmt.Errorf("%w: %s", ErrUnsupportedProfileType, p.profileType)
 	}
-
-	p.isFileBased = true
-	log.Info("Profiling started", "type", p.profileType, "file", p.config.File)
 	return nil
 }
 
@@ -230,42 +240,7 @@ func (p *Server) Stop() error {
 
 // stopFileBasedProfiling stops profiling and writes/closes the file based on the profile type.
 func (p *Server) stopFileBasedProfiling() error {
-	var writeErr error
-
-	switch p.profileType {
-	case ProfileTypeCPU:
-		pprof.StopCPUProfile()
-	case ProfileTypeTrace:
-		trace.Stop()
-	case ProfileTypeHeap:
-		if prof := pprof.Lookup("heap"); prof != nil {
-			writeErr = prof.WriteTo(p.profFile, 0)
-		}
-	case ProfileTypeAllocs:
-		if prof := pprof.Lookup("allocs"); prof != nil {
-			writeErr = prof.WriteTo(p.profFile, 0)
-		}
-	case ProfileTypeGoroutine:
-		if prof := pprof.Lookup("goroutine"); prof != nil {
-			writeErr = prof.WriteTo(p.profFile, 0)
-		}
-	case ProfileTypeBlock:
-		if prof := pprof.Lookup("block"); prof != nil {
-			writeErr = prof.WriteTo(p.profFile, 0)
-		}
-		runtime.SetBlockProfileRate(0) // Disable block profiling
-	case ProfileTypeMutex:
-		if prof := pprof.Lookup("mutex"); prof != nil {
-			writeErr = prof.WriteTo(p.profFile, 0)
-		}
-		runtime.SetMutexProfileFraction(0) // Disable mutex profiling
-	case ProfileTypeThreadCreate:
-		if prof := pprof.Lookup("threadcreate"); prof != nil {
-			writeErr = prof.WriteTo(p.profFile, 0)
-		}
-	default:
-		writeErr = fmt.Errorf("%w: %s", ErrUnsupportedProfileType, p.profileType)
-	}
+	writeErr := p.stopProfileAndWrite()
 
 	if writeErr != nil {
 		log.Error("Error writing profile data", "error", writeErr, "type", p.profileType, "file", p.config.File)
@@ -289,6 +264,44 @@ func (p *Server) stopFileBasedProfiling() error {
 	}
 	if writeErr != nil {
 		return writeErr
+	}
+	return nil
+}
+
+// stopProfileAndWrite stops profiling and writes profile data based on the profile type.
+func (p *Server) stopProfileAndWrite() error {
+	switch p.profileType {
+	case ProfileTypeCPU:
+		pprof.StopCPUProfile()
+		return nil
+	case ProfileTypeTrace:
+		trace.Stop()
+		return nil
+	case ProfileTypeHeap:
+		return p.writeProfile("heap")
+	case ProfileTypeAllocs:
+		return p.writeProfile("allocs")
+	case ProfileTypeGoroutine:
+		return p.writeProfile("goroutine")
+	case ProfileTypeBlock:
+		err := p.writeProfile("block")
+		runtime.SetBlockProfileRate(0) // Disable block profiling
+		return err
+	case ProfileTypeMutex:
+		err := p.writeProfile("mutex")
+		runtime.SetMutexProfileFraction(0) // Disable mutex profiling
+		return err
+	case ProfileTypeThreadCreate:
+		return p.writeProfile("threadcreate")
+	default:
+		return fmt.Errorf("%w: %s", ErrUnsupportedProfileType, p.profileType)
+	}
+}
+
+// writeProfile writes a profile to the file using pprof.Lookup.
+func (p *Server) writeProfile(profileName string) error {
+	if prof := pprof.Lookup(profileName); prof != nil {
+		return prof.WriteTo(p.profFile, 0)
 	}
 	return nil
 }
@@ -366,5 +379,6 @@ func ParseProfileType(s string) (ProfileType, error) {
 	if IsValidProfileType(profileType) {
 		return profileType, nil
 	}
-	return "", fmt.Errorf("%w: %s. Supported types: %v", ErrUnsupportedProfileType, s, GetSupportedProfileTypes())
+	return "", fmt.Errorf("%w: %s. Supported types: %v",
+		ErrUnsupportedProfileType, s, GetSupportedProfileTypes())
 }
