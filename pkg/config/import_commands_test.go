@@ -48,8 +48,8 @@ commands:
       - echo "imported2"
 `,
 			},
-			expectedCommands: []string{"imported-cmd1", "imported-cmd2", "main-cmd1", "main-cmd2"},
-			description:      "Explicit imports should merge commands (imported first, then main)",
+			expectedCommands: []string{"main-cmd1", "main-cmd2", "imported-cmd1", "imported-cmd2"},
+			description:      "Explicit imports should merge commands (main can override imported)",
 		},
 		{
 			name: "nested_imports_merge_all_commands",
@@ -81,8 +81,8 @@ commands:
       - echo "level2"
 `,
 			},
-			expectedCommands: []string{"level2-cmd", "level1-cmd", "main-cmd"},
-			description:      "Nested imports should merge all commands in correct order",
+			expectedCommands: []string{"main-cmd", "level1-cmd", "level2-cmd"},
+			description:      "Nested imports should merge all commands (main first, then imports)",
 		},
 		{
 			name: "atmos_d_merges_with_explicit_imports",
@@ -112,8 +112,8 @@ commands:
       - echo "atmos.d"
 `,
 			},
-			expectedCommands: []string{"atmos-d-cmd", "imported-cmd", "main-cmd"},
-			description:      ".atmos.d commands should merge with both imported and main commands",
+			expectedCommands: []string{"main-cmd", "atmos-d-cmd", "imported-cmd"},
+			description:      ".atmos.d commands should merge with both imported and main commands (main, .atmos.d, imports)",
 		},
 		{
 			name: "duplicate_command_names_deduplicated",
@@ -144,8 +144,8 @@ commands:
       - echo "imported only"
 `,
 			},
-			expectedCommands: []string{"shared-cmd", "imported-only", "main-only"},
-			description:      "Duplicate command names should be deduplicated (first occurrence wins)",
+			expectedCommands: []string{"shared-cmd", "main-only", "imported-only"},
+			description:      "Duplicate command names should be deduplicated (main version wins)",
 		},
 		{
 			name: "multiple_imports_merge_all",
@@ -176,8 +176,8 @@ commands:
       - echo "import2"
 `,
 			},
-			expectedCommands: []string{"import1-cmd", "import2-cmd", "main-cmd"},
-			description:      "Multiple imports should all merge their commands",
+			expectedCommands: []string{"main-cmd", "import1-cmd", "import2-cmd"},
+			description:      "Multiple imports should all merge their commands (main first)",
 		},
 		{
 			name: "cloudposse_style_centralized_config",
@@ -208,8 +208,8 @@ commands:
       - echo "Running org deployment"
 `,
 			},
-			expectedCommands: []string{"org-lint", "org-test", "org-deploy", "project-specific"},
-			description:      "CloudPosse-style centralized config should merge org commands with project commands",
+			expectedCommands: []string{"project-specific", "org-lint", "org-test", "org-deploy"},
+			description:      "CloudPosse-style: project commands appear first and can override org commands",
 		},
 	}
 
@@ -340,8 +340,8 @@ commands:
       - echo "cmd2"
 `,
 			},
-			expectedCommands: []string{"cmd1", "cmd2", "main-cmd"},
-			description:      "Glob pattern imports should merge all matched files' commands",
+			expectedCommands: []string{"main-cmd", "cmd1", "cmd2"},
+			description:      "Glob pattern imports should merge all matched files' commands (main first)",
 		},
 	}
 

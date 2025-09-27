@@ -217,7 +217,7 @@ settings:
 
 		err := processConfigImportsAndReapply(tempDir, v, content)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "merge main config")
+		assert.Contains(t, err.Error(), "parse main config")
 	})
 }
 

@@ -236,10 +236,8 @@ commands:
   - name: "complex-cmd"
     description: "A complex command with nested structure"
     steps:
-      - name: "step1"
-        command: "echo 'Step 1'"
-      - name: "step2"
-        command: "echo 'Step 2'"
+      - "echo 'Step 1'"
+      - "echo 'Step 2'"
     env:
       - KEY1: "value1"
       - KEY2: "value2"
@@ -256,12 +254,9 @@ commands:
   - name: "base-complex-cmd"
     description: "Base complex command"
     steps:
-      - name: "base-step1"
-        command: "terraform plan"
-      - name: "base-step2"
-        command: "terraform apply"
+      - "terraform plan"
+      - "terraform apply"
     verbose: true
-    component: "infrastructure"
 `,
 			},
 			expectedCount: 2,
@@ -342,12 +337,9 @@ commands:
   - name: "terraform-plan"
     description: "Run terraform plan with all the bells and whistles"
     steps:
-      - name: "init"
-        command: "terraform init"
-      - name: "validate"
-        command: "terraform validate"
-      - name: "plan"
-        command: "terraform plan -out=tfplan"
+      - "terraform init"
+      - "terraform validate"
+      - "terraform plan -out=tfplan"
     env:
       - TF_VAR_region: "us-east-1"
       - TF_VAR_env: "dev"
