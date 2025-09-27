@@ -351,7 +351,18 @@ func applyIgnorePatterns(input string, patterns []string) string {
 	return strings.Join(filteredLines, "\n") // Join the filtered lines back into a string
 }
 
-// Simulate TTY command execution with optional stdin and proper stdout redirection.
+// simulateTtyCommand executes a command in a pseudo-terminal (PTY) environment.
+//
+// IMPORTANT: PTY behavior merges stderr and stdout into a single stream!
+// This is not a bug - it's how terminals work. A terminal display shows all output
+// in one place; there's no separate "stderr screen" and "stdout screen".
+//
+// This means:
+// - All output (stdout + stderr) will be captured together
+// - The returned string contains both streams merged
+// - This matches real terminal behavior where users see everything in one stream
+//
+// For tests that need separate stderr/stdout streams, use non-TTY execution instead.
 func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, error) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
