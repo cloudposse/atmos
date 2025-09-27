@@ -1,6 +1,5 @@
 DEBU Set logs-level=trace logs-file=/dev/stderr
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Profiler is disabled
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU Telemetry event enqueued
