@@ -16,7 +16,7 @@ import (
 // UploadInstanceStatus uploads the drift detection result status to the pro API.
 func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error {
 	if dto == nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrFailedToUploadInstanceStatus, errUtils.ErrNilRequestDTO)
+		return fmt.Errorf("%w: %s", errUtils.ErrFailedToUploadInstanceStatus, errUtils.ErrNilRequestDTO)
 	}
 	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/instances/{stack}/{component}
 	targetURL := fmt.Sprintf("%s/%s/repos/%s/%s/instances/%s/%s",
@@ -45,22 +45,22 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "PATCH", targetURL, bytes.NewBuffer(data))
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToMakeRequest, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if err := handleAPIResponse(resp, "UploadInstanceStatus"); err != nil {
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadInstanceStatus, err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrFailedToUploadInstanceStatus, err)
 	}
 
 	log.Debug("Uploaded instance status.", "url", targetURL)

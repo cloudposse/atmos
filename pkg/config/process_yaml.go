@@ -14,7 +14,7 @@ import (
 const (
 	functionKey       = "function"
 	tagValueFormat    = "%s %s"
-	errorFormat       = "%w %v %v error %v"
+	errorFormat       = "%w: %v %v error %v"
 	failedToProcess   = "failed to process"
 	emptyValueWarning = "execute returned empty value"
 )

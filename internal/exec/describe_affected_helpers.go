@@ -297,7 +297,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 		err = w.Checkout(&checkoutOptions)
 		if err != nil {
-			if strings.Contains(err.Error(), "reference not found") {
+			if errors.Is(err, plumbing.ErrReferenceNotFound) {
 				errorMessage := fmt.Sprintf("the Git ref '%s' does not exist on the local filesystem"+
 					"\nmake sure it's correct and was cloned by Git from the remote, or use the '--clone-target-ref=true' flag to clone it"+
 					"\nrefer to https://atmos.tools/cli/commands/describe/affected for more details", ref)

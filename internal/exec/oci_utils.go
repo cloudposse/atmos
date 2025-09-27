@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/pkg/errors"
 
@@ -32,25 +33,25 @@ const (
 func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
 	tempDir, err := os.MkdirTemp("", uuid.New().String())
 	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrCreateTempDirectory, err)
 	}
 	defer removeTempDir(tempDir)
 
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		log.Error("Failed to parse OCI image reference", "image", imageName, "error", err)
-		return fmt.Errorf("invalid image reference: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidImageReference, err)
 	}
 
 	descriptor, err := pullImage(ref)
 	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrPullImage, err)
 	}
 
 	img, err := descriptor.Image()
 	if err != nil {
 		log.Error("Failed to get image descriptor", "image", imageName, "error", err)
-		return fmt.Errorf("cannot get a descriptor for the OCI image '%s': %w", imageName, err)
+		return fmt.Errorf("%w '%s': %s", errUtils.ErrGetImageDescriptor, imageName, err)
 	}
 
 	checkArtifactType(descriptor, imageName)
@@ -58,7 +59,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 	layers, err := img.Layers()
 	if err != nil {
 		log.Error("Failed to retrieve layers from OCI image", "image", imageName, "error", err)
-		return fmt.Errorf("failed to get image layers: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrGetImageLayers, err)
 	}
 
 	if len(layers) == 0 {
@@ -68,7 +69,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 
 	for i, layer := range layers {
 		if err := processLayer(layer, i, destDir); err != nil {
-			return fmt.Errorf("failed to process layer %d: %w", i, err)
+			return fmt.Errorf("%w %d: %s", errUtils.ErrProcessLayer, i, err)
 		}
 	}
 
@@ -113,13 +114,13 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	uncompressed, err := layer.Uncompressed()
 	if err != nil {
 		log.Error("Layer decompression failed", "index", index, "digest", layerDesc, "error", err)
-		return fmt.Errorf("layer decompression error: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrLayerDecompression, err)
 	}
 	defer uncompressed.Close()
 
 	if err := extractTarball(uncompressed, destDir); err != nil {
 		log.Error("Layer extraction failed", "index", index, "digest", layerDesc, "error", err)
-		return fmt.Errorf("tarball extraction error: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrTarballExtraction, err)
 	}
 
 	return nil

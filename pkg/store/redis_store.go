@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -165,7 +166,7 @@ func (s *RedisStore) GetKey(key string) (interface{}, error) {
 	// Get the value from Redis
 	resp := s.redisClient.Get(context.Background(), redisKey)
 	if resp.Err() != nil {
-		if resp.Err().Error() == "redis: nil" {
+		if errors.Is(resp.Err(), redis.Nil) {
 			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, redisKey, resp.Err())
 		}
 		return nil, fmt.Errorf(errFormat, ErrGetParameter, resp.Err())

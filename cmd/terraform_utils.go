@@ -20,12 +20,12 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	// Initialize the CLI config
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return fmt.Errorf("error initializing CLI config: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInitializeCLIConfig, err)
 	}
 
 	hooks, err := h.GetHooks(&atmosConfig, &info)
 	if err != nil {
-		return fmt.Errorf("error getting hooks: %w", err)
+		return fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrGetHooks, err)
 	}
 
 	if hooks != nil && hooks.HasHooks() {

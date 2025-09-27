@@ -12,6 +12,7 @@ import (
 	"github.com/agiledragon/gomonkey/v2"
 	cp "github.com/otiai10/copy"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -81,8 +82,8 @@ func TestCopyFile_SourceNotExist(t *testing.T) {
 	nonExistent := filepath.Join(os.TempDir(), "nonexistent.txt")
 	dstFile := filepath.Join(os.TempDir(), "dst.txt")
 	err := copyFile(nonExistent, dstFile)
-	if err == nil || !strings.Contains(err.Error(), "opening source file") {
-		t.Errorf("Expected error for non-existent source file, got %v", err)
+	if err == nil || !errors.Is(err, errUtils.ErrOpenFile) {
+		t.Errorf("Expected ErrOpenFile for non-existent source file, got %v", err)
 	}
 }
 
@@ -560,8 +561,8 @@ func TestProcessMatch_Directory(t *testing.T) {
 // TestProcessMatch_ErrorStat ensures processMatch returns an error when os.Stat fails.
 func TestProcessMatch_ErrorStat(t *testing.T) {
 	err := processMatch(os.TempDir(), os.TempDir(), "/nonexistentfile.txt", false, []string{})
-	if err == nil || !strings.Contains(err.Error(), "stating file") {
-		t.Errorf("Expected error for non-existent file in processMatch, got %v", err)
+	if err == nil || !errors.Is(err, errUtils.ErrStatFile) {
+		t.Errorf("Expected ErrStatFile for non-existent file in processMatch, got %v", err)
 	}
 }
 
@@ -575,8 +576,8 @@ func TestCopyDirRecursive_ReadDirError(t *testing.T) {
 		Included: []string{},
 	}
 	err := copyDirRecursive(ctx)
-	if err == nil || !strings.Contains(err.Error(), "reading directory") {
-		t.Errorf("Expected error for non-existent src dir, got %v", err)
+	if err == nil || !errors.Is(err, errUtils.ErrReadDirectory) {
+		t.Errorf("Expected ErrReadDirectory for non-existent src dir, got %v", err)
 	}
 }
 
@@ -689,8 +690,8 @@ func TestProcessDirEntry_InfoError(t *testing.T) {
 		Included: []string{},
 	}
 	err := processDirEntry(fakeDirEntry{name: "error.txt", err: errForcedInfoError}, ctx)
-	if err == nil || !strings.Contains(err.Error(), "getting info") {
-		t.Errorf("Expected error for Info() failure, got %v", err)
+	if err == nil || !errors.Is(err, errUtils.ErrStatFile) {
+		t.Errorf("Expected ErrStatFile for Info() failure, got %v", err)
 	}
 }
 
@@ -714,8 +715,8 @@ func TestCopyFile_FailCreateDir(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 	dstFile := filepath.Join(tmpFile.Name(), "test.txt")
 	err = copyFile(srcFile, dstFile)
-	if err == nil || !strings.Contains(err.Error(), "creating destination directory") {
-		t.Errorf("Expected error creating destination directory, got %v", err)
+	if err == nil || !errors.Is(err, errUtils.ErrCreateDirectory) {
+		t.Errorf("Expected ErrCreateDirectory when creating destination directory fails, got %v", err)
 	}
 }
 
@@ -747,8 +748,8 @@ func TestCopyFile_FailChmod(t *testing.T) {
 	if err == nil {
 		t.Skipf("Skipping test: os.Chmod not effective on this platform")
 	}
-	if !strings.Contains(err.Error(), "setting permissions") {
-		t.Errorf("Expected chmod error, got %v", err)
+	if !errors.Is(err, errUtils.ErrSetPermissions) {
+		t.Errorf("Expected ErrSetPermissions for chmod failure, got %v", err)
 	}
 }
 
@@ -807,8 +808,8 @@ func TestProcessPrefixEntry_InfoError(t *testing.T) {
 		err:  errForcedInfoError,
 	}
 	err := processPrefixEntry(fakeEntry, ctx)
-	if err == nil || !strings.Contains(err.Error(), "getting info") {
-		t.Errorf("Expected error getting info, got %v", err)
+	if err == nil || !errors.Is(err, errUtils.ErrStatFile) {
+		t.Errorf("Expected ErrStatFile when getting info fails, got %v", err)
 	}
 }
 
@@ -876,8 +877,8 @@ func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
 	defer patches.Reset()
 
 	err = processPrefixEntry(fakeEntry, ctx)
-	if err == nil || !strings.Contains(err.Error(), "creating directory") {
-		t.Errorf("Expected error creating directory, got %v", err)
+	if err == nil || !errors.Is(err, errUtils.ErrCreateDirectory) {
+		t.Errorf("Expected ErrCreateDirectory when creating directory fails, got %v", err)
 	}
 }
 
@@ -964,7 +965,7 @@ func TestProcessMatch_RelPathError(t *testing.T) {
 	defer patches.Reset()
 
 	err = processMatch(srcDir, dstPath, filePath, false, []string{})
-	if err == nil || !strings.Contains(err.Error(), "computing relative path") {
-		t.Errorf("Expected relative path error, got %v", err)
+	if err == nil || !errors.Is(err, errUtils.ErrComputeRelativePath) {
+		t.Errorf("Expected ErrComputeRelativePath, got %v", err)
 	}
 }

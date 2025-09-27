@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // DisplayDocs displays component documentation directly through the terminal or
@@ -23,7 +25,7 @@ func DisplayDocs(componentDocs string, usePager bool) error {
 
 	args := strings.Fields(pagerCmd)
 	if len(args) == 0 {
-		return fmt.Errorf("invalid pager command")
+		return errUtils.ErrInvalidPagerCommand
 	}
 
 	cmd := exec.Command(args[0], args[1:]...)

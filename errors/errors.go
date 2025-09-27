@@ -5,9 +5,11 @@ import (
 )
 
 const (
-	ErrWrappingFormat       = "%w: %w"
-	ErrStringWrappingFormat = "%w: %s"
-	ErrValueWrappingFormat  = "%w: %v"
+	ErrWrappingFormat           = "%w: %w"
+	ErrStringWrappingFormat     = "%w: %s"
+	ErrValueWrappingFormat      = "%w: %v"
+	ErrPathWrappingFormat       = "%w %q: %s"
+	ErrPathStringWrappingFormat = "%w %s: %s"
 )
 
 var (
@@ -140,4 +142,45 @@ var (
 	ErrCacheWrite     = errors.New("cache write failed")
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
+
+	// File operation errors.
+	ErrCopyFile            = errors.New("failed to copy file")
+	ErrCreateDirectory     = errors.New("failed to create directory")
+	ErrOpenFile            = errors.New("failed to open file")
+	ErrStatFile            = errors.New("failed to stat file")
+	ErrRemoveDirectory     = errors.New("failed to remove directory")
+	ErrSetPermissions      = errors.New("failed to set permissions")
+	ErrReadDirectory       = errors.New("failed to read directory")
+	ErrComputeRelativePath = errors.New("failed to compute relative path")
+
+	// OCI/Container image errors.
+	ErrCreateTempDirectory   = errors.New("failed to create temp directory")
+	ErrInvalidImageReference = errors.New("invalid image reference")
+	ErrPullImage             = errors.New("failed to pull image")
+	ErrGetImageDescriptor    = errors.New("cannot get a descriptor for the OCI image")
+	ErrGetImageLayers        = errors.New("failed to get image layers")
+	ErrProcessLayer          = errors.New("failed to process layer")
+	ErrLayerDecompression    = errors.New("layer decompression error")
+	ErrTarballExtraction     = errors.New("tarball extraction error")
+
+	// Initialization and configuration errors.
+	ErrInitializeCLIConfig = errors.New("error initializing CLI config")
+	ErrGetHooks            = errors.New("error getting hooks")
+	ErrSetFlag             = errors.New("failed to set flag")
+	ErrVersionMismatch     = errors.New("version mismatch")
+	ErrCommandNil          = errors.New("command cannot be nil")
+
+	// Download and client errors.
+	ErrCreateDownloadClient    = errors.New("failed to create download client")
+	ErrMergeConfiguration      = errors.New("failed to merge configuration")
+	ErrPreprocessYAMLFunctions = errors.New("failed to preprocess YAML functions")
+	ErrMergeEmbeddedConfig     = errors.New("failed to merge embedded config")
+
+	// Template and documentation errors.
+	ErrGenerateTerraformDocs = errors.New("failed to generate terraform docs")
+	ErrMergeInputYAMLs       = errors.New("failed to merge input YAMLs")
+	ErrRenderTemplate        = errors.New("failed to render template with datasources")
+	ErrResolveOutputPath     = errors.New("failed to resolve output path")
+	ErrWriteOutput           = errors.New("failed to write output")
+	ErrInvalidPagerCommand   = errors.New("invalid pager command")
 )
