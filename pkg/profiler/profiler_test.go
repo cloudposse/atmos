@@ -1,12 +1,16 @@
 package profiler
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -484,5 +488,258 @@ func TestDefaultProfileType(t *testing.T) {
 	// Check that the profile file was created
 	if _, err := os.Stat(profileFile); os.IsNotExist(err) {
 		t.Errorf("Profile file was not created: %s", profileFile)
+	}
+}
+
+func TestConfigWithAllFields(t *testing.T) {
+	config := Config{
+		Enabled:     true,
+		Port:        8080,
+		Host:        "0.0.0.0",
+		File:        "/tmp/test.prof",
+		ProfileType: ProfileTypeHeap,
+	}
+
+	profiler := New(config)
+	if profiler == nil {
+		t.Fatal("New() returned nil profiler")
+	}
+
+	// Verify all fields are set correctly
+	if profiler.config.Enabled != config.Enabled {
+		t.Errorf("Expected enabled %v, got %v", config.Enabled, profiler.config.Enabled)
+	}
+	if profiler.config.Port != config.Port {
+		t.Errorf("Expected port %d, got %d", config.Port, profiler.config.Port)
+	}
+	if profiler.config.Host != config.Host {
+		t.Errorf("Expected host %s, got %s", config.Host, profiler.config.Host)
+	}
+	if profiler.config.File != config.File {
+		t.Errorf("Expected file %s, got %s", config.File, profiler.config.File)
+	}
+	if profiler.config.ProfileType != config.ProfileType {
+		t.Errorf("Expected profile type %s, got %s", config.ProfileType, profiler.config.ProfileType)
+	}
+}
+
+func TestConfigSerialization(t *testing.T) {
+	originalConfig := Config{
+		Enabled:     true,
+		Port:        9090,
+		Host:        "127.0.0.1",
+		File:        "test.prof",
+		ProfileType: ProfileTypeTrace,
+	}
+
+	// Test JSON serialization/deserialization
+	t.Run("JSON", func(t *testing.T) {
+		jsonData, err := json.Marshal(originalConfig)
+		if err != nil {
+			t.Fatalf("Failed to marshal config to JSON: %v", err)
+		}
+
+		var config Config
+		err = json.Unmarshal(jsonData, &config)
+		if err != nil {
+			t.Fatalf("Failed to unmarshal config from JSON: %v", err)
+		}
+
+		if !reflect.DeepEqual(originalConfig, config) {
+			t.Errorf("Config mismatch after JSON round-trip.\nOriginal: %+v\nResult: %+v", originalConfig, config)
+		}
+	})
+
+	// Test YAML serialization/deserialization
+	t.Run("YAML", func(t *testing.T) {
+		yamlData, err := yaml.Marshal(originalConfig)
+		if err != nil {
+			t.Fatalf("Failed to marshal config to YAML: %v", err)
+		}
+
+		var config Config
+		err = yaml.Unmarshal(yamlData, &config)
+		if err != nil {
+			t.Fatalf("Failed to unmarshal config from YAML: %v", err)
+		}
+
+		if !reflect.DeepEqual(originalConfig, config) {
+			t.Errorf("Config mismatch after YAML round-trip.\nOriginal: %+v\nResult: %+v", originalConfig, config)
+		}
+	})
+}
+
+func TestConfigWithProfileTypeString(t *testing.T) {
+	// Test that ProfileType can be set from string (for environment variable support)
+	tests := []struct {
+		name        string
+		profileType string
+		expected    ProfileType
+		expectError bool
+	}{
+		{"CPU", "cpu", ProfileTypeCPU, false},
+		{"Heap", "heap", ProfileTypeHeap, false},
+		{"Allocs", "allocs", ProfileTypeAllocs, false},
+		{"Goroutine", "goroutine", ProfileTypeGoroutine, false},
+		{"Block", "block", ProfileTypeBlock, false},
+		{"Mutex", "mutex", ProfileTypeMutex, false},
+		{"ThreadCreate", "threadcreate", ProfileTypeThreadCreate, false},
+		{"Trace", "trace", ProfileTypeTrace, false},
+		{"Invalid", "invalid", "", true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Simulate how environment variable would be processed
+			parsed, err := ParseProfileType(test.profileType)
+			if test.expectError {
+				if err == nil {
+					t.Errorf("Expected error for profile type %s, but got none", test.profileType)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error for profile type %s: %v", test.profileType, err)
+				return
+			}
+
+			if parsed != test.expected {
+				t.Errorf("Expected profile type %s, got %s", test.expected, parsed)
+			}
+
+			// Create config with parsed type
+			config := Config{
+				Enabled:     true,
+				File:        "test.prof",
+				ProfileType: parsed,
+			}
+
+			profiler := New(config)
+			if profiler.config.ProfileType != test.expected {
+				t.Errorf("Config profile type mismatch: expected %s, got %s", test.expected, profiler.config.ProfileType)
+			}
+		})
+	}
+}
+
+func TestAllProfileTypesFileCreation(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "profiler_all_types_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	profileTypes := GetSupportedProfileTypes()
+
+	for _, profileType := range profileTypes {
+		t.Run(string(profileType), func(t *testing.T) {
+			var fileExt string
+			if profileType == ProfileTypeTrace {
+				fileExt = ".out"
+			} else {
+				fileExt = ".prof"
+			}
+
+			profileFile := filepath.Join(tempDir, string(profileType)+fileExt)
+			config := Config{
+				Enabled:     true,
+				File:        profileFile,
+				ProfileType: profileType,
+			}
+
+			profiler := New(config)
+
+			// Start profiling
+			err = profiler.Start()
+			if err != nil {
+				t.Fatalf("Failed to start %s profiling: %v", profileType, err)
+			}
+
+			if !profiler.IsRunning() {
+				t.Errorf("Profiler should be running for %s", profileType)
+			}
+
+			// Let it run for a short time
+			time.Sleep(50 * time.Millisecond)
+
+			// Stop profiling
+			err = profiler.Stop()
+			if err != nil {
+				t.Fatalf("Failed to stop %s profiling: %v", profileType, err)
+			}
+
+			if profiler.IsRunning() {
+				t.Errorf("Profiler should not be running after stop for %s", profileType)
+			}
+
+			// Check that the profile file was created
+			if _, err := os.Stat(profileFile); os.IsNotExist(err) {
+				t.Errorf("Profile file was not created for %s: %s", profileType, profileFile)
+			}
+		})
+	}
+}
+
+func TestProfileTypeDefaultHandling(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "profiler_default_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test with empty ProfileType (should default to CPU)
+	profileFile := filepath.Join(tempDir, "default.prof")
+	config := Config{
+		Enabled: true,
+		File:    profileFile,
+		// ProfileType intentionally left empty
+	}
+
+	profiler := New(config)
+
+	// The profiler should internally default to CPU when ProfileType is empty
+	err = profiler.Start()
+	if err != nil {
+		t.Fatalf("Failed to start profiling with empty ProfileType: %v", err)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	err = profiler.Stop()
+	if err != nil {
+		t.Fatalf("Failed to stop profiling: %v", err)
+	}
+
+	// Check that the profile file was created
+	if _, err := os.Stat(profileFile); os.IsNotExist(err) {
+		t.Errorf("Profile file was not created: %s", profileFile)
+	}
+}
+
+func TestConfiguredProfilerDisabled(t *testing.T) {
+	config := Config{
+		Enabled:     false,
+		Port:        8080,
+		Host:        "localhost",
+		File:        "disabled.prof",
+		ProfileType: ProfileTypeHeap,
+	}
+
+	profiler := New(config)
+
+	// Even with file configured, disabled profiler should not start
+	err := profiler.Start()
+	if err != nil {
+		t.Fatalf("Start() should not fail when profiler is disabled: %v", err)
+	}
+
+	if profiler.IsRunning() {
+		t.Error("Profiler should not be running when disabled")
+	}
+
+	// File should not be created
+	if _, err := os.Stat(config.File); !os.IsNotExist(err) {
+		t.Error("Profile file should not be created when profiler is disabled")
 	}
 }
