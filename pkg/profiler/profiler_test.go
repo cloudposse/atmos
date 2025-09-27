@@ -752,7 +752,7 @@ func TestProfilerStateResetOnErrors(t *testing.T) {
 
 	// Create a read-only directory to force file creation failure
 	readOnlyDir := filepath.Join(tempDir, "readonly")
-	if err := os.Mkdir(readOnlyDir, 0444); err != nil {
+	if err := os.Mkdir(readOnlyDir, 0o444); err != nil {
 		t.Fatalf("Failed to create read-only dir: %v", err)
 	}
 
