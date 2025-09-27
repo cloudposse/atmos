@@ -150,15 +150,15 @@ func TestJoinPath_WindowsEdgeCases(t *testing.T) {
 			name:         "Leading backslash on provided",
 			basePath:     `C:\project`,
 			providedPath: `\components\terraform`,
-			expected:     `C:\project\components\terraform`,
-			description:  "Leading backslash on relative path",
+			expected:     `\components\terraform`,
+			description:  "Leading backslash indicates absolute path on Windows",
 		},
 		{
-			name:         "Multiple backslashes",
+			name:         "Multiple backslashes (UNC path)",
 			basePath:     `C:\\project\\`,
 			providedPath: `\\components\\terraform`,
-			expected:     `C:\\project\\\\components\\terraform`,
-			description:  "Multiple separators preserved (Go doesn't clean until Clean() called)",
+			expected:     `\\components\\terraform`,
+			description:  "UNC path format treated as absolute",
 		},
 
 		// ============ MIXED FORWARD AND BACKWARD SLASHES ============
@@ -173,15 +173,15 @@ func TestJoinPath_WindowsEdgeCases(t *testing.T) {
 			name:         "Mixed slashes",
 			basePath:     `C:\project`,
 			providedPath: `components/terraform/module`,
-			expected:     `C:\project\components/terraform/module`,
-			description:  "Mixed separators preserved",
+			expected:     `C:\project\components\terraform\module`,
+			description:  "filepath.Join normalizes to OS separator",
 		},
 		{
 			name:         "Unix-style absolute on Windows",
 			basePath:     `C:\project`,
 			providedPath: `/usr/local/bin`,
-			expected:     `C:\project\usr/local/bin`,
-			description:  "Unix absolute treated as relative on Windows",
+			expected:     `/usr/local/bin`,
+			description:  "Unix absolute path on Windows returns unchanged",
 		},
 
 		// ============ WINDOWS LONG PATH SUPPORT ============

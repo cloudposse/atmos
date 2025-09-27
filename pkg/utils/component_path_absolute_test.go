@@ -113,7 +113,7 @@ func TestGetComponentPath_AbsolutePathScenarios(t *testing.T) {
 				"Component path should be clean")
 
 			// Check for path duplication
-			if tt.shouldNotHaveDuplication { //nolint:nestif
+			if tt.shouldNotHaveDuplication {
 				assert.NotContains(t, componentPath, "/.//",
 					"Component path should not contain /.// pattern")
 				assert.NotContains(t, componentPath, "//",
@@ -124,22 +124,17 @@ func TestGetComponentPath_AbsolutePathScenarios(t *testing.T) {
 					"/home/runner/_work/infrastructure/infrastructure/.//home/runner/_work/infrastructure/infrastructure",
 					"Component path should not contain the duplication pattern from the bug")
 
-				// Check that base path doesn't appear twice
+				// Check that the full base path doesn't appear twice consecutively
 				if filepath.IsAbs(tt.basePath) && tt.basePath != "/" {
-					// Count how many times a unique part of the base path appears
-					baseName := filepath.Base(tt.basePath)
-					if baseName != "." && baseName != "/" {
-						// This is a simplistic check, but helps catch obvious duplications
-						pathParts := filepath.SplitList(componentPath)
-						count := 0
-						for _, part := range pathParts {
-							if part == baseName {
-								count++
-							}
-						}
-						assert.LessOrEqual(t, count, 1,
-							"Base path component should not be duplicated")
-					}
+					// Look for the base path appearing twice with path separators
+					duplicatedPath := filepath.Join(tt.basePath, tt.basePath)
+					assert.NotContains(t, componentPath, duplicatedPath,
+						"Base path should not be duplicated consecutively")
+
+					// Also check with ./ or .// patterns that might indicate duplication
+					duplicatedWithDot := tt.basePath + "/./" + tt.basePath
+					assert.NotContains(t, componentPath, duplicatedWithDot,
+						"Base path should not be duplicated with /./ pattern")
 				}
 			}
 

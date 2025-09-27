@@ -265,6 +265,9 @@ func TestMetadataComponent_PathHandling(t *testing.T) {
 					finalComponent,
 				)
 
+				// Fail fast if GetComponentPath returns an error
+				require.NoError(t, err)
+
 				// If metadata.component is absolute, the path should be that absolute path
 				if filepath.IsAbs(tt.metadataComponent) {
 					// When metadata.component is absolute, it should be used as-is (with folder prefix if needed)
@@ -277,7 +280,7 @@ func TestMetadataComponent_PathHandling(t *testing.T) {
 						assert.Contains(t, componentPath, filepath.Clean(tt.metadataComponent),
 							"Component path should contain the absolute metadata.component")
 					}
-				} else if err == nil {
+				} else {
 					// For relative paths, check no duplication
 					assert.NotContains(t, componentPath, "/.//",
 						"Path should not contain /.// pattern")
