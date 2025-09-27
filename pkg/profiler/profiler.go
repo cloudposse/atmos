@@ -271,19 +271,25 @@ func (p *Server) stopFileBasedProfiling() error {
 		log.Error("Error writing profile data", "error", writeErr, "type", p.profileType, "file", p.config.File)
 	}
 
+	var closeErr error
 	if err := p.profFile.Close(); err != nil {
 		log.Error("Error closing profile file", "error", err, "file", p.config.File)
-		return err
+		closeErr = err
 	}
 
-	if writeErr != nil {
-		return writeErr
-	}
-
+	// Always reset profiler state, even on errors
 	log.Info("Profiling completed", "type", p.profileType, "file", p.config.File)
 	p.profFile = nil
 	p.isFileBased = false
 	p.cancel()
+
+	// Return the first error encountered, prioritizing close errors over write errors
+	if closeErr != nil {
+		return closeErr
+	}
+	if writeErr != nil {
+		return writeErr
+	}
 	return nil
 }
 

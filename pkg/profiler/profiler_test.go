@@ -742,3 +742,68 @@ func TestConfiguredProfilerDisabled(t *testing.T) {
 		t.Error("Profile file should not be created when profiler is disabled")
 	}
 }
+
+func TestProfilerStateResetOnErrors(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "profiler_state_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create a read-only directory to force file creation failure
+	readOnlyDir := filepath.Join(tempDir, "readonly")
+	if err := os.Mkdir(readOnlyDir, 0444); err != nil {
+		t.Fatalf("Failed to create read-only dir: %v", err)
+	}
+
+	config := Config{
+		Enabled:     true,
+		File:        filepath.Join(readOnlyDir, "test.prof"),
+		ProfileType: ProfileTypeHeap,
+	}
+
+	profiler := New(config)
+
+	// This should fail due to permission error
+	err = profiler.Start()
+	if err == nil {
+		t.Error("Start() should fail when unable to create profile file")
+	}
+
+	// Profiler should not be running after failure
+	if profiler.IsRunning() {
+		t.Error("Profiler should not be running after start failure")
+	}
+
+	// Change to a valid directory and ensure it can start again
+	config.File = filepath.Join(tempDir, "valid.prof")
+	profiler.config = config
+
+	err = profiler.Start()
+	if err != nil {
+		t.Fatalf("Start() should succeed with valid file path: %v", err)
+	}
+
+	if !profiler.IsRunning() {
+		t.Error("Profiler should be running after successful start")
+	}
+
+	// Stop should succeed and reset state properly
+	err = profiler.Stop()
+	if err != nil {
+		t.Fatalf("Stop() should succeed: %v", err)
+	}
+
+	if profiler.IsRunning() {
+		t.Error("Profiler should not be running after stop")
+	}
+
+	// Should be able to start again after stop
+	err = profiler.Start()
+	if err != nil {
+		t.Fatalf("Start() should succeed after previous stop: %v", err)
+	}
+
+	// Clean up
+	profiler.Stop()
+}
