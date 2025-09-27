@@ -16,6 +16,28 @@ var (
 	ErrUnknownComponentType = errors.New("unknown component type")
 )
 
+// buildComponentPath builds the component path handling absolute vs relative cases.
+func buildComponentPath(basePath, componentFolderPrefix, component string) string {
+	// Check if the component itself is an absolute path
+	if component != "" && filepath.IsAbs(component) {
+		// If component is absolute, use it as the base and only append folder prefix if needed
+		if componentFolderPrefix != "" {
+			return filepath.Join(component, componentFolderPrefix)
+		}
+		return component
+	}
+
+	// Normal case: build path from base, folder prefix, and component
+	pathParts := []string{basePath}
+	if componentFolderPrefix != "" {
+		pathParts = append(pathParts, componentFolderPrefix)
+	}
+	if component != "" {
+		pathParts = append(pathParts, component)
+	}
+	return filepath.Join(pathParts...)
+}
+
 // getBasePathForComponentType returns the base path for a specific component type.
 func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, componentType string) (string, string, error) {
 	var basePath string
@@ -83,16 +105,7 @@ func GetComponentPath(atmosConfig *schema.AtmosConfiguration, componentType stri
 	}
 
 	// Build the full component path.
-	// componentFolderPrefix might be empty, component might have subdirectories.
-	pathParts := []string{basePath}
-	if componentFolderPrefix != "" {
-		pathParts = append(pathParts, componentFolderPrefix)
-	}
-	if component != "" {
-		pathParts = append(pathParts, component)
-	}
-
-	componentPath := filepath.Join(pathParts...)
+	componentPath := buildComponentPath(basePath, componentFolderPrefix, component)
 
 	// Clean the path to handle any redundant separators or relative components.
 	cleanPath := filepath.Clean(componentPath)
