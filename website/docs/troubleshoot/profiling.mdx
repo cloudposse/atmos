@@ -95,6 +95,44 @@ atmos terraform plan vpc -s plat-ue2-dev --profiler-enabled
     <dd>Port for profiling server (default: 6060)</dd>
 </dl>
 
+### Environment Variables
+
+All profiling flags can be set using environment variables for easier CI/CD integration:
+
+<dl>
+    <dt>`ATMOS_PROFILER_ENABLED`</dt>
+    <dd>Enable pprof profiling server (equivalent to `--profiler-enabled`)</dd>
+
+    <dt>`ATMOS_PROFILER_HOST`</dt>
+    <dd>Host address for profiling server (equivalent to `--profiler-host`)</dd>
+
+    <dt>`ATMOS_PROFILER_PORT`</dt>
+    <dd>Port for profiling server (equivalent to `--profiler-port`)</dd>
+
+    <dt>`ATMOS_PROFILE_FILE`</dt>
+    <dd>File path for file-based profiling (equivalent to `--profile-file`)</dd>
+
+    <dt>`ATMOS_PROFILE_TYPE`</dt>
+    <dd>Profile type for file-based profiling (equivalent to `--profile-type`)</dd>
+</dl>
+
+**Examples:**
+```bash
+# File-based profiling via environment variables
+export ATMOS_PROFILE_FILE=cpu.prof
+export ATMOS_PROFILE_TYPE=cpu
+atmos terraform plan vpc -s prod
+
+# Server-based profiling via environment variables
+export ATMOS_PROFILER_ENABLED=true
+export ATMOS_PROFILER_PORT=8080
+atmos terraform apply vpc -s prod
+
+# Combined environment and CLI usage
+export ATMOS_PROFILER_HOST=0.0.0.0
+atmos terraform plan vpc -s prod --profiler-enabled --profiler-port=9090
+```
+
 ### Configuration File
 
 You can also enable profiling through your `atmos.yaml` configuration:
@@ -109,6 +147,12 @@ You can also enable profiling through your `atmos.yaml` configuration:
       profile_type: "cpu"           # Optional: profile type for file-based profiling
     ```
 </File>
+
+**Configuration Precedence:**
+1. Command-line flags (highest priority)
+2. Environment variables
+3. Configuration file (`atmos.yaml`)
+4. Default values (lowest priority)
 
 ## Analyzing Profile Data
 
@@ -312,6 +356,25 @@ go tool pprof -list=functionName cpu.prof
 ```shell
 # Use a different port
 atmos command --profiler-enabled --profiler-port=7070
+```
+
+**Environment variable usage:**
+```shell
+# CI/CD environment setup for profiling
+export ATMOS_PROFILE_FILE=/var/log/atmos-cpu.prof
+export ATMOS_PROFILE_TYPE=cpu
+atmos terraform apply --auto-approve
+
+# Different profile types via environment variables
+export ATMOS_PROFILE_TYPE=heap
+export ATMOS_PROFILE_FILE=memory-analysis.prof
+atmos describe stacks
+
+# Server mode via environment variables
+export ATMOS_PROFILER_ENABLED=true
+export ATMOS_PROFILER_HOST=0.0.0.0
+export ATMOS_PROFILER_PORT=6060
+atmos terraform plan vpc -s prod
 ```
 
 ### Understanding Profile Data
