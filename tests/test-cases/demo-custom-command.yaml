@@ -13,8 +13,6 @@ tests:
       diff: []
       stdout:
         - "Hello, Neo\n"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos greet without args
@@ -29,6 +27,4 @@ tests:
       diff: []
       stdout:
         - "Hello, John Doe\n"
-      stderr:
-        - "^$"
       exit_code: 0

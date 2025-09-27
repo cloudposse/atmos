@@ -19,7 +19,6 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -498,8 +497,6 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
-
-	telemetry.PrintTelemetryDisclosure()
 
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()

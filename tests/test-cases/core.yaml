@@ -61,7 +61,7 @@ tests:
         - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
         - "but the directory does not exist."
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 1
 
   - name: atmos docs
@@ -78,4 +78,4 @@ tests:
       stdout:
         - "Opening default browser to 'https://atmos.tools'."
       stderr:
-        - "^$"
+        - "Telemetry Enabled"

@@ -4,7 +4,11 @@ package utils
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
+
+	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -14,10 +18,10 @@ import (
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
-// PrintfMarkdown prints a message in Markdown format.
-func PrintfMarkdown(format string, a ...interface{}) {
+// printfMarkdownTo prints a message in Markdown format to the specified writer.
+func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 	if render == nil {
-		_, err := os.Stdout.WriteString(fmt.Sprintf(format, a...))
+		_, err := fmt.Fprintf(w, format, a...)
 		errUtils.CheckErrorAndPrint(err, "", "")
 		return
 	}
@@ -28,8 +32,36 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	if renderErr != nil {
 		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
 	}
-	_, err := os.Stdout.WriteString(fmt.Sprint(md + "\n"))
+
+	// Check if output is to a terminal
+	isTerminal := false
+	if file, ok := w.(*os.File); ok {
+		isTerminal = term.IsTerminal(int(file.Fd()))
+	}
+
+	// Trim trailing spaces from each line when not outputting to a terminal
+	if !isTerminal {
+		lines := strings.Split(md, "\n")
+		for i, line := range lines {
+			lines[i] = strings.TrimRight(line, " \t")
+		}
+		md = strings.Join(lines, "\n")
+	}
+
+	_, err := fmt.Fprint(w, md+"\n")
 	errUtils.CheckErrorAndPrint(err, "", "")
+}
+
+// PrintfMarkdown prints a message in Markdown format.
+func PrintfMarkdown(format string, a ...interface{}) {
+	printfMarkdownTo(os.Stdout, format, a...)
+}
+
+// PrintfMarkdownToTUI prints a message in Markdown format to stderr.
+// This is useful for notices, warnings, and other messages that should not
+// interfere with stdout when piping command output.
+func PrintfMarkdownToTUI(format string, a ...interface{}) {
+	printfMarkdownTo(os.Stderr, format, a...)
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.

@@ -189,6 +189,49 @@ See [Testing Strategy PRD](../docs/prd/testing-strategy.md) for the complete des
 
 Our convention is to implement a test-case configuration file per scenario. Then place all smoke tests related to that scenario in the file.
 
+### PTY (Pseudo-Terminal) Behavior
+
+#### Important: Understanding TTY vs Non-TTY Tests
+
+Tests can run in two modes:
+- **TTY mode** (`tty: true`): Uses a pseudo-terminal (PTY) to emulate a real terminal
+- **Non-TTY mode** (`tty: false`): Standard pipes without terminal emulation
+
+**Critical Difference**: In PTY/TTY mode, **stderr and stdout are merged into a single stream** that appears in stdout. This is not a bug - it's how terminals work!
+
+Think of it like a monitor display - there's no separate "stderr screen" and "stdout screen". Everything appears on the same display. This is why:
+
+1. In TTY test snapshots (e.g., `TestCLICommands_atmos_list_instances.stdout.golden`), you'll see telemetry notices, tables, and error messages all in stdout
+2. In non-TTY test snapshots (e.g., `TestCLICommands_atmos_list_instances_no_tty.stderr.golden`), stderr and stdout are properly separated
+
+#### Why This Matters
+
+- **For TTY tests**: Expect all output (including stderr content like telemetry notices) to appear in the stdout snapshot
+- **For non-TTY tests**: stderr and stdout are kept separate, enabling proper piping and redirection
+- **Golden snapshots**: Will differ between TTY and non-TTY modes, which is why we maintain separate snapshots for each
+
+#### Example Test Configuration
+
+```yaml
+tests:
+  - name: atmos list instances        # TTY version
+    tty: true                         # PTY merges stderr→stdout
+    snapshot: true
+    expect:
+      stdout:                         # Contains BOTH stdout and stderr
+        - "Notice: Telemetry"         # stderr content appears here
+        - "Component.*Stack"          # stdout content
+
+  - name: atmos list instances no tty # Non-TTY version
+    tty: false                        # Keeps streams separate
+    snapshot: true
+    expect:
+      stdout:                         # Only actual stdout
+        - "Component,Stack"           # CSV output
+      stderr:                         # Only actual stderr
+        - "Notice: Telemetry"         # Telemetry notice
+```
+
 ### Environment Variables
 
 The tests will automatically set some environment variables:

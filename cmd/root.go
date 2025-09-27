@@ -214,6 +214,12 @@ func Execute() error {
 		}
 	}
 
+	// Print telemetry disclosure if needed (skip for completion commands)
+	// We need to show this before command execution
+	if !isCompletionCommand() {
+		telemetry.PrintTelemetryDisclosure()
+	}
+
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
@@ -225,6 +231,34 @@ func Execute() error {
 		}
 	}
 	return err
+}
+
+// isCompletionCommand checks if the current invocation is for shell completion.
+// This includes both user-visible completion commands and Cobra's internal
+// hidden completion commands (__complete, __completeNoDesc).
+func isCompletionCommand() bool {
+	// Check if running completion commands
+	args := os.Args
+	if len(args) > 1 {
+		// Check for the regular completion command
+		if args[1] == "completion" {
+			return true
+		}
+		// Check for Cobra's hidden shell completion commands
+		// These are used internally by shell completion scripts
+		if args[1] == "__complete" || args[1] == "__completeNoDesc" {
+			return true
+		}
+	}
+
+	// Also check for shell completion environment variables
+	// Cobra sets these when generating completions
+	//nolint:forbidigo // These are external shell variables, not Atmos config
+	if os.Getenv("COMP_LINE") != "" || os.Getenv("_ARGCOMPLETE") != "" {
+		return true
+	}
+
+	return false
 }
 
 func getInvalidCommandName(input string) string {
@@ -310,8 +344,6 @@ func initCobraConfig() {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
-			telemetry.PrintTelemetryDisclosure()
-
 			if err := oldUsageFunc(command); err != nil {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
@@ -342,7 +374,6 @@ func initCobraConfig() {
 			fmt.Println()
 			err := tuiUtils.PrintStyledText("ATMOS")
 			errUtils.CheckErrorPrintAndExit(err, "", "")
-			telemetry.PrintTelemetryDisclosure()
 
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {

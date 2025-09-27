@@ -22,10 +22,6 @@ import (
 )
 
 var (
-	// Error constants.
-	ErrInvalidHooksSection          = errors.New("invalid 'hooks' section in the file")
-	ErrInvalidTerraformHooksSection = errors.New("invalid 'terraform.hooks' section in the file")
-
 	// File content sync map.
 	getFileContentSyncMap = sync.Map{}
 
@@ -711,7 +707,7 @@ func ProcessStackConfig(
 	if i, ok := config["hooks"]; ok {
 		globalHooksSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, errors.Wrapf(ErrInvalidHooksSection, " '%s'", stackName)
+			return nil, errors.Wrapf(errUtils.ErrInvalidHooksSection, " '%s'", stackName)
 		}
 	}
 
@@ -775,7 +771,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection["hooks"]; ok {
 		terraformHooks, ok = i.(map[string]any)
 		if !ok {
-			return nil, errors.Wrapf(ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
+			return nil, errors.Wrapf(errUtils.ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
 		}
 	}
 

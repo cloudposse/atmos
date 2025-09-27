@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 // TestExecuteTerraform_ExportEnvVar check that when executing the terraform apply command.
@@ -19,6 +20,8 @@ import (
 // Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
 // Check that `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` point to a directory.
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -86,7 +89,8 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 	// Restore stdout
-	w.Close()
+	err = w.Close()
+	assert.NoError(t, err)
 	os.Stdout = oldStdout
 
 	// Read the captured output
@@ -138,6 +142,8 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -202,6 +208,8 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -268,6 +276,8 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 }
 
 func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	err := os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
 
@@ -329,6 +339,8 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -366,6 +378,8 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -407,7 +421,6 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-
 	// Restore stderr
 	err = w.Close()
 	assert.NoError(t, err)
@@ -430,6 +443,8 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 }
 
 func TestExecuteTerraform_OpaValidation(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -470,6 +485,8 @@ func TestExecuteTerraform_OpaValidation(t *testing.T) {
 }
 
 func TestExecuteTerraform_Version(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	tests := []struct {
 		name           string
 		workDir        string
@@ -521,9 +538,9 @@ func TestExecuteTerraform_Version(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 			}
-
 			// Restore stdout
-			w.Close()
+			err = w.Close()
+			assert.NoError(t, err)
 			os.Stdout = oldStdout
 
 			// Read the captured output
@@ -542,6 +559,8 @@ func TestExecuteTerraform_Version(t *testing.T) {
 }
 
 func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
+	// Skip if terraform is not installed
+	tests.RequireTerraform(t)
 	workDir := "../../tests/fixtures/scenarios/terraform-cloud"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_BASE_PATH", workDir)
@@ -572,7 +591,6 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-
 	// Restore stderr
 	err = w.Close()
 	assert.NoError(t, err)

@@ -1,5 +1,5 @@
 
-Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains
+Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 
 Usage:
 
@@ -15,10 +15,10 @@ Available Commands:
   completion                     Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
   describe                       Show details about Atmos configurations and components
   docs                           Open Atmos documentation or display component-specific docs
-  generate                       Generic generation commands (e.g. docs, scaffolding, etc.)
   helmfile                       Manage Helmfile-based Kubernetes deployments
   help                           Display help information for Atmos commands
   list                           List available stacks and components
+  packer                         Manage packer-based machine images for multiple platforms
   pro                            Access premium features integrated with atmos-pro.com
   support                        Show Atmos support options
   terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
@@ -30,28 +30,48 @@ Available Commands:
 Subcommand Aliases:
 
   hf                             Alias of "atmos helmfile" command
+  pk                             Alias of "atmos packer" command
   tf                             Alias of "atmos terraform" command
 
 
 Flags:
 
-    -h, --help                      help for atmos (default "false")
+        --base-path string           Base path for Atmos project
 
-        --logs-file string          The file to write Atmos logs to. Logs can be
-                                    written to any file or any standard file
-                                    descriptor, including '/dev/stdout',
-                                    '/dev/stderr' and '/dev/null' (default
-                                    "/dev/stdout")
+        --config stringSlice         Paths to configuration files
+                                     (comma-separated or repeated flag) (default
+                                     [])
 
-        --logs-level string         Logs level. Supported log levels are Trace,
-                                    Debug, Info, Warning, Off. If the log level
-                                    is set to Off, Atmos will not log any
-                                    messages (default "Info")
+        --config-path stringSlice    Paths to configuration directories
+                                     (comma-separated or repeated flag) (default
+                                     [])
 
-        --redirect-stderr string    File descriptor to redirect 'stderr' to.
-                                    Errors can be redirected to any file or any
-                                    standard file descriptor (including
-                                    '/dev/null'): atmos <command>
-                                    --redirect-stderr /dev/stdout
+    -h, --help                       help for atmos
 
-Use [;1m atmos [subcommand] --help[0m for more information about a command.
+        --logs-file string           The file to write Atmos logs to. Logs can
+                                     be written to any file or any standard file
+                                     descriptor, including '/dev/stdout',
+                                     '/dev/stderr' and '/dev/null' (default
+                                     /dev/stderr)
+
+        --logs-level string          Logs level. Supported log levels are Trace,
+                                     Debug, Info, Warning, Off. If the log level
+                                     is set to Off, Atmos will not log any
+                                     messages (default Info)
+
+        --no-color                   Disable color output (default false)
+
+        --redirect-stderr string     File descriptor to redirect stderr to.
+                                     Errors can be redirected to any file or any
+                                     standard file descriptor (including
+                                     /dev/null)
+
+
+Use atmos [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+
+
+╭──────────────────────────────────────────────────────────────╮
+│               Update available! test » 1.191.0               │
+│ Atmos Releases: https://github.com/cloudposse/atmos/releases │
+│          Install Atmos: https://atmos.tools/install          │
+╰──────────────────────────────────────────────────────────────╯

@@ -3,13 +3,20 @@ package exec
 import (
 	"bytes"
 	"os"
+	osexec "os/exec"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestExecuteHelmfile_Version(t *testing.T) {
+	// Skip if helmfile is not installed
+	if _, err := osexec.LookPath("helmfile"); err != nil {
+		t.Skipf("Skipping test: helmfile is not installed or not in PATH")
+	}
 	tests := []struct {
 		name           string
 		workDir        string
@@ -58,7 +65,8 @@ func TestExecuteHelmfile_Version(t *testing.T) {
 			}
 
 			// Restore stdout
-			w.Close()
+			err = w.Close()
+			assert.NoError(t, err)
 			os.Stdout = oldStdout
 
 			// Read the captured output
