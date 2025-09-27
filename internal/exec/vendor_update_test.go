@@ -83,23 +83,7 @@ func TestCheckForVendorUpdates(t *testing.T) {
 
 			// For this simplified test, we'll just check the logic
 			// In real implementation, this would call checkForVendorUpdates
-			hasUpdate := false
-			latestVersion := tt.source.Version
-
-			// Simulate version checking
-			if tt.mockTags != nil {
-				if newTag, ok := tt.mockTags[tt.source.Source]; ok && newTag != tt.source.Version {
-					hasUpdate = true
-					latestVersion = newTag
-				}
-			} else if tt.mockCommits != nil {
-				if newCommit, ok := tt.mockCommits[tt.source.Source]; ok {
-					if isCommitHash(tt.source.Version) && newCommit != tt.source.Version {
-						hasUpdate = true
-						latestVersion = newCommit[:6] // Short hash
-					}
-				}
-			}
+			hasUpdate, latestVersion := checkTestVersionUpdate(&tt.source, tt.mockTags, tt.mockCommits)
 
 			assert.Equal(t, tt.expectUpdate, hasUpdate)
 			if tt.expectUpdate {
@@ -368,4 +352,28 @@ func TestVendorUpdateWithMocks(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Contains(t, string(updatedContent), `version: "2.0.0"`)
 	})
+}
+
+// checkTestVersionUpdate simulates version checking for test purposes.
+func checkTestVersionUpdate(source *schema.AtmosVendorSource, mockTags, mockCommits map[string]string) (bool, string) {
+	hasUpdate := false
+	latestVersion := source.Version
+
+	// Check for tag updates
+	if mockTags != nil {
+		if newTag, ok := mockTags[source.Source]; ok && newTag != source.Version {
+			return true, newTag
+		}
+	}
+
+	// Check for commit updates
+	if mockCommits != nil {
+		if newCommit, ok := mockCommits[source.Source]; ok {
+			if isCommitHash(source.Version) && newCommit != source.Version {
+				return true, newCommit[:6] // Short hash
+			}
+		}
+	}
+
+	return hasUpdate, latestVersion
 }

@@ -30,6 +30,10 @@ var (
 	commitHashRegex = regexp.MustCompile(`^[a-fA-F0-9]{7,40}$`)
 )
 
+const (
+	gitLsRemoteCmd = "ls-remote"
+)
+
 // ExecuteVendorPullCmd executes `vendor pull` commands.
 func ExecuteVendorPullCmd(cmd *cobra.Command, args []string) error {
 	return ExecuteVendorPullCommand(cmd, args)
@@ -360,48 +364,53 @@ func checkForVendorUpdates(source *schema.AtmosVendorSource, _ bool) (bool, stri
 
 // checkRemoteUpdates checks for updates in remote sources (Git, HTTP, etc.) using go-getter patterns.
 func checkRemoteUpdates(uri, currentVersion string) (bool, string, error) {
-	// For HTTP/HTTPS URLs that aren't Git repositories, we can't check versions
-	// Only Git-like URLs can be checked for version updates
-	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
-		// Check if this is a direct file download (like raw.githubusercontent.com files)
-		if strings.Contains(uri, "raw.githubusercontent.com") ||
-			(!strings.Contains(uri, ".git") && !strings.Contains(uri, "github.com") &&
-				!strings.Contains(uri, "gitlab.com") && !strings.Contains(uri, "bitbucket.org")) {
-			// This is likely a direct HTTP file download, not a Git repository
-			// We can't check for version updates for direct file downloads
-			return false, currentVersion, errUtils.ErrVersionCheckingNotSupported
-		}
+	// Check if this is a direct file download (not a Git repository)
+	if isDirectHTTPDownload(uri) {
+		return false, currentVersion, errUtils.ErrVersionCheckingNotSupported
 	}
 
 	// Extract the clean Git URL using the same patterns as vendor pull
 	gitURL := extractCleanGitURL(uri)
 
-	// Use Git commands to check for version tags and commits
+	// Try to get the latest tag first
 	latestTag, err := getLatestGitTag(gitURL)
 	if err != nil {
 		// Fall back to commit checking if tags aren't available
-		latestCommit, commitErr := getLatestGitCommit(gitURL)
-		if commitErr != nil {
-			return false, "", fmt.Errorf("failed to check Git updates: %w (tag check also failed: %v)", commitErr, err)
-		}
+		return checkCommitUpdates(gitURL, currentVersion, err)
+	}
 
-		// If current version looks like a commit hash, compare
-		if isCommitHash(currentVersion) && latestCommit != "" {
-			if currentVersion != latestCommit[:min(len(currentVersion), len(latestCommit))] {
-				return true, latestCommit[:gitShortHashLength], nil // Show short commit hash
-			}
-		} else if latestCommit != "" {
-			return true, latestCommit[:gitShortHashLength], nil
-		}
+	// Check if we have a newer version
+	return checkTagUpdate(latestTag, currentVersion)
+}
 
+// isDirectHTTPDownload checks if a URI is a direct file download rather than a Git repository.
+func isDirectHTTPDownload(uri string) bool {
+	if !strings.HasPrefix(uri, "http://") && !strings.HasPrefix(uri, "https://") {
+		return false
+	}
+
+	// Check if this is a direct file download (like raw.githubusercontent.com files)
+	if strings.Contains(uri, "raw.githubusercontent.com") {
+		return true
+	}
+
+	// Check if it's not a known Git hosting service
+	isGitService := strings.Contains(uri, ".git") ||
+		strings.Contains(uri, "github.com") ||
+		strings.Contains(uri, "gitlab.com") ||
+		strings.Contains(uri, "bitbucket.org")
+
+	return !isGitService
+}
+
+// checkTagUpdate compares a latest tag with the current version.
+func checkTagUpdate(latestTag, currentVersion string) (bool, string, error) {
+	if latestTag == "" || latestTag == currentVersion {
 		return false, currentVersion, nil
 	}
 
-	// Compare versions using semantic version parsing
-	if latestTag != "" && latestTag != currentVersion {
-		if isVersionNewer(currentVersion, latestTag) {
-			return true, latestTag, nil
-		}
+	if isVersionNewer(currentVersion, latestTag) {
+		return true, latestTag, nil
 	}
 
 	return false, currentVersion, nil
@@ -479,7 +488,7 @@ func getLatestGitTag(gitURL string) (string, error) {
 	ctx := context.Background()
 
 	// Use git ls-remote with proper error handling
-	cmd := exec.CommandContext(ctx, gitCommand, "ls-remote", "--tags", "--sort=-version:refname", gitURL)
+	cmd := exec.CommandContext(ctx, gitCommand, gitLsRemoteCmd, "--tags", "--sort=-version:refname", gitURL)
 	cmd.Env = append(os.Environ(),
 		"GIT_SSH_COMMAND=ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=10",
 		gitTerminalPrompt0)
@@ -491,7 +500,7 @@ func getLatestGitTag(gitURL string) (string, error) {
 		if httpsURL == gitURL {
 			return "", fmt.Errorf("failed to execute git ls-remote: %w", err)
 		}
-		cmd = exec.CommandContext(ctx, gitCommand, "ls-remote", "--tags", "--sort=-version:refname", httpsURL)
+		cmd = exec.CommandContext(ctx, gitCommand, gitLsRemoteCmd, "--tags", "--sort=-version:refname", httpsURL)
 		cmd.Env = append(os.Environ(), gitTerminalPrompt0)
 		output, err = cmd.Output()
 		if err != nil {
@@ -506,7 +515,7 @@ func getLatestGitTag(gitURL string) (string, error) {
 func getLatestGitCommit(gitURL string) (string, error) {
 	ctx := context.Background()
 
-	cmd := exec.CommandContext(ctx, gitCommand, "ls-remote", gitURL, "HEAD")
+	cmd := exec.CommandContext(ctx, gitCommand, gitLsRemoteCmd, gitURL, "HEAD")
 	cmd.Env = append(os.Environ(),
 		"GIT_SSH_COMMAND=ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=10",
 		gitTerminalPrompt0)
@@ -518,7 +527,7 @@ func getLatestGitCommit(gitURL string) (string, error) {
 		if httpsURL == gitURL {
 			return "", fmt.Errorf("failed to execute git ls-remote: %w", err)
 		}
-		cmd = exec.CommandContext(ctx, gitCommand, "ls-remote", httpsURL, "HEAD")
+		cmd = exec.CommandContext(ctx, gitCommand, gitLsRemoteCmd, httpsURL, "HEAD")
 		cmd.Env = append(os.Environ(), gitTerminalPrompt0)
 		output, err = cmd.Output()
 		if err != nil {
@@ -541,28 +550,12 @@ func parseLatestStableTag(output string) (string, error) {
 	var latestVersion semverlib.Version
 
 	for _, line := range lines {
-		parts := strings.Fields(line)
-		if len(parts) < 2 {
+		tag, version := parseGitTagLine(line)
+		if tag == "" || version == nil {
 			continue
 		}
 
-		// Extract tag name from refs/tags/tagname format
-		tagRef := parts[1]
-		tag := strings.TrimPrefix(tagRef, "refs/tags/")
-		tag = strings.TrimSuffix(tag, "^{}")
-
-		// Skip empty tags or pre-release tags
-		if tag == "" || isPreReleaseTag(tag) {
-			continue
-		}
-
-		// Parse version for comparison
-		version, err := semverlib.NewVersion(tag)
-		if err != nil {
-			continue
-		}
-
-		if latestTag == "" || version.GreaterThan(&latestVersion) {
+		if shouldUpdateLatestTag(latestTag, &latestVersion, tag, version) {
 			latestTag = tag
 			latestVersion = *version
 		}
@@ -573,6 +566,37 @@ func parseLatestStableTag(output string) (string, error) {
 	}
 
 	return latestTag, nil
+}
+
+// parseGitTagLine parses a single line from git ls-remote output.
+func parseGitTagLine(line string) (string, *semverlib.Version) {
+	parts := strings.Fields(line)
+	if len(parts) < 2 {
+		return "", nil
+	}
+
+	// Extract tag name from refs/tags/tagname format
+	tagRef := parts[1]
+	tag := strings.TrimPrefix(tagRef, "refs/tags/")
+	tag = strings.TrimSuffix(tag, "^{}")
+
+	// Skip empty tags or pre-release tags
+	if tag == "" || isPreReleaseTag(tag) {
+		return "", nil
+	}
+
+	// Parse version for comparison
+	version, err := semverlib.NewVersion(tag)
+	if err != nil {
+		return "", nil
+	}
+
+	return tag, version
+}
+
+// shouldUpdateLatestTag determines if a new tag should become the latest.
+func shouldUpdateLatestTag(currentLatest string, currentVersion *semverlib.Version, _ string, newVersion *semverlib.Version) bool {
+	return currentLatest == "" || newVersion.GreaterThan(currentVersion)
 }
 
 // parseLatestCommit parses git ls-remote output to extract the latest commit.
@@ -647,4 +671,23 @@ func isPreReleaseTag(tag string) bool {
 	}
 
 	return false
+}
+
+// checkCommitUpdates checks for updates using Git commit hashes when tags are not available.
+func checkCommitUpdates(gitURL, currentVersion string, tagErr error) (bool, string, error) {
+	latestCommit, commitErr := getLatestGitCommit(gitURL)
+	if commitErr != nil {
+		return false, "", fmt.Errorf("failed to check Git updates: %w (tag check also failed: %v)", commitErr, tagErr)
+	}
+
+	// If current version looks like a commit hash, compare
+	if isCommitHash(currentVersion) && latestCommit != "" {
+		if currentVersion != latestCommit[:min(len(currentVersion), len(latestCommit))] {
+			return true, latestCommit[:gitShortHashLength], nil // Show short commit hash
+		}
+	} else if latestCommit != "" {
+		return true, latestCommit[:gitShortHashLength], nil
+	}
+
+	return false, currentVersion, nil
 }

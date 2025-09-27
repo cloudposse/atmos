@@ -49,35 +49,47 @@ func (u *YAMLVersionUpdater) UpdateVersionsInContent(content []byte, updates map
 	}
 
 	// Check if we have documents to process
-	if len(file.Docs) == 0 || file.Docs[0] == nil || file.Docs[0].Body == nil {
+	if !u.hasValidDocument(file) {
 		return content, nil
 	}
 
+	// Apply updates and encode back to YAML
+	return u.applyUpdatesAndEncode(file, updates)
+}
+
+// hasValidDocument checks if the file has a valid document to process.
+func (u *YAMLVersionUpdater) hasValidDocument(file *ast.File) bool {
+	return len(file.Docs) > 0 && file.Docs[0] != nil && file.Docs[0].Body != nil
+}
+
+// applyUpdatesAndEncode applies updates to the AST and encodes back to YAML.
+func (u *YAMLVersionUpdater) applyUpdatesAndEncode(file *ast.File, updates map[string]string) ([]byte, error) {
 	// Track components and their anchors for proper updates
 	componentNodes := u.findComponentNodes(file.Docs[0].Body)
 
 	// Apply updates to the AST
-	for componentName, newVersion := range updates {
-		if nodes, exists := componentNodes[componentName]; exists {
-			for _, node := range nodes {
-				u.updateVersionInNode(node, newVersion)
-			}
-			// Version updated for component
-		}
-	}
+	u.applyUpdatesToNodes(componentNodes, updates)
 
 	// Convert AST back to YAML bytes
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 
-	// Encode only the document body, not the full file structure
-	if len(file.Docs) > 0 && file.Docs[0] != nil {
-		if err := encoder.Encode(file.Docs[0].Body); err != nil {
-			return nil, fmt.Errorf("failed to encode YAML: %w", err)
-		}
+	if err := encoder.Encode(file.Docs[0].Body); err != nil {
+		return nil, fmt.Errorf("failed to encode YAML: %w", err)
 	}
 
 	return buf.Bytes(), nil
+}
+
+// applyUpdatesToNodes applies version updates to the component nodes.
+func (u *YAMLVersionUpdater) applyUpdatesToNodes(componentNodes map[string][]*ast.MappingNode, updates map[string]string) {
+	for componentName, newVersion := range updates {
+		if nodes, exists := componentNodes[componentName]; exists {
+			for _, node := range nodes {
+				u.updateVersionInNode(node, newVersion)
+			}
+		}
+	}
 }
 
 // findComponentNodes finds all nodes that define components in the YAML AST.
@@ -145,18 +157,18 @@ func (u *YAMLVersionUpdater) walkAST(node ast.Node, visitor func(ast.Node) bool)
 		return
 	}
 
+	u.walkNodeChildren(node, visitor)
+}
+
+// walkNodeChildren walks the children of a node based on its type.
+func (u *YAMLVersionUpdater) walkNodeChildren(node ast.Node, visitor func(ast.Node) bool) {
 	switch n := node.(type) {
 	case *ast.DocumentNode:
 		u.walkAST(n.Body, visitor)
 	case *ast.MappingNode:
-		for _, value := range n.Values {
-			u.walkAST(value.Key, visitor)
-			u.walkAST(value.Value, visitor)
-		}
+		u.walkMappingNode(n, visitor)
 	case *ast.SequenceNode:
-		for _, value := range n.Values {
-			u.walkAST(value, visitor)
-		}
+		u.walkSequenceNode(n, visitor)
 	case *ast.MappingValueNode:
 		u.walkAST(n.Key, visitor)
 		u.walkAST(n.Value, visitor)
@@ -164,5 +176,20 @@ func (u *YAMLVersionUpdater) walkAST(node ast.Node, visitor func(ast.Node) bool)
 		u.walkAST(n.Value, visitor)
 	case *ast.AliasNode:
 		// Aliases are references, don't walk into them
+	}
+}
+
+// walkMappingNode walks all values in a mapping node.
+func (u *YAMLVersionUpdater) walkMappingNode(n *ast.MappingNode, visitor func(ast.Node) bool) {
+	for _, value := range n.Values {
+		u.walkAST(value.Key, visitor)
+		u.walkAST(value.Value, visitor)
+	}
+}
+
+// walkSequenceNode walks all values in a sequence node.
+func (u *YAMLVersionUpdater) walkSequenceNode(n *ast.SequenceNode, visitor func(ast.Node) bool) {
+	for _, value := range n.Values {
+		u.walkAST(value, visitor)
 	}
 }

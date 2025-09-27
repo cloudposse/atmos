@@ -15,40 +15,62 @@ import (
 
 // ExecuteVendorUpdateCmd executes `vendor update` commands.
 func ExecuteVendorUpdateCmd(cmd *cobra.Command, args []string) error {
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	// Initialize configuration
+	atmosConfig, err := initVendorUpdateConfig(cmd, args)
 	if err != nil {
 		return err
 	}
 
-	flags := cmd.Flags()
+	// Parse and validate flags
+	vendorFlags, err := parseVendorUpdateFlags(cmd)
+	if err != nil {
+		return err
+	}
+
+	// Execute the vendor update
+	if err := executeVendorUpdate(&atmosConfig, vendorFlags); err != nil {
+		return err
+	}
+
+	// Execute vendor pull if requested
+	return executeVendorPullIfRequested(cmd, args, vendorFlags)
+}
+
+// initVendorUpdateConfig initializes the configuration for vendor update.
+func initVendorUpdateConfig(cmd *cobra.Command, args []string) (schema.AtmosConfiguration, error) {
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	if err != nil {
+		return schema.AtmosConfiguration{}, err
+	}
 
 	// vendor update doesn't use stack flag
 	processStacks := false
 
 	atmosConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
-		return fmt.Errorf("failed to initialize CLI config: %w", err)
+		return schema.AtmosConfiguration{}, fmt.Errorf("failed to initialize CLI config: %w", err)
 	}
 
-	// Parse vendor update specific flags
+	return atmosConfig, nil
+}
+
+// parseVendorUpdateFlags parses and validates vendor update flags.
+func parseVendorUpdateFlags(cmd *cobra.Command) (*VendorFlags, error) {
+	flags := cmd.Flags()
+
 	checkOnly, err := flags.GetBool("check")
 	if err != nil {
-		return err
-	}
-
-	pullAfterUpdate, err := flags.GetBool("pull")
-	if err != nil {
-		return err
+		return nil, err
 	}
 
 	component, err := flags.GetString("component")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	tagsCsv, err := flags.GetString("tags")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var tags []string
@@ -58,11 +80,10 @@ func ExecuteVendorUpdateCmd(cmd *cobra.Command, args []string) error {
 
 	componentType, err := flags.GetString("type")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Create vendor flags structure
-	vendorFlags := VendorFlags{
+	vendorFlags := &VendorFlags{
 		Component:     component,
 		Tags:          tags,
 		ComponentType: componentType,
@@ -71,34 +92,42 @@ func ExecuteVendorUpdateCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate flags
-	if err := validateVendorUpdateFlags(&vendorFlags); err != nil {
-		return err
+	if err := validateVendorUpdateFlags(vendorFlags); err != nil {
+		return nil, err
 	}
 
-	// Execute the vendor update
-	err = executeVendorUpdate(&atmosConfig, &vendorFlags)
+	return vendorFlags, nil
+}
+
+// executeVendorPullIfRequested executes vendor pull if the --pull flag is set.
+func executeVendorPullIfRequested(cmd *cobra.Command, args []string, vendorFlags *VendorFlags) error {
+	flags := cmd.Flags()
+
+	pullAfterUpdate, err := flags.GetBool("pull")
 	if err != nil {
 		return err
 	}
 
-	// If --pull flag is set and we're not in check-only mode, execute vendor pull
-	if pullAfterUpdate && !checkOnly {
-		log.Info("Executing vendor pull for updated components...")
-
-		// Create a new command for vendor pull with same filters
-		pullCmd := &cobra.Command{}
-		pullCmd.Flags().StringP("component", "c", component, "")
-		pullCmd.Flags().String("tags", tagsCsv, "")
-		pullCmd.Flags().StringP("type", "t", componentType, "")
-
-		err = ExecuteVendorPullCommand(pullCmd, args)
-		if err != nil {
-			return fmt.Errorf("version references updated but pull failed: %w", err)
-		}
-
-		log.Info("Successfully updated version references and pulled new component versions")
+	if !pullAfterUpdate || vendorFlags.DryRun {
+		return nil
 	}
 
+	log.Info("Executing vendor pull for updated components...")
+
+	// Get original flag values for passing to pull command
+	tagsCsv, _ := flags.GetString("tags")
+
+	// Create a new command for vendor pull with same filters
+	pullCmd := &cobra.Command{}
+	pullCmd.Flags().StringP("component", "c", vendorFlags.Component, "")
+	pullCmd.Flags().String("tags", tagsCsv, "")
+	pullCmd.Flags().StringP("type", "t", vendorFlags.ComponentType, "")
+
+	if err := ExecuteVendorPullCommand(pullCmd, args); err != nil {
+		return fmt.Errorf("version references updated but pull failed: %w", err)
+	}
+
+	log.Info("Successfully updated version references and pulled new component versions")
 	return nil
 }
 
@@ -156,14 +185,7 @@ func executeVendorUpdate(atmosConfig *schema.AtmosConfiguration, flg *VendorFlag
 	filteredSources := filterSources(sources, flg.Component, flg.Tags)
 
 	if len(filteredSources) == 0 {
-		switch {
-		case flg.Component != "":
-			fmt.Printf("No vendor sources found for component: %s\n", flg.Component)
-		case len(flg.Tags) > 0:
-			fmt.Printf("No vendor sources found for tags: %v\n", flg.Tags)
-		default:
-			fmt.Println("No vendor sources found")
-		}
+		reportNoSourcesFound(flg)
 		return nil
 	}
 
@@ -427,4 +449,16 @@ func checkAndUpdateVendorVersions(
 
 	// Apply updates to files
 	return helper.applyUpdatesToFiles(updatesByFile)
+}
+
+// reportNoSourcesFound reports when no vendor sources are found based on filters.
+func reportNoSourcesFound(flg *VendorFlags) {
+	switch {
+	case flg.Component != "":
+		fmt.Printf("No vendor sources found for component: %s\n", flg.Component)
+	case len(flg.Tags) > 0:
+		fmt.Printf("No vendor sources found for tags: %v\n", flg.Tags)
+	default:
+		fmt.Println("No vendor sources found")
+	}
 }
