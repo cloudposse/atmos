@@ -40,11 +40,11 @@ const (
 
 // Config holds the configuration for the profiler.
 type Config struct {
-	Enabled     bool        `json:"enabled" yaml:"enabled"`
-	Port        int         `json:"port" yaml:"port"`
-	Host        string      `json:"host" yaml:"host"`
-	File        string      `json:"file" yaml:"file"`
-	ProfileType ProfileType `json:"profile_type" yaml:"profile_type"`
+	Enabled     bool        `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
+	Port        int         `json:"port" yaml:"port" mapstructure:"port"`
+	Host        string      `json:"host" yaml:"host" mapstructure:"host"`
+	File        string      `json:"file" yaml:"file" mapstructure:"file"`
+	ProfileType ProfileType `json:"profile_type" yaml:"profile_type" mapstructure:"profile_type"`
 }
 
 // DefaultConfig returns the default profiler configuration.

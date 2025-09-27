@@ -183,12 +183,35 @@ func Cleanup() {
 
 // setupProfiler initializes and starts the profiler if enabled.
 func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
-	// Get profiler configuration from config file
+	// Get profiler configuration from config file and environment variables
 	profilerConfig := atmosConfig.Profiler
 
 	// If profiler config is empty, use defaults
 	if profilerConfig.Host == "" && profilerConfig.Port == 0 {
 		profilerConfig = profiler.DefaultConfig()
+	}
+
+	// Apply any values from environment variables that were loaded into atmosConfig
+	if atmosConfig.Profiler.Host != "" {
+		profilerConfig.Host = atmosConfig.Profiler.Host
+	}
+	if atmosConfig.Profiler.Port != 0 {
+		profilerConfig.Port = atmosConfig.Profiler.Port
+	}
+	if atmosConfig.Profiler.File != "" {
+		profilerConfig.File = atmosConfig.Profiler.File
+		// Enable profiler automatically when file is specified via env var
+		profilerConfig.Enabled = true
+	}
+	if atmosConfig.Profiler.ProfileType != "" {
+		if parsedType, parseErr := profiler.ParseProfileType(string(atmosConfig.Profiler.ProfileType)); parseErr == nil {
+			profilerConfig.ProfileType = parsedType
+		} else {
+			return fmt.Errorf("invalid profile type from environment variable: %w", parseErr)
+		}
+	}
+	if atmosConfig.Profiler.Enabled {
+		profilerConfig.Enabled = atmosConfig.Profiler.Enabled
 	}
 
 	// Override with CLI flags if provided
