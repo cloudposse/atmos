@@ -632,6 +632,55 @@ func TestSandboxComponentIsolation(t *testing.T) {
 	assert.NotContains(t, originalAbsPath, "atmos-sandbox", "Original path should not contain sandbox identifier")
 }
 
+// TestSandboxWithAbsoluteComponentPaths verifies that the sandbox correctly handles
+// absolute paths in component configurations without path duplication.
+func TestSandboxWithAbsoluteComponentPaths(t *testing.T) {
+	// Create a temporary directory to use as an absolute path.
+	tempDir, err := os.MkdirTemp("", "sandbox-absolute-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// Create component structure.
+	componentDir := filepath.Join(tempDir, "mycomponents", "terraform")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Create a component file.
+	componentFile := filepath.Join(componentDir, "test-component", "main.tf")
+	require.NoError(t, os.MkdirAll(filepath.Dir(componentFile), 0o755))
+	require.NoError(t, os.WriteFile(componentFile, []byte("# Test component"), 0o644))
+
+	// Create workdir with atmos.yaml pointing to absolute path.
+	workdir, err := os.MkdirTemp("", "sandbox-workdir-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(workdir)
+
+	// Write atmos.yaml with absolute path.
+	atmosYaml := filepath.Join(workdir, "atmos.yaml")
+	atmosContent := fmt.Sprintf(`
+components:
+  terraform:
+    base_path: "%s"
+`, filepath.Join(tempDir, "mycomponents", "terraform"))
+	require.NoError(t, os.WriteFile(atmosYaml, []byte(atmosContent), 0o644))
+
+	// Setup sandbox.
+	sandbox, err := SetupSandbox(t, workdir)
+	require.NoError(t, err)
+	defer sandbox.Cleanup()
+
+	// Verify component was copied correctly.
+	sandboxComponentPath := filepath.Join(sandbox.ComponentsPath, "terraform", "test-component", "main.tf")
+	assert.FileExists(t, sandboxComponentPath)
+
+	// Verify environment variables are set correctly.
+	envVars := sandbox.GetEnvironmentVariables()
+	if terraformPath, ok := envVars["ATMOS_COMPONENTS_TERRAFORM_BASE_PATH"]; ok {
+		// The path should be within the sandbox, not the original absolute path.
+		assert.Contains(t, terraformPath, sandbox.TempDir)
+		assert.NotContains(t, terraformPath, tempDir)
+	}
+}
+
 func TestSandboxActuallyUsedByAtmos(t *testing.T) {
 	// This test proves that when we set sandbox environment variables,
 	// Atmos would actually use the sandboxed components.
