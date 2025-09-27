@@ -141,7 +141,7 @@ function mergeCommands(sources []CommandSource) []Command {
 
 ### Precedence Chain
 
-```
+```text
 Embedded Defaults
     ↓ (lowest precedence)
 .atmos.d/ directories
@@ -240,7 +240,7 @@ None - all requirements have been implemented and tested.
 
 ## References
 
-- [Original Issue](#1447)
-- [First Fix Attempt](#1489)
+- [Original Issue](https://github.com/cloudposse/atmos/issues/1447)
+- [First Fix Attempt](https://github.com/cloudposse/atmos/issues/1489)
 - [Atmos Configuration Documentation](https://atmos.tools/configuration)
 - [CloudPosse Reference Architecture](https://github.com/cloudposse/reference-architectures)

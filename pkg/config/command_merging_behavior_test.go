@@ -13,8 +13,8 @@ import (
 
 // TestCommandMergingBehavior tests the exact command merging behavior.
 // This test clarifies:
-// 1. Remote/imported configs provide a set of commands
-// 2. Local config can add more commands
+// 1. Remote/imported configs provide a set of commands.
+// 2. Local config can add more commands.
 // 3. If local has a duplicate name, local should win.
 func TestCommandMergingBehavior(t *testing.T) {
 	tests := []struct {
@@ -80,21 +80,21 @@ commands:
       - echo "remote10"
 `,
 			},
-			expectedCount: 11, // 10 remote + 1 local = 11 total
+			expectedCount: 11, // 10 remote + 1 local = 11 total.
 			checkCommands: func(t *testing.T, commands []schema.Command) {
-				// All 11 commands should be present
+				// All 11 commands should be present.
 				names := make(map[string]bool)
 				for _, cmd := range commands {
 					names[cmd.Name] = true
 				}
 
-				// Check all remote commands are present
+				// Check all remote commands are present.
 				for i := 1; i <= 10; i++ {
 					cmdName := fmt.Sprintf("remote-cmd%d", i)
 					assert.True(t, names[cmdName], "Remote command %s should be present", cmdName)
 				}
 
-				// Check local command is present
+				// Check local command is present.
 				assert.True(t, names["local-cmd"], "Local command should be present")
 			},
 		},
@@ -127,9 +127,9 @@ commands:
       - echo "remote only"
 `,
 			},
-			expectedCount: 3, // shared-cmd (local wins), local-only, remote-only
+			expectedCount: 3, // shared-cmd (local wins), local-only, remote-only.
 			checkCommands: func(t *testing.T, commands []schema.Command) {
-				// Find the shared command and verify it's the LOCAL version
+				// Find the shared command and verify it's the LOCAL version.
 				var sharedCmd *schema.Command
 				cmdMap := make(map[string]*schema.Command)
 
@@ -142,15 +142,15 @@ commands:
 
 				require.NotNil(t, sharedCmd, "shared-cmd should exist")
 
-				// The local version should win (check description to verify)
+				// The local version should win (check description to verify).
 				assert.Equal(t, "LOCAL version of shared command", sharedCmd.Description,
 					"Local command should override remote command with same name")
 
-				// Verify we have all expected commands
+				// Verify we have all expected commands.
 				assert.NotNil(t, cmdMap["local-only"], "local-only command should exist")
 				assert.NotNil(t, cmdMap["remote-only"], "remote-only command should exist")
 
-				// Print actual command details for debugging
+				// Print actual command details for debugging.
 				fmt.Printf("\nActual commands:\n")
 				for _, cmd := range commands {
 					fmt.Printf("  - %s: %s\n", cmd.Name, cmd.Description)
@@ -205,9 +205,9 @@ commands:
       - echo "level4"
 `,
 			},
-			expectedCount: 5, // One command from each level
+			expectedCount: 5, // One command from each level.
 			checkCommands: func(t *testing.T, commands []schema.Command) {
-				// All 5 commands from all levels should be present
+				// All 5 commands from all levels should be present.
 				cmdMap := make(map[string]bool)
 				for _, cmd := range commands {
 					cmdMap[cmd.Name] = true
@@ -263,7 +263,7 @@ commands:
 			checkCommands: func(t *testing.T, commands []schema.Command) {
 				assert.Len(t, commands, 2, "Should have both commands")
 
-				// Verify complex nested structures are preserved
+				// Verify complex nested structures are preserved.
 				for _, cmd := range commands {
 					fmt.Printf("\nCommand '%s' structure:\n", cmd.Name)
 					fmt.Printf("  Description: %s\n", cmd.Description)
@@ -286,26 +286,26 @@ commands:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create temp directory
+			// Create temp directory.
 			tempDir, err := os.MkdirTemp("", "atmos-merge-behavior-*")
 			require.NoError(t, err)
 			defer os.RemoveAll(tempDir)
 
-			// Create test files
+			// Create test files.
 			for path, content := range tt.setupFiles {
 				fullPath := filepath.Join(tempDir, path)
 				err := os.WriteFile(fullPath, []byte(content), 0o644)
 				require.NoError(t, err)
 			}
 
-			// Change to test directory
+			// Change to test directory.
 			oldDir, err := os.Getwd()
 			require.NoError(t, err)
 			err = os.Chdir(tempDir)
 			require.NoError(t, err)
 			defer os.Chdir(oldDir)
 
-			// Load configuration
+			// Load configuration.
 			configInfo := schema.ConfigAndStacksInfo{
 				AtmosBasePath:      tempDir,
 				AtmosCliConfigPath: filepath.Join(tempDir, "atmos.yaml"),
@@ -313,7 +313,7 @@ commands:
 			cfg, err := InitCliConfig(configInfo, false)
 			require.NoError(t, err)
 
-			// Check results
+			// Check results.
 			assert.Len(t, cfg.Commands, tt.expectedCount,
 				"Test %s: Should have %d commands", tt.name, tt.expectedCount)
 
@@ -326,12 +326,12 @@ commands:
 
 // TestCommandStructurePreservation verifies that complex command structures are preserved through merging.
 func TestCommandStructurePreservation(t *testing.T) {
-	// Create temp directory
+	// Create temp directory.
 	tempDir, err := os.MkdirTemp("", "atmos-structure-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	// Create a file with a complex command structure
+	// Create a file with a complex command structure.
 	complexYAML := `
 commands:
   - name: "terraform-plan"
@@ -364,7 +364,7 @@ commands:
 	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(complexYAML), 0o644)
 	require.NoError(t, err)
 
-	// Load and verify
+	// Load and verify.
 	oldDir, err := os.Getwd()
 	require.NoError(t, err)
 	err = os.Chdir(tempDir)
@@ -378,7 +378,7 @@ commands:
 	cfg, err := InitCliConfig(configInfo, false)
 	require.NoError(t, err)
 
-	// Verify the complex structure is preserved
+	// Verify the complex structure is preserved.
 	require.Len(t, cfg.Commands, 1)
 	cmd := cfg.Commands[0]
 
