@@ -17,7 +17,7 @@ import (
 	log "github.com/charmbracelet/log"
 )
 
-// Profiler-specific errors
+// Profiler-specific errors.
 var (
 	// ErrUnsupportedProfileType is returned when an unsupported profile type is used.
 	ErrUnsupportedProfileType = errors.New("unsupported profile type")
@@ -141,13 +141,13 @@ func (p *Server) startFileBasedProfiling() error {
 		if err := pprof.StartCPUProfile(p.profFile); err != nil {
 			p.profFile.Close()
 			p.profFile = nil
-			return fmt.Errorf("%w: %w", ErrStartCPUProfile, err)
+			return fmt.Errorf("%w: %v", ErrStartCPUProfile, err)
 		}
 	case ProfileTypeTrace:
 		if err := trace.Start(p.profFile); err != nil {
 			p.profFile.Close()
 			p.profFile = nil
-			return fmt.Errorf("%w: %w", ErrStartTraceProfile, err)
+			return fmt.Errorf("%w: %v", ErrStartTraceProfile, err)
 		}
 	case ProfileTypeHeap, ProfileTypeAllocs, ProfileTypeGoroutine, ProfileTypeBlock, ProfileTypeMutex, ProfileTypeThreadCreate:
 		// These profiles are collected on-demand when stopping, so we just keep the file open
@@ -228,7 +228,7 @@ func (p *Server) Stop() error {
 	return nil
 }
 
-// stopFileBasedProfiling stops profiling and writes/closes the file based on profile type.
+// stopFileBasedProfiling stops profiling and writes/closes the file based on the profile type.
 func (p *Server) stopFileBasedProfiling() error {
 	var writeErr error
 

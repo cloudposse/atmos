@@ -1,5 +1,6 @@
 DEBU Set logs-level=debug logs-file=/dev/stdout
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Profiler is disabled
 
 👽 Atmos test on darwin/arm64
 

@@ -1,4 +1,5 @@
 DEBU Set logs-level=debug logs-file=/dev/stderr
+DEBU Profiler is disabled
 DEBU Vendor config file not found file=vendor
 DEBU No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
 DEBU CustomGitDetector.Detect called
