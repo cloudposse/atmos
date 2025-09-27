@@ -205,10 +205,15 @@ func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) e
 		return err
 	}
 
+	// Skip when not enabled (server) and no file-based profiling requested
+	if !profilerConfig.Enabled && profilerConfig.File == "" {
+		return nil
+	}
+
 	// Create and start profiler
 	profilerServer = profiler.New(profilerConfig)
 	if err := profilerServer.Start(); err != nil {
-		return fmt.Errorf("failed to start profiler: %w", err)
+		return fmt.Errorf("%w: failed to start profiler: %v", errUtils.ErrProfilerStart, err)
 	}
 
 	return nil
@@ -278,7 +283,7 @@ func applyProfilerEnvironmentOverrides(config *profiler.Config, atmosConfig *sch
 	if atmosConfig.Profiler.ProfileType != "" {
 		parsedType, parseErr := profiler.ParseProfileType(string(atmosConfig.Profiler.ProfileType))
 		if parseErr != nil {
-			return fmt.Errorf("invalid profile type from environment variable: %w", parseErr)
+			return fmt.Errorf("%w: invalid ATMOS_PROFILE_TYPE %q: %v", errUtils.ErrParseFlag, atmosConfig.Profiler.ProfileType, parseErr)
 		}
 		config.ProfileType = parsedType
 	}
