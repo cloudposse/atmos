@@ -2,6 +2,8 @@ package profiler
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,6 +14,18 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+func getFreeTCPPort(t *testing.T) int {
+	t.Helper()
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to allocate tcp port: %v", err)
+	}
+	defer l.Close()
+
+	return l.Addr().(*net.TCPAddr).Port
+}
 
 func TestDefaultConfig(t *testing.T) {
 	config := DefaultConfig()
@@ -54,10 +68,11 @@ func TestNew(t *testing.T) {
 }
 
 func TestServerStartStop(t *testing.T) {
+	port := getFreeTCPPort(t)
 	config := Config{
 		Enabled: true,
-		Port:    9090,
-		Host:    "localhost",
+		Port:    port,
+		Host:    "127.0.0.1",
 	}
 
 	profiler := New(config)
@@ -76,7 +91,7 @@ func TestServerStartStop(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Test that the server is actually listening
-	resp, err := http.Get("http://localhost:9090/debug/pprof/")
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/debug/pprof/", port))
 	if err != nil {
 		t.Fatalf("Failed to connect to profiler server: %v", err)
 	}
@@ -179,10 +194,11 @@ func TestGetURLDisabled(t *testing.T) {
 }
 
 func TestMultipleStartCalls(t *testing.T) {
+	port := getFreeTCPPort(t)
 	config := Config{
 		Enabled: true,
-		Port:    9092,
-		Host:    "localhost",
+		Port:    port,
+		Host:    "127.0.0.1",
 	}
 
 	profiler := New(config)
@@ -526,9 +542,10 @@ func TestConfigWithAllFields(t *testing.T) {
 }
 
 func TestConfigSerialization(t *testing.T) {
+	port := getFreeTCPPort(t)
 	originalConfig := Config{
 		Enabled:     true,
-		Port:        9090,
+		Port:        port,
 		Host:        "127.0.0.1",
 		File:        "test.prof",
 		ProfileType: ProfileTypeTrace,

@@ -64,8 +64,8 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceErrors = true
 		}
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		// Only validate the config, don't store it yet since commands may need to add more info.
-		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
+		// Load the config (includes env var bindings); don't store globally yet.
+		tmpConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error.
@@ -79,7 +79,7 @@ var RootCmd = &cobra.Command{
 
 		// Setup profiler before command execution (but skip for help commands).
 		if !isHelpRequested {
-			if setupErr := setupProfiler(cmd, &atmosConfig); setupErr != nil {
+			if setupErr := setupProfiler(cmd, &tmpConfig); setupErr != nil {
 				errUtils.CheckErrorPrintAndExit(setupErr, "Failed to setup profiler", "")
 			}
 		}
