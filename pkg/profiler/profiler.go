@@ -2,9 +2,10 @@ package profiler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // #nosec G108 - Profiling endpoint is intentionally exposed for debugging
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -16,10 +17,27 @@ import (
 	log "github.com/charmbracelet/log"
 )
 
+// Profiler-specific errors
+var (
+	// ErrUnsupportedProfileType is returned when an unsupported profile type is used.
+	ErrUnsupportedProfileType = errors.New("unsupported profile type")
+	// ErrStartCPUProfile is returned when CPU profiling fails to start.
+	ErrStartCPUProfile = errors.New("failed to start CPU profile")
+	// ErrStartTraceProfile is returned when trace profiling fails to start.
+	ErrStartTraceProfile = errors.New("failed to start trace profile")
+	// ErrCreateProfileFile is returned when profile file creation fails.
+	ErrCreateProfileFile = errors.New("failed to create profile file")
+)
+
 // ProfileType represents the type of profile to collect.
 type ProfileType string
 
 const (
+	// DefaultProfilerPort is the default port for the profiler server.
+	DefaultProfilerPort = 6060
+	// DefaultReadHeaderTimeout is the default timeout for reading request headers.
+	DefaultReadHeaderTimeout = 10 * time.Second
+
 	// ProfileTypeCPU collects CPU profile data.
 	ProfileTypeCPU ProfileType = "cpu"
 	// ProfileTypeHeap collects heap memory profile data.
@@ -51,7 +69,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Enabled:     false,
-		Port:        6060,
+		Port:        DefaultProfilerPort,
 		Host:        "localhost",
 		ProfileType: ProfileTypeCPU,
 	}
@@ -96,7 +114,7 @@ func (p *Server) Start() error {
 			p.profileType = ProfileTypeCPU
 		}
 		if !IsValidProfileType(p.profileType) {
-			return fmt.Errorf("unsupported profile type: %s. Supported types: %v", p.profileType, GetSupportedProfileTypes())
+			return fmt.Errorf("%w: %s. Supported types: %v", ErrUnsupportedProfileType, p.profileType, GetSupportedProfileTypes())
 		}
 		return p.startFileBasedProfiling()
 	}
@@ -115,7 +133,7 @@ func (p *Server) startFileBasedProfiling() error {
 	var err error
 	p.profFile, err = os.Create(p.config.File)
 	if err != nil {
-		return fmt.Errorf("failed to create profile file %s: %w", p.config.File, err)
+		return fmt.Errorf("%w %s: %w", ErrCreateProfileFile, p.config.File, err)
 	}
 
 	switch p.profileType {
@@ -123,13 +141,13 @@ func (p *Server) startFileBasedProfiling() error {
 		if err := pprof.StartCPUProfile(p.profFile); err != nil {
 			p.profFile.Close()
 			p.profFile = nil
-			return fmt.Errorf("failed to start CPU profile: %w", err)
+			return fmt.Errorf("%w: %w", ErrStartCPUProfile, err)
 		}
 	case ProfileTypeTrace:
 		if err := trace.Start(p.profFile); err != nil {
 			p.profFile.Close()
 			p.profFile = nil
-			return fmt.Errorf("failed to start trace profile: %w", err)
+			return fmt.Errorf("%w: %w", ErrStartTraceProfile, err)
 		}
 	case ProfileTypeHeap, ProfileTypeAllocs, ProfileTypeGoroutine, ProfileTypeBlock, ProfileTypeMutex, ProfileTypeThreadCreate:
 		// These profiles are collected on-demand when stopping, so we just keep the file open
@@ -143,7 +161,7 @@ func (p *Server) startFileBasedProfiling() error {
 	default:
 		p.profFile.Close()
 		p.profFile = nil
-		return fmt.Errorf("unsupported profile type: %s", p.profileType)
+		return fmt.Errorf("%w: %s", ErrUnsupportedProfileType, p.profileType)
 	}
 
 	p.isFileBased = true
@@ -160,18 +178,32 @@ func (p *Server) startServerBasedProfiling() error {
 
 	addr := fmt.Sprintf("%s:%d", p.config.Host, p.config.Port)
 	p.server = &http.Server{
-		Addr:    addr,
-		Handler: http.DefaultServeMux,
+		Addr:              addr,
+		Handler:           http.DefaultServeMux,
+		ReadHeaderTimeout: DefaultReadHeaderTimeout, // #nosec G112 - Prevent Slowloris attacks
 	}
 
+	// Channel to receive startup errors
+	errChan := make(chan error, 1)
+
 	go func() {
-		if err := p.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := p.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("Profiler server error", "error", err)
+			errChan <- err
 		}
+		close(errChan)
 	}()
 
-	// Give the server a moment to start
-	time.Sleep(100 * time.Millisecond)
+	// Give the server a moment to start and check for immediate errors
+	select {
+	case err := <-errChan:
+		if err != nil {
+			p.server = nil
+			return fmt.Errorf("failed to start profiler server: %w", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		// Server started successfully (no immediate error)
+	}
 
 	log.Info("Profiler server available at:", "url", fmt.Sprintf("http://%s/debug/pprof/", addr))
 	log.Debug("Profiler server started successfully")
@@ -232,7 +264,7 @@ func (p *Server) stopFileBasedProfiling() error {
 			writeErr = prof.WriteTo(p.profFile, 0)
 		}
 	default:
-		writeErr = fmt.Errorf("unsupported profile type: %s", p.profileType)
+		writeErr = fmt.Errorf("%w: %s", ErrUnsupportedProfileType, p.profileType)
 	}
 
 	if writeErr != nil {
@@ -328,5 +360,5 @@ func ParseProfileType(s string) (ProfileType, error) {
 	if IsValidProfileType(profileType) {
 		return profileType, nil
 	}
-	return "", fmt.Errorf("unsupported profile type: %s. Supported types: %v", s, GetSupportedProfileTypes())
+	return "", fmt.Errorf("%w: %s. Supported types: %v", ErrUnsupportedProfileType, s, GetSupportedProfileTypes())
 }

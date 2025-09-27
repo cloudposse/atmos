@@ -2,7 +2,6 @@ package profiler
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -309,7 +308,7 @@ func TestGetSupportedProfileTypes(t *testing.T) {
 }
 
 func TestFileBasedProfilingCPU(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "profiler_test")
+	tempDir, err := os.MkdirTemp("", "profiler_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -354,7 +353,7 @@ func TestFileBasedProfilingCPU(t *testing.T) {
 }
 
 func TestFileBasedProfilingHeap(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "profiler_test")
+	tempDir, err := os.MkdirTemp("", "profiler_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -391,7 +390,7 @@ func TestFileBasedProfilingHeap(t *testing.T) {
 }
 
 func TestFileBasedProfilingTrace(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "profiler_test")
+	tempDir, err := os.MkdirTemp("", "profiler_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -428,7 +427,7 @@ func TestFileBasedProfilingTrace(t *testing.T) {
 }
 
 func TestFileBasedProfilingInvalidType(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "profiler_test")
+	tempDir, err := os.MkdirTemp("", "profiler_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -455,7 +454,7 @@ func TestFileBasedProfilingInvalidType(t *testing.T) {
 }
 
 func TestDefaultProfileType(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "profiler_test")
+	tempDir, err := os.MkdirTemp("", "profiler_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -624,7 +623,7 @@ func TestConfigWithProfileTypeString(t *testing.T) {
 }
 
 func TestAllProfileTypesFileCreation(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "profiler_all_types_test")
+	tempDir, err := os.MkdirTemp("", "profiler_all_types_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -682,7 +681,7 @@ func TestAllProfileTypesFileCreation(t *testing.T) {
 }
 
 func TestProfileTypeDefaultHandling(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "profiler_default_test")
+	tempDir, err := os.MkdirTemp("", "profiler_default_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}

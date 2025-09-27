@@ -76,6 +76,21 @@ var RootCmd = &cobra.Command{
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
+
+		// Setup profiler before command execution (but skip for help commands)
+		if !isHelpRequested {
+			if setupErr := setupProfiler(cmd, &atmosConfig); setupErr != nil {
+				log.Error("Failed to setup profiler", "error", setupErr)
+			}
+		}
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		// Stop profiler after command execution
+		if profilerServer != nil {
+			if stopErr := profilerServer.Stop(); stopErr != nil {
+				log.Error("Failed to stop profiler", "error", stopErr)
+			}
+		}
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
@@ -299,19 +314,6 @@ func Execute() error {
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
 
-	// Setup profiler after command parsing but before telemetry
-	if cmd != nil {
-		if setupErr := setupProfiler(cmd, &atmosConfig); setupErr != nil {
-			log.Error("Failed to setup profiler", "error", setupErr)
-		} else if profilerServer != nil {
-			// Ensure profiler stops when the command finishes
-			defer func() {
-				if stopErr := profilerServer.Stop(); stopErr != nil {
-					log.Error("Failed to stop profiler", "error", stopErr)
-				}
-			}()
-		}
-	}
 	telemetry.CaptureCmd(cmd, err)
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
