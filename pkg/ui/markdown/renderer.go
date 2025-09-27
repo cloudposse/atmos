@@ -239,30 +239,21 @@ func WithWidth(width uint) Option {
 }
 
 func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
-	maxWidth := atmosConfig.Settings.Terminal.MaxWidth
+	maxWidth := atmosConfig.Settings.Docs.MaxWidth
 	// Create a terminal writer to get the optimal width
 	termWriter := term.NewResponsiveWriter(os.Stdout)
 	var wr *term.TerminalWriter
 	var ok bool
-	// Use a large default width for non-terminal environments (like tests) to avoid wrapping.
-	// This ensures messages like the telemetry notice are not wrapped unexpectedly.
 	var screenWidth uint = 1000
 	if wr, ok = termWriter.(*term.TerminalWriter); ok {
-		// In a terminal, use the detected width
 		screenWidth = wr.GetWidth()
-		// Apply maxWidth constraint if specified and in a terminal
-		if maxWidth > 0 {
-			termWidth := wr.GetWidth()
-			// Safe conversion: maxWidth is already checked to be > 0
-			maxWidthUint := uint(maxWidth)
-			if maxWidthUint < termWidth {
-				screenWidth = maxWidthUint
-			} else {
-				screenWidth = termWidth
-			}
-		}
 	}
-	// When not in a terminal (tests, CI, piped output), keep the large width to avoid wrapping
+	if maxWidth > 0 && ok {
+		screenWidth = uint(min(maxWidth, int(wr.GetWidth())))
+	} else if maxWidth > 0 {
+		// Fallback: if type assertion fails, use maxWidth as the screen width.
+		screenWidth = uint(maxWidth)
+	}
 	return NewRenderer(
 		atmosConfig,
 		WithWidth(screenWidth),
