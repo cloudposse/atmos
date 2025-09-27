@@ -27,15 +27,15 @@ func buildComponentPath(basePath, componentFolderPrefix, component string) strin
 		return component
 	}
 
-	// Normal case: build path from base, folder prefix, and component
-	pathParts := []string{basePath}
+	// Build path step by step using JoinPath to handle absolute paths correctly
+	result := basePath
 	if componentFolderPrefix != "" {
-		pathParts = append(pathParts, componentFolderPrefix)
+		result = JoinPath(result, componentFolderPrefix)
 	}
 	if component != "" {
-		pathParts = append(pathParts, component)
+		result = JoinPath(result, component)
 	}
-	return filepath.Join(pathParts...)
+	return result
 }
 
 // getBasePathForComponentType returns the base path for a specific component type.

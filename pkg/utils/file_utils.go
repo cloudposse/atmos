@@ -91,6 +91,19 @@ func IsPathAbsolute(path string) bool {
 }
 
 // JoinAbsolutePathWithPath checks if the provided path is absolute. If the provided path is relative, it joins the base path with the path and returns the absolute path
+// JoinPath joins two paths handling absolute paths correctly.
+// If the second path is absolute, it returns the second path.
+// Otherwise, it joins the paths and returns the absolute path.
+// This function does NOT check if the path exists on the filesystem.
+func JoinPath(basePath string, providedPath string) string {
+	// If the provided path is an absolute path, return it
+	if filepath.IsAbs(providedPath) {
+		return providedPath
+	}
+	// Join the base path with the provided path
+	return filepath.Join(basePath, providedPath)
+}
+
 func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, error) {
 	// If the provided path is an absolute path, return it
 	if filepath.IsAbs(providedPath) {

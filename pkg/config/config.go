@@ -199,14 +199,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert Terraform dir to an absolute path.
-	var terraformBasePath string
-	if filepath.IsAbs(atmosConfig.Components.Terraform.BasePath) {
-		// If the component base path is already absolute, use it as-is
-		terraformBasePath = atmosConfig.Components.Terraform.BasePath
-	} else {
-		// If relative, join with the base path
-		terraformBasePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
-	}
+	terraformBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
 	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
 		return err
@@ -214,14 +207,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert Helmfile dir to an absolute path.
-	var helmfileBasePath string
-	if filepath.IsAbs(atmosConfig.Components.Helmfile.BasePath) {
-		// If the component base path is already absolute, use it as-is
-		helmfileBasePath = atmosConfig.Components.Helmfile.BasePath
-	} else {
-		// If relative, join with the base path
-		helmfileBasePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
-	}
+	helmfileBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
 	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
 		return err
@@ -229,14 +215,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// Convert Packer dir to an absolute path.
-	var packerBasePath string
-	if filepath.IsAbs(atmosConfig.Components.Packer.BasePath) {
-		// If the component base path is already absolute, use it as-is
-		packerBasePath = atmosConfig.Components.Packer.BasePath
-	} else {
-		// If relative, join with the base path
-		packerBasePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
-	}
+	packerBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
 	packerDirAbsPath, err := filepath.Abs(packerBasePath)
 	if err != nil {
 		return err
