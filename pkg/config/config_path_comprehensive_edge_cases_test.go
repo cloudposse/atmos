@@ -23,6 +23,7 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 		expectedPattern       string // What the result should contain
 		shouldHaveDuplication bool   // Whether we expect path duplication (bug)
 		skipOnWindows         bool
+		onlyOnWindows         bool // Run only on Windows
 	}{
 		// ============ ABSOLUTE ATMOS BASE PATH TESTS ============
 		{
@@ -274,6 +275,17 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 			skipOnWindows:         true,
 		},
 		{
+			name:                  "Windows absolute paths on Windows",
+			atmosBasePath:         "C:\\Users\\runner\\work\\infrastructure",
+			componentBasePath:     "C:\\Users\\runner\\work\\infrastructure\\components\\terraform",
+			componentName:         "vpc",
+			description:           "Windows absolute component base path should not be duplicated",
+			expectedPattern:       "C:\\Users\\runner\\work\\infrastructure\\components\\terraform\\vpc",
+			shouldHaveDuplication: false,
+			skipOnWindows:         false,
+			onlyOnWindows:         true,
+		},
+		{
 			name:                  "URL-like path (should be treated as relative)",
 			atmosBasePath:         "https://example.com/infrastructure",
 			componentBasePath:     "components/terraform",
@@ -311,6 +323,9 @@ func TestPathJoining_ComprehensiveEdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.skipOnWindows && runtime.GOOS == "windows" {
 				t.Skipf("Skipping Unix-specific test on Windows")
+			}
+			if tt.onlyOnWindows && runtime.GOOS != "windows" {
+				t.Skipf("Skipping Windows-specific test on non-Windows")
 			}
 
 			// Test filepath.Join behavior (this is where the bug occurs)
