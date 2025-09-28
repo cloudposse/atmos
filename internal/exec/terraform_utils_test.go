@@ -1,7 +1,9 @@
 package exec
 
 import (
+	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -295,4 +297,246 @@ func TestProcessTerraformComponent(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, called)
 	})
+}
+
+func TestParseTFCliArgsVars(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		expected map[string]string
+	}{
+		{
+			name:     "empty environment variable",
+			envValue: "",
+			expected: map[string]string{},
+		},
+		{
+			name:     "single -var argument",
+			envValue: "-var environment=prod",
+			expected: map[string]string{
+				"environment": "prod",
+			},
+		},
+		{
+			name:     "multiple -var arguments",
+			envValue: "-var environment=prod -var region=us-east-1 -var instance_count=3",
+			expected: map[string]string{
+				"environment":    "prod",
+				"region":         "us-east-1",
+				"instance_count": "3",
+			},
+		},
+		{
+			name:     "mixed with other arguments",
+			envValue: "-auto-approve -var environment=staging -input=false -var tag=latest",
+			expected: map[string]string{
+				"environment": "staging",
+				"tag":         "latest",
+			},
+		},
+		{
+			name:     "quoted values",
+			envValue: `-var "environment=production with spaces" -var 'region=us-west-2'`,
+			expected: map[string]string{
+				"environment": "production with spaces",
+				"region":      "us-west-2",
+			},
+		},
+		{
+			name:     "var with equals format",
+			envValue: "-var=environment=dev -var=region=eu-west-1",
+			expected: map[string]string{
+				"environment": "dev",
+				"region":      "eu-west-1",
+			},
+		},
+		{
+			name:     "complex values with equals signs",
+			envValue: `-var database_url="postgres://user:pass@host:5432/db" -var connection_string="server=host;database=db"`,
+			expected: map[string]string{
+				"database_url":      "postgres://user:pass@host:5432/db",
+				"connection_string": "server=host;database=db",
+			},
+		},
+		{
+			name:     "JSON-like values",
+			envValue: `-var 'tags={"Environment":"prod","Team":"devops"}' -var list='["item1","item2"]'`,
+			expected: map[string]string{
+				"tags": `{"Environment":"prod","Team":"devops"}`,
+				"list": `["item1","item2"]`,
+			},
+		},
+		{
+			name:     "empty value",
+			envValue: "-var empty_var= -var normal_var=value",
+			expected: map[string]string{
+				"empty_var":  "",
+				"normal_var": "value",
+			},
+		},
+		{
+			name:     "special characters in values",
+			envValue: `-var path="/tmp/test file" -var command="echo 'hello world'"`,
+			expected: map[string]string{
+				"path":    "/tmp/test file",
+				"command": "echo 'hello world'",
+			},
+		},
+		{
+			name:     "malformed var arguments are ignored",
+			envValue: "-var -var malformed -var good=value",
+			expected: map[string]string{
+				"good": "value",
+			},
+		},
+		{
+			name:     "var without value is ignored",
+			envValue: "-var key_without_equals -var good=value",
+			expected: map[string]string{
+				"good": "value",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Store original value to restore later.
+			originalValue := os.Getenv("TF_CLI_ARGS")
+			defer func() {
+				if originalValue != "" {
+					os.Setenv("TF_CLI_ARGS", originalValue)
+				} else {
+					os.Unsetenv("TF_CLI_ARGS")
+				}
+			}()
+
+			// Set test environment variable
+			os.Setenv("TF_CLI_ARGS", tt.envValue)
+
+			// Test the function
+			result := ParseTFCliArgsVars()
+
+			// Assert results
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("ParseTFCliArgsVars() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestParseTFCliArgsVars_NoEnvironmentVariable(t *testing.T) {
+	// Ensure TF_CLI_ARGS is not set.
+	originalValue := os.Getenv("TF_CLI_ARGS")
+	os.Unsetenv("TF_CLI_ARGS")
+	defer func() {
+		if originalValue != "" {
+			os.Setenv("TF_CLI_ARGS", originalValue)
+		}
+	}()
+
+	result := ParseTFCliArgsVars()
+
+	// Should return empty map when environment variable is not set.
+	expected := map[string]string{}
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("ParseTFCliArgsVars() with no env var = %v, expected %v", result, expected)
+	}
+}
+
+func TestParseCommandArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{
+			name:     "empty string",
+			input:    "",
+			expected: []string{},
+		},
+		{
+			name:     "single argument",
+			input:    "plan",
+			expected: []string{"plan"},
+		},
+		{
+			name:     "multiple arguments",
+			input:    "terraform plan -auto-approve",
+			expected: []string{"terraform", "plan", "-auto-approve"},
+		},
+		{
+			name:     "quoted arguments",
+			input:    `terraform plan -var "environment=production"`,
+			expected: []string{"terraform", "plan", "-var", "environment=production"},
+		},
+		{
+			name:     "single quoted arguments",
+			input:    `terraform plan -var 'region=us-west-2'`,
+			expected: []string{"terraform", "plan", "-var", "region=us-west-2"},
+		},
+		{
+			name:     "mixed quotes",
+			input:    `terraform plan -var "env=prod" -var 'region=us-east-1'`,
+			expected: []string{"terraform", "plan", "-var", "env=prod", "-var", "region=us-east-1"},
+		},
+		{
+			name:     "quotes within quotes",
+			input:    `terraform plan -var 'command=echo "hello world"'`,
+			expected: []string{"terraform", "plan", "-var", `command=echo "hello world"`},
+		},
+		{
+			name:     "extra spaces",
+			input:    "  terraform   plan   -auto-approve  ",
+			expected: []string{"terraform", "plan", "-auto-approve"},
+		},
+		{
+			name:     "complex example",
+			input:    `-auto-approve -var "database_url=postgres://user:pass@host:5432/db" -var environment=prod`,
+			expected: []string{"-auto-approve", "-var", "database_url=postgres://user:pass@host:5432/db", "-var", "environment=prod"},
+		},
+		{
+			name:     "empty quotes",
+			input:    `terraform plan -var "empty=" -var normal=value`,
+			expected: []string{"terraform", "plan", "-var", "empty=", "-var", "normal=value"},
+		},
+		{
+			name:     "unclosed quotes handled gracefully",
+			input:    `terraform plan -var "unclosed`,
+			expected: []string{"terraform", "plan", "-var", "unclosed"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseCommandArgs(tt.input)
+
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("parseCommandArgs(%q) = %v, expected %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// Benchmark test to ensure the function performs well with large inputs.
+func BenchmarkParseTFCliArgsVars(b *testing.B) {
+	// Create a large TF_CLI_ARGS string for benchmarking
+	largeTFCliArgs := ""
+	for i := 0; i < 100; i++ {
+		largeTFCliArgs += fmt.Sprintf(" -var key%d=value%d", i, i)
+	}
+
+	originalValue := os.Getenv("TF_CLI_ARGS")
+	os.Setenv("TF_CLI_ARGS", largeTFCliArgs)
+	defer func() {
+		if originalValue != "" {
+			os.Setenv("TF_CLI_ARGS", originalValue)
+		} else {
+			os.Unsetenv("TF_CLI_ARGS")
+		}
+	}()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ParseTFCliArgsVars()
+	}
 }
