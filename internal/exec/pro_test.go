@@ -221,8 +221,8 @@ func TestUploadStatus(t *testing.T) {
 
 // TestParseLockUnlockCliArgs tests the parseLockUnlockCliArgs function error handling.
 func TestParseLockUnlockCliArgs(t *testing.T) {
-	// Skip this test as it requires full command setup with many flags
-	t.Skip("Requires full command setup with ProcessCommandLineArgs")
+	// Skip this test as it requires full command setup with ProcessCommandLineArgs.
+	t.Skipf("Requires full command setup with ProcessCommandLineArgs which depends on global state")
 }
 
 // TestParseLockCliArgs tests the parseLockCliArgs function.
@@ -235,6 +235,37 @@ func TestParseLockCliArgs(t *testing.T) {
 		expectedTTL int32
 		expectedMsg string
 	}{
+		{
+			name: "Success with defaults",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("component", "test-component", "Component name")
+				cmd.Flags().String("stack", "test-stack", "Stack name")
+				cmd.Flags().Int32("ttl", 30, "TTL in seconds")
+				cmd.Flags().String("message", "", "Lock message")
+				return cmd
+			},
+			args:        []string{},
+			expectError: false,
+			expectedTTL: 30,
+			expectedMsg: "Locked by Atmos",
+		},
+		{
+			name: "Success with custom values",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("component", "vpc", "Component name")
+				cmd.Flags().String("stack", "prod", "Stack name")
+				cmd.Flags().Int32("ttl", 60, "TTL in seconds")
+				cmd.Flags().String("message", "Custom lock", "Lock message")
+				cmd.Flags().Set("message", "Custom lock")
+				return cmd
+			},
+			args:        []string{},
+			expectError: false,
+			expectedTTL: 60,
+			expectedMsg: "Custom lock",
+		},
 		{
 			name: "Invalid TTL flag",
 			setupCmd: func() *cobra.Command {
@@ -265,12 +296,14 @@ func TestParseLockCliArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := tt.setupCmd()
-			_, err := parseLockCliArgs(cmd, tt.args)
+			result, err := parseLockCliArgs(cmd, tt.args)
 
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedTTL, result.LockTTL)
+				assert.Equal(t, tt.expectedMsg, result.LockMessage)
 			}
 		})
 	}
@@ -284,6 +317,17 @@ func TestParseUnlockCliArgs(t *testing.T) {
 		args        []string
 		expectError bool
 	}{
+		{
+			name: "Success",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("component", "test-component", "Component name")
+				cmd.Flags().String("stack", "test-stack", "Stack name")
+				return cmd
+			},
+			args:        []string{},
+			expectError: false,
+		},
 		{
 			name: "Missing key flag",
 			setupCmd: func() *cobra.Command {
@@ -301,12 +345,13 @@ func TestParseUnlockCliArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := tt.setupCmd()
-			_, err := parseUnlockCliArgs(cmd, tt.args)
+			result, err := parseUnlockCliArgs(cmd, tt.args)
 
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				assert.NotNil(t, result)
 			}
 		})
 	}

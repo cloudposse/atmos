@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
-	pkgErrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -16,12 +15,12 @@ import (
 )
 
 var (
-	ErrInvalidFormat                      = pkgErrors.New("invalid format")
-	ErrCreatingTempDirectory              = pkgErrors.New("error creating temporary directory")
-	ErrCreatingIntermediateSubdirectories = pkgErrors.New("error creating intermediate subdirectories")
-	ErrGettingJsonForPlanfile             = pkgErrors.New("error getting JSON for planfile")
-	ErrConvertingJsonToGoType             = pkgErrors.New("error converting JSON to Go type")
-	ErrNoComponent                        = pkgErrors.New("no component specified")
+	ErrInvalidFormat                      = errors.New("invalid format")
+	ErrCreatingTempDirectory              = errors.New("error creating temporary directory")
+	ErrCreatingIntermediateSubdirectories = errors.New("error creating intermediate subdirectories")
+	ErrGettingJsonForPlanfile             = errors.New("error getting JSON for planfile")
+	ErrConvertingJsonToGoType             = errors.New("error converting JSON to Go type")
+	ErrNoComponent                        = errors.New("no component specified")
 )
 
 // PlanfileOptions holds the options for generating a Terraform planfile.

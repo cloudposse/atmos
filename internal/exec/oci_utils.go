@@ -11,7 +11,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
-	pkgErrors "github.com/pkg/errors"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -23,7 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var ErrNoLayers = pkgErrors.New("the OCI image does not have any layers")
+var ErrNoLayers = errors.New("the OCI image does not have any layers")
 
 const (
 	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components

@@ -14,7 +14,6 @@ import (
 	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	pkgErrors "github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -31,7 +30,7 @@ func GetCacheFilePath() (string, error) {
 	cacheDir := filepath.Join(xdg.CacheHome, "atmos")
 
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return "", pkgErrors.Wrap(err, "error creating cache directory")
+		return "", errors.Join(errUtils.ErrCacheWrite, err)
 	}
 
 	return filepath.Join(cacheDir, "cache.yaml"), nil

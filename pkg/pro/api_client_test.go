@@ -467,7 +467,7 @@ func TestDoStackLockAction(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Length", "1000")
 			w.WriteHeader(http.StatusOK)
-			// Don't write the full content to simulate read error
+			// Don't write the full content to simulate read error.
 		}))
 		defer server.Close()
 
@@ -540,7 +540,7 @@ func TestHandleAPIResponse(t *testing.T) {
 	})
 
 	t.Run("Read error", func(t *testing.T) {
-		// Create a reader that fails
+		// Create a reader that fails.
 		failingReader := &failingReader{}
 		resp := &http.Response{
 			StatusCode: http.StatusInternalServerError,
